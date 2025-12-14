@@ -11,11 +11,14 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
+import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
+import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Bot, Folder, LayoutGrid } from 'lucide-vue-next';
+import { BookOpen, Bot, Database, Folder, LayoutGrid, Users, Wrench } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 
 const mainNavItems: NavItem[] = [
@@ -25,9 +28,24 @@ const mainNavItems: NavItem[] = [
         icon: LayoutGrid,
     },
     {
-        title: 'Agents',
+        title: 'Agent Teams',
         href: AgentTeamController.index(),
+        icon: Users,
+    },
+    {
+        title: 'Agents',
+        href: AgentController.index(),
         icon: Bot,
+    },
+    {
+        title: 'Knowledge Base',
+        href: KnowledgeBaseController.index(),
+        icon: Database,
+    },
+    {
+        title: 'Tools',
+        href: ToolController.index(),
+        icon: Wrench,
     },
 ];
 

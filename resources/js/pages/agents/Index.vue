@@ -29,31 +29,33 @@ const breadcrumbs: BreadcrumbItem[] = [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
-            <div class="mb-8 flex items-center justify-between">
-                <Heading
-                    title="Agent Teams"
-                    description="Manage your AI agent teams for customer service automation"
-                />
-                <Button as-child>
-                    <Link :href="AgentTeamController.create()">
-                        <Plus class="mr-2 h-4 w-4" />
-                        Create Team
-                    </Link>
-                </Button>
-            </div>
+            <div class="mx-auto max-w-6xl">
+                <div class="mb-8 flex items-center justify-between">
+                    <Heading
+                        title="Agent Teams"
+                        description="Manage your AI agent teams for customer service automation"
+                    />
+                    <Button as-child>
+                        <Link :href="AgentTeamController.create()">
+                            <Plus class="mr-2 h-4 w-4" />
+                            Create Team
+                        </Link>
+                    </Button>
+                </div>
 
-            <div
-                v-if="teams.data.length > 0"
-                class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-            >
-                <AgentTeamCard
-                    v-for="team in teams.data"
-                    :key="team.id"
-                    :team="team"
-                />
-            </div>
+                <div
+                    v-if="teams.data.length > 0"
+                    class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+                >
+                    <AgentTeamCard
+                        v-for="team in teams.data"
+                        :key="team.id"
+                        :team="team"
+                    />
+                </div>
 
-            <EmptyState v-else />
+                <EmptyState v-else />
+            </div>
         </div>
     </AppLayout>
 </template>
