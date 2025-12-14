@@ -37,7 +37,7 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Agent Teams', href: AgentTeamController.index().url },
     {
         title: props.team.name,
-        href: AgentTeamController.show({ agentTeam: props.team.id }).url,
+        href: AgentTeamController.show({ agent_team: props.team.id }).url,
     },
     { title: 'Edit', href: '#' },
 ]);
@@ -63,7 +63,7 @@ const form = useForm({
 
 const submit = () => {
     form.agents = agents.value;
-    form.put(AgentTeamController.update({ agentTeam: props.team.id }).url);
+    form.put(AgentTeamController.update({ agent_team: props.team.id }).url);
 };
 
 const updateAgent = (index: number, agent: AgentFormData) => {
@@ -161,7 +161,7 @@ const statusOptions = [
                             <Link
                                 :href="
                                     AgentTeamController.show({
-                                        agentTeam: team.id,
+                                        agent_team: team.id,
                                     })
                                 "
                             >

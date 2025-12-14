@@ -64,7 +64,7 @@ const agentIcon = (type: string) => {
 };
 
 const deleteTeam = () => {
-    router.delete(AgentTeamController.destroy({ agentTeam: props.team.id }).url);
+    router.delete(AgentTeamController.destroy({ agent_team: props.team.id }).url);
 };
 </script>
 
@@ -94,7 +94,7 @@ const deleteTeam = () => {
                             <Link
                                 :href="
                                     AgentTeamController.edit({
-                                        agentTeam: team.id,
+                                        agent_team: team.id,
                                     })
                                 "
                             >

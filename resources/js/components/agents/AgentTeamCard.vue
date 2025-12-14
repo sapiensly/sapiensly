@@ -29,7 +29,7 @@ const statusVariant = (status: string) => {
 </script>
 
 <template>
-    <Link :href="AgentTeamController.show({ agentTeam: team.id })">
+    <Link :href="AgentTeamController.show({ agent_team: team.id })">
         <Card
             class="cursor-pointer transition-colors hover:border-primary/50"
         >
