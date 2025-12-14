@@ -25,7 +25,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { Agent, AgentType } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Bot, Brain, Copy, Database, Pencil, Trash2, Wrench, Zap } from 'lucide-vue-next';
+import { Bot, Brain, Copy, Database, MessageSquare, Pencil, Trash2, Wrench, Zap } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface Props {
@@ -128,6 +128,12 @@ const configDisplay = computed(() => {
                         </p>
                     </div>
                     <div class="flex gap-2">
+                        <Button as-child>
+                            <Link :href="AgentController.chat({ agent: agent.id }).url">
+                                <MessageSquare class="mr-2 h-4 w-4" />
+                                Test Agent
+                            </Link>
+                        </Button>
                         <Button variant="outline" @click="duplicateAgent">
                             <Copy class="mr-2 h-4 w-4" />
                             Duplicate

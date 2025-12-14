@@ -20,7 +20,7 @@ import type {
     PaginatedAgents,
 } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Bot, Brain, Database, Plus, Wrench, Zap } from 'lucide-vue-next';
+import { Bot, Brain, Database, MessageSquare, Plus, Wrench, Zap } from 'lucide-vue-next';
 
 interface Props {
     agents: PaginatedAgents;
@@ -131,14 +131,12 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                 </div>
 
                 <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <Link
+                    <Card
                         v-for="agent in agents.data"
                         :key="agent.id"
-                        :href="AgentController.show({ agent: agent.id }).url"
+                        class="h-full transition-colors hover:border-primary/50"
                     >
-                        <Card
-                            class="h-full cursor-pointer transition-colors hover:border-primary/50"
-                        >
+                        <Link :href="AgentController.show({ agent: agent.id }).url">
                             <CardHeader>
                                 <div class="flex items-start justify-between">
                                     <div class="flex items-center gap-2">
@@ -158,7 +156,9 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                                     {{ agent.description }}
                                 </CardDescription>
                             </CardHeader>
-                            <CardContent>
+                        </Link>
+                        <CardContent>
+                            <div class="flex items-center justify-between">
                                 <div class="flex flex-wrap gap-4 text-sm text-muted-foreground">
                                     <div class="flex items-center gap-1">
                                         <Badge variant="outline" class="capitalize">
@@ -180,9 +180,15 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                                         {{ agent.tools_count }} tools
                                     </div>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </Link>
+                                <Button variant="outline" size="sm" as-child>
+                                    <Link :href="AgentController.chat({ agent: agent.id }).url">
+                                        <MessageSquare class="mr-2 h-4 w-4" />
+                                        Test
+                                    </Link>
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </div>

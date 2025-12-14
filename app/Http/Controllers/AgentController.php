@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Enums\AgentStatus;
 use App\Enums\AgentType;
+use App\Enums\MessageRole;
 use App\Http\Requests\Agent\StoreAgentRequest;
 use App\Http\Requests\Agent\UpdateAgentRequest;
 use App\Models\Agent;
+use App\Models\Conversation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -164,7 +166,7 @@ class AgentController extends Controller
         }
 
         $newAgent = $agent->replicate();
-        $newAgent->name = $agent->name . ' (Copy)';
+        $newAgent->name = $agent->name.' (Copy)';
         $newAgent->status = AgentStatus::Draft;
         $newAgent->save();
 
@@ -179,7 +181,7 @@ class AgentController extends Controller
         return [
             ['value' => 'claude-sonnet-4-20250514', 'label' => 'Claude Sonnet 4', 'provider' => 'anthropic'],
             ['value' => 'claude-opus-4-20250514', 'label' => 'Claude Opus 4', 'provider' => 'anthropic'],
-            ['value' => 'claude-haiku-3-5-20241022', 'label' => 'Claude Haiku 3.5', 'provider' => 'anthropic'],
+            ['value' => 'claude-3-5-haiku-20241022', 'label' => 'Claude 3.5 Haiku', 'provider' => 'anthropic'],
             ['value' => 'gpt-4o', 'label' => 'GPT-4o', 'provider' => 'openai'],
             ['value' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini', 'provider' => 'openai'],
             ['value' => 'gpt-4-turbo', 'label' => 'GPT-4 Turbo', 'provider' => 'openai'],
@@ -189,9 +191,62 @@ class AgentController extends Controller
     private function getRecommendedModels(): array
     {
         return [
-            'triage' => ['claude-haiku-3-5-20241022', 'gpt-4o-mini'],
+            'triage' => ['claude-3-5-haiku-20241022', 'gpt-4o-mini'],
             'knowledge' => ['claude-sonnet-4-20250514', 'gpt-4o'],
             'action' => ['claude-sonnet-4-20250514', 'gpt-4o'],
         ];
+    }
+
+    public function chat(Request $request, Agent $agent): Response
+    {
+        if ($agent->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        // Get or create a conversation for this agent
+        $conversation = Conversation::firstOrCreate(
+            [
+                'user_id' => $request->user()->id,
+                'agent_id' => $agent->id,
+            ],
+            [
+                'title' => "Chat with {$agent->name}",
+            ]
+        );
+
+        return Inertia::render('standalone-agents/Chat', [
+            'agent' => $agent,
+            'conversation' => $conversation->load('messages'),
+        ]);
+    }
+
+    public function sendMessage(Request $request, Agent $agent): RedirectResponse
+    {
+        if ($agent->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        $request->validate([
+            'message' => 'required|string|max:10000',
+        ]);
+
+        // Get or create conversation
+        $conversation = Conversation::firstOrCreate(
+            [
+                'user_id' => $request->user()->id,
+                'agent_id' => $agent->id,
+            ],
+            [
+                'title' => "Chat with {$agent->name}",
+            ]
+        );
+
+        // Save user message
+        $conversation->messages()->create([
+            'role' => MessageRole::User,
+            'content' => $request->message,
+        ]);
+
+        return back();
     }
 }

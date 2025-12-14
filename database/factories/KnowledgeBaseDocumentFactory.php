@@ -21,17 +21,17 @@ class KnowledgeBaseDocumentFactory extends Factory
             'type' => $type,
             'source' => $type === DocumentType::Url
                 ? fake()->url()
-                : fake()->word() . '.' . $type->extension(),
+                : fake()->word().'.'.$type->extension(),
             'original_filename' => $type === DocumentType::Url
                 ? null
-                : fake()->word() . '.' . $type->extension(),
+                : fake()->word().'.'.$type->extension(),
             'content' => fake()->paragraphs(3, true),
             'metadata' => [],
             'embedding_status' => KnowledgeBaseStatus::Pending,
             'error_message' => null,
             'file_path' => $type === DocumentType::Url
                 ? null
-                : 'documents/' . fake()->uuid() . '.' . $type->extension(),
+                : 'documents/'.fake()->uuid().'.'.$type->extension(),
             'file_size' => $type === DocumentType::Url
                 ? null
                 : fake()->numberBetween(1000, 1000000),
@@ -42,9 +42,9 @@ class KnowledgeBaseDocumentFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'type' => DocumentType::Pdf,
-            'source' => fake()->word() . '.pdf',
-            'original_filename' => fake()->word() . '.pdf',
-            'file_path' => 'documents/' . fake()->uuid() . '.pdf',
+            'source' => fake()->word().'.pdf',
+            'original_filename' => fake()->word().'.pdf',
+            'file_path' => 'documents/'.fake()->uuid().'.pdf',
         ]);
     }
 

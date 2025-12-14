@@ -90,7 +90,7 @@ describe('store', function () {
             'type' => AgentType::Triage->value,
             'name' => 'My Triage Agent',
             'description' => 'Handles routing',
-            'model' => 'claude-haiku-3-5-20241022',
+            'model' => 'claude-3-5-haiku-20241022',
             'prompt_template' => 'You are a triage agent.',
             'config' => [
                 'temperature' => 0.3,
@@ -318,7 +318,7 @@ describe('duplicate', function () {
             ->post(route('agents.duplicate', $agent))
             ->assertRedirect();
 
-        $copy = Agent::where('name', $agent->name . ' (Copy)')->first();
+        $copy = Agent::where('name', $agent->name.' (Copy)')->first();
         expect($copy->knowledgeBases)->toHaveCount(1);
     });
 

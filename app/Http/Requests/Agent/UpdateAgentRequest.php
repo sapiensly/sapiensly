@@ -49,7 +49,7 @@ class UpdateAgentRequest extends FormRequest
         return [
             'claude-sonnet-4-20250514',
             'claude-opus-4-20250514',
-            'claude-haiku-3-5-20241022',
+            'claude-3-5-haiku-20241022',
             'gpt-4o',
             'gpt-4o-mini',
             'gpt-4-turbo',
