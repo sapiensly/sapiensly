@@ -97,6 +97,8 @@ The project uses `laravel/wayfinder` for type-safe routing between Laravel and t
 
 ## Code Style
 
+**Language Requirement**: All code, comments, commit messages, and documentation must be written in English.
+
 ### PHP
 - Uses Laravel Pint for formatting
 - PHP 8.4 required
