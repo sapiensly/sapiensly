@@ -13,7 +13,7 @@ import type { BreadcrumbItem } from '@/types';
 import type { Agent, AgentType } from '@/types/agents';
 import type { Conversation, Message } from '@/types/chat';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Bot, Brain, Zap } from 'lucide-vue-next';
+import { ArrowLeft, Bot, Brain, Plus, Zap } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
 
 interface Props {
@@ -90,6 +90,13 @@ const displayMessages = computed(() => {
     }
     return result;
 });
+
+// Create new conversation
+function handleNewConversation() {
+    if (isStreaming.value) return;
+
+    router.post(AgentController.newConversation({ agent: props.agent.id }).url);
+}
 
 // Send message
 async function handleSendMessage(content: string) {
@@ -168,9 +175,20 @@ async function handleSendMessage(content: string) {
                         class="h-5 w-5 text-muted-foreground"
                     />
                     <Heading :title="agent.name" />
-                    <Badge variant="secondary" class="ml-auto">
-                        {{ agent.model }}
-                    </Badge>
+                    <div class="ml-auto flex items-center gap-2">
+                        <Badge variant="secondary">
+                            {{ agent.model }}
+                        </Badge>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            :disabled="isStreaming"
+                            @click="handleNewConversation"
+                        >
+                            <Plus class="mr-1 h-4 w-4" />
+                            New Chat
+                        </Button>
+                    </div>
                 </div>
             </div>
 

@@ -15,6 +15,7 @@ Route::middleware([
     // Chat routes
     Route::get('agents/{agent}/chat', [AgentController::class, 'chat'])->name('agents.chat');
     Route::post('agents/{agent}/chat', [AgentController::class, 'sendMessage'])->name('agents.chat.send');
+    Route::post('agents/{agent}/chat/new', [AgentController::class, 'newConversation'])->name('agents.chat.new');
     Route::get('agents/{agent}/chat/{conversation}/stream', [ChatStreamController::class, 'stream'])
         ->name('agents.chat.stream');
 });

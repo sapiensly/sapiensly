@@ -249,4 +249,18 @@ class AgentController extends Controller
 
         return back();
     }
+
+    public function newConversation(Request $request, Agent $agent): RedirectResponse
+    {
+        if ($agent->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        // Delete existing conversation for this agent
+        Conversation::where('user_id', $request->user()->id)
+            ->where('agent_id', $agent->id)
+            ->delete();
+
+        return to_route('agents.chat', $agent);
+    }
 }
