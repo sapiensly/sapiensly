@@ -54,7 +54,13 @@ const breadcrumbs: BreadcrumbItem[] = [
                     />
                 </div>
 
-                <EmptyState v-else />
+                <EmptyState
+                        v-else
+                        title="No agent teams yet"
+                        description="Create your first agent team to get started with AI-powered customer service automation."
+                        :create-url="AgentTeamController.create()"
+                        create-label="Create your first team"
+                    />
             </div>
         </div>
     </AppLayout>
