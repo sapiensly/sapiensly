@@ -33,8 +33,7 @@ class ChatStreamController extends Controller
         if ($messages->isEmpty()) {
             return response()->stream(function () {
                 echo 'data: '.json_encode(['error' => 'No messages in conversation'])."\n\n";
-                ob_flush();
-                flush();
+                $this->flushOutput();
             }, 200, $this->streamHeaders());
         }
 
@@ -43,13 +42,11 @@ class ChatStreamController extends Controller
         if ($lastMessage->role !== MessageRole::User) {
             return response()->stream(function () {
                 echo 'data: '.json_encode(['error' => 'Last message must be from user'])."\n\n";
-                ob_flush();
-                flush();
+                $this->flushOutput();
             }, 200, $this->streamHeaders());
         }
 
-        // Collect chunks from LLM outside of the stream response
-        // This avoids conflicts between Guzzle streaming and PHP output buffering
+        // Collect chunks from LLM
         $chunks = [];
         $error = null;
 
@@ -70,8 +67,7 @@ class ChatStreamController extends Controller
         return response()->stream(function () use ($agent, $conversation, $chunks, $error) {
             if ($error) {
                 echo 'data: '.json_encode(['error' => $error])."\n\n";
-                ob_flush();
-                flush();
+                $this->flushOutput();
 
                 return;
             }
@@ -80,8 +76,7 @@ class ChatStreamController extends Controller
             foreach ($chunks as $chunk) {
                 $fullContent .= $chunk;
                 echo 'data: '.json_encode(['content' => $chunk])."\n\n";
-                ob_flush();
-                flush();
+                $this->flushOutput();
             }
 
             // Save the complete assistant message
@@ -94,8 +89,7 @@ class ChatStreamController extends Controller
             }
 
             echo "data: [DONE]\n\n";
-            ob_flush();
-            flush();
+            $this->flushOutput();
         }, 200, $this->streamHeaders());
     }
 
@@ -107,5 +101,13 @@ class ChatStreamController extends Controller
             'Connection' => 'keep-alive',
             'X-Accel-Buffering' => 'no',
         ];
+    }
+
+    private function flushOutput(): void
+    {
+        if (ob_get_level() > 0) {
+            ob_flush();
+        }
+        flush();
     }
 }

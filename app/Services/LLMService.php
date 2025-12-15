@@ -57,7 +57,8 @@ class LLMService
      * Stream a chat response.
      *
      * Note: PHP-FPM doesn't support Guzzle's HTTP streaming properly,
-     * so we fall back to non-streaming mode in that context.
+     * so we use non-streaming mode as fallback. Octane (FrankenPHP/Swoole/RoadRunner)
+     * and CLI support true streaming.
      *
      * @param  array<Message>  $messages
      * @return Generator<string>
@@ -67,15 +68,16 @@ class LLMService
         $formattedMessages = $this->formatMessages($messages);
         $request = $this->buildRequestWithMessages($agent, $formattedMessages);
 
-        // PHP-FPM has issues with Guzzle streaming, use non-streaming fallback
-        if (PHP_SAPI === 'fpm-fcgi') {
+        // PHP-FPM has issues with Guzzle/HTTP streaming - use non-streaming fallback
+        // Octane (frankenphp, cli-server, etc.) and CLI support streaming
+        if (PHP_SAPI === 'fpm-fcgi' || PHP_SAPI === 'cgi-fcgi') {
             $response = $request->asText();
             yield $response->text;
 
             return;
         }
 
-        // CLI and other SAPIs can use true streaming
+        // Octane and CLI can use true streaming
         foreach ($request->asStream() as $event) {
             if ($event instanceof TextDeltaEvent) {
                 yield $event->delta;
