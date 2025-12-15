@@ -6,6 +6,7 @@ use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\Message;
 use Generator;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Enums\Provider;
 use Prism\Prism\Prism;
 use Prism\Prism\Streaming\Events\TextDeltaEvent;
@@ -15,6 +16,8 @@ use Prism\Prism\ValueObjects\Messages\UserMessage;
 
 class LLMService
 {
+    private ?RetrievalService $retrievalService = null;
+
     /**
      * Map model IDs to Prism providers.
      */
@@ -86,6 +89,124 @@ class LLMService
     }
 
     /**
+     * Stream a chat response with RAG (Retrieval Augmented Generation).
+     *
+     * This method automatically retrieves relevant context from the agent's
+     * knowledge bases and injects it into the system prompt.
+     *
+     * @param  array<Message>  $messages
+     * @param  string|null  $userQuery  The query to use for retrieval (defaults to last user message)
+     * @return Generator<string>
+     */
+    public function streamChatWithRAG(Agent $agent, array $messages, ?string $userQuery = null): Generator
+    {
+        // Get the agent's knowledge base IDs
+        $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
+
+        // If no knowledge bases, fall back to regular chat
+        if (empty($knowledgeBaseIds)) {
+            yield from $this->streamChat($agent, $messages);
+
+            return;
+        }
+
+        // Determine the query for retrieval
+        if ($userQuery === null) {
+            // Use the last user message as the query
+            $lastUserMessage = collect($messages)
+                ->filter(fn ($m) => ($m->role instanceof MessageRole ? $m->role : MessageRole::from($m->role)) === MessageRole::User)
+                ->last();
+
+            $userQuery = $lastUserMessage?->content ?? '';
+        }
+
+        if (empty(trim($userQuery))) {
+            yield from $this->streamChat($agent, $messages);
+
+            return;
+        }
+
+        // Retrieve relevant context
+        $retrieval = $this->getRetrievalService()->retrieve(
+            $userQuery,
+            $knowledgeBaseIds,
+            topK: 5,
+            threshold: 0.5
+        );
+
+        Log::info('RAG retrieval completed', [
+            'agent_id' => $agent->id,
+            'query_length' => strlen($userQuery),
+            'chunks_found' => $retrieval['chunk_count'],
+        ]);
+
+        // If no relevant context found, fall back to regular chat
+        if (empty($retrieval['context'])) {
+            yield from $this->streamChat($agent, $messages);
+
+            return;
+        }
+
+        // Build augmented system prompt
+        $augmentedSystemPrompt = $this->buildAugmentedSystemPrompt(
+            $agent->prompt_template ?? '',
+            $retrieval['context']
+        );
+
+        // Build request with augmented prompt
+        $formattedMessages = $this->formatMessages($messages);
+        $request = $this->buildRequestWithSystemPrompt($agent, $formattedMessages, $augmentedSystemPrompt);
+
+        // PHP-FPM fallback
+        if (PHP_SAPI === 'fpm-fcgi' || PHP_SAPI === 'cgi-fcgi') {
+            $response = $request->asText();
+            yield $response->text;
+
+            return;
+        }
+
+        // True streaming
+        foreach ($request->asStream() as $event) {
+            if ($event instanceof TextDeltaEvent) {
+                yield $event->delta;
+            }
+        }
+    }
+
+    /**
+     * Build an augmented system prompt with retrieved context.
+     */
+    private function buildAugmentedSystemPrompt(string $originalPrompt, string $context): string
+    {
+        $augmentation = <<<EOT
+
+---
+## Relevant Context
+
+The following information was retrieved from the knowledge base and may be relevant to answering the user's question:
+
+{$context}
+
+---
+Use this context to inform your response when relevant. If the context doesn't contain the answer, you may say so, but try to be helpful based on what you do know.
+EOT;
+
+        return $originalPrompt.$augmentation;
+    }
+
+    /**
+     * Get the retrieval service (lazy initialization).
+     */
+    private function getRetrievalService(): RetrievalService
+    {
+        if ($this->retrievalService === null) {
+            $this->retrievalService = new RetrievalService;
+        }
+
+        return $this->retrievalService;
+    }
+
+    /**
      * Build a Prism request configured for the agent.
      *
      * @param  array<Message>  $messages
@@ -110,6 +231,39 @@ class LLMService
         // Add system prompt separately (required for Anthropic)
         if ($agent->prompt_template) {
             $request->withSystemPrompt($agent->prompt_template);
+        }
+
+        // Add conversation messages
+        $request->withMessages($formattedMessages);
+
+        // Apply temperature if configured
+        $config = $agent->config ?? [];
+        if (isset($config['temperature'])) {
+            $request->usingTemperature((float) $config['temperature']);
+        }
+
+        // Apply max tokens (required for Anthropic)
+        $maxTokens = $config['max_tokens'] ?? $this->getDefaultMaxTokens($provider);
+        $request->withMaxTokens($maxTokens);
+
+        return $request;
+    }
+
+    /**
+     * Build a Prism request with a custom system prompt (for RAG).
+     *
+     * @param  array<UserMessage|AssistantMessage>  $formattedMessages
+     */
+    private function buildRequestWithSystemPrompt(Agent $agent, array $formattedMessages, string $systemPrompt): PendingRequest
+    {
+        $provider = $this->getProvider($agent->model);
+
+        $request = $this->prism->text()
+            ->using($provider, $agent->model);
+
+        // Add the augmented system prompt
+        if (! empty($systemPrompt)) {
+            $request->withSystemPrompt($systemPrompt);
         }
 
         // Add conversation messages

@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('knowledge_bases', function (Blueprint $table) {
-            $table->id();
+            $table->string('id', 36)->primary(); // kb_01JFXYZ...
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->string('name');
             $table->text('description')->nullable();

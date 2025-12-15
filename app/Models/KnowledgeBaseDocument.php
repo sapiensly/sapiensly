@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\DocumentType;
 use App\Enums\KnowledgeBaseStatus;
+use App\Models\Concerns\HasPrefixedUlid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class KnowledgeBaseDocument extends Model
 {
-    use HasFactory;
+    use HasFactory, HasPrefixedUlid;
 
     protected $fillable = [
         'knowledge_base_id',
@@ -34,6 +35,11 @@ class KnowledgeBaseDocument extends Model
             'metadata' => 'array',
             'file_size' => 'integer',
         ];
+    }
+
+    public static function getIdPrefix(): string
+    {
+        return 'doc';
     }
 
     public function knowledgeBase(): BelongsTo

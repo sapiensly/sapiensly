@@ -12,10 +12,16 @@
         "php": "^8.4",
         "inertiajs/inertia-laravel": "^2.0",
         "laravel/framework": "^12.0",
+        "laravel/horizon": "^5.40",
         "laravel/tinker": "^2.10.1",
         "laravel/wayfinder": "^0.1.9",
         "laravel/workos": "^0.1.0",
-        "prism-php/prism": "^0.99.1"
+        "league/flysystem-aws-s3-v3": "^3.0",
+        "pgvector/pgvector": "^0.2.2",
+        "phpoffice/phpword": "^1.4",
+        "predis/predis": "^3.3",
+        "prism-php/prism": "^0.99.1",
+        "smalot/pdfparser": "^2.12"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -50,7 +56,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite --kill-others"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan horizon\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,horizon,logs,vite --kill-others"
         ],
         "dev:ssr": [
             "npm run build:ssr",
@@ -82,7 +88,9 @@
     },
     "extra": {
         "laravel": {
-            "dont-discover": []
+            "dont-discover": [
+                "pgvector/pgvector"
+            ]
         }
     },
     "config": {

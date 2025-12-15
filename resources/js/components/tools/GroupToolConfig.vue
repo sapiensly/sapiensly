@@ -6,16 +6,16 @@ import type { ToolReference } from '@/types/tools';
 import { Code, Server, Wrench } from 'lucide-vue-next';
 
 const props = defineProps<{
-    toolIds: number[];
+    toolIds: string[];
     availableTools: ToolReference[];
     errors: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
-    'update:toolIds': [ids: number[]];
+    'update:toolIds': [ids: string[]];
 }>();
 
-const toggleTool = (id: number, checked: boolean) => {
+const toggleTool = (id: string, checked: boolean) => {
     const currentIds = [...props.toolIds];
     if (checked) {
         if (!currentIds.includes(id)) {
@@ -30,7 +30,7 @@ const toggleTool = (id: number, checked: boolean) => {
     emit('update:toolIds', currentIds);
 };
 
-const isSelected = (id: number) => props.toolIds.includes(id);
+const isSelected = (id: string) => props.toolIds.includes(id);
 
 const toolIcon = (type: string) => {
     switch (type) {
@@ -66,8 +66,8 @@ const toolIcon = (type: string) => {
             >
                 <Checkbox
                     :id="`tool-${tool.id}`"
-                    :checked="isSelected(tool.id)"
-                    @update:checked="toggleTool(tool.id, $event)"
+                    :model-value="isSelected(tool.id)"
+                    @update:model-value="toggleTool(tool.id, $event as boolean)"
                 />
                 <component
                     :is="toolIcon(tool.type)"

@@ -4,6 +4,9 @@ namespace App\Models;
 
 use App\Enums\AgentStatus;
 use App\Enums\AgentType;
+use App\Enums\Visibility;
+use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\HasVisibility;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,15 +16,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Agent extends Model
 {
-    use HasFactory;
+    use HasFactory, HasPrefixedUlid, HasVisibility;
 
     protected $fillable = [
         'user_id',
+        'organization_id',
         'agent_team_id',
         'type',
         'name',
         'description',
         'status',
+        'visibility',
         'prompt_template',
         'model',
         'config',
@@ -32,8 +37,14 @@ class Agent extends Model
         return [
             'type' => AgentType::class,
             'status' => AgentStatus::class,
+            'visibility' => Visibility::class,
             'config' => 'array',
         ];
+    }
+
+    public static function getIdPrefix(): string
+    {
+        return 'agent';
     }
 
     public function user(): BelongsTo

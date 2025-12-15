@@ -10,14 +10,14 @@ import { computed } from 'vue';
 
 const props = defineProps<{
     config: KnowledgeAgentConfig;
-    knowledgeBaseIds: number[];
+    knowledgeBaseIds: string[];
     knowledgeBases: KnowledgeBaseReference[];
     errors: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
     'update:config': [config: KnowledgeAgentConfig];
-    'update:knowledgeBaseIds': [ids: number[]];
+    'update:knowledgeBaseIds': [ids: string[]];
 }>();
 
 const topK = computed({
@@ -46,7 +46,7 @@ const similarityThreshold = computed({
     },
 });
 
-const toggleKnowledgeBase = (id: number, checked: boolean) => {
+const toggleKnowledgeBase = (id: string, checked: boolean) => {
     const currentIds = [...props.knowledgeBaseIds];
     if (checked) {
         if (!currentIds.includes(id)) {
@@ -61,7 +61,7 @@ const toggleKnowledgeBase = (id: number, checked: boolean) => {
     emit('update:knowledgeBaseIds', currentIds);
 };
 
-const isSelected = (id: number) => props.knowledgeBaseIds.includes(id);
+const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
 </script>
 
 <template>
@@ -82,8 +82,8 @@ const isSelected = (id: number) => props.knowledgeBaseIds.includes(id);
                 >
                     <Checkbox
                         :id="`kb-${kb.id}`"
-                        :checked="isSelected(kb.id)"
-                        @update:checked="toggleKnowledgeBase(kb.id, $event)"
+                        :model-value="isSelected(kb.id)"
+                        @update:model-value="toggleKnowledgeBase(kb.id, $event as boolean)"
                     />
                     <Label :for="`kb-${kb.id}`" class="flex-1 cursor-pointer">
                         {{ kb.name }}

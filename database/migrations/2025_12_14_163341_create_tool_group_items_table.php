@@ -13,10 +13,20 @@ return new class extends Migration
     {
         Schema::create('tool_group_items', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('tool_group_id')->constrained('tools')->cascadeOnDelete();
-            $table->foreignId('tool_id')->constrained()->cascadeOnDelete();
+            $table->string('tool_group_id', 36);
+            $table->string('tool_id', 36);
             $table->unsignedInteger('order')->default(0);
             $table->timestamps();
+
+            $table->foreign('tool_group_id')
+                ->references('id')
+                ->on('tools')
+                ->cascadeOnDelete();
+
+            $table->foreign('tool_id')
+                ->references('id')
+                ->on('tools')
+                ->cascadeOnDelete();
 
             $table->unique(['tool_group_id', 'tool_id']);
         });

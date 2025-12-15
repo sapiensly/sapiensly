@@ -25,27 +25,27 @@ export interface McpConfig {
 }
 
 export interface GroupConfig {
-    tool_ids?: number[];
+    tool_ids?: string[];
 }
 
 export type ToolConfig = FunctionConfig | McpConfig | GroupConfig;
 
 export interface ToolGroupItem {
     id: number;
-    tool_group_id: number;
-    tool_id: number;
+    tool_group_id: string;
+    tool_id: string;
     order: number;
     tool?: ToolReference;
 }
 
 export interface ToolReference {
-    id: number;
+    id: string;
     name: string;
     type: ToolType;
 }
 
 export interface Tool {
-    id: number;
+    id: string;
     user_id: number;
     type: ToolType;
     name: string;

@@ -12,8 +12,8 @@ export interface KnowledgeBaseConfig {
 }
 
 export interface KnowledgeBaseDocument {
-    id: number;
-    knowledge_base_id: number;
+    id: string;
+    knowledge_base_id: string;
     type: DocumentType;
     source: string;
     original_filename: string | null;
@@ -28,7 +28,7 @@ export interface KnowledgeBaseDocument {
 }
 
 export interface KnowledgeBase {
-    id: number;
+    id: string;
     user_id: number;
     name: string;
     description: string | null;

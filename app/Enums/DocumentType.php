@@ -50,4 +50,17 @@ enum DocumentType: string
             self::Json => 'json',
         };
     }
+
+    public static function fromExtension(string $extension): self
+    {
+        return match (strtolower($extension)) {
+            'pdf' => self::Pdf,
+            'txt' => self::Txt,
+            'docx', 'doc' => self::Docx,
+            'md', 'markdown' => self::Md,
+            'csv' => self::Csv,
+            'json' => self::Json,
+            default => throw new \InvalidArgumentException("Unsupported file extension: {$extension}"),
+        };
+    }
 }

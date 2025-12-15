@@ -25,6 +25,27 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Create Team', href: '#' },
 ];
 
+const knowledgeAgentPrompt = `You are an expert assistant that answers questions based on the provided documentation.
+
+## Instructions
+
+1. **Use the context**: Base your answers on the information from the provided context. If the context contains the answer, use it.
+
+2. **Cite sources**: When using information from the context, mention the source (e.g., "According to [document name]...").
+
+3. **Be honest**: If the context doesn't contain enough information to answer, say so clearly. Don't make up information.
+
+4. **Be concise**: Answer clearly and directly. Use lists or steps when appropriate.
+
+5. **Language**: Respond in the same language as the user.
+
+## When information is not available
+
+If the question cannot be answered with the available context:
+- Indicate that you couldn't find that information in the documentation
+- If you have relevant general knowledge, you may share it while clarifying it doesn't come from the documentation
+- Suggest what type of document might contain that information`;
+
 const agents = ref<AgentFormData[]>([
     {
         type: 'triage',
@@ -40,7 +61,7 @@ const agents = ref<AgentFormData[]>([
         name: 'Knowledge Agent',
         description: '',
         status: 'draft',
-        prompt_template: '',
+        prompt_template: knowledgeAgentPrompt,
         model: 'claude-sonnet-4-20250514',
         config: {},
     },

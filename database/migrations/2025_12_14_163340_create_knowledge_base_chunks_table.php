@@ -13,12 +13,22 @@ return new class extends Migration
     {
         Schema::create('knowledge_base_chunks', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('knowledge_base_document_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('knowledge_base_id')->constrained()->cascadeOnDelete();
+            $table->string('knowledge_base_document_id', 36);
+            $table->string('knowledge_base_id', 36);
             $table->text('content');
             $table->unsignedInteger('chunk_index');
             $table->json('metadata')->nullable();
             $table->timestamps();
+
+            $table->foreign('knowledge_base_document_id')
+                ->references('id')
+                ->on('knowledge_base_documents')
+                ->cascadeOnDelete();
+
+            $table->foreign('knowledge_base_id')
+                ->references('id')
+                ->on('knowledge_bases')
+                ->cascadeOnDelete();
 
             $table->index(['knowledge_base_id', 'chunk_index']);
         });

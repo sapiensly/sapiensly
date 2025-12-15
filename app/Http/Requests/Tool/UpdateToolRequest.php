@@ -32,7 +32,7 @@ class UpdateToolRequest extends FormRequest
             'config.auth_config' => ['nullable', 'array'],
 
             'tool_ids' => ['nullable', 'array'],
-            'tool_ids.*' => ['integer', 'exists:tools,id'],
+            'tool_ids.*' => ['string', 'exists:tools,id'],
         ];
     }
 }

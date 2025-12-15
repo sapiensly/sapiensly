@@ -14,10 +14,15 @@ return new class extends Migration
         Schema::create('conversations', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('agent_id')->constrained()->cascadeOnDelete();
+            $table->string('agent_id', 36);
             $table->string('title')->nullable();
             $table->json('metadata')->nullable();
             $table->timestamps();
+
+            $table->foreign('agent_id')
+                ->references('id')
+                ->on('agents')
+                ->cascadeOnDelete();
 
             $table->index(['user_id', 'agent_id']);
         });

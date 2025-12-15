@@ -54,8 +54,8 @@ const form = useForm({
     prompt_template: props.agent.prompt_template ?? '',
     model: props.agent.model,
     config: props.agent.config ?? {},
-    knowledge_base_ids: props.agent.knowledge_bases?.map((kb) => kb.id) ?? [],
-    tool_ids: props.agent.tools?.map((t) => t.id) ?? [],
+    knowledge_base_ids: props.agent.knowledge_bases?.map((kb) => kb.id) ?? [] as string[],
+    tool_ids: props.agent.tools?.map((t) => t.id) ?? [] as string[],
 });
 
 const statusOptions = [

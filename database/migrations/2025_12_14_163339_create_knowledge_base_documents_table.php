@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('knowledge_base_documents', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('knowledge_base_id')->constrained()->cascadeOnDelete();
+            $table->string('id', 36)->primary(); // doc_01JFXYZ...
+            $table->string('knowledge_base_id', 36);
             $table->string('type');
             $table->string('source');
             $table->string('original_filename')->nullable();
@@ -24,6 +24,11 @@ return new class extends Migration
             $table->string('file_path')->nullable();
             $table->unsignedBigInteger('file_size')->nullable();
             $table->timestamps();
+
+            $table->foreign('knowledge_base_id')
+                ->references('id')
+                ->on('knowledge_bases')
+                ->cascadeOnDelete();
 
             $table->index(['knowledge_base_id', 'type']);
             $table->index(['knowledge_base_id', 'embedding_status']);

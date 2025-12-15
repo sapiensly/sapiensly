@@ -4,6 +4,9 @@ namespace App\Models;
 
 use App\Enums\AgentStatus;
 use App\Enums\ToolType;
+use App\Enums\Visibility;
+use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\HasVisibility;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,15 +17,17 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tool extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, HasPrefixedUlid, HasVisibility, SoftDeletes;
 
     protected $fillable = [
         'user_id',
+        'organization_id',
         'type',
         'name',
         'description',
         'config',
         'status',
+        'visibility',
         'is_validated',
         'last_validated_at',
     ];
@@ -32,10 +37,16 @@ class Tool extends Model
         return [
             'type' => ToolType::class,
             'status' => AgentStatus::class,
+            'visibility' => Visibility::class,
             'config' => 'array',
             'is_validated' => 'boolean',
             'last_validated_at' => 'datetime',
         ];
+    }
+
+    public static function getIdPrefix(): string
+    {
+        return 'tool';
     }
 
     public function user(): BelongsTo

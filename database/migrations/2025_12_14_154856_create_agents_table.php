@@ -12,8 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('agents', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('agent_team_id')->constrained()->cascadeOnDelete();
+            $table->string('id', 36)->primary(); // agent_01JFXYZ...
+            $table->foreignId('user_id')->nullable()->constrained()->cascadeOnDelete();
+            $table->string('agent_team_id', 36)->nullable();
             $table->string('type');
             $table->string('name');
             $table->text('description')->nullable();
@@ -23,8 +24,13 @@ return new class extends Migration
             $table->json('config')->nullable();
             $table->timestamps();
 
+            $table->foreign('agent_team_id')
+                ->references('id')
+                ->on('agent_teams')
+                ->cascadeOnDelete();
+
+            $table->index(['user_id', 'status']);
             $table->index(['agent_team_id', 'type']);
-            $table->unique(['agent_team_id', 'type']);
         });
     }
 

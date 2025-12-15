@@ -46,12 +46,13 @@ class ChatStreamController extends Controller
             }, 200, $this->streamHeaders());
         }
 
-        // Collect chunks from LLM
+        // Collect chunks from LLM (with RAG if agent has knowledge bases)
         $chunks = [];
         $error = null;
 
         try {
-            foreach ($this->llmService->streamChat($agent, $messages->all()) as $chunk) {
+            // Use RAG-enabled streaming - automatically retrieves context from knowledge bases
+            foreach ($this->llmService->streamChatWithRAG($agent, $messages->all()) as $chunk) {
                 $chunks[] = $chunk;
             }
         } catch (\Exception $e) {

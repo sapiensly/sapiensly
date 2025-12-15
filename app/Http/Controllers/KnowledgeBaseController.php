@@ -6,7 +6,9 @@ use App\Enums\DocumentType;
 use App\Enums\KnowledgeBaseStatus;
 use App\Http\Requests\KnowledgeBase\StoreKnowledgeBaseRequest;
 use App\Http\Requests\KnowledgeBase\UpdateKnowledgeBaseRequest;
+use App\Models\Document;
 use App\Models\KnowledgeBase;
+use App\Services\DocumentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -99,5 +101,43 @@ class KnowledgeBaseController extends Controller
         $knowledgeBase->delete();
 
         return to_route('knowledge-bases.index');
+    }
+
+    public function attachDocuments(Request $request, KnowledgeBase $knowledgeBase, DocumentService $documentService): RedirectResponse
+    {
+        if ($knowledgeBase->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        $request->validate([
+            'document_ids' => ['required', 'array'],
+            'document_ids.*' => ['string', 'exists:documents,id'],
+        ]);
+
+        $user = $request->user();
+
+        foreach ($request->document_ids as $documentId) {
+            $document = Document::find($documentId);
+
+            // Verify user has access to the document
+            if (! $document || ! $document->isVisibleTo($user)) {
+                continue;
+            }
+
+            $documentService->attachToKnowledgeBase($document, $knowledgeBase);
+        }
+
+        return back();
+    }
+
+    public function detachDocument(Request $request, KnowledgeBase $knowledgeBase, Document $document, DocumentService $documentService): RedirectResponse
+    {
+        if ($knowledgeBase->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        $documentService->detachFromKnowledgeBase($document, $knowledgeBase);
+
+        return back();
     }
 }

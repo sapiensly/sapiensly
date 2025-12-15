@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
+import * as KnowledgeBaseDocumentController from '@/actions/App/Http/Controllers/KnowledgeBaseDocumentController';
 import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
+import DocumentUpload from '@/components/knowledge-bases/DocumentUpload.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,11 +23,17 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
-import type { DocumentTypeOption, KnowledgeBase } from '@/types/knowledge-base';
+import type { DocumentTypeOption, KnowledgeBase, KnowledgeBaseDocument } from '@/types/knowledge-base';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { FileText, Pencil, Trash2, Upload } from 'lucide-vue-next';
+import { FileText, MoreVertical, Pencil, RefreshCw, Trash2 } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface Props {
@@ -64,6 +72,29 @@ const deleteKnowledgeBase = () => {
 const documentTypeLabel = (type: string) => {
     const found = props.documentTypes.find((dt) => dt.value === type);
     return found?.label ?? type.toUpperCase();
+};
+
+const deleteDocument = (doc: KnowledgeBaseDocument) => {
+    if (!confirm(`Delete "${doc.original_filename ?? doc.source}"?`)) return;
+
+    router.delete(
+        KnowledgeBaseDocumentController.destroy({
+            knowledge_base: props.knowledgeBase.id,
+            document: doc.id,
+        }).url,
+        { preserveScroll: true },
+    );
+};
+
+const reprocessDocument = (doc: KnowledgeBaseDocument) => {
+    router.post(
+        KnowledgeBaseDocumentController.reprocess({
+            knowledge_base: props.knowledgeBase.id,
+            document: doc.id,
+        }).url,
+        {},
+        { preserveScroll: true },
+    );
 };
 </script>
 
@@ -181,10 +212,7 @@ const documentTypeLabel = (type: string) => {
                                 title="Documents"
                                 description="Files and URLs in this knowledge base"
                             />
-                            <Button variant="outline" disabled>
-                                <Upload class="mr-2 h-4 w-4" />
-                                Upload Document
-                            </Button>
+                            <DocumentUpload :knowledge-base-id="knowledgeBase.id" />
                         </div>
 
                         <div class="mt-4">
@@ -210,14 +238,42 @@ const documentTypeLabel = (type: string) => {
                                                 <p class="font-medium">
                                                     {{ doc.original_filename ?? doc.source }}
                                                 </p>
-                                                <p class="text-sm text-muted-foreground">
-                                                    {{ documentTypeLabel(doc.type) }}
-                                                </p>
+                                                <div class="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    <span>{{ documentTypeLabel(doc.type) }}</span>
+                                                    <span v-if="doc.error_message" class="text-destructive">
+                                                        - {{ doc.error_message }}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                        <Badge :variant="statusVariant(doc.embedding_status)">
-                                            {{ doc.embedding_status }}
-                                        </Badge>
+                                        <div class="flex items-center gap-2">
+                                            <Badge :variant="statusVariant(doc.embedding_status)">
+                                                {{ doc.embedding_status }}
+                                            </Badge>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger as-child>
+                                                    <Button variant="ghost" size="icon" class="h-8 w-8">
+                                                        <MoreVertical class="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem
+                                                        v-if="doc.embedding_status === 'failed'"
+                                                        @click="reprocessDocument(doc)"
+                                                    >
+                                                        <RefreshCw class="mr-2 h-4 w-4" />
+                                                        Retry Processing
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        class="text-destructive focus:text-destructive"
+                                                        @click="deleteDocument(doc)"
+                                                    >
+                                                        <Trash2 class="mr-2 h-4 w-4" />
+                                                        Delete
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
                                     </CardContent>
                                 </Card>
                             </div>

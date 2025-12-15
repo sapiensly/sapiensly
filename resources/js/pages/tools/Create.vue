@@ -37,7 +37,7 @@ const form = useForm({
     name: '',
     description: '',
     config: {} as Record<string, unknown>,
-    tool_ids: [] as number[],
+    tool_ids: [] as string[],
 });
 
 const selectType = (type: ToolType) => {

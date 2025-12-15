@@ -13,9 +13,19 @@ return new class extends Migration
     {
         Schema::create('agent_knowledge_bases', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('agent_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('knowledge_base_id')->constrained()->cascadeOnDelete();
+            $table->string('agent_id', 36);
+            $table->string('knowledge_base_id', 36);
             $table->timestamps();
+
+            $table->foreign('agent_id')
+                ->references('id')
+                ->on('agents')
+                ->cascadeOnDelete();
+
+            $table->foreign('knowledge_base_id')
+                ->references('id')
+                ->on('knowledge_bases')
+                ->cascadeOnDelete();
 
             $table->unique(['agent_id', 'knowledge_base_id']);
         });

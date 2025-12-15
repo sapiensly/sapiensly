@@ -42,20 +42,20 @@ export type AgentConfig =
     | ActionAgentConfig;
 
 export interface KnowledgeBaseReference {
-    id: number;
+    id: string;
     name: string;
 }
 
 export interface ToolReference {
-    id: number;
+    id: string;
     name: string;
     type: string;
 }
 
 export interface Agent {
-    id: number;
+    id: string;
     user_id: number | null;
-    agent_team_id: number | null;
+    agent_team_id: string | null;
     type: AgentType;
     name: string;
     description: string | null;
@@ -72,7 +72,7 @@ export interface Agent {
 }
 
 export interface AgentTeam {
-    id: number;
+    id: string;
     user_id: number;
     name: string;
     description: string | null;
@@ -101,8 +101,8 @@ export interface StandaloneAgentFormData {
     prompt_template: string;
     model: string;
     config: AgentConfig;
-    knowledge_base_ids: number[];
-    tool_ids: number[];
+    knowledge_base_ids: string[];
+    tool_ids: string[];
 }
 
 export interface PaginatedAgentTeams {

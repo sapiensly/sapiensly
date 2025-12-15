@@ -15,7 +15,7 @@ export interface Message {
 export interface Conversation {
     id: string;
     user_id: number;
-    agent_id: number;
+    agent_id: string;
     title: string | null;
     metadata: Record<string, unknown> | null;
     messages: Message[];

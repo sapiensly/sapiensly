@@ -9,14 +9,14 @@ import { computed } from 'vue';
 
 const props = defineProps<{
     config: ActionAgentConfig;
-    toolIds: number[];
+    toolIds: string[];
     tools: ToolReference[];
     errors: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
     'update:config': [config: ActionAgentConfig];
-    'update:toolIds': [ids: number[]];
+    'update:toolIds': [ids: string[]];
 }>();
 
 const timeout = computed({
@@ -45,7 +45,7 @@ const retryCount = computed({
     },
 });
 
-const toggleTool = (id: number, checked: boolean) => {
+const toggleTool = (id: string, checked: boolean) => {
     const currentIds = [...props.toolIds];
     if (checked) {
         if (!currentIds.includes(id)) {
@@ -60,7 +60,7 @@ const toggleTool = (id: number, checked: boolean) => {
     emit('update:toolIds', currentIds);
 };
 
-const isSelected = (id: number) => props.toolIds.includes(id);
+const isSelected = (id: string) => props.toolIds.includes(id);
 
 const toolTypeLabel = (type: string) => {
     switch (type) {
@@ -94,8 +94,8 @@ const toolTypeLabel = (type: string) => {
                 >
                     <Checkbox
                         :id="`tool-${tool.id}`"
-                        :checked="isSelected(tool.id)"
-                        @update:checked="toggleTool(tool.id, $event)"
+                        :model-value="isSelected(tool.id)"
+                        @update:model-value="toggleTool(tool.id, $event as boolean)"
                     />
                     <Label :for="`tool-${tool.id}`" class="flex-1 cursor-pointer">
                         {{ tool.name }}

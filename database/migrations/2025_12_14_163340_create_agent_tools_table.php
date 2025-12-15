@@ -13,9 +13,19 @@ return new class extends Migration
     {
         Schema::create('agent_tools', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('agent_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('tool_id')->constrained()->cascadeOnDelete();
+            $table->string('agent_id', 36);
+            $table->string('tool_id', 36);
             $table->timestamps();
+
+            $table->foreign('agent_id')
+                ->references('id')
+                ->on('agents')
+                ->cascadeOnDelete();
+
+            $table->foreign('tool_id')
+                ->references('id')
+                ->on('tools')
+                ->cascadeOnDelete();
 
             $table->unique(['agent_id', 'tool_id']);
         });

@@ -41,4 +41,25 @@ return [
         'redirect_url' => env('WORKOS_REDIRECT_URL'),
     ],
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+    ],
+
+    'anthropic' => [
+        'api_key' => env('ANTHROPIC_API_KEY'),
+    ],
+
+    'embeddings' => [
+        'default_provider' => env('EMBEDDING_PROVIDER', 'openai'),
+        'default_model' => env('EMBEDDING_MODEL', 'text-embedding-3-small'),
+        'providers' => [
+            'openai' => [
+                'models' => [
+                    'text-embedding-3-small' => ['dimensions' => 1536, 'cost_per_1m' => 0.02],
+                    'text-embedding-3-large' => ['dimensions' => 3072, 'cost_per_1m' => 0.13],
+                ],
+            ],
+        ],
+    ],
+
 ];
