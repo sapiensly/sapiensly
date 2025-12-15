@@ -89,6 +89,71 @@ describe('send message', function () {
     });
 });
 
+describe('new conversation', function () {
+    it('deletes existing conversation and redirects to chat', function () {
+        $agent = Agent::factory()->standalone()->create(['user_id' => $this->user->id]);
+        $conversation = Conversation::factory()->create([
+            'user_id' => $this->user->id,
+            'agent_id' => $agent->id,
+        ]);
+        $conversation->messages()->create([
+            'role' => MessageRole::User,
+            'content' => 'Old message',
+        ]);
+
+        $this->assertDatabaseHas('conversations', ['id' => $conversation->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('agents.chat.new', $agent))
+            ->assertRedirect(route('agents.chat', $agent));
+
+        $this->assertDatabaseMissing('conversations', ['id' => $conversation->id]);
+    });
+
+    it('works when no conversation exists', function () {
+        $agent = Agent::factory()->standalone()->create(['user_id' => $this->user->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('agents.chat.new', $agent))
+            ->assertRedirect(route('agents.chat', $agent));
+    });
+
+    it('returns 403 for agents belonging to other users', function () {
+        $otherAgent = Agent::factory()->standalone()->create();
+
+        $this->actingAs($this->user)
+            ->post(route('agents.chat.new', $otherAgent))
+            ->assertForbidden();
+    });
+
+    it('only deletes conversation for the current user', function () {
+        $agent = Agent::factory()->standalone()->create(['user_id' => $this->user->id]);
+
+        // Create conversation for current user
+        $myConversation = Conversation::factory()->create([
+            'user_id' => $this->user->id,
+            'agent_id' => $agent->id,
+        ]);
+
+        // Create conversation for another user with same agent
+        $otherUser = User::factory()->create();
+        $otherConversation = Conversation::factory()->create([
+            'user_id' => $otherUser->id,
+            'agent_id' => $agent->id,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('agents.chat.new', $agent))
+            ->assertRedirect();
+
+        // My conversation should be deleted
+        $this->assertDatabaseMissing('conversations', ['id' => $myConversation->id]);
+
+        // Other user's conversation should remain
+        $this->assertDatabaseHas('conversations', ['id' => $otherConversation->id]);
+    });
+});
+
 describe('stream response', function () {
     it('returns 403 for agents belonging to other users', function () {
         $otherAgent = Agent::factory()->standalone()->create();
