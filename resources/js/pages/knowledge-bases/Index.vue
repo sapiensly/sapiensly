@@ -98,7 +98,7 @@ const statusVariant = (status: string) => {
                                 <div class="flex items-center gap-4 text-sm text-muted-foreground">
                                     <div class="flex items-center gap-1">
                                         <FileText class="h-4 w-4" />
-                                        {{ kb.documents_count ?? 0 }} documents
+                                        {{ kb.total_documents_count ?? 0 }} documents
                                     </div>
                                 </div>
                             </CardContent>

@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Enums\DocumentType;
 use App\Enums\KnowledgeBaseStatus;
+use App\Enums\Visibility;
 use App\Http\Requests\KnowledgeBase\StoreKnowledgeBaseRequest;
 use App\Http\Requests\KnowledgeBase\UpdateKnowledgeBaseRequest;
 use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Services\DocumentService;
+use App\Services\FolderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,9 +22,16 @@ class KnowledgeBaseController extends Controller
     {
         $knowledgeBases = KnowledgeBase::query()
             ->where('user_id', $request->user()->id)
-            ->withCount('documents')
+            ->withCount(['documents', 'attachedDocuments'])
             ->latest()
             ->paginate(12);
+
+        // Add combined document count
+        $knowledgeBases->getCollection()->transform(function ($kb) {
+            $kb->total_documents_count = ($kb->documents_count ?? 0) + ($kb->attached_documents_count ?? 0);
+
+            return $kb;
+        });
 
         return Inertia::render('knowledge-bases/Index', [
             'knowledgeBases' => $knowledgeBases,
@@ -55,18 +64,37 @@ class KnowledgeBaseController extends Controller
         return to_route('knowledge-bases.show', $knowledgeBase);
     }
 
-    public function show(Request $request, KnowledgeBase $knowledgeBase): Response
+    public function show(Request $request, KnowledgeBase $knowledgeBase, FolderService $folderService): Response
     {
         if ($knowledgeBase->user_id !== $request->user()->id) {
             abort(403);
         }
 
+        $user = $request->user();
+
+        // Get documents attached to this KB (using new Document model)
+        $attachedDocumentIds = $knowledgeBase->attachedDocuments()->pluck('documents.id')->toArray();
+
+        // Get all documents visible to user
+        $availableDocuments = Document::visibleTo($user)
+            ->with(['folder:id,name'])
+            ->get();
+
         return Inertia::render('knowledge-bases/Show', [
-            'knowledgeBase' => $knowledgeBase->load('documents'),
+            'knowledgeBase' => $knowledgeBase->load(['documents', 'attachedDocuments']),
             'documentTypes' => collect(DocumentType::cases())->map(fn ($type) => [
                 'value' => $type->value,
                 'label' => $type->label(),
             ]),
+            'availableDocuments' => $availableDocuments,
+            'attachedDocumentIds' => $attachedDocumentIds,
+            'folders' => $folderService->getGroupedFolders($user),
+            'visibilityOptions' => collect(Visibility::cases())->map(fn ($v) => [
+                'value' => $v->value,
+                'label' => $v->label(),
+                'description' => $v->description(),
+            ])->values()->all(),
+            'canShareWithOrg' => $user->hasOrganization(),
         ]);
     }
 

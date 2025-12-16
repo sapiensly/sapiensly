@@ -69,7 +69,7 @@ class Folder extends Model
      */
     public function getAncestors(): Collection
     {
-        $ancestors = new Collection();
+        $ancestors = new Collection;
         $folder = $this->parent;
 
         while ($folder) {
@@ -85,7 +85,7 @@ class Folder extends Model
      */
     public function getDescendants(): Collection
     {
-        $descendants = new Collection();
+        $descendants = new Collection;
 
         foreach ($this->children as $child) {
             $descendants->push($child);

@@ -8,6 +8,7 @@ use App\Http\Requests\Document\StoreDocumentRequest;
 use App\Http\Requests\Document\UpdateDocumentRequest;
 use App\Models\Document;
 use App\Models\Folder;
+use App\Models\KnowledgeBase;
 use App\Services\DocumentService;
 use App\Services\FolderService;
 use Illuminate\Http\RedirectResponse;
@@ -77,6 +78,7 @@ class DocumentController extends Controller
                 'description' => $v->description(),
             ])->values()->all(),
             'canShareWithOrg' => $user->hasOrganization(),
+            'canDeleteFolder' => $currentFolder?->isOwnedBy($user) ?? false,
         ]);
     }
 
@@ -115,6 +117,15 @@ class DocumentController extends Controller
             }
         }
 
+        // Validate knowledge base access if provided
+        $knowledgeBase = null;
+        if ($request->knowledge_base_id) {
+            $knowledgeBase = KnowledgeBase::find($request->knowledge_base_id);
+            if (! $knowledgeBase || $knowledgeBase->user_id !== $user->id) {
+                return back()->withErrors(['knowledge_base_id' => 'Invalid knowledge base.']);
+            }
+        }
+
         $document = $this->documentService->upload(
             file: $request->file('file'),
             user: $user,
@@ -122,6 +133,13 @@ class DocumentController extends Controller
             name: $request->name,
             folderId: $request->folder_id
         );
+
+        // Attach to knowledge base if provided
+        if ($knowledgeBase) {
+            $this->documentService->attachToKnowledgeBase($document, $knowledgeBase);
+
+            return to_route('knowledge-bases.show', $knowledgeBase);
+        }
 
         return to_route('documents.show', $document);
     }

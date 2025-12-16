@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
 import * as KnowledgeBaseDocumentController from '@/actions/App/Http/Controllers/KnowledgeBaseDocumentController';
+import DocumentSelectorDialog from '@/components/documents/DocumentSelectorDialog.vue';
+import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue';
 import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
-import DocumentUpload from '@/components/knowledge-bases/DocumentUpload.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,21 +28,57 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
+import type { Document, GroupedFolders, VisibilityOption } from '@/types/document';
 import type { DocumentTypeOption, KnowledgeBase, KnowledgeBaseDocument } from '@/types/knowledge-base';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { FileText, MoreVertical, Pencil, RefreshCw, Trash2 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { FileText, FolderPlus, MoreVertical, Pencil, Plus, RefreshCw, Trash2, Upload } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 interface Props {
     knowledgeBase: KnowledgeBase;
     documentTypes: DocumentTypeOption[];
+    availableDocuments: Document[];
+    attachedDocumentIds: string[];
+    folders: GroupedFolders;
+    visibilityOptions: VisibilityOption[];
+    canShareWithOrg: boolean;
 }
 
 const props = defineProps<Props>();
+
+const showDocumentSelector = ref(false);
+const showUploadDialog = ref(false);
+
+// Combine legacy documents and new attached documents
+const allDocuments = computed(() => {
+    const legacy = props.knowledgeBase.documents || [];
+    const attached = props.knowledgeBase.attached_documents || [];
+
+    // Map attached documents to have similar structure as legacy
+    const mappedAttached = attached.map(doc => ({
+        id: doc.id,
+        original_filename: doc.original_filename,
+        name: doc.name,
+        source: doc.name,
+        type: doc.type,
+        embedding_status: doc.pivot?.embedding_status || 'pending',
+        error_message: doc.pivot?.error_message || null,
+        isAttached: true, // Flag to differentiate
+    }));
+
+    // Map legacy documents
+    const mappedLegacy = legacy.map(doc => ({
+        ...doc,
+        isAttached: false,
+    }));
+
+    return [...mappedLegacy, ...mappedAttached];
+});
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Knowledge Base', href: KnowledgeBaseController.index().url },
@@ -74,16 +111,28 @@ const documentTypeLabel = (type: string) => {
     return found?.label ?? type.toUpperCase();
 };
 
-const deleteDocument = (doc: KnowledgeBaseDocument) => {
-    if (!confirm(`Delete "${doc.original_filename ?? doc.source}"?`)) return;
+const deleteDocument = (doc: KnowledgeBaseDocument & { isAttached?: boolean }) => {
+    if (!confirm(`Remove "${doc.original_filename ?? doc.name ?? doc.source}"?`)) return;
 
-    router.delete(
-        KnowledgeBaseDocumentController.destroy({
-            knowledge_base: props.knowledgeBase.id,
-            document: doc.id,
-        }).url,
-        { preserveScroll: true },
-    );
+    if (doc.isAttached) {
+        // Detach new Document model
+        router.delete(
+            KnowledgeBaseController.detachDocument({
+                knowledge_base: props.knowledgeBase.id,
+                document: doc.id,
+            }).url,
+            { preserveScroll: true },
+        );
+    } else {
+        // Delete legacy KnowledgeBaseDocument
+        router.delete(
+            KnowledgeBaseDocumentController.destroy({
+                knowledge_base: props.knowledgeBase.id,
+                document: doc.id,
+            }).url,
+            { preserveScroll: true },
+        );
+    }
 };
 
 const reprocessDocument = (doc: KnowledgeBaseDocument) => {
@@ -93,6 +142,18 @@ const reprocessDocument = (doc: KnowledgeBaseDocument) => {
             document: doc.id,
         }).url,
         {},
+        { preserveScroll: true },
+    );
+};
+
+const handleDocumentsSelected = (documentIds: string[]) => {
+    if (documentIds.length === 0) return;
+
+    router.post(
+        KnowledgeBaseController.attachDocuments({
+            knowledge_base: props.knowledgeBase.id,
+        }).url,
+        { document_ids: documentIds },
         { preserveScroll: true },
     );
 };
@@ -212,12 +273,30 @@ const reprocessDocument = (doc: KnowledgeBaseDocument) => {
                                 title="Documents"
                                 description="Files and URLs in this knowledge base"
                             />
-                            <DocumentUpload :knowledge-base-id="knowledgeBase.id" />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger as-child>
+                                    <Button>
+                                        <Plus class="mr-2 h-4 w-4" />
+                                        Add Document
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem @click="showDocumentSelector = true">
+                                        <FolderPlus class="mr-2 h-4 w-4" />
+                                        Add Existing Document
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem @click="showUploadDialog = true">
+                                        <Upload class="mr-2 h-4 w-4" />
+                                        Upload New Document
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
 
                         <div class="mt-4">
                             <div
-                                v-if="!knowledgeBase.documents || knowledgeBase.documents.length === 0"
+                                v-if="allDocuments.length === 0"
                                 class="rounded-lg border border-dashed p-8 text-center"
                             >
                                 <FileText class="mx-auto h-8 w-8 text-muted-foreground" />
@@ -228,7 +307,7 @@ const reprocessDocument = (doc: KnowledgeBaseDocument) => {
 
                             <div v-else class="space-y-3">
                                 <Card
-                                    v-for="doc in knowledgeBase.documents"
+                                    v-for="doc in allDocuments"
                                     :key="doc.id"
                                 >
                                     <CardContent class="flex items-center justify-between py-4">
@@ -282,5 +361,24 @@ const reprocessDocument = (doc: KnowledgeBaseDocument) => {
                 </div>
             </div>
         </div>
+
+        <!-- Document Selector Dialog -->
+        <DocumentSelectorDialog
+            v-model:open="showDocumentSelector"
+            :documents="availableDocuments"
+            :folders="folders"
+            :exclude-document-ids="attachedDocumentIds"
+            @select="handleDocumentsSelected"
+        />
+
+        <!-- Upload Dialog -->
+        <DocumentUploadDialog
+            v-model:open="showUploadDialog"
+            :visibility-options="visibilityOptions"
+            :can-share-with-org="canShareWithOrg"
+            :folders="folders"
+            :show-folder-selector="true"
+            :knowledge-base-id="knowledgeBase.id"
+        />
     </AppLayout>
 </template>

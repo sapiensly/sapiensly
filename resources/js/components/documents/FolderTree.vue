@@ -81,7 +81,7 @@ const hasChildren = (folder: Folder) => folder.children && folder.children.lengt
                             </button>
                             <span v-else class="w-4" />
 
-                            <FolderOpen v-if="isExpanded(folder.id)" class="h-4 w-4 text-muted-foreground" />
+                            <FolderOpen v-if="isExpanded(folder.id) || isActive(folder.id)" class="h-4 w-4 text-muted-foreground" />
                             <FolderIcon v-else class="h-4 w-4 text-muted-foreground" />
                             <span class="flex-1 truncate">{{ folder.name }}</span>
                             <Users
@@ -116,7 +116,7 @@ const hasChildren = (folder: Folder) => folder.children && folder.children.lengt
                                         </button>
                                         <span v-else class="w-4" />
 
-                                        <FolderOpen v-if="isExpanded(child.id)" class="h-4 w-4 text-muted-foreground" />
+                                        <FolderOpen v-if="isExpanded(child.id) || isActive(child.id)" class="h-4 w-4 text-muted-foreground" />
                                         <FolderIcon v-else class="h-4 w-4 text-muted-foreground" />
                                         <span class="flex-1 truncate">{{ child.name }}</span>
                                         <Users
@@ -141,7 +141,8 @@ const hasChildren = (folder: Folder) => folder.children && folder.children.lengt
                                             @click="navigateToFolder(grandchild.id)"
                                         >
                                             <span class="w-4" />
-                                            <FolderIcon class="h-4 w-4 text-muted-foreground" />
+                                            <FolderOpen v-if="isActive(grandchild.id)" class="h-4 w-4 text-muted-foreground" />
+                                            <FolderIcon v-else class="h-4 w-4 text-muted-foreground" />
                                             <span class="flex-1 truncate">{{ grandchild.name }}</span>
                                             <Users
                                                 v-if="grandchild.visibility === 'organization'"
@@ -187,7 +188,7 @@ const hasChildren = (folder: Folder) => folder.children && folder.children.lengt
                             </button>
                             <span v-else class="w-4" />
 
-                            <FolderOpen v-if="isExpanded(folder.id)" class="h-4 w-4 text-muted-foreground" />
+                            <FolderOpen v-if="isExpanded(folder.id) || isActive(folder.id)" class="h-4 w-4 text-muted-foreground" />
                             <FolderIcon v-else class="h-4 w-4 text-muted-foreground" />
                             <span class="flex-1 truncate">{{ folder.name }}</span>
                             <Users class="h-3 w-3 text-muted-foreground" />
@@ -205,7 +206,8 @@ const hasChildren = (folder: Folder) => folder.children && folder.children.lengt
                                 @click="navigateToFolder(child.id)"
                             >
                                 <span class="w-4" />
-                                <FolderIcon class="h-4 w-4 text-muted-foreground" />
+                                <FolderOpen v-if="isActive(child.id)" class="h-4 w-4 text-muted-foreground" />
+                                <FolderIcon v-else class="h-4 w-4 text-muted-foreground" />
                                 <span class="flex-1 truncate">{{ child.name }}</span>
                                 <Users class="h-3 w-3 text-muted-foreground" />
                             </div>

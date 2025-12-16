@@ -18,18 +18,25 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import type { VisibilityOption } from '@/types/document';
+import type { Folder, GroupedFolders, VisibilityOption } from '@/types/document';
 import { useForm } from '@inertiajs/vue3';
-import { File, Lock, Upload, Users, X } from 'lucide-vue-next';
-import { ref, watch } from 'vue';
+import { File, FolderIcon, Lock, Upload, Users, X } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 
 interface Props {
     visibilityOptions: VisibilityOption[];
     canShareWithOrg: boolean;
-    currentFolderId: string | null;
+    currentFolderId?: string | null;
+    folders?: GroupedFolders;
+    showFolderSelector?: boolean;
+    knowledgeBaseId?: string | null;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+    currentFolderId: null,
+    showFolderSelector: false,
+    knowledgeBaseId: null,
+});
 
 const open = defineModel<boolean>('open', { required: true });
 
@@ -38,6 +45,7 @@ const form = useForm({
     name: '',
     visibility: 'private',
     folder_id: props.currentFolderId,
+    knowledge_base_id: props.knowledgeBaseId,
 });
 
 const selectedFile = ref<File | null>(null);
@@ -50,6 +58,32 @@ watch(
         form.folder_id = newVal;
     }
 );
+
+// Flatten folders for the selector dropdown
+const flattenedFolders = computed(() => {
+    if (!props.folders) return [];
+
+    const result: { id: string; name: string; depth: number; visibility: string }[] = [];
+
+    const addFolders = (folders: Folder[], depth: number) => {
+        for (const folder of folders) {
+            result.push({
+                id: folder.id,
+                name: folder.name,
+                depth,
+                visibility: folder.visibility,
+            });
+            if (folder.children?.length) {
+                addFolders(folder.children, depth + 1);
+            }
+        }
+    };
+
+    addFolders(props.folders.my, 0);
+    addFolders(props.folders.organization, 0);
+
+    return result;
+});
 
 const handleFileSelect = (e: Event) => {
     const target = e.target as HTMLInputElement;
@@ -180,6 +214,40 @@ const handleClose = () => {
                         v-model="form.name"
                         placeholder="Document name"
                     />
+                </div>
+
+                <!-- Folder Select (when showFolderSelector is true) -->
+                <div v-if="showFolderSelector && folders" class="space-y-2">
+                    <Label for="folder">Folder (optional)</Label>
+                    <Select v-model="form.folder_id">
+                        <SelectTrigger>
+                            <SelectValue placeholder="No folder (root)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem :value="null">
+                                <span class="text-muted-foreground">No folder (root)</span>
+                            </SelectItem>
+                            <SelectItem
+                                v-for="folder in flattenedFolders"
+                                :key="folder.id"
+                                :value="folder.id"
+                            >
+                                <div class="flex items-center gap-2">
+                                    <span :style="{ paddingLeft: `${folder.depth * 12}px` }">
+                                        <FolderIcon class="inline h-4 w-4 mr-1" />
+                                        {{ folder.name }}
+                                    </span>
+                                    <Users
+                                        v-if="folder.visibility === 'organization'"
+                                        class="h-3 w-3 text-muted-foreground"
+                                    />
+                                </div>
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <p class="text-xs text-muted-foreground">
+                        Choose where to save this document
+                    </p>
                 </div>
 
                 <!-- Visibility Select -->

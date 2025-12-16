@@ -8,7 +8,7 @@ interface Props {
     title: string;
     description: string;
     createUrl?: string;
-    createLabel: string;
+    createLabel?: string;
 }
 
 defineProps<Props>();
@@ -31,16 +31,19 @@ const emit = defineEmits<{
             <p class="mb-6 max-w-sm text-sm text-muted-foreground">
                 {{ description }}
             </p>
-            <Button v-if="createUrl" as-child>
-                <Link :href="createUrl">
+            <div class="flex gap-2">
+                <Button v-if="createUrl && createLabel" as-child>
+                    <Link :href="createUrl">
+                        <Plus class="mr-2 h-4 w-4" />
+                        {{ createLabel }}
+                    </Link>
+                </Button>
+                <Button v-else-if="createLabel" @click="emit('create')">
                     <Plus class="mr-2 h-4 w-4" />
                     {{ createLabel }}
-                </Link>
-            </Button>
-            <Button v-else @click="emit('create')">
-                <Plus class="mr-2 h-4 w-4" />
-                {{ createLabel }}
-            </Button>
+                </Button>
+                <slot name="extra" />
+            </div>
         </CardContent>
     </Card>
 </template>

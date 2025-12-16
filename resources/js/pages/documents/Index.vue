@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
+import * as FolderController from '@/actions/App/Http/Controllers/FolderController';
 import EmptyState from '@/components/agents/EmptyState.vue';
 import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue';
 import FolderDialog from '@/components/documents/FolderDialog.vue';
@@ -14,6 +15,14 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
@@ -35,6 +44,7 @@ import {
     Home,
     Lock,
     Search,
+    Trash2,
     Upload,
     Users,
 } from 'lucide-vue-next';
@@ -52,12 +62,15 @@ interface Props {
     documentTypes: DocumentTypeOption[];
     visibilityOptions: VisibilityOption[];
     canShareWithOrg: boolean;
+    canDeleteFolder: boolean;
 }
 
 const props = defineProps<Props>();
 
 const showUploadDialog = ref(false);
 const showFolderDialog = ref(false);
+const showDeleteFolderDialog = ref(false);
+const isDeletingFolder = ref(false);
 const searchQuery = ref(props.filters.search);
 
 const performSearch = useDebounceFn(() => {
@@ -113,6 +126,19 @@ const typeColors: Record<string, string> = {
     md: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
     csv: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
     json: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+};
+
+const handleDeleteFolder = () => {
+    if (!props.currentFolder) return;
+
+    isDeletingFolder.value = true;
+
+    router.delete(FolderController.destroy({ folder: props.currentFolder.id }).url, {
+        onFinish: () => {
+            isDeletingFolder.value = false;
+            showDeleteFolderDialog.value = false;
+        },
+    });
 };
 </script>
 
@@ -197,7 +223,17 @@ const typeColors: Record<string, string> = {
                                         : 'Upload your first document to get started.')"
                                 :create-label="filters.search ? undefined : 'Upload Document'"
                                 @create="showUploadDialog = true"
-                            />
+                            >
+                                <template v-if="currentFolder && canDeleteFolder && !filters.search" #extra>
+                                    <Button
+                                        variant="destructive"
+                                        @click="showDeleteFolderDialog = true"
+                                    >
+                                        <Trash2 class="mr-2 h-4 w-4" />
+                                        Delete Folder
+                                    </Button>
+                                </template>
+                            </EmptyState>
                         </div>
 
                         <!-- Documents Grid -->
@@ -274,5 +310,30 @@ const typeColors: Record<string, string> = {
             :can-share-with-org="canShareWithOrg"
             :parent-folder-id="currentFolder?.id ?? null"
         />
+
+        <!-- Delete Folder Dialog -->
+        <Dialog v-model:open="showDeleteFolderDialog">
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Delete Folder</DialogTitle>
+                    <DialogDescription>
+                        Are you sure you want to delete "{{ currentFolder?.name }}"? This action cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <DialogFooter>
+                    <Button variant="outline" @click="showDeleteFolderDialog = false">
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        :disabled="isDeletingFolder"
+                        @click="handleDeleteFolder"
+                    >
+                        Delete
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>

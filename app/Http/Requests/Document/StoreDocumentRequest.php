@@ -20,6 +20,7 @@ class StoreDocumentRequest extends FormRequest
             'name' => ['nullable', 'string', 'max:255'],
             'visibility' => ['nullable', new Enum(Visibility::class)],
             'folder_id' => ['nullable', 'string', 'exists:folders,id'],
+            'knowledge_base_id' => ['nullable', 'string', 'exists:knowledge_bases,id'],
         ];
     }
 
