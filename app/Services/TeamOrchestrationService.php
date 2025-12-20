@@ -155,16 +155,51 @@ class TeamOrchestrationService
     /**
      * Extract routing decision from Prism response.
      *
+     * When using maxSteps=1 (single LLM call), the tool is called but not executed,
+     * so we extract the routing decision from the tool arguments instead of the result.
+     * The tool name tells us the action, and arguments contain the details.
+     *
      * @return array{action: string, query?: string, task?: string, response?: string, urgency?: string, context?: array}
      */
     private function extractRoutingDecision($response): array
     {
-        // Prism stores tool call results in steps
+        // Prism stores tool calls in steps
         foreach ($response->steps ?? [] as $step) {
             foreach ($step->toolCalls ?? [] as $toolCall) {
-                if (isset($toolCall->result) && is_array($toolCall->result)) {
-                    // Found a routing tool result
-                    return $toolCall->result;
+                $toolName = $toolCall->name ?? '';
+                $args = $toolCall->arguments();
+
+                // Map tool name to action and extract arguments
+                switch ($toolName) {
+                    case 'route_to_knowledge':
+                        return [
+                            'action' => 'knowledge',
+                            'query' => $args['query'] ?? '',
+                            'urgency' => $args['urgency'] ?? 'medium',
+                        ];
+
+                    case 'route_to_action':
+                        $context = [];
+                        if (isset($args['context'])) {
+                            $decoded = is_string($args['context'])
+                                ? json_decode($args['context'], true)
+                                : $args['context'];
+                            if (is_array($decoded)) {
+                                $context = $decoded;
+                            }
+                        }
+
+                        return [
+                            'action' => 'action',
+                            'task' => $args['task'] ?? '',
+                            'context' => $context,
+                        ];
+
+                    case 'respond_directly':
+                        return [
+                            'action' => 'direct',
+                            'response' => $args['response'] ?? '',
+                        ];
                 }
             }
         }
