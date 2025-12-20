@@ -81,6 +81,9 @@ export interface AgentTeam {
     status: AgentStatus;
     agents_count?: number;
     agents?: Agent[];
+    triage_agent?: Agent | null;
+    knowledge_agent?: Agent | null;
+    action_agent?: Agent | null;
     created_at: string;
     updated_at: string;
     deleted_at: string | null;

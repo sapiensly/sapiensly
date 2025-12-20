@@ -15,6 +15,7 @@ class Conversation extends Model
     protected $fillable = [
         'user_id',
         'agent_id',
+        'team_id',
         'title',
         'metadata',
     ];
@@ -34,6 +35,11 @@ class Conversation extends Model
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class);
+    }
+
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(AgentTeam::class, 'team_id');
     }
 
     public function messages(): HasMany

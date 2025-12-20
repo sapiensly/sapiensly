@@ -34,10 +34,26 @@ export interface KnowledgeBaseRef {
 }
 
 export interface StreamChunk {
-    type?: 'tool_call' | 'knowledge_base' | 'content';
+    type?: 'tool_call' | 'knowledge_base' | 'content' | 'routing' | 'agent_start';
     content?: string;
     tool?: string;
     name?: string;
     id?: string;
     error?: string;
+    // Routing-specific fields (for team orchestration)
+    agent?: 'triage' | 'knowledge' | 'action';
+    decision?: RoutingDecision;
+}
+
+export interface RoutingDecision {
+    action: 'knowledge' | 'action' | 'direct';
+    query?: string;
+    task?: string;
+    response?: string;
+    urgency?: string;
+    context?: Record<string, unknown>;
+}
+
+export interface TeamMessage extends Message {
+    routing?: RoutingDecision;
 }

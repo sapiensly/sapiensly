@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AgentType;
+use App\Enums\MessageRole;
 use App\Http\Requests\AgentTeam\StoreAgentTeamRequest;
 use App\Http\Requests\AgentTeam\UpdateAgentTeamRequest;
 use App\Models\Agent;
 use App\Models\AgentTeam;
+use App\Models\Conversation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -152,5 +154,72 @@ class AgentTeamController extends Controller
             ['value' => 'gpt-4', 'label' => 'GPT-4'],
             ['value' => 'gpt-4-turbo', 'label' => 'GPT-4 Turbo'],
         ];
+    }
+
+    public function chat(Request $request, AgentTeam $agentTeam): Response
+    {
+        if ($agentTeam->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        // Get or create a conversation for this team
+        $conversation = Conversation::firstOrCreate(
+            [
+                'user_id' => $request->user()->id,
+                'team_id' => $agentTeam->id,
+            ],
+            [
+                'title' => "Chat with {$agentTeam->name}",
+            ]
+        );
+
+        return Inertia::render('agent-teams/Chat', [
+            'team' => $agentTeam->load(['triageAgent', 'knowledgeAgent', 'actionAgent']),
+            'conversation' => $conversation->load('messages'),
+        ]);
+    }
+
+    public function sendMessage(Request $request, AgentTeam $agentTeam): RedirectResponse
+    {
+        if ($agentTeam->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        $request->validate([
+            'message' => 'required|string|max:10000',
+        ]);
+
+        // Get or create conversation
+        $conversation = Conversation::firstOrCreate(
+            [
+                'user_id' => $request->user()->id,
+                'team_id' => $agentTeam->id,
+            ],
+            [
+                'title' => "Chat with {$agentTeam->name}",
+            ]
+        );
+
+        // Save user message
+        $conversation->messages()->create([
+            'role' => MessageRole::User,
+            'content' => $request->message,
+        ]);
+
+        return back();
+    }
+
+    public function newConversation(Request $request, AgentTeam $agentTeam): RedirectResponse
+    {
+        if ($agentTeam->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        // Delete existing conversation for this team
+        Conversation::where('user_id', $request->user()->id)
+            ->where('team_id', $agentTeam->id)
+            ->delete();
+
+        return to_route('agent-teams.chat', $agentTeam);
     }
 }

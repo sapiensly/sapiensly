@@ -25,7 +25,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { AgentTeam } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Bot, Brain, Pencil, Trash2, Zap } from 'lucide-vue-next';
+import { Bot, Brain, MessageSquare, Pencil, Trash2, Zap } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface Props {
@@ -90,6 +90,18 @@ const deleteTeam = () => {
                         </p>
                     </div>
                     <div class="flex gap-2">
+                        <Button as-child>
+                            <Link
+                                :href="
+                                    AgentTeamController.chat({
+                                        agentTeam: team.id,
+                                    })
+                                "
+                            >
+                                <MessageSquare class="mr-2 h-4 w-4" />
+                                Test Team
+                            </Link>
+                        </Button>
                         <Button variant="outline" as-child>
                             <Link
                                 :href="

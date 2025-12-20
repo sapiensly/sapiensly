@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import type { StreamChunk, ToolCall, KnowledgeBaseRef } from '@/types/chat';
+import type { StreamChunk, ToolCall, KnowledgeBaseRef, RoutingDecision } from '@/types/chat';
 
 export interface StreamCallbacks {
     onChunk: (content: string) => void;
@@ -7,6 +7,8 @@ export interface StreamCallbacks {
     onError: (error: string) => void;
     onToolCall?: (tool: ToolCall) => void;
     onKnowledgeBase?: (kb: KnowledgeBaseRef) => void;
+    onRouting?: (routing: RoutingDecision) => void;
+    onAgentStart?: (agent: 'triage' | 'knowledge' | 'action') => void;
 }
 
 export function useStreamingChat() {
@@ -14,6 +16,8 @@ export function useStreamingChat() {
     const streamingContent = ref('');
     const toolCalls = ref<ToolCall[]>([]);
     const knowledgeBases = ref<KnowledgeBaseRef[]>([]);
+    const routing = ref<RoutingDecision | null>(null);
+    const currentAgent = ref<'triage' | 'knowledge' | 'action' | null>(null);
     const error = ref<string | null>(null);
 
     let eventSource: EventSource | null = null;
@@ -24,7 +28,9 @@ export function useStreamingChat() {
         onComplete: () => void,
         onError: (error: string) => void,
         onToolCall?: (tool: ToolCall) => void,
-        onKnowledgeBase?: (kb: KnowledgeBaseRef) => void
+        onKnowledgeBase?: (kb: KnowledgeBaseRef) => void,
+        onRouting?: (routing: RoutingDecision) => void,
+        onAgentStart?: (agent: 'triage' | 'knowledge' | 'action') => void
     ) {
         // Close any existing connection
         stopStream();
@@ -33,6 +39,8 @@ export function useStreamingChat() {
         streamingContent.value = '';
         toolCalls.value = [];
         knowledgeBases.value = [];
+        routing.value = null;
+        currentAgent.value = null;
         error.value = null;
 
         eventSource = new EventSource(url);
@@ -51,6 +59,20 @@ export function useStreamingChat() {
                     error.value = data.error;
                     stopStream();
                     onError(data.error);
+                    return;
+                }
+
+                // Handle routing events (team orchestration)
+                if (data.type === 'routing' && data.decision) {
+                    routing.value = data.decision;
+                    onRouting?.(data.decision);
+                    return;
+                }
+
+                // Handle agent start events (team orchestration)
+                if (data.type === 'agent_start' && data.agent) {
+                    currentAgent.value = data.agent;
+                    onAgentStart?.(data.agent);
                     return;
                 }
 
@@ -100,6 +122,8 @@ export function useStreamingChat() {
         streamingContent,
         toolCalls,
         knowledgeBases,
+        routing,
+        currentAgent,
         error,
         startStream,
         stopStream,

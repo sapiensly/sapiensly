@@ -257,6 +257,45 @@ class LLMService
     }
 
     /**
+     * Chat with custom routing tools (for Triage Agents).
+     *
+     * Unlike chatWithTools, this method accepts Prism tools directly
+     * rather than building them from the agent's Tool models.
+     *
+     * @param  array<Message>  $messages
+     * @param  array<\Prism\Prism\Tool>  $tools
+     */
+    public function chatWithRoutingTools(Agent $agent, array $messages, array $tools, int $maxSteps = 1): TextResponse
+    {
+        Log::info('Building chat with routing tools', [
+            'agent_id' => $agent->id,
+            'tool_count' => count($tools),
+            'tool_names' => collect($tools)->map(fn ($t) => $t->name())->all(),
+        ]);
+
+        // Build the request
+        $formattedMessages = $this->formatMessages($messages);
+        $request = $this->buildRequestWithMessages($agent, $formattedMessages);
+
+        // Add routing tools
+        if (count($tools) > 0) {
+            $request->withTools($tools)
+                ->withMaxSteps($maxSteps);
+        }
+
+        // Execute
+        $response = $request->asText();
+
+        Log::info('Routing chat completed', [
+            'agent_id' => $agent->id,
+            'steps' => count($response->steps ?? []),
+            'finish_reason' => $response->finishReason?->name ?? 'unknown',
+        ]);
+
+        return $response;
+    }
+
+    /**
      * Get the tool builder service (lazy initialization).
      */
     private function getToolBuilderService(): ToolBuilderService
