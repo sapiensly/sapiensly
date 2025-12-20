@@ -6,9 +6,10 @@ use App\Models\AgentTeam;
 use Prism\Prism\Tool as PrismTool;
 
 /**
- * Builds routing tools for Triage Agents to decide where to route requests.
+ * Builds routing tools for Triage Agents to create execution plans.
  *
- * The Triage Agent uses these tools to classify user intent and route to:
+ * The Triage Agent analyzes user messages and creates an execution plan
+ * that may include multiple steps, each routed to the appropriate agent:
  * - Knowledge Agent: For questions about documentation, FAQs, policies
  * - Action Agent: For tasks requiring execution (orders, refunds, updates)
  * - Direct Response: For greetings, clarifications, or simple questions
@@ -16,137 +17,168 @@ use Prism\Prism\Tool as PrismTool;
 class TriageRoutingService
 {
     /**
-     * Build routing tools for a Triage Agent based on the team's agents.
+     * Build the execution plan tool for a Triage Agent.
      *
      * @return array<PrismTool>
      */
     public function buildRoutingTools(AgentTeam $team): array
     {
-        $tools = [];
-
         // Load the team's agents
         $team->load(['knowledgeAgent', 'actionAgent']);
 
-        // Route to Knowledge Agent (RAG)
+        return [$this->buildExecutionPlanTool($team)];
+    }
+
+    /**
+     * Build the create_execution_plan tool.
+     *
+     * This tool allows the Triage Agent to create a multi-step execution plan
+     * that routes different parts of a user's message to appropriate agents.
+     */
+    private function buildExecutionPlanTool(AgentTeam $team): PrismTool
+    {
+        $availableAgents = $this->describeAvailableAgents($team);
+
+        $tool = new PrismTool;
+        $tool
+            ->as('create_execution_plan')
+            ->for("Analyze the user's message and create an execution plan. The plan should contain one or more steps, each routing to the appropriate agent or responding directly. {$availableAgents}")
+            ->withStringParameter(
+                'steps',
+                $this->buildStepsDescription($team),
+                required: true
+            )
+            ->using(fn (string $steps) => $steps);
+
+        return $tool;
+    }
+
+    /**
+     * Describe which agents are available for routing.
+     */
+    private function describeAvailableAgents(AgentTeam $team): string
+    {
+        $agents = [];
+
         if ($team->knowledgeAgent) {
-            $tools[] = $this->buildRouteToKnowledgeTool($team);
+            $name = $team->knowledgeAgent->name ?? 'Knowledge Agent';
+            $agents[] = "- knowledge: {$name} - handles questions about documentation, FAQs, policies, guides, or any information lookup";
         }
 
-        // Route to Action Agent (Tools)
         if ($team->actionAgent) {
-            $tools[] = $this->buildRouteToActionTool($team);
+            $name = $team->actionAgent->name ?? 'Action Agent';
+            $toolNames = $team->actionAgent->tools()
+                ->where('status', 'active')
+                ->pluck('name')
+                ->join(', ');
+
+            $desc = "- action: {$name} - handles tasks requiring execution";
+            if ($toolNames) {
+                $desc .= " (capabilities: {$toolNames})";
+            }
+            $agents[] = $desc;
         }
 
-        // Respond directly (always available)
-        $tools[] = $this->buildRespondDirectlyTool();
+        $agents[] = '- direct: respond directly for greetings, clarifications, or when no specialized agent is needed';
 
-        return $tools;
+        return "Available agents:\n".implode("\n", $agents);
     }
 
     /**
-     * Build the route_to_knowledge tool.
+     * Build the description for the steps parameter.
      */
-    private function buildRouteToKnowledgeTool(AgentTeam $team): PrismTool
+    private function buildStepsDescription(AgentTeam $team): string
     {
-        $kbName = $team->knowledgeAgent->name ?? 'Knowledge Agent';
+        $examples = [];
 
-        $tool = new PrismTool;
-        $tool
-            ->as('route_to_knowledge')
-            ->for("Route to the {$kbName} for questions about documentation, FAQs, policies, how-to guides, or any information lookup that can be answered from the knowledge base.")
-            ->withStringParameter(
-                'query',
-                'The refined query to search in the knowledge base. Rephrase the user\'s question to optimize for semantic search.',
-                required: true
-            )
-            ->withStringParameter(
-                'urgency',
-                'The urgency level: low, medium, or high. Default to medium if unclear.',
-                required: false
-            )
-            ->using(function (string $query, ?string $urgency = null) {
-                return [
-                    'action' => 'knowledge',
-                    'query' => $query,
-                    'urgency' => $urgency ?? 'medium',
-                ];
-            });
+        // Single step example
+        $examples[] = '[{"agent":"direct","response":"Hello! How can I help you today?"}]';
 
-        return $tool;
-    }
-
-    /**
-     * Build the route_to_action tool.
-     */
-    private function buildRouteToActionTool(AgentTeam $team): PrismTool
-    {
-        $actionName = $team->actionAgent->name ?? 'Action Agent';
-
-        // Get the action agent's tools for better description
-        $toolNames = $team->actionAgent->tools()
-            ->where('status', 'active')
-            ->pluck('name')
-            ->join(', ');
-
-        $description = "Route to the {$actionName} for tasks requiring execution or real-world operations.";
-        if ($toolNames) {
-            $description .= " Available capabilities: {$toolNames}.";
+        // Multi-step example based on available agents
+        if ($team->knowledgeAgent && $team->actionAgent) {
+            $examples[] = '[{"agent":"knowledge","query":"refund policy","urgency":"medium"},{"agent":"action","task":"check order status for #12345"}]';
+        } elseif ($team->knowledgeAgent) {
+            $examples[] = '[{"agent":"knowledge","query":"how to reset password","urgency":"high"}]';
+        } elseif ($team->actionAgent) {
+            $examples[] = '[{"agent":"action","task":"cancel subscription for user"}]';
         }
 
-        $tool = new PrismTool;
-        $tool
-            ->as('route_to_action')
-            ->for($description)
-            ->withStringParameter(
-                'task',
-                'A clear description of the task to perform. Include all relevant details from the user\'s request.',
-                required: true
-            )
-            ->withStringParameter(
-                'context',
-                'Additional context or parameters for the task as a JSON string (optional).',
-                required: false
-            )
-            ->using(function (string $task, ?string $context = null) {
-                $contextData = [];
-                if ($context) {
-                    $decoded = json_decode($context, true);
-                    if (is_array($decoded)) {
-                        $contextData = $decoded;
-                    }
-                }
+        $exampleStr = implode(' or ', $examples);
 
-                return [
-                    'action' => 'action',
-                    'task' => $task,
-                    'context' => $contextData,
-                ];
-            });
+        return <<<DESC
+A JSON array of execution steps. Each step must have an "agent" field ("knowledge", "action", or "direct").
 
-        return $tool;
+For "knowledge" steps: include "query" (refined search query) and optional "urgency" (low/medium/high).
+For "action" steps: include "task" (task description) and optional "context" (JSON object with additional data).
+For "direct" steps: include "response" (your response text).
+
+Analyze the user's message carefully:
+- If it contains multiple questions or requests, create multiple steps
+- Order steps logically (information gathering before actions)
+- Use "direct" for greetings, clarifications, or simple responses
+
+Examples: {$exampleStr}
+DESC;
     }
 
     /**
-     * Build the respond_directly tool for simple interactions.
+     * Parse the execution plan from the tool response.
+     *
+     * @return array<array{agent: string, query?: string, task?: string, response?: string, urgency?: string, context?: array}>
      */
-    private function buildRespondDirectlyTool(): PrismTool
+    public function parseExecutionPlan(string $stepsJson): array
     {
-        $tool = new PrismTool;
-        $tool
-            ->as('respond_directly')
-            ->for('Respond directly to the user without routing to another agent. Use this for: greetings, clarifying questions, simple conversational responses, or when the request doesn\'t require specialized knowledge or actions.')
-            ->withStringParameter(
-                'response',
-                'Your response to the user. Be helpful, friendly, and concise.',
-                required: true
-            )
-            ->using(function (string $response) {
-                return [
-                    'action' => 'direct',
-                    'response' => $response,
-                ];
-            });
+        $steps = json_decode($stepsJson, true);
 
-        return $tool;
+        if (! is_array($steps)) {
+            // Fallback: treat as direct response
+            return [['agent' => 'direct', 'response' => $stepsJson]];
+        }
+
+        // Normalize steps
+        $normalized = [];
+        foreach ($steps as $step) {
+            if (! is_array($step) || ! isset($step['agent'])) {
+                continue;
+            }
+
+            $normalized[] = match ($step['agent']) {
+                'knowledge' => [
+                    'agent' => 'knowledge',
+                    'query' => $step['query'] ?? '',
+                    'urgency' => $step['urgency'] ?? 'medium',
+                ],
+                'action' => [
+                    'agent' => 'action',
+                    'task' => $step['task'] ?? '',
+                    'context' => $this->parseContext($step['context'] ?? null),
+                ],
+                'direct' => [
+                    'agent' => 'direct',
+                    'response' => $step['response'] ?? '',
+                ],
+                default => null,
+            };
+        }
+
+        return array_filter($normalized);
+    }
+
+    /**
+     * Parse context from various formats.
+     */
+    private function parseContext(mixed $context): array
+    {
+        if (is_array($context)) {
+            return $context;
+        }
+
+        if (is_string($context)) {
+            $decoded = json_decode($context, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
     }
 }

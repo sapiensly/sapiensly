@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import type { StreamChunk, ToolCall, KnowledgeBaseRef, RoutingDecision } from '@/types/chat';
+import type { StreamChunk, ToolCall, KnowledgeBaseRef, ExecutionStep } from '@/types/chat';
 
 export interface StreamCallbacks {
     onChunk: (content: string) => void;
@@ -7,8 +7,9 @@ export interface StreamCallbacks {
     onError: (error: string) => void;
     onToolCall?: (tool: ToolCall) => void;
     onKnowledgeBase?: (kb: KnowledgeBaseRef) => void;
-    onRouting?: (routing: RoutingDecision) => void;
-    onAgentStart?: (agent: 'triage' | 'knowledge' | 'action') => void;
+    onExecutionPlan?: (steps: ExecutionStep[]) => void;
+    onStepStart?: (step: number, agent: string, details: ExecutionStep) => void;
+    onStepComplete?: (step: number) => void;
 }
 
 export function useStreamingChat() {
@@ -16,8 +17,9 @@ export function useStreamingChat() {
     const streamingContent = ref('');
     const toolCalls = ref<ToolCall[]>([]);
     const knowledgeBases = ref<KnowledgeBaseRef[]>([]);
-    const routing = ref<RoutingDecision | null>(null);
-    const currentAgent = ref<'triage' | 'knowledge' | 'action' | null>(null);
+    const executionPlan = ref<ExecutionStep[]>([]);
+    const currentStep = ref<number | null>(null);
+    const currentAgent = ref<'knowledge' | 'action' | 'direct' | null>(null);
     const error = ref<string | null>(null);
 
     let eventSource: EventSource | null = null;
@@ -29,8 +31,9 @@ export function useStreamingChat() {
         onError: (error: string) => void,
         onToolCall?: (tool: ToolCall) => void,
         onKnowledgeBase?: (kb: KnowledgeBaseRef) => void,
-        onRouting?: (routing: RoutingDecision) => void,
-        onAgentStart?: (agent: 'triage' | 'knowledge' | 'action') => void
+        onExecutionPlan?: (steps: ExecutionStep[]) => void,
+        onStepStart?: (step: number, agent: string, details: ExecutionStep) => void,
+        onStepComplete?: (step: number) => void
     ) {
         // Close any existing connection
         stopStream();
@@ -39,7 +42,8 @@ export function useStreamingChat() {
         streamingContent.value = '';
         toolCalls.value = [];
         knowledgeBases.value = [];
-        routing.value = null;
+        executionPlan.value = [];
+        currentStep.value = null;
         currentAgent.value = null;
         error.value = null;
 
@@ -62,17 +66,24 @@ export function useStreamingChat() {
                     return;
                 }
 
-                // Handle routing events (team orchestration)
-                if (data.type === 'routing' && data.decision) {
-                    routing.value = data.decision;
-                    onRouting?.(data.decision);
+                // Handle execution plan event
+                if (data.type === 'execution_plan' && data.steps) {
+                    executionPlan.value = data.steps;
+                    onExecutionPlan?.(data.steps);
                     return;
                 }
 
-                // Handle agent start events (team orchestration)
-                if (data.type === 'agent_start' && data.agent) {
+                // Handle step start event
+                if (data.type === 'step_start' && data.step !== undefined && data.agent && data.details) {
+                    currentStep.value = data.step;
                     currentAgent.value = data.agent;
-                    onAgentStart?.(data.agent);
+                    onStepStart?.(data.step, data.agent, data.details);
+                    return;
+                }
+
+                // Handle step complete event
+                if (data.type === 'step_complete' && data.step !== undefined) {
+                    onStepComplete?.(data.step);
                     return;
                 }
 
@@ -122,7 +133,8 @@ export function useStreamingChat() {
         streamingContent,
         toolCalls,
         knowledgeBases,
-        routing,
+        executionPlan,
+        currentStep,
         currentAgent,
         error,
         startStream,

@@ -3,7 +3,7 @@ import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamCo
 import * as TeamStreamController from '@/actions/App/Http/Controllers/TeamStreamController';
 import ChatInput from '@/components/chat/ChatInput.vue';
 import ChatMessage from '@/components/chat/ChatMessage.vue';
-import RoutingIndicator from '@/components/chat/RoutingIndicator.vue';
+import ExecutionPlanIndicator from '@/components/chat/ExecutionPlanIndicator.vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { useStreamingChat } from '@/composables/useStreamingChat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { AgentTeam } from '@/types/agents';
-import type { Conversation, Message, ToolCall, KnowledgeBaseRef, RoutingDecision } from '@/types/chat';
+import type { Conversation, Message, ToolCall, KnowledgeBaseRef, ExecutionStep } from '@/types/chat';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Bot, Brain, Plus, Users, Zap } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
@@ -36,8 +36,9 @@ const messages = ref<Message[]>([...props.conversation.messages]);
 const streamingMessage = ref<string>('');
 const activeToolCalls = ref<ToolCall[]>([]);
 const activeKnowledgeBases = ref<KnowledgeBaseRef[]>([]);
-const activeRouting = ref<RoutingDecision | null>(null);
-const activeAgent = ref<'triage' | 'knowledge' | 'action' | null>(null);
+const activeExecutionPlan = ref<ExecutionStep[]>([]);
+const activeStep = ref<number | null>(null);
+const completedSteps = ref<number[]>([]);
 const error = ref<string | null>(null);
 
 const { isStreaming, startStream } = useStreamingChat();
@@ -96,8 +97,9 @@ async function handleSendMessage(content: string) {
     streamingMessage.value = '';
     activeToolCalls.value = [];
     activeKnowledgeBases.value = [];
-    activeRouting.value = null;
-    activeAgent.value = null;
+    activeExecutionPlan.value = [];
+    activeStep.value = null;
+    completedSteps.value = [];
 
     // Optimistically add user message
     const userMessage: Message = {
@@ -138,32 +140,33 @@ async function handleSendMessage(content: string) {
                         streamingMessage.value = '';
                         activeToolCalls.value = [];
                         activeKnowledgeBases.value = [];
-                        activeRouting.value = null;
-                        activeAgent.value = null;
+                        activeExecutionPlan.value = [];
+                        activeStep.value = null;
+                        completedSteps.value = [];
                     },
                     (err) => {
                         error.value = err;
                         streamingMessage.value = '';
                         activeToolCalls.value = [];
                         activeKnowledgeBases.value = [];
-                        activeRouting.value = null;
-                        activeAgent.value = null;
+                        activeExecutionPlan.value = [];
+                        activeStep.value = null;
+                        completedSteps.value = [];
                     },
                     (toolCall) => {
-                        // Track tool calls during streaming
                         activeToolCalls.value.push(toolCall);
                     },
                     (kb) => {
-                        // Track knowledge base usage during streaming
                         activeKnowledgeBases.value.push(kb);
                     },
-                    (routing) => {
-                        // Track routing decision
-                        activeRouting.value = routing;
+                    (steps) => {
+                        activeExecutionPlan.value = steps;
                     },
-                    (agent) => {
-                        // Track which agent is responding
-                        activeAgent.value = agent;
+                    (step, _agent, _details) => {
+                        activeStep.value = step;
+                    },
+                    (step) => {
+                        completedSteps.value.push(step);
                     }
                 );
             },
@@ -183,6 +186,12 @@ const actionAgent = computed(() => props.team.action_agent);
 const configuredAgentCount = computed(() => {
     return [triageAgent.value, knowledgeAgent.value, actionAgent.value].filter(Boolean).length;
 });
+
+// Get execution plan from message metadata
+function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
+    const metadata = message.metadata as { execution_plan?: ExecutionStep[] } | null;
+    return metadata?.execution_plan ?? null;
+}
 </script>
 
 <template>
@@ -261,34 +270,36 @@ const configuredAgentCount = computed(() => {
                             Send a message to test {{ team.name }}
                         </p>
                         <p class="mt-2 text-xs text-muted-foreground">
-                            Your message will be triaged and routed to the appropriate agent
+                            Your message will be analyzed and routed to the appropriate agents
                         </p>
                     </div>
 
                     <!-- Messages -->
                     <template v-for="message in displayMessages" :key="message.id">
-                        <!-- Routing indicator for streaming message -->
+                        <!-- Execution plan indicator for streaming message -->
                         <div
-                            v-if="message.id === 'streaming' && activeRouting"
+                            v-if="message.id === 'streaming' && activeExecutionPlan.length > 0"
                             class="flex gap-3"
                         >
                             <div class="h-8 w-8 shrink-0" />
-                            <RoutingIndicator
-                                :routing="activeRouting"
-                                :current-agent="activeAgent"
-                                :is-processing="isStreaming && !streamingMessage"
+                            <ExecutionPlanIndicator
+                                :steps="activeExecutionPlan"
+                                :current-step="activeStep"
+                                :completed-steps="completedSteps"
+                                :is-processing="isStreaming"
                                 collapsible
                             />
                         </div>
 
-                        <!-- Routing indicator from saved message metadata -->
+                        <!-- Execution plan indicator from saved message metadata -->
                         <div
-                            v-else-if="message.role === 'assistant' && message.metadata?.routing"
+                            v-else-if="message.role === 'assistant' && getMessageExecutionPlan(message)"
                             class="flex gap-3"
                         >
                             <div class="h-8 w-8 shrink-0" />
-                            <RoutingIndicator
-                                :routing="message.metadata.routing"
+                            <ExecutionPlanIndicator
+                                :steps="getMessageExecutionPlan(message)!"
+                                :completed-steps="getMessageExecutionPlan(message)!.map((_, i) => i)"
                                 collapsible
                             />
                         </div>

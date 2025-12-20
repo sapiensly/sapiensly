@@ -61,7 +61,8 @@ class TeamStreamController extends Controller
 
                 // Track metadata for saving
                 match ($event['type'] ?? null) {
-                    'routing' => $metadata['routing'] = $event['decision'] ?? null,
+                    'execution_plan' => $metadata['execution_plan'] = $event['steps'] ?? [],
+                    'step_start' => $metadata['current_step'] = $event['step'] ?? 0,
                     'tool_call' => $metadata['tool_calls'][] = ['name' => $event['tool'] ?? 'unknown'],
                     'knowledge_base' => $metadata['knowledge_bases'][] = [
                         'name' => $event['name'] ?? 'unknown',
@@ -103,12 +104,9 @@ class TeamStreamController extends Controller
 
             // Save the assistant message with full metadata
             if ($fullContent !== '') {
-                // Find which agent responded
-                $respondingAgentId = $this->getRespondingAgentId($agentTeam, $metadata['routing']);
-
                 $messageMetadata = [];
-                if ($metadata['routing']) {
-                    $messageMetadata['routing'] = $metadata['routing'];
+                if (! empty($metadata['execution_plan'])) {
+                    $messageMetadata['execution_plan'] = $metadata['execution_plan'];
                 }
                 if (! empty($metadata['tool_calls'])) {
                     $messageMetadata['tool_calls'] = $metadata['tool_calls'];
@@ -120,7 +118,7 @@ class TeamStreamController extends Controller
                 $conversation->messages()->create([
                     'role' => MessageRole::Assistant,
                     'content' => $fullContent,
-                    'model' => $this->getRespondingAgentModel($agentTeam, $metadata['routing']),
+                    'model' => $this->getRespondingAgentModel($agentTeam, $metadata['execution_plan']),
                     'metadata' => ! empty($messageMetadata) ? $messageMetadata : null,
                 ]);
             }
@@ -131,35 +129,24 @@ class TeamStreamController extends Controller
     }
 
     /**
-     * Get the ID of the agent that responded based on routing decision.
+     * Get the model of the primary responding agent based on execution plan.
+     *
+     * Returns the model of the first non-direct agent in the plan,
+     * or the triage agent's model if all steps are direct.
      */
-    private function getRespondingAgentId(AgentTeam $team, ?array $routing): ?string
+    private function getRespondingAgentModel(AgentTeam $team, array $executionPlan): ?string
     {
-        if (! $routing) {
-            return $team->triageAgent?->id;
+        foreach ($executionPlan as $step) {
+            $agent = $step['agent'] ?? 'direct';
+
+            return match ($agent) {
+                'knowledge' => $team->knowledgeAgent?->model,
+                'action' => $team->actionAgent?->model,
+                default => $team->triageAgent?->model,
+            };
         }
 
-        return match ($routing['action'] ?? 'direct') {
-            'knowledge' => $team->knowledgeAgent?->id,
-            'action' => $team->actionAgent?->id,
-            default => $team->triageAgent?->id,
-        };
-    }
-
-    /**
-     * Get the model of the agent that responded.
-     */
-    private function getRespondingAgentModel(AgentTeam $team, ?array $routing): ?string
-    {
-        if (! $routing) {
-            return $team->triageAgent?->model;
-        }
-
-        return match ($routing['action'] ?? 'direct') {
-            'knowledge' => $team->knowledgeAgent?->model,
-            'action' => $team->actionAgent?->model,
-            default => $team->triageAgent?->model,
-        };
+        return $team->triageAgent?->model;
     }
 
     private function streamHeaders(): array

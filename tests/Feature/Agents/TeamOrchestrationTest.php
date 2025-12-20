@@ -161,7 +161,7 @@ describe('new conversation', function () {
 });
 
 describe('triage routing service', function () {
-    test('it builds routing tools based on team agents', function () {
+    test('it builds execution plan tool', function () {
         // Create all three agents
         Agent::factory()->create([
             'user_id' => $this->user->id,
@@ -188,34 +188,46 @@ describe('triage routing service', function () {
         $service = app(\App\Services\TriageRoutingService::class);
         $tools = $service->buildRoutingTools($this->team->fresh());
 
-        // Should have 3 tools: route_to_knowledge, route_to_action, respond_directly
-        expect($tools)->toHaveCount(3);
-
-        $toolNames = collect($tools)->map(fn ($t) => $t->name())->all();
-        expect($toolNames)->toContain('route_to_knowledge');
-        expect($toolNames)->toContain('route_to_action');
-        expect($toolNames)->toContain('respond_directly');
+        // Should have 1 tool: create_execution_plan
+        expect($tools)->toHaveCount(1);
+        expect($tools[0]->name())->toBe('create_execution_plan');
     });
 
-    test('it only builds tools for configured agents', function () {
-        // Only create triage agent (no knowledge or action)
-        Agent::factory()->create([
-            'user_id' => $this->user->id,
-            'agent_team_id' => $this->team->id,
-            'type' => AgentType::Triage,
-            'name' => 'Triage Bot',
-        ]);
-
+    test('it parses execution plan with multiple steps', function () {
         $service = app(\App\Services\TriageRoutingService::class);
-        $tools = $service->buildRoutingTools($this->team->fresh());
 
-        // Should only have respond_directly since no knowledge or action agents
-        expect($tools)->toHaveCount(1);
+        $stepsJson = '[{"agent":"knowledge","query":"refund policy","urgency":"high"},{"agent":"action","task":"check order #12345"}]';
 
-        $toolNames = collect($tools)->map(fn ($t) => $t->name())->all();
-        expect($toolNames)->toContain('respond_directly');
-        expect($toolNames)->not->toContain('route_to_knowledge');
-        expect($toolNames)->not->toContain('route_to_action');
+        $plan = $service->parseExecutionPlan($stepsJson);
+
+        expect($plan)->toHaveCount(2);
+        expect($plan[0]['agent'])->toBe('knowledge');
+        expect($plan[0]['query'])->toBe('refund policy');
+        expect($plan[0]['urgency'])->toBe('high');
+        expect($plan[1]['agent'])->toBe('action');
+        expect($plan[1]['task'])->toBe('check order #12345');
+    });
+
+    test('it parses single step execution plan', function () {
+        $service = app(\App\Services\TriageRoutingService::class);
+
+        $stepsJson = '[{"agent":"direct","response":"Hello! How can I help you?"}]';
+
+        $plan = $service->parseExecutionPlan($stepsJson);
+
+        expect($plan)->toHaveCount(1);
+        expect($plan[0]['agent'])->toBe('direct');
+        expect($plan[0]['response'])->toBe('Hello! How can I help you?');
+    });
+
+    test('it handles invalid JSON gracefully', function () {
+        $service = app(\App\Services\TriageRoutingService::class);
+
+        $plan = $service->parseExecutionPlan('not valid json');
+
+        expect($plan)->toHaveCount(1);
+        expect($plan[0]['agent'])->toBe('direct');
+        expect($plan[0]['response'])->toBe('not valid json');
     });
 });
 

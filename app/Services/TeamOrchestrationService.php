@@ -15,9 +15,9 @@ use Illuminate\Support\Facades\Log;
  *
  * Flow:
  * 1. User message arrives
- * 2. Triage Agent classifies intent and decides routing
- * 3. Route to Knowledge Agent (RAG), Action Agent (Tools), or respond directly
- * 4. Return the final response
+ * 2. Triage Agent creates an execution plan (one or more steps)
+ * 3. Execute each step in sequence (Knowledge, Action, or Direct)
+ * 4. Return combined responses
  */
 class TeamOrchestrationService
 {
@@ -30,11 +30,12 @@ class TeamOrchestrationService
      * Orchestrate a user message through the agent team.
      *
      * Yields events as the orchestration progresses:
-     * - ['type' => 'routing', 'agent' => 'triage', 'decision' => [...]]
-     * - ['type' => 'agent_start', 'agent' => 'knowledge|action']
+     * - ['type' => 'execution_plan', 'steps' => [...]]
+     * - ['type' => 'step_start', 'step' => int, 'agent' => 'knowledge|action|direct', 'details' => [...]]
      * - ['type' => 'tool_call', 'tool' => 'tool_name']
      * - ['type' => 'knowledge_base', 'name' => 'kb_name', 'id' => 'kb_id']
      * - ['type' => 'content', 'content' => 'text chunk']
+     * - ['type' => 'step_complete', 'step' => int]
      *
      * @return Generator<array<string, mixed>>
      */
@@ -55,81 +56,109 @@ class TeamOrchestrationService
             'message_count' => $messages->count(),
         ]);
 
-        // Step 1: Run triage to classify the request
-        $triageResult = $this->runTriage($team, $messages, $userMessage);
+        // Step 1: Run triage to create execution plan
+        $executionPlan = $this->createExecutionPlan($team, $messages, $userMessage);
 
         yield [
-            'type' => 'routing',
-            'agent' => 'triage',
-            'decision' => $triageResult,
+            'type' => 'execution_plan',
+            'steps' => $executionPlan,
         ];
 
-        Log::info('Triage decision', [
+        Log::info('Execution plan created', [
             'team_id' => $team->id,
-            'action' => $triageResult['action'],
+            'step_count' => count($executionPlan),
+            'steps' => $executionPlan,
         ]);
 
-        // Step 2: Execute based on routing decision
-        switch ($triageResult['action']) {
-            case 'knowledge':
-                yield ['type' => 'agent_start', 'agent' => 'knowledge'];
-                yield from $this->executeKnowledge($team, $messages, $triageResult, $userMessage);
-                break;
+        // Step 2: Execute each step in the plan
+        foreach ($executionPlan as $index => $step) {
+            yield [
+                'type' => 'step_start',
+                'step' => $index,
+                'agent' => $step['agent'],
+                'details' => $step,
+            ];
 
-            case 'action':
-                yield ['type' => 'agent_start', 'agent' => 'action'];
-                yield from $this->executeAction($team, $messages, $triageResult, $userMessage);
-                break;
+            Log::info('Executing step', [
+                'team_id' => $team->id,
+                'step' => $index,
+                'agent' => $step['agent'],
+            ]);
 
-            case 'direct':
-            default:
-                // Triage responded directly
-                yield ['type' => 'content', 'content' => $triageResult['response'] ?? ''];
-                break;
+            // Execute based on agent type
+            switch ($step['agent']) {
+                case 'knowledge':
+                    yield from $this->executeKnowledge($team, $messages, $step, $userMessage);
+                    break;
+
+                case 'action':
+                    yield from $this->executeAction($team, $messages, $step, $userMessage);
+                    break;
+
+                case 'direct':
+                default:
+                    yield ['type' => 'content', 'content' => $step['response'] ?? ''];
+                    break;
+            }
+
+            yield [
+                'type' => 'step_complete',
+                'step' => $index,
+            ];
         }
     }
 
     /**
-     * Run the Triage Agent to classify the request.
+     * Create an execution plan using the Triage Agent.
      *
      * @param  Collection<int, Message>  $messages
-     * @return array{action: string, query?: string, task?: string, response?: string, urgency?: string, context?: array}
+     * @return array<array{agent: string, query?: string, task?: string, response?: string, urgency?: string, context?: array}>
      */
-    private function runTriage(AgentTeam $team, Collection $messages, string $userMessage): array
+    private function createExecutionPlan(AgentTeam $team, Collection $messages, string $userMessage): array
     {
         if (! $team->triageAgent) {
-            // No triage agent - default to knowledge if available, otherwise direct
-            if ($team->knowledgeAgent) {
-                return ['action' => 'knowledge', 'query' => $userMessage, 'urgency' => 'medium'];
-            }
-            if ($team->actionAgent) {
-                return ['action' => 'action', 'task' => $userMessage, 'context' => []];
-            }
-
-            return ['action' => 'direct', 'response' => 'No agents configured to handle your request.'];
+            // No triage agent - create simple plan based on available agents
+            return $this->createFallbackPlan($team, $userMessage);
         }
 
-        // Build routing tools for the triage agent
+        // Build the execution plan tool
         $routingTools = $this->routingService->buildRoutingTools($team);
 
         // Prepare messages for triage (include conversation history)
         $triageMessages = $this->prepareTriageMessages($messages, $userMessage);
 
-        Log::info('Running triage', [
+        Log::info('Running triage for execution plan', [
             'team_id' => $team->id,
             'triage_agent_id' => $team->triageAgent->id,
-            'routing_tools' => count($routingTools),
         ]);
 
-        // Call triage with routing tools
+        // Call triage with execution plan tool
         $response = $this->llmService->chatWithRoutingTools(
             $team->triageAgent,
             $triageMessages,
             $routingTools
         );
 
-        // Extract routing decision from tool call results
-        return $this->extractRoutingDecision($response);
+        // Extract execution plan from tool call
+        return $this->extractExecutionPlan($response);
+    }
+
+    /**
+     * Create a fallback plan when no triage agent is configured.
+     *
+     * @return array<array{agent: string, query?: string, task?: string, response?: string}>
+     */
+    private function createFallbackPlan(AgentTeam $team, string $userMessage): array
+    {
+        if ($team->knowledgeAgent) {
+            return [['agent' => 'knowledge', 'query' => $userMessage, 'urgency' => 'medium']];
+        }
+
+        if ($team->actionAgent) {
+            return [['agent' => 'action', 'task' => $userMessage, 'context' => []]];
+        }
+
+        return [['agent' => 'direct', 'response' => 'No agents configured to handle your request.']];
     }
 
     /**
@@ -153,62 +182,28 @@ class TeamOrchestrationService
     }
 
     /**
-     * Extract routing decision from Prism response.
+     * Extract execution plan from Prism response.
      *
-     * When using maxSteps=1 (single LLM call), the tool is called but not executed,
-     * so we extract the routing decision from the tool arguments instead of the result.
-     * The tool name tells us the action, and arguments contain the details.
-     *
-     * @return array{action: string, query?: string, task?: string, response?: string, urgency?: string, context?: array}
+     * @return array<array{agent: string, query?: string, task?: string, response?: string, urgency?: string, context?: array}>
      */
-    private function extractRoutingDecision($response): array
+    private function extractExecutionPlan($response): array
     {
-        // Prism stores tool calls in steps
+        // Look for the create_execution_plan tool call
         foreach ($response->steps ?? [] as $step) {
             foreach ($step->toolCalls ?? [] as $toolCall) {
-                $toolName = $toolCall->name ?? '';
-                $args = $toolCall->arguments();
+                if (($toolCall->name ?? '') === 'create_execution_plan') {
+                    $args = $toolCall->arguments();
+                    $stepsJson = $args['steps'] ?? '[]';
 
-                // Map tool name to action and extract arguments
-                switch ($toolName) {
-                    case 'route_to_knowledge':
-                        return [
-                            'action' => 'knowledge',
-                            'query' => $args['query'] ?? '',
-                            'urgency' => $args['urgency'] ?? 'medium',
-                        ];
-
-                    case 'route_to_action':
-                        $context = [];
-                        if (isset($args['context'])) {
-                            $decoded = is_string($args['context'])
-                                ? json_decode($args['context'], true)
-                                : $args['context'];
-                            if (is_array($decoded)) {
-                                $context = $decoded;
-                            }
-                        }
-
-                        return [
-                            'action' => 'action',
-                            'task' => $args['task'] ?? '',
-                            'context' => $context,
-                        ];
-
-                    case 'respond_directly':
-                        return [
-                            'action' => 'direct',
-                            'response' => $args['response'] ?? '',
-                        ];
+                    return $this->routingService->parseExecutionPlan($stepsJson);
                 }
             }
         }
 
         // Fallback: if no tool was called, treat response as direct
-        return [
-            'action' => 'direct',
-            'response' => $response->text ?? 'I\'m not sure how to help with that.',
-        ];
+        $responseText = $response->text ?? 'I\'m not sure how to help with that.';
+
+        return [['agent' => 'direct', 'response' => $responseText]];
     }
 
     /**
@@ -220,7 +215,7 @@ class TeamOrchestrationService
     private function executeKnowledge(
         AgentTeam $team,
         Collection $messages,
-        array $triageResult,
+        array $step,
         string $originalMessage
     ): Generator {
         if (! $team->knowledgeAgent) {
@@ -229,8 +224,8 @@ class TeamOrchestrationService
             return;
         }
 
-        // Use the refined query from triage, or fall back to original message
-        $query = $triageResult['query'] ?? $originalMessage;
+        // Use the refined query from the step
+        $query = $step['query'] ?? $originalMessage;
 
         // Prepare messages for knowledge agent
         $knowledgeMessages = $this->prepareAgentMessages($messages, $originalMessage);
@@ -272,7 +267,7 @@ class TeamOrchestrationService
     private function executeAction(
         AgentTeam $team,
         Collection $messages,
-        array $triageResult,
+        array $step,
         string $originalMessage
     ): Generator {
         if (! $team->actionAgent) {
@@ -281,9 +276,9 @@ class TeamOrchestrationService
             return;
         }
 
-        // Use the task description from triage, or fall back to original message
-        $task = $triageResult['task'] ?? $originalMessage;
-        $context = $triageResult['context'] ?? [];
+        // Use the task description from the step
+        $task = $step['task'] ?? $originalMessage;
+        $context = $step['context'] ?? [];
 
         // Build a message that includes the task and any context
         $taskMessage = $task;
@@ -308,8 +303,8 @@ class TeamOrchestrationService
         );
 
         // Emit tool call events
-        foreach ($response->steps ?? [] as $step) {
-            foreach ($step->toolCalls ?? [] as $toolCall) {
+        foreach ($response->steps ?? [] as $responseStep) {
+            foreach ($responseStep->toolCalls ?? [] as $toolCall) {
                 yield [
                     'type' => 'tool_call',
                     'tool' => $toolCall->name ?? 'unknown',

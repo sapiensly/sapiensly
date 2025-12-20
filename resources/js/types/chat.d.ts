@@ -33,27 +33,37 @@ export interface KnowledgeBaseRef {
     id?: string;
 }
 
+// Execution plan step types
+export interface ExecutionStep {
+    agent: 'knowledge' | 'action' | 'direct';
+    query?: string;
+    task?: string;
+    response?: string;
+    urgency?: 'low' | 'medium' | 'high';
+    context?: Record<string, unknown>;
+}
+
 export interface StreamChunk {
-    type?: 'tool_call' | 'knowledge_base' | 'content' | 'routing' | 'agent_start';
+    type?: 'execution_plan' | 'step_start' | 'step_complete' | 'tool_call' | 'knowledge_base' | 'content';
     content?: string;
     tool?: string;
     name?: string;
     id?: string;
     error?: string;
-    // Routing-specific fields (for team orchestration)
-    agent?: 'triage' | 'knowledge' | 'action';
-    decision?: RoutingDecision;
+    // Execution plan fields
+    steps?: ExecutionStep[];
+    step?: number;
+    agent?: 'knowledge' | 'action' | 'direct';
+    details?: ExecutionStep;
 }
 
-export interface RoutingDecision {
-    action: 'knowledge' | 'action' | 'direct';
-    query?: string;
-    task?: string;
-    response?: string;
-    urgency?: string;
-    context?: Record<string, unknown>;
-}
+// Legacy alias for backwards compatibility
+export type RoutingDecision = ExecutionStep;
 
 export interface TeamMessage extends Message {
-    routing?: RoutingDecision;
+    metadata?: {
+        execution_plan?: ExecutionStep[];
+        tool_calls?: ToolCall[];
+        knowledge_bases?: KnowledgeBaseRef[];
+    } | null;
 }
