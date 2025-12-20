@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\AgentType;
 use App\Http\Requests\AgentTeam\StoreAgentTeamRequest;
 use App\Http\Requests\AgentTeam\UpdateAgentTeamRequest;
+use App\Models\Agent;
 use App\Models\AgentTeam;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,8 +27,23 @@ class AgentTeamController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
+        $user = $request->user();
+
+        // Get standalone agents visible to user, grouped by type
+        $standaloneAgents = Agent::visibleTo($user)
+            ->standalone()
+            ->get()
+            ->groupBy('type')
+            ->map(fn ($agents) => $agents->map(fn ($agent) => [
+                'id' => $agent->id,
+                'name' => $agent->name,
+                'description' => $agent->description,
+                'model' => $agent->model,
+                'status' => $agent->status,
+            ])->values());
+
         return Inertia::render('agents/Create', [
             'agentTypes' => collect(AgentType::cases())->map(fn ($type) => [
                 'value' => $type->value,
@@ -35,21 +51,38 @@ class AgentTeamController extends Controller
                 'description' => $type->description(),
             ]),
             'availableModels' => $this->getAvailableModels(),
+            'standaloneAgents' => [
+                'triage' => $standaloneAgents->get('triage', collect())->all(),
+                'knowledge' => $standaloneAgents->get('knowledge', collect())->all(),
+                'action' => $standaloneAgents->get('action', collect())->all(),
+            ],
         ]);
     }
 
     public function store(StoreAgentTeamRequest $request): RedirectResponse
     {
+        $user = $request->user();
+
+        // Verify user has access to selected agents
+        $agentIds = array_values($request->agent_ids);
+        $agents = Agent::whereIn('id', $agentIds)->get();
+
+        foreach ($agents as $agent) {
+            if (! $agent->isVisibleTo($user)) {
+                abort(403, 'You do not have access to one or more selected agents.');
+            }
+        }
+
         $team = AgentTeam::create([
-            'user_id' => $request->user()->id,
+            'user_id' => $user->id,
             'name' => $request->name,
             'description' => $request->description,
+            'keywords' => $request->keywords ?? [],
             'status' => 'draft',
         ]);
 
-        foreach ($request->agents as $agentData) {
-            $team->agents()->create($agentData);
-        }
+        // Attach agents to team
+        Agent::whereIn('id', $agentIds)->update(['agent_team_id' => $team->id]);
 
         return to_route('agent-teams.show', $team);
     }
@@ -87,6 +120,7 @@ class AgentTeamController extends Controller
         $agentTeam->update([
             'name' => $request->name,
             'description' => $request->description,
+            'keywords' => $request->keywords ?? [],
             'status' => $request->status ?? $agentTeam->status,
         ]);
 

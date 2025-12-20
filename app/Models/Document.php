@@ -22,6 +22,7 @@ class Document extends Model
         'organization_id',
         'folder_id',
         'name',
+        'keywords',
         'type',
         'original_filename',
         'file_path',
@@ -39,6 +40,7 @@ class Document extends Model
         return [
             'type' => DocumentType::class,
             'visibility' => Visibility::class,
+            'keywords' => 'array',
             'file_size' => 'integer',
             'metadata' => 'array',
         ];

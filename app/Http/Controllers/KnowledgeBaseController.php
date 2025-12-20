@@ -54,6 +54,7 @@ class KnowledgeBaseController extends Controller
             'user_id' => $request->user()->id,
             'name' => $request->name,
             'description' => $request->description,
+            'keywords' => $request->keywords ?? [],
             'status' => KnowledgeBaseStatus::Pending,
             'config' => $request->config ?? [
                 'chunk_size' => 1000,
@@ -114,6 +115,7 @@ class KnowledgeBaseController extends Controller
         $knowledgeBase->update([
             'name' => $request->name,
             'description' => $request->description,
+            'keywords' => $request->keywords ?? [],
             'config' => $request->config ?? $knowledgeBase->config,
         ]);
 

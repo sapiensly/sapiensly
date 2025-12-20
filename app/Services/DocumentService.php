@@ -28,7 +28,8 @@ class DocumentService
         User $user,
         Visibility $visibility = Visibility::Private,
         ?string $name = null,
-        ?string $folderId = null
+        ?string $folderId = null,
+        ?array $keywords = null
     ): Document {
         // Determine document type from extension
         $extension = strtolower($file->getClientOriginalExtension());
@@ -41,6 +42,7 @@ class DocumentService
             'organization_id' => $visibility === Visibility::Organization ? $user->organization_id : null,
             'folder_id' => $folderId,
             'name' => $name ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+            'keywords' => $keywords ?? [],
             'type' => $type,
             'original_filename' => $file->getClientOriginalName(),
             'file_size' => $file->getSize(),

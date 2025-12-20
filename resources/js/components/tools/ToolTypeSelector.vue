@@ -6,7 +6,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import type { ToolType, ToolTypeOption } from '@/types/tools';
-import { Code, Layers, Server } from 'lucide-vue-next';
+import { Braces, Code, Database, Globe, Layers, Server } from 'lucide-vue-next';
 
 defineProps<{
     toolTypes: ToolTypeOption[];
@@ -24,6 +24,12 @@ const toolIcon = (type: ToolType) => {
             return Server;
         case 'group':
             return Layers;
+        case 'rest_api':
+            return Globe;
+        case 'graphql':
+            return Braces;
+        case 'database':
+            return Database;
         default:
             return Code;
     }
@@ -37,6 +43,12 @@ const toolColor = (type: ToolType) => {
             return 'text-green-500';
         case 'group':
             return 'text-purple-500';
+        case 'rest_api':
+            return 'text-orange-500';
+        case 'graphql':
+            return 'text-pink-500';
+        case 'database':
+            return 'text-cyan-500';
         default:
             return 'text-muted-foreground';
     }

@@ -3,6 +3,7 @@ import * as AgentController from '@/actions/App/Http/Controllers/AgentController
 import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import KeywordsInput from '@/components/KeywordsInput.vue';
 import ActionAgentConfig from '@/components/standalone-agents/ActionAgentConfig.vue';
 import AgentTypeSelector from '@/components/standalone-agents/AgentTypeSelector.vue';
 import KnowledgeAgentConfig from '@/components/standalone-agents/KnowledgeAgentConfig.vue';
@@ -53,6 +54,7 @@ const form = useForm({
     type: props.selectedType ?? 'triage',
     name: '',
     description: '',
+    keywords: [] as string[],
     prompt_template: '',
     model: '',
     config: {} as Record<string, unknown>,
@@ -198,6 +200,15 @@ if (props.selectedType) {
                                     placeholder="What does this agent do?"
                                 />
                                 <InputError :message="form.errors.description" />
+                            </div>
+
+                            <div class="grid gap-2">
+                                <Label for="keywords">Keywords</Label>
+                                <KeywordsInput v-model="form.keywords" />
+                                <p class="text-xs text-muted-foreground">
+                                    Add keywords for search and categorization
+                                </p>
+                                <InputError :message="form.errors.keywords" />
                             </div>
 
                             <div class="grid gap-2">

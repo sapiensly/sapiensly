@@ -78,6 +78,7 @@ class AgentController extends Controller
             'type' => $request->type,
             'name' => $request->name,
             'description' => $request->description,
+            'keywords' => $request->keywords ?? [],
             'status' => AgentStatus::Draft,
             'prompt_template' => $request->prompt_template,
             'model' => $request->model,
@@ -131,6 +132,7 @@ class AgentController extends Controller
         $agent->update([
             'name' => $request->name,
             'description' => $request->description,
+            'keywords' => $request->keywords ?? [],
             'status' => $request->status ?? $agent->status,
             'prompt_template' => $request->prompt_template,
             'model' => $request->model,

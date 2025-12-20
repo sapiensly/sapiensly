@@ -22,6 +22,7 @@ class KnowledgeBase extends Model
         'organization_id',
         'name',
         'description',
+        'keywords',
         'status',
         'visibility',
         'config',
@@ -34,6 +35,7 @@ class KnowledgeBase extends Model
         return [
             'status' => KnowledgeBaseStatus::class,
             'visibility' => Visibility::class,
+            'keywords' => 'array',
             'config' => 'array',
             'document_count' => 'integer',
             'chunk_count' => 'integer',

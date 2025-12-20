@@ -3,6 +3,7 @@ import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/Knowled
 import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import KeywordsInput from '@/components/KeywordsInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +27,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     name: '',
     description: '',
+    keywords: [] as string[],
     config: {
         chunk_size: 1000,
         chunk_overlap: 200,
@@ -76,6 +78,15 @@ const submit = () => {
                                     rows="3"
                                 />
                                 <InputError :message="form.errors.description" />
+                            </div>
+
+                            <div class="grid gap-2">
+                                <Label for="keywords">Keywords</Label>
+                                <KeywordsInput v-model="form.keywords" />
+                                <p class="text-xs text-muted-foreground">
+                                    Add keywords to help with search and categorization
+                                </p>
+                                <InputError :message="form.errors.keywords" />
                             </div>
                         </div>
                     </div>

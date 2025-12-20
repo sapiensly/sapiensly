@@ -19,6 +19,8 @@ class UpdateAgentTeamRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
+            'keywords' => ['nullable', 'array', 'max:20'],
+            'keywords.*' => ['string', 'max:50'],
             'status' => ['nullable', Rule::enum(AgentStatus::class)],
 
             'agents' => ['required', 'array', 'size:3'],

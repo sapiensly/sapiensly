@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
+import KeywordsInput from '@/components/KeywordsInput.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -43,6 +44,7 @@ const open = defineModel<boolean>('open', { required: true });
 const form = useForm({
     file: null as File | null,
     name: '',
+    keywords: [] as string[],
     visibility: 'private',
     folder_id: props.currentFolderId,
     knowledge_base_id: props.knowledgeBaseId,
@@ -214,6 +216,15 @@ const handleClose = () => {
                         v-model="form.name"
                         placeholder="Document name"
                     />
+                </div>
+
+                <!-- Keywords Input -->
+                <div class="space-y-2">
+                    <Label for="keywords">Keywords (optional)</Label>
+                    <KeywordsInput v-model="form.keywords" />
+                    <p class="text-xs text-muted-foreground">
+                        Add keywords to help with search
+                    </p>
                 </div>
 
                 <!-- Folder Select (when showFolderSelector is true) -->

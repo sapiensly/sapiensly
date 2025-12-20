@@ -98,6 +98,7 @@ class RetrievalService
      * Perform RAG retrieval: search and build context in one step.
      *
      * @param  array<int>  $knowledgeBaseIds
+     * @return array{chunks: Collection, context: string, chunk_count: int, knowledge_bases: array<array{id: string, name: string}>}
      */
     public function retrieve(
         string $query,
@@ -108,10 +109,19 @@ class RetrievalService
         $chunks = $this->search($query, $knowledgeBaseIds, $topK, $threshold);
         $context = $this->buildContext($chunks);
 
+        // Get unique knowledge bases that had matching chunks
+        $kbIds = $chunks->pluck('knowledge_base_id')->unique()->values()->all();
+        $knowledgeBases = KnowledgeBase::whereIn('id', $kbIds)
+            ->get(['id', 'name'])
+            ->map(fn ($kb) => ['id' => $kb->id, 'name' => $kb->name])
+            ->values()
+            ->all();
+
         return [
             'chunks' => $chunks,
             'context' => $context,
             'chunk_count' => $chunks->count(),
+            'knowledge_bases' => $knowledgeBases,
         ];
     }
 

@@ -19,6 +19,8 @@ class StoreAgentRequest extends FormRequest
             'type' => ['required', Rule::enum(AgentType::class)],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
+            'keywords' => ['nullable', 'array', 'max:20'],
+            'keywords.*' => ['string', 'max:50'],
             'prompt_template' => ['nullable', 'string'],
             'model' => ['required', 'string', Rule::in($this->availableModels())],
             'config' => ['nullable', 'array'],

@@ -32,6 +32,7 @@ export interface KnowledgeBase {
     user_id: number;
     name: string;
     description: string | null;
+    keywords: string[] | null;
     status: KnowledgeBaseStatus;
     config: KnowledgeBaseConfig | null;
     document_count: number;

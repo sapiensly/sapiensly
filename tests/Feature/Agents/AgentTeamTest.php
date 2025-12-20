@@ -34,7 +34,11 @@ describe('index', function () {
 });
 
 describe('create', function () {
-    it('displays the create agent team form', function () {
+    it('displays the create agent team form with standalone agents', function () {
+        // Create some standalone agents
+        Agent::factory()->triage()->create(['user_id' => $this->user->id, 'agent_team_id' => null]);
+        Agent::factory()->knowledge()->create(['user_id' => $this->user->id, 'agent_team_id' => null]);
+
         $this->actingAs($this->user)
             ->get(route('agent-teams.create'))
             ->assertOk()
@@ -42,34 +46,25 @@ describe('create', function () {
                 ->component('agents/Create')
                 ->has('agentTypes', 3)
                 ->has('availableModels')
+                ->has('standaloneAgents')
             );
     });
 });
 
 describe('store', function () {
-    it('creates an agent team with three agents', function () {
+    it('creates an agent team by selecting existing agents', function () {
+        // Create standalone agents that belong to the user
+        $triageAgent = Agent::factory()->triage()->create(['user_id' => $this->user->id, 'agent_team_id' => null]);
+        $knowledgeAgent = Agent::factory()->knowledge()->create(['user_id' => $this->user->id, 'agent_team_id' => null]);
+        $actionAgent = Agent::factory()->action()->create(['user_id' => $this->user->id, 'agent_team_id' => null]);
+
         $data = [
             'name' => 'Test Team',
             'description' => 'A test team',
-            'agents' => [
-                [
-                    'type' => AgentType::Triage->value,
-                    'name' => 'Triage Agent',
-                    'description' => 'Handles triage',
-                    'model' => 'claude-sonnet-4-20250514',
-                ],
-                [
-                    'type' => AgentType::Knowledge->value,
-                    'name' => 'Knowledge Agent',
-                    'description' => 'Searches knowledge base',
-                    'model' => 'claude-sonnet-4-20250514',
-                ],
-                [
-                    'type' => AgentType::Action->value,
-                    'name' => 'Action Agent',
-                    'description' => 'Executes actions',
-                    'model' => 'claude-sonnet-4-20250514',
-                ],
+            'agent_ids' => [
+                'triage' => $triageAgent->id,
+                'knowledge' => $knowledgeAgent->id,
+                'action' => $actionAgent->id,
             ],
         ];
 
@@ -85,12 +80,39 @@ describe('store', function () {
 
         $team = AgentTeam::where('name', 'Test Team')->first();
         expect($team->agents)->toHaveCount(3);
+
+        // Verify agents are now attached to the team
+        expect($triageAgent->fresh()->agent_team_id)->toBe($team->id);
+        expect($knowledgeAgent->fresh()->agent_team_id)->toBe($team->id);
+        expect($actionAgent->fresh()->agent_team_id)->toBe($team->id);
     });
 
     it('validates required fields', function () {
         $this->actingAs($this->user)
             ->post(route('agent-teams.store'), [])
-            ->assertSessionHasErrors(['name', 'agents']);
+            ->assertSessionHasErrors(['name', 'agent_ids']);
+    });
+
+    it('validates agent ownership', function () {
+        $otherUser = User::factory()->create();
+
+        // Create agents belonging to another user
+        $triageAgent = Agent::factory()->triage()->create(['user_id' => $otherUser->id, 'agent_team_id' => null]);
+        $knowledgeAgent = Agent::factory()->knowledge()->create(['user_id' => $this->user->id, 'agent_team_id' => null]);
+        $actionAgent = Agent::factory()->action()->create(['user_id' => $this->user->id, 'agent_team_id' => null]);
+
+        $data = [
+            'name' => 'Test Team',
+            'agent_ids' => [
+                'triage' => $triageAgent->id,
+                'knowledge' => $knowledgeAgent->id,
+                'action' => $actionAgent->id,
+            ],
+        ];
+
+        $this->actingAs($this->user)
+            ->post(route('agent-teams.store'), $data)
+            ->assertForbidden();
     });
 });
 

@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AgentType;
 use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\Conversation;
 use App\Services\LLMService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatStreamController extends Controller
@@ -46,13 +48,114 @@ class ChatStreamController extends Controller
             }, 200, $this->streamHeaders());
         }
 
-        // Collect chunks from LLM (with RAG if agent has knowledge bases)
-        $chunks = [];
+        // Route Action Agents with tools to tool-enabled chat
+        if ($agent->type === AgentType::Action && $agent->tools()->where('status', 'active')->exists()) {
+            return $this->streamWithTools($agent, $conversation, $messages);
+        }
+
+        // Default: RAG-enabled streaming for Knowledge agents or agents without tools
+        return $this->streamWithRAG($agent, $conversation, $messages);
+    }
+
+    /**
+     * Stream response with tool calling for Action Agents.
+     *
+     * Tool calling uses non-streaming mode because Prism executes
+     * tools synchronously. The final response is then streamed to the client.
+     */
+    private function streamWithTools(Agent $agent, Conversation $conversation, Collection $messages): StreamedResponse
+    {
+        $responseText = null;
+        $toolCalls = [];
         $error = null;
 
         try {
-            // Use RAG-enabled streaming - automatically retrieves context from knowledge bases
-            foreach ($this->llmService->streamChatWithRAG($agent, $messages->all()) as $chunk) {
+            \Log::info('Starting tool-enabled chat', [
+                'agent_id' => $agent->id,
+                'conversation_id' => $conversation->id,
+            ]);
+
+            $response = $this->llmService->chatWithTools($agent, $messages->all());
+            $responseText = $response->text;
+
+            // Extract tool call information from steps for logging
+            foreach ($response->steps ?? [] as $step) {
+                if (! empty($step->toolCalls)) {
+                    foreach ($step->toolCalls as $toolCall) {
+                        $toolCalls[] = [
+                            'name' => $toolCall->name ?? 'unknown',
+                            'id' => $toolCall->id ?? null,
+                        ];
+                    }
+                }
+            }
+
+            \Log::info('Tool chat completed', [
+                'agent_id' => $agent->id,
+                'tool_calls' => $toolCalls,
+                'response_length' => strlen($responseText ?? ''),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Tool Chat Error', [
+                'agent_id' => $agent->id,
+                'conversation_id' => $conversation->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $error = $e->getMessage();
+        }
+
+        return response()->stream(function () use ($agent, $conversation, $responseText, $toolCalls, $error) {
+            // Send tool call events first (for UI feedback)
+            foreach ($toolCalls as $toolCall) {
+                echo 'data: '.json_encode([
+                    'type' => 'tool_call',
+                    'tool' => $toolCall['name'],
+                ])."\n\n";
+                $this->flushOutput();
+            }
+
+            if ($error) {
+                echo 'data: '.json_encode(['error' => $error])."\n\n";
+                $this->flushOutput();
+
+                return;
+            }
+
+            if ($responseText !== null && $responseText !== '') {
+                // Stream the response as a single chunk (it's already complete)
+                echo 'data: '.json_encode(['content' => $responseText])."\n\n";
+                $this->flushOutput();
+
+                // Save the complete assistant message
+                $conversation->messages()->create([
+                    'role' => MessageRole::Assistant,
+                    'content' => $responseText,
+                    'model' => $agent->model,
+                    'metadata' => ! empty($toolCalls) ? ['tool_calls' => $toolCalls] : null,
+                ]);
+            }
+
+            echo "data: [DONE]\n\n";
+            $this->flushOutput();
+        }, 200, $this->streamHeaders());
+    }
+
+    /**
+     * Stream response with RAG (Retrieval Augmented Generation).
+     */
+    private function streamWithRAG(Agent $agent, Conversation $conversation, Collection $messages): StreamedResponse
+    {
+        $chunks = [];
+        $knowledgeBases = [];
+        $error = null;
+
+        try {
+            // Use RAG-enabled streaming with metadata
+            $ragResult = $this->llmService->streamChatWithRAGInfo($agent, $messages->all());
+            $knowledgeBases = $ragResult['knowledge_bases'];
+
+            foreach ($ragResult['generator'] as $chunk) {
                 $chunks[] = $chunk;
             }
         } catch (\Exception $e) {
@@ -65,7 +168,17 @@ class ChatStreamController extends Controller
             $error = $e->getMessage();
         }
 
-        return response()->stream(function () use ($agent, $conversation, $chunks, $error) {
+        return response()->stream(function () use ($agent, $conversation, $chunks, $knowledgeBases, $error) {
+            // Send knowledge base events first (for UI feedback)
+            foreach ($knowledgeBases as $kb) {
+                echo 'data: '.json_encode([
+                    'type' => 'knowledge_base',
+                    'name' => $kb['name'],
+                    'id' => $kb['id'],
+                ])."\n\n";
+                $this->flushOutput();
+            }
+
             if ($error) {
                 echo 'data: '.json_encode(['error' => $error])."\n\n";
                 $this->flushOutput();
@@ -86,6 +199,7 @@ class ChatStreamController extends Controller
                     'role' => MessageRole::Assistant,
                     'content' => $fullContent,
                     'model' => $agent->model,
+                    'metadata' => ! empty($knowledgeBases) ? ['knowledge_bases' => $knowledgeBases] : null,
                 ]);
             }
 

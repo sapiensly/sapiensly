@@ -1,94 +1,84 @@
 <script setup lang="ts">
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
-import AgentForm from '@/components/agents/AgentForm.vue';
+import AgentSelector from '@/components/agents/AgentSelector.vue';
 import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import KeywordsInput from '@/components/KeywordsInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
-import type { AgentFormData, AgentTypeOption, ModelOption } from '@/types/agents';
+import type { AgentType, AgentTypeOption, ModelOption } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+
+interface AgentOption {
+    id: string;
+    name: string;
+    description: string | null;
+    model: string;
+    status: string;
+}
+
+interface StandaloneAgents {
+    triage: AgentOption[];
+    knowledge: AgentOption[];
+    action: AgentOption[];
+}
 
 interface Props {
     agentTypes: AgentTypeOption[];
     availableModels: ModelOption[];
+    standaloneAgents: StandaloneAgents;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Agent Teams', href: AgentTeamController.index().url },
     { title: 'Create Team', href: '#' },
 ];
 
-const knowledgeAgentPrompt = `You are an expert assistant that answers questions based on the provided documentation.
-
-## Instructions
-
-1. **Use the context**: Base your answers on the information from the provided context. If the context contains the answer, use it.
-
-2. **Cite sources**: When using information from the context, mention the source (e.g., "According to [document name]...").
-
-3. **Be honest**: If the context doesn't contain enough information to answer, say so clearly. Don't make up information.
-
-4. **Be concise**: Answer clearly and directly. Use lists or steps when appropriate.
-
-5. **Language**: Respond in the same language as the user.
-
-## When information is not available
-
-If the question cannot be answered with the available context:
-- Indicate that you couldn't find that information in the documentation
-- If you have relevant general knowledge, you may share it while clarifying it doesn't come from the documentation
-- Suggest what type of document might contain that information`;
-
-const agents = ref<AgentFormData[]>([
-    {
-        type: 'triage',
-        name: 'Triage Agent',
-        description: '',
-        status: 'draft',
-        prompt_template: '',
-        model: 'claude-sonnet-4-20250514',
-        config: {},
-    },
-    {
-        type: 'knowledge',
-        name: 'Knowledge Agent',
-        description: '',
-        status: 'draft',
-        prompt_template: knowledgeAgentPrompt,
-        model: 'claude-sonnet-4-20250514',
-        config: {},
-    },
-    {
-        type: 'action',
-        name: 'Action Agent',
-        description: '',
-        status: 'draft',
-        prompt_template: '',
-        model: 'claude-sonnet-4-20250514',
-        config: {},
-    },
-]);
+const selectedAgents = ref<Record<AgentType, string | null>>({
+    triage: null,
+    knowledge: null,
+    action: null,
+});
 
 const form = useForm({
     name: '',
     description: '',
-    agents: agents.value,
+    keywords: [] as string[],
+    agent_ids: {} as Record<AgentType, string>,
+});
+
+const agentTypeMap = computed(() => {
+    const map: Record<string, AgentTypeOption> = {};
+    for (const type of props.agentTypes) {
+        map[type.value] = type;
+    }
+    return map;
+});
+
+const isComplete = computed(() => {
+    return selectedAgents.value.triage &&
+           selectedAgents.value.knowledge &&
+           selectedAgents.value.action;
 });
 
 const submit = () => {
-    form.agents = agents.value;
-    form.post(AgentTeamController.store().url);
-};
+    if (!isComplete.value) return;
 
-const updateAgent = (index: number, agent: AgentFormData) => {
-    agents.value[index] = agent;
+    form.agent_ids = {
+        triage: selectedAgents.value.triage!,
+        knowledge: selectedAgents.value.knowledge!,
+        action: selectedAgents.value.action!,
+    };
+
+    form.post(AgentTeamController.store().url);
 };
 </script>
 
@@ -97,20 +87,20 @@ const updateAgent = (index: number, agent: AgentFormData) => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
+            <div class="mx-auto max-w-5xl">
                 <Heading
                     title="Create Agent Team"
-                    description="Configure a new team of AI agents for customer service"
+                    description="Build a team by selecting existing agents or creating new ones"
                 />
 
-                <form class="space-y-8" @submit.prevent="submit">
+                <form class="mt-8 space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
                         <HeadingSmall
                             title="Team Details"
                             description="Basic information about your agent team"
                         />
 
-                        <div class="grid gap-4">
+                        <div class="grid gap-4 max-w-xl">
                             <div class="grid gap-2">
                                 <Label for="name">Team Name</Label>
                                 <Input
@@ -124,41 +114,69 @@ const updateAgent = (index: number, agent: AgentFormData) => {
 
                             <div class="grid gap-2">
                                 <Label for="description">Description</Label>
-                                <Input
+                                <Textarea
                                     id="description"
                                     v-model="form.description"
                                     placeholder="Describe what this team does..."
+                                    rows="2"
                                 />
                                 <InputError :message="form.errors.description" />
+                            </div>
+
+                            <div class="grid gap-2">
+                                <Label for="keywords">Keywords</Label>
+                                <KeywordsInput v-model="form.keywords" />
+                                <p class="text-xs text-muted-foreground">
+                                    Add keywords for search and categorization
+                                </p>
+                                <InputError :message="form.errors.keywords" />
                             </div>
                         </div>
                     </div>
 
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Agent Configuration"
-                            description="Configure each agent in your team"
+                            title="Select Agents"
+                            description="Choose an agent for each role or create new ones"
                         />
 
-                        <AgentForm
-                            v-for="(agent, index) in agents"
-                            :key="agent.type"
-                            :agent="agent"
-                            :index="index"
-                            :agent-types="agentTypes"
-                            :available-models="availableModels"
-                            :errors="form.errors"
-                            @update:agent="updateAgent(index, $event)"
-                        />
+                        <div class="grid gap-4 md:grid-cols-3">
+                            <AgentSelector
+                                type="triage"
+                                :type-info="agentTypeMap.triage"
+                                :agents="standaloneAgents.triage"
+                                v-model="selectedAgents.triage"
+                            />
+                            <InputError :message="form.errors['agent_ids.triage']" />
+
+                            <AgentSelector
+                                type="knowledge"
+                                :type-info="agentTypeMap.knowledge"
+                                :agents="standaloneAgents.knowledge"
+                                v-model="selectedAgents.knowledge"
+                            />
+                            <InputError :message="form.errors['agent_ids.knowledge']" />
+
+                            <AgentSelector
+                                type="action"
+                                :type-info="agentTypeMap.action"
+                                :agents="standaloneAgents.action"
+                                v-model="selectedAgents.action"
+                            />
+                            <InputError :message="form.errors['agent_ids.action']" />
+                        </div>
                     </div>
 
-                    <div class="flex justify-end gap-4">
+                    <div class="flex justify-end gap-4 pt-4 border-t">
                         <Button variant="outline" as-child>
-                            <Link :href="AgentTeamController.index()">
+                            <Link :href="AgentTeamController.index().url">
                                 Cancel
                             </Link>
                         </Button>
-                        <Button type="submit" :disabled="form.processing">
+                        <Button
+                            type="submit"
+                            :disabled="form.processing || !isComplete"
+                        >
                             Create Team
                         </Button>
                     </div>

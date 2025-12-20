@@ -11,7 +11,7 @@ import { useStreamingChat } from '@/composables/useStreamingChat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { Agent, AgentType } from '@/types/agents';
-import type { Conversation, Message } from '@/types/chat';
+import type { Conversation, Message, ToolCall, KnowledgeBaseRef } from '@/types/chat';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Bot, Brain, Plus, Zap } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
@@ -46,6 +46,8 @@ const agentIcon = (type: AgentType) => {
 const messagesContainer = ref<HTMLDivElement | null>(null);
 const messages = ref<Message[]>([...props.conversation.messages]);
 const streamingMessage = ref<string>('');
+const activeToolCalls = ref<ToolCall[]>([]);
+const activeKnowledgeBases = ref<KnowledgeBaseRef[]>([]);
 const error = ref<string | null>(null);
 
 const { isStreaming, startStream } = useStreamingChat();
@@ -102,6 +104,8 @@ function handleNewConversation() {
 async function handleSendMessage(content: string) {
     error.value = null;
     streamingMessage.value = '';
+    activeToolCalls.value = [];
+    activeKnowledgeBases.value = [];
 
     // Optimistically add user message
     const userMessage: Message = {
@@ -140,10 +144,22 @@ async function handleSendMessage(content: string) {
                         // On complete, refresh to get the saved message
                         router.reload({ only: ['conversation'] });
                         streamingMessage.value = '';
+                        activeToolCalls.value = [];
+                        activeKnowledgeBases.value = [];
                     },
                     (err) => {
                         error.value = err;
                         streamingMessage.value = '';
+                        activeToolCalls.value = [];
+                        activeKnowledgeBases.value = [];
+                    },
+                    (toolCall) => {
+                        // Track tool calls during streaming
+                        activeToolCalls.value.push(toolCall);
+                    },
+                    (kb) => {
+                        // Track knowledge base usage during streaming
+                        activeKnowledgeBases.value.push(kb);
                     }
                 );
             },
@@ -219,6 +235,8 @@ async function handleSendMessage(content: string) {
                         :key="message.id"
                         :message="message"
                         :is-streaming="message.id === 'streaming'"
+                        :tool-calls="message.id === 'streaming' ? activeToolCalls : undefined"
+                        :knowledge-bases="message.id === 'streaming' ? activeKnowledgeBases : undefined"
                     />
 
                     <!-- Error display -->

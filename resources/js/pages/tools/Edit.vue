@@ -3,9 +3,12 @@ import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import DatabaseToolConfig from '@/components/tools/DatabaseToolConfig.vue';
 import FunctionToolConfig from '@/components/tools/FunctionToolConfig.vue';
+import GraphqlToolConfig from '@/components/tools/GraphqlToolConfig.vue';
 import GroupToolConfig from '@/components/tools/GroupToolConfig.vue';
 import McpToolConfig from '@/components/tools/McpToolConfig.vue';
+import RestApiToolConfig from '@/components/tools/RestApiToolConfig.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -132,6 +135,24 @@ const submit = () => {
 
                         <McpToolConfig
                             v-else-if="tool.type === 'mcp'"
+                            v-model:config="form.config"
+                            :errors="form.errors"
+                        />
+
+                        <RestApiToolConfig
+                            v-else-if="tool.type === 'rest_api'"
+                            v-model:config="form.config"
+                            :errors="form.errors"
+                        />
+
+                        <GraphqlToolConfig
+                            v-else-if="tool.type === 'graphql'"
+                            v-model:config="form.config"
+                            :errors="form.errors"
+                        />
+
+                        <DatabaseToolConfig
+                            v-else-if="tool.type === 'database'"
                             v-model:config="form.config"
                             :errors="form.errors"
                         />

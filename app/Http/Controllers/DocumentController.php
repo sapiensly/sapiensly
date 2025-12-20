@@ -131,7 +131,8 @@ class DocumentController extends Controller
             user: $user,
             visibility: $visibility,
             name: $request->name,
-            folderId: $request->folder_id
+            folderId: $request->folder_id,
+            keywords: $request->keywords
         );
 
         // Attach to knowledge base if provided

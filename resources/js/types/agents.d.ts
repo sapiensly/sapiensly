@@ -59,6 +59,7 @@ export interface Agent {
     type: AgentType;
     name: string;
     description: string | null;
+    keywords: string[] | null;
     status: AgentStatus;
     prompt_template: string | null;
     model: string;
@@ -76,6 +77,7 @@ export interface AgentTeam {
     user_id: number;
     name: string;
     description: string | null;
+    keywords: string[] | null;
     status: AgentStatus;
     agents_count?: number;
     agents?: Agent[];

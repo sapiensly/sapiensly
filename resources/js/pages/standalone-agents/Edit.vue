@@ -3,6 +3,7 @@ import * as AgentController from '@/actions/App/Http/Controllers/AgentController
 import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import KeywordsInput from '@/components/KeywordsInput.vue';
 import ActionAgentConfig from '@/components/standalone-agents/ActionAgentConfig.vue';
 import KnowledgeAgentConfig from '@/components/standalone-agents/KnowledgeAgentConfig.vue';
 import TriageAgentConfig from '@/components/standalone-agents/TriageAgentConfig.vue';
@@ -50,6 +51,7 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
 const form = useForm({
     name: props.agent.name,
     description: props.agent.description ?? '',
+    keywords: props.agent.keywords ?? [],
     status: props.agent.status,
     prompt_template: props.agent.prompt_template ?? '',
     model: props.agent.model,
@@ -115,6 +117,15 @@ const submit = () => {
                                     placeholder="What does this agent do?"
                                 />
                                 <InputError :message="form.errors.description" />
+                            </div>
+
+                            <div class="grid gap-2">
+                                <Label for="keywords">Keywords</Label>
+                                <KeywordsInput v-model="form.keywords" />
+                                <p class="text-xs text-muted-foreground">
+                                    Add keywords for search and categorization
+                                </p>
+                                <InputError :message="form.errors.keywords" />
                             </div>
 
                             <div class="grid gap-2">

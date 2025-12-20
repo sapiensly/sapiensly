@@ -25,6 +25,7 @@ class Agent extends Model
         'type',
         'name',
         'description',
+        'keywords',
         'status',
         'visibility',
         'prompt_template',
@@ -38,6 +39,7 @@ class Agent extends Model
             'type' => AgentType::class,
             'status' => AgentStatus::class,
             'visibility' => Visibility::class,
+            'keywords' => 'array',
             'config' => 'array',
         ];
     }

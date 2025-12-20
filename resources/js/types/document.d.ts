@@ -33,6 +33,7 @@ export interface Document {
     organization_id: string | null;
     folder_id: string | null;
     name: string;
+    keywords: string[] | null;
     type: DocumentType;
     original_filename: string | null;
     file_path: string | null;

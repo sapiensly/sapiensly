@@ -66,7 +66,7 @@ describe('create', function () {
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('tools/Create')
-                ->has('toolTypes', 3)
+                ->has('toolTypes', 6)
             );
     });
 
@@ -166,6 +166,81 @@ describe('store', function () {
         $group = Tool::where('name', 'My Tool Group')->first();
         expect($group->groupItems)->toHaveCount(2);
         expect($group->groupItems->pluck('tool_id')->toArray())->toContain($tool1->id, $tool2->id);
+    });
+
+    it('creates a REST API tool', function () {
+        $data = [
+            'type' => ToolType::RestApi->value,
+            'name' => 'Order API',
+            'description' => 'Fetches order information',
+            'config' => [
+                'base_url' => 'https://api.example.com',
+                'method' => 'GET',
+                'path' => '/orders/{id}',
+                'auth_type' => 'bearer',
+            ],
+        ];
+
+        $this->actingAs($this->user)
+            ->post(route('tools.store'), $data)
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('tools', [
+            'user_id' => $this->user->id,
+            'name' => 'Order API',
+            'type' => ToolType::RestApi->value,
+        ]);
+    });
+
+    it('creates a GraphQL tool', function () {
+        $data = [
+            'type' => ToolType::Graphql->value,
+            'name' => 'Customer Query',
+            'description' => 'Queries customer data',
+            'config' => [
+                'endpoint' => 'https://api.example.com/graphql',
+                'operation_type' => 'query',
+                'operation' => 'query GetCustomer($id: ID!) { customer(id: $id) { name email } }',
+                'auth_type' => 'bearer',
+            ],
+        ];
+
+        $this->actingAs($this->user)
+            ->post(route('tools.store'), $data)
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('tools', [
+            'user_id' => $this->user->id,
+            'name' => 'Customer Query',
+            'type' => ToolType::Graphql->value,
+        ]);
+    });
+
+    it('creates a Database tool', function () {
+        $data = [
+            'type' => ToolType::Database->value,
+            'name' => 'Customer Lookup',
+            'description' => 'Looks up customer information',
+            'config' => [
+                'driver' => 'pgsql',
+                'host' => 'localhost',
+                'port' => 5432,
+                'database' => 'customers',
+                'username' => 'app_user',
+                'password' => 'secret123',
+                'query_template' => 'SELECT * FROM customers WHERE id = :id',
+                'read_only' => true,
+            ],
+        ];
+
+        $this->actingAs($this->user)
+            ->post(route('tools.store'), $data)
+            ->assertRedirect();
+
+        $tool = Tool::where('name', 'Customer Lookup')->first();
+        expect($tool->type)->toBe(ToolType::Database);
+        // Password should be encrypted
+        expect($tool->config['password'])->not->toBe('secret123');
     });
 
     it('validates required fields', function () {
@@ -317,5 +392,53 @@ describe('destroy', function () {
         $this->actingAs($this->user)
             ->delete(route('tools.destroy', $otherTool))
             ->assertForbidden();
+    });
+});
+
+describe('sensitive field handling', function () {
+    it('masks database credentials when showing a tool', function () {
+        $tool = Tool::factory()->database()->create(['user_id' => $this->user->id]);
+
+        $this->actingAs($this->user)
+            ->get(route('tools.show', $tool))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->missing('tool.config.username')
+                ->missing('tool.config.password')
+                ->where('tool.config.username_is_set', true)
+                ->where('tool.config.password_is_set', true)
+            );
+    });
+
+    it('masks API auth config when showing a REST API tool', function () {
+        $tool = Tool::factory()->restApi()->create([
+            'user_id' => $this->user->id,
+            'config' => [
+                'base_url' => 'https://api.example.com',
+                'method' => 'GET',
+                'auth_type' => 'bearer',
+                'auth_config' => ['token' => 'secret-token'],
+            ],
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('tools.show', $tool))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->missing('tool.config.auth_config')
+                ->where('tool.config.auth_config_is_set', true)
+            );
+    });
+
+    it('masks auth config when editing a tool', function () {
+        $tool = Tool::factory()->database()->create(['user_id' => $this->user->id]);
+
+        $this->actingAs($this->user)
+            ->get(route('tools.edit', $tool))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->missing('tool.config.username')
+                ->missing('tool.config.password')
+            );
     });
 });

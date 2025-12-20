@@ -7,6 +7,7 @@ use App\Enums\ToolType;
 use App\Http\Requests\Tool\StoreToolRequest;
 use App\Http\Requests\Tool\UpdateToolRequest;
 use App\Models\Tool;
+use App\Services\ToolConfigService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -14,6 +15,10 @@ use Inertia\Response;
 
 class ToolController extends Controller
 {
+    public function __construct(
+        private readonly ToolConfigService $toolConfigService
+    ) {}
+
     public function index(Request $request): Response
     {
         $typeFilter = $request->query('type');
@@ -67,12 +72,20 @@ class ToolController extends Controller
 
     public function store(StoreToolRequest $request): RedirectResponse
     {
+        $type = ToolType::from($request->type);
+        $config = $request->config ?? [];
+
+        // Encrypt sensitive fields
+        if ($this->toolConfigService->hasSensitiveFields($type)) {
+            $config = $this->toolConfigService->encryptConfig($type, $config);
+        }
+
         $tool = Tool::create([
             'user_id' => $request->user()->id,
             'type' => $request->type,
             'name' => $request->name,
             'description' => $request->description,
-            'config' => $request->config ?? [],
+            'config' => $config,
             'status' => AgentStatus::Draft,
         ]);
 
@@ -96,8 +109,17 @@ class ToolController extends Controller
 
         $tool->load(['groupItems.tool']);
 
+        // Mask sensitive fields for display
+        $toolData = $tool->toArray();
+        if ($this->toolConfigService->hasSensitiveFields($tool->type)) {
+            $toolData['config'] = $this->toolConfigService->maskSensitiveFields(
+                $tool->type,
+                $tool->config ?? []
+            );
+        }
+
         return Inertia::render('tools/Show', [
-            'tool' => $tool,
+            'tool' => $toolData,
         ]);
     }
 
@@ -109,8 +131,17 @@ class ToolController extends Controller
 
         $tool->load(['groupItems.tool']);
 
+        // Mask sensitive fields for editing
+        $toolData = $tool->toArray();
+        if ($this->toolConfigService->hasSensitiveFields($tool->type)) {
+            $toolData['config'] = $this->toolConfigService->maskSensitiveFields(
+                $tool->type,
+                $tool->config ?? []
+            );
+        }
+
         return Inertia::render('tools/Edit', [
-            'tool' => $tool,
+            'tool' => $toolData,
             'toolTypes' => collect(ToolType::cases())->map(fn ($type) => [
                 'value' => $type->value,
                 'label' => $type->label(),
@@ -126,11 +157,18 @@ class ToolController extends Controller
 
     public function update(UpdateToolRequest $request, Tool $tool): RedirectResponse
     {
+        $config = $request->config ?? $tool->config;
+
+        // Handle sensitive fields encryption
+        if ($this->toolConfigService->hasSensitiveFields($tool->type)) {
+            $config = $this->mergeAndEncryptConfig($tool, $config);
+        }
+
         $tool->update([
             'name' => $request->name,
             'description' => $request->description,
             'status' => $request->status ?? $tool->status,
-            'config' => $request->config ?? $tool->config,
+            'config' => $config,
         ]);
 
         if ($tool->type->value === 'group' && $request->has('tool_ids')) {
@@ -155,5 +193,30 @@ class ToolController extends Controller
         $tool->delete();
 
         return to_route('tools.index');
+    }
+
+    /**
+     * Merge new config with existing encrypted values and encrypt new sensitive fields.
+     *
+     * If a sensitive field is empty/null in the new config, keep the existing encrypted value.
+     * If a new value is provided, encrypt it.
+     */
+    private function mergeAndEncryptConfig(Tool $tool, array $newConfig): array
+    {
+        $existingConfig = $tool->config ?? [];
+        $encryptedFields = match ($tool->type->value) {
+            'rest_api', 'graphql', 'mcp' => ['auth_config'],
+            'database' => ['username', 'password'],
+            default => [],
+        };
+
+        foreach ($encryptedFields as $field) {
+            // If new value is empty but we have an existing value, keep the existing
+            if (empty($newConfig[$field]) && ! empty($existingConfig[$field])) {
+                $newConfig[$field] = $existingConfig[$field];
+            }
+        }
+
+        return $this->toolConfigService->encryptConfig($tool->type, $newConfig);
     }
 }

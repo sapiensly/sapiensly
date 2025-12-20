@@ -11,12 +11,15 @@ use Prism\Prism\Enums\Provider;
 use Prism\Prism\Prism;
 use Prism\Prism\Streaming\Events\TextDeltaEvent;
 use Prism\Prism\Text\PendingRequest;
+use Prism\Prism\Text\Response as TextResponse;
 use Prism\Prism\ValueObjects\Messages\AssistantMessage;
 use Prism\Prism\ValueObjects\Messages\UserMessage;
 
 class LLMService
 {
     private ?RetrievalService $retrievalService = null;
+
+    private ?ToolBuilderService $toolBuilderService = null;
 
     /**
      * Map model IDs to Prism providers.
@@ -100,14 +103,32 @@ class LLMService
      */
     public function streamChatWithRAG(Agent $agent, array $messages, ?string $userQuery = null): Generator
     {
+        $result = $this->streamChatWithRAGInfo($agent, $messages, $userQuery);
+        yield from $result['generator'];
+    }
+
+    /**
+     * Stream a chat response with RAG and return retrieval metadata.
+     *
+     * Returns both the generator for streaming and information about which
+     * knowledge bases were consulted.
+     *
+     * @param  array<Message>  $messages
+     * @param  string|null  $userQuery  The query to use for retrieval (defaults to last user message)
+     * @return array{generator: Generator<string>, knowledge_bases: array<array{id: string, name: string}>, chunk_count: int}
+     */
+    public function streamChatWithRAGInfo(Agent $agent, array $messages, ?string $userQuery = null): array
+    {
         // Get the agent's knowledge base IDs
         $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
 
         // If no knowledge bases, fall back to regular chat
         if (empty($knowledgeBaseIds)) {
-            yield from $this->streamChat($agent, $messages);
-
-            return;
+            return [
+                'generator' => $this->streamChat($agent, $messages),
+                'knowledge_bases' => [],
+                'chunk_count' => 0,
+            ];
         }
 
         // Determine the query for retrieval
@@ -121,9 +142,11 @@ class LLMService
         }
 
         if (empty(trim($userQuery))) {
-            yield from $this->streamChat($agent, $messages);
-
-            return;
+            return [
+                'generator' => $this->streamChat($agent, $messages),
+                'knowledge_bases' => [],
+                'chunk_count' => 0,
+            ];
         }
 
         // Retrieve relevant context
@@ -138,13 +161,16 @@ class LLMService
             'agent_id' => $agent->id,
             'query_length' => strlen($userQuery),
             'chunks_found' => $retrieval['chunk_count'],
+            'knowledge_bases' => $retrieval['knowledge_bases'],
         ]);
 
         // If no relevant context found, fall back to regular chat
         if (empty($retrieval['context'])) {
-            yield from $this->streamChat($agent, $messages);
-
-            return;
+            return [
+                'generator' => $this->streamChat($agent, $messages),
+                'knowledge_bases' => [],
+                'chunk_count' => 0,
+            ];
         }
 
         // Build augmented system prompt
@@ -157,20 +183,89 @@ class LLMService
         $formattedMessages = $this->formatMessages($messages);
         $request = $this->buildRequestWithSystemPrompt($agent, $formattedMessages, $augmentedSystemPrompt);
 
-        // PHP-FPM fallback
-        if (PHP_SAPI === 'fpm-fcgi' || PHP_SAPI === 'cgi-fcgi') {
-            $response = $request->asText();
-            yield $response->text;
+        // Create the generator
+        $generator = (function () use ($request) {
+            // PHP-FPM fallback
+            if (PHP_SAPI === 'fpm-fcgi' || PHP_SAPI === 'cgi-fcgi') {
+                $response = $request->asText();
+                yield $response->text;
 
-            return;
-        }
-
-        // True streaming
-        foreach ($request->asStream() as $event) {
-            if ($event instanceof TextDeltaEvent) {
-                yield $event->delta;
+                return;
             }
+
+            // True streaming
+            foreach ($request->asStream() as $event) {
+                if ($event instanceof TextDeltaEvent) {
+                    yield $event->delta;
+                }
+            }
+        })();
+
+        return [
+            'generator' => $generator,
+            'knowledge_bases' => $retrieval['knowledge_bases'],
+            'chunk_count' => $retrieval['chunk_count'],
+        ];
+    }
+
+    /**
+     * Chat with tool calling support for Action Agents.
+     *
+     * This method allows the LLM to call tools during the conversation.
+     * Prism handles the tool calling loop automatically via maxSteps.
+     *
+     * Note: Tool calling uses non-streaming mode because Prism executes
+     * tools synchronously during the conversation.
+     *
+     * @param  array<Message>  $messages
+     */
+    public function chatWithTools(Agent $agent, array $messages, int $maxSteps = 5): TextResponse
+    {
+        // Get the agent's active tools
+        $tools = $agent->tools()->where('status', 'active')->get();
+
+        // Build Prism tools from database Tool models
+        $prismTools = $this->getToolBuilderService()->buildPrismTools($tools);
+
+        Log::info('Building chat with tools', [
+            'agent_id' => $agent->id,
+            'tool_count' => count($prismTools),
+            'tool_names' => collect($prismTools)->map(fn ($t) => $t->name())->all(),
+            'max_steps' => $maxSteps,
+        ]);
+
+        // Build the request
+        $formattedMessages = $this->formatMessages($messages);
+        $request = $this->buildRequestWithMessages($agent, $formattedMessages);
+
+        // Add tools if available
+        if (count($prismTools) > 0) {
+            $request->withTools($prismTools)
+                ->withMaxSteps($maxSteps);
         }
+
+        // Execute (Prism handles the tool calling loop)
+        $response = $request->asText();
+
+        Log::info('Tool chat completed', [
+            'agent_id' => $agent->id,
+            'steps' => count($response->steps ?? []),
+            'finish_reason' => $response->finishReason?->name ?? 'unknown',
+        ]);
+
+        return $response;
+    }
+
+    /**
+     * Get the tool builder service (lazy initialization).
+     */
+    private function getToolBuilderService(): ToolBuilderService
+    {
+        if ($this->toolBuilderService === null) {
+            $this->toolBuilderService = app(ToolBuilderService::class);
+        }
+
+        return $this->toolBuilderService;
     }
 
     /**

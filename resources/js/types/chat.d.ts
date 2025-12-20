@@ -23,7 +23,21 @@ export interface Conversation {
     updated_at: string;
 }
 
+export interface ToolCall {
+    name: string;
+    id?: string;
+}
+
+export interface KnowledgeBaseRef {
+    name: string;
+    id?: string;
+}
+
 export interface StreamChunk {
+    type?: 'tool_call' | 'knowledge_base' | 'content';
     content?: string;
+    tool?: string;
+    name?: string;
+    id?: string;
     error?: string;
 }

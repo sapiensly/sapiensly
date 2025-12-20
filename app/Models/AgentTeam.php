@@ -23,6 +23,7 @@ class AgentTeam extends Model
         'organization_id',
         'name',
         'description',
+        'keywords',
         'status',
         'visibility',
     ];
@@ -32,6 +33,7 @@ class AgentTeam extends Model
         return [
             'status' => AgentStatus::class,
             'visibility' => Visibility::class,
+            'keywords' => 'array',
         ];
     }
 

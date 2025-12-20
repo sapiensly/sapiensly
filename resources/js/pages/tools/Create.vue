@@ -3,9 +3,12 @@ import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import DatabaseToolConfig from '@/components/tools/DatabaseToolConfig.vue';
 import FunctionToolConfig from '@/components/tools/FunctionToolConfig.vue';
+import GraphqlToolConfig from '@/components/tools/GraphqlToolConfig.vue';
 import GroupToolConfig from '@/components/tools/GroupToolConfig.vue';
 import McpToolConfig from '@/components/tools/McpToolConfig.vue';
+import RestApiToolConfig from '@/components/tools/RestApiToolConfig.vue';
 import ToolTypeSelector from '@/components/tools/ToolTypeSelector.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,6 +66,36 @@ const getDefaultConfig = (type: ToolType): Record<string, unknown> => {
                 endpoint: '',
                 auth_type: 'none',
                 auth_config: {},
+            };
+        case 'rest_api':
+            return {
+                base_url: '',
+                method: 'GET',
+                path: '',
+                headers: {},
+                auth_type: 'none',
+                auth_config: {},
+                request_body_template: '',
+            };
+        case 'graphql':
+            return {
+                endpoint: '',
+                operation_type: 'query',
+                operation: '',
+                variables_template: {},
+                auth_type: 'none',
+                auth_config: {},
+            };
+        case 'database':
+            return {
+                driver: 'pgsql',
+                host: '',
+                port: 5432,
+                database: '',
+                username: '',
+                password: '',
+                query_template: '',
+                read_only: true,
             };
         case 'group':
             return {};
@@ -155,6 +188,24 @@ if (props.selectedType) {
 
                         <McpToolConfig
                             v-else-if="currentType === 'mcp'"
+                            v-model:config="form.config"
+                            :errors="form.errors"
+                        />
+
+                        <RestApiToolConfig
+                            v-else-if="currentType === 'rest_api'"
+                            v-model:config="form.config"
+                            :errors="form.errors"
+                        />
+
+                        <GraphqlToolConfig
+                            v-else-if="currentType === 'graphql'"
+                            v-model:config="form.config"
+                            :errors="form.errors"
+                        />
+
+                        <DatabaseToolConfig
+                            v-else-if="currentType === 'database'"
                             v-model:config="form.config"
                             :errors="form.errors"
                         />

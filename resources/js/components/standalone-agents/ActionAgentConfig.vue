@@ -70,6 +70,12 @@ const toolTypeLabel = (type: string) => {
             return 'MCP';
         case 'group':
             return 'Group';
+        case 'rest_api':
+            return 'REST API';
+        case 'graphql':
+            return 'GraphQL';
+        case 'database':
+            return 'Database';
         default:
             return type;
     }
@@ -83,7 +89,10 @@ const toolTypeLabel = (type: string) => {
             <div v-if="tools.length === 0" class="rounded-lg border border-dashed p-6 text-center">
                 <Wrench class="mx-auto h-8 w-8 text-muted-foreground" />
                 <p class="mt-2 text-sm text-muted-foreground">
-                    No tools available. Create tools to enable action capabilities.
+                    No active tools available.
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Create tools and set their status to "Active" to enable action capabilities.
                 </p>
             </div>
             <div v-else class="space-y-2">
