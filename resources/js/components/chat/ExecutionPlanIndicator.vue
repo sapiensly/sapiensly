@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import type { ExecutionStep } from '@/types/chat';
-import { Bot, Brain, Check, ChevronRight, Loader2, Zap } from 'lucide-vue-next';
+import { Bot, Brain, Check, ChevronRight, Loader2, Sparkles, Zap } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -9,6 +9,7 @@ const props = defineProps<{
     currentStep?: number | null;
     completedSteps?: number[];
     isProcessing?: boolean;
+    isConsolidating?: boolean;
     collapsible?: boolean;
 }>();
 
@@ -50,6 +51,9 @@ function getStepStatus(index: number): 'pending' | 'active' | 'completed' {
 }
 
 const summaryText = computed(() => {
+    if (props.isConsolidating) {
+        return 'Consolidating response...';
+    }
     const stepCount = props.steps.length;
     if (stepCount === 1) {
         const step = props.steps[0];
@@ -58,8 +62,12 @@ const summaryText = computed(() => {
     return `${stepCount} steps planned`;
 });
 
-const hasDetails = computed(() => {
-    return props.steps.some(step => step.query || step.task);
+const showConsolidationStep = computed(() => {
+    return props.steps.length > 1 && (props.isConsolidating || allStepsCompleted.value);
+});
+
+const allStepsCompleted = computed(() => {
+    return props.steps.every((_, i) => props.completedSteps?.includes(i));
 });
 </script>
 
@@ -76,7 +84,7 @@ const hasDetails = computed(() => {
                 class="h-3 w-3 transition-transform"
                 :class="{ 'rotate-90': isExpanded }"
             />
-            <Loader2 v-if="isProcessing && currentStep !== null" class="h-3 w-3 animate-spin" />
+            <Loader2 v-if="isProcessing && (currentStep !== null || isConsolidating)" class="h-3 w-3 animate-spin" />
             <span>{{ summaryText }}</span>
 
             <!-- Step badges preview (when collapsed) -->
@@ -92,12 +100,21 @@ const hasDetails = computed(() => {
                         }"
                     />
                 </template>
+                <!-- Consolidation indicator -->
+                <Sparkles
+                    v-if="showConsolidationStep"
+                    class="h-3 w-3 ml-0.5"
+                    :class="{
+                        'text-primary animate-pulse': isConsolidating && isProcessing,
+                        'text-green-500': !isProcessing && allStepsCompleted,
+                    }"
+                />
             </div>
         </button>
 
         <!-- Non-collapsible header -->
         <div v-else class="flex items-center gap-1.5">
-            <Loader2 v-if="isProcessing && currentStep !== null" class="h-3 w-3 animate-spin" />
+            <Loader2 v-if="isProcessing && (currentStep !== null || isConsolidating)" class="h-3 w-3 animate-spin" />
             <span>{{ summaryText }}</span>
         </div>
 
@@ -156,6 +173,40 @@ const hasDetails = computed(() => {
                     </p>
                     <p v-else-if="step.task" class="text-muted-foreground/70 truncate">
                         {{ step.task }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Consolidation step -->
+            <div
+                v-if="showConsolidationStep"
+                class="flex items-start gap-2 py-1 px-2 rounded-md transition-colors"
+                :class="{
+                    'bg-primary/5 border-l-2 border-primary': isConsolidating && isProcessing,
+                    'bg-green-500/5': !isProcessing && allStepsCompleted,
+                }"
+            >
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="text-[10px] font-medium text-muted-foreground/70">
+                        {{ steps.length + 1 }}.
+                    </span>
+                    <Loader2
+                        v-if="isConsolidating && isProcessing"
+                        class="h-3 w-3 animate-spin text-primary"
+                    />
+                    <Check
+                        v-else-if="!isProcessing && allStepsCompleted"
+                        class="h-3 w-3 text-green-500"
+                    />
+                    <Sparkles
+                        v-else
+                        class="h-3 w-3 text-muted-foreground/50"
+                    />
+                </div>
+                <div class="flex-1 min-w-0">
+                    <span class="font-medium">Consolidate</span>
+                    <p class="text-muted-foreground/70 truncate">
+                        Combining responses into coherent reply
                     </p>
                 </div>
             </div>

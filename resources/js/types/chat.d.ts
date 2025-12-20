@@ -44,7 +44,7 @@ export interface ExecutionStep {
 }
 
 export interface StreamChunk {
-    type?: 'execution_plan' | 'step_start' | 'step_complete' | 'tool_call' | 'knowledge_base' | 'content';
+    type?: 'execution_plan' | 'step_start' | 'step_complete' | 'consolidating' | 'tool_call' | 'knowledge_base' | 'content';
     content?: string;
     tool?: string;
     name?: string;
@@ -55,6 +55,7 @@ export interface StreamChunk {
     step?: number;
     agent?: 'knowledge' | 'action' | 'direct';
     details?: ExecutionStep;
+    response?: string; // Step response (in step_complete)
 }
 
 // Legacy alias for backwards compatibility

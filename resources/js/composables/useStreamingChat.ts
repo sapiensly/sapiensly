@@ -9,7 +9,8 @@ export interface StreamCallbacks {
     onKnowledgeBase?: (kb: KnowledgeBaseRef) => void;
     onExecutionPlan?: (steps: ExecutionStep[]) => void;
     onStepStart?: (step: number, agent: string, details: ExecutionStep) => void;
-    onStepComplete?: (step: number) => void;
+    onStepComplete?: (step: number, response?: string) => void;
+    onConsolidating?: () => void;
 }
 
 export function useStreamingChat() {
@@ -20,6 +21,7 @@ export function useStreamingChat() {
     const executionPlan = ref<ExecutionStep[]>([]);
     const currentStep = ref<number | null>(null);
     const currentAgent = ref<'knowledge' | 'action' | 'direct' | null>(null);
+    const isConsolidating = ref(false);
     const error = ref<string | null>(null);
 
     let eventSource: EventSource | null = null;
@@ -33,7 +35,8 @@ export function useStreamingChat() {
         onKnowledgeBase?: (kb: KnowledgeBaseRef) => void,
         onExecutionPlan?: (steps: ExecutionStep[]) => void,
         onStepStart?: (step: number, agent: string, details: ExecutionStep) => void,
-        onStepComplete?: (step: number) => void
+        onStepComplete?: (step: number, response?: string) => void,
+        onConsolidating?: () => void
     ) {
         // Close any existing connection
         stopStream();
@@ -45,6 +48,7 @@ export function useStreamingChat() {
         executionPlan.value = [];
         currentStep.value = null;
         currentAgent.value = null;
+        isConsolidating.value = false;
         error.value = null;
 
         eventSource = new EventSource(url);
@@ -83,7 +87,14 @@ export function useStreamingChat() {
 
                 // Handle step complete event
                 if (data.type === 'step_complete' && data.step !== undefined) {
-                    onStepComplete?.(data.step);
+                    onStepComplete?.(data.step, data.response);
+                    return;
+                }
+
+                // Handle consolidating event
+                if (data.type === 'consolidating') {
+                    isConsolidating.value = true;
+                    onConsolidating?.();
                     return;
                 }
 
@@ -136,6 +147,7 @@ export function useStreamingChat() {
         executionPlan,
         currentStep,
         currentAgent,
+        isConsolidating,
         error,
         startStream,
         stopStream,

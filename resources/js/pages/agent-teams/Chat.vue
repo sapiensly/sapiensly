@@ -39,6 +39,7 @@ const activeKnowledgeBases = ref<KnowledgeBaseRef[]>([]);
 const activeExecutionPlan = ref<ExecutionStep[]>([]);
 const activeStep = ref<number | null>(null);
 const completedSteps = ref<number[]>([]);
+const consolidating = ref(false);
 const error = ref<string | null>(null);
 
 const { isStreaming, startStream } = useStreamingChat();
@@ -100,6 +101,7 @@ async function handleSendMessage(content: string) {
     activeExecutionPlan.value = [];
     activeStep.value = null;
     completedSteps.value = [];
+    consolidating.value = false;
 
     // Optimistically add user message
     const userMessage: Message = {
@@ -143,6 +145,7 @@ async function handleSendMessage(content: string) {
                         activeExecutionPlan.value = [];
                         activeStep.value = null;
                         completedSteps.value = [];
+                        consolidating.value = false;
                     },
                     (err) => {
                         error.value = err;
@@ -152,6 +155,7 @@ async function handleSendMessage(content: string) {
                         activeExecutionPlan.value = [];
                         activeStep.value = null;
                         completedSteps.value = [];
+                        consolidating.value = false;
                     },
                     (toolCall) => {
                         activeToolCalls.value.push(toolCall);
@@ -167,6 +171,12 @@ async function handleSendMessage(content: string) {
                     },
                     (step) => {
                         completedSteps.value.push(step);
+                    },
+                    () => {
+                        // Consolidating - mark all steps complete and show consolidation phase
+                        completedSteps.value = activeExecutionPlan.value.map((_, i) => i);
+                        activeStep.value = null;
+                        consolidating.value = true;
                     }
                 );
             },
@@ -287,6 +297,7 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                                 :current-step="activeStep"
                                 :completed-steps="completedSteps"
                                 :is-processing="isStreaming"
+                                :is-consolidating="consolidating"
                                 collapsible
                             />
                         </div>

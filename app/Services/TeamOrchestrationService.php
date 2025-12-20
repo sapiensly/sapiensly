@@ -17,7 +17,8 @@ use Illuminate\Support\Facades\Log;
  * 1. User message arrives
  * 2. Triage Agent creates an execution plan (one or more steps)
  * 3. Execute each step in sequence (Knowledge, Action, or Direct)
- * 4. Return combined responses
+ * 4. If multiple steps, consolidate responses into coherent reply
+ * 5. Return the final response
  */
 class TeamOrchestrationService
 {
@@ -34,8 +35,9 @@ class TeamOrchestrationService
      * - ['type' => 'step_start', 'step' => int, 'agent' => 'knowledge|action|direct', 'details' => [...]]
      * - ['type' => 'tool_call', 'tool' => 'tool_name']
      * - ['type' => 'knowledge_base', 'name' => 'kb_name', 'id' => 'kb_id']
+     * - ['type' => 'step_complete', 'step' => int, 'response' => string]
+     * - ['type' => 'consolidating'] (when multiple steps need consolidation)
      * - ['type' => 'content', 'content' => 'text chunk']
-     * - ['type' => 'step_complete', 'step' => int]
      *
      * @return Generator<array<string, mixed>>
      */
@@ -70,7 +72,9 @@ class TeamOrchestrationService
             'steps' => $executionPlan,
         ]);
 
-        // Step 2: Execute each step in the plan
+        // Step 2: Execute each step and collect responses
+        $stepResponses = [];
+
         foreach ($executionPlan as $index => $step) {
             yield [
                 'type' => 'step_start',
@@ -85,27 +89,149 @@ class TeamOrchestrationService
                 'agent' => $step['agent'],
             ]);
 
-            // Execute based on agent type
+            // Execute and collect response
+            $stepContent = '';
+
             switch ($step['agent']) {
                 case 'knowledge':
-                    yield from $this->executeKnowledge($team, $messages, $step, $userMessage);
+                    foreach ($this->executeKnowledgeWithEvents($team, $messages, $step, $userMessage) as $event) {
+                        if ($event['type'] === 'content') {
+                            $stepContent .= $event['content'] ?? '';
+                        } else {
+                            // Yield non-content events (knowledge_base, etc.)
+                            yield $event;
+                        }
+                    }
                     break;
 
                 case 'action':
-                    yield from $this->executeAction($team, $messages, $step, $userMessage);
+                    foreach ($this->executeActionWithEvents($team, $messages, $step, $userMessage) as $event) {
+                        if ($event['type'] === 'content') {
+                            $stepContent .= $event['content'] ?? '';
+                        } else {
+                            // Yield non-content events (tool_call, etc.)
+                            yield $event;
+                        }
+                    }
                     break;
 
                 case 'direct':
                 default:
-                    yield ['type' => 'content', 'content' => $step['response'] ?? ''];
+                    $stepContent = $step['response'] ?? '';
                     break;
             }
+
+            $stepResponses[] = [
+                'agent' => $step['agent'],
+                'query' => $step['query'] ?? $step['task'] ?? null,
+                'response' => $stepContent,
+            ];
 
             yield [
                 'type' => 'step_complete',
                 'step' => $index,
+                'response' => $stepContent,
             ];
         }
+
+        // Step 3: Consolidate or return directly
+        if (count($stepResponses) === 1) {
+            // Single step - return response directly
+            yield ['type' => 'content', 'content' => $stepResponses[0]['response']];
+        } else {
+            // Multiple steps - consolidate responses
+            yield ['type' => 'consolidating'];
+
+            Log::info('Consolidating responses', [
+                'team_id' => $team->id,
+                'step_count' => count($stepResponses),
+            ]);
+
+            yield from $this->consolidateResponses($team, $userMessage, $stepResponses);
+        }
+    }
+
+    /**
+     * Consolidate multiple step responses into a coherent reply.
+     *
+     * @param  array<array{agent: string, query: ?string, response: string}>  $stepResponses
+     * @return Generator<array<string, mixed>>
+     */
+    private function consolidateResponses(
+        AgentTeam $team,
+        string $userMessage,
+        array $stepResponses
+    ): Generator {
+        if (! $team->triageAgent) {
+            // No triage agent - just concatenate with separator
+            foreach ($stepResponses as $i => $step) {
+                if ($i > 0) {
+                    yield ['type' => 'content', 'content' => "\n\n---\n\n"];
+                }
+                yield ['type' => 'content', 'content' => $step['response']];
+            }
+
+            return;
+        }
+
+        // Build consolidation prompt
+        $consolidationPrompt = $this->buildConsolidationPrompt($userMessage, $stepResponses);
+
+        // Create a message for consolidation
+        $consolidationMessage = new Message([
+            'role' => MessageRole::User,
+            'content' => $consolidationPrompt,
+        ]);
+
+        Log::info('Running consolidation', [
+            'team_id' => $team->id,
+            'triage_agent_id' => $team->triageAgent->id,
+        ]);
+
+        // Stream consolidated response
+        foreach ($this->llmService->streamChat($team->triageAgent, [$consolidationMessage]) as $chunk) {
+            yield ['type' => 'content', 'content' => $chunk];
+        }
+    }
+
+    /**
+     * Build the consolidation prompt for the Triage Agent.
+     *
+     * @param  array<array{agent: string, query: ?string, response: string}>  $stepResponses
+     */
+    private function buildConsolidationPrompt(string $userMessage, array $stepResponses): string
+    {
+        $responsesText = '';
+
+        foreach ($stepResponses as $i => $step) {
+            $agentLabel = match ($step['agent']) {
+                'knowledge' => 'Knowledge Base',
+                'action' => 'System Action',
+                'direct' => 'Direct Response',
+                default => 'Agent',
+            };
+
+            $query = $step['query'] ? " (regarding: {$step['query']})" : '';
+            $responsesText .= "### Response from {$agentLabel}{$query}\n{$step['response']}\n\n";
+        }
+
+        return <<<PROMPT
+The user asked: "{$userMessage}"
+
+I gathered the following information from different sources:
+
+{$responsesText}
+
+Please consolidate these responses into a single, coherent reply for the user. Guidelines:
+- Combine the information naturally without repetition
+- Remove duplicate greetings or closings
+- Maintain a consistent tone throughout
+- Present the information in a logical order
+- If there are contradictions, note them clearly
+- Keep the response concise but complete
+
+Provide only the consolidated response, nothing else.
+PROMPT;
     }
 
     /**
@@ -207,12 +333,12 @@ class TeamOrchestrationService
     }
 
     /**
-     * Execute the Knowledge Agent (RAG) flow.
+     * Execute the Knowledge Agent (RAG) flow, yielding events.
      *
      * @param  Collection<int, Message>  $messages
      * @return Generator<array<string, mixed>>
      */
-    private function executeKnowledge(
+    private function executeKnowledgeWithEvents(
         AgentTeam $team,
         Collection $messages,
         array $step,
@@ -259,12 +385,12 @@ class TeamOrchestrationService
     }
 
     /**
-     * Execute the Action Agent (Tools) flow.
+     * Execute the Action Agent (Tools) flow, yielding events.
      *
      * @param  Collection<int, Message>  $messages
      * @return Generator<array<string, mixed>>
      */
-    private function executeAction(
+    private function executeActionWithEvents(
         AgentTeam $team,
         Collection $messages,
         array $step,
