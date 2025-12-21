@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { Chatbot } from '@/types/chatbot';
-import { usePreviewChat } from '@/composables/usePreviewChat';
+import { usePreviewChat, type PreviewMessage } from '@/composables/usePreviewChat';
 import { Head, Link } from '@inertiajs/vue3';
 import {
     AlertCircle,
@@ -19,6 +19,25 @@ import {
     X,
 } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
+import { marked } from 'marked';
+
+// Configure marked for safe rendering
+marked.setOptions({
+    breaks: true,
+    gfm: true,
+});
+
+// Render markdown for assistant messages
+function renderMarkdown(msg: PreviewMessage): string {
+    if (msg.role === 'user') {
+        return msg.content;
+    }
+    try {
+        return marked.parse(msg.content || '') as string;
+    } catch {
+        return msg.content;
+    }
+}
 
 interface Props {
     chatbot: Chatbot;
@@ -270,7 +289,8 @@ watch(
                                         "
                                     >
                                         <div
-                                            class="max-w-[80%] whitespace-pre-wrap rounded-lg px-3 py-2"
+                                            class="max-w-[80%] rounded-lg px-3 py-2"
+                                            :class="msg.role === 'assistant' ? 'prose prose-sm max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-black/10 prose-code:text-xs prose-code:before:content-none prose-code:after:content-none' : 'whitespace-pre-wrap'"
                                             :style="{
                                                 backgroundColor:
                                                     msg.role === 'user'
@@ -287,7 +307,13 @@ watch(
                                                 <Loader2 class="h-4 w-4 animate-spin" />
                                             </template>
                                             <template v-else>
-                                                {{ msg.content }}
+                                                <!-- User messages: plain text -->
+                                                <span v-if="msg.role === 'user'">{{ msg.content }}</span>
+                                                <!-- Assistant messages: markdown -->
+                                                <div
+                                                    v-else
+                                                    v-html="renderMarkdown(msg)"
+                                                />
                                                 <span
                                                     v-if="msg.isStreaming"
                                                     class="ml-1 inline-block h-3 w-1 animate-pulse bg-current"
