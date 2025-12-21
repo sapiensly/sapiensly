@@ -190,7 +190,7 @@ export function generateStyles(config: AppearanceConfig): string {
         }
 
         .sapiensly-message-assistant pre {
-            background: rgba(0, 0, 0, 0.1);
+            background: #1e1e1e;
             padding: 0.75em 1em;
             border-radius: 8px;
             overflow-x: auto;
@@ -201,6 +201,78 @@ export function generateStyles(config: AppearanceConfig): string {
             background: none;
             padding: 0;
             font-size: 0.85em;
+            color: #d4d4d4;
+        }
+
+        /* Syntax highlighting - VS Code Dark+ inspired */
+        .sapiensly-message-assistant .hljs-keyword,
+        .sapiensly-message-assistant .hljs-selector-tag,
+        .sapiensly-message-assistant .hljs-built_in,
+        .sapiensly-message-assistant .hljs-name {
+            color: #569cd6;
+        }
+
+        .sapiensly-message-assistant .hljs-string,
+        .sapiensly-message-assistant .hljs-attr {
+            color: #ce9178;
+        }
+
+        .sapiensly-message-assistant .hljs-number,
+        .sapiensly-message-assistant .hljs-literal {
+            color: #b5cea8;
+        }
+
+        .sapiensly-message-assistant .hljs-function,
+        .sapiensly-message-assistant .hljs-title {
+            color: #dcdcaa;
+        }
+
+        .sapiensly-message-assistant .hljs-comment {
+            color: #6a9955;
+            font-style: italic;
+        }
+
+        .sapiensly-message-assistant .hljs-variable,
+        .sapiensly-message-assistant .hljs-params {
+            color: #9cdcfe;
+        }
+
+        .sapiensly-message-assistant .hljs-class,
+        .sapiensly-message-assistant .hljs-type {
+            color: #4ec9b0;
+        }
+
+        .sapiensly-message-assistant .hljs-property {
+            color: #9cdcfe;
+        }
+
+        .sapiensly-message-assistant .hljs-operator {
+            color: #d4d4d4;
+        }
+
+        .sapiensly-message-assistant .hljs-punctuation {
+            color: #d4d4d4;
+        }
+
+        .sapiensly-message-assistant .hljs-meta {
+            color: #c586c0;
+        }
+
+        .sapiensly-message-assistant .hljs-regexp {
+            color: #d16969;
+        }
+
+        .sapiensly-message-assistant .hljs-tag {
+            color: #569cd6;
+        }
+
+        .sapiensly-message-assistant .hljs-selector-class,
+        .sapiensly-message-assistant .hljs-selector-id {
+            color: #d7ba7d;
+        }
+
+        .sapiensly-message-assistant .hljs-attribute {
+            color: #9cdcfe;
         }
 
         .sapiensly-message-assistant a {

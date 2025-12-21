@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Widget Markdown Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { color: #333; }
+        .test-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-input {
+            width: 100%;
+            height: 150px;
+            font-family: monospace;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .test-output {
+            padding: 15px;
+            background: rgba(0,0,0,0.08);
+            border-radius: 12px;
+            min-height: 50px;
+        }
+        button {
+            background: #3B82F6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+        button:hover { background: #2563EB; }
+
+        /* Copy widget markdown styles for testing */
+        .test-output p { margin: 0 0 0.5em 0; }
+        .test-output p:last-child { margin-bottom: 0; }
+        .test-output ul, .test-output ol { margin: 0.5em 0; padding-left: 1.5em; }
+        .test-output li { margin: 0.25em 0; }
+        .test-output code {
+            background: rgba(0, 0, 0, 0.1);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+        .test-output pre {
+            background: #1e1e1e;
+            padding: 0.75em 1em;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 0.5em 0;
+        }
+        .test-output pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.85em;
+            color: #d4d4d4;
+        }
+        /* Syntax highlighting */
+        .test-output .hljs-keyword, .test-output .hljs-built_in { color: #569cd6; }
+        .test-output .hljs-string { color: #ce9178; }
+        .test-output .hljs-number { color: #b5cea8; }
+        .test-output .hljs-function, .test-output .hljs-title { color: #dcdcaa; }
+        .test-output .hljs-comment { color: #6a9955; font-style: italic; }
+        .test-output .hljs-variable, .test-output .hljs-params { color: #9cdcfe; }
+        .test-output a { color: #3B82F6; text-decoration: underline; }
+        .test-output strong { font-weight: 600; }
+        .test-output em { font-style: italic; }
+        .test-output blockquote {
+            border-left: 3px solid #3B82F6;
+            margin: 0.5em 0;
+            padding-left: 1em;
+            opacity: 0.9;
+        }
+        .test-output h1, .test-output h2, .test-output h3 {
+            margin: 0.75em 0 0.5em 0;
+            font-weight: 600;
+        }
+        .test-output h1:first-child, .test-output h2:first-child, .test-output h3:first-child {
+            margin-top: 0;
+        }
+        .test-output h1 { font-size: 1.3em; }
+        .test-output h2 { font-size: 1.2em; }
+        .test-output h3 { font-size: 1.1em; }
+        .test-output table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.9em; }
+        .test-output th, .test-output td { border: 1px solid rgba(0,0,0,0.15); padding: 0.4em 0.6em; }
+        .test-output th { background: rgba(0,0,0,0.05); font-weight: 600; }
+    </style>
+</head>
+<body>
+    <h1>Widget Markdown Test</h1>
+
+    <div class="test-section">
+        <h2>Test Input</h2>
+        <textarea id="input" class="test-input">Here's a code example:
+
+```javascript
+function greet(name) {
+    console.log(`Hello, ${name}!`);
+}
+
+greet('World');
+```
+
+And some inline `code` too.
+
+## Features
+- **Bold text** and *italic text*
+- Lists work great
+- [Links](https://example.com) are clickable
+
+> This is a blockquote
+
+| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+| Cell 3   | Cell 4   |</textarea>
+        <button onclick="renderMarkdown()">Render Markdown</button>
+
+        <h3>Output (Widget Style)</h3>
+        <div id="output" class="test-output"></div>
+    </div>
+
+    <script type="module">
+        import { marked } from 'https://cdn.jsdelivr.net/npm/marked@17/lib/marked.esm.js';
+        import hljs from 'https://cdn.jsdelivr.net/npm/highlight.js@11/es/core.min.js';
+        import javascript from 'https://cdn.jsdelivr.net/npm/highlight.js@11/es/languages/javascript.min.js';
+        import python from 'https://cdn.jsdelivr.net/npm/highlight.js@11/es/languages/python.min.js';
+        import php from 'https://cdn.jsdelivr.net/npm/highlight.js@11/es/languages/php.min.js';
+        import sql from 'https://cdn.jsdelivr.net/npm/highlight.js@11/es/languages/sql.min.js';
+        import json from 'https://cdn.jsdelivr.net/npm/highlight.js@11/es/languages/json.min.js';
+        import bash from 'https://cdn.jsdelivr.net/npm/highlight.js@11/es/languages/bash.min.js';
+
+        hljs.registerLanguage('javascript', javascript);
+        hljs.registerLanguage('js', javascript);
+        hljs.registerLanguage('python', python);
+        hljs.registerLanguage('py', python);
+        hljs.registerLanguage('php', php);
+        hljs.registerLanguage('sql', sql);
+        hljs.registerLanguage('json', json);
+        hljs.registerLanguage('bash', bash);
+        hljs.registerLanguage('sh', bash);
+
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+        });
+
+        const renderer = new marked.Renderer();
+        renderer.code = function({ text, lang }) {
+            const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
+            let highlighted;
+            try {
+                highlighted = language === 'plaintext'
+                    ? text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    : hljs.highlight(text, { language }).value;
+            } catch {
+                highlighted = text;
+            }
+            return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+        };
+        marked.use({ renderer });
+
+        window.renderMarkdown = function() {
+            const input = document.getElementById('input').value;
+            const output = document.getElementById('output');
+            output.innerHTML = marked.parse(input);
+        };
+
+        // Render on load
+        window.renderMarkdown();
+    </script>
+</body>
+</html>

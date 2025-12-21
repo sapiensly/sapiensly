@@ -19,13 +19,62 @@ import {
     X,
 } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
-import { marked } from 'marked';
+import { marked, Renderer } from 'marked';
+import hljs from 'highlight.js/lib/core';
 
-// Configure marked for safe rendering
+// Import common languages
+import javascript from 'highlight.js/lib/languages/javascript';
+import typescript from 'highlight.js/lib/languages/typescript';
+import python from 'highlight.js/lib/languages/python';
+import php from 'highlight.js/lib/languages/php';
+import sql from 'highlight.js/lib/languages/sql';
+import json from 'highlight.js/lib/languages/json';
+import bash from 'highlight.js/lib/languages/bash';
+import css from 'highlight.js/lib/languages/css';
+import xml from 'highlight.js/lib/languages/xml';
+
+// Register languages
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('js', javascript);
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('ts', typescript);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('py', python);
+hljs.registerLanguage('php', php);
+hljs.registerLanguage('sql', sql);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('sh', bash);
+hljs.registerLanguage('shell', bash);
+hljs.registerLanguage('css', css);
+hljs.registerLanguage('html', xml);
+hljs.registerLanguage('xml', xml);
+
+// Configure marked with syntax highlighting
 marked.setOptions({
     breaks: true,
     gfm: true,
 });
+
+// Custom renderer for code blocks
+const renderer = new Renderer();
+renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
+    const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
+    let highlighted: string;
+    try {
+        if (language === 'plaintext') {
+            const div = document.createElement('div');
+            div.textContent = text;
+            highlighted = div.innerHTML;
+        } else {
+            highlighted = hljs.highlight(text, { language }).value;
+        }
+    } catch {
+        highlighted = text;
+    }
+    return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+};
+marked.use({ renderer });
 
 // Render markdown for assistant messages
 function renderMarkdown(msg: PreviewMessage): string {
@@ -290,7 +339,7 @@ watch(
                                     >
                                         <div
                                             class="max-w-[80%] rounded-lg px-3 py-2"
-                                            :class="msg.role === 'assistant' ? 'prose prose-sm max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-black/10 prose-code:text-xs prose-code:before:content-none prose-code:after:content-none' : 'whitespace-pre-wrap'"
+                                            :class="msg.role === 'assistant' ? 'preview-message-assistant prose prose-sm max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-[#1e1e1e] prose-pre:text-[#d4d4d4] prose-code:text-xs prose-code:before:content-none prose-code:after:content-none' : 'whitespace-pre-wrap'"
                                             :style="{
                                                 backgroundColor:
                                                     msg.role === 'user'
@@ -384,3 +433,77 @@ watch(
         </div>
     </AppLayout>
 </template>
+
+<style>
+/* Syntax highlighting - VS Code Dark+ inspired */
+.preview-message-assistant .hljs-keyword,
+.preview-message-assistant .hljs-selector-tag,
+.preview-message-assistant .hljs-built_in,
+.preview-message-assistant .hljs-name {
+    color: #569cd6;
+}
+
+.preview-message-assistant .hljs-string,
+.preview-message-assistant .hljs-attr {
+    color: #ce9178;
+}
+
+.preview-message-assistant .hljs-number,
+.preview-message-assistant .hljs-literal {
+    color: #b5cea8;
+}
+
+.preview-message-assistant .hljs-function,
+.preview-message-assistant .hljs-title {
+    color: #dcdcaa;
+}
+
+.preview-message-assistant .hljs-comment {
+    color: #6a9955;
+    font-style: italic;
+}
+
+.preview-message-assistant .hljs-variable,
+.preview-message-assistant .hljs-params {
+    color: #9cdcfe;
+}
+
+.preview-message-assistant .hljs-class,
+.preview-message-assistant .hljs-type {
+    color: #4ec9b0;
+}
+
+.preview-message-assistant .hljs-property {
+    color: #9cdcfe;
+}
+
+.preview-message-assistant .hljs-operator,
+.preview-message-assistant .hljs-punctuation {
+    color: #d4d4d4;
+}
+
+.preview-message-assistant .hljs-meta {
+    color: #c586c0;
+}
+
+.preview-message-assistant .hljs-regexp {
+    color: #d16969;
+}
+
+.preview-message-assistant .hljs-tag {
+    color: #569cd6;
+}
+
+.preview-message-assistant .hljs-selector-class,
+.preview-message-assistant .hljs-selector-id {
+    color: #d7ba7d;
+}
+
+.preview-message-assistant .hljs-attribute {
+    color: #9cdcfe;
+}
+
+.preview-message-assistant pre code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+</style>
