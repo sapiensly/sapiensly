@@ -1,10 +1,15 @@
 <?php
 
+use App\Http\Controllers\WidgetAssetController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\WorkOS\Http\Middleware\ValidateSessionWithWorkOS;
 
 Route::get('/', fn () => Inertia::render('Welcome'));
+
+// Widget asset route (public, no auth)
+Route::get('widget/v1/widget.js', [WidgetAssetController::class, 'script'])
+    ->name('widget.script');
 
 Route::middleware([
     'auth',
@@ -21,4 +26,5 @@ require __DIR__.'/standalone-agents.php';
 require __DIR__.'/knowledge-bases.php';
 require __DIR__.'/tools.php';
 require __DIR__.'/documents.php';
+require __DIR__.'/chatbots.php';
 require __DIR__.'/auth.php';

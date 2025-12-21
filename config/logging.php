@@ -127,6 +127,14 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        'widget' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/widget.log'),
+            'level' => 'debug',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];

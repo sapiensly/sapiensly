@@ -5,6 +5,7 @@
     "scripts": {
         "build": "vite build",
         "build:ssr": "vite build && vite build --ssr",
+        "build:widget": "vite build --config vite.config.widget.ts",
         "dev": "vite",
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
@@ -24,6 +25,7 @@
         "prettier": "^3.4.2",
         "prettier-plugin-organize-imports": "^4.1.0",
         "prettier-plugin-tailwindcss": "^0.6.11",
+        "terser": "^5.44.1",
         "typescript": "^5.2.2",
         "typescript-eslint": "^8.23.0",
         "vite": "^7.0.4",
@@ -33,6 +35,7 @@
         "@inertiajs/vue3": "^2.1.0",
         "@tailwindcss/typography": "^0.5.19",
         "@vueuse/core": "^12.8.2",
+        "chart.js": "^4.5.1",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "laravel-vite-plugin": "^2.0.0",
@@ -42,7 +45,8 @@
         "tailwind-merge": "^3.2.0",
         "tailwindcss": "^4.1.1",
         "tw-animate-css": "^1.2.5",
-        "vue": "^3.5.13"
+        "vue": "^3.5.13",
+        "vue-chartjs": "^5.3.3"
     },
     "optionalDependencies": {
         "@rollup/rollup-linux-x64-gnu": "4.9.5",
