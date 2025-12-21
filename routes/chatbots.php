@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ChatbotAnalyticsController;
 use App\Http\Controllers\ChatbotController;
+use App\Http\Controllers\ChatbotPreviewController;
 use Illuminate\Support\Facades\Route;
 use Laravel\WorkOS\Http\Middleware\ValidateSessionWithWorkOS;
 
@@ -16,6 +17,16 @@ Route::middleware([
 
     Route::get('chatbots/{chatbot}/preview', [ChatbotController::class, 'preview'])
         ->name('chatbots.preview');
+
+    // Preview chat endpoints
+    Route::post('chatbots/{chatbot}/preview/init', [ChatbotPreviewController::class, 'init'])
+        ->name('chatbots.preview.init');
+    Route::post('chatbots/{chatbot}/preview/send', [ChatbotPreviewController::class, 'send'])
+        ->name('chatbots.preview.send');
+    Route::get('chatbots/{chatbot}/preview/stream/{conversation}', [ChatbotPreviewController::class, 'stream'])
+        ->name('chatbots.preview.stream');
+    Route::post('chatbots/{chatbot}/preview/clear', [ChatbotPreviewController::class, 'clear'])
+        ->name('chatbots.preview.clear');
 
     Route::get('chatbots/{chatbot}/analytics', [ChatbotAnalyticsController::class, 'show'])
         ->name('chatbots.analytics');

@@ -50,7 +50,10 @@ class TeamOrchestrationService
         $team->load(['triageAgent', 'knowledgeAgent', 'actionAgent']);
 
         // Get conversation history for context
-        $messages = $conversation->messages()->get();
+        // Use loaded relation if available (for widget/preview), otherwise query
+        $messages = $conversation->relationLoaded('messages')
+            ? $conversation->messages
+            : $conversation->messages()->get();
 
         Log::info('Starting team orchestration', [
             'team_id' => $team->id,
