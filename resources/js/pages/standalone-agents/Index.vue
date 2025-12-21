@@ -20,7 +20,7 @@ import type {
     PaginatedAgents,
 } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Bot, Brain, Database, MessageSquare, Plus, Wrench, Zap } from 'lucide-vue-next';
+import { Bot, Brain, Database, MessageSquare, Plus, Users, Wrench, Zap } from 'lucide-vue-next';
 
 interface Props {
     agents: PaginatedAgents;
@@ -148,9 +148,19 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                                             {{ agent.name }}
                                         </CardTitle>
                                     </div>
-                                    <Badge :variant="statusVariant(agent.status)">
-                                        {{ agent.status }}
-                                    </Badge>
+                                    <div class="flex items-center gap-1">
+                                        <Badge
+                                            v-if="agent.team"
+                                            variant="secondary"
+                                            class="gap-1 text-xs"
+                                        >
+                                            <Users class="h-3 w-3" />
+                                            {{ agent.team.name }}
+                                        </Badge>
+                                        <Badge :variant="statusVariant(agent.status)">
+                                            {{ agent.status }}
+                                        </Badge>
+                                    </div>
                                 </div>
                                 <CardDescription v-if="agent.description">
                                     {{ agent.description }}

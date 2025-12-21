@@ -21,8 +21,8 @@ class AgentController extends Controller
         $typeFilter = $request->query('type');
 
         $query = Agent::query()
-            ->standalone()
             ->forUser($request->user()->id)
+            ->with('team:id,name')
             ->withCount(['knowledgeBases', 'tools'])
             ->latest();
 
@@ -33,7 +33,6 @@ class AgentController extends Controller
         $agents = $query->paginate(12)->withQueryString();
 
         $agentsByType = Agent::query()
-            ->standalone()
             ->forUser($request->user()->id)
             ->selectRaw('type, count(*) as count')
             ->groupBy('type')

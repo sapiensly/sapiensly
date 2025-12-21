@@ -52,10 +52,16 @@ export interface ToolReference {
     type: string;
 }
 
+export interface AgentTeamReference {
+    id: string;
+    name: string;
+}
+
 export interface Agent {
     id: string;
     user_id: number | null;
     agent_team_id: string | null;
+    team?: AgentTeamReference | null;
     type: AgentType;
     name: string;
     description: string | null;
