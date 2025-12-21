@@ -145,7 +145,6 @@ export function generateStyles(config: AppearanceConfig): string {
             padding: 10px 14px;
             border-radius: 16px;
             word-wrap: break-word;
-            white-space: pre-wrap;
         }
 
         .sapiensly-message-user {
@@ -153,6 +152,7 @@ export function generateStyles(config: AppearanceConfig): string {
             color: white;
             align-self: flex-end;
             border-bottom-right-radius: 4px;
+            white-space: pre-wrap;
         }
 
         .sapiensly-message-assistant {
@@ -160,6 +160,114 @@ export function generateStyles(config: AppearanceConfig): string {
             color: var(--sw-text);
             align-self: flex-start;
             border-bottom-left-radius: 4px;
+        }
+
+        /* Markdown styles for assistant messages */
+        .sapiensly-message-assistant p {
+            margin: 0 0 0.5em 0;
+        }
+
+        .sapiensly-message-assistant p:last-child {
+            margin-bottom: 0;
+        }
+
+        .sapiensly-message-assistant ul,
+        .sapiensly-message-assistant ol {
+            margin: 0.5em 0;
+            padding-left: 1.5em;
+        }
+
+        .sapiensly-message-assistant li {
+            margin: 0.25em 0;
+        }
+
+        .sapiensly-message-assistant code {
+            background: rgba(0, 0, 0, 0.1);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        .sapiensly-message-assistant pre {
+            background: rgba(0, 0, 0, 0.1);
+            padding: 0.75em 1em;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 0.5em 0;
+        }
+
+        .sapiensly-message-assistant pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.85em;
+        }
+
+        .sapiensly-message-assistant a {
+            color: var(--sw-primary);
+            text-decoration: underline;
+        }
+
+        .sapiensly-message-assistant a:hover {
+            opacity: 0.8;
+        }
+
+        .sapiensly-message-assistant strong {
+            font-weight: 600;
+        }
+
+        .sapiensly-message-assistant em {
+            font-style: italic;
+        }
+
+        .sapiensly-message-assistant blockquote {
+            border-left: 3px solid var(--sw-primary);
+            margin: 0.5em 0;
+            padding-left: 1em;
+            opacity: 0.9;
+        }
+
+        .sapiensly-message-assistant h1,
+        .sapiensly-message-assistant h2,
+        .sapiensly-message-assistant h3,
+        .sapiensly-message-assistant h4 {
+            margin: 0.75em 0 0.5em 0;
+            font-weight: 600;
+        }
+
+        .sapiensly-message-assistant h1:first-child,
+        .sapiensly-message-assistant h2:first-child,
+        .sapiensly-message-assistant h3:first-child,
+        .sapiensly-message-assistant h4:first-child {
+            margin-top: 0;
+        }
+
+        .sapiensly-message-assistant h1 { font-size: 1.3em; }
+        .sapiensly-message-assistant h2 { font-size: 1.2em; }
+        .sapiensly-message-assistant h3 { font-size: 1.1em; }
+        .sapiensly-message-assistant h4 { font-size: 1em; }
+
+        .sapiensly-message-assistant hr {
+            border: none;
+            border-top: 1px solid rgba(0, 0, 0, 0.15);
+            margin: 0.75em 0;
+        }
+
+        .sapiensly-message-assistant table {
+            border-collapse: collapse;
+            margin: 0.5em 0;
+            font-size: 0.9em;
+        }
+
+        .sapiensly-message-assistant th,
+        .sapiensly-message-assistant td {
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            padding: 0.4em 0.6em;
+        }
+
+        .sapiensly-message-assistant th {
+            background: rgba(0, 0, 0, 0.05);
+            font-weight: 600;
         }
 
         /* Typing Indicator */

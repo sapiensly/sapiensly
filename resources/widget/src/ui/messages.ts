@@ -1,4 +1,5 @@
 import type { Message } from '../types';
+import { parseMarkdown, escapeHtml } from './markdown';
 
 /**
  * Messages list component.
@@ -51,8 +52,14 @@ export class Messages {
 
         const messageEl = document.createElement('div');
         messageEl.className = `sapiensly-message sapiensly-message-${message.role}`;
-        messageEl.textContent = message.content;
         messageEl.dataset.messageId = message.id;
+
+        // User messages: escape HTML, Assistant messages: render markdown
+        if (message.role === 'user') {
+            messageEl.textContent = message.content;
+        } else {
+            messageEl.innerHTML = parseMarkdown(message.content);
+        }
 
         this.element.appendChild(messageEl);
         this.scrollToBottom();
@@ -69,7 +76,13 @@ export class Messages {
         ) as HTMLDivElement;
 
         if (messageEl) {
-            messageEl.textContent = content;
+            // Check if it's an assistant message by class
+            const isAssistant = messageEl.classList.contains('sapiensly-message-assistant');
+            if (isAssistant) {
+                messageEl.innerHTML = parseMarkdown(content);
+            } else {
+                messageEl.textContent = content;
+            }
             this.scrollToBottom();
         }
     }
