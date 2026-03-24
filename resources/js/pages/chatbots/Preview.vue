@@ -19,6 +19,9 @@ import {
     X,
 } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 import { marked, Renderer } from 'marked';
 import hljs from 'highlight.js/lib/core';
 
@@ -95,12 +98,12 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Chatbots', href: ChatbotController.index().url },
+    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
     {
         title: props.chatbot.name,
         href: ChatbotController.show({ chatbot: props.chatbot.id }).url,
     },
-    { title: 'Preview', href: '#' },
+    { title: t('chatbots.preview.title'), href: '#' },
 ]);
 
 const isOpen = ref(true);
@@ -152,7 +155,7 @@ watch(
 </script>
 
 <template>
-    <Head title="Preview Chatbot" />
+    <Head :title="t('chatbots.preview.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">

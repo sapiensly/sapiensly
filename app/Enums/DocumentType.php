@@ -15,13 +15,13 @@ enum DocumentType: string
     public function label(): string
     {
         return match ($this) {
-            self::Pdf => 'PDF',
-            self::Txt => 'Text',
-            self::Docx => 'Word Document',
-            self::Md => 'Markdown',
-            self::Url => 'URL',
-            self::Csv => 'CSV',
-            self::Json => 'JSON',
+            self::Pdf => __('PDF'),
+            self::Txt => __('Text'),
+            self::Docx => __('Word Document'),
+            self::Md => __('Markdown'),
+            self::Url => __('URL'),
+            self::Csv => __('CSV'),
+            self::Json => __('JSON'),
         };
     }
 

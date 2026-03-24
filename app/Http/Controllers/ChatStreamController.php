@@ -7,6 +7,7 @@ use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\Conversation;
 use App\Services\LLMService;
+use App\Services\RetrievalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -19,8 +20,8 @@ class ChatStreamController extends Controller
 
     public function stream(Request $request, Agent $agent, Conversation $conversation): StreamedResponse
     {
-        // Verify ownership
-        if ($agent->user_id !== $request->user()->id) {
+        // Verify access
+        if (! $agent->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -60,80 +61,62 @@ class ChatStreamController extends Controller
     /**
      * Stream response with tool calling for Action Agents.
      *
-     * Tool calling uses non-streaming mode because Prism executes
-     * tools synchronously. The final response is then streamed to the client.
+     * Tool calling uses non-streaming mode because the AI SDK executes
+     * tools synchronously. The final response is then sent to the client.
      */
     private function streamWithTools(Agent $agent, Conversation $conversation, Collection $messages): StreamedResponse
     {
-        $responseText = null;
-        $toolCalls = [];
-        $error = null;
+        return response()->stream(function () use ($agent, $conversation, $messages) {
+            try {
+                \Log::info('Starting tool-enabled chat', [
+                    'agent_id' => $agent->id,
+                    'conversation_id' => $conversation->id,
+                ]);
 
-        try {
-            \Log::info('Starting tool-enabled chat', [
-                'agent_id' => $agent->id,
-                'conversation_id' => $conversation->id,
-            ]);
+                $response = $this->llmService->chatWithTools($agent, $messages->all());
+                $responseText = $response->text;
+                $toolCalls = [];
 
-            $response = $this->llmService->chatWithTools($agent, $messages->all());
-            $responseText = $response->text;
-
-            // Extract tool call information from steps for logging
-            foreach ($response->steps ?? [] as $step) {
-                if (! empty($step->toolCalls)) {
-                    foreach ($step->toolCalls as $toolCall) {
-                        $toolCalls[] = [
-                            'name' => $toolCall->name ?? 'unknown',
-                            'id' => $toolCall->id ?? null,
-                        ];
+                foreach ($response->steps ?? [] as $step) {
+                    if (! empty($step->toolCalls)) {
+                        foreach ($step->toolCalls as $toolCall) {
+                            $toolCalls[] = [
+                                'name' => $toolCall->name ?? 'unknown',
+                                'id' => $toolCall->id ?? null,
+                            ];
+                        }
                     }
                 }
-            }
 
-            \Log::info('Tool chat completed', [
-                'agent_id' => $agent->id,
-                'tool_calls' => $toolCalls,
-                'response_length' => strlen($responseText ?? ''),
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Tool Chat Error', [
-                'agent_id' => $agent->id,
-                'conversation_id' => $conversation->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-            $error = $e->getMessage();
-        }
+                // Send tool call events
+                foreach ($toolCalls as $toolCall) {
+                    echo 'data: '.json_encode([
+                        'type' => 'tool_call',
+                        'tool' => $toolCall['name'],
+                    ])."\n\n";
+                    $this->flushOutput();
+                }
 
-        return response()->stream(function () use ($agent, $conversation, $responseText, $toolCalls, $error) {
-            // Send tool call events first (for UI feedback)
-            foreach ($toolCalls as $toolCall) {
-                echo 'data: '.json_encode([
-                    'type' => 'tool_call',
-                    'tool' => $toolCall['name'],
-                ])."\n\n";
-                $this->flushOutput();
-            }
+                if ($responseText !== null && $responseText !== '') {
+                    echo 'data: '.json_encode(['content' => $responseText])."\n\n";
+                    $this->flushOutput();
 
-            if ($error) {
-                echo 'data: '.json_encode(['error' => $error])."\n\n";
-                $this->flushOutput();
-
-                return;
-            }
-
-            if ($responseText !== null && $responseText !== '') {
-                // Stream the response as a single chunk (it's already complete)
-                echo 'data: '.json_encode(['content' => $responseText])."\n\n";
-                $this->flushOutput();
-
-                // Save the complete assistant message
-                $conversation->messages()->create([
-                    'role' => MessageRole::Assistant,
-                    'content' => $responseText,
-                    'model' => $agent->model,
-                    'metadata' => ! empty($toolCalls) ? ['tool_calls' => $toolCalls] : null,
+                    $conversation->messages()->create([
+                        'role' => MessageRole::Assistant,
+                        'content' => $responseText,
+                        'model' => $agent->model,
+                        'metadata' => ! empty($toolCalls) ? ['tool_calls' => $toolCalls] : null,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                \Log::error('Tool Chat Error', [
+                    'agent_id' => $agent->id,
+                    'conversation_id' => $conversation->id,
+                    'error' => $e->getMessage(),
                 ]);
+
+                echo 'data: '.json_encode(['error' => $e->getMessage()])."\n\n";
+                $this->flushOutput();
             }
 
             echo "data: [DONE]\n\n";
@@ -146,30 +129,39 @@ class ChatStreamController extends Controller
      */
     private function streamWithRAG(Agent $agent, Conversation $conversation, Collection $messages): StreamedResponse
     {
-        $chunks = [];
+        // Collect the full response first, then stream it to the client.
+        // The Laravel AI SDK's stream() generator does not yield inside
+        // response()->stream() closures due to output-buffering conflicts,
+        // so we use the synchronous chat methods instead.
         $knowledgeBases = [];
+        $fullContent = '';
         $error = null;
 
         try {
-            // Use RAG-enabled streaming with metadata
-            $ragResult = $this->llmService->streamChatWithRAGInfo($agent, $messages->all());
-            $knowledgeBases = $ragResult['knowledge_bases'];
+            $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
 
-            foreach ($ragResult['generator'] as $chunk) {
-                $chunks[] = $chunk;
+            if (! empty($knowledgeBaseIds)) {
+                $lastUserMessage = $messages->last()?->content ?? '';
+                $retrieval = app(RetrievalService::class)->retrieve(
+                    $lastUserMessage,
+                    $knowledgeBaseIds,
+                    topK: 5,
+                    threshold: 0.5
+                );
+                $knowledgeBases = $retrieval['knowledge_bases'] ?? [];
             }
+
+            $fullContent = $this->llmService->chat($agent, $messages->all());
         } catch (\Exception $e) {
-            \Log::error('LLM Stream Error', [
+            \Log::error('LLM Chat Error', [
                 'agent_id' => $agent->id,
                 'conversation_id' => $conversation->id,
-                'message_count' => $messages->count(),
                 'error' => $e->getMessage(),
             ]);
             $error = $e->getMessage();
         }
 
-        return response()->stream(function () use ($agent, $conversation, $chunks, $knowledgeBases, $error) {
-            // Send knowledge base events first (for UI feedback)
+        return response()->stream(function () use ($agent, $conversation, $knowledgeBases, $fullContent, $error) {
             foreach ($knowledgeBases as $kb) {
                 echo 'data: '.json_encode([
                     'type' => 'knowledge_base',
@@ -182,19 +174,10 @@ class ChatStreamController extends Controller
             if ($error) {
                 echo 'data: '.json_encode(['error' => $error])."\n\n";
                 $this->flushOutput();
-
-                return;
-            }
-
-            $fullContent = '';
-            foreach ($chunks as $chunk) {
-                $fullContent .= $chunk;
-                echo 'data: '.json_encode(['content' => $chunk])."\n\n";
+            } elseif ($fullContent !== '') {
+                echo 'data: '.json_encode(['content' => $fullContent])."\n\n";
                 $this->flushOutput();
-            }
 
-            // Save the complete assistant message
-            if ($fullContent !== '') {
                 $conversation->messages()->create([
                     'role' => MessageRole::Assistant,
                     'content' => $fullContent,

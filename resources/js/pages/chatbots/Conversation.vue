@@ -11,6 +11,9 @@ import type { Chatbot, WidgetConversation, WidgetMessage } from '@/types/chatbot
 import { Head, Link } from '@inertiajs/vue3';
 import { Bot, Clock, Mail, MessageSquare, Star, User } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface ConversationWithMessages extends WidgetConversation {
     messages: WidgetMessage[];
@@ -24,10 +27,10 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Chatbots', href: ChatbotController.index().url },
+    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
     { title: props.chatbot.name, href: ChatbotController.show({ chatbot: props.chatbot.id }).url },
-    { title: 'Conversations', href: ChatbotController.conversations({ chatbot: props.chatbot.id }).url },
-    { title: 'Details', href: '#' },
+    { title: t('chatbots.conversations.title'), href: ChatbotController.conversations({ chatbot: props.chatbot.id }).url },
+    { title: t('chatbots.conversation.title'), href: '#' },
 ]);
 
 const formatDate = (date: string) => {
@@ -50,7 +53,7 @@ const formatTime = (date: string) => {
 </script>
 
 <template>
-    <Head title="Conversation Details" />
+    <Head :title="t('chatbots.conversation.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
@@ -58,7 +61,7 @@ const formatTime = (date: string) => {
                 <div class="mb-8 flex items-start justify-between">
                     <div>
                         <div class="mb-2 flex items-center gap-3">
-                            <Heading title="Conversation" />
+                            <Heading :title="t('chatbots.conversation.heading')" />
                             <Badge v-if="conversation.is_resolved" variant="default">
                                 Resolved
                             </Badge>
@@ -70,12 +73,12 @@ const formatTime = (date: string) => {
                             </Badge>
                         </div>
                         <p class="text-sm text-muted-foreground">
-                            Started {{ formatDate(conversation.created_at) }}
+                            {{ t('chatbots.conversation.started') }} {{ formatDate(conversation.created_at) }}
                         </p>
                     </div>
                     <Button variant="outline" as-child>
                         <Link :href="ChatbotController.conversations({ chatbot: chatbot.id }).url">
-                            Back to Conversations
+                            {{ t('chatbots.conversation.back') }}
                         </Link>
                     </Button>
                 </div>
@@ -85,7 +88,7 @@ const formatTime = (date: string) => {
                     <div class="space-y-4 lg:col-span-1">
                         <Card>
                             <CardHeader>
-                                <CardTitle class="text-base">Visitor Info</CardTitle>
+                                <CardTitle class="text-base">{{ t('chatbots.conversation.visitor_info') }}</CardTitle>
                             </CardHeader>
                             <CardContent class="space-y-4">
                                 <div class="flex items-center gap-3">
@@ -94,7 +97,7 @@ const formatTime = (date: string) => {
                                     </div>
                                     <div>
                                         <p class="font-medium">
-                                            {{ conversation.session?.visitor_name || 'Anonymous' }}
+                                            {{ conversation.session?.visitor_name || t('chatbots.conversation.anonymous') }}
                                         </p>
                                         <p v-if="conversation.session?.visitor_email" class="text-sm text-muted-foreground">
                                             {{ conversation.session.visitor_email }}
@@ -109,7 +112,7 @@ const formatTime = (date: string) => {
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <MessageSquare class="h-4 w-4 text-muted-foreground" />
-                                        <span>{{ conversation.message_count }} messages</span>
+                                        <span>{{ conversation.message_count }} {{ t('chatbots.conversations.messages') }}</span>
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <Clock class="h-4 w-4 text-muted-foreground" />
@@ -122,7 +125,7 @@ const formatTime = (date: string) => {
                         <!-- Rating & Feedback -->
                         <Card v-if="conversation.rating || conversation.feedback">
                             <CardHeader>
-                                <CardTitle class="text-base">Feedback</CardTitle>
+                                <CardTitle class="text-base">{{ t('chatbots.conversation.feedback') }}</CardTitle>
                             </CardHeader>
                             <CardContent class="space-y-3">
                                 <div v-if="conversation.rating" class="flex items-center gap-2">
@@ -136,7 +139,7 @@ const formatTime = (date: string) => {
                                                 : 'text-muted-foreground'"
                                         />
                                     </div>
-                                    <span class="text-sm font-medium">{{ conversation.rating }}/5</span>
+                                    <span class="text-sm font-medium">{{ conversation.rating }}{{ t('chatbots.conversation.out_of_5') }}</span>
                                 </div>
                                 <p v-if="conversation.feedback" class="text-sm text-muted-foreground">
                                     "{{ conversation.feedback }}"

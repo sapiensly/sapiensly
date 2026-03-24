@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\MembershipStatus;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -44,8 +45,20 @@ class HandleInertiaRequests extends Middleware
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $request->user(),
+                'organization' => $request->user()?->organization,
+                'memberships' => $request->user()?->memberships()
+                    ->where('status', MembershipStatus::Active)
+                    ->with('organization:id,name,slug')
+                    ->get()
+                    ->map(fn ($m) => [
+                        'organization_id' => $m->organization_id,
+                        'organization_name' => $m->organization->name,
+                        'role' => $m->role->value,
+                    ]),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'locale' => app()->getLocale(),
+            'availableLocales' => ['en', 'es'],
         ];
     }
 }

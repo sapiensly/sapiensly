@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AgentStatus;
 use App\Enums\ToolType;
+use App\Enums\Visibility;
 use App\Http\Requests\Tool\StoreToolRequest;
 use App\Http\Requests\Tool\UpdateToolRequest;
 use App\Models\Tool;
@@ -24,7 +25,7 @@ class ToolController extends Controller
         $typeFilter = $request->query('type');
 
         $query = Tool::query()
-            ->where('user_id', $request->user()->id)
+            ->forAccountContext($request->user())
             ->latest();
 
         if ($typeFilter && in_array($typeFilter, array_column(ToolType::cases(), 'value'))) {
@@ -34,7 +35,7 @@ class ToolController extends Controller
         $tools = $query->paginate(12)->withQueryString();
 
         $toolsByType = Tool::query()
-            ->where('user_id', $request->user()->id)
+            ->forAccountContext($request->user())
             ->selectRaw('type, count(*) as count')
             ->groupBy('type')
             ->pluck('count', 'type')
@@ -63,7 +64,7 @@ class ToolController extends Controller
                 'label' => $type->label(),
                 'description' => $type->description(),
             ]),
-            'availableTools' => $request->user()->tools()
+            'availableTools' => Tool::forAccountContext($request->user())
                 ->whereIn('type', ['function', 'mcp'])
                 ->where('status', 'active')
                 ->get(['id', 'name', 'type']),
@@ -72,6 +73,7 @@ class ToolController extends Controller
 
     public function store(StoreToolRequest $request): RedirectResponse
     {
+        $user = $request->user();
         $type = ToolType::from($request->type);
         $config = $request->config ?? [];
 
@@ -81,7 +83,9 @@ class ToolController extends Controller
         }
 
         $tool = Tool::create([
-            'user_id' => $request->user()->id,
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+            'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
             'type' => $request->type,
             'name' => $request->name,
             'description' => $request->description,
@@ -103,7 +107,7 @@ class ToolController extends Controller
 
     public function show(Request $request, Tool $tool): Response
     {
-        if ($tool->user_id !== $request->user()->id) {
+        if (! $tool->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -125,7 +129,7 @@ class ToolController extends Controller
 
     public function edit(Request $request, Tool $tool): Response
     {
-        if ($tool->user_id !== $request->user()->id) {
+        if (! $tool->isOwnedBy($request->user())) {
             abort(403);
         }
 
@@ -147,7 +151,7 @@ class ToolController extends Controller
                 'label' => $type->label(),
                 'description' => $type->description(),
             ]),
-            'availableTools' => $request->user()->tools()
+            'availableTools' => Tool::forAccountContext($request->user())
                 ->whereIn('type', ['function', 'mcp'])
                 ->where('status', 'active')
                 ->where('id', '!=', $tool->id)
@@ -186,7 +190,7 @@ class ToolController extends Controller
 
     public function destroy(Request $request, Tool $tool): RedirectResponse
     {
-        if ($tool->user_id !== $request->user()->id) {
+        if (! $tool->isOwnedBy($request->user())) {
             abort(403);
         }
 

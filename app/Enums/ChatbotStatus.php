@@ -11,9 +11,9 @@ enum ChatbotStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Draft => 'Draft',
-            self::Active => 'Active',
-            self::Inactive => 'Inactive',
+            self::Draft => __('Draft'),
+            self::Active => __('Active'),
+            self::Inactive => __('Inactive'),
         };
     }
 

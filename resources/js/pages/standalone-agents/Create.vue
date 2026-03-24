@@ -31,6 +31,9 @@ import type {
 } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     selectedType: AgentType | null;
@@ -43,10 +46,10 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Agents', href: AgentController.index().url },
-    { title: 'Create', href: '#' },
-];
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: t('agents.index.heading'), href: AgentController.index().url },
+    { title: t('common.create'), href: '#' },
+]);
 
 const currentType = ref<AgentType | null>(props.selectedType);
 
@@ -151,20 +154,20 @@ if (props.selectedType) {
 </script>
 
 <template>
-    <Head title="Create Agent" />
+    <Head :title="t('agents.create.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-4xl">
                 <Heading
-                    title="Create Agent"
-                    description="Create a new standalone agent with type-specific configuration"
+                    :title="t('agents.create.heading')"
+                    :description="t('agents.create.description')"
                 />
 
                 <div v-if="!currentType" class="mt-8">
                     <HeadingSmall
-                        title="Select Agent Type"
-                        description="Choose the type of agent you want to create"
+                        :title="t('agents.create.select_type')"
+                        :description="t('agents.create.select_type_description')"
                     />
                     <AgentTypeSelector
                         :agent-types="agentTypes"
@@ -176,46 +179,46 @@ if (props.selectedType) {
                 <form v-else class="mt-8 space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Basic Information"
-                            description="Name and describe your agent"
+                            :title="t('agents.create.basic_info')"
+                            :description="t('agents.create.basic_info_description')"
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">Agent Name</Label>
+                                <Label for="name">{{ t('agents.create.agent_name') }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    placeholder="My Agent"
+                                    :placeholder="t('agents.create.agent_name_placeholder')"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">Description</Label>
+                                <Label for="description">{{ t('agents.create.description_label') }}</Label>
                                 <Input
                                     id="description"
                                     v-model="form.description"
-                                    placeholder="What does this agent do?"
+                                    :placeholder="t('agents.create.description_placeholder')"
                                 />
                                 <InputError :message="form.errors.description" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="keywords">Keywords</Label>
+                                <Label for="keywords">{{ t('agents.create.keywords_label') }}</Label>
                                 <KeywordsInput v-model="form.keywords" />
                                 <p class="text-xs text-muted-foreground">
-                                    Add keywords for search and categorization
+                                    {{ t('agents.create.keywords_description') }}
                                 </p>
                                 <InputError :message="form.errors.keywords" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="model">Model</Label>
+                                <Label for="model">{{ t('agents.create.model') }}</Label>
                                 <Select v-model="form.model">
                                     <SelectTrigger id="model">
-                                        <SelectValue placeholder="Select a model" />
+                                        <SelectValue :placeholder="t('agents.create.select_model')" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -237,11 +240,11 @@ if (props.selectedType) {
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="prompt_template">Prompt Template</Label>
+                                <Label for="prompt_template">{{ t('agents.create.prompt_template') }}</Label>
                                 <Textarea
                                     id="prompt_template"
                                     v-model="form.prompt_template"
-                                    placeholder="System instructions for the agent..."
+                                    :placeholder="t('agents.create.prompt_placeholder')"
                                     rows="6"
                                 />
                                 <InputError :message="form.errors.prompt_template" />
@@ -251,8 +254,8 @@ if (props.selectedType) {
 
                     <div class="space-y-6">
                         <HeadingSmall
-                            :title="`${currentType.charAt(0).toUpperCase() + currentType.slice(1)} Configuration`"
-                            description="Type-specific settings for this agent"
+                            :title="t('agents.create.config_title')"
+                            :description="t('agents.create.config_description')"
                         />
 
                         <TriageAgentConfig
@@ -280,15 +283,15 @@ if (props.selectedType) {
 
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" type="button" @click="currentType = null">
-                            Change Type
+                            {{ t('common.change_type') }}
                         </Button>
                         <Button variant="outline" as-child>
                             <Link :href="AgentController.index().url">
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button type="submit" :disabled="form.processing">
-                            Create Agent
+                            {{ t('agents.create.submit') }}
                         </Button>
                     </div>
                 </form>

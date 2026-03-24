@@ -321,7 +321,7 @@ PROMPT;
         foreach ($response->steps ?? [] as $step) {
             foreach ($step->toolCalls ?? [] as $toolCall) {
                 if (($toolCall->name ?? '') === 'create_execution_plan') {
-                    $args = $toolCall->arguments();
+                    $args = $toolCall->arguments;
                     $stepsJson = $args['steps'] ?? '[]';
 
                     return $this->routingService->parseExecutionPlan($stepsJson);

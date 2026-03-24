@@ -9,6 +9,10 @@ import type { BreadcrumbItem } from '@/types';
 import type { PaginatedAgentTeams } from '@/types/agents';
 import { Head, Link } from '@inertiajs/vue3';
 import { Plus } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     teams: PaginatedAgentTeams;
@@ -16,29 +20,29 @@ interface Props {
 
 defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     {
-        title: 'Agent Teams',
+        title: t('agent_teams.index.title'),
         href: AgentTeamController.index().url,
     },
-];
+]);
 </script>
 
 <template>
-    <Head title="Agent Teams" />
+    <Head :title="t('agent_teams.index.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-6xl">
                 <div class="mb-8 flex items-center justify-between">
                     <Heading
-                        title="Agent Teams"
-                        description="Manage your AI agent teams for customer service automation"
+                        :title="t('agent_teams.index.title')"
+                        :description="t('agent_teams.index.description')"
                     />
                     <Button as-child>
                         <Link :href="AgentTeamController.create()">
                             <Plus class="mr-2 h-4 w-4" />
-                            Create Team
+                            {{ t('agent_teams.index.create_team') }}
                         </Link>
                     </Button>
                 </div>
@@ -56,10 +60,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 
                 <EmptyState
                         v-else
-                        title="No agent teams yet"
-                        description="Create your first agent team to get started with AI-powered customer service automation."
+                        :title="t('agent_teams.index.no_teams')"
+                        :description="t('agent_teams.index.no_teams_description')"
                         :create-url="AgentTeamController.create()"
-                        create-label="Create your first team"
+                        :create-label="t('agent_teams.index.create_first')"
                     />
             </div>
         </div>

@@ -14,24 +14,24 @@ enum ToolType: string
     public function label(): string
     {
         return match ($this) {
-            self::Function => 'Function',
-            self::Mcp => 'MCP Server',
-            self::Group => 'Tool Group',
-            self::RestApi => 'REST API',
-            self::Graphql => 'GraphQL',
-            self::Database => 'Database',
+            self::Function => __('Function'),
+            self::Mcp => __('MCP Server'),
+            self::Group => __('Tool Group'),
+            self::RestApi => __('REST API'),
+            self::Graphql => __('GraphQL'),
+            self::Database => __('Database'),
         };
     }
 
     public function description(): string
     {
         return match ($this) {
-            self::Function => 'Custom function with JSON schema definition',
-            self::Mcp => 'Model Context Protocol server integration',
-            self::Group => 'Collection of multiple tools',
-            self::RestApi => 'HTTP REST API integration with configurable endpoints',
-            self::Graphql => 'GraphQL API with query and mutation support',
-            self::Database => 'Direct database query execution with safety controls',
+            self::Function => __('Custom function with JSON schema definition'),
+            self::Mcp => __('Model Context Protocol server integration'),
+            self::Group => __('Collection of multiple tools'),
+            self::RestApi => __('HTTP REST API integration with configurable endpoints'),
+            self::Graphql => __('GraphQL API with query and mutation support'),
+            self::Database => __('Direct database query execution with safety controls'),
         };
     }
 }

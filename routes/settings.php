@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\OrganizationController;
 use App\Http\Controllers\Settings\ProfileController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -18,4 +19,9 @@ Route::middleware([
     Route::get('settings/appearance', function () {
         return Inertia::render('settings/Appearance');
     })->name('appearance.edit');
+
+    Route::get('settings/organization', [OrganizationController::class, 'show'])->name('organization.show');
+    Route::get('settings/organization/create', [OrganizationController::class, 'create'])->name('organization.create');
+    Route::post('settings/organization', [OrganizationController::class, 'store'])->name('organization.store');
+    Route::post('settings/organization/invite', [OrganizationController::class, 'invite'])->name('organization.invite');
 });

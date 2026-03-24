@@ -30,9 +30,9 @@ class StoreAgentTeamRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'agent_ids.triage.required' => 'Please select a Triage agent.',
-            'agent_ids.knowledge.required' => 'Please select a Knowledge agent.',
-            'agent_ids.action.required' => 'Please select an Action agent.',
+            'agent_ids.triage.required' => __('Please select a Triage agent.'),
+            'agent_ids.knowledge.required' => __('Please select a Knowledge agent.'),
+            'agent_ids.action.required' => __('Please select an Action agent.'),
         ];
     }
 }

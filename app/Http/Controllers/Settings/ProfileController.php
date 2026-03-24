@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\WorkOS\Http\Requests\AuthKitAccountDeletionRequest;
@@ -29,9 +30,10 @@ class ProfileController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'locale' => ['sometimes', 'string', Rule::in(['en', 'es'])],
         ]);
 
-        $request->user()->update(['name' => $request->name]);
+        $request->user()->update($request->only(['name', 'locale']));
 
         return to_route('profile.edit');
     }

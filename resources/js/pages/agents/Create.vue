@@ -14,6 +14,9 @@ import type { BreadcrumbItem } from '@/types';
 import type { AgentType, AgentTypeOption, ModelOption } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface AgentOption {
     id: string;
@@ -37,10 +40,10 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Agent Teams', href: AgentTeamController.index().url },
-    { title: 'Create Team', href: '#' },
-];
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: t('agent_teams.index.title'), href: AgentTeamController.index().url },
+    { title: t('agent_teams.create.title'), href: '#' },
+]);
 
 const selectedAgents = ref<Record<AgentType, string | null>>({
     triage: null,
@@ -83,51 +86,51 @@ const submit = () => {
 </script>
 
 <template>
-    <Head title="Create Agent Team" />
+    <Head :title="t('agent_teams.create.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-5xl">
                 <Heading
-                    title="Create Agent Team"
-                    description="Build a team by selecting existing agents or creating new ones"
+                    :title="t('agent_teams.create.heading')"
+                    :description="t('agent_teams.create.description')"
                 />
 
                 <form class="mt-8 space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Team Details"
-                            description="Basic information about your agent team"
+                            :title="t('agent_teams.create.details_title')"
+                            :description="t('agent_teams.create.details_description')"
                         />
 
                         <div class="grid gap-4 max-w-xl">
                             <div class="grid gap-2">
-                                <Label for="name">Team Name</Label>
+                                <Label for="name">{{ t('agent_teams.create.team_name') }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    placeholder="My Agent Team"
+                                    :placeholder="t('agent_teams.create.team_name_placeholder')"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">Description</Label>
+                                <Label for="description">{{ t('agent_teams.create.description_label') }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    placeholder="Describe what this team does..."
+                                    :placeholder="t('agent_teams.create.description_placeholder')"
                                     rows="2"
                                 />
                                 <InputError :message="form.errors.description" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="keywords">Keywords</Label>
+                                <Label for="keywords">{{ t('agent_teams.create.keywords_label') }}</Label>
                                 <KeywordsInput v-model="form.keywords" />
                                 <p class="text-xs text-muted-foreground">
-                                    Add keywords for search and categorization
+                                    {{ t('agent_teams.create.keywords_description') }}
                                 </p>
                                 <InputError :message="form.errors.keywords" />
                             </div>
@@ -136,8 +139,8 @@ const submit = () => {
 
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Select Agents"
-                            description="Choose an agent for each role or create new ones"
+                            :title="t('agent_teams.create.select_agents')"
+                            :description="t('agent_teams.create.select_agents_description')"
                         />
 
                         <div class="grid gap-4 md:grid-cols-3">
@@ -170,14 +173,14 @@ const submit = () => {
                     <div class="flex justify-end gap-4 pt-4 border-t">
                         <Button variant="outline" as-child>
                             <Link :href="AgentTeamController.index().url">
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button
                             type="submit"
                             :disabled="form.processing || !isComplete"
                         >
-                            Create Team
+                            {{ t('agent_teams.create.submit') }}
                         </Button>
                     </div>
                 </form>

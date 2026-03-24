@@ -12,6 +12,9 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import type { RestApiConfig } from '@/types/tools';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     config: RestApiConfig;
@@ -73,11 +76,11 @@ const methodOptions = [
 ];
 
 const authOptions = [
-    { value: 'none', label: 'None' },
-    { value: 'bearer', label: 'Bearer Token' },
-    { value: 'api_key', label: 'API Key' },
-    { value: 'basic', label: 'Basic Auth' },
-    { value: 'oauth2', label: 'OAuth 2.0' },
+    { value: 'none', label: t('tools.config.rest.auth_none') },
+    { value: 'bearer', label: t('tools.config.rest.auth_bearer') },
+    { value: 'api_key', label: t('tools.config.rest.auth_api_key') },
+    { value: 'basic', label: t('tools.config.rest.auth_basic') },
+    { value: 'oauth2', label: t('tools.config.rest.auth_oauth') },
 ];
 
 const showRequestBody = computed(() =>

@@ -3,11 +3,12 @@
 namespace Database\Factories;
 
 use App\Enums\KnowledgeBaseStatus;
+use App\Models\KnowledgeBase;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\KnowledgeBase>
+ * @extends Factory<KnowledgeBase>
  */
 class KnowledgeBaseFactory extends Factory
 {

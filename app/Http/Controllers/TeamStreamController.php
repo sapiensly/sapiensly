@@ -18,8 +18,8 @@ class TeamStreamController extends Controller
 
     public function stream(Request $request, AgentTeam $agentTeam, Conversation $conversation): StreamedResponse
     {
-        // Verify ownership
-        if ($agentTeam->user_id !== $request->user()->id) {
+        // Verify access
+        if (! $agentTeam->isVisibleTo($request->user())) {
             abort(403);
         }
 

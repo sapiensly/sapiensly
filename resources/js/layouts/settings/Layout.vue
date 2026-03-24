@@ -6,18 +6,36 @@ import { toUrl, urlIsActive } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editProfile } from '@/routes/profile';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 
-const sidebarNavItems: NavItem[] = [
-    {
-        title: 'Profile',
-        href: editProfile(),
-    },
-    {
-        title: 'Appearance',
-        href: editAppearance(),
-    },
-];
+const { t } = useI18n();
+
+const page = usePage();
+const hasOrganization = computed(() => !!page.props.auth.user.organization_id);
+
+const sidebarNavItems = computed<NavItem[]>(() => {
+    const items: NavItem[] = [
+        {
+            title: t('settings.nav.profile'),
+            href: editProfile(),
+        },
+        {
+            title: t('settings.nav.appearance'),
+            href: editAppearance(),
+        },
+    ];
+
+    if (hasOrganization.value) {
+        items.push({
+            title: t('settings.nav.organization'),
+            href: '/settings/organization',
+        });
+    }
+
+    return items;
+});
 
 const currentPath = typeof window !== undefined ? window.location.pathname : '';
 </script>
@@ -25,8 +43,8 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
 <template>
     <div class="px-4 py-6">
         <Heading
-            title="Settings"
-            description="Manage your profile and account settings"
+            :title="t('settings.title')"
+            :description="t('settings.description')"
         />
 
         <div class="flex flex-col lg:flex-row lg:space-x-12">

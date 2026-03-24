@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
-import * as ChatStreamController from '@/actions/App/Http/Controllers/ChatStreamController';
 import ChatInput from '@/components/chat/ChatInput.vue';
 import ChatMessage from '@/components/chat/ChatMessage.vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { useStreamingChat } from '@/composables/useStreamingChat';
+import echo from '@/echo';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { Agent, AgentType } from '@/types/agents';
 import type { Conversation, Message, ToolCall, KnowledgeBaseRef } from '@/types/chat';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Bot, Brain, Plus, Zap } from 'lucide-vue-next';
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     agent: Agent;
@@ -24,9 +26,9 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Agents', href: AgentController.index().url },
+    { title: t('agents.show.agents'), href: AgentController.index().url },
     { title: props.agent.name, href: AgentController.show({ agent: props.agent.id }).url },
-    { title: 'Chat', href: '#' },
+    { title: t('agents.chat.title'), href: '#' },
 ]);
 
 const agentIcon = (type: AgentType) => {
@@ -46,18 +48,106 @@ const agentIcon = (type: AgentType) => {
 const messagesContainer = ref<HTMLDivElement | null>(null);
 const messages = ref<Message[]>([...props.conversation.messages]);
 const streamingMessage = ref<string>('');
+const isStreaming = ref(false);
 const activeToolCalls = ref<ToolCall[]>([]);
 const activeKnowledgeBases = ref<KnowledgeBaseRef[]>([]);
 const error = ref<string | null>(null);
 
-const { isStreaming, startStream } = useStreamingChat();
+// Echo channel
+let channel: ReturnType<typeof echo.private> | null = null;
+let streamingTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function subscribeToConversation() {
+    if (channel) {
+        channel.stopListening('.AgentStreamChunk');
+        channel.stopListening('.AgentStreamComplete');
+        channel.stopListening('.AgentStreamError');
+        echo.leave(`conversation.${props.conversation.id}`);
+    }
+
+    channel = echo.private(`conversation.${props.conversation.id}`);
+
+    channel.listen('.AgentStreamChunk', (data: { content?: string; type?: string; tool?: string; name?: string; id?: string }) => {
+        // Clear safety timeout — we're receiving data
+        if (streamingTimeout) {
+            clearTimeout(streamingTimeout);
+            streamingTimeout = null;
+        }
+
+        if (data.type === 'tool_call' && data.tool) {
+            activeToolCalls.value.push({ name: data.tool });
+            return;
+        }
+
+        if (data.type === 'knowledge_base' && data.name) {
+            activeKnowledgeBases.value.push({ name: data.name, id: data.id });
+            return;
+        }
+
+        if (data.content) {
+            if (!isStreaming.value) {
+                isStreaming.value = true;
+            }
+            streamingMessage.value += data.content;
+        }
+    });
+
+    channel.listen('.AgentStreamComplete', () => {
+        if (streamingTimeout) {
+            clearTimeout(streamingTimeout);
+            streamingTimeout = null;
+        }
+
+        // Promote streaming message to a local message to avoid flash
+        const hadStreamingContent = !!streamingMessage.value;
+        if (hadStreamingContent) {
+            messages.value.push({
+                id: 'completed-' + Date.now(),
+                conversation_id: props.conversation.id,
+                role: 'assistant' as const,
+                content: streamingMessage.value,
+                tokens_used: null,
+                model: null,
+                metadata: null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            });
+        }
+
+        isStreaming.value = false;
+        streamingMessage.value = '';
+        activeToolCalls.value = [];
+        activeKnowledgeBases.value = [];
+
+        // Sync with server — if no streaming content was received,
+        // this reload will show the response from the database
+        router.reload({ only: ['conversation'], preserveScroll: true });
+    });
+
+    channel.listen('.AgentStreamError', (data: { error: string }) => {
+        isStreaming.value = false;
+        streamingMessage.value = '';
+        activeToolCalls.value = [];
+        activeKnowledgeBases.value = [];
+        error.value = data.error;
+    });
+}
+
+subscribeToConversation();
+
+onBeforeUnmount(() => {
+    if (channel) {
+        echo.leave(`conversation.${props.conversation.id}`);
+        channel = null;
+    }
+});
 
 // Watch for prop updates (after Inertia reload)
 watch(
     () => props.conversation.messages,
     (newMessages) => {
         messages.value = [...newMessages];
-    }
+    },
 );
 
 // Auto-scroll to bottom
@@ -71,13 +161,13 @@ function scrollToBottom() {
 
 watch(
     () => [messages.value.length, streamingMessage.value],
-    () => scrollToBottom()
+    () => scrollToBottom(),
 );
 
 // Display messages including streaming
 const displayMessages = computed(() => {
     const result = [...messages.value];
-    if (streamingMessage.value && isStreaming.value) {
+    if (streamingMessage.value) {
         result.push({
             id: 'streaming',
             conversation_id: props.conversation.id,
@@ -120,61 +210,41 @@ async function handleSendMessage(content: string) {
         updated_at: new Date().toISOString(),
     };
     messages.value.push(userMessage);
+    isStreaming.value = true;
     scrollToBottom();
 
-    // Send to server
+    // Safety timeout: if no broadcast received within 30s, reload from server
+    if (streamingTimeout) clearTimeout(streamingTimeout);
+    streamingTimeout = setTimeout(() => {
+        if (isStreaming.value && !streamingMessage.value) {
+            isStreaming.value = false;
+            router.reload({ only: ['conversation'], preserveScroll: true });
+        }
+    }, 30000);
+
+    // Send to server — the job will be dispatched and stream via Echo
     router.post(
         AgentController.sendMessage({ agent: props.agent.id }).url,
         { message: content },
         {
             preserveScroll: true,
+            preserveState: true,
             onSuccess: () => {
-                // Start streaming response
-                const streamUrl = ChatStreamController.stream({
-                    agent: props.agent.id,
-                    conversation: props.conversation.id,
-                }).url;
-
-                startStream(
-                    streamUrl,
-                    (chunk) => {
-                        streamingMessage.value += chunk;
-                    },
-                    () => {
-                        // On complete, refresh to get the saved message
-                        router.reload({ only: ['conversation'] });
-                        streamingMessage.value = '';
-                        activeToolCalls.value = [];
-                        activeKnowledgeBases.value = [];
-                    },
-                    (err) => {
-                        error.value = err;
-                        streamingMessage.value = '';
-                        activeToolCalls.value = [];
-                        activeKnowledgeBases.value = [];
-                    },
-                    (toolCall) => {
-                        // Track tool calls during streaming
-                        activeToolCalls.value.push(toolCall);
-                    },
-                    (kb) => {
-                        // Track knowledge base usage during streaming
-                        activeKnowledgeBases.value.push(kb);
-                    }
-                );
+                // Re-subscribe to ensure channel is active after Inertia round-trip
+                subscribeToConversation();
             },
             onError: (errors) => {
-                // Remove optimistic message on error
                 messages.value = messages.value.filter((m) => m.id !== userMessage.id);
                 error.value = Object.values(errors).flat().join(', ');
+                isStreaming.value = false;
             },
-        }
+        },
     );
 }
 </script>
 
 <template>
-    <Head :title="`Chat with ${agent.name}`" />
+    <Head :title="`${t('agents.chat.title')} - ${agent.name}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-[calc(100vh-4rem)] flex-col">

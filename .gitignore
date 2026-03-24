@@ -30,3 +30,11 @@ yarn-error.log
 **/caddy
 frankenphp
 frankenphp-worker.php
+
+# Laravel Boost (auto-regenerated)
+AGENTS.md
+.mcp.json
+.ai/
+.junie/
+.cursor/skills/
+boost.json

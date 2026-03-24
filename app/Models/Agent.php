@@ -81,11 +81,6 @@ class Agent extends Model
         return $query->whereNull('agent_team_id');
     }
 
-    public function scopeForUser(Builder $query, int $userId): Builder
-    {
-        return $query->where('user_id', $userId);
-    }
-
     public function scopeOfType(Builder $query, AgentType $type): Builder
     {
         return $query->where('type', $type);

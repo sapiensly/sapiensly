@@ -6,6 +6,7 @@ use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\AgentTeam;
 use App\Models\Chatbot;
+use App\Models\Conversation;
 use App\Models\WidgetConversation;
 use App\Models\WidgetMessage;
 use Illuminate\Support\Facades\Log;
@@ -82,12 +83,23 @@ class WidgetStreamService
                     }
                 }
             } else {
-                // Use RAG-enabled streaming
-                $ragResult = $this->llmService->streamChatWithRAGInfo($agent, $messages->all());
-                $knowledgeBases = $ragResult['knowledge_bases'];
+                // Use synchronous chat (streaming generators don't work inside response()->stream())
+                $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
 
-                foreach ($ragResult['generator'] as $chunk) {
-                    $chunks[] = $chunk;
+                if (! empty($knowledgeBaseIds)) {
+                    $lastUserMessage = $messages->last()?->content ?? '';
+                    $retrieval = app(RetrievalService::class)->retrieve(
+                        $lastUserMessage,
+                        $knowledgeBaseIds,
+                        topK: 5,
+                        threshold: 0.5
+                    );
+                    $knowledgeBases = $retrieval['knowledge_bases'] ?? [];
+                }
+
+                $fullContent = $this->llmService->chat($agent, $messages->all());
+                if ($fullContent !== '') {
+                    $chunks[] = $fullContent;
                 }
             }
         } catch (\Exception $e) {
@@ -137,7 +149,7 @@ class WidgetStreamService
             $userMessage = $lastUserMessage?->content ?? '';
 
             // Create a temporary conversation-like object for orchestration
-            $tempConversation = new \App\Models\Conversation([
+            $tempConversation = new Conversation([
                 'id' => $conversation->id,
             ]);
             $tempConversation->setRelation('messages', $messages);

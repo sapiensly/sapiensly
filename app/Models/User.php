@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -11,7 +12,7 @@ use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     /**
@@ -25,6 +26,7 @@ class User extends Authenticatable
         'workos_id',
         'organization_id',
         'avatar',
+        'locale',
     ];
 
     /**
@@ -59,6 +61,11 @@ class User extends Authenticatable
     public function agents(): HasMany
     {
         return $this->hasMany(Agent::class);
+    }
+
+    public function aiProviders(): HasMany
+    {
+        return $this->hasMany(AiProvider::class);
     }
 
     public function knowledgeBases(): HasMany

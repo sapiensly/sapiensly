@@ -25,6 +25,9 @@ import type {
 } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     team: AgentTeam;
@@ -35,12 +38,12 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Agent Teams', href: AgentTeamController.index().url },
+    { title: t('agent_teams.index.title'), href: AgentTeamController.index().url },
     {
         title: props.team.name,
         href: AgentTeamController.show({ agent_team: props.team.id }).url,
     },
-    { title: 'Edit', href: '#' },
+    { title: t('common.edit'), href: '#' },
 ]);
 
 const agents = ref<AgentFormData[]>(
@@ -72,67 +75,67 @@ const updateAgent = (index: number, agent: AgentFormData) => {
     agents.value[index] = agent;
 };
 
-const statusOptions = [
-    { value: 'draft', label: 'Draft' },
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' },
-];
+const statusOptions = computed(() => [
+    { value: 'draft', label: t('common.draft') },
+    { value: 'active', label: t('common.active') },
+    { value: 'inactive', label: t('common.inactive') },
+]);
 </script>
 
 <template>
-    <Head :title="`Edit ${team.name}`" />
+    <Head :title="`${t('agent_teams.edit.title')} ${team.name}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-4xl">
                 <Heading
-                    :title="`Edit ${team.name}`"
-                    description="Update your agent team configuration"
+                    :title="`${t('agent_teams.edit.title')} ${team.name}`"
+                    :description="t('agent_teams.edit.description')"
                 />
 
                 <form class="space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Team Details"
-                            description="Basic information about your agent team"
+                            :title="t('agent_teams.edit.details_title')"
+                            :description="t('agent_teams.edit.details_description')"
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">Team Name</Label>
+                                <Label for="name">{{ t('agent_teams.edit.team_name') }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    placeholder="My Agent Team"
+                                    :placeholder="t('agent_teams.edit.team_name_placeholder')"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">Description</Label>
+                                <Label for="description">{{ t('agent_teams.edit.description_label') }}</Label>
                                 <Input
                                     id="description"
                                     v-model="form.description"
-                                    placeholder="Describe what this team does..."
+                                    :placeholder="t('agent_teams.edit.description_placeholder')"
                                 />
                                 <InputError :message="form.errors.description" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="keywords">Keywords</Label>
+                                <Label for="keywords">{{ t('agent_teams.edit.keywords_label') }}</Label>
                                 <KeywordsInput v-model="form.keywords" />
                                 <p class="text-xs text-muted-foreground">
-                                    Add keywords for search and categorization
+                                    {{ t('agent_teams.edit.keywords_description') }}
                                 </p>
                                 <InputError :message="form.errors.keywords" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="status">Status</Label>
+                                <Label for="status">{{ t('common.status') }}</Label>
                                 <Select v-model="form.status">
                                     <SelectTrigger id="status">
-                                        <SelectValue placeholder="Select status" />
+                                        <SelectValue :placeholder="t('common.select_status')" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -151,8 +154,8 @@ const statusOptions = [
 
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Agent Configuration"
-                            description="Configure each agent in your team"
+                            :title="t('agent_teams.edit.agent_config')"
+                            :description="t('agent_teams.edit.agent_config_description')"
                         />
 
                         <AgentForm
@@ -176,11 +179,11 @@ const statusOptions = [
                                     })
                                 "
                             >
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button type="submit" :disabled="form.processing">
-                            Save Changes
+                            {{ t('common.save_changes') }}
                         </Button>
                     </div>
                 </form>

@@ -30,7 +30,7 @@ class DocumentController extends Controller
         $search = $request->query('search');
 
         // Get documents query
-        $documentsQuery = Document::visibleTo($user)
+        $documentsQuery = Document::forAccountContext($user)
             ->with(['user:id,name', 'folder:id,name'])
             ->withCount('knowledgeBases');
 
@@ -113,7 +113,7 @@ class DocumentController extends Controller
         if ($request->folder_id) {
             $folder = Folder::find($request->folder_id);
             if (! $folder || ! $folder->isVisibleTo($user)) {
-                return back()->withErrors(['folder_id' => 'Invalid folder.']);
+                return back()->withErrors(['folder_id' => __('Invalid folder.')]);
             }
         }
 
@@ -122,7 +122,7 @@ class DocumentController extends Controller
         if ($request->knowledge_base_id) {
             $knowledgeBase = KnowledgeBase::find($request->knowledge_base_id);
             if (! $knowledgeBase || $knowledgeBase->user_id !== $user->id) {
-                return back()->withErrors(['knowledge_base_id' => 'Invalid knowledge base.']);
+                return back()->withErrors(['knowledge_base_id' => __('Invalid knowledge base.')]);
             }
         }
 
@@ -158,7 +158,7 @@ class DocumentController extends Controller
         if ($request->has('folder_id')) {
             $folder = $request->folder_id ? Folder::find($request->folder_id) : null;
             if ($request->folder_id && (! $folder || ! $folder->isVisibleTo($request->user()))) {
-                return back()->withErrors(['folder_id' => 'Invalid folder.']);
+                return back()->withErrors(['folder_id' => __('Invalid folder.')]);
             }
             $data['folder_id'] = $request->folder_id;
         }
@@ -193,7 +193,7 @@ class DocumentController extends Controller
         $temporaryUrl = $this->documentService->getTemporaryUrl($document);
 
         if (! $temporaryUrl) {
-            return back()->withErrors(['document' => 'Document file not found.']);
+            return back()->withErrors(['document' => __('Document file not found.')]);
         }
 
         return redirect()->away($temporaryUrl);
@@ -210,7 +210,7 @@ class DocumentController extends Controller
         $folder = $request->folder_id ? Folder::find($request->folder_id) : null;
 
         if ($folder && ! $folder->isVisibleTo($request->user())) {
-            return back()->withErrors(['folder_id' => 'Invalid folder.']);
+            return back()->withErrors(['folder_id' => __('Invalid folder.')]);
         }
 
         $this->documentService->moveToFolder($document, $folder);

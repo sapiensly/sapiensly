@@ -50,6 +50,9 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     documents: PaginatedDocuments;
@@ -93,7 +96,7 @@ watch(searchQuery, () => {
 
 const pageBreadcrumbs = computed<BreadcrumbItem[]>(() => {
     const crumbs: BreadcrumbItem[] = [
-        { title: 'Documents', href: DocumentController.index().url },
+        { title: t('documents.index.title'), href: DocumentController.index().url },
     ];
 
     for (const folder of props.breadcrumbs) {
@@ -143,14 +146,14 @@ const handleDeleteFolder = () => {
 </script>
 
 <template>
-    <Head title="Documents" />
+    <Head :title="t('documents.index.title')" />
 
     <AppLayout :breadcrumbs="pageBreadcrumbs">
         <div class="flex h-full">
             <!-- Sidebar: Folder Tree -->
             <div class="w-64 shrink-0 border-r bg-muted/30 p-4">
                 <div class="mb-4 flex items-center justify-between">
-                    <h3 class="text-sm font-semibold">Folders</h3>
+                    <h3 class="text-sm font-semibold">{{ t('documents.index.folders') }}</h3>
                     <Button variant="ghost" size="icon" @click="showFolderDialog = true">
                         <FolderPlus class="h-4 w-4" />
                     </Button>
@@ -170,7 +173,7 @@ const handleDeleteFolder = () => {
                         <div>
                             <Heading
                                 :title="currentFolder?.name ?? 'All Documents'"
-                                description="Manage your documents and files"
+                                :description="t('documents.index.description')"
                             />
 
                             <!-- Breadcrumb navigation -->
@@ -195,7 +198,7 @@ const handleDeleteFolder = () => {
 
                         <Button @click="showUploadDialog = true">
                             <Upload class="mr-2 h-4 w-4" />
-                            Upload Document
+                            {{ t('documents.index.upload') }}
                         </Button>
                     </div>
 

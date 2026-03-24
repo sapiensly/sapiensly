@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
+import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +28,9 @@ import type { Agent, AgentType } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Bot, Brain, Copy, Database, MessageSquare, Pencil, Trash2, Wrench, Zap } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     agent: Agent;
@@ -35,7 +39,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Agents', href: AgentController.index().url },
+    { title: t('agents.show.agents'), href: AgentController.index().url },
     { title: props.agent.name, href: '#' },
 ]);
 
@@ -131,39 +135,39 @@ const configDisplay = computed(() => {
                         <Button as-child>
                             <Link :href="AgentController.chat({ agent: agent.id }).url">
                                 <MessageSquare class="mr-2 h-4 w-4" />
-                                Test Agent
+                                {{ t('agents.show.test_agent') }}
                             </Link>
                         </Button>
                         <Button variant="outline" @click="duplicateAgent">
                             <Copy class="mr-2 h-4 w-4" />
-                            Duplicate
+                            {{ t('common.duplicate') }}
                         </Button>
                         <Button variant="outline" as-child>
                             <Link :href="AgentController.edit({ agent: agent.id }).url">
                                 <Pencil class="mr-2 h-4 w-4" />
-                                Edit
+                                {{ t('common.edit') }}
                             </Link>
                         </Button>
                         <Dialog>
                             <DialogTrigger as-child>
                                 <Button variant="destructive">
                                     <Trash2 class="mr-2 h-4 w-4" />
-                                    Delete
+                                    {{ t('common.delete') }}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>Delete Agent</DialogTitle>
+                                    <DialogTitle>{{ t('agents.show.delete_agent') }}</DialogTitle>
                                     <DialogDescription>
-                                        Are you sure you want to delete "{{ agent.name }}"? This action cannot be undone.
+                                        {{ t('common.confirm_delete') }} "{{ agent.name }}"? {{ t('common.action_irreversible') }}
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
                                     <DialogClose as-child>
-                                        <Button variant="outline">Cancel</Button>
+                                        <Button variant="outline">{{ t('common.cancel') }}</Button>
                                     </DialogClose>
                                     <Button variant="destructive" @click="deleteAgent">
-                                        Delete
+                                        {{ t('common.delete') }}
                                     </Button>
                                 </DialogFooter>
                             </DialogContent>
@@ -174,19 +178,19 @@ const configDisplay = computed(() => {
                 <div class="space-y-8">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Configuration</CardTitle>
+                            <CardTitle>{{ t('agents.show.configuration') }}</CardTitle>
                             <CardDescription>
-                                Agent type and model settings
+                                {{ t('agents.show.config_description') }}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <dl class="grid gap-4 sm:grid-cols-2">
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">Type</dt>
+                                    <dt class="text-sm font-medium text-muted-foreground">{{ t('agents.show.type') }}</dt>
                                     <dd class="mt-1 capitalize">{{ agent.type }}</dd>
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">Model</dt>
+                                    <dt class="text-sm font-medium text-muted-foreground">{{ t('agents.show.model') }}</dt>
                                     <dd class="mt-1">{{ agent.model }}</dd>
                                 </div>
                                 <div v-for="item in configDisplay" :key="item.label">
@@ -233,15 +237,23 @@ const configDisplay = computed(() => {
                             description="Connected tools for actions"
                         />
                         <div class="mt-4 grid gap-3">
-                            <Card v-for="tool in agent.tools" :key="tool.id">
-                                <CardContent class="flex items-center gap-3 py-4">
-                                    <Wrench class="h-5 w-5 text-muted-foreground" />
-                                    <span>{{ tool.name }}</span>
-                                    <Badge variant="outline" class="ml-auto">
-                                        {{ tool.type }}
-                                    </Badge>
-                                </CardContent>
-                            </Card>
+                            <a
+                                v-for="tool in agent.tools"
+                                :key="tool.id"
+                                :href="ToolController.show.url(tool.id)"
+                                target="_blank"
+                                class="block"
+                            >
+                                <Card class="transition-colors hover:bg-muted/50 cursor-pointer">
+                                    <CardContent class="flex items-center gap-3 py-4">
+                                        <Wrench class="h-5 w-5 text-muted-foreground" />
+                                        <span>{{ tool.name }}</span>
+                                        <Badge variant="outline" class="ml-auto">
+                                            {{ tool.type }}
+                                        </Badge>
+                                    </CardContent>
+                                </Card>
+                            </a>
                         </div>
                     </div>
                 </div>

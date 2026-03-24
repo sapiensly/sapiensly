@@ -12,10 +12,10 @@ enum KnowledgeBaseStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Pending => 'Pending',
-            self::Processing => 'Processing',
-            self::Ready => 'Ready',
-            self::Failed => 'Failed',
+            self::Pending => __('Pending'),
+            self::Processing => __('Processing'),
+            self::Ready => __('Ready'),
+            self::Failed => __('Failed'),
         };
     }
 }

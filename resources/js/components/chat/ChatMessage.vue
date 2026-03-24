@@ -118,7 +118,7 @@ const renderedContent = computed(() => {
                 <!-- Assistant messages: markdown -->
                 <div
                     v-else
-                    class="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-background/50 prose-code:text-xs prose-code:before:content-none prose-code:after:content-none"
+                    class="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-background-100 prose-code:text-xs prose-code:before:content-none prose-code:after:content-none"
                     v-html="renderedContent"
                 />
 

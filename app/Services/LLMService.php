@@ -5,15 +5,16 @@ namespace App\Services;
 use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\Message;
+use App\Models\User;
 use Generator;
 use Illuminate\Support\Facades\Log;
-use Prism\Prism\Enums\Provider;
-use Prism\Prism\Prism;
-use Prism\Prism\Streaming\Events\TextDeltaEvent;
-use Prism\Prism\Text\PendingRequest;
-use Prism\Prism\Text\Response as TextResponse;
-use Prism\Prism\ValueObjects\Messages\AssistantMessage;
-use Prism\Prism\ValueObjects\Messages\UserMessage;
+use Laravel\Ai\AnonymousAgent;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Messages\AssistantMessage;
+use Laravel\Ai\Messages\UserMessage;
+use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Streaming\Events\TextDelta;
 
 class LLMService
 {
@@ -21,28 +22,52 @@ class LLMService
 
     private ?ToolBuilderService $toolBuilderService = null;
 
-    /**
-     * Map model IDs to Prism providers.
-     */
-    private const MODEL_PROVIDERS = [
-        'claude-sonnet-4-20250514' => Provider::Anthropic,
-        'claude-opus-4-20250514' => Provider::Anthropic,
-        'claude-3-5-haiku-20241022' => Provider::Anthropic,
-        'gpt-4o' => Provider::OpenAI,
-        'gpt-4o-mini' => Provider::OpenAI,
-        'gpt-4-turbo' => Provider::OpenAI,
-    ];
+    private ?AiProviderService $aiProviderService = null;
 
-    public function __construct(
-        private Prism $prism
-    ) {}
+    private ?User $contextUser = null;
 
     /**
-     * Get the provider for a given model.
+     * Set the user context explicitly (for queue jobs).
      */
-    public function getProvider(string $model): Provider
+    public function setContext(?User $user): self
     {
-        return self::MODEL_PROVIDERS[$model] ?? Provider::Anthropic;
+        $this->contextUser = $user;
+
+        if ($user) {
+            $this->getAiProviderService()->applyRuntimeConfig($user);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Get the provider for a given model, resolved from DB-configured providers.
+     */
+    public function getProvider(string $model, ?Agent $agent = null): Lab
+    {
+        $user = $this->resolveUser($agent);
+
+        if ($user) {
+            return $this->getAiProviderService()->resolveProvider($model, $user);
+        }
+
+        return Lab::Anthropic;
+    }
+
+    /**
+     * Resolve the user from context or agent relationship.
+     */
+    private function resolveUser(?Agent $agent = null): ?User
+    {
+        if ($this->contextUser) {
+            return $this->contextUser;
+        }
+
+        if ($agent) {
+            return $agent->user;
+        }
+
+        return auth()->user();
     }
 
     /**
@@ -52,9 +77,14 @@ class LLMService
      */
     public function chat(Agent $agent, array $messages): string
     {
-        $request = $this->buildRequest($agent, $messages);
+        [$history, $prompt] = $this->splitMessages($messages);
+        $sdkAgent = $this->buildAgent($agent, $history);
 
-        $response = $request->asText();
+        $response = $sdkAgent->prompt(
+            $prompt,
+            provider: $this->getProvider($agent->model, $agent),
+            model: $agent->model,
+        );
 
         return $response->text;
     }
@@ -62,30 +92,22 @@ class LLMService
     /**
      * Stream a chat response.
      *
-     * Note: PHP-FPM doesn't support Guzzle's HTTP streaming properly,
-     * so we use non-streaming mode as fallback. Octane (FrankenPHP/Swoole/RoadRunner)
-     * and CLI support true streaming.
-     *
      * @param  array<Message>  $messages
      * @return Generator<string>
      */
     public function streamChat(Agent $agent, array $messages): Generator
     {
-        $formattedMessages = $this->formatMessages($messages);
-        $request = $this->buildRequestWithMessages($agent, $formattedMessages);
+        [$history, $prompt] = $this->splitMessages($messages);
+        $sdkAgent = $this->buildAgent($agent, $history);
 
-        // PHP-FPM has issues with Guzzle/HTTP streaming - use non-streaming fallback
-        // Octane (frankenphp, cli-server, etc.) and CLI support streaming
-        if (PHP_SAPI === 'fpm-fcgi' || PHP_SAPI === 'cgi-fcgi') {
-            $response = $request->asText();
-            yield $response->text;
+        $response = $sdkAgent->stream(
+            $prompt,
+            provider: $this->getProvider($agent->model, $agent),
+            model: $agent->model,
+        );
 
-            return;
-        }
-
-        // Octane and CLI can use true streaming
-        foreach ($request->asStream() as $event) {
-            if ($event instanceof TextDeltaEvent) {
+        foreach ($response as $event) {
+            if ($event instanceof TextDelta) {
                 yield $event->delta;
             }
         }
@@ -93,9 +115,6 @@ class LLMService
 
     /**
      * Stream a chat response with RAG (Retrieval Augmented Generation).
-     *
-     * This method automatically retrieves relevant context from the agent's
-     * knowledge bases and injects it into the system prompt.
      *
      * @param  array<Message>  $messages
      * @param  string|null  $userQuery  The query to use for retrieval (defaults to last user message)
@@ -110,19 +129,14 @@ class LLMService
     /**
      * Stream a chat response with RAG and return retrieval metadata.
      *
-     * Returns both the generator for streaming and information about which
-     * knowledge bases were consulted.
-     *
      * @param  array<Message>  $messages
      * @param  string|null  $userQuery  The query to use for retrieval (defaults to last user message)
      * @return array{generator: Generator<string>, knowledge_bases: array<array{id: string, name: string}>, chunk_count: int}
      */
     public function streamChatWithRAGInfo(Agent $agent, array $messages, ?string $userQuery = null): array
     {
-        // Get the agent's knowledge base IDs
         $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
 
-        // If no knowledge bases, fall back to regular chat
         if (empty($knowledgeBaseIds)) {
             return [
                 'generator' => $this->streamChat($agent, $messages),
@@ -131,9 +145,7 @@ class LLMService
             ];
         }
 
-        // Determine the query for retrieval
         if ($userQuery === null) {
-            // Use the last user message as the query
             $lastUserMessage = collect($messages)
                 ->filter(fn ($m) => ($m->role instanceof MessageRole ? $m->role : MessageRole::from($m->role)) === MessageRole::User)
                 ->last();
@@ -149,7 +161,6 @@ class LLMService
             ];
         }
 
-        // Retrieve relevant context
         $retrieval = $this->getRetrievalService()->retrieve(
             $userQuery,
             $knowledgeBaseIds,
@@ -164,7 +175,6 @@ class LLMService
             'knowledge_bases' => $retrieval['knowledge_bases'],
         ]);
 
-        // If no relevant context found, fall back to regular chat
         if (empty($retrieval['context'])) {
             return [
                 'generator' => $this->streamChat($agent, $messages),
@@ -173,29 +183,23 @@ class LLMService
             ];
         }
 
-        // Build augmented system prompt
         $augmentedSystemPrompt = $this->buildAugmentedSystemPrompt(
             $agent->prompt_template ?? '',
             $retrieval['context']
         );
 
-        // Build request with augmented prompt
-        $formattedMessages = $this->formatMessages($messages);
-        $request = $this->buildRequestWithSystemPrompt($agent, $formattedMessages, $augmentedSystemPrompt);
+        [$history, $prompt] = $this->splitMessages($messages);
+        $sdkAgent = $this->buildAgent($agent, $history, systemPrompt: $augmentedSystemPrompt);
 
-        // Create the generator
-        $generator = (function () use ($request) {
-            // PHP-FPM fallback
-            if (PHP_SAPI === 'fpm-fcgi' || PHP_SAPI === 'cgi-fcgi') {
-                $response = $request->asText();
-                yield $response->text;
+        $generator = (function () use ($sdkAgent, $prompt, $agent) {
+            $response = $sdkAgent->stream(
+                $prompt,
+                provider: $this->getProvider($agent->model, $agent),
+                model: $agent->model,
+            );
 
-                return;
-            }
-
-            // True streaming
-            foreach ($request->asStream() as $event) {
-                if ($event instanceof TextDeltaEvent) {
+            foreach ($response as $event) {
+                if ($event instanceof TextDelta) {
                     yield $event->delta;
                 }
             }
@@ -211,46 +215,36 @@ class LLMService
     /**
      * Chat with tool calling support for Action Agents.
      *
-     * This method allows the LLM to call tools during the conversation.
-     * Prism handles the tool calling loop automatically via maxSteps.
-     *
-     * Note: Tool calling uses non-streaming mode because Prism executes
-     * tools synchronously during the conversation.
-     *
      * @param  array<Message>  $messages
      */
-    public function chatWithTools(Agent $agent, array $messages, int $maxSteps = 5): TextResponse
+    public function chatWithTools(Agent $agent, array $messages, int $maxSteps = 5): AgentResponse
     {
-        // Get the agent's active tools
         $tools = $agent->tools()->where('status', 'active')->get();
 
-        // Build Prism tools from database Tool models
-        $prismTools = $this->getToolBuilderService()->buildPrismTools($tools);
+        $sdkTools = $this->getToolBuilderService()->buildTools($tools);
 
         Log::info('Building chat with tools', [
             'agent_id' => $agent->id,
-            'tool_count' => count($prismTools),
-            'tool_names' => collect($prismTools)->map(fn ($t) => $t->name())->all(),
+            'tool_count' => count($sdkTools),
+            'tool_names' => collect($sdkTools)->map(fn ($t) => $t->name())->all(),
             'max_steps' => $maxSteps,
         ]);
 
-        // Build the request
-        $formattedMessages = $this->formatMessages($messages);
-        $request = $this->buildRequestWithMessages($agent, $formattedMessages);
+        [$history, $prompt] = $this->splitMessages($messages);
+        $sdkAgent = $this->buildAgent($agent, $history, $sdkTools);
 
-        // Add tools if available
-        if (count($prismTools) > 0) {
-            $request->withTools($prismTools)
-                ->withMaxSteps($maxSteps);
-        }
+        $response = $sdkAgent->prompt(
+            $prompt,
+            provider: $this->getProvider($agent->model, $agent),
+            model: $agent->model,
+        );
 
-        // Execute (Prism handles the tool calling loop)
-        $response = $request->asText();
+        $lastStep = $response->steps->last();
 
         Log::info('Tool chat completed', [
             'agent_id' => $agent->id,
-            'steps' => count($response->steps ?? []),
-            'finish_reason' => $response->finishReason?->name ?? 'unknown',
+            'steps' => $response->steps->count(),
+            'finish_reason' => $lastStep?->finishReason?->name ?? 'unknown',
         ]);
 
         return $response;
@@ -259,13 +253,10 @@ class LLMService
     /**
      * Chat with custom routing tools (for Triage Agents).
      *
-     * Unlike chatWithTools, this method accepts Prism tools directly
-     * rather than building them from the agent's Tool models.
-     *
      * @param  array<Message>  $messages
-     * @param  array<\Prism\Prism\Tool>  $tools
+     * @param  array<Tool>  $tools
      */
-    public function chatWithRoutingTools(Agent $agent, array $messages, array $tools, int $maxSteps = 1): TextResponse
+    public function chatWithRoutingTools(Agent $agent, array $messages, array $tools, int $maxSteps = 1): AgentResponse
     {
         Log::info('Building chat with routing tools', [
             'agent_id' => $agent->id,
@@ -273,23 +264,21 @@ class LLMService
             'tool_names' => collect($tools)->map(fn ($t) => $t->name())->all(),
         ]);
 
-        // Build the request
-        $formattedMessages = $this->formatMessages($messages);
-        $request = $this->buildRequestWithMessages($agent, $formattedMessages);
+        [$history, $prompt] = $this->splitMessages($messages);
+        $sdkAgent = $this->buildAgent($agent, $history, $tools);
 
-        // Add routing tools
-        if (count($tools) > 0) {
-            $request->withTools($tools)
-                ->withMaxSteps($maxSteps);
-        }
+        $response = $sdkAgent->prompt(
+            $prompt,
+            provider: $this->getProvider($agent->model, $agent),
+            model: $agent->model,
+        );
 
-        // Execute
-        $response = $request->asText();
+        $lastStep = $response->steps->last();
 
         Log::info('Routing chat completed', [
             'agent_id' => $agent->id,
-            'steps' => count($response->steps ?? []),
-            'finish_reason' => $response->finishReason?->name ?? 'unknown',
+            'steps' => $response->steps->count(),
+            'finish_reason' => $lastStep?->finishReason?->name ?? 'unknown',
         ]);
 
         return $response;
@@ -305,6 +294,18 @@ class LLMService
         }
 
         return $this->toolBuilderService;
+    }
+
+    /**
+     * Get the AI provider service (lazy initialization).
+     */
+    private function getAiProviderService(): AiProviderService
+    {
+        if ($this->aiProviderService === null) {
+            $this->aiProviderService = app(AiProviderService::class);
+        }
+
+        return $this->aiProviderService;
     }
 
     /**
@@ -341,95 +342,51 @@ EOT;
     }
 
     /**
-     * Build a Prism request configured for the agent.
+     * Build an AnonymousAgent configured for the given agent.
+     *
+     * @param  array<UserMessage|AssistantMessage>  $messages
+     * @param  array<Tool>  $tools
+     */
+    private function buildAgent(Agent $agent, array $messages, array $tools = [], ?string $systemPrompt = null): AnonymousAgent
+    {
+        $instructions = $systemPrompt ?? $agent->prompt_template ?? '';
+
+        return new AnonymousAgent($instructions, $messages, $tools);
+    }
+
+    /**
+     * Split messages into history (SDK Message objects) and prompt string.
+     *
+     * The SDK's prompt() and stream() methods take a string prompt as the
+     * latest user message, so we extract the last user message content
+     * and convert the rest to SDK Message objects.
      *
      * @param  array<Message>  $messages
+     * @return array{0: array<UserMessage|AssistantMessage>, 1: string}
      */
-    private function buildRequest(Agent $agent, array $messages): PendingRequest
+    private function splitMessages(array $messages): array
     {
-        return $this->buildRequestWithMessages($agent, $this->formatMessages($messages));
+        $formatted = $this->formatMessages($messages);
+
+        if (empty($formatted)) {
+            return [[], ''];
+        }
+
+        $last = end($formatted);
+
+        // If the last message is from the user, extract it as the prompt
+        if ($last instanceof UserMessage) {
+            $history = array_slice($formatted, 0, -1);
+
+            return [$history, $last->content ?? ''];
+        }
+
+        // If the last message is from the assistant, keep all as history
+        return [$formatted, ''];
     }
 
     /**
-     * Build a Prism request with pre-formatted messages.
-     *
-     * @param  array<UserMessage|AssistantMessage>  $formattedMessages
-     */
-    private function buildRequestWithMessages(Agent $agent, array $formattedMessages): PendingRequest
-    {
-        $provider = $this->getProvider($agent->model);
-
-        $request = $this->prism->text()
-            ->using($provider, $agent->model);
-
-        // Add system prompt separately (required for Anthropic)
-        if ($agent->prompt_template) {
-            $request->withSystemPrompt($agent->prompt_template);
-        }
-
-        // Add conversation messages
-        $request->withMessages($formattedMessages);
-
-        // Apply temperature if configured
-        $config = $agent->config ?? [];
-        if (isset($config['temperature'])) {
-            $request->usingTemperature((float) $config['temperature']);
-        }
-
-        // Apply max tokens (required for Anthropic)
-        $maxTokens = $config['max_tokens'] ?? $this->getDefaultMaxTokens($provider);
-        $request->withMaxTokens($maxTokens);
-
-        return $request;
-    }
-
-    /**
-     * Build a Prism request with a custom system prompt (for RAG).
-     *
-     * @param  array<UserMessage|AssistantMessage>  $formattedMessages
-     */
-    private function buildRequestWithSystemPrompt(Agent $agent, array $formattedMessages, string $systemPrompt): PendingRequest
-    {
-        $provider = $this->getProvider($agent->model);
-
-        $request = $this->prism->text()
-            ->using($provider, $agent->model);
-
-        // Add the augmented system prompt
-        if (! empty($systemPrompt)) {
-            $request->withSystemPrompt($systemPrompt);
-        }
-
-        // Add conversation messages
-        $request->withMessages($formattedMessages);
-
-        // Apply temperature if configured
-        $config = $agent->config ?? [];
-        if (isset($config['temperature'])) {
-            $request->usingTemperature((float) $config['temperature']);
-        }
-
-        // Apply max tokens (required for Anthropic)
-        $maxTokens = $config['max_tokens'] ?? $this->getDefaultMaxTokens($provider);
-        $request->withMaxTokens($maxTokens);
-
-        return $request;
-    }
-
-    /**
-     * Get default max tokens for a provider.
-     */
-    private function getDefaultMaxTokens(Provider $provider): int
-    {
-        return match ($provider) {
-            Provider::Anthropic => 4096,
-            Provider::OpenAI => 4096,
-            default => 2048,
-        };
-    }
-
-    /**
-     * Format conversation messages for Prism (user and assistant only).
+     * Format conversation messages for the SDK (user and assistant only).
      *
      * Anthropic requires:
      * - Alternating user/assistant messages
@@ -448,7 +405,6 @@ EOT;
                 ? $message->role
                 : MessageRole::from($message->role);
 
-            // Skip system messages and empty content
             if ($role === MessageRole::System) {
                 continue;
             }
@@ -474,7 +430,7 @@ EOT;
             ];
         }
 
-        // Convert to Prism message objects
+        // Convert to SDK message objects
         $formatted = [];
         foreach ($normalized as $msg) {
             $formatted[] = match ($msg['role']) {

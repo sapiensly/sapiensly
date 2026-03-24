@@ -53,9 +53,9 @@ class StoreChatbotRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'agent_id.required_without' => 'Please select an agent or agent team.',
-            'agent_team_id.required_without' => 'Please select an agent or agent team.',
-            'config.appearance.primary_color.regex' => 'Color must be a valid hex code (e.g., #3B82F6).',
+            'agent_id.required_without' => __('Please select an agent or agent team.'),
+            'agent_team_id.required_without' => __('Please select an agent or agent team.'),
+            'config.appearance.primary_color.regex' => __('Color must be a valid hex code (e.g., #3B82F6).'),
         ];
     }
 

@@ -27,6 +27,9 @@ import type { AgentTeam } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Bot, Brain, MessageSquare, Pencil, Trash2, Zap } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     team: AgentTeam;
@@ -35,7 +38,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Agent Teams', href: AgentTeamController.index().url },
+    { title: t('agent_teams.index.title'), href: AgentTeamController.index().url },
     { title: props.team.name, href: '#' },
 ]);
 
@@ -99,7 +102,7 @@ const deleteTeam = () => {
                                 "
                             >
                                 <MessageSquare class="mr-2 h-4 w-4" />
-                                Test Team
+                                {{ t('agent_teams.show.test_team') }}
                             </Link>
                         </Button>
                         <Button variant="outline" as-child>
@@ -111,36 +114,36 @@ const deleteTeam = () => {
                                 "
                             >
                                 <Pencil class="mr-2 h-4 w-4" />
-                                Edit
+                                {{ t('common.edit') }}
                             </Link>
                         </Button>
                         <Dialog>
                             <DialogTrigger as-child>
                                 <Button variant="destructive">
                                     <Trash2 class="mr-2 h-4 w-4" />
-                                    Delete
+                                    {{ t('common.delete') }}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>Delete Agent Team</DialogTitle>
+                                    <DialogTitle>{{ t('agent_teams.show.delete_team') }}</DialogTitle>
                                     <DialogDescription>
-                                        Are you sure you want to delete "{{
+                                        {{ t('common.confirm_delete') }} "{{
                                             team.name
-                                        }}"? This action cannot be undone.
+                                        }}"? {{ t('common.action_irreversible') }}
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
                                     <DialogClose as-child>
                                         <Button variant="outline">
-                                            Cancel
+                                            {{ t('common.cancel') }}
                                         </Button>
                                     </DialogClose>
                                     <Button
                                         variant="destructive"
                                         @click="deleteTeam"
                                     >
-                                        Delete
+                                        {{ t('common.delete') }}
                                     </Button>
                                 </DialogFooter>
                             </DialogContent>
@@ -150,8 +153,8 @@ const deleteTeam = () => {
 
                 <div class="space-y-6">
                     <HeadingSmall
-                        title="Agents"
-                        description="The agents in this team"
+                        :title="t('agent_teams.show.agents')"
+                        :description="t('agent_teams.show.agents_description')"
                     />
 
                     <div class="grid gap-4">
@@ -190,7 +193,7 @@ const deleteTeam = () => {
                                 <dl class="grid gap-2 text-sm">
                                     <div class="flex gap-2">
                                         <dt class="text-muted-foreground">
-                                            Type:
+                                            {{ t('agent_teams.show.type') }}
                                         </dt>
                                         <dd class="capitalize">
                                             {{ agent.type }}
@@ -198,7 +201,7 @@ const deleteTeam = () => {
                                     </div>
                                     <div class="flex gap-2">
                                         <dt class="text-muted-foreground">
-                                            Model:
+                                            {{ t('common.model') }}:
                                         </dt>
                                         <dd>{{ agent.model }}</dd>
                                     </div>

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\EmbeddingStatus;
 use App\Enums\KnowledgeBaseStatus;
+use App\Events\DocumentStatusChanged;
 use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseChunk;
@@ -58,6 +59,14 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
             // Update pivot status to processing
             $this->updatePivotStatus(EmbeddingStatus::Processing);
             $knowledgeBase->update(['status' => KnowledgeBaseStatus::Processing]);
+
+            DocumentStatusChanged::dispatch(
+                $knowledgeBase->id,
+                $document->id,
+                EmbeddingStatus::Processing->value,
+                null,
+                KnowledgeBaseStatus::Processing->value,
+            );
 
             // Parse document content from S3
             Log::info("Parsing document: {$document->id}");
@@ -124,6 +133,17 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
             $this->updateKnowledgeBaseCounts($knowledgeBase);
             $this->updateKnowledgeBaseStatus($knowledgeBase);
 
+            $knowledgeBase->refresh();
+            DocumentStatusChanged::dispatch(
+                $knowledgeBase->id,
+                $document->id,
+                EmbeddingStatus::Ready->value,
+                null,
+                $knowledgeBase->status->value ?? $knowledgeBase->status,
+                $knowledgeBase->document_count,
+                $knowledgeBase->chunk_count,
+            );
+
             Log::info("Successfully processed document for KB: {$document->id}");
 
         } catch (\Throwable $e) {
@@ -136,6 +156,15 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
 
             // Check if all documents have failed
             $this->updateKnowledgeBaseStatus($knowledgeBase);
+
+            $knowledgeBase->refresh();
+            DocumentStatusChanged::dispatch(
+                $knowledgeBase->id,
+                $document->id,
+                EmbeddingStatus::Failed->value,
+                $e->getMessage(),
+                $knowledgeBase->status->value ?? $knowledgeBase->status,
+            );
 
             throw $e;
         }

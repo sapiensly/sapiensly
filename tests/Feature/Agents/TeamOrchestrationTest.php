@@ -7,6 +7,7 @@ use App\Models\Agent;
 use App\Models\AgentTeam;
 use App\Models\Conversation;
 use App\Models\User;
+use App\Services\TriageRoutingService;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
@@ -185,7 +186,7 @@ describe('triage routing service', function () {
             'status' => AgentStatus::Active,
         ]);
 
-        $service = app(\App\Services\TriageRoutingService::class);
+        $service = app(TriageRoutingService::class);
         $tools = $service->buildRoutingTools($this->team->fresh());
 
         // Should have 1 tool: create_execution_plan
@@ -194,7 +195,7 @@ describe('triage routing service', function () {
     });
 
     test('it parses execution plan with multiple steps', function () {
-        $service = app(\App\Services\TriageRoutingService::class);
+        $service = app(TriageRoutingService::class);
 
         $stepsJson = '[{"agent":"knowledge","query":"refund policy","urgency":"high"},{"agent":"action","task":"check order #12345"}]';
 
@@ -209,7 +210,7 @@ describe('triage routing service', function () {
     });
 
     test('it parses single step execution plan', function () {
-        $service = app(\App\Services\TriageRoutingService::class);
+        $service = app(TriageRoutingService::class);
 
         $stepsJson = '[{"agent":"direct","response":"Hello! How can I help you?"}]';
 
@@ -221,7 +222,7 @@ describe('triage routing service', function () {
     });
 
     test('it handles invalid JSON gracefully', function () {
-        $service = app(\App\Services\TriageRoutingService::class);
+        $service = app(TriageRoutingService::class);
 
         $plan = $service->parseExecutionPlan('not valid json');
 

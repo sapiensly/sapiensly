@@ -39,7 +39,7 @@ class DocumentService
         // We'll create the document first to get the ID
         $document = Document::create([
             'user_id' => $user->id,
-            'organization_id' => $visibility === Visibility::Organization ? $user->organization_id : null,
+            'organization_id' => $user->organization_id,
             'folder_id' => $folderId,
             'name' => $name ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
             'keywords' => $keywords ?? [],

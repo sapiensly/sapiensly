@@ -16,6 +16,10 @@ import type { BreadcrumbItem } from '@/types';
 import type { PaginatedKnowledgeBases } from '@/types/knowledge-base';
 import { Head, Link } from '@inertiajs/vue3';
 import { Database, FileText, Plus } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     knowledgeBases: PaginatedKnowledgeBases;
@@ -23,7 +27,7 @@ interface Props {
 
 defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Knowledge Base', href: '#' }];
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [{ title: t('knowledge_bases.index.heading'), href: '#' }]);
 
 const statusVariant = (status: string) => {
     switch (status) {
@@ -42,30 +46,30 @@ const statusVariant = (status: string) => {
 </script>
 
 <template>
-    <Head title="Knowledge Base" />
+    <Head :title="t('knowledge_bases.index.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-6xl">
                 <div class="mb-8 flex items-center justify-between">
                     <Heading
-                        title="Knowledge Base"
-                        description="Manage your knowledge bases for RAG-powered agents"
+                        :title="t('knowledge_bases.index.heading')"
+                        :description="t('knowledge_bases.index.description')"
                     />
                     <Button as-child>
                         <Link :href="KnowledgeBaseController.create().url">
                             <Plus class="mr-2 h-4 w-4" />
-                            New Knowledge Base
+                            {{ t('knowledge_bases.index.new_kb') }}
                         </Link>
                     </Button>
                 </div>
 
                 <div v-if="knowledgeBases.data.length === 0">
                     <EmptyState
-                        title="No knowledge bases yet"
-                        description="Create your first knowledge base to enable RAG capabilities for your agents."
+                        :title="t('knowledge_bases.index.no_kbs')"
+                        :description="t('knowledge_bases.index.no_kbs_description')"
                         :create-url="KnowledgeBaseController.create().url"
-                        create-label="Create Knowledge Base"
+                        :create-label="t('knowledge_bases.index.create_kb')"
                     />
                 </div>
 
@@ -98,7 +102,7 @@ const statusVariant = (status: string) => {
                                 <div class="flex items-center gap-4 text-sm text-muted-foreground">
                                     <div class="flex items-center gap-1">
                                         <FileText class="h-4 w-4" />
-                                        {{ kb.total_documents_count ?? 0 }} documents
+                                        {{ kb.total_documents_count ?? 0 }} {{ t('knowledge_bases.index.documents') }}
                                     </div>
                                 </div>
                             </CardContent>

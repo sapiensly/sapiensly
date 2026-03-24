@@ -29,8 +29,8 @@ class StoreDocumentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'file.max' => 'The document must not be larger than 10MB.',
-            'file.mimes' => 'The document must be a PDF, TXT, DOCX, DOC, MD, CSV, or JSON file.',
+            'file.max' => __('The document must not be larger than 10MB.'),
+            'file.mimes' => __('The document must be a PDF, TXT, DOCX, DOC, MD, CSV, or JSON file.'),
         ];
     }
 }

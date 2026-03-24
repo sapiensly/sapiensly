@@ -4,11 +4,12 @@ namespace Database\Factories;
 
 use App\Enums\AgentStatus;
 use App\Enums\ToolType;
+use App\Models\Tool;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Tool>
+ * @extends Factory<Tool>
  */
 class ToolFactory extends Factory
 {

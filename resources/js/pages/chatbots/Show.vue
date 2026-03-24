@@ -39,6 +39,9 @@ import {
     Users,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     chatbot: Chatbot;
@@ -49,7 +52,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Chatbots', href: ChatbotController.index().url },
+    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
     { title: props.chatbot.name, href: '#' },
 ]);
 
@@ -103,49 +106,49 @@ const formatDate = (date: string) => {
                         <Button variant="outline" as-child>
                             <Link :href="ChatbotController.preview({ chatbot: chatbot.id }).url">
                                 <Eye class="mr-2 h-4 w-4" />
-                                Preview
+                                {{ t('chatbots.show.preview') }}
                             </Link>
                         </Button>
                         <Button variant="outline" as-child>
                             <Link :href="ChatbotAnalyticsController.show({ chatbot: chatbot.id }).url">
                                 <BarChart3 class="mr-2 h-4 w-4" />
-                                Analytics
+                                {{ t('chatbots.show.analytics') }}
                             </Link>
                         </Button>
                         <Button as-child>
                             <Link :href="ChatbotController.embed({ chatbot: chatbot.id }).url">
                                 <Code class="mr-2 h-4 w-4" />
-                                Embed
+                                {{ t('chatbots.show.embed') }}
                             </Link>
                         </Button>
                         <Button variant="outline" as-child>
                             <Link :href="ChatbotController.edit({ chatbot: chatbot.id }).url">
                                 <Pencil class="mr-2 h-4 w-4" />
-                                Edit
+                                {{ t('common.edit') }}
                             </Link>
                         </Button>
                         <Dialog>
                             <DialogTrigger as-child>
                                 <Button variant="destructive">
                                     <Trash2 class="mr-2 h-4 w-4" />
-                                    Delete
+                                    {{ t('common.delete') }}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>Delete Chatbot</DialogTitle>
+                                    <DialogTitle>{{ t('chatbots.show.delete_chatbot') }}</DialogTitle>
                                     <DialogDescription>
-                                        Are you sure you want to delete "{{ chatbot.name }}"?
-                                        This will also delete all conversations and sessions.
-                                        This action cannot be undone.
+                                        {{ t('common.confirm_delete') }} "{{ chatbot.name }}"?
+                                        {{ t('chatbots.show.delete_warning') }}
+                                        {{ t('common.action_irreversible') }}
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
                                     <DialogClose as-child>
-                                        <Button variant="outline">Cancel</Button>
+                                        <Button variant="outline">{{ t('common.cancel') }}</Button>
                                     </DialogClose>
                                     <Button variant="destructive" @click="deleteChatbot">
-                                        Delete
+                                        {{ t('common.delete') }}
                                     </Button>
                                 </DialogFooter>
                             </DialogContent>
@@ -215,7 +218,7 @@ const formatDate = (date: string) => {
                 <!-- Target Info -->
                 <div class="mb-8 space-y-6">
                     <HeadingSmall
-                        title="Target"
+                        title="Agent or Agents Team"
                         description="The agent or team powering this chatbot"
                     />
 
@@ -231,7 +234,7 @@ const formatDate = (date: string) => {
                                         {{ chatbot.agent?.name || chatbot.agent_team?.name }}
                                     </CardTitle>
                                     <CardDescription>
-                                        {{ chatbot.agent ? `${chatbot.agent.type} agent` : 'Agent Team' }}
+                                        {{ chatbot.agent ? `${chatbot.agent.type} agent` : 'Agents Team' }}
                                     </CardDescription>
                                 </div>
                             </div>

@@ -18,7 +18,10 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { ToolReference, ToolType, ToolTypeOption } from '@/types/tools';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     selectedType: ToolType | null;
@@ -28,10 +31,10 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tools', href: ToolController.index().url },
-    { title: 'Create', href: '#' },
-];
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: t('tools.index.heading'), href: ToolController.index().url },
+    { title: t('common.create'), href: '#' },
+]);
 
 const currentType = ref<ToolType | null>(props.selectedType);
 
@@ -120,20 +123,20 @@ if (props.selectedType) {
 </script>
 
 <template>
-    <Head title="Create Tool" />
+    <Head :title="t('tools.create.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-2xl">
                 <Heading
-                    title="Create Tool"
-                    description="Create a new tool for your agents"
+                    :title="t('tools.create.heading')"
+                    :description="t('tools.create.description')"
                 />
 
                 <div v-if="!currentType" class="mt-8">
                     <HeadingSmall
-                        title="Select Tool Type"
-                        description="Choose the type of tool you want to create"
+                        :title="t('tools.create.select_type')"
+                        :description="t('tools.create.select_type_description')"
                     />
                     <ToolTypeSelector
                         :tool-types="toolTypes"
@@ -145,28 +148,28 @@ if (props.selectedType) {
                 <form v-else class="mt-8 space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Basic Information"
-                            description="Name and describe your tool"
+                            :title="t('tools.create.basic_info')"
+                            :description="t('tools.create.basic_info_description')"
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">Tool Name</Label>
+                                <Label for="name">{{ t('tools.create.tool_name') }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    placeholder="My Tool"
+                                    :placeholder="t('tools.create.tool_name_placeholder')"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">Description</Label>
+                                <Label for="description">{{ t('tools.create.description_label') }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    placeholder="What does this tool do?"
+                                    :placeholder="t('tools.create.description_placeholder')"
                                     rows="3"
                                 />
                                 <InputError :message="form.errors.description" />
@@ -176,8 +179,8 @@ if (props.selectedType) {
 
                     <div class="space-y-6">
                         <HeadingSmall
-                            :title="`${currentType.charAt(0).toUpperCase() + currentType.slice(1)} Configuration`"
-                            description="Type-specific settings for this tool"
+                            :title="t('tools.create.config_title')"
+                            :description="t('tools.create.config_description')"
                         />
 
                         <FunctionToolConfig
@@ -220,15 +223,15 @@ if (props.selectedType) {
 
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" type="button" @click="currentType = null">
-                            Change Type
+                            {{ t('common.change_type') }}
                         </Button>
                         <Button variant="outline" as-child>
                             <Link :href="ToolController.index().url">
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button type="submit" :disabled="form.processing">
-                            Create Tool
+                            {{ t('tools.create.submit') }}
                         </Button>
                     </div>
                 </form>

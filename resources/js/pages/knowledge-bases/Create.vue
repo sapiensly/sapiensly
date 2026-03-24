@@ -12,6 +12,10 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { DocumentTypeOption } from '@/types/knowledge-base';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     documentTypes: DocumentTypeOption[];
@@ -19,10 +23,10 @@ interface Props {
 
 defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Knowledge Base', href: KnowledgeBaseController.index().url },
-    { title: 'Create', href: '#' },
-];
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: t('knowledge_bases.index.heading'), href: KnowledgeBaseController.index().url },
+    { title: t('common.create'), href: '#' },
+]);
 
 const form = useForm({
     name: '',
@@ -40,51 +44,51 @@ const submit = () => {
 </script>
 
 <template>
-    <Head title="Create Knowledge Base" />
+    <Head :title="t('knowledge_bases.create.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-2xl">
                 <Heading
-                    title="Create Knowledge Base"
-                    description="Create a new knowledge base for document storage and RAG"
+                    :title="t('knowledge_bases.create.heading')"
+                    :description="t('knowledge_bases.create.description')"
                 />
 
                 <form class="mt-8 space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Basic Information"
-                            description="Name and describe your knowledge base"
+                            :title="t('knowledge_bases.create.basic_info')"
+                            :description="t('knowledge_bases.create.basic_info_description')"
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">Name</Label>
+                                <Label for="name">{{ t('common.name') }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    placeholder="My Knowledge Base"
+                                    :placeholder="t('knowledge_bases.create.name_placeholder')"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">Description</Label>
+                                <Label for="description">{{ t('knowledge_bases.create.description_label') }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    placeholder="What kind of documents will this knowledge base contain?"
+                                    :placeholder="t('knowledge_bases.create.description_placeholder')"
                                     rows="3"
                                 />
                                 <InputError :message="form.errors.description" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="keywords">Keywords</Label>
+                                <Label for="keywords">{{ t('knowledge_bases.create.keywords_label') }}</Label>
                                 <KeywordsInput v-model="form.keywords" />
                                 <p class="text-xs text-muted-foreground">
-                                    Add keywords to help with search and categorization
+                                    {{ t('knowledge_bases.create.keywords_description') }}
                                 </p>
                                 <InputError :message="form.errors.keywords" />
                             </div>
@@ -93,13 +97,13 @@ const submit = () => {
 
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Processing Configuration"
-                            description="Configure how documents are processed"
+                            :title="t('knowledge_bases.create.processing_title')"
+                            :description="t('knowledge_bases.create.processing_description')"
                         />
 
                         <div class="grid gap-4 sm:grid-cols-2">
                             <div class="grid gap-2">
-                                <Label for="chunk_size">Chunk Size</Label>
+                                <Label for="chunk_size">{{ t('knowledge_bases.create.chunk_size') }}</Label>
                                 <Input
                                     id="chunk_size"
                                     v-model.number="form.config.chunk_size"
@@ -108,13 +112,13 @@ const submit = () => {
                                     max="4000"
                                 />
                                 <p class="text-xs text-muted-foreground">
-                                    Number of characters per chunk (100-4000)
+                                    {{ t('knowledge_bases.create.chunk_size_description') }}
                                 </p>
                                 <InputError :message="form.errors['config.chunk_size']" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="chunk_overlap">Chunk Overlap</Label>
+                                <Label for="chunk_overlap">{{ t('knowledge_bases.create.chunk_overlap') }}</Label>
                                 <Input
                                     id="chunk_overlap"
                                     v-model.number="form.config.chunk_overlap"
@@ -123,7 +127,7 @@ const submit = () => {
                                     max="500"
                                 />
                                 <p class="text-xs text-muted-foreground">
-                                    Overlap between chunks (0-500)
+                                    {{ t('knowledge_bases.create.chunk_overlap_description') }}
                                 </p>
                                 <InputError :message="form.errors['config.chunk_overlap']" />
                             </div>
@@ -133,11 +137,11 @@ const submit = () => {
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" as-child>
                             <Link :href="KnowledgeBaseController.index().url">
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button type="submit" :disabled="form.processing">
-                            Create Knowledge Base
+                            {{ t('knowledge_bases.create.submit') }}
                         </Button>
                     </div>
                 </form>

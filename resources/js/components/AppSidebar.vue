@@ -11,68 +11,82 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
+import * as StackController from '@/actions/App/Http/Controllers/StackController';
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import { dashboard } from '@/routes';
+import { urlIsActive } from '@/lib/utils';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/vue3';
-import { BookOpen, Bot, Database, FileText, Folder, LayoutGrid, MessageSquare, Users, Wrench } from 'lucide-vue-next';
+import { Link, usePage } from '@inertiajs/vue3';
+import { BookOpen, Bot, BrainCircuit, Database, FileText, Layers, LayoutGrid, MessageSquare, Users, Wrench } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppLogo from './AppLogo.vue';
 
-const mainNavItems: NavItem[] = [
+const { t } = useI18n();
+const page = usePage();
+
+const mainNavItems = computed<NavItem[]>(() => [
     {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
+        title: t('nav.chatbots'),
+        href: ChatbotController.index(),
+        icon: MessageSquare,
     },
     {
-        title: 'Agent Teams',
-        href: AgentTeamController.index(),
-        icon: Users,
-    },
-    {
-        title: 'Agents',
+        title: t('nav.agents'),
         href: AgentController.index(),
         icon: Bot,
     },
     {
-        title: 'Knowledge Base',
-        href: KnowledgeBaseController.index(),
-        icon: Database,
+        title: t('nav.agent_teams'),
+        href: AgentTeamController.index(),
+        icon: Users,
     },
+]);
+
+const capabilitiesNavItems = computed<NavItem[]>(() => [
     {
-        title: 'Documents',
-        href: DocumentController.index(),
-        icon: FileText,
-    },
-    {
-        title: 'Tools',
+        title: t('nav.tools'),
         href: ToolController.index(),
         icon: Wrench,
     },
     {
-        title: 'Chatbots',
-        href: ChatbotController.index(),
-        icon: MessageSquare,
+        title: t('nav.documents'),
+        href: DocumentController.index(),
+        icon: FileText,
     },
-];
+    {
+        title: t('nav.knowledge_base'),
+        href: KnowledgeBaseController.index(),
+        icon: Database,
+    },
+]);
 
-const footerNavItems: NavItem[] = [
+const systemNavItems = computed<NavItem[]>(() => [
     {
-        title: 'Github Repo',
-        href: 'https://github.com/laravel/vue-starter-kit',
-        icon: Folder,
+        title: t('nav.ai_providers'),
+        href: AiProviderController.index(),
+        icon: BrainCircuit,
     },
     {
-        title: 'Documentation',
+        title: t('nav.stack'),
+        href: StackController.index(),
+        icon: Layers,
+    },
+]);
+
+const footerNavItems = computed<NavItem[]>(() => [
+    {
+        title: t('nav.documentation'),
         href: 'https://laravel.com/docs/starter-kits#vue',
         icon: BookOpen,
     },
-];
+]);
 </script>
 
 <template>
@@ -90,7 +104,23 @@ const footerNavItems: NavItem[] = [
         </SidebarHeader>
 
         <SidebarContent>
+            <SidebarMenu class="px-2 py-2">
+                <SidebarMenuItem>
+                    <SidebarMenuButton
+                        as-child
+                        :is-active="urlIsActive(dashboard(), page.url)"
+                        :tooltip="t('nav.dashboard')"
+                    >
+                        <Link :href="dashboard()">
+                            <LayoutGrid />
+                            <span>{{ t('nav.dashboard') }}</span>
+                        </Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            </SidebarMenu>
             <NavMain :items="mainNavItems" />
+            <NavMain :items="capabilitiesNavItems" :label="t('nav.capabilities')" />
+            <NavMain :items="systemNavItems" :label="t('nav.system')" />
         </SidebarContent>
 
         <SidebarFooter>

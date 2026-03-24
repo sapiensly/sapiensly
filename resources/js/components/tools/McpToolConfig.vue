@@ -11,6 +11,9 @@ import {
 } from '@/components/ui/select';
 import type { McpConfig } from '@/types/tools';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     config: McpConfig;
@@ -43,35 +46,35 @@ const authType = computed({
 });
 
 const authOptions = [
-    { value: 'none', label: 'None' },
-    { value: 'bearer', label: 'Bearer Token' },
-    { value: 'api_key', label: 'API Key' },
-    { value: 'basic', label: 'Basic Auth' },
+    { value: 'none', label: t('tools.config.mcp.auth_none') },
+    { value: 'bearer', label: t('tools.config.mcp.auth_bearer') },
+    { value: 'api_key', label: t('tools.config.mcp.auth_api_key') },
+    { value: 'basic', label: t('tools.config.mcp.auth_basic') },
 ];
 </script>
 
 <template>
     <div class="space-y-4">
         <div class="grid gap-2">
-            <Label for="endpoint">MCP Server Endpoint</Label>
+            <Label for="endpoint">{{ t('tools.config.mcp.endpoint') }}</Label>
             <Input
                 id="endpoint"
                 v-model="endpoint"
                 type="url"
-                placeholder="https://api.example.com/mcp"
+                :placeholder="t('tools.config.mcp.endpoint_placeholder')"
                 class="font-mono"
             />
             <p class="text-xs text-muted-foreground">
-                The URL of the MCP server
+                {{ t('tools.config.mcp.endpoint_description') }}
             </p>
             <InputError :message="errors['config.endpoint']" />
         </div>
 
         <div class="grid gap-2">
-            <Label for="auth-type">Authentication Type</Label>
+            <Label for="auth-type">{{ t('tools.config.mcp.auth_type') }}</Label>
             <Select v-model="authType">
                 <SelectTrigger id="auth-type">
-                    <SelectValue placeholder="Select auth type" />
+                    <SelectValue :placeholder="t('tools.config.mcp.select_auth')" />
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem

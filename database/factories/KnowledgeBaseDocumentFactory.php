@@ -5,10 +5,11 @@ namespace Database\Factories;
 use App\Enums\DocumentType;
 use App\Enums\KnowledgeBaseStatus;
 use App\Models\KnowledgeBase;
+use App\Models\KnowledgeBaseDocument;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\KnowledgeBaseDocument>
+ * @extends Factory<KnowledgeBaseDocument>
  */
 class KnowledgeBaseDocumentFactory extends Factory
 {

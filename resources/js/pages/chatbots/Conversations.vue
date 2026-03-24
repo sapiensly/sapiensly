@@ -15,6 +15,9 @@ import type { Chatbot, PaginatedConversations } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
 import { ChevronLeft, ChevronRight, MessageSquare, Star } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     chatbot: Chatbot;
@@ -24,9 +27,9 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Chatbots', href: ChatbotController.index().url },
+    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
     { title: props.chatbot.name, href: ChatbotController.show({ chatbot: props.chatbot.id }).url },
-    { title: 'Conversations', href: '#' },
+    { title: t('chatbots.conversations.title'), href: '#' },
 ]);
 
 const formatDate = (date: string) => {
@@ -40,32 +43,32 @@ const formatDate = (date: string) => {
 </script>
 
 <template>
-    <Head title="Conversations" />
+    <Head :title="t('chatbots.conversations.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-4xl">
                 <div class="mb-8 flex items-center justify-between">
                     <Heading
-                        title="Conversations"
-                        :description="`All conversations for ${chatbot.name}`"
+                        :title="t('chatbots.conversations.title')"
+                        :description="`${t('chatbots.conversations.all_for')} ${chatbot.name}`"
                     />
                     <Button variant="outline" as-child>
                         <Link :href="ChatbotController.show({ chatbot: chatbot.id }).url">
-                            Back to Chatbot
+                            {{ t('chatbots.conversations.back') }}
                         </Link>
                     </Button>
                 </div>
 
                 <div v-if="conversations.data.length === 0" class="rounded-lg border border-dashed p-12 text-center">
                     <MessageSquare class="mx-auto h-12 w-12 text-muted-foreground" />
-                    <h3 class="mt-4 text-lg font-medium">No conversations yet</h3>
+                    <h3 class="mt-4 text-lg font-medium">{{ t('chatbots.conversations.no_conversations') }}</h3>
                     <p class="mt-2 text-sm text-muted-foreground">
-                        Embed the widget on your website to start receiving conversations.
+                        {{ t('chatbots.conversations.no_conversations_description') }}
                     </p>
                     <Button class="mt-4" as-child>
                         <Link :href="ChatbotController.embed({ chatbot: chatbot.id }).url">
-                            Get Embed Code
+                            {{ t('chatbots.conversations.get_embed') }}
                         </Link>
                     </Button>
                 </div>
@@ -90,7 +93,7 @@ const formatDate = (date: string) => {
                                                 {{ conversation.session?.visitor_name || conversation.session?.visitor_email || 'Anonymous Visitor' }}
                                             </CardTitle>
                                             <CardDescription class="flex items-center gap-2">
-                                                <span>{{ conversation.messages_count || conversation.message_count }} messages</span>
+                                                <span>{{ conversation.messages_count || conversation.message_count }} {{ t('chatbots.conversations.messages') }}</span>
                                                 <span v-if="conversation.session?.visitor_email" class="text-xs">
                                                     &bull; {{ conversation.session.visitor_email }}
                                                 </span>
@@ -106,13 +109,13 @@ const formatDate = (date: string) => {
 
                                         <!-- Status Badge -->
                                         <Badge v-if="conversation.is_resolved" variant="default">
-                                            Resolved
+                                            {{ t('chatbots.conversations.resolved') }}
                                         </Badge>
                                         <Badge v-else-if="conversation.is_abandoned" variant="secondary">
-                                            Abandoned
+                                            {{ t('chatbots.conversations.abandoned') }}
                                         </Badge>
                                         <Badge v-else variant="outline">
-                                            Open
+                                            {{ t('chatbots.conversations.open') }}
                                         </Badge>
 
                                         <!-- Date -->
@@ -128,8 +131,8 @@ const formatDate = (date: string) => {
                     <!-- Pagination -->
                     <div v-if="conversations.last_page > 1" class="flex items-center justify-between pt-4">
                         <p class="text-sm text-muted-foreground">
-                            Page {{ conversations.current_page }} of {{ conversations.last_page }}
-                            ({{ conversations.total }} total)
+                            {{ t('common.page') }} {{ conversations.current_page }} {{ t('common.of') }} {{ conversations.last_page }}
+                            ({{ conversations.total }} {{ t('common.total') }})
                         </p>
                         <div class="flex gap-2">
                             <Button
@@ -145,7 +148,7 @@ const formatDate = (date: string) => {
                                     }).url"
                                 >
                                     <ChevronLeft class="h-4 w-4" />
-                                    Previous
+                                    {{ t('common.previous') }}
                                 </Link>
                             </Button>
                             <Button
@@ -160,7 +163,7 @@ const formatDate = (date: string) => {
                                         query: { page: conversations.current_page + 1 }
                                     }).url"
                                 >
-                                    Next
+                                    {{ t('common.next') }}
                                     <ChevronRight class="h-4 w-4" />
                                 </Link>
                             </Button>

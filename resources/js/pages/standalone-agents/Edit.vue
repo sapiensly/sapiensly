@@ -30,6 +30,9 @@ import type {
 } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     agent: Agent;
@@ -43,9 +46,9 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Agents', href: AgentController.index().url },
+    { title: t('agents.index.heading'), href: AgentController.index().url },
     { title: props.agent.name, href: AgentController.show({ agent: props.agent.id }).url },
-    { title: 'Edit', href: '#' },
+    { title: t('common.edit'), href: '#' },
 ]);
 
 const form = useForm({
@@ -60,11 +63,11 @@ const form = useForm({
     tool_ids: props.agent.tools?.map((t) => t.id) ?? [] as string[],
 });
 
-const statusOptions = [
-    { value: 'draft', label: 'Draft' },
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' },
-];
+const statusOptions = computed(() => [
+    { value: 'draft', label: t('common.draft') },
+    { value: 'active', label: t('common.active') },
+    { value: 'inactive', label: t('common.inactive') },
+]);
 
 const recommendedModelsList = computed(() => {
     return props.recommendedModels[props.agent.type] || [];
@@ -80,59 +83,59 @@ const submit = () => {
 </script>
 
 <template>
-    <Head :title="`Edit ${agent.name}`" />
+    <Head :title="`${t('agents.edit.title')} ${agent.name}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-4xl">
                 <Heading
-                    :title="`Edit ${agent.name}`"
-                    description="Update your agent configuration"
+                    :title="`${t('agents.edit.title')} ${agent.name}`"
+                    :description="t('agents.edit.description')"
                 />
 
                 <form class="mt-8 space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Basic Information"
-                            description="Name and describe your agent"
+                            :title="t('agents.edit.basic_info')"
+                            :description="t('agents.edit.basic_info_description')"
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">Agent Name</Label>
+                                <Label for="name">{{ t('agents.edit.agent_name') }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    placeholder="My Agent"
+                                    :placeholder="t('agents.edit.agent_name_placeholder')"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">Description</Label>
+                                <Label for="description">{{ t('agents.edit.description_label') }}</Label>
                                 <Input
                                     id="description"
                                     v-model="form.description"
-                                    placeholder="What does this agent do?"
+                                    :placeholder="t('agents.edit.description_placeholder')"
                                 />
                                 <InputError :message="form.errors.description" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="keywords">Keywords</Label>
+                                <Label for="keywords">{{ t('agents.edit.keywords_label') }}</Label>
                                 <KeywordsInput v-model="form.keywords" />
                                 <p class="text-xs text-muted-foreground">
-                                    Add keywords for search and categorization
+                                    {{ t('agents.edit.keywords_description') }}
                                 </p>
                                 <InputError :message="form.errors.keywords" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="status">Status</Label>
+                                <Label for="status">{{ t('common.status') }}</Label>
                                 <Select v-model="form.status">
                                     <SelectTrigger id="status">
-                                        <SelectValue placeholder="Select status" />
+                                        <SelectValue :placeholder="t('common.select_status')" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -148,10 +151,10 @@ const submit = () => {
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="model">Model</Label>
+                                <Label for="model">{{ t('agents.edit.model') }}</Label>
                                 <Select v-model="form.model">
                                     <SelectTrigger id="model">
-                                        <SelectValue placeholder="Select a model" />
+                                        <SelectValue :placeholder="t('agents.edit.select_model')" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -164,7 +167,7 @@ const submit = () => {
                                                 v-if="isRecommended(model.value)"
                                                 class="ml-2 text-xs text-green-600"
                                             >
-                                                (Recommended)
+                                                {{ t('agents.edit.recommended') }}
                                             </span>
                                         </SelectItem>
                                     </SelectContent>
@@ -173,11 +176,11 @@ const submit = () => {
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="prompt_template">Prompt Template</Label>
+                                <Label for="prompt_template">{{ t('agents.edit.prompt_template') }}</Label>
                                 <Textarea
                                     id="prompt_template"
                                     v-model="form.prompt_template"
-                                    placeholder="System instructions for the agent..."
+                                    :placeholder="t('agents.edit.prompt_placeholder')"
                                     rows="6"
                                 />
                                 <InputError :message="form.errors.prompt_template" />
@@ -187,8 +190,8 @@ const submit = () => {
 
                     <div class="space-y-6">
                         <HeadingSmall
-                            :title="`${agent.type.charAt(0).toUpperCase() + agent.type.slice(1)} Configuration`"
-                            description="Type-specific settings for this agent"
+                            :title="t('agents.edit.config_title')"
+                            :description="t('agents.edit.config_description')"
                         />
 
                         <TriageAgentConfig
@@ -217,11 +220,11 @@ const submit = () => {
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" as-child>
                             <Link :href="AgentController.show({ agent: agent.id }).url">
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button type="submit" :disabled="form.processing">
-                            Save Changes
+                            {{ t('common.save_changes') }}
                         </Button>
                     </div>
                 </form>

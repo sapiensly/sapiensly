@@ -24,7 +24,7 @@ class KnowledgeBaseDocumentController extends Controller
      */
     public function store(Request $request, KnowledgeBase $knowledgeBase): RedirectResponse
     {
-        if ($knowledgeBase->user_id !== $request->user()->id) {
+        if (! $knowledgeBase->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -75,7 +75,7 @@ class KnowledgeBaseDocumentController extends Controller
         // Dispatch processing job
         ProcessKnowledgeBaseDocument::dispatch($document);
 
-        return back()->with('success', 'Document uploaded and processing started.');
+        return back()->with('success', __('Document uploaded and processing started.'));
     }
 
     /**
@@ -83,7 +83,7 @@ class KnowledgeBaseDocumentController extends Controller
      */
     public function storeUrl(Request $request, KnowledgeBase $knowledgeBase): RedirectResponse
     {
-        if ($knowledgeBase->user_id !== $request->user()->id) {
+        if (! $knowledgeBase->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -101,7 +101,7 @@ class KnowledgeBaseDocumentController extends Controller
         // Dispatch processing job
         ProcessKnowledgeBaseDocument::dispatch($document);
 
-        return back()->with('success', 'URL added and processing started.');
+        return back()->with('success', __('URL added and processing started.'));
     }
 
     /**
@@ -109,7 +109,7 @@ class KnowledgeBaseDocumentController extends Controller
      */
     public function destroy(Request $request, KnowledgeBase $knowledgeBase, KnowledgeBaseDocument $document): RedirectResponse
     {
-        if ($knowledgeBase->user_id !== $request->user()->id) {
+        if (! $knowledgeBase->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -131,7 +131,7 @@ class KnowledgeBaseDocumentController extends Controller
             'chunk_count' => $knowledgeBase->chunks()->count(),
         ]);
 
-        return back()->with('success', 'Document deleted.');
+        return back()->with('success', __('Document deleted.'));
     }
 
     /**
@@ -139,7 +139,7 @@ class KnowledgeBaseDocumentController extends Controller
      */
     public function reprocess(Request $request, KnowledgeBase $knowledgeBase, KnowledgeBaseDocument $document): RedirectResponse
     {
-        if ($knowledgeBase->user_id !== $request->user()->id) {
+        if (! $knowledgeBase->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -156,6 +156,6 @@ class KnowledgeBaseDocumentController extends Controller
         // Dispatch processing job
         ProcessKnowledgeBaseDocument::dispatch($document);
 
-        return back()->with('success', 'Document reprocessing started.');
+        return back()->with('success', __('Document reprocessing started.'));
     }
 }

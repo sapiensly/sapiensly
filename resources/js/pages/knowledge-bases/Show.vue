@@ -35,9 +35,13 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { Document, GroupedFolders, VisibilityOption } from '@/types/document';
 import type { DocumentTypeOption, KnowledgeBase, KnowledgeBaseDocument } from '@/types/knowledge-base';
+import echo from '@/echo';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { FileText, FolderPlus, MoreVertical, Pencil, Plus, RefreshCw, Trash2, Upload } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { FileText, FolderPlus, Loader2, MoreVertical, Pencil, Plus, RefreshCw, Trash2, Upload } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     knowledgeBase: KnowledgeBase;
@@ -53,6 +57,46 @@ const props = defineProps<Props>();
 
 const showDocumentSelector = ref(false);
 const showUploadDialog = ref(false);
+
+// Real-time status tracking via WebSocket
+const statusOverrides = reactive<Record<string, { status: string; errorMessage?: string | null }>>({});
+const kbStatusOverride = ref<string | null>(null);
+const kbDocCountOverride = ref<number | null>(null);
+const kbChunkCountOverride = ref<number | null>(null);
+
+const channel = echo.private(`knowledge-base.${props.knowledgeBase.id}`);
+
+channel.listen('.DocumentStatusChanged', (data: {
+    documentId: string;
+    status: string;
+    errorMessage?: string | null;
+    knowledgeBaseStatus?: string | null;
+    documentCount?: number | null;
+    chunkCount?: number | null;
+}) => {
+    statusOverrides[data.documentId] = {
+        status: data.status,
+        errorMessage: data.errorMessage,
+    };
+
+    if (data.knowledgeBaseStatus) {
+        kbStatusOverride.value = data.knowledgeBaseStatus;
+    }
+    if (data.documentCount !== null && data.documentCount !== undefined) {
+        kbDocCountOverride.value = data.documentCount;
+    }
+    if (data.chunkCount !== null && data.chunkCount !== undefined) {
+        kbChunkCountOverride.value = data.chunkCount;
+    }
+});
+
+onBeforeUnmount(() => {
+    echo.leave(`knowledge-base.${props.knowledgeBase.id}`);
+});
+
+const currentKbStatus = computed(() => kbStatusOverride.value ?? props.knowledgeBase.status);
+const currentDocCount = computed(() => kbDocCountOverride.value ?? props.knowledgeBase.document_count);
+const currentChunkCount = computed(() => kbChunkCountOverride.value ?? props.knowledgeBase.chunk_count);
 
 // Combine legacy documents and new attached documents
 const allDocuments = computed(() => {
@@ -77,11 +121,22 @@ const allDocuments = computed(() => {
         isAttached: false,
     }));
 
-    return [...mappedLegacy, ...mappedAttached];
+    // Apply real-time status overrides
+    return [...mappedLegacy, ...mappedAttached].map(doc => {
+        const override = statusOverrides[doc.id];
+        if (override) {
+            return {
+                ...doc,
+                embedding_status: override.status,
+                error_message: override.errorMessage ?? doc.error_message,
+            };
+        }
+        return doc;
+    });
 });
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Knowledge Base', href: KnowledgeBaseController.index().url },
+    { title: t('knowledge_bases.index.heading'), href: KnowledgeBaseController.index().url },
     { title: props.knowledgeBase.name, href: '#' },
 ]);
 
@@ -135,15 +190,21 @@ const deleteDocument = (doc: KnowledgeBaseDocument & { isAttached?: boolean }) =
     }
 };
 
-const reprocessDocument = (doc: KnowledgeBaseDocument) => {
-    router.post(
-        KnowledgeBaseDocumentController.reprocess({
-            knowledge_base: props.knowledgeBase.id,
-            document: doc.id,
-        }).url,
-        {},
-        { preserveScroll: true },
-    );
+const reprocessDocument = (doc: KnowledgeBaseDocument & { isAttached?: boolean }) => {
+    // Optimistically update status
+    statusOverrides[doc.id] = { status: 'pending', errorMessage: null };
+
+    const url = doc.isAttached
+        ? KnowledgeBaseController.reprocessDocument({
+              knowledge_base: props.knowledgeBase.id,
+              document: doc.id,
+          }).url
+        : KnowledgeBaseDocumentController.reprocess({
+              knowledge_base: props.knowledgeBase.id,
+              document: doc.id,
+          }).url;
+
+    router.post(url, {}, { preserveScroll: true, preserveState: true });
 };
 
 const handleDocumentsSelected = (documentIds: string[]) => {
@@ -169,8 +230,9 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                     <div>
                         <div class="mb-2 flex items-center gap-3">
                             <Heading :title="knowledgeBase.name" />
-                            <Badge :variant="statusVariant(knowledgeBase.status)">
-                                {{ knowledgeBase.status }}
+                            <Badge :variant="statusVariant(currentKbStatus)">
+                                <Loader2 v-if="currentKbStatus === 'processing'" class="mr-1 h-3 w-3 animate-spin" />
+                                {{ currentKbStatus }}
                             </Badge>
                         </div>
                         <p
@@ -190,34 +252,34 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                                 "
                             >
                                 <Pencil class="mr-2 h-4 w-4" />
-                                Edit
+                                {{ t('common.edit') }}
                             </Link>
                         </Button>
                         <Dialog>
                             <DialogTrigger as-child>
                                 <Button variant="destructive">
                                     <Trash2 class="mr-2 h-4 w-4" />
-                                    Delete
+                                    {{ t('common.delete') }}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>Delete Knowledge Base</DialogTitle>
+                                    <DialogTitle>{{ t('knowledge_bases.show.delete_kb') }}</DialogTitle>
                                     <DialogDescription>
-                                        Are you sure you want to delete "{{
+                                        {{ t('common.confirm_delete') }} "{{
                                             knowledgeBase.name
-                                        }}"? This will also delete all documents and cannot be undone.
+                                        }}"? {{ t('common.action_irreversible') }}
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
                                     <DialogClose as-child>
-                                        <Button variant="outline">Cancel</Button>
+                                        <Button variant="outline">{{ t('common.cancel') }}</Button>
                                     </DialogClose>
                                     <Button
                                         variant="destructive"
                                         @click="deleteKnowledgeBase"
                                     >
-                                        Delete
+                                        {{ t('common.delete') }}
                                     </Button>
                                 </DialogFooter>
                             </DialogContent>
@@ -228,9 +290,9 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                 <div class="space-y-8">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Configuration</CardTitle>
+                            <CardTitle>{{ t('knowledge_bases.show.configuration') }}</CardTitle>
                             <CardDescription>
-                                Processing settings for this knowledge base
+                                {{ t('knowledge_bases.show.config_description') }}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -255,13 +317,13 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                                     <dt class="text-sm font-medium text-muted-foreground">
                                         Documents
                                     </dt>
-                                    <dd class="mt-1">{{ knowledgeBase.document_count }}</dd>
+                                    <dd class="mt-1">{{ currentDocCount }}</dd>
                                 </div>
                                 <div>
                                     <dt class="text-sm font-medium text-muted-foreground">
                                         Chunks
                                     </dt>
-                                    <dd class="mt-1">{{ knowledgeBase.chunk_count }}</dd>
+                                    <dd class="mt-1">{{ currentChunkCount }}</dd>
                                 </div>
                             </dl>
                         </CardContent>
@@ -327,6 +389,7 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <Badge :variant="statusVariant(doc.embedding_status)">
+                                                <Loader2 v-if="doc.embedding_status === 'processing'" class="mr-1 h-3 w-3 animate-spin" />
                                                 {{ doc.embedding_status }}
                                             </Badge>
                                             <DropdownMenu>

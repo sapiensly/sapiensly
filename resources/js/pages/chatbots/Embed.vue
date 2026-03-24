@@ -17,6 +17,9 @@ import type { Chatbot, ChatbotApiToken } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
 import { Check, Copy, Key } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     chatbot: Chatbot;
@@ -27,9 +30,9 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Chatbots', href: ChatbotController.index().url },
+    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
     { title: props.chatbot.name, href: ChatbotController.show({ chatbot: props.chatbot.id }).url },
-    { title: 'Embed', href: '#' },
+    { title: t('chatbots.show.embed'), href: '#' },
 ]);
 
 const copied = ref(false);
@@ -53,19 +56,19 @@ const formatDate = (date: string | null) => {
 </script>
 
 <template>
-    <Head title="Embed Chatbot" />
+    <Head :title="t('chatbots.embed.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-3xl">
                 <div class="mb-8 flex items-center justify-between">
                     <Heading
-                        title="Embed Chatbot"
-                        :description="`Add ${chatbot.name} to your website`"
+                        :title="t('chatbots.embed.title')"
+                        :description="t('chatbots.embed.description')"
                     />
                     <Button variant="outline" as-child>
                         <Link :href="ChatbotController.show({ chatbot: chatbot.id }).url">
-                            Back to Chatbot
+                            {{ t('chatbots.embed.back') }}
                         </Link>
                     </Button>
                 </div>
@@ -74,8 +77,8 @@ const formatDate = (date: string | null) => {
                     <!-- Embed Code Section -->
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Embed Code"
-                            description="Copy and paste this code into your website's HTML, just before the closing </body> tag"
+                            :title="t('chatbots.embed.code_title')"
+                            :description="t('chatbots.embed.code_description')"
                         />
 
                         <Card>
@@ -92,7 +95,7 @@ const formatDate = (date: string | null) => {
                                     >
                                         <Check v-if="copied" class="mr-2 h-4 w-4" />
                                         <Copy v-else class="mr-2 h-4 w-4" />
-                                        {{ copied ? 'Copied!' : 'Copy' }}
+                                        {{ copied ? t('chatbots.embed.copied') : t('chatbots.embed.copy') }}
                                     </Button>
                                 </div>
                             </CardContent>
@@ -102,34 +105,34 @@ const formatDate = (date: string | null) => {
                     <!-- Installation Guide -->
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Installation Guide"
-                            description="Follow these steps to install the widget"
+                            :title="t('chatbots.embed.guide_title')"
+                            :description="t('chatbots.embed.guide_description')"
                         />
 
                         <div class="space-y-4">
                             <Card>
                                 <CardHeader>
-                                    <CardTitle class="text-base">1. Copy the embed code</CardTitle>
+                                    <CardTitle class="text-base">{{ t('chatbots.embed.step_1') }}</CardTitle>
                                     <CardDescription>
-                                        Click the "Copy" button above to copy the embed code to your clipboard.
+                                        {{ t('chatbots.embed.step_1_description') }}
                                     </CardDescription>
                                 </CardHeader>
                             </Card>
 
                             <Card>
                                 <CardHeader>
-                                    <CardTitle class="text-base">2. Paste into your HTML</CardTitle>
+                                    <CardTitle class="text-base">{{ t('chatbots.embed.step_2') }}</CardTitle>
                                     <CardDescription>
-                                        Add the code just before the closing &lt;/body&gt; tag on every page where you want the widget to appear.
+                                        {{ t('chatbots.embed.step_2_description') }}
                                     </CardDescription>
                                 </CardHeader>
                             </Card>
 
                             <Card>
                                 <CardHeader>
-                                    <CardTitle class="text-base">3. Verify installation</CardTitle>
+                                    <CardTitle class="text-base">{{ t('chatbots.embed.step_3') }}</CardTitle>
                                     <CardDescription>
-                                        Reload your website and look for the chat bubble in the corner of your page.
+                                        {{ t('chatbots.embed.step_3_description') }}
                                     </CardDescription>
                                 </CardHeader>
                             </Card>
@@ -139,13 +142,13 @@ const formatDate = (date: string | null) => {
                     <!-- API Usage -->
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Widget API"
-                            description="Control the widget programmatically"
+                            :title="t('chatbots.embed.api_title')"
+                            :description="t('chatbots.embed.api_description')"
                         />
 
                         <Card>
                             <CardHeader>
-                                <CardTitle class="text-base">Basic Commands</CardTitle>
+                                <CardTitle class="text-base">{{ t('chatbots.embed.basic_commands') }}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <pre

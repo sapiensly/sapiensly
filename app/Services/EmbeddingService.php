@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\KnowledgeBase;
-use Illuminate\Support\Facades\Http;
+use App\Models\User;
+use Laravel\Ai\Embeddings;
+use Laravel\Ai\Enums\Lab;
 
 class EmbeddingService
 {
@@ -13,8 +15,23 @@ class EmbeddingService
 
     private int $dimensions;
 
-    public function __construct(?string $provider = null, ?string $model = null)
+    public function __construct(?string $provider = null, ?string $model = null, ?User $user = null)
     {
+        // If a user is provided, try to resolve defaults from their configured AI providers
+        if ($user && ($provider === null || $model === null)) {
+            $aiProviderService = app(AiProviderService::class);
+            $aiProviderService->applyRuntimeConfig($user);
+
+            $defaultEmbeddings = $aiProviderService->getDefaultEmbeddingsProvider($user);
+            if ($defaultEmbeddings) {
+                $embeddingModels = $defaultEmbeddings->getEmbeddingModels();
+                if (! empty($embeddingModels)) {
+                    $provider ??= $defaultEmbeddings->driver;
+                    $model ??= $embeddingModels[0]['id'];
+                }
+            }
+        }
+
         $this->provider = $provider ?? config('services.embeddings.default_provider', 'openai');
         $this->model = $model ?? config('services.embeddings.default_model', 'text-embedding-3-small');
         $this->dimensions = $this->getDimensionsForModel($this->model);
@@ -26,10 +43,12 @@ class EmbeddingService
     public static function forKnowledgeBase(KnowledgeBase $knowledgeBase): self
     {
         $config = $knowledgeBase->config ?? [];
+        $user = $knowledgeBase->user;
 
         return new self(
             $config['embedding_provider'] ?? null,
-            $config['embedding_model'] ?? null
+            $config['embedding_model'] ?? null,
+            $user,
         );
     }
 
@@ -57,10 +76,13 @@ class EmbeddingService
             return [];
         }
 
-        return match ($this->provider) {
-            'openai' => $this->embedWithOpenAI($texts),
-            default => throw new \InvalidArgumentException("Unsupported embedding provider: {$this->provider}"),
-        };
+        $lab = $this->getLabProvider();
+
+        $response = Embeddings::for($texts)
+            ->dimensions($this->dimensions)
+            ->generate(provider: $lab, model: $this->model);
+
+        return $response->embeddings;
     }
 
     /**
@@ -88,43 +110,20 @@ class EmbeddingService
     }
 
     /**
-     * Generate embeddings using OpenAI API.
-     *
-     * @param  array<string>  $texts
-     * @return array<array<float>>
+     * Get the Lab enum value for the configured provider.
      */
-    private function embedWithOpenAI(array $texts): array
+    private function getLabProvider(): Lab
     {
-        $apiKey = config('services.openai.api_key');
-
-        if (! $apiKey) {
-            throw new \RuntimeException('OpenAI API key is not configured');
-        }
-
-        $response = Http::withHeaders([
-            'Authorization' => "Bearer {$apiKey}",
-            'Content-Type' => 'application/json',
-        ])->post('https://api.openai.com/v1/embeddings', [
-            'model' => $this->model,
-            'input' => $texts,
-            'dimensions' => $this->dimensions,
-        ]);
-
-        if (! $response->successful()) {
-            throw new \RuntimeException(
-                "OpenAI embeddings API error: {$response->status()} - {$response->body()}"
-            );
-        }
-
-        $data = $response->json();
-
-        // Sort by index to ensure correct order
-        $embeddings = collect($data['data'])
-            ->sortBy('index')
-            ->pluck('embedding')
-            ->toArray();
-
-        return $embeddings;
+        return match ($this->provider) {
+            'openai' => Lab::OpenAI,
+            'anthropic' => Lab::Anthropic,
+            'gemini' => Lab::Gemini,
+            'mistral' => Lab::Mistral,
+            'cohere' => Lab::Cohere,
+            'jina' => Lab::Jina,
+            'voyageai' => Lab::VoyageAI,
+            default => Lab::OpenAI,
+        };
     }
 
     /**
@@ -138,7 +137,6 @@ class EmbeddingService
             return $models[$model]['dimensions'];
         }
 
-        // Default dimensions for common models
         return match ($model) {
             'text-embedding-3-small' => 1536,
             'text-embedding-3-large' => 3072,

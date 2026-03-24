@@ -13,6 +13,9 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import type { DatabaseConfig } from '@/types/tools';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     config: DatabaseConfig;
@@ -75,9 +78,9 @@ const readOnly = computed({
 });
 
 const driverOptions = [
-    { value: 'pgsql', label: 'PostgreSQL', defaultPort: 5432 },
-    { value: 'mysql', label: 'MySQL', defaultPort: 3306 },
-    { value: 'sqlite', label: 'SQLite', defaultPort: null },
+    { value: 'pgsql', label: t('tools.config.database.postgresql'), defaultPort: 5432 },
+    { value: 'mysql', label: t('tools.config.database.mysql'), defaultPort: 3306 },
+    { value: 'sqlite', label: t('tools.config.database.sqlite'), defaultPort: null },
     { value: 'sqlsrv', label: 'SQL Server', defaultPort: 1433 },
 ];
 

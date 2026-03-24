@@ -11,20 +11,22 @@
     "require": {
         "php": "^8.4",
         "inertiajs/inertia-laravel": "^2.0",
-        "laravel/framework": "^12.0",
+        "laravel/ai": "^0.3.2",
+        "laravel/framework": "^13.0",
         "laravel/horizon": "^5.40",
-        "laravel/tinker": "^2.10.1",
+        "laravel/reverb": "^1.8",
+        "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.9",
-        "laravel/workos": "^0.1.0",
+        "laravel/workos": "^0.6.0",
         "league/flysystem-aws-s3-v3": "^3.0",
         "pgvector/pgvector": "^0.2.2",
         "phpoffice/phpword": "^1.4",
         "predis/predis": "^3.3",
-        "prism-php/prism": "^0.99.1",
         "smalot/pdfparser": "^2.12"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "laravel/boost": "^2.3",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.24",
         "laravel/sail": "^1.41",
@@ -56,7 +58,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan horizon\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,horizon,logs,vite --kill-others"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74,#86efac\" \"php artisan serve\" \"php artisan horizon\" \"php artisan reverb:start\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,horizon,reverb,logs,vite --kill-others"
         ],
         "dev:ssr": [
             "npm run build:ssr",
@@ -72,7 +74,8 @@
             "@php artisan package:discover --ansi"
         ],
         "post-update-cmd": [
-            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+            "@php artisan vendor:publish --tag=laravel-assets --ansi --force",
+            "@php artisan boost:update --ansi"
         ],
         "post-root-package-install": [
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""

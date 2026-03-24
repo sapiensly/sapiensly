@@ -124,6 +124,7 @@ async function handleSendMessage(content: string) {
         { message: content },
         {
             preserveScroll: true,
+            preserveState: true,
             onSuccess: () => {
                 // Start streaming response
                 const streamUrl = TeamStreamController.stream({

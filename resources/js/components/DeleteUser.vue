@@ -13,27 +13,30 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Form } from '@inertiajs/vue3';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 </script>
 
 <template>
     <div class="space-y-6">
         <HeadingSmall
-            title="Delete account"
-            description="Delete your account and all of its resources"
+            :title="t('settings.delete_account.title')"
+            :description="t('settings.delete_account.description')"
         />
         <div
             class="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-200/10 dark:bg-red-700/10"
         >
             <div class="relative space-y-0.5 text-red-600 dark:text-red-100">
-                <p class="font-medium">Warning</p>
+                <p class="font-medium">{{ t('settings.delete_account.warning') }}</p>
                 <p class="text-sm">
-                    Please proceed with caution, this cannot be undone.
+                    {{ t('settings.delete_account.warning_text') }}
                 </p>
             </div>
             <Dialog>
                 <DialogTrigger as-child>
                     <Button variant="destructive" data-test="delete-user-button"
-                        >Delete account</Button
+                        >{{ t('settings.delete_account.title') }}</Button
                     >
                 </DialogTrigger>
                 <DialogContent>
@@ -47,15 +50,9 @@ import { Form } from '@inertiajs/vue3';
                         v-slot="{ processing, reset, clearErrors }"
                     >
                         <DialogHeader class="space-y-3">
-                            <DialogTitle
-                                >Are you sure you want to delete your
-                                account?</DialogTitle
-                            >
+                            <DialogTitle>{{ t('settings.delete_account.confirm_title') }}</DialogTitle>
                             <DialogDescription>
-                                Once your account is deleted, all of its
-                                resources and data will also be permanently
-                                deleted. Please confirm you would like to
-                                permanently delete your account.
+                                {{ t('settings.delete_account.confirm_description') }}
                             </DialogDescription>
                         </DialogHeader>
 
@@ -70,7 +67,7 @@ import { Form } from '@inertiajs/vue3';
                                         }
                                     "
                                 >
-                                    Cancel
+                                    {{ t('common.cancel') }}
                                 </Button>
                             </DialogClose>
 
@@ -80,7 +77,7 @@ import { Form } from '@inertiajs/vue3';
                                 :disabled="processing"
                                 data-test="confirm-delete-user-button"
                             >
-                                Delete account
+                                {{ t('settings.delete_account.title') }}
                             </Button>
                         </DialogFooter>
                     </Form>

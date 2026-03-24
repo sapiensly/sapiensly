@@ -4,6 +4,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { ToolReference } from '@/types/tools';
 import { Code, Server, Wrench } from 'lucide-vue-next';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     toolIds: string[];
@@ -46,7 +49,7 @@ const toolIcon = (type: string) => {
 
 <template>
     <div class="space-y-4">
-        <Label>Select Tools for Group</Label>
+        <Label>{{ t('tools.config.group.select_tools') }}</Label>
 
         <div
             v-if="availableTools.length === 0"
@@ -54,7 +57,7 @@ const toolIcon = (type: string) => {
         >
             <Wrench class="mx-auto h-8 w-8 text-muted-foreground" />
             <p class="mt-2 text-sm text-muted-foreground">
-                No active function or MCP tools available. Create and activate tools first to add them to a group.
+                {{ t('tools.config.group.no_tools') }}
             </p>
         </div>
 

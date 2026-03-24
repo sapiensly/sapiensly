@@ -46,6 +46,24 @@ trait HasVisibility
     }
 
     /**
+     * Scope: Resources for the user's current account context (fully isolated).
+     *
+     * Personal mode: only user's own resources with no org.
+     * Business mode: user's own private resources in this org + all shared resources in this org.
+     */
+    public function scopeForAccountContext(Builder $query, User $user): Builder
+    {
+        if ($user->organization_id === null) {
+            return $query->where('user_id', $user->id)->whereNull('organization_id');
+        }
+
+        return $query->where('organization_id', $user->organization_id)
+            ->where(fn (Builder $q) => $q
+                ->where('user_id', $user->id)
+                ->orWhere('visibility', Visibility::Organization));
+    }
+
+    /**
      * Scope: Resources owned by user
      */
     public function scopeOwnedBy(Builder $query, User $user): Builder
@@ -71,23 +89,22 @@ trait HasVisibility
     }
 
     /**
-     * Check if the resource is visible to the user
+     * Check if the resource is visible to the user in their current account context.
      */
     public function isVisibleTo(User $user): bool
     {
-        // Owner can always see
-        if ($this->user_id === $user->id) {
-            return true;
+        if ($user->organization_id === null) {
+            // Personal context: only own resources with no org
+            return $this->user_id === $user->id && $this->organization_id === null;
         }
 
-        // Organization members can see organization-visible resources
-        if ($this->visibility === Visibility::Organization
-            && $user->organization_id
-            && $this->organization_id === $user->organization_id) {
-            return true;
+        // Business context: resource must belong to the same org
+        if ($this->organization_id !== $user->organization_id) {
+            return false;
         }
 
-        return false;
+        // Own resources or organization-shared resources
+        return $this->user_id === $user->id || $this->visibility === Visibility::Organization;
     }
 
     /**

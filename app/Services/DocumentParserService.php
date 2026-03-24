@@ -6,6 +6,8 @@ use App\Enums\DocumentType;
 use App\Models\KnowledgeBaseDocument;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use PhpOffice\PhpWord\Element\Text;
+use PhpOffice\PhpWord\Element\TextRun;
 use PhpOffice\PhpWord\IOFactory;
 use Smalot\PdfParser\Parser as PdfParser;
 
@@ -139,8 +141,8 @@ class DocumentParserService
         }
 
         // Add newline after paragraphs
-        if ($element instanceof \PhpOffice\PhpWord\Element\TextRun ||
-            $element instanceof \PhpOffice\PhpWord\Element\Text) {
+        if ($element instanceof TextRun ||
+            $element instanceof Text) {
             // Don't add extra newlines for inline elements
         } else {
             $text .= "\n";

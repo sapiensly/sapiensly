@@ -24,7 +24,7 @@ export function useStreamingChat() {
     const isConsolidating = ref(false);
     const error = ref<string | null>(null);
 
-    let eventSource: EventSource | null = null;
+    let abortController: AbortController | null = null;
 
     function startStream(
         url: string,
@@ -51,90 +51,111 @@ export function useStreamingChat() {
         isConsolidating.value = false;
         error.value = null;
 
-        eventSource = new EventSource(url);
+        abortController = new AbortController();
 
-        eventSource.onmessage = (event) => {
-            if (event.data === '[DONE]') {
+        fetch(url, {
+            signal: abortController.signal,
+            credentials: 'same-origin',
+            headers: { Accept: 'text/event-stream' },
+        })
+            .then(async (response) => {
+                if (response.redirected) {
+                    throw new Error(`Redirected to ${response.url} — session may have expired`);
+                }
+
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${body.substring(0, 200)}`);
+                }
+
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('text/event-stream')) {
+                    const body = await response.text();
+                    throw new Error(`Expected event-stream but got ${contentType}: ${body.substring(0, 200)}`);
+                }
+
+                const reader = response.body?.getReader();
+                if (!reader) {
+                    throw new Error('No response body');
+                }
+
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const payload = line.slice(6).trim();
+
+                        if (payload === '[DONE]') {
+                            stopStream();
+                            onComplete();
+                            return;
+                        }
+
+                        try {
+                            const data: StreamChunk = JSON.parse(payload);
+
+                            if (data.error) {
+                                error.value = data.error;
+                                stopStream();
+                                onError(data.error);
+                                return;
+                            }
+
+                            if (data.type === 'execution_plan' && data.steps) {
+                                executionPlan.value = data.steps;
+                                onExecutionPlan?.(data.steps);
+                            } else if (data.type === 'step_start' && data.step !== undefined && data.agent && data.details) {
+                                currentStep.value = data.step;
+                                currentAgent.value = data.agent;
+                                onStepStart?.(data.step, data.agent, data.details);
+                            } else if (data.type === 'step_complete' && data.step !== undefined) {
+                                onStepComplete?.(data.step, data.response);
+                            } else if (data.type === 'consolidating') {
+                                isConsolidating.value = true;
+                                onConsolidating?.();
+                            } else if (data.type === 'tool_call' && data.tool) {
+                                const toolCall: ToolCall = { name: data.tool };
+                                toolCalls.value.push(toolCall);
+                                onToolCall?.(toolCall);
+                            } else if (data.type === 'knowledge_base' && data.name) {
+                                const kb: KnowledgeBaseRef = { name: data.name, id: data.id };
+                                knowledgeBases.value.push(kb);
+                                onKnowledgeBase?.(kb);
+                            } else if (data.content) {
+                                streamingContent.value += data.content;
+                                onChunk(data.content);
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse SSE message:', e);
+                        }
+                    }
+                }
+
+                // Stream ended without [DONE]
                 stopStream();
                 onComplete();
-                return;
-            }
-
-            try {
-                const data: StreamChunk = JSON.parse(event.data);
-
-                if (data.error) {
-                    error.value = data.error;
-                    stopStream();
-                    onError(data.error);
-                    return;
-                }
-
-                // Handle execution plan event
-                if (data.type === 'execution_plan' && data.steps) {
-                    executionPlan.value = data.steps;
-                    onExecutionPlan?.(data.steps);
-                    return;
-                }
-
-                // Handle step start event
-                if (data.type === 'step_start' && data.step !== undefined && data.agent && data.details) {
-                    currentStep.value = data.step;
-                    currentAgent.value = data.agent;
-                    onStepStart?.(data.step, data.agent, data.details);
-                    return;
-                }
-
-                // Handle step complete event
-                if (data.type === 'step_complete' && data.step !== undefined) {
-                    onStepComplete?.(data.step, data.response);
-                    return;
-                }
-
-                // Handle consolidating event
-                if (data.type === 'consolidating') {
-                    isConsolidating.value = true;
-                    onConsolidating?.();
-                    return;
-                }
-
-                // Handle tool call events
-                if (data.type === 'tool_call' && data.tool) {
-                    const toolCall: ToolCall = { name: data.tool };
-                    toolCalls.value.push(toolCall);
-                    onToolCall?.(toolCall);
-                    return;
-                }
-
-                // Handle knowledge base events
-                if (data.type === 'knowledge_base' && data.name) {
-                    const kb: KnowledgeBaseRef = { name: data.name, id: data.id };
-                    knowledgeBases.value.push(kb);
-                    onKnowledgeBase?.(kb);
-                    return;
-                }
-
-                // Handle content
-                if (data.content) {
-                    streamingContent.value += data.content;
-                    onChunk(data.content);
-                }
-            } catch (e) {
-                console.error('Failed to parse SSE message:', e);
-            }
-        };
-
-        eventSource.onerror = () => {
-            error.value = 'Connection lost. Please try again.';
-            stopStream();
-            onError(error.value);
-        };
+            })
+            .catch((err) => {
+                if (err.name === 'AbortError') return;
+                error.value = err.message || 'Connection lost. Please try again.';
+                stopStream();
+                onError(error.value);
+            });
     }
 
     function stopStream() {
-        if (eventSource) {
-            eventSource.close();
-            eventSource = null;
+        if (abortController) {
+            abortController.abort();
+            abortController = null;
         }
         isStreaming.value = false;
     }

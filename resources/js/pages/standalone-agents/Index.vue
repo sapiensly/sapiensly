@@ -21,6 +21,10 @@ import type {
 } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Bot, Brain, Database, MessageSquare, Plus, Users, Wrench, Zap } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     agents: PaginatedAgents;
@@ -31,7 +35,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Agents', href: '#' }];
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [{ title: t('agents.index.heading'), href: '#' }]);
 
 const agentIcon = (type: AgentType) => {
     switch (type) {
@@ -72,20 +76,20 @@ const totalAgents = Object.values(props.agentsByType).reduce(
 </script>
 
 <template>
-    <Head title="Agents" />
+    <Head :title="t('agents.index.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-6xl">
                 <div class="mb-8 flex items-center justify-between">
                     <Heading
-                        title="Agents"
-                        description="Manage your standalone agents by type"
+                        :title="t('agents.index.heading')"
+                        :description="t('agents.index.description')"
                     />
                     <Button as-child>
                         <Link :href="AgentController.create().url">
                             <Plus class="mr-2 h-4 w-4" />
-                            New Agent
+                            {{ t('agents.index.new_agent') }}
                         </Link>
                     </Button>
                 </div>
@@ -97,7 +101,7 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                 >
                     <TabsList>
                         <TabsTrigger value="all">
-                            All ({{ totalAgents }})
+                            {{ t('common.all') }} ({{ totalAgents }})
                         </TabsTrigger>
                         <TabsTrigger
                             v-for="type in agentTypes"
@@ -116,17 +120,17 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                 <div v-if="agents.data.length === 0">
                     <EmptyState
                         v-if="!currentType"
-                        title="No agents yet"
-                        description="Create your first standalone agent to get started. Agents can be configured independently with knowledge bases and tools."
+                        :title="t('agents.index.no_agents')"
+                        :description="t('agents.index.no_agents_description')"
                         :create-url="AgentController.create().url"
-                        create-label="Create Agent"
+                        :create-label="t('agents.index.create_agent')"
                     />
                     <EmptyState
                         v-else
-                        :title="`No ${currentType} agents`"
-                        :description="`You don't have any ${currentType} agents yet.`"
+                        :title="t('agents.index.no_agents_filtered')"
+                        :description="t('agents.index.no_agents_type')"
                         :create-url="`${AgentController.create().url}?type=${currentType}`"
-                        :create-label="`Create ${currentType.charAt(0).toUpperCase() + currentType.slice(1)} Agent`"
+                        :create-label="t('agents.index.create_agent')"
                     />
                 </div>
 
@@ -180,20 +184,20 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                                         class="flex items-center gap-1"
                                     >
                                         <Database class="h-4 w-4" />
-                                        {{ agent.knowledge_bases_count }} KB
+                                        {{ agent.knowledge_bases_count }} {{ t('agents.index.kb') }}
                                     </div>
                                     <div
                                         v-if="agent.tools_count"
                                         class="flex items-center gap-1"
                                     >
                                         <Wrench class="h-4 w-4" />
-                                        {{ agent.tools_count }} tools
+                                        {{ agent.tools_count }} {{ t('agents.index.tools') }}
                                     </div>
                                 </div>
                                 <Button variant="outline" size="sm" as-child>
                                     <Link :href="AgentController.chat({ agent: agent.id }).url">
                                         <MessageSquare class="mr-2 h-4 w-4" />
-                                        Test
+                                        {{ t('common.test') }}
                                     </Link>
                                 </Button>
                             </div>

@@ -114,19 +114,52 @@ class OrganizationService
     }
 
     /**
+     * Switch the user's active account context.
+     *
+     * Pass null to switch to personal mode.
+     * Pass an organization ID to switch to that org's context.
+     */
+    public function switchAccount(User $user, ?string $organizationId): void
+    {
+        if ($organizationId === null) {
+            $user->update(['organization_id' => null]);
+
+            return;
+        }
+
+        $hasActiveMembership = OrganizationMembership::where('user_id', $user->id)
+            ->where('organization_id', $organizationId)
+            ->where('status', MembershipStatus::Active)
+            ->exists();
+
+        if (! $hasActiveMembership) {
+            throw new \RuntimeException('User does not have an active membership in this organization.');
+        }
+
+        $user->update(['organization_id' => $organizationId]);
+    }
+
+    /**
      * Set user's primary organization.
+     *
+     * Preserves user's current organization_id if the membership is still active.
+     * Only clears if the current membership was deactivated.
+     * New users stay in personal mode (null).
      */
     protected function setUserPrimaryOrganization(User $user): void
     {
-        // Prefer admin role, then any active membership
-        $primaryMembership = OrganizationMembership::where('user_id', $user->id)
-            ->where('status', MembershipStatus::Active)
-            ->orderByRaw("CASE WHEN role = 'admin' THEN 0 ELSE 1 END")
-            ->first();
+        if ($user->organization_id) {
+            $currentMembershipActive = OrganizationMembership::where('user_id', $user->id)
+                ->where('organization_id', $user->organization_id)
+                ->where('status', MembershipStatus::Active)
+                ->exists();
 
-        $user->update([
-            'organization_id' => $primaryMembership?->organization_id,
-        ]);
+            if ($currentMembershipActive) {
+                return;
+            }
+        }
+
+        $user->update(['organization_id' => null]);
     }
 
     /**

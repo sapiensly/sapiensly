@@ -40,6 +40,9 @@ import {
     Users,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 import { Bar, Doughnut, Line } from 'vue-chartjs';
 
 // Register Chart.js components
@@ -78,9 +81,9 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Chatbots', href: ChatbotController.index().url },
+    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
     { title: props.chatbot.name, href: ChatbotController.show({ chatbot: props.chatbot.id }).url },
-    { title: 'Analytics', href: '#' },
+    { title: t('chatbots.analytics.title'), href: '#' },
 ]);
 
 // Date range form
@@ -134,7 +137,7 @@ const conversationsChartOptions = {
 };
 
 const ratingsChartData = computed(() => ({
-    labels: ['1 Star', '2 Stars', '3 Stars', '4 Stars', '5 Stars'],
+    labels: [t('chatbots.conversation.star_1'), t('chatbots.conversation.star_2'), t('chatbots.conversation.star_3'), t('chatbots.conversation.star_4'), t('chatbots.conversation.star_5')],
     datasets: [
         {
             label: 'Ratings',
@@ -222,7 +225,7 @@ const hasResponseTimes = computed(() => {
 </script>
 
 <template>
-    <Head :title="`Analytics - ${chatbot.name}`" />
+    <Head :title="`${t('chatbots.analytics.title')} - ${chatbot.name}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">

@@ -24,6 +24,8 @@ Route::middleware([
     // New document attachment routes (Document model)
     Route::post('knowledge-bases/{knowledge_base}/attach-documents', [KnowledgeBaseController::class, 'attachDocuments'])
         ->name('knowledge-bases.attach-documents');
+    Route::post('knowledge-bases/{knowledge_base}/reprocess-document/{document}', [KnowledgeBaseController::class, 'reprocessDocument'])
+        ->name('knowledge-bases.reprocess-document');
     Route::delete('knowledge-bases/{knowledge_base}/detach-document/{document}', [KnowledgeBaseController::class, 'detachDocument'])
         ->name('knowledge-bases.detach-document');
 });

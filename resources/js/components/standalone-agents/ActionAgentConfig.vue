@@ -6,6 +6,9 @@ import { Label } from '@/components/ui/label';
 import type { ActionAgentConfig, ToolReference } from '@/types/agents';
 import { Wrench } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     config: ActionAgentConfig;
@@ -85,14 +88,14 @@ const toolTypeLabel = (type: string) => {
 <template>
     <div class="space-y-6">
         <div class="space-y-4">
-            <Label>Tools</Label>
+            <Label>{{ t('agents.config.action.tools') }}</Label>
             <div v-if="tools.length === 0" class="rounded-lg border border-dashed p-6 text-center">
                 <Wrench class="mx-auto h-8 w-8 text-muted-foreground" />
                 <p class="mt-2 text-sm text-muted-foreground">
-                    No active tools available.
+                    {{ t('agents.config.action.no_tools') }}
                 </p>
                 <p class="mt-1 text-xs text-muted-foreground">
-                    Create tools and set their status to "Active" to enable action capabilities.
+                    {{ t('agents.config.action.create_tools_note') }}
                 </p>
             </div>
             <div v-else class="space-y-2">

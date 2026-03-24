@@ -27,6 +27,9 @@ import type { Tool, ToolType } from '@/types/tools';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Braces, Code, Database, Globe, Layers, Pencil, Server, Trash2, Wrench } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     tool: Tool;
@@ -35,7 +38,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Tools', href: ToolController.index().url },
+    { title: t('tools.index.heading'), href: ToolController.index().url },
     { title: props.tool.name, href: '#' },
 ]);
 
@@ -153,29 +156,29 @@ const databaseConfig = computed(() => {
                         <Button variant="outline" as-child>
                             <Link :href="ToolController.edit({ tool: tool.id }).url">
                                 <Pencil class="mr-2 h-4 w-4" />
-                                Edit
+                                {{ t('common.edit') }}
                             </Link>
                         </Button>
                         <Dialog>
                             <DialogTrigger as-child>
                                 <Button variant="destructive">
                                     <Trash2 class="mr-2 h-4 w-4" />
-                                    Delete
+                                    {{ t('common.delete') }}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>Delete Tool</DialogTitle>
+                                    <DialogTitle>{{ t('tools.show.delete_tool') }}</DialogTitle>
                                     <DialogDescription>
-                                        Are you sure you want to delete "{{ tool.name }}"? This action cannot be undone.
+                                        {{ t('common.confirm_delete') }} "{{ tool.name }}"? {{ t('common.action_irreversible') }}
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
                                     <DialogClose as-child>
-                                        <Button variant="outline">Cancel</Button>
+                                        <Button variant="outline">{{ t('common.cancel') }}</Button>
                                     </DialogClose>
                                     <Button variant="destructive" @click="deleteTool">
-                                        Delete
+                                        {{ t('common.delete') }}
                                     </Button>
                                 </DialogFooter>
                             </DialogContent>
@@ -186,20 +189,20 @@ const databaseConfig = computed(() => {
                 <div class="space-y-8">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Configuration</CardTitle>
+                            <CardTitle>{{ t('tools.show.configuration') }}</CardTitle>
                             <CardDescription>
-                                Tool type and settings
+                                {{ t('tools.show.config_description') }}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <dl class="grid gap-4 sm:grid-cols-2">
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">Type</dt>
+                                    <dt class="text-sm font-medium text-muted-foreground">{{ t('common.type') }}</dt>
                                     <dd class="mt-1 capitalize">{{ tool.type }}</dd>
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">Validated</dt>
-                                    <dd class="mt-1">{{ tool.is_validated ? 'Yes' : 'No' }}</dd>
+                                    <dt class="text-sm font-medium text-muted-foreground">{{ t('tools.show.validated') }}</dt>
+                                    <dd class="mt-1">{{ tool.is_validated ? t('common.yes') : t('common.no') }}</dd>
                                 </div>
                             </dl>
                         </CardContent>

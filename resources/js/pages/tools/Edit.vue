@@ -25,6 +25,9 @@ import type { BreadcrumbItem } from '@/types';
 import type { Tool, ToolReference, ToolTypeOption } from '@/types/tools';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     tool: Tool;
@@ -35,9 +38,9 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Tools', href: ToolController.index().url },
+    { title: t('tools.index.heading'), href: ToolController.index().url },
     { title: props.tool.name, href: ToolController.show({ tool: props.tool.id }).url },
-    { title: 'Edit', href: '#' },
+    { title: t('common.edit'), href: '#' },
 ]);
 
 const form = useForm({
@@ -48,11 +51,11 @@ const form = useForm({
     tool_ids: props.tool.group_items?.map((item) => item.tool_id) ?? [],
 });
 
-const statusOptions = [
-    { value: 'draft', label: 'Draft' },
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' },
-];
+const statusOptions = computed(() => [
+    { value: 'draft', label: t('common.draft') },
+    { value: 'active', label: t('common.active') },
+    { value: 'inactive', label: t('common.inactive') },
+]);
 
 const submit = () => {
     form.put(ToolController.update({ tool: props.tool.id }).url);
@@ -60,41 +63,41 @@ const submit = () => {
 </script>
 
 <template>
-    <Head :title="`Edit ${tool.name}`" />
+    <Head :title="`${t('tools.edit.title')} ${tool.name}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-2xl">
                 <Heading
-                    :title="`Edit ${tool.name}`"
-                    description="Update your tool configuration"
+                    :title="`${t('tools.edit.title')} ${tool.name}`"
+                    :description="t('tools.edit.description')"
                 />
 
                 <form class="mt-8 space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Basic Information"
-                            description="Name and describe your tool"
+                            :title="t('tools.edit.basic_info')"
+                            :description="t('tools.edit.basic_info_description')"
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">Tool Name</Label>
+                                <Label for="name">{{ t('tools.edit.tool_name') }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    placeholder="My Tool"
+                                    :placeholder="t('tools.edit.tool_name_placeholder')"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">Description</Label>
+                                <Label for="description">{{ t('tools.edit.description_label') }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    placeholder="What does this tool do?"
+                                    :placeholder="t('tools.edit.description_placeholder')"
                                     rows="3"
                                 />
                                 <InputError :message="form.errors.description" />
@@ -123,8 +126,8 @@ const submit = () => {
 
                     <div class="space-y-6">
                         <HeadingSmall
-                            :title="`${tool.type.charAt(0).toUpperCase() + tool.type.slice(1)} Configuration`"
-                            description="Type-specific settings for this tool"
+                            :title="t('tools.edit.config_title')"
+                            :description="t('tools.edit.config_description')"
                         />
 
                         <FunctionToolConfig
@@ -168,11 +171,11 @@ const submit = () => {
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" as-child>
                             <Link :href="ToolController.show({ tool: tool.id }).url">
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button type="submit" :disabled="form.processing">
-                            Save Changes
+                            {{ t('common.save_changes') }}
                         </Button>
                     </div>
                 </form>

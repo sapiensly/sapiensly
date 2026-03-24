@@ -62,7 +62,7 @@ class UpdateChatbotRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'config.appearance.primary_color.regex' => 'Color must be a valid hex code (e.g., #3B82F6).',
+            'config.appearance.primary_color.regex' => __('Color must be a valid hex code (e.g., #3B82F6).'),
         ];
     }
 

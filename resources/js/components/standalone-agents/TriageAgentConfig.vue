@@ -5,6 +5,9 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import type { TriageAgentConfig } from '@/types/agents';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     config: TriageAgentConfig;
@@ -43,7 +46,7 @@ const contentFilters = computed({
     <div class="space-y-6">
         <div class="space-y-4">
             <div class="flex items-center justify-between">
-                <Label>Temperature</Label>
+                <Label>{{ t('agents.config.triage.temperature') }}</Label>
                 <span class="text-sm text-muted-foreground">
                     {{ temperature[0].toFixed(2) }}
                 </span>
@@ -56,18 +59,18 @@ const contentFilters = computed({
                 class="w-full"
             />
             <p class="text-xs text-muted-foreground">
-                Lower values make responses more focused and deterministic. Higher values make responses more creative.
+                {{ t('agents.config.triage.temperature_description') }}
             </p>
             <InputError :message="errors['config.temperature']" />
         </div>
 
         <div class="space-y-4">
-            <Label>Guardrails</Label>
+            <Label>{{ t('agents.config.triage.guardrails') }}</Label>
             <div class="flex items-center justify-between rounded-lg border p-4">
                 <div class="space-y-0.5">
-                    <div class="text-sm font-medium">Content Filters</div>
+                    <div class="text-sm font-medium">{{ t('agents.config.triage.content_filters') }}</div>
                     <div class="text-xs text-muted-foreground">
-                        Enable content filtering for safety
+                        {{ t('agents.config.triage.content_filters_description') }}
                     </div>
                 </div>
                 <Switch v-model:checked="contentFilters" />

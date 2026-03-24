@@ -17,6 +17,10 @@ import type { BreadcrumbItem } from '@/types';
 import type { PaginatedTools, ToolType, ToolTypeOption } from '@/types/tools';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Code, Layers, Plus, Server, Wrench } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     tools: PaginatedTools;
@@ -27,7 +31,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Tools', href: '#' }];
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [{ title: t('tools.index.heading'), href: '#' }]);
 
 const toolIcon = (type: ToolType) => {
     switch (type) {
@@ -68,20 +72,20 @@ const totalTools = Object.values(props.toolsByType).reduce(
 </script>
 
 <template>
-    <Head title="Tools" />
+    <Head :title="t('tools.index.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-6xl">
                 <div class="mb-8 flex items-center justify-between">
                     <Heading
-                        title="Tools"
-                        description="Manage your tools for agent actions"
+                        :title="t('tools.index.heading')"
+                        :description="t('tools.index.description')"
                     />
                     <Button as-child>
                         <Link :href="ToolController.create().url">
                             <Plus class="mr-2 h-4 w-4" />
-                            New Tool
+                            {{ t('tools.index.new_tool') }}
                         </Link>
                     </Button>
                 </div>
@@ -93,7 +97,7 @@ const totalTools = Object.values(props.toolsByType).reduce(
                 >
                     <TabsList>
                         <TabsTrigger value="all">
-                            All ({{ totalTools }})
+                            {{ t('common.all') }} ({{ totalTools }})
                         </TabsTrigger>
                         <TabsTrigger
                             v-for="type in toolTypes"
@@ -112,17 +116,17 @@ const totalTools = Object.values(props.toolsByType).reduce(
                 <div v-if="tools.data.length === 0">
                     <EmptyState
                         v-if="!currentType"
-                        title="No tools yet"
-                        description="Create your first tool to enable action capabilities for your agents."
+                        :title="t('tools.index.no_tools')"
+                        :description="t('tools.index.no_tools_description')"
                         :create-url="ToolController.create().url"
-                        create-label="Create Tool"
+                        :create-label="t('tools.index.create_tool')"
                     />
                     <EmptyState
                         v-else
-                        :title="`No ${currentType} tools`"
-                        :description="`You don't have any ${currentType} tools yet.`"
+                        :title="t('tools.index.no_tools_filtered')"
+                        :description="t('tools.index.no_tools_type')"
                         :create-url="`${ToolController.create().url}?type=${currentType}`"
-                        create-label="Create Tool"
+                        :create-label="t('tools.index.create_tool')"
                     />
                 </div>
 
@@ -163,7 +167,7 @@ const totalTools = Object.values(props.toolsByType).reduce(
                                         v-if="tool.is_validated"
                                         class="text-green-600"
                                     >
-                                        Validated
+                                        {{ t('tools.index.validated') }}
                                     </span>
                                 </div>
                             </CardContent>

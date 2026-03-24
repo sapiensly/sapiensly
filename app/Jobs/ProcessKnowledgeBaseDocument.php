@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Enums\KnowledgeBaseStatus;
+use App\Events\DocumentStatusChanged;
 use App\Models\KnowledgeBaseChunk;
 use App\Models\KnowledgeBaseDocument;
 use App\Services\ChunkingService;
@@ -52,6 +53,8 @@ class ProcessKnowledgeBaseDocument implements ShouldQueue
             // Update status to processing
             $document->update(['embedding_status' => KnowledgeBaseStatus::Processing]);
             $knowledgeBase->update(['status' => KnowledgeBaseStatus::Processing]);
+
+            $this->broadcastStatus($document, $knowledgeBase, KnowledgeBaseStatus::Processing);
 
             // Parse document
             Log::info("Parsing document: {$document->id}");
@@ -119,6 +122,8 @@ class ProcessKnowledgeBaseDocument implements ShouldQueue
             $this->updateKnowledgeBaseCounts($knowledgeBase);
             $this->updateKnowledgeBaseStatus($knowledgeBase);
 
+            $this->broadcastStatus($document, $knowledgeBase->fresh(), KnowledgeBaseStatus::Ready);
+
             Log::info("Successfully processed document: {$document->id}");
 
         } catch (\Throwable $e) {
@@ -135,8 +140,30 @@ class ProcessKnowledgeBaseDocument implements ShouldQueue
             // Check if all documents have failed
             $this->updateKnowledgeBaseStatus($knowledgeBase);
 
+            $this->broadcastStatus($document, $knowledgeBase->fresh(), KnowledgeBaseStatus::Failed, $e->getMessage());
+
             throw $e;
         }
+    }
+
+    /**
+     * Broadcast document status change via WebSocket.
+     */
+    private function broadcastStatus(
+        KnowledgeBaseDocument $document,
+        $knowledgeBase,
+        KnowledgeBaseStatus $status,
+        ?string $errorMessage = null,
+    ): void {
+        DocumentStatusChanged::dispatch(
+            $knowledgeBase->id,
+            $document->id,
+            $status->value,
+            $errorMessage,
+            $knowledgeBase->status->value ?? $knowledgeBase->status,
+            $knowledgeBase->document_count,
+            $knowledgeBase->chunk_count,
+        );
     }
 
     /**

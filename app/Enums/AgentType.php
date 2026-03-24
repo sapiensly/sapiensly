@@ -11,18 +11,18 @@ enum AgentType: string
     public function label(): string
     {
         return match ($this) {
-            self::Triage => 'Triage Agent',
-            self::Knowledge => 'Knowledge Agent',
-            self::Action => 'Action Agent',
+            self::Triage => __('Triage Agent'),
+            self::Knowledge => __('Knowledge Agent'),
+            self::Action => __('Action Agent'),
         };
     }
 
     public function description(): string
     {
         return match ($this) {
-            self::Triage => 'Classifies intent, urgency, and sentiment',
-            self::Knowledge => 'Searches company documentation with RAG',
-            self::Action => 'Executes real-world operations via tools',
+            self::Triage => __('Classifies intent, urgency, and sentiment'),
+            self::Knowledge => __('Searches company documentation with RAG'),
+            self::Action => __('Executes real-world operations via tools'),
         };
     }
 }

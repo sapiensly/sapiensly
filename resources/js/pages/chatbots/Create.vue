@@ -19,7 +19,10 @@ import type { BreadcrumbItem } from '@/types';
 import type { ChatbotAgent, ChatbotAgentTeam, ChatbotConfig, VisibilityOption } from '@/types/chatbot';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Bot, Users } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     agents: ChatbotAgent[];
@@ -31,10 +34,10 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Chatbots', href: ChatbotController.index().url },
-    { title: 'Create', href: '#' },
-];
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
+    { title: t('common.create'), href: '#' },
+]);
 
 const form = useForm({
     name: '',
@@ -53,42 +56,42 @@ const submit = () => {
 </script>
 
 <template>
-    <Head title="Create Chatbot" />
+    <Head :title="t('chatbots.create.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-2xl">
                 <Heading
-                    title="Create Chatbot"
-                    description="Create a new embeddable chatbot widget"
+                    :title="t('chatbots.create.heading')"
+                    :description="t('chatbots.create.description')"
                 />
 
                 <form class="mt-8 space-y-8" @submit.prevent="submit">
                     <!-- Basic Information -->
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Basic Information"
-                            description="Name and describe your chatbot"
+                            :title="t('chatbots.create.basic_info')"
+                            :description="t('chatbots.create.basic_info_description')"
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">Name</Label>
+                                <Label for="name">{{ t('common.name') }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    placeholder="Customer Support"
+                                    :placeholder="t('chatbots.create.name_placeholder')"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">Description</Label>
+                                <Label for="description">{{ t('chatbots.create.description_label') }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    placeholder="What does this chatbot help with?"
+                                    :placeholder="t('chatbots.create.description_placeholder')"
                                     rows="3"
                                 />
                                 <InputError :message="form.errors.description" />
@@ -99,8 +102,8 @@ const submit = () => {
                     <!-- Target Selection -->
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Select Target"
-                            description="Choose which agent or team will power this chatbot"
+                            :title="t('chatbots.create.select_agent')"
+                            :description="t('chatbots.create.select_agent_description')"
                         />
 
                         <div class="grid gap-4">
@@ -113,7 +116,7 @@ const submit = () => {
                                     @click="targetType = 'agent'; form.agent_team_id = null"
                                 >
                                     <Bot class="mr-2 h-4 w-4" />
-                                    Single Agent
+                                    {{ t('chatbots.create.single_agent') }}
                                 </Button>
                                 <Button
                                     type="button"
@@ -122,16 +125,16 @@ const submit = () => {
                                     @click="targetType = 'team'; form.agent_id = null"
                                 >
                                     <Users class="mr-2 h-4 w-4" />
-                                    Agent Team
+                                    {{ t('chatbots.create.agents_team') }}
                                 </Button>
                             </div>
 
                             <!-- Agent Selection -->
                             <div v-if="targetType === 'agent'" class="grid gap-2">
-                                <Label>Select Agent</Label>
+                                <Label>{{ t('chatbots.create.select_agent') }}</Label>
                                 <Select v-model="form.agent_id">
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Choose an agent" />
+                                        <SelectValue :placeholder="t('chatbots.create.choose_agent')" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -144,14 +147,14 @@ const submit = () => {
                                     </SelectContent>
                                 </Select>
                                 <p class="text-xs text-muted-foreground">
-                                    Use a single agent for simple use cases
+                                    {{ t('chatbots.create.single_agent_note') }}
                                 </p>
                                 <InputError :message="form.errors.agent_id" />
                             </div>
 
                             <!-- Team Selection -->
                             <div v-if="targetType === 'team'" class="grid gap-2">
-                                <Label>Select Agent Team</Label>
+                                <Label>Select Agents Team</Label>
                                 <Select v-model="form.agent_team_id">
                                     <SelectTrigger>
                                         <SelectValue placeholder="Choose an agent team" />
@@ -278,11 +281,11 @@ const submit = () => {
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" as-child>
                             <Link :href="ChatbotController.index().url">
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button type="submit" :disabled="form.processing">
-                            Create Chatbot
+                            {{ t('chatbots.index.create_chatbot') }}
                         </Button>
                     </div>
                 </form>

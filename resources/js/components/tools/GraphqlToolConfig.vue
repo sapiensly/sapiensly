@@ -12,6 +12,9 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import type { GraphqlConfig } from '@/types/tools';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     config: GraphqlConfig;
@@ -60,14 +63,14 @@ const authType = computed({
 });
 
 const operationTypes = [
-    { value: 'query', label: 'Query' },
-    { value: 'mutation', label: 'Mutation' },
+    { value: 'query', label: t('tools.config.graphql.query') },
+    { value: 'mutation', label: t('tools.config.graphql.mutation') },
 ];
 
 const authOptions = [
-    { value: 'none', label: 'None' },
-    { value: 'bearer', label: 'Bearer Token' },
-    { value: 'api_key', label: 'API Key' },
+    { value: 'none', label: t('tools.config.graphql.auth_none') },
+    { value: 'bearer', label: t('tools.config.graphql.auth_bearer') },
+    { value: 'api_key', label: t('tools.config.graphql.auth_api_key') },
 ];
 
 const queryPlaceholder = `query GetOrder($id: ID!) {

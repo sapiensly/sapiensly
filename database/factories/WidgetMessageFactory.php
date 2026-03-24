@@ -8,7 +8,7 @@ use App\Models\WidgetMessage;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\WidgetMessage>
+ * @extends Factory<WidgetMessage>
  */
 class WidgetMessageFactory extends Factory
 {

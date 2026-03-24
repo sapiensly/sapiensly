@@ -2,6 +2,8 @@
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import { edit } from '@/routes/profile';
 import { Form, Head, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 import DeleteUser from '@/components/DeleteUser.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
@@ -13,18 +15,20 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 
+const { t } = useI18n();
+
 interface Props {
     status?: string;
 }
 
 defineProps<Props>();
 
-const breadcrumbItems: BreadcrumbItem[] = [
+const breadcrumbItems = computed<BreadcrumbItem[]>(() => [
     {
-        title: 'Profile settings',
+        title: t('settings.profile.breadcrumb'),
         href: edit().url,
     },
-];
+]);
 
 const page = usePage();
 const user = page.props.auth.user;
@@ -32,13 +36,13 @@ const user = page.props.auth.user;
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbItems">
-        <Head title="Profile settings" />
+        <Head :title="t('settings.profile.breadcrumb')" />
 
         <SettingsLayout>
             <div class="flex flex-col space-y-6">
                 <HeadingSmall
-                    title="Profile information"
-                    description="Update your name and email address"
+                    :title="t('settings.profile.title')"
+                    :description="t('settings.profile.description')"
                 />
 
                 <Form
@@ -47,7 +51,7 @@ const user = page.props.auth.user;
                     v-slot="{ errors, processing, recentlySuccessful }"
                 >
                     <div class="grid gap-2">
-                        <Label for="name">Name</Label>
+                        <Label for="name">{{ t('settings.profile.name') }}</Label>
                         <Input
                             id="name"
                             class="mt-1 block w-full"
@@ -61,7 +65,7 @@ const user = page.props.auth.user;
                     </div>
 
                     <div class="grid gap-2">
-                        <Label for="email">Email address</Label>
+                        <Label for="email">{{ t('settings.profile.email') }}</Label>
                         <Input
                             id="email"
                             type="email"
@@ -76,11 +80,24 @@ const user = page.props.auth.user;
                         <InputError class="mt-2" :message="errors.email" />
                     </div>
 
+                    <div class="grid gap-2">
+                        <Label for="locale">{{ t('settings.profile.language') }}</Label>
+                        <select
+                            id="locale"
+                            name="locale"
+                            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            :default-value="user.locale"
+                        >
+                            <option value="en">English</option>
+                            <option value="es">Español</option>
+                        </select>
+                    </div>
+
                     <div class="flex items-center gap-4">
                         <Button
                             :disabled="processing"
                             data-test="update-profile-button"
-                            >Save</Button
+                            >{{ t('settings.profile.save') }}</Button
                         >
 
                         <Transition
@@ -93,7 +110,7 @@ const user = page.props.auth.user;
                                 v-show="recentlySuccessful"
                                 class="text-sm text-neutral-600"
                             >
-                                Saved.
+                                {{ t('settings.profile.saved') }}
                             </p>
                         </Transition>
                     </div>

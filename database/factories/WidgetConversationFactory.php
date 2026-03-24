@@ -8,7 +8,7 @@ use App\Models\WidgetSession;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\WidgetConversation>
+ * @extends Factory<WidgetConversation>
  */
 class WidgetConversationFactory extends Factory
 {

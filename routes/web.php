@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountSwitchController;
 use App\Http\Controllers\WidgetAssetController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -18,6 +19,8 @@ Route::middleware([
     Route::get('dashboard', function () {
         return Inertia::render('Dashboard');
     })->name('dashboard');
+
+    Route::post('account/switch', AccountSwitchController::class)->name('account.switch');
 });
 
 require __DIR__.'/settings.php';
@@ -27,4 +30,5 @@ require __DIR__.'/knowledge-bases.php';
 require __DIR__.'/tools.php';
 require __DIR__.'/documents.php';
 require __DIR__.'/chatbots.php';
+require __DIR__.'/system.php';
 require __DIR__.'/auth.php';

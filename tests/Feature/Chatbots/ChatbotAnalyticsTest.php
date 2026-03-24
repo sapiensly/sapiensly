@@ -266,7 +266,7 @@ describe('ChatbotAnalyticsService', function () {
         ]);
 
         // Manually update updated_at using raw query to bypass timestamp auto-update
-        \DB::table('widget_conversations')
+        DB::table('widget_conversations')
             ->where('id', $conversation->id)
             ->update(['updated_at' => now()->subHours(1)]);
 

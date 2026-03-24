@@ -10,16 +10,16 @@ enum Visibility: string
     public function label(): string
     {
         return match ($this) {
-            self::Private => 'Private',
-            self::Organization => 'Organization',
+            self::Private => __('Private'),
+            self::Organization => __('Organization'),
         };
     }
 
     public function description(): string
     {
         return match ($this) {
-            self::Private => 'Only you can see and use this resource',
-            self::Organization => 'All members of your organization can see and use this resource',
+            self::Private => __('Only you can see and use this resource'),
+            self::Organization => __('All members of your organization can see and use this resource'),
         };
     }
 }

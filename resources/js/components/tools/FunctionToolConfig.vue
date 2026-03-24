@@ -5,6 +5,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { FunctionConfig } from '@/types/tools';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     config: FunctionConfig;
@@ -58,35 +61,35 @@ const parametersJson = computed({
 <template>
     <div class="space-y-4">
         <div class="grid gap-2">
-            <Label for="function-name">Function Name</Label>
+            <Label for="function-name">{{ t('tools.config.function.name') }}</Label>
             <Input
                 id="function-name"
                 v-model="functionName"
-                placeholder="get_weather"
+                :placeholder="t('tools.config.function.name_placeholder')"
                 class="font-mono"
             />
             <p class="text-xs text-muted-foreground">
-                The name that will be used when calling this function
+                {{ t('tools.config.function.name_description') }}
             </p>
             <InputError :message="errors['config.name']" />
         </div>
 
         <div class="grid gap-2">
-            <Label for="function-description">Function Description</Label>
+            <Label for="function-description">{{ t('tools.config.function.description') }}</Label>
             <Textarea
                 id="function-description"
                 v-model="functionDescription"
-                placeholder="Gets the current weather for a given location"
+                :placeholder="t('tools.config.function.description_example')"
                 rows="2"
             />
             <p class="text-xs text-muted-foreground">
-                Description of what this function does
+                {{ t('tools.config.function.description_hint') }}
             </p>
             <InputError :message="errors['config.description']" />
         </div>
 
         <div class="grid gap-2">
-            <Label for="parameters">Parameters Schema (JSON)</Label>
+            <Label for="parameters">{{ t('tools.config.function.parameters_schema') }}</Label>
             <Textarea
                 id="parameters"
                 v-model="parametersJson"

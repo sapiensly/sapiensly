@@ -16,6 +16,10 @@ import type { BreadcrumbItem } from '@/types';
 import type { PaginatedChatbots } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
 import { Bot, Code, MessageSquare, Plus, Users } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     chatbots: PaginatedChatbots;
@@ -23,7 +27,7 @@ interface Props {
 
 defineProps<Props>();
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Chatbots', href: '#' }];
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [{ title: t('chatbots.index.heading'), href: '#' }]);
 
 const statusVariant = (status: string) => {
     switch (status) {
@@ -38,30 +42,30 @@ const statusVariant = (status: string) => {
 </script>
 
 <template>
-    <Head title="Chatbots" />
+    <Head :title="t('chatbots.index.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-6xl">
                 <div class="mb-8 flex items-center justify-between">
                     <Heading
-                        title="Chatbots"
-                        description="Manage your embeddable chatbot widgets"
+                        :title="t('chatbots.index.heading')"
+                        :description="t('chatbots.index.description')"
                     />
                     <Button as-child>
                         <Link :href="ChatbotController.create().url">
                             <Plus class="mr-2 h-4 w-4" />
-                            New Chatbot
+                            {{ t('chatbots.index.new_chatbot') }}
                         </Link>
                     </Button>
                 </div>
 
                 <div v-if="chatbots.data.length === 0">
                     <EmptyState
-                        title="No chatbots yet"
-                        description="Create your first chatbot widget to embed on your website."
+                        :title="t('chatbots.index.no_chatbots')"
+                        :description="t('chatbots.index.no_chatbots_description')"
                         :create-url="ChatbotController.create().url"
-                        create-label="Create Chatbot"
+                        :create-label="t('chatbots.index.create_chatbot')"
                     />
                 </div>
 
@@ -111,7 +115,7 @@ const statusVariant = (status: string) => {
                                 <Button variant="outline" size="sm" as-child>
                                     <Link :href="ChatbotController.embed({ chatbot: chatbot.id }).url">
                                         <Code class="mr-1 h-4 w-4" />
-                                        Embed
+                                        {{ t('chatbots.index.embed') }}
                                     </Link>
                                 </Button>
                             </div>

@@ -20,6 +20,9 @@ import type { Chatbot, ChatbotAgent, ChatbotAgentTeam, VisibilityOption } from '
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Bot, Users } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     chatbot: Chatbot;
@@ -32,9 +35,9 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Chatbots', href: ChatbotController.index().url },
+    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
     { title: props.chatbot.name, href: ChatbotController.show({ chatbot: props.chatbot.id }).url },
-    { title: 'Edit', href: '#' },
+    { title: t('common.edit'), href: '#' },
 ]);
 
 const targetType = ref<'agent' | 'team'>(props.chatbot.agent_id ? 'agent' : 'team');
@@ -50,11 +53,11 @@ const form = useForm({
     allowed_origins: props.chatbot.allowed_origins ?? [],
 });
 
-const statusOptions = [
-    { value: 'draft', label: 'Draft' },
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' },
-];
+const statusOptions = computed(() => [
+    { value: 'draft', label: t('common.draft') },
+    { value: 'active', label: t('common.active') },
+    { value: 'inactive', label: t('common.inactive') },
+]);
 
 const submit = () => {
     form.put(ChatbotController.update({ chatbot: props.chatbot.id }).url);
@@ -62,42 +65,42 @@ const submit = () => {
 </script>
 
 <template>
-    <Head :title="`Edit ${chatbot.name}`" />
+    <Head :title="`${t('chatbots.edit.title')} ${chatbot.name}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-2xl">
                 <Heading
-                    :title="`Edit ${chatbot.name}`"
-                    description="Update your chatbot configuration"
+                    :title="`${t('chatbots.edit.title')} ${chatbot.name}`"
+                    :description="t('chatbots.edit.description')"
                 />
 
                 <form class="mt-8 space-y-8" @submit.prevent="submit">
                     <!-- Basic Information -->
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Basic Information"
-                            description="Name and describe your chatbot"
+                            :title="t('chatbots.edit.basic_info')"
+                            :description="t('chatbots.edit.basic_info_description')"
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">Name</Label>
+                                <Label for="name">{{ t('common.name') }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    placeholder="Customer Support"
+                                    :placeholder="t('chatbots.edit.name_placeholder')"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">Description</Label>
+                                <Label for="description">{{ t('chatbots.edit.description_label') }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    placeholder="What does this chatbot help with?"
+                                    :placeholder="t('chatbots.edit.description_placeholder')"
                                     rows="3"
                                 />
                                 <InputError :message="form.errors.description" />
@@ -146,8 +149,8 @@ const submit = () => {
                     <!-- Target Selection -->
                     <div class="space-y-6">
                         <HeadingSmall
-                            title="Target"
-                            description="Choose which agent or team will power this chatbot"
+                            :title="t('chatbots.edit.agent_section')"
+                            :description="t('chatbots.edit.agent_section_description')"
                         />
 
                         <div class="grid gap-4">
@@ -160,7 +163,7 @@ const submit = () => {
                                     @click="targetType = 'agent'; form.agent_team_id = null"
                                 >
                                     <Bot class="mr-2 h-4 w-4" />
-                                    Single Agent
+                                    {{ t('chatbots.create.single_agent') }}
                                 </Button>
                                 <Button
                                     type="button"
@@ -169,7 +172,7 @@ const submit = () => {
                                     @click="targetType = 'team'; form.agent_id = null"
                                 >
                                     <Users class="mr-2 h-4 w-4" />
-                                    Agent Team
+                                    {{ t('chatbots.create.agents_team') }}
                                 </Button>
                             </div>
 
@@ -195,7 +198,7 @@ const submit = () => {
 
                             <!-- Team Selection -->
                             <div v-if="targetType === 'team'" class="grid gap-2">
-                                <Label>Select Agent Team</Label>
+                                <Label>Select Agents Team</Label>
                                 <Select v-model="form.agent_team_id">
                                     <SelectTrigger>
                                         <SelectValue placeholder="Choose an agent team" />
@@ -389,11 +392,11 @@ const submit = () => {
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" as-child>
                             <Link :href="ChatbotController.show({ chatbot: chatbot.id }).url">
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button type="submit" :disabled="form.processing">
-                            Save Changes
+                            {{ t('common.save_changes') }}
                         </Button>
                     </div>
                 </form>

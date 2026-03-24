@@ -21,7 +21,7 @@ class ChatbotController extends Controller
     public function index(Request $request): Response
     {
         $chatbots = Chatbot::query()
-            ->visibleTo($request->user())
+            ->forAccountContext($request->user())
             ->with(['agent:id,name,type', 'agentTeam:id,name'])
             ->withCount(['conversations', 'sessions'])
             ->latest()
@@ -37,10 +37,9 @@ class ChatbotController extends Controller
         $user = $request->user();
 
         return Inertia::render('chatbots/Create', [
-            'agents' => Agent::visibleTo($user)
-                ->standalone()
+            'agents' => Agent::forAccountContext($user)
                 ->get(['id', 'name', 'type', 'status']),
-            'agentTeams' => AgentTeam::visibleTo($user)
+            'agentTeams' => AgentTeam::forAccountContext($user)
                 ->get(['id', 'name', 'status']),
             'defaultConfig' => Chatbot::getDefaultConfig(),
             'visibilityOptions' => collect(Visibility::cases())->map(fn ($v) => [
@@ -54,8 +53,12 @@ class ChatbotController extends Controller
 
     public function store(StoreChatbotRequest $request): RedirectResponse
     {
+        $user = $request->user();
+
         $chatbot = Chatbot::create([
-            'user_id' => $request->user()->id,
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+            'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
             'agent_id' => $request->agent_id,
             'agent_team_id' => $request->agent_team_id,
             'name' => $request->name,
@@ -113,10 +116,9 @@ class ChatbotController extends Controller
 
         return Inertia::render('chatbots/Edit', [
             'chatbot' => $chatbot->load(['agent', 'agentTeam']),
-            'agents' => Agent::visibleTo($user)
-                ->standalone()
+            'agents' => Agent::forAccountContext($user)
                 ->get(['id', 'name', 'type', 'status']),
-            'agentTeams' => AgentTeam::visibleTo($user)
+            'agentTeams' => AgentTeam::forAccountContext($user)
                 ->get(['id', 'name', 'status']),
             'visibilityOptions' => collect(Visibility::cases())->map(fn ($v) => [
                 'value' => $v->value,

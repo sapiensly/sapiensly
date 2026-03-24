@@ -27,7 +27,7 @@ export function usePreviewChat(chatbotId: string) {
     const toolCalls = ref<ToolCall[]>([]);
     const knowledgeBases = ref<KnowledgeBaseRef[]>([]);
 
-    let eventSource: EventSource | null = null;
+    let abortController: AbortController | null = null;
 
     async function init() {
         try {
@@ -124,92 +124,108 @@ export function usePreviewChat(chatbotId: string) {
                 return;
             }
 
-            // Close any existing connection
             stopStream();
-
             isStreaming.value = true;
+
+            abortController = new AbortController();
 
             const streamUrl = ChatbotPreviewController.stream.url({
                 chatbot: chatbotId,
                 conversation: conversationId.value,
             });
 
-            eventSource = new EventSource(streamUrl);
+            fetch(streamUrl, {
+                signal: abortController.signal,
+                credentials: 'same-origin',
+                headers: { Accept: 'text/event-stream' },
+            })
+                .then(async (response) => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
 
-            eventSource.onmessage = (event) => {
-                if (event.data === '[DONE]') {
+                    const reader = response.body?.getReader();
+                    if (!reader) throw new Error('No response body');
+
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (!line.startsWith('data: ')) continue;
+                            const payload = line.slice(6).trim();
+
+                            if (payload === '[DONE]') {
+                                if (messages.value[messageIndex]) {
+                                    messages.value[messageIndex].isStreaming = false;
+                                }
+                                stopStream();
+                                resolve();
+                                return;
+                            }
+
+                            try {
+                                const data = JSON.parse(payload);
+
+                                if (data.error) {
+                                    error.value = data.error;
+                                    if (messages.value[messageIndex]) {
+                                        messages.value[messageIndex].isStreaming = false;
+                                    }
+                                    stopStream();
+                                    reject(new Error(data.error));
+                                    return;
+                                }
+
+                                if (data.type === 'tool_call' && data.tool) {
+                                    toolCalls.value.push({ name: data.tool });
+                                } else if (data.type === 'knowledge_base' && data.name) {
+                                    knowledgeBases.value.push({ name: data.name, id: data.id });
+                                } else if (data.type === 'done') {
+                                    if (messages.value[messageIndex]) {
+                                        messages.value[messageIndex].isStreaming = false;
+                                    }
+                                    stopStream();
+                                    resolve();
+                                    return;
+                                } else if (data.content && messages.value[messageIndex]) {
+                                    messages.value[messageIndex].content += data.content;
+                                }
+                            } catch (e) {
+                                console.error('Failed to parse SSE message:', e);
+                            }
+                        }
+                    }
+
                     if (messages.value[messageIndex]) {
                         messages.value[messageIndex].isStreaming = false;
                     }
                     stopStream();
                     resolve();
-                    return;
-                }
-
-                try {
-                    const data = JSON.parse(event.data);
-
-                    if (data.error) {
-                        error.value = data.error;
-                        if (messages.value[messageIndex]) {
-                            messages.value[messageIndex].isStreaming = false;
-                            messages.value[messageIndex].content =
-                                messages.value[messageIndex].content || 'An error occurred.';
-                        }
-                        stopStream();
-                        reject(new Error(data.error));
-                        return;
+                })
+                .catch((err) => {
+                    if (err.name === 'AbortError') return;
+                    error.value = err.message || 'Connection lost. Please try again.';
+                    if (messages.value[messageIndex]) {
+                        messages.value[messageIndex].isStreaming = false;
                     }
-
-                    // Handle tool call events
-                    if (data.type === 'tool_call' && data.tool) {
-                        toolCalls.value.push({ name: data.tool });
-                        return;
-                    }
-
-                    // Handle knowledge base events
-                    if (data.type === 'knowledge_base' && data.name) {
-                        knowledgeBases.value.push({
-                            name: data.name,
-                            id: data.id,
-                        });
-                        return;
-                    }
-
-                    // Handle done event
-                    if (data.type === 'done') {
-                        if (messages.value[messageIndex]) {
-                            messages.value[messageIndex].isStreaming = false;
-                        }
-                        stopStream();
-                        resolve();
-                        return;
-                    }
-
-                    // Handle content - update via array index for reactivity
-                    if (data.content && messages.value[messageIndex]) {
-                        messages.value[messageIndex].content += data.content;
-                    }
-                } catch (e) {
-                    console.error('Failed to parse SSE message:', e);
-                }
-            };
-
-            eventSource.onerror = () => {
-                error.value = 'Connection lost. Please try again.';
-                if (messages.value[messageIndex]) {
-                    messages.value[messageIndex].isStreaming = false;
-                }
-                stopStream();
-                reject(new Error('Connection lost'));
-            };
+                    stopStream();
+                    reject(err);
+                });
         });
     }
 
     function stopStream() {
-        if (eventSource) {
-            eventSource.close();
-            eventSource = null;
+        if (abortController) {
+            abortController.abort();
+            abortController = null;
         }
         isStreaming.value = false;
     }

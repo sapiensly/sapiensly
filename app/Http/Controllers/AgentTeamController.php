@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Enums\AgentType;
 use App\Enums\MessageRole;
+use App\Enums\Visibility;
 use App\Http\Requests\AgentTeam\StoreAgentTeamRequest;
 use App\Http\Requests\AgentTeam\UpdateAgentTeamRequest;
 use App\Models\Agent;
 use App\Models\AgentTeam;
 use App\Models\Conversation;
+use App\Services\AiProviderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,10 +18,14 @@ use Inertia\Response;
 
 class AgentTeamController extends Controller
 {
+    public function __construct(
+        private AiProviderService $aiProviderService,
+    ) {}
+
     public function index(Request $request): Response
     {
         $teams = AgentTeam::query()
-            ->where('user_id', $request->user()->id)
+            ->forAccountContext($request->user())
             ->withCount('agents')
             ->latest()
             ->paginate(12);
@@ -33,8 +39,8 @@ class AgentTeamController extends Controller
     {
         $user = $request->user();
 
-        // Get standalone agents visible to user, grouped by type
-        $standaloneAgents = Agent::visibleTo($user)
+        // Get standalone agents in user's current account context, grouped by type
+        $standaloneAgents = Agent::forAccountContext($user)
             ->standalone()
             ->get()
             ->groupBy('type')
@@ -52,7 +58,7 @@ class AgentTeamController extends Controller
                 'label' => $type->label(),
                 'description' => $type->description(),
             ]),
-            'availableModels' => $this->getAvailableModels(),
+            'availableModels' => $this->aiProviderService->getAvailableModels($request->user()),
             'standaloneAgents' => [
                 'triage' => $standaloneAgents->get('triage', collect())->all(),
                 'knowledge' => $standaloneAgents->get('knowledge', collect())->all(),
@@ -71,12 +77,14 @@ class AgentTeamController extends Controller
 
         foreach ($agents as $agent) {
             if (! $agent->isVisibleTo($user)) {
-                abort(403, 'You do not have access to one or more selected agents.');
+                abort(403, __('You do not have access to one or more selected agents.'));
             }
         }
 
         $team = AgentTeam::create([
             'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+            'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
             'name' => $request->name,
             'description' => $request->description,
             'keywords' => $request->keywords ?? [],
@@ -91,7 +99,7 @@ class AgentTeamController extends Controller
 
     public function show(Request $request, AgentTeam $agentTeam): Response
     {
-        if ($agentTeam->user_id !== $request->user()->id) {
+        if (! $agentTeam->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -102,7 +110,7 @@ class AgentTeamController extends Controller
 
     public function edit(Request $request, AgentTeam $agentTeam): Response
     {
-        if ($agentTeam->user_id !== $request->user()->id) {
+        if (! $agentTeam->isOwnedBy($request->user())) {
             abort(403);
         }
 
@@ -113,7 +121,7 @@ class AgentTeamController extends Controller
                 'label' => $type->label(),
                 'description' => $type->description(),
             ]),
-            'availableModels' => $this->getAvailableModels(),
+            'availableModels' => $this->aiProviderService->getAvailableModels($request->user()),
         ]);
     }
 
@@ -137,7 +145,7 @@ class AgentTeamController extends Controller
 
     public function destroy(Request $request, AgentTeam $agentTeam): RedirectResponse
     {
-        if ($agentTeam->user_id !== $request->user()->id) {
+        if (! $agentTeam->isOwnedBy($request->user())) {
             abort(403);
         }
 
@@ -146,19 +154,9 @@ class AgentTeamController extends Controller
         return to_route('agent-teams.index');
     }
 
-    private function getAvailableModels(): array
-    {
-        return [
-            ['value' => 'claude-sonnet-4-20250514', 'label' => 'Claude Sonnet 4'],
-            ['value' => 'claude-opus-4-20250514', 'label' => 'Claude Opus 4'],
-            ['value' => 'gpt-4', 'label' => 'GPT-4'],
-            ['value' => 'gpt-4-turbo', 'label' => 'GPT-4 Turbo'],
-        ];
-    }
-
     public function chat(Request $request, AgentTeam $agentTeam): Response
     {
-        if ($agentTeam->user_id !== $request->user()->id) {
+        if (! $agentTeam->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -181,7 +179,7 @@ class AgentTeamController extends Controller
 
     public function sendMessage(Request $request, AgentTeam $agentTeam): RedirectResponse
     {
-        if ($agentTeam->user_id !== $request->user()->id) {
+        if (! $agentTeam->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -211,7 +209,7 @@ class AgentTeamController extends Controller
 
     public function newConversation(Request $request, AgentTeam $agentTeam): RedirectResponse
     {
-        if ($agentTeam->user_id !== $request->user()->id) {
+        if (! $agentTeam->isVisibleTo($request->user())) {
             abort(403);
         }
 

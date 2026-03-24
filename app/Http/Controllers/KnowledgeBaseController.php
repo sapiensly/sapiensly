@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DocumentType;
+use App\Enums\EmbeddingStatus;
 use App\Enums\KnowledgeBaseStatus;
 use App\Enums\Visibility;
 use App\Http\Requests\KnowledgeBase\StoreKnowledgeBaseRequest;
 use App\Http\Requests\KnowledgeBase\UpdateKnowledgeBaseRequest;
+use App\Jobs\ProcessDocumentForKnowledgeBase;
 use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Services\DocumentService;
@@ -21,7 +23,7 @@ class KnowledgeBaseController extends Controller
     public function index(Request $request): Response
     {
         $knowledgeBases = KnowledgeBase::query()
-            ->where('user_id', $request->user()->id)
+            ->forAccountContext($request->user())
             ->withCount(['documents', 'attachedDocuments'])
             ->latest()
             ->paginate(12);
@@ -50,8 +52,12 @@ class KnowledgeBaseController extends Controller
 
     public function store(StoreKnowledgeBaseRequest $request): RedirectResponse
     {
+        $user = $request->user();
+
         $knowledgeBase = KnowledgeBase::create([
-            'user_id' => $request->user()->id,
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+            'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
             'name' => $request->name,
             'description' => $request->description,
             'keywords' => $request->keywords ?? [],
@@ -67,7 +73,7 @@ class KnowledgeBaseController extends Controller
 
     public function show(Request $request, KnowledgeBase $knowledgeBase, FolderService $folderService): Response
     {
-        if ($knowledgeBase->user_id !== $request->user()->id) {
+        if (! $knowledgeBase->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -76,8 +82,8 @@ class KnowledgeBaseController extends Controller
         // Get documents attached to this KB (using new Document model)
         $attachedDocumentIds = $knowledgeBase->attachedDocuments()->pluck('documents.id')->toArray();
 
-        // Get all documents visible to user
-        $availableDocuments = Document::visibleTo($user)
+        // Get all documents in user's current account context
+        $availableDocuments = Document::forAccountContext($user)
             ->with(['folder:id,name'])
             ->get();
 
@@ -101,7 +107,7 @@ class KnowledgeBaseController extends Controller
 
     public function edit(Request $request, KnowledgeBase $knowledgeBase): Response
     {
-        if ($knowledgeBase->user_id !== $request->user()->id) {
+        if (! $knowledgeBase->isOwnedBy($request->user())) {
             abort(403);
         }
 
@@ -124,7 +130,7 @@ class KnowledgeBaseController extends Controller
 
     public function destroy(Request $request, KnowledgeBase $knowledgeBase): RedirectResponse
     {
-        if ($knowledgeBase->user_id !== $request->user()->id) {
+        if (! $knowledgeBase->isOwnedBy($request->user())) {
             abort(403);
         }
 
@@ -135,7 +141,7 @@ class KnowledgeBaseController extends Controller
 
     public function attachDocuments(Request $request, KnowledgeBase $knowledgeBase, DocumentService $documentService): RedirectResponse
     {
-        if ($knowledgeBase->user_id !== $request->user()->id) {
+        if (! $knowledgeBase->isOwnedBy($request->user())) {
             abort(403);
         }
 
@@ -160,9 +166,33 @@ class KnowledgeBaseController extends Controller
         return back();
     }
 
+    public function reprocessDocument(Request $request, KnowledgeBase $knowledgeBase, Document $document): RedirectResponse
+    {
+        if (! $knowledgeBase->isVisibleTo($request->user())) {
+            abort(403);
+        }
+
+        // Reset pivot status
+        $document->knowledgeBases()->updateExistingPivot($knowledgeBase->id, [
+            'embedding_status' => EmbeddingStatus::Pending->value,
+            'error_message' => null,
+            'updated_at' => now(),
+        ]);
+
+        // Delete existing chunks for this document in this KB
+        $knowledgeBase->chunks()
+            ->where('document_id', $document->id)
+            ->delete();
+
+        // Dispatch processing job
+        ProcessDocumentForKnowledgeBase::dispatch($document, $knowledgeBase);
+
+        return back()->with('success', __('Document reprocessing started.'));
+    }
+
     public function detachDocument(Request $request, KnowledgeBase $knowledgeBase, Document $document, DocumentService $documentService): RedirectResponse
     {
-        if ($knowledgeBase->user_id !== $request->user()->id) {
+        if (! $knowledgeBase->isOwnedBy($request->user())) {
             abort(403);
         }
 

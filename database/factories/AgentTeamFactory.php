@@ -3,11 +3,12 @@
 namespace Database\Factories;
 
 use App\Enums\AgentStatus;
+use App\Models\AgentTeam;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\AgentTeam>
+ * @extends Factory<AgentTeam>
  */
 class AgentTeamFactory extends Factory
 {

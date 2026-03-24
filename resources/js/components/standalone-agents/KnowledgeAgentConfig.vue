@@ -7,6 +7,9 @@ import { Slider } from '@/components/ui/slider';
 import type { KnowledgeAgentConfig, KnowledgeBaseReference } from '@/types/agents';
 import { Database } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     config: KnowledgeAgentConfig;
@@ -67,11 +70,11 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
 <template>
     <div class="space-y-6">
         <div class="space-y-4">
-            <Label>Knowledge Bases</Label>
+            <Label>{{ t('agents.config.knowledge.knowledge_bases') }}</Label>
             <div v-if="knowledgeBases.length === 0" class="rounded-lg border border-dashed p-6 text-center">
                 <Database class="mx-auto h-8 w-8 text-muted-foreground" />
                 <p class="mt-2 text-sm text-muted-foreground">
-                    No knowledge bases available. Create one to enable RAG capabilities.
+                    {{ t('agents.config.knowledge.no_kbs') }}
                 </p>
             </div>
             <div v-else class="space-y-2">
@@ -91,13 +94,13 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
                 </div>
             </div>
             <p class="text-xs text-muted-foreground">
-                If no knowledge bases are selected, the agent will operate in pass-through mode.
+                {{ t('agents.config.knowledge.passthrough_note') }}
             </p>
         </div>
 
         <div class="space-y-4">
             <div class="flex items-center justify-between">
-                <Label for="top-k">Top K Results</Label>
+                <Label for="top-k">{{ t('agents.config.knowledge.top_k') }}</Label>
                 <Input
                     id="top-k"
                     v-model.number="topK"

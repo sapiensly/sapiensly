@@ -26,17 +26,9 @@ class FolderService
             }
         }
 
-        $organizationId = null;
-        if ($visibility === Visibility::Organization) {
-            if (! $user->organization_id) {
-                throw new \RuntimeException('User must belong to an organization to create shared folders.');
-            }
-            $organizationId = $user->organization_id;
-        }
-
         return Folder::create([
             'user_id' => $user->id,
-            'organization_id' => $organizationId,
+            'organization_id' => $user->organization_id,
             'parent_id' => $parentId,
             'name' => $name,
             'visibility' => $visibility,
@@ -133,19 +125,18 @@ class FolderService
     }
 
     /**
-     * Get folder tree visible to user.
+     * Get folder tree for user's current account context.
      *
      * @return Collection<Folder>
      */
     public function getFolderTree(User $user): Collection
     {
-        // Get all root folders visible to user, with nested children
-        return Folder::visibleTo($user)
+        return Folder::forAccountContext($user)
             ->root()
             ->with(['children' => function ($query) use ($user) {
-                $query->visibleTo($user)
+                $query->forAccountContext($user)
                     ->with(['children' => function ($q) use ($user) {
-                        $q->visibleTo($user);
+                        $q->forAccountContext($user);
                     }]);
             }])
             ->orderBy('name')
@@ -153,13 +144,13 @@ class FolderService
     }
 
     /**
-     * Get flat list of all folders visible to user.
+     * Get flat list of all folders for user's current account context.
      *
      * @return Collection<Folder>
      */
     public function getAllFolders(User $user): Collection
     {
-        return Folder::visibleTo($user)
+        return Folder::forAccountContext($user)
             ->orderBy('name')
             ->get();
     }
@@ -167,31 +158,54 @@ class FolderService
     /**
      * Get folders grouped by ownership (My Folders / Organization Folders).
      *
+     * Fully isolated by account context:
+     * - Personal: only user's own folders with no organization.
+     * - Business: user's own folders in this org + shared org folders from others.
+     *
      * @return array{my: Collection<Folder>, organization: Collection<Folder>}
      */
     public function getGroupedFolders(User $user): array
     {
-        $myFolders = Folder::ownedBy($user)
+        if ($user->organization_id === null) {
+            // Personal context: only user's own folders with no org
+            $myFolders = Folder::where('user_id', $user->id)
+                ->whereNull('organization_id')
+                ->root()
+                ->with(['children' => function ($query) use ($user) {
+                    $query->where('user_id', $user->id)
+                        ->whereNull('organization_id');
+                }])
+                ->orderBy('name')
+                ->get();
+
+            return [
+                'my' => $myFolders,
+                'organization' => collect(),
+            ];
+        }
+
+        // Business context: user's own folders in this org
+        $myFolders = Folder::where('user_id', $user->id)
+            ->where('organization_id', $user->organization_id)
             ->root()
             ->with(['children' => function ($query) use ($user) {
-                $query->ownedBy($user);
+                $query->where('user_id', $user->id)
+                    ->where('organization_id', $user->organization_id);
             }])
             ->orderBy('name')
             ->get();
 
-        $organizationFolders = collect();
-        if ($user->organization_id) {
-            $organizationFolders = Folder::where('organization_id', $user->organization_id)
-                ->where('visibility', Visibility::Organization)
-                ->where('user_id', '!=', $user->id) // Exclude user's own org folders (already in myFolders)
-                ->root()
-                ->with(['children' => function ($query) use ($user) {
-                    $query->where('organization_id', $user->organization_id)
-                        ->where('visibility', Visibility::Organization);
-                }])
-                ->orderBy('name')
-                ->get();
-        }
+        // Shared org folders from other members
+        $organizationFolders = Folder::where('organization_id', $user->organization_id)
+            ->where('visibility', Visibility::Organization)
+            ->where('user_id', '!=', $user->id)
+            ->root()
+            ->with(['children' => function ($query) use ($user) {
+                $query->where('organization_id', $user->organization_id)
+                    ->where('visibility', Visibility::Organization);
+            }])
+            ->orderBy('name')
+            ->get();
 
         return [
             'my' => $myFolders,

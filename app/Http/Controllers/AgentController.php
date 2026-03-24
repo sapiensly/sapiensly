@@ -5,10 +5,15 @@ namespace App\Http\Controllers;
 use App\Enums\AgentStatus;
 use App\Enums\AgentType;
 use App\Enums\MessageRole;
+use App\Enums\Visibility;
 use App\Http\Requests\Agent\StoreAgentRequest;
 use App\Http\Requests\Agent\UpdateAgentRequest;
+use App\Jobs\ProcessAgentChat;
 use App\Models\Agent;
 use App\Models\Conversation;
+use App\Models\KnowledgeBase;
+use App\Models\Tool;
+use App\Services\AiProviderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,12 +21,16 @@ use Inertia\Response;
 
 class AgentController extends Controller
 {
+    public function __construct(
+        private AiProviderService $aiProviderService,
+    ) {}
+
     public function index(Request $request): Response
     {
         $typeFilter = $request->query('type');
 
         $query = Agent::query()
-            ->forUser($request->user()->id)
+            ->forAccountContext($request->user())
             ->with('team:id,name')
             ->withCount(['knowledgeBases', 'tools'])
             ->latest();
@@ -33,7 +42,7 @@ class AgentController extends Controller
         $agents = $query->paginate(12)->withQueryString();
 
         $agentsByType = Agent::query()
-            ->forUser($request->user()->id)
+            ->forAccountContext($request->user())
             ->selectRaw('type, count(*) as count')
             ->groupBy('type')
             ->pluck('count', 'type')
@@ -62,17 +71,21 @@ class AgentController extends Controller
                 'label' => $type->label(),
                 'description' => $type->description(),
             ]),
-            'availableModels' => $this->getAvailableModels(),
-            'recommendedModels' => $this->getRecommendedModels(),
-            'knowledgeBases' => $request->user()->knowledgeBases()->where('status', 'ready')->get(['id', 'name']),
-            'tools' => $request->user()->tools()->where('status', 'active')->get(['id', 'name', 'type']),
+            'availableModels' => $this->aiProviderService->getAvailableModels($request->user()),
+            'recommendedModels' => $this->aiProviderService->getRecommendedModels(),
+            'knowledgeBases' => KnowledgeBase::forAccountContext($request->user())->where('status', 'ready')->get(['id', 'name']),
+            'tools' => Tool::forAccountContext($request->user())->where('status', 'active')->get(['id', 'name', 'type']),
         ]);
     }
 
     public function store(StoreAgentRequest $request): RedirectResponse
     {
+        $user = $request->user();
+
         $agent = Agent::create([
-            'user_id' => $request->user()->id,
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+            'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
             'agent_team_id' => null,
             'type' => $request->type,
             'name' => $request->name,
@@ -97,7 +110,7 @@ class AgentController extends Controller
 
     public function show(Request $request, Agent $agent): Response
     {
-        if ($agent->user_id !== $request->user()->id) {
+        if (! $agent->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -108,7 +121,7 @@ class AgentController extends Controller
 
     public function edit(Request $request, Agent $agent): Response
     {
-        if ($agent->user_id !== $request->user()->id) {
+        if (! $agent->isOwnedBy($request->user())) {
             abort(403);
         }
 
@@ -119,10 +132,10 @@ class AgentController extends Controller
                 'label' => $type->label(),
                 'description' => $type->description(),
             ]),
-            'availableModels' => $this->getAvailableModels(),
-            'recommendedModels' => $this->getRecommendedModels(),
-            'knowledgeBases' => $request->user()->knowledgeBases()->where('status', 'ready')->get(['id', 'name']),
-            'tools' => $request->user()->tools()->where('status', 'active')->get(['id', 'name', 'type']),
+            'availableModels' => $this->aiProviderService->getAvailableModels($request->user()),
+            'recommendedModels' => $this->aiProviderService->getRecommendedModels(),
+            'knowledgeBases' => KnowledgeBase::forAccountContext($request->user())->where('status', 'ready')->get(['id', 'name']),
+            'tools' => Tool::forAccountContext($request->user())->where('status', 'active')->get(['id', 'name', 'type']),
         ]);
     }
 
@@ -151,7 +164,7 @@ class AgentController extends Controller
 
     public function destroy(Request $request, Agent $agent): RedirectResponse
     {
-        if ($agent->user_id !== $request->user()->id) {
+        if (! $agent->isOwnedBy($request->user())) {
             abort(403);
         }
 
@@ -162,7 +175,7 @@ class AgentController extends Controller
 
     public function duplicate(Request $request, Agent $agent): RedirectResponse
     {
-        if ($agent->user_id !== $request->user()->id) {
+        if (! $agent->isOwnedBy($request->user())) {
             abort(403);
         }
 
@@ -177,30 +190,9 @@ class AgentController extends Controller
         return to_route('agents.show', $newAgent);
     }
 
-    private function getAvailableModels(): array
-    {
-        return [
-            ['value' => 'claude-sonnet-4-20250514', 'label' => 'Claude Sonnet 4', 'provider' => 'anthropic'],
-            ['value' => 'claude-opus-4-20250514', 'label' => 'Claude Opus 4', 'provider' => 'anthropic'],
-            ['value' => 'claude-3-5-haiku-20241022', 'label' => 'Claude 3.5 Haiku', 'provider' => 'anthropic'],
-            ['value' => 'gpt-4o', 'label' => 'GPT-4o', 'provider' => 'openai'],
-            ['value' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini', 'provider' => 'openai'],
-            ['value' => 'gpt-4-turbo', 'label' => 'GPT-4 Turbo', 'provider' => 'openai'],
-        ];
-    }
-
-    private function getRecommendedModels(): array
-    {
-        return [
-            'triage' => ['claude-3-5-haiku-20241022', 'gpt-4o-mini'],
-            'knowledge' => ['claude-sonnet-4-20250514', 'gpt-4o'],
-            'action' => ['claude-sonnet-4-20250514', 'gpt-4o'],
-        ];
-    }
-
     public function chat(Request $request, Agent $agent): Response
     {
-        if ($agent->user_id !== $request->user()->id) {
+        if (! $agent->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -223,7 +215,7 @@ class AgentController extends Controller
 
     public function sendMessage(Request $request, Agent $agent): RedirectResponse
     {
-        if ($agent->user_id !== $request->user()->id) {
+        if (! $agent->isVisibleTo($request->user())) {
             abort(403);
         }
 
@@ -248,12 +240,15 @@ class AgentController extends Controller
             'content' => $request->message,
         ]);
 
+        // Dispatch job to process response via WebSocket streaming
+        ProcessAgentChat::dispatch($agent, $conversation);
+
         return back();
     }
 
     public function newConversation(Request $request, Agent $agent): RedirectResponse
     {
-        if ($agent->user_id !== $request->user()->id) {
+        if (! $agent->isVisibleTo($request->user())) {
             abort(403);
         }
 

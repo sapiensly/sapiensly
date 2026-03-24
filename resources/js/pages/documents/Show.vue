@@ -43,6 +43,9 @@ import {
     Users,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     document: Document;
@@ -64,7 +67,7 @@ const isSubmitting = ref(false);
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => {
     const crumbs: BreadcrumbItem[] = [
-        { title: 'Documents', href: DocumentController.index().url },
+        { title: t('documents.show.documents'), href: DocumentController.index().url },
     ];
 
     if (props.document.folder) {
@@ -171,7 +174,7 @@ const handleDelete = () => {
                             @click="handleDownload"
                         >
                             <ExternalLink class="mr-2 h-4 w-4" />
-                            Open
+                            {{ t('common.open') }}
                         </Button>
                         <Button
                             v-if="canEdit"
@@ -179,7 +182,7 @@ const handleDelete = () => {
                             @click="showEditDialog = true"
                         >
                             <Edit class="mr-2 h-4 w-4" />
-                            Edit
+                            {{ t('common.edit') }}
                         </Button>
                         <Button
                             v-if="canEdit"
@@ -187,7 +190,7 @@ const handleDelete = () => {
                             @click="showDeleteDialog = true"
                         >
                             <Trash2 class="mr-2 h-4 w-4" />
-                            Delete
+                            {{ t('common.delete') }}
                         </Button>
                     </div>
                 </div>
@@ -195,7 +198,7 @@ const handleDelete = () => {
                 <!-- Details Card -->
                 <Card class="mb-6">
                     <CardHeader>
-                        <CardTitle>Document Details</CardTitle>
+                        <CardTitle>{{ t('documents.show.title') }}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <dl class="grid gap-4 sm:grid-cols-2">

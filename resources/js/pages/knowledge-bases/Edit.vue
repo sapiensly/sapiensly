@@ -13,6 +13,9 @@ import type { BreadcrumbItem } from '@/types';
 import type { KnowledgeBase } from '@/types/knowledge-base';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     knowledgeBase: KnowledgeBase;
@@ -21,12 +24,12 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Knowledge Base', href: KnowledgeBaseController.index().url },
+    { title: t('knowledge_bases.index.heading'), href: KnowledgeBaseController.index().url },
     {
         title: props.knowledgeBase.name,
         href: KnowledgeBaseController.show({ knowledge_base: props.knowledgeBase.id }).url,
     },
-    { title: 'Edit', href: '#' },
+    { title: t('common.edit'), href: '#' },
 ]);
 
 const form = useForm({
@@ -47,14 +50,14 @@ const submit = () => {
 </script>
 
 <template>
-    <Head :title="`Edit ${knowledgeBase.name}`" />
+    <Head :title="`${t('knowledge_bases.edit.title')} ${knowledgeBase.name}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-2xl">
                 <Heading
-                    :title="`Edit ${knowledgeBase.name}`"
-                    description="Update your knowledge base settings"
+                    :title="`${t('knowledge_bases.edit.title')} ${knowledgeBase.name}`"
+                    :description="t('knowledge_bases.edit.description')"
                 />
 
                 <form class="mt-8 space-y-8" @submit.prevent="submit">
@@ -146,11 +149,11 @@ const submit = () => {
                                     }).url
                                 "
                             >
-                                Cancel
+                                {{ t('common.cancel') }}
                             </Link>
                         </Button>
                         <Button type="submit" :disabled="form.processing">
-                            Save Changes
+                            {{ t('common.save_changes') }}
                         </Button>
                     </div>
                 </form>

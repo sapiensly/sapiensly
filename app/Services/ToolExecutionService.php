@@ -9,6 +9,7 @@ use App\Models\Tool;
 use App\Services\Tools\DatabaseExecutor;
 use App\Services\Tools\GraphqlExecutor;
 use App\Services\Tools\RestApiExecutor;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class ToolExecutionService
@@ -220,7 +221,7 @@ class ToolExecutionService
             }
 
             // Try a HEAD request to the base URL
-            $response = \Illuminate\Support\Facades\Http::timeout(10)
+            $response = Http::timeout(10)
                 ->head($baseUrl);
 
             return ToolExecutionResult::success(
@@ -253,7 +254,7 @@ class ToolExecutionService
             }
 
             // Try an introspection query
-            $response = \Illuminate\Support\Facades\Http::timeout(10)
+            $response = Http::timeout(10)
                 ->post($endpoint, [
                     'query' => '{ __typename }',
                 ]);
