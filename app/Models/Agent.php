@@ -76,6 +76,16 @@ class Agent extends Model
         return $this->hasMany(Conversation::class);
     }
 
+    public function flows(): HasMany
+    {
+        return $this->hasMany(Flow::class);
+    }
+
+    public function activeFlow(): ?Flow
+    {
+        return $this->flows()->active()->latest()->first();
+    }
+
     public function scopeStandalone(Builder $query): Builder
     {
         return $query->whereNull('agent_team_id');

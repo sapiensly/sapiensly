@@ -114,9 +114,10 @@ export class ErrorTracker {
         };
 
         const rejectionHandler = (event: PromiseRejectionEvent) => {
-            const error = event.reason instanceof Error
-                ? event.reason
-                : new Error(String(event.reason));
+            const error =
+                event.reason instanceof Error
+                    ? event.reason
+                    : new Error(String(event.reason));
             this.capture(error, { type: 'unhandledRejection' });
         };
 

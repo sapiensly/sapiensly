@@ -4,9 +4,11 @@ use App\Http\Controllers\AccountSwitchController;
 use App\Http\Controllers\WidgetAssetController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use Laravel\WorkOS\Http\Middleware\ValidateSessionWithWorkOS;
+use Laravel\Fortify\Features;
 
-Route::get('/', fn () => Inertia::render('Welcome'));
+Route::get('/', fn () => Inertia::render('Welcome', [
+    'canRegister' => Features::enabled(Features::registration()),
+]));
 
 // Widget asset route (public, no auth)
 Route::get('widget/v1/widget.js', [WidgetAssetController::class, 'script'])
@@ -14,7 +16,7 @@ Route::get('widget/v1/widget.js', [WidgetAssetController::class, 'script'])
 
 Route::middleware([
     'auth',
-    ValidateSessionWithWorkOS::class,
+    'verified',
 ])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('Dashboard');
@@ -31,4 +33,5 @@ require __DIR__.'/tools.php';
 require __DIR__.'/documents.php';
 require __DIR__.'/chatbots.php';
 require __DIR__.'/system.php';
+require __DIR__.'/flows.php';
 require __DIR__.'/auth.php';

@@ -51,7 +51,9 @@ const user = page.props.auth.user;
                     v-slot="{ errors, processing, recentlySuccessful }"
                 >
                     <div class="grid gap-2">
-                        <Label for="name">{{ t('settings.profile.name') }}</Label>
+                        <Label for="name">{{
+                            t('settings.profile.name')
+                        }}</Label>
                         <Input
                             id="name"
                             class="mt-1 block w-full"
@@ -65,7 +67,9 @@ const user = page.props.auth.user;
                     </div>
 
                     <div class="grid gap-2">
-                        <Label for="email">{{ t('settings.profile.email') }}</Label>
+                        <Label for="email">{{
+                            t('settings.profile.email')
+                        }}</Label>
                         <Input
                             id="email"
                             type="email"
@@ -81,11 +85,13 @@ const user = page.props.auth.user;
                     </div>
 
                     <div class="grid gap-2">
-                        <Label for="locale">{{ t('settings.profile.language') }}</Label>
+                        <Label for="locale">{{
+                            t('settings.profile.language')
+                        }}</Label>
                         <select
                             id="locale"
                             name="locale"
-                            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
                             :default-value="user.locale"
                         >
                             <option value="en">English</option>

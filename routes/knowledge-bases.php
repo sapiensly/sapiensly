@@ -3,11 +3,10 @@
 use App\Http\Controllers\KnowledgeBaseController;
 use App\Http\Controllers\KnowledgeBaseDocumentController;
 use Illuminate\Support\Facades\Route;
-use Laravel\WorkOS\Http\Middleware\ValidateSessionWithWorkOS;
 
 Route::middleware([
     'auth',
-    ValidateSessionWithWorkOS::class,
+    'verified',
 ])->group(function () {
     Route::resource('knowledge-bases', KnowledgeBaseController::class);
 

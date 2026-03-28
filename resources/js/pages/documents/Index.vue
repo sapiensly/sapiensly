@@ -34,6 +34,7 @@ import type {
     VisibilityOption,
 } from '@/types/document';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { useDebounceFn } from '@vueuse/core';
 import {
     ChevronRight,
     Database,
@@ -49,7 +50,6 @@ import {
     Users,
 } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
-import { useDebounceFn } from '@vueuse/core';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -84,10 +84,14 @@ const performSearch = useDebounceFn(() => {
     if (searchQuery.value) {
         params.search = searchQuery.value;
     }
-    router.get(DocumentController.index({ query: params }).url, {}, {
-        preserveState: true,
-        preserveScroll: true,
-    });
+    router.get(
+        DocumentController.index({ query: params }).url,
+        {},
+        {
+            preserveState: true,
+            preserveScroll: true,
+        },
+    );
 }, 300);
 
 watch(searchQuery, () => {
@@ -96,13 +100,17 @@ watch(searchQuery, () => {
 
 const pageBreadcrumbs = computed<BreadcrumbItem[]>(() => {
     const crumbs: BreadcrumbItem[] = [
-        { title: t('documents.index.title'), href: DocumentController.index().url },
+        {
+            title: t('documents.index.title'),
+            href: DocumentController.index().url,
+        },
     ];
 
     for (const folder of props.breadcrumbs) {
         crumbs.push({
             title: folder.name,
-            href: DocumentController.index({ query: { folder: folder.id } }).url,
+            href: DocumentController.index({ query: { folder: folder.id } })
+                .url,
         });
     }
 
@@ -136,12 +144,15 @@ const handleDeleteFolder = () => {
 
     isDeletingFolder.value = true;
 
-    router.delete(FolderController.destroy({ folder: props.currentFolder.id }).url, {
-        onFinish: () => {
-            isDeletingFolder.value = false;
-            showDeleteFolderDialog.value = false;
+    router.delete(
+        FolderController.destroy({ folder: props.currentFolder.id }).url,
+        {
+            onFinish: () => {
+                isDeletingFolder.value = false;
+                showDeleteFolderDialog.value = false;
+            },
         },
-    });
+    );
 };
 </script>
 
@@ -153,8 +164,14 @@ const handleDeleteFolder = () => {
             <!-- Sidebar: Folder Tree -->
             <div class="w-64 shrink-0 border-r bg-muted/30 p-4">
                 <div class="mb-4 flex items-center justify-between">
-                    <h3 class="text-sm font-semibold">{{ t('documents.index.folders') }}</h3>
-                    <Button variant="ghost" size="icon" @click="showFolderDialog = true">
+                    <h3 class="text-sm font-semibold">
+                        {{ t('documents.index.folders') }}
+                    </h3>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        @click="showFolderDialog = true"
+                    >
                         <FolderPlus class="h-4 w-4" />
                     </Button>
                 </div>
@@ -166,7 +183,7 @@ const handleDeleteFolder = () => {
             </div>
 
             <!-- Main Content -->
-            <div class="flex-1 px-4 py-6 overflow-auto">
+            <div class="flex-1 overflow-auto px-4 py-6">
                 <div class="mx-auto max-w-6xl">
                     <!-- Header -->
                     <div class="mb-6 flex items-center justify-between">
@@ -177,17 +194,27 @@ const handleDeleteFolder = () => {
                             />
 
                             <!-- Breadcrumb navigation -->
-                            <nav v-if="breadcrumbs.length > 0" class="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
+                            <nav
+                                v-if="breadcrumbs.length > 0"
+                                class="mt-2 flex items-center gap-1 text-sm text-muted-foreground"
+                            >
                                 <Link
                                     :href="DocumentController.index().url"
                                     class="flex items-center gap-1 hover:text-foreground"
                                 >
                                     <Home class="h-4 w-4" />
                                 </Link>
-                                <template v-for="folder in breadcrumbs" :key="folder.id">
+                                <template
+                                    v-for="folder in breadcrumbs"
+                                    :key="folder.id"
+                                >
                                     <ChevronRight class="h-4 w-4" />
                                     <Link
-                                        :href="DocumentController.index({ query: { folder: folder.id } }).url"
+                                        :href="
+                                            DocumentController.index({
+                                                query: { folder: folder.id },
+                                            }).url
+                                        "
                                         class="hover:text-foreground"
                                     >
                                         {{ folder.name }}
@@ -203,8 +230,10 @@ const handleDeleteFolder = () => {
                     </div>
 
                     <!-- Search -->
-                    <div class="mb-6 relative">
-                        <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <div class="relative mb-6">
+                        <Search
+                            class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        />
                         <Input
                             v-model="searchQuery"
                             type="search"
@@ -218,16 +247,35 @@ const handleDeleteFolder = () => {
                         <!-- Empty State -->
                         <div v-if="documents.data.length === 0">
                             <EmptyState
-                                :title="filters.search ? 'No documents found' : (currentFolder ? 'Empty folder' : 'No documents yet')"
-                                :description="filters.search
-                                    ? 'Try a different search term.'
-                                    : (currentFolder
-                                        ? 'This folder is empty. Upload a document to get started.'
-                                        : 'Upload your first document to get started.')"
-                                :create-label="filters.search ? undefined : 'Upload Document'"
+                                :title="
+                                    filters.search
+                                        ? 'No documents found'
+                                        : currentFolder
+                                          ? 'Empty folder'
+                                          : 'No documents yet'
+                                "
+                                :description="
+                                    filters.search
+                                        ? 'Try a different search term.'
+                                        : currentFolder
+                                          ? 'This folder is empty. Upload a document to get started.'
+                                          : 'Upload your first document to get started.'
+                                "
+                                :create-label="
+                                    filters.search
+                                        ? undefined
+                                        : 'Upload Document'
+                                "
                                 @create="showUploadDialog = true"
                             >
-                                <template v-if="currentFolder && canDeleteFolder && !filters.search" #extra>
+                                <template
+                                    v-if="
+                                        currentFolder &&
+                                        canDeleteFolder &&
+                                        !filters.search
+                                    "
+                                    #extra
+                                >
                                     <Button
                                         variant="destructive"
                                         @click="showDeleteFolderDialog = true"
@@ -240,58 +288,113 @@ const handleDeleteFolder = () => {
                         </div>
 
                         <!-- Documents Grid -->
-                        <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        <Link
-                            v-for="doc in documents.data"
-                            :key="doc.id"
-                            :href="DocumentController.show({ document: doc.id }).url"
+                        <div
+                            v-else
+                            class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
                         >
-                            <Card class="h-full cursor-pointer transition-colors hover:border-primary/50">
-                                <CardHeader class="pb-2">
-                                    <div class="flex items-start justify-between gap-2">
-                                        <div class="flex items-center gap-2 min-w-0">
-                                            <component
-                                                :is="getDocumentIcon(doc.type)"
-                                                class="h-5 w-5 shrink-0 text-muted-foreground"
-                                            />
-                                            <CardTitle class="line-clamp-1 text-base">
-                                                {{ doc.name }}
-                                            </CardTitle>
-                                        </div>
-                                        <Badge
-                                            :class="typeColors[doc.type] || typeColors.txt"
-                                            variant="outline"
-                                            class="shrink-0"
+                            <Link
+                                v-for="doc in documents.data"
+                                :key="doc.id"
+                                :href="
+                                    DocumentController.show({
+                                        document: doc.id,
+                                    }).url
+                                "
+                            >
+                                <Card
+                                    class="h-full cursor-pointer transition-colors hover:border-primary/50"
+                                >
+                                    <CardHeader class="pb-2">
+                                        <div
+                                            class="flex items-start justify-between gap-2"
                                         >
-                                            {{ doc.type.toUpperCase() }}
-                                        </Badge>
-                                    </div>
-                                    <CardDescription v-if="doc.original_filename" class="line-clamp-1 text-xs">
-                                        {{ doc.original_filename }}
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                                        <span v-if="doc.formatted_file_size">
-                                            {{ doc.formatted_file_size }}
-                                        </span>
-                                        <Badge v-if="doc.folder && !currentFolder" variant="secondary" class="text-xs">
-                                            <FolderIcon class="mr-1 h-3 w-3" />
-                                            {{ doc.folder.name }}
-                                        </Badge>
-                                        <Badge v-if="doc.knowledge_bases_count" variant="outline" class="text-xs">
-                                            <Database class="mr-1 h-3 w-3" />
-                                            {{ doc.knowledge_bases_count }} KB
-                                        </Badge>
-                                        <component
-                                            :is="getVisibilityIcon(doc.visibility)"
-                                            class="ml-auto h-4 w-4"
-                                            :title="doc.visibility === 'organization' ? 'Shared with organization' : 'Private'"
-                                        />
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </Link>
+                                            <div
+                                                class="flex min-w-0 items-center gap-2"
+                                            >
+                                                <component
+                                                    :is="
+                                                        getDocumentIcon(
+                                                            doc.type,
+                                                        )
+                                                    "
+                                                    class="h-5 w-5 shrink-0 text-muted-foreground"
+                                                />
+                                                <CardTitle
+                                                    class="line-clamp-1 text-base"
+                                                >
+                                                    {{ doc.name }}
+                                                </CardTitle>
+                                            </div>
+                                            <Badge
+                                                :class="
+                                                    typeColors[doc.type] ||
+                                                    typeColors.txt
+                                                "
+                                                variant="outline"
+                                                class="shrink-0"
+                                            >
+                                                {{ doc.type.toUpperCase() }}
+                                            </Badge>
+                                        </div>
+                                        <CardDescription
+                                            v-if="doc.original_filename"
+                                            class="line-clamp-1 text-xs"
+                                        >
+                                            {{ doc.original_filename }}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div
+                                            class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+                                        >
+                                            <span
+                                                v-if="doc.formatted_file_size"
+                                            >
+                                                {{ doc.formatted_file_size }}
+                                            </span>
+                                            <Badge
+                                                v-if="
+                                                    doc.folder && !currentFolder
+                                                "
+                                                variant="secondary"
+                                                class="text-xs"
+                                            >
+                                                <FolderIcon
+                                                    class="mr-1 h-3 w-3"
+                                                />
+                                                {{ doc.folder.name }}
+                                            </Badge>
+                                            <Badge
+                                                v-if="doc.knowledge_bases_count"
+                                                variant="outline"
+                                                class="text-xs"
+                                            >
+                                                <Database
+                                                    class="mr-1 h-3 w-3"
+                                                />
+                                                {{
+                                                    doc.knowledge_bases_count
+                                                }}
+                                                KB
+                                            </Badge>
+                                            <component
+                                                :is="
+                                                    getVisibilityIcon(
+                                                        doc.visibility,
+                                                    )
+                                                "
+                                                class="ml-auto h-4 w-4"
+                                                :title="
+                                                    doc.visibility ===
+                                                    'organization'
+                                                        ? 'Shared with organization'
+                                                        : 'Private'
+                                                "
+                                            />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </Link>
                         </div>
                     </div>
                 </div>
@@ -320,12 +423,17 @@ const handleDeleteFolder = () => {
                 <DialogHeader>
                     <DialogTitle>Delete Folder</DialogTitle>
                     <DialogDescription>
-                        Are you sure you want to delete "{{ currentFolder?.name }}"? This action cannot be undone.
+                        Are you sure you want to delete "{{
+                            currentFolder?.name
+                        }}"? This action cannot be undone.
                     </DialogDescription>
                 </DialogHeader>
 
                 <DialogFooter>
-                    <Button variant="outline" @click="showDeleteFolderDialog = false">
+                    <Button
+                        variant="outline"
+                        @click="showDeleteFolderDialog = false"
+                    >
                         Cancel
                     </Button>
                     <Button

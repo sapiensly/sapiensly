@@ -57,7 +57,13 @@ const props = defineProps<Props>();
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: t('nav.system'), href: '#' },
     { title: t('system.ai_providers.title'), href: '/system/ai-providers' },
-    { title: props.mode === 'create' ? t('system.ai_provider_form.add_breadcrumb') : t('system.ai_provider_form.edit_breadcrumb'), href: '#' },
+    {
+        title:
+            props.mode === 'create'
+                ? t('system.ai_provider_form.add_breadcrumb')
+                : t('system.ai_provider_form.edit_breadcrumb'),
+        href: '#',
+    },
 ]);
 
 const form = useForm({
@@ -133,25 +139,41 @@ const submit = () => {
 </script>
 
 <template>
-    <Head :title="mode === 'create' ? t('system.ai_provider_form.add_title') : t('system.ai_provider_form.edit_title')" />
+    <Head
+        :title="
+            mode === 'create'
+                ? t('system.ai_provider_form.add_title')
+                : t('system.ai_provider_form.edit_title')
+        "
+    />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="px-4 py-6">
             <div class="mx-auto max-w-2xl">
                 <Heading
-                    :title="mode === 'create' ? t('system.ai_provider_form.add_title') : t('system.ai_provider_form.edit_title')"
-                    :description="mode === 'create'
-                        ? t('system.ai_provider_form.add_description')
-                        : t('system.ai_provider_form.edit_description')"
+                    :title="
+                        mode === 'create'
+                            ? t('system.ai_provider_form.add_title')
+                            : t('system.ai_provider_form.edit_title')
+                    "
+                    :description="
+                        mode === 'create'
+                            ? t('system.ai_provider_form.add_description')
+                            : t('system.ai_provider_form.edit_description')
+                    "
                 />
 
                 <form class="mt-8 space-y-6" @submit.prevent="submit">
                     <!-- Driver selection (only on create) -->
                     <div v-if="mode === 'create'" class="grid gap-2">
-                        <Label for="driver">{{ t('system.ai_provider_form.provider') }}</Label>
+                        <Label for="driver">{{
+                            t('system.ai_provider_form.provider')
+                        }}</Label>
                         <Select v-model="form.driver">
                             <SelectTrigger id="driver">
-                                <SelectValue placeholder="Select an AI provider" />
+                                <SelectValue
+                                    placeholder="Select an AI provider"
+                                />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem
@@ -169,7 +191,9 @@ const submit = () => {
                     <template v-if="form.driver">
                         <!-- Display name -->
                         <div class="grid gap-2">
-                            <Label for="display_name">{{ t('system.ai_provider_form.display_name') }}</Label>
+                            <Label for="display_name">{{
+                                t('system.ai_provider_form.display_name')
+                            }}</Label>
                             <Input
                                 id="display_name"
                                 v-model="form.display_name"
@@ -180,33 +204,57 @@ const submit = () => {
 
                         <!-- Credentials -->
                         <div class="space-y-4">
-                            <Label class="text-base font-medium">{{ t('system.ai_provider_form.credentials') }}</Label>
+                            <Label class="text-base font-medium">{{
+                                t('system.ai_provider_form.credentials')
+                            }}</Label>
                             <div
                                 v-for="field in credentialFields"
                                 :key="field"
                                 class="grid gap-2"
                             >
-                                <Label :for="`cred_${field}`">{{ credentialFieldLabel(field) }}</Label>
+                                <Label :for="`cred_${field}`">{{
+                                    credentialFieldLabel(field)
+                                }}</Label>
                                 <Input
                                     :id="`cred_${field}`"
                                     v-model="form.credentials[field]"
-                                    :type="field === 'api_key' ? 'password' : 'text'"
-                                    :placeholder="mode === 'edit' && field === 'api_key' ? 'Leave blank to keep current key' : ''"
+                                    :type="
+                                        field === 'api_key'
+                                            ? 'password'
+                                            : 'text'
+                                    "
+                                    :placeholder="
+                                        mode === 'edit' && field === 'api_key'
+                                            ? 'Leave blank to keep current key'
+                                            : ''
+                                    "
                                 />
-                                <InputError :message="(form.errors as any)[`credentials.${field}`]" />
+                                <InputError
+                                    :message="
+                                        (form.errors as any)[
+                                            `credentials.${field}`
+                                        ]
+                                    "
+                                />
                             </div>
                         </div>
 
                         <!-- Models -->
                         <div class="space-y-4">
                             <div>
-                                <Label class="text-base font-medium">Available Models</Label>
+                                <Label class="text-base font-medium"
+                                    >Available Models</Label
+                                >
                                 <p class="text-sm text-muted-foreground">
-                                    Select which models to make available for agent creation
+                                    Select which models to make available for
+                                    agent creation
                                 </p>
                             </div>
 
-                            <div v-if="catalogModels.length > 0" class="space-y-2">
+                            <div
+                                v-if="catalogModels.length > 0"
+                                class="space-y-2"
+                            >
                                 <div
                                     v-for="model in catalogModels"
                                     :key="model.id"
@@ -217,39 +265,60 @@ const submit = () => {
                                         :checked="isModelSelected(model.id)"
                                         @update:checked="toggleModel(model)"
                                     />
-                                    <label :for="`model_${model.id}`" class="flex-1 cursor-pointer">
-                                        <div class="text-sm font-medium">{{ model.label }}</div>
-                                        <div class="text-xs text-muted-foreground">
-                                            {{ model.id }} &middot; {{ model.capabilities.join(', ') }}
+                                    <label
+                                        :for="`model_${model.id}`"
+                                        class="flex-1 cursor-pointer"
+                                    >
+                                        <div class="text-sm font-medium">
+                                            {{ model.label }}
+                                        </div>
+                                        <div
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            {{ model.id }} &middot;
+                                            {{ model.capabilities.join(', ') }}
                                         </div>
                                     </label>
                                 </div>
                             </div>
                             <p v-else class="text-sm text-muted-foreground">
-                                No predefined models for this provider. Models can be added manually after creation.
+                                No predefined models for this provider. Models
+                                can be added manually after creation.
                             </p>
                         </div>
 
                         <!-- Defaults -->
                         <div class="space-y-4">
-                            <div class="flex items-center justify-between rounded-md border p-3">
+                            <div
+                                class="flex items-center justify-between rounded-md border p-3"
+                            >
                                 <div>
-                                    <div class="text-sm font-medium">Default LLM Provider</div>
+                                    <div class="text-sm font-medium">
+                                        Default LLM Provider
+                                    </div>
                                     <div class="text-xs text-muted-foreground">
-                                        Use this provider by default for agent chat
+                                        Use this provider by default for agent
+                                        chat
                                     </div>
                                 </div>
                                 <Switch v-model:checked="form.is_default" />
                             </div>
 
-                            <div class="flex items-center justify-between rounded-md border p-3">
+                            <div
+                                class="flex items-center justify-between rounded-md border p-3"
+                            >
                                 <div>
-                                    <div class="text-sm font-medium">Default Embeddings Provider</div>
+                                    <div class="text-sm font-medium">
+                                        Default Embeddings Provider
+                                    </div>
                                     <div class="text-xs text-muted-foreground">
-                                        Use this provider by default for document embeddings
+                                        Use this provider by default for
+                                        document embeddings
                                     </div>
                                 </div>
-                                <Switch v-model:checked="form.is_default_embeddings" />
+                                <Switch
+                                    v-model:checked="form.is_default_embeddings"
+                                />
                             </div>
                         </div>
 
@@ -261,8 +330,12 @@ const submit = () => {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="active">{{ t('common.active') }}</SelectItem>
-                                    <SelectItem value="inactive">{{ t('common.inactive') }}</SelectItem>
+                                    <SelectItem value="active">{{
+                                        t('common.active')
+                                    }}</SelectItem>
+                                    <SelectItem value="inactive">{{
+                                        t('common.inactive')
+                                    }}</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -271,10 +344,19 @@ const submit = () => {
                     <!-- Actions -->
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" as-child>
-                            <Link href="/system/ai-providers">{{ t('common.cancel') }}</Link>
+                            <Link href="/system/ai-providers">{{
+                                t('common.cancel')
+                            }}</Link>
                         </Button>
-                        <Button type="submit" :disabled="form.processing || !form.driver">
-                            {{ mode === 'create' ? 'Add Provider' : 'Update Provider' }}
+                        <Button
+                            type="submit"
+                            :disabled="form.processing || !form.driver"
+                        >
+                            {{
+                                mode === 'create'
+                                    ? 'Add Provider'
+                                    : 'Update Provider'
+                            }}
                         </Button>
                     </div>
                 </form>

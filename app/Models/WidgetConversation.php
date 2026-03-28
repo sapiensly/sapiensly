@@ -26,12 +26,14 @@ class WidgetConversation extends Model
         'is_resolved',
         'is_abandoned',
         'abandoned_at',
+        'flow_state',
     ];
 
     protected function casts(): array
     {
         return [
             'metadata' => 'array',
+            'flow_state' => 'array',
             'rating' => 'integer',
             'message_count' => 'integer',
             'total_response_time_ms' => 'integer',

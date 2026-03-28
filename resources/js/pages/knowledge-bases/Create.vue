@@ -24,7 +24,10 @@ interface Props {
 defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('knowledge_bases.index.heading'), href: KnowledgeBaseController.index().url },
+    {
+        title: t('knowledge_bases.index.heading'),
+        href: KnowledgeBaseController.index().url,
+    },
     { title: t('common.create'), href: '#' },
 ]);
 
@@ -58,7 +61,11 @@ const submit = () => {
                     <div class="space-y-6">
                         <HeadingSmall
                             :title="t('knowledge_bases.create.basic_info')"
-                            :description="t('knowledge_bases.create.basic_info_description')"
+                            :description="
+                                t(
+                                    'knowledge_bases.create.basic_info_description',
+                                )
+                            "
                         />
 
                         <div class="grid gap-4">
@@ -68,27 +75,47 @@ const submit = () => {
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    :placeholder="t('knowledge_bases.create.name_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'knowledge_bases.create.name_placeholder',
+                                        )
+                                    "
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">{{ t('knowledge_bases.create.description_label') }}</Label>
+                                <Label for="description">{{
+                                    t(
+                                        'knowledge_bases.create.description_label',
+                                    )
+                                }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    :placeholder="t('knowledge_bases.create.description_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'knowledge_bases.create.description_placeholder',
+                                        )
+                                    "
                                     rows="3"
                                 />
-                                <InputError :message="form.errors.description" />
+                                <InputError
+                                    :message="form.errors.description"
+                                />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="keywords">{{ t('knowledge_bases.create.keywords_label') }}</Label>
+                                <Label for="keywords">{{
+                                    t('knowledge_bases.create.keywords_label')
+                                }}</Label>
                                 <KeywordsInput v-model="form.keywords" />
                                 <p class="text-xs text-muted-foreground">
-                                    {{ t('knowledge_bases.create.keywords_description') }}
+                                    {{
+                                        t(
+                                            'knowledge_bases.create.keywords_description',
+                                        )
+                                    }}
                                 </p>
                                 <InputError :message="form.errors.keywords" />
                             </div>
@@ -97,13 +124,21 @@ const submit = () => {
 
                     <div class="space-y-6">
                         <HeadingSmall
-                            :title="t('knowledge_bases.create.processing_title')"
-                            :description="t('knowledge_bases.create.processing_description')"
+                            :title="
+                                t('knowledge_bases.create.processing_title')
+                            "
+                            :description="
+                                t(
+                                    'knowledge_bases.create.processing_description',
+                                )
+                            "
                         />
 
                         <div class="grid gap-4 sm:grid-cols-2">
                             <div class="grid gap-2">
-                                <Label for="chunk_size">{{ t('knowledge_bases.create.chunk_size') }}</Label>
+                                <Label for="chunk_size">{{
+                                    t('knowledge_bases.create.chunk_size')
+                                }}</Label>
                                 <Input
                                     id="chunk_size"
                                     v-model.number="form.config.chunk_size"
@@ -112,13 +147,21 @@ const submit = () => {
                                     max="4000"
                                 />
                                 <p class="text-xs text-muted-foreground">
-                                    {{ t('knowledge_bases.create.chunk_size_description') }}
+                                    {{
+                                        t(
+                                            'knowledge_bases.create.chunk_size_description',
+                                        )
+                                    }}
                                 </p>
-                                <InputError :message="form.errors['config.chunk_size']" />
+                                <InputError
+                                    :message="form.errors['config.chunk_size']"
+                                />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="chunk_overlap">{{ t('knowledge_bases.create.chunk_overlap') }}</Label>
+                                <Label for="chunk_overlap">{{
+                                    t('knowledge_bases.create.chunk_overlap')
+                                }}</Label>
                                 <Input
                                     id="chunk_overlap"
                                     v-model.number="form.config.chunk_overlap"
@@ -127,9 +170,17 @@ const submit = () => {
                                     max="500"
                                 />
                                 <p class="text-xs text-muted-foreground">
-                                    {{ t('knowledge_bases.create.chunk_overlap_description') }}
+                                    {{
+                                        t(
+                                            'knowledge_bases.create.chunk_overlap_description',
+                                        )
+                                    }}
                                 </p>
-                                <InputError :message="form.errors['config.chunk_overlap']" />
+                                <InputError
+                                    :message="
+                                        form.errors['config.chunk_overlap']
+                                    "
+                                />
                             </div>
                         </div>
                     </div>

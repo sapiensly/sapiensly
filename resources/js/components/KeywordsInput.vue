@@ -24,7 +24,11 @@ const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
         e.preventDefault();
         addKeyword();
-    } else if (e.key === 'Backspace' && !inputValue.value && model.value.length > 0) {
+    } else if (
+        e.key === 'Backspace' &&
+        !inputValue.value &&
+        model.value.length > 0
+    ) {
         removeKeyword(model.value.length - 1);
     }
 };
@@ -32,10 +36,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 <template>
     <div class="space-y-2">
-        <div
-            v-if="model.length > 0"
-            class="flex flex-wrap gap-1.5"
-        >
+        <div v-if="model.length > 0" class="flex flex-wrap gap-1.5">
             <Badge
                 v-for="(keyword, index) in model"
                 :key="keyword"
@@ -45,7 +46,7 @@ const handleKeydown = (e: KeyboardEvent) => {
                 {{ keyword }}
                 <button
                     type="button"
-                    class="hover:bg-muted rounded-full p-0.5"
+                    class="rounded-full p-0.5 hover:bg-muted"
                     @click="removeKeyword(index)"
                 >
                     <X class="size-3" />
@@ -54,7 +55,11 @@ const handleKeydown = (e: KeyboardEvent) => {
         </div>
         <Input
             v-model="inputValue"
-            :placeholder="model.length >= 20 ? 'Maximum 20 keywords' : 'Type and press Enter to add'"
+            :placeholder="
+                model.length >= 20
+                    ? 'Maximum 20 keywords'
+                    : 'Type and press Enter to add'
+            "
             :disabled="model.length >= 20"
             @keydown="handleKeydown"
         />

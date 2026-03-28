@@ -44,7 +44,14 @@ export interface ExecutionStep {
 }
 
 export interface StreamChunk {
-    type?: 'execution_plan' | 'step_start' | 'step_complete' | 'consolidating' | 'tool_call' | 'knowledge_base' | 'content';
+    type?:
+        | 'execution_plan'
+        | 'step_start'
+        | 'step_complete'
+        | 'consolidating'
+        | 'tool_call'
+        | 'knowledge_base'
+        | 'content';
     content?: string;
     tool?: string;
     name?: string;

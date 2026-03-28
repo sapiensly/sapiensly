@@ -74,7 +74,9 @@ const authOptions = [
             <Label for="auth-type">{{ t('tools.config.mcp.auth_type') }}</Label>
             <Select v-model="authType">
                 <SelectTrigger id="auth-type">
-                    <SelectValue :placeholder="t('tools.config.mcp.select_auth')" />
+                    <SelectValue
+                        :placeholder="t('tools.config.mcp.select_auth')"
+                    />
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem
@@ -97,7 +99,8 @@ const authOptions = [
             class="rounded-lg border border-dashed p-4"
         >
             <p class="text-sm text-muted-foreground">
-                Authentication credentials will be configured securely after creating the tool.
+                Authentication credentials will be configured securely after
+                creating the tool.
             </p>
         </div>
     </div>

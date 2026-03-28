@@ -23,7 +23,9 @@ const emit = defineEmits<{
             class="flex flex-col items-center justify-center py-16 text-center"
         >
             <slot name="icon">
-                <div class="mb-4 h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                <div
+                    class="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
+                >
                     <Plus class="h-6 w-6 text-muted-foreground" />
                 </div>
             </slot>

@@ -56,7 +56,7 @@ const hasDetails = computed(() => {
         <button
             v-if="collapsible && hasDetails"
             type="button"
-            class="flex items-center gap-1 hover:text-foreground transition-colors"
+            class="flex items-center gap-1 transition-colors hover:text-foreground"
             @click="isExpanded = !isExpanded"
         >
             <ChevronRight
@@ -79,7 +79,7 @@ const hasDetails = computed(() => {
         <Badge
             v-if="routing.urgency && routing.urgency !== 'medium'"
             :variant="routing.urgency === 'high' ? 'destructive' : 'secondary'"
-            class="text-[10px] px-1 py-0"
+            class="px-1 py-0 text-[10px]"
         >
             {{ routing.urgency }}
         </Badge>
@@ -88,7 +88,7 @@ const hasDetails = computed(() => {
     <!-- Expanded details -->
     <div
         v-if="isExpanded && hasDetails"
-        class="mt-1 ml-4 pl-3 border-l border-muted text-xs text-muted-foreground space-y-1"
+        class="mt-1 ml-4 space-y-1 border-l border-muted pl-3 text-xs text-muted-foreground"
     >
         <p v-if="routing.query">
             <span class="font-medium">Query:</span> {{ routing.query }}

@@ -95,7 +95,9 @@ export class Widget {
                 this.conversation = savedConversation;
                 // Load existing messages
                 try {
-                    this.messages = await this.api.getMessages(savedConversation.conversation_id);
+                    this.messages = await this.api.getMessages(
+                        savedConversation.conversation_id,
+                    );
                 } catch {
                     // Conversation might have expired, start fresh
                     this.storage.clearConversation();
@@ -111,7 +113,7 @@ export class Widget {
                     onSend: (message) => this.sendMessage(message),
                     onOpen: () => this.handleOpen(),
                     onClose: () => this.handleClose(),
-                }
+                },
             );
 
             // Mount to DOM
@@ -213,7 +215,9 @@ export class Widget {
     /**
      * Ensure we have a session.
      */
-    private async ensureSession(visitorInfo?: VisitorInfo): Promise<SessionData> {
+    private async ensureSession(
+        visitorInfo?: VisitorInfo,
+    ): Promise<SessionData> {
         if (this.session) {
             return this.session;
         }
@@ -223,7 +227,10 @@ export class Widget {
 
         // Update error tracker context with session
         if (this.config) {
-            this.errorTracker.setContext(this.config.chatbot_id, this.session.session_id);
+            this.errorTracker.setContext(
+                this.config.chatbot_id,
+                this.session.session_id,
+            );
         }
 
         this.events.emit('session:created', this.session);
@@ -279,7 +286,10 @@ export class Widget {
             this.events.emit('message:sent', userMessage);
 
             // Send to API
-            const response = await this.api.sendMessage(conversation.conversation_id, content);
+            const response = await this.api.sendMessage(
+                conversation.conversation_id,
+                content,
+            );
 
             // Update message ID
             userMessage.id = response.message_id;
@@ -305,7 +315,7 @@ export class Widget {
                 conversation.conversation_id,
                 (event) => this.handleStreamEvent(event, assistantMessage),
                 (error) => this.handleStreamError(error),
-                () => this.handleStreamComplete(assistantMessage)
+                () => this.handleStreamComplete(assistantMessage),
             );
         } catch (error) {
             this.errorTracker.capture(error as Error, { phase: 'sendMessage' });
@@ -337,11 +347,58 @@ export class Widget {
             this.container?.updateMessage(message.id, this.streamContent);
         }
 
+        // Flow events
+        if (event.type === 'flow_start') {
+            this.events.emit('flow:start', {
+                flow_id: event.flow_id,
+                flow_name: event.flow_name,
+            });
+        } else if (event.type === 'flow_menu') {
+            this.container?.hideTyping();
+
+            // Import FlowMenu dynamically to keep initial bundle small
+            import('./ui/flow-menu').then(({ FlowMenu }) => {
+                const menu = new FlowMenu(
+                    event.message,
+                    event.options,
+                    (_optionId: string, label: string) => {
+                        this.sendMessage(label);
+                    },
+                );
+                this.container?.appendToMessages(menu.getElement());
+                this.container?.scrollToBottom();
+            });
+
+            this.events.emit('flow:menu', {
+                message: event.message,
+                options: event.options,
+            });
+        } else if (event.type === 'flow_message') {
+            this.container?.hideTyping();
+
+            const flowMsg: Message = {
+                id: `flow-msg-${Date.now()}`,
+                role: 'assistant',
+                content: event.content,
+                created_at: new Date().toISOString(),
+            };
+            this.messages.push(flowMsg);
+            this.container?.addMessage(flowMsg);
+        } else if (event.type === 'flow_end') {
+            this.events.emit('flow:end', { action: event.action });
+        }
+
         // Emit events for tool calls, knowledge bases, etc.
         if (event.type === 'tool_call') {
-            this.events.emit('message', { type: 'tool_call', tool: event.tool });
+            this.events.emit('message', {
+                type: 'tool_call',
+                tool: event.tool,
+            });
         } else if (event.type === 'knowledge_base') {
-            this.events.emit('message', { type: 'knowledge_base', name: event.name });
+            this.events.emit('message', {
+                type: 'knowledge_base',
+                name: event.name,
+            });
         }
     }
 

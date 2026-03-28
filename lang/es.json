@@ -1,5 +1,5 @@
 {
-    "Triage Agent": "Agente de Triaje",
+    "Triage Agent": "Agente de Clasificación",
     "Knowledge Agent": "Agente de Conocimiento",
     "Action Agent": "Agente de Acción",
     "Classifies intent, urgency, and sentiment": "Clasifica intención, urgencia y sentimiento",
@@ -50,7 +50,7 @@
     "Invalid folder.": "Carpeta inválida.",
     "Invalid knowledge base.": "Base de conocimiento inválida.",
     "You do not have access to one or more selected agents.": "No tienes acceso a uno o más agentes seleccionados.",
-    "Please select a Triage agent.": "Por favor, selecciona un agente de Triaje.",
+    "Please select a Triage agent.": "Por favor, selecciona un agente de Clasificación.",
     "Please select a Knowledge agent.": "Por favor, selecciona un agente de Conocimiento.",
     "Please select an Action agent.": "Por favor, selecciona un agente de Acción.",
     "Please select an agent or agent team.": "Por favor, selecciona un agente o equipo de agentes.",

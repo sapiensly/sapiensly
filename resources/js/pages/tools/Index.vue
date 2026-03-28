@@ -31,7 +31,9 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [{ title: t('tools.index.heading'), href: '#' }]);
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: t('tools.index.heading'), href: '#' },
+]);
 
 const toolIcon = (type: ToolType) => {
     switch (type) {
@@ -58,11 +60,9 @@ const statusVariant = (status: string) => {
 };
 
 const filterByType = (type: string | null) => {
-    router.get(
-        ToolController.index().url,
-        type ? { type } : {},
-        { preserveState: true },
-    );
+    router.get(ToolController.index().url, type ? { type } : {}, {
+        preserveState: true,
+    });
 };
 
 const totalTools = Object.values(props.toolsByType).reduce(
@@ -93,7 +93,9 @@ const totalTools = Object.values(props.toolsByType).reduce(
                 <Tabs
                     :default-value="currentType ?? 'all'"
                     class="mb-6"
-                    @update:model-value="filterByType($event === 'all' ? null : $event)"
+                    @update:model-value="
+                        filterByType($event === 'all' ? null : $event)
+                    "
                 >
                     <TabsList>
                         <TabsTrigger value="all">
@@ -108,7 +110,9 @@ const totalTools = Object.values(props.toolsByType).reduce(
                                 :is="toolIcon(type.value)"
                                 class="mr-2 h-4 w-4"
                             />
-                            {{ type.label }} ({{ toolsByType[type.value] ?? 0 }})
+                            {{ type.label }} ({{
+                                toolsByType[type.value] ?? 0
+                            }})
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
@@ -150,7 +154,9 @@ const totalTools = Object.values(props.toolsByType).reduce(
                                             {{ tool.name }}
                                         </CardTitle>
                                     </div>
-                                    <Badge :variant="statusVariant(tool.status)">
+                                    <Badge
+                                        :variant="statusVariant(tool.status)"
+                                    >
                                         {{ tool.status }}
                                     </Badge>
                                 </div>
@@ -159,7 +165,9 @@ const totalTools = Object.values(props.toolsByType).reduce(
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div class="flex items-center gap-2 text-sm text-muted-foreground">
+                                <div
+                                    class="flex items-center gap-2 text-sm text-muted-foreground"
+                                >
                                     <Badge variant="outline" class="capitalize">
                                         {{ tool.type }}
                                     </Badge>

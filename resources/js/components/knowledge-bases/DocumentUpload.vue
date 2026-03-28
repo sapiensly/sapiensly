@@ -22,7 +22,16 @@ const props = defineProps<Props>();
 const isOpen = ref(false);
 const isDragging = ref(false);
 const files = ref<File[]>([]);
-const uploadProgress = ref<Map<string, { progress: number; status: 'pending' | 'uploading' | 'done' | 'error'; error?: string }>>(new Map());
+const uploadProgress = ref<
+    Map<
+        string,
+        {
+            progress: number;
+            status: 'pending' | 'uploading' | 'done' | 'error';
+            error?: string;
+        }
+    >
+>(new Map());
 
 const acceptedTypes = [
     'application/pdf',
@@ -39,16 +48,24 @@ const acceptedExtensions = '.pdf,.txt,.docx,.md,.csv,.json';
 const maxFileSize = 10 * 1024 * 1024; // 10MB
 
 const isUploading = computed(() => {
-    return Array.from(uploadProgress.value.values()).some(p => p.status === 'uploading');
+    return Array.from(uploadProgress.value.values()).some(
+        (p) => p.status === 'uploading',
+    );
 });
 
 const hasErrors = computed(() => {
-    return Array.from(uploadProgress.value.values()).some(p => p.status === 'error');
+    return Array.from(uploadProgress.value.values()).some(
+        (p) => p.status === 'error',
+    );
 });
 
 const allDone = computed(() => {
-    return files.value.length > 0 &&
-           Array.from(uploadProgress.value.values()).every(p => p.status === 'done' || p.status === 'error');
+    return (
+        files.value.length > 0 &&
+        Array.from(uploadProgress.value.values()).every(
+            (p) => p.status === 'done' || p.status === 'error',
+        )
+    );
 });
 
 function openDialog() {
@@ -114,7 +131,7 @@ function addFiles(newFiles: File[]) {
         }
 
         // Check for duplicates
-        if (files.value.some(f => f.name === file.name)) {
+        if (files.value.some((f) => f.name === file.name)) {
             continue;
         }
 
@@ -127,7 +144,7 @@ function addFiles(newFiles: File[]) {
 }
 
 function removeFile(file: File) {
-    files.value = files.value.filter(f => f.name !== file.name);
+    files.value = files.value.filter((f) => f.name !== file.name);
     uploadProgress.value.delete(file.name);
 }
 
@@ -136,7 +153,10 @@ async function uploadFiles() {
         const progress = uploadProgress.value.get(file.name);
         if (!progress || progress.status !== 'pending') continue;
 
-        uploadProgress.value.set(file.name, { progress: 0, status: 'uploading' });
+        uploadProgress.value.set(file.name, {
+            progress: 0,
+            status: 'uploading',
+        });
 
         try {
             const formData = new FormData();
@@ -147,14 +167,20 @@ async function uploadFiles() {
             }).url;
 
             // Simulate progress since we can't track real progress with Inertia
-            uploadProgress.value.set(file.name, { progress: 30, status: 'uploading' });
+            uploadProgress.value.set(file.name, {
+                progress: 30,
+                status: 'uploading',
+            });
 
             await new Promise<void>((resolve) => {
                 router.post(url, formData, {
                     forceFormData: true,
                     preserveScroll: true,
                     onSuccess: () => {
-                        uploadProgress.value.set(file.name, { progress: 100, status: 'done' });
+                        uploadProgress.value.set(file.name, {
+                            progress: 100,
+                            status: 'done',
+                        });
                         resolve();
                     },
                     onError: (errors) => {
@@ -196,7 +222,8 @@ function formatFileSize(bytes: number): string {
                 <DialogHeader>
                     <DialogTitle>Upload Documents</DialogTitle>
                     <DialogDescription>
-                        Drag and drop files or click to browse. Max 10MB per file.
+                        Drag and drop files or click to browse. Max 10MB per
+                        file.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -205,7 +232,8 @@ function formatFileSize(bytes: number): string {
                     class="relative rounded-lg border-2 border-dashed p-8 text-center transition-colors"
                     :class="{
                         'border-primary bg-primary/5': isDragging,
-                        'border-muted-foreground/25 hover:border-muted-foreground/50': !isDragging,
+                        'border-muted-foreground/25 hover:border-muted-foreground/50':
+                            !isDragging,
                     }"
                     @dragover="handleDragOver"
                     @dragleave="handleDragLeave"
@@ -228,39 +256,75 @@ function formatFileSize(bytes: number): string {
                 </div>
 
                 <!-- File list -->
-                <div v-if="files.length > 0 || uploadProgress.size > 0" class="mt-4 space-y-2">
+                <div
+                    v-if="files.length > 0 || uploadProgress.size > 0"
+                    class="mt-4 space-y-2"
+                >
                     <div
                         v-for="file in files"
                         :key="file.name"
                         class="flex items-center gap-3 rounded-lg border p-3"
                     >
-                        <FileText class="h-5 w-5 shrink-0 text-muted-foreground" />
+                        <FileText
+                            class="h-5 w-5 shrink-0 text-muted-foreground"
+                        />
                         <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-medium">{{ file.name }}</p>
+                            <p class="truncate text-sm font-medium">
+                                {{ file.name }}
+                            </p>
                             <div class="flex items-center gap-2">
                                 <span class="text-xs text-muted-foreground">
                                     {{ formatFileSize(file.size) }}
                                 </span>
-                                <template v-if="uploadProgress.get(file.name)?.status === 'uploading'">
+                                <template
+                                    v-if="
+                                        uploadProgress.get(file.name)
+                                            ?.status === 'uploading'
+                                    "
+                                >
                                     <Progress
-                                        :model-value="uploadProgress.get(file.name)?.progress ?? 0"
+                                        :model-value="
+                                            uploadProgress.get(file.name)
+                                                ?.progress ?? 0
+                                        "
                                         class="h-1 flex-1"
                                     />
                                 </template>
-                                <template v-else-if="uploadProgress.get(file.name)?.status === 'done'">
-                                    <CheckCircle class="h-4 w-4 text-green-500" />
-                                    <span class="text-xs text-green-500">Uploaded</span>
+                                <template
+                                    v-else-if="
+                                        uploadProgress.get(file.name)
+                                            ?.status === 'done'
+                                    "
+                                >
+                                    <CheckCircle
+                                        class="h-4 w-4 text-green-500"
+                                    />
+                                    <span class="text-xs text-green-500"
+                                        >Uploaded</span
+                                    >
                                 </template>
-                                <template v-else-if="uploadProgress.get(file.name)?.status === 'error'">
-                                    <AlertCircle class="h-4 w-4 text-destructive" />
+                                <template
+                                    v-else-if="
+                                        uploadProgress.get(file.name)
+                                            ?.status === 'error'
+                                    "
+                                >
+                                    <AlertCircle
+                                        class="h-4 w-4 text-destructive"
+                                    />
                                     <span class="text-xs text-destructive">
-                                        {{ uploadProgress.get(file.name)?.error }}
+                                        {{
+                                            uploadProgress.get(file.name)?.error
+                                        }}
                                     </span>
                                 </template>
                             </div>
                         </div>
                         <Button
-                            v-if="uploadProgress.get(file.name)?.status === 'pending'"
+                            v-if="
+                                uploadProgress.get(file.name)?.status ===
+                                'pending'
+                            "
                             variant="ghost"
                             size="icon"
                             class="h-8 w-8 shrink-0"
@@ -271,15 +335,27 @@ function formatFileSize(bytes: number): string {
                     </div>
 
                     <!-- Error-only entries (files that failed validation before being added) -->
-                    <template v-for="[name, progress] in uploadProgress" :key="name">
+                    <template
+                        v-for="[name, progress] in uploadProgress"
+                        :key="name"
+                    >
                         <div
-                            v-if="progress.status === 'error' && !files.some(f => f.name === name)"
+                            v-if="
+                                progress.status === 'error' &&
+                                !files.some((f) => f.name === name)
+                            "
                             class="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/5 p-3"
                         >
-                            <AlertCircle class="h-5 w-5 shrink-0 text-destructive" />
+                            <AlertCircle
+                                class="h-5 w-5 shrink-0 text-destructive"
+                            />
                             <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-medium">{{ name }}</p>
-                                <p class="text-xs text-destructive">{{ progress.error }}</p>
+                                <p class="truncate text-sm font-medium">
+                                    {{ name }}
+                                </p>
+                                <p class="text-xs text-destructive">
+                                    {{ progress.error }}
+                                </p>
                             </div>
                         </div>
                     </template>
@@ -287,7 +363,11 @@ function formatFileSize(bytes: number): string {
 
                 <!-- Actions -->
                 <div class="mt-4 flex justify-end gap-2">
-                    <Button variant="outline" :disabled="isUploading" @click="closeDialog">
+                    <Button
+                        variant="outline"
+                        :disabled="isUploading"
+                        @click="closeDialog"
+                    >
                         {{ allDone ? 'Close' : 'Cancel' }}
                     </Button>
                     <Button
@@ -296,7 +376,11 @@ function formatFileSize(bytes: number): string {
                         @click="uploadFiles"
                     >
                         <Upload v-if="!isUploading" class="mr-2 h-4 w-4" />
-                        {{ isUploading ? 'Uploading...' : `Upload ${files.length} file${files.length !== 1 ? 's' : ''}` }}
+                        {{
+                            isUploading
+                                ? 'Uploading...'
+                                : `Upload ${files.length} file${files.length !== 1 ? 's' : ''}`
+                        }}
                     </Button>
                 </div>
             </DialogContent>

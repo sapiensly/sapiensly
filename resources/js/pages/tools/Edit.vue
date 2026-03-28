@@ -39,7 +39,10 @@ const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: t('tools.index.heading'), href: ToolController.index().url },
-    { title: props.tool.name, href: ToolController.show({ tool: props.tool.id }).url },
+    {
+        title: props.tool.name,
+        href: ToolController.show({ tool: props.tool.id }).url,
+    },
     { title: t('common.edit'), href: '#' },
 ]);
 
@@ -77,37 +80,51 @@ const submit = () => {
                     <div class="space-y-6">
                         <HeadingSmall
                             :title="t('tools.edit.basic_info')"
-                            :description="t('tools.edit.basic_info_description')"
+                            :description="
+                                t('tools.edit.basic_info_description')
+                            "
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">{{ t('tools.edit.tool_name') }}</Label>
+                                <Label for="name">{{
+                                    t('tools.edit.tool_name')
+                                }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    :placeholder="t('tools.edit.tool_name_placeholder')"
+                                    :placeholder="
+                                        t('tools.edit.tool_name_placeholder')
+                                    "
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">{{ t('tools.edit.description_label') }}</Label>
+                                <Label for="description">{{
+                                    t('tools.edit.description_label')
+                                }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    :placeholder="t('tools.edit.description_placeholder')"
+                                    :placeholder="
+                                        t('tools.edit.description_placeholder')
+                                    "
                                     rows="3"
                                 />
-                                <InputError :message="form.errors.description" />
+                                <InputError
+                                    :message="form.errors.description"
+                                />
                             </div>
 
                             <div class="grid gap-2">
                                 <Label for="status">Status</Label>
                                 <Select v-model="form.status">
                                     <SelectTrigger id="status">
-                                        <SelectValue placeholder="Select status" />
+                                        <SelectValue
+                                            placeholder="Select status"
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -170,7 +187,11 @@ const submit = () => {
 
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" as-child>
-                            <Link :href="ToolController.show({ tool: tool.id }).url">
+                            <Link
+                                :href="
+                                    ToolController.show({ tool: tool.id }).url
+                                "
+                            >
                                 {{ t('common.cancel') }}
                             </Link>
                         </Button>

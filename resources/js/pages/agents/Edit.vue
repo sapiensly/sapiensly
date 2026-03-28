@@ -38,7 +38,10 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('agent_teams.index.title'), href: AgentTeamController.index().url },
+    {
+        title: t('agent_teams.index.title'),
+        href: AgentTeamController.index().url,
+    },
     {
         title: props.team.name,
         href: AgentTeamController.show({ agent_team: props.team.id }).url,
@@ -97,45 +100,73 @@ const statusOptions = computed(() => [
                     <div class="space-y-6">
                         <HeadingSmall
                             :title="t('agent_teams.edit.details_title')"
-                            :description="t('agent_teams.edit.details_description')"
+                            :description="
+                                t('agent_teams.edit.details_description')
+                            "
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">{{ t('agent_teams.edit.team_name') }}</Label>
+                                <Label for="name">{{
+                                    t('agent_teams.edit.team_name')
+                                }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    :placeholder="t('agent_teams.edit.team_name_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'agent_teams.edit.team_name_placeholder',
+                                        )
+                                    "
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">{{ t('agent_teams.edit.description_label') }}</Label>
+                                <Label for="description">{{
+                                    t('agent_teams.edit.description_label')
+                                }}</Label>
                                 <Input
                                     id="description"
                                     v-model="form.description"
-                                    :placeholder="t('agent_teams.edit.description_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'agent_teams.edit.description_placeholder',
+                                        )
+                                    "
                                 />
-                                <InputError :message="form.errors.description" />
+                                <InputError
+                                    :message="form.errors.description"
+                                />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="keywords">{{ t('agent_teams.edit.keywords_label') }}</Label>
+                                <Label for="keywords">{{
+                                    t('agent_teams.edit.keywords_label')
+                                }}</Label>
                                 <KeywordsInput v-model="form.keywords" />
                                 <p class="text-xs text-muted-foreground">
-                                    {{ t('agent_teams.edit.keywords_description') }}
+                                    {{
+                                        t(
+                                            'agent_teams.edit.keywords_description',
+                                        )
+                                    }}
                                 </p>
                                 <InputError :message="form.errors.keywords" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="status">{{ t('common.status') }}</Label>
+                                <Label for="status">{{
+                                    t('common.status')
+                                }}</Label>
                                 <Select v-model="form.status">
                                     <SelectTrigger id="status">
-                                        <SelectValue :placeholder="t('common.select_status')" />
+                                        <SelectValue
+                                            :placeholder="
+                                                t('common.select_status')
+                                            "
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -155,7 +186,9 @@ const statusOptions = computed(() => [
                     <div class="space-y-6">
                         <HeadingSmall
                             :title="t('agent_teams.edit.agent_config')"
-                            :description="t('agent_teams.edit.agent_config_description')"
+                            :description="
+                                t('agent_teams.edit.agent_config_description')
+                            "
                         />
 
                         <AgentForm

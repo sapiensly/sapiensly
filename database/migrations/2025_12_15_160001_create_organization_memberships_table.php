@@ -12,7 +12,6 @@ return new class extends Migration
             $table->string('id', 36)->primary();
             $table->string('organization_id', 36);
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('workos_membership_id')->unique();
             $table->string('role')->default('member');
             $table->string('status')->default('active');
             $table->timestamps();

@@ -79,7 +79,7 @@ const toolIcon = (type: string) => {
                 <Label :for="`tool-${tool.id}`" class="flex-1 cursor-pointer">
                     {{ tool.name }}
                 </Label>
-                <span class="text-xs capitalize text-muted-foreground">
+                <span class="text-xs text-muted-foreground capitalize">
                     {{ tool.type }}
                 </span>
             </div>

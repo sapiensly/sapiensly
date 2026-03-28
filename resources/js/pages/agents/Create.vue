@@ -41,7 +41,10 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('agent_teams.index.title'), href: AgentTeamController.index().url },
+    {
+        title: t('agent_teams.index.title'),
+        href: AgentTeamController.index().url,
+    },
     { title: t('agent_teams.create.title'), href: '#' },
 ]);
 
@@ -67,9 +70,11 @@ const agentTypeMap = computed(() => {
 });
 
 const isComplete = computed(() => {
-    return selectedAgents.value.triage &&
-           selectedAgents.value.knowledge &&
-           selectedAgents.value.action;
+    return (
+        selectedAgents.value.triage &&
+        selectedAgents.value.knowledge &&
+        selectedAgents.value.action
+    );
 });
 
 const submit = () => {
@@ -100,37 +105,59 @@ const submit = () => {
                     <div class="space-y-6">
                         <HeadingSmall
                             :title="t('agent_teams.create.details_title')"
-                            :description="t('agent_teams.create.details_description')"
+                            :description="
+                                t('agent_teams.create.details_description')
+                            "
                         />
 
-                        <div class="grid gap-4 max-w-xl">
+                        <div class="grid max-w-xl gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">{{ t('agent_teams.create.team_name') }}</Label>
+                                <Label for="name">{{
+                                    t('agent_teams.create.team_name')
+                                }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    :placeholder="t('agent_teams.create.team_name_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'agent_teams.create.team_name_placeholder',
+                                        )
+                                    "
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">{{ t('agent_teams.create.description_label') }}</Label>
+                                <Label for="description">{{
+                                    t('agent_teams.create.description_label')
+                                }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    :placeholder="t('agent_teams.create.description_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'agent_teams.create.description_placeholder',
+                                        )
+                                    "
                                     rows="2"
                                 />
-                                <InputError :message="form.errors.description" />
+                                <InputError
+                                    :message="form.errors.description"
+                                />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="keywords">{{ t('agent_teams.create.keywords_label') }}</Label>
+                                <Label for="keywords">{{
+                                    t('agent_teams.create.keywords_label')
+                                }}</Label>
                                 <KeywordsInput v-model="form.keywords" />
                                 <p class="text-xs text-muted-foreground">
-                                    {{ t('agent_teams.create.keywords_description') }}
+                                    {{
+                                        t(
+                                            'agent_teams.create.keywords_description',
+                                        )
+                                    }}
                                 </p>
                                 <InputError :message="form.errors.keywords" />
                             </div>
@@ -140,7 +167,11 @@ const submit = () => {
                     <div class="space-y-6">
                         <HeadingSmall
                             :title="t('agent_teams.create.select_agents')"
-                            :description="t('agent_teams.create.select_agents_description')"
+                            :description="
+                                t(
+                                    'agent_teams.create.select_agents_description',
+                                )
+                            "
                         />
 
                         <div class="grid gap-4 md:grid-cols-3">
@@ -150,7 +181,9 @@ const submit = () => {
                                 :agents="standaloneAgents.triage"
                                 v-model="selectedAgents.triage"
                             />
-                            <InputError :message="form.errors['agent_ids.triage']" />
+                            <InputError
+                                :message="form.errors['agent_ids.triage']"
+                            />
 
                             <AgentSelector
                                 type="knowledge"
@@ -158,7 +191,9 @@ const submit = () => {
                                 :agents="standaloneAgents.knowledge"
                                 v-model="selectedAgents.knowledge"
                             />
-                            <InputError :message="form.errors['agent_ids.knowledge']" />
+                            <InputError
+                                :message="form.errors['agent_ids.knowledge']"
+                            />
 
                             <AgentSelector
                                 type="action"
@@ -166,11 +201,13 @@ const submit = () => {
                                 :agents="standaloneAgents.action"
                                 v-model="selectedAgents.action"
                             />
-                            <InputError :message="form.errors['agent_ids.action']" />
+                            <InputError
+                                :message="form.errors['agent_ids.action']"
+                            />
                         </div>
                     </div>
 
-                    <div class="flex justify-end gap-4 pt-4 border-t">
+                    <div class="flex justify-end gap-4 border-t pt-4">
                         <Button variant="outline" as-child>
                             <Link :href="AgentTeamController.index().url">
                                 {{ t('common.cancel') }}

@@ -57,7 +57,9 @@ watch(open, (isOpen) => {
 });
 
 const availableDocuments = computed(() => {
-    return props.documents.filter(doc => !props.excludeDocumentIds.includes(doc.id));
+    return props.documents.filter(
+        (doc) => !props.excludeDocumentIds.includes(doc.id),
+    );
 });
 
 const filteredDocuments = computed(() => {
@@ -65,15 +67,16 @@ const filteredDocuments = computed(() => {
 
     // Filter by folder
     if (selectedFolderId.value !== null) {
-        docs = docs.filter(doc => doc.folder_id === selectedFolderId.value);
+        docs = docs.filter((doc) => doc.folder_id === selectedFolderId.value);
     }
 
     // Filter by search query
     if (searchQuery.value) {
         const query = searchQuery.value.toLowerCase();
-        docs = docs.filter(doc =>
-            doc.name.toLowerCase().includes(query) ||
-            doc.original_filename?.toLowerCase().includes(query)
+        docs = docs.filter(
+            (doc) =>
+                doc.name.toLowerCase().includes(query) ||
+                doc.original_filename?.toLowerCase().includes(query),
         );
     }
 
@@ -99,7 +102,8 @@ const toggleDocument = (docId: string) => {
     selectedDocumentIds.value = new Set(selectedDocumentIds.value);
 };
 
-const isDocumentSelected = (docId: string) => selectedDocumentIds.value.has(docId);
+const isDocumentSelected = (docId: string) =>
+    selectedDocumentIds.value.has(docId);
 
 const toggleFolder = (folderId: string) => {
     if (expandedFolders.value.has(folderId)) {
@@ -110,8 +114,10 @@ const toggleFolder = (folderId: string) => {
 };
 
 const isExpanded = (folderId: string) => expandedFolders.value.has(folderId);
-const isActiveFolder = (folderId: string | null) => selectedFolderId.value === folderId;
-const hasChildren = (folder: Folder) => folder.children && folder.children.length > 0;
+const isActiveFolder = (folderId: string | null) =>
+    selectedFolderId.value === folderId;
+const hasChildren = (folder: Folder) =>
+    folder.children && folder.children.length > 0;
 
 const handleConfirm = () => {
     emit('select', Array.from(selectedDocumentIds.value));
@@ -130,7 +136,7 @@ const typeColors: Record<string, string> = {
 
 <template>
     <Dialog v-model:open="open">
-        <DialogContent class="sm:max-w-5xl h-[700px] flex flex-col">
+        <DialogContent class="flex h-[700px] flex-col sm:max-w-5xl">
             <DialogHeader>
                 <DialogTitle>Select Documents</DialogTitle>
                 <DialogDescription>
@@ -147,7 +153,9 @@ const typeColors: Record<string, string> = {
                             <div
                                 :class="[
                                     'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
-                                    isActiveFolder(null) ? 'bg-accent text-accent-foreground' : '',
+                                    isActiveFolder(null)
+                                        ? 'bg-accent text-accent-foreground'
+                                        : '',
                                 ]"
                                 @click="selectedFolderId = null"
                             >
@@ -157,49 +165,99 @@ const typeColors: Record<string, string> = {
 
                             <!-- My Folders -->
                             <div v-if="folders.my.length > 0" class="mt-4">
-                                <h4 class="mb-2 px-2 text-xs font-semibold uppercase text-muted-foreground">
+                                <h4
+                                    class="mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase"
+                                >
                                     My Folders
                                 </h4>
-                                <template v-for="folder in folders.my" :key="folder.id">
+                                <template
+                                    v-for="folder in folders.my"
+                                    :key="folder.id"
+                                >
                                     <div>
                                         <div
                                             :class="[
                                                 'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
-                                                isActiveFolder(folder.id) ? 'bg-accent text-accent-foreground' : '',
+                                                isActiveFolder(folder.id)
+                                                    ? 'bg-accent text-accent-foreground'
+                                                    : '',
                                             ]"
-                                            @click="selectedFolderId = folder.id"
+                                            @click="
+                                                selectedFolderId = folder.id
+                                            "
                                         >
                                             <button
                                                 v-if="hasChildren(folder)"
                                                 type="button"
                                                 class="shrink-0 rounded p-0.5 hover:bg-muted"
-                                                @click.stop="toggleFolder(folder.id)"
+                                                @click.stop="
+                                                    toggleFolder(folder.id)
+                                                "
                                             >
-                                                <ChevronDown v-if="isExpanded(folder.id)" class="h-3 w-3" />
-                                                <ChevronRight v-else class="h-3 w-3" />
+                                                <ChevronDown
+                                                    v-if="isExpanded(folder.id)"
+                                                    class="h-3 w-3"
+                                                />
+                                                <ChevronRight
+                                                    v-else
+                                                    class="h-3 w-3"
+                                                />
                                             </button>
                                             <span v-else class="w-4" />
 
-                                            <FolderOpen v-if="isExpanded(folder.id) || isActiveFolder(folder.id)" class="h-4 w-4 text-muted-foreground" />
-                                            <FolderIcon v-else class="h-4 w-4 text-muted-foreground" />
-                                            <span class="flex-1 truncate text-xs">{{ folder.name }}</span>
+                                            <FolderOpen
+                                                v-if="
+                                                    isExpanded(folder.id) ||
+                                                    isActiveFolder(folder.id)
+                                                "
+                                                class="h-4 w-4 text-muted-foreground"
+                                            />
+                                            <FolderIcon
+                                                v-else
+                                                class="h-4 w-4 text-muted-foreground"
+                                            />
+                                            <span
+                                                class="flex-1 truncate text-xs"
+                                                >{{ folder.name }}</span
+                                            >
                                         </div>
 
                                         <!-- Children -->
-                                        <div v-if="isExpanded(folder.id) && hasChildren(folder)" class="ml-4">
+                                        <div
+                                            v-if="
+                                                isExpanded(folder.id) &&
+                                                hasChildren(folder)
+                                            "
+                                            class="ml-4"
+                                        >
                                             <div
                                                 v-for="child in folder.children"
                                                 :key="child.id"
                                                 :class="[
                                                     'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
-                                                    isActiveFolder(child.id) ? 'bg-accent text-accent-foreground' : '',
+                                                    isActiveFolder(child.id)
+                                                        ? 'bg-accent text-accent-foreground'
+                                                        : '',
                                                 ]"
-                                                @click="selectedFolderId = child.id"
+                                                @click="
+                                                    selectedFolderId = child.id
+                                                "
                                             >
                                                 <span class="w-4" />
-                                                <FolderOpen v-if="isActiveFolder(child.id)" class="h-4 w-4 text-muted-foreground" />
-                                                <FolderIcon v-else class="h-4 w-4 text-muted-foreground" />
-                                                <span class="flex-1 truncate text-xs">{{ child.name }}</span>
+                                                <FolderOpen
+                                                    v-if="
+                                                        isActiveFolder(child.id)
+                                                    "
+                                                    class="h-4 w-4 text-muted-foreground"
+                                                />
+                                                <FolderIcon
+                                                    v-else
+                                                    class="h-4 w-4 text-muted-foreground"
+                                                />
+                                                <span
+                                                    class="flex-1 truncate text-xs"
+                                                    >{{ child.name }}</span
+                                                >
                                             </div>
                                         </div>
                                     </div>
@@ -207,23 +265,43 @@ const typeColors: Record<string, string> = {
                             </div>
 
                             <!-- Organization Folders -->
-                            <div v-if="folders.organization.length > 0" class="mt-4">
-                                <h4 class="mb-2 px-2 text-xs font-semibold uppercase text-muted-foreground">
+                            <div
+                                v-if="folders.organization.length > 0"
+                                class="mt-4"
+                            >
+                                <h4
+                                    class="mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase"
+                                >
                                     Organization
                                 </h4>
-                                <template v-for="folder in folders.organization" :key="folder.id">
+                                <template
+                                    v-for="folder in folders.organization"
+                                    :key="folder.id"
+                                >
                                     <div
                                         :class="[
                                             'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
-                                            isActiveFolder(folder.id) ? 'bg-accent text-accent-foreground' : '',
+                                            isActiveFolder(folder.id)
+                                                ? 'bg-accent text-accent-foreground'
+                                                : '',
                                         ]"
                                         @click="selectedFolderId = folder.id"
                                     >
                                         <span class="w-4" />
-                                        <FolderOpen v-if="isActiveFolder(folder.id)" class="h-4 w-4 text-muted-foreground" />
-                                        <FolderIcon v-else class="h-4 w-4 text-muted-foreground" />
-                                        <span class="flex-1 truncate text-xs">{{ folder.name }}</span>
-                                        <Users class="h-3 w-3 text-muted-foreground" />
+                                        <FolderOpen
+                                            v-if="isActiveFolder(folder.id)"
+                                            class="h-4 w-4 text-muted-foreground"
+                                        />
+                                        <FolderIcon
+                                            v-else
+                                            class="h-4 w-4 text-muted-foreground"
+                                        />
+                                        <span class="flex-1 truncate text-xs">{{
+                                            folder.name
+                                        }}</span>
+                                        <Users
+                                            class="h-3 w-3 text-muted-foreground"
+                                        />
                                     </div>
                                 </template>
                             </div>
@@ -232,10 +310,12 @@ const typeColors: Record<string, string> = {
                 </div>
 
                 <!-- Document List -->
-                <div class="flex-1 flex flex-col overflow-hidden">
+                <div class="flex flex-1 flex-col overflow-hidden">
                     <!-- Search -->
                     <div class="relative mb-4">
-                        <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Search
+                            class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        />
                         <Input
                             v-model="searchQuery"
                             type="search"
@@ -246,10 +326,19 @@ const typeColors: Record<string, string> = {
 
                     <!-- Documents -->
                     <ScrollArea class="flex-1">
-                        <div v-if="filteredDocuments.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-                            <File class="h-12 w-12 text-muted-foreground mb-4" />
+                        <div
+                            v-if="filteredDocuments.length === 0"
+                            class="flex flex-col items-center justify-center py-12 text-center"
+                        >
+                            <File
+                                class="mb-4 h-12 w-12 text-muted-foreground"
+                            />
                             <p class="text-sm text-muted-foreground">
-                                {{ availableDocuments.length === 0 ? 'No documents available' : 'No documents match your search' }}
+                                {{
+                                    availableDocuments.length === 0
+                                        ? 'No documents available'
+                                        : 'No documents match your search'
+                                }}
                             </p>
                         </div>
 
@@ -258,8 +347,10 @@ const typeColors: Record<string, string> = {
                                 v-for="doc in filteredDocuments"
                                 :key="doc.id"
                                 :class="[
-                                    'flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
-                                    isDocumentSelected(doc.id) ? 'border-primary bg-primary/5' : 'hover:bg-muted/50',
+                                    'flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors',
+                                    isDocumentSelected(doc.id)
+                                        ? 'border-primary bg-primary/5'
+                                        : 'hover:bg-muted/50',
                                 ]"
                                 @click="toggleDocument(doc.id)"
                             >
@@ -271,22 +362,41 @@ const typeColors: Record<string, string> = {
                                     :is="getDocumentIcon(doc.type)"
                                     class="h-5 w-5 shrink-0 text-muted-foreground"
                                 />
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-medium truncate">{{ doc.name }}</p>
-                                    <div class="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <span :class="['px-1.5 py-0.5 rounded text-xs', typeColors[doc.type] || typeColors.txt]">
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate font-medium">
+                                        {{ doc.name }}
+                                    </p>
+                                    <div
+                                        class="flex items-center gap-2 text-xs text-muted-foreground"
+                                    >
+                                        <span
+                                            :class="[
+                                                'rounded px-1.5 py-0.5 text-xs',
+                                                typeColors[doc.type] ||
+                                                    typeColors.txt,
+                                            ]"
+                                        >
                                             {{ doc.type.toUpperCase() }}
                                         </span>
-                                        <span v-if="doc.formatted_file_size">{{ doc.formatted_file_size }}</span>
-                                        <span v-if="doc.folder" class="flex items-center gap-1">
+                                        <span v-if="doc.formatted_file_size">{{
+                                            doc.formatted_file_size
+                                        }}</span>
+                                        <span
+                                            v-if="doc.folder"
+                                            class="flex items-center gap-1"
+                                        >
                                             <FolderIcon class="h-3 w-3" />
                                             {{ doc.folder.name }}
                                         </span>
                                     </div>
                                 </div>
                                 <component
-                                    :is="doc.visibility === 'organization' ? Users : Lock"
-                                    class="h-4 w-4 text-muted-foreground shrink-0"
+                                    :is="
+                                        doc.visibility === 'organization'
+                                            ? Users
+                                            : Lock
+                                    "
+                                    class="h-4 w-4 shrink-0 text-muted-foreground"
                                 />
                             </div>
                         </div>

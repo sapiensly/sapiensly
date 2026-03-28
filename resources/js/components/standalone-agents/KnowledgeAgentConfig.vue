@@ -4,7 +4,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-import type { KnowledgeAgentConfig, KnowledgeBaseReference } from '@/types/agents';
+import type {
+    KnowledgeAgentConfig,
+    KnowledgeBaseReference,
+} from '@/types/agents';
 import { Database } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -71,7 +74,10 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
     <div class="space-y-6">
         <div class="space-y-4">
             <Label>{{ t('agents.config.knowledge.knowledge_bases') }}</Label>
-            <div v-if="knowledgeBases.length === 0" class="rounded-lg border border-dashed p-6 text-center">
+            <div
+                v-if="knowledgeBases.length === 0"
+                class="rounded-lg border border-dashed p-6 text-center"
+            >
                 <Database class="mx-auto h-8 w-8 text-muted-foreground" />
                 <p class="mt-2 text-sm text-muted-foreground">
                     {{ t('agents.config.knowledge.no_kbs') }}
@@ -86,7 +92,9 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
                     <Checkbox
                         :id="`kb-${kb.id}`"
                         :model-value="isSelected(kb.id)"
-                        @update:model-value="toggleKnowledgeBase(kb.id, $event as boolean)"
+                        @update:model-value="
+                            toggleKnowledgeBase(kb.id, $event as boolean)
+                        "
                     />
                     <Label :for="`kb-${kb.id}`" class="flex-1 cursor-pointer">
                         {{ kb.name }}
@@ -100,7 +108,9 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
 
         <div class="space-y-4">
             <div class="flex items-center justify-between">
-                <Label for="top-k">{{ t('agents.config.knowledge.top_k') }}</Label>
+                <Label for="top-k">{{
+                    t('agents.config.knowledge.top_k')
+                }}</Label>
                 <Input
                     id="top-k"
                     v-model.number="topK"
@@ -131,9 +141,12 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
                 class="w-full"
             />
             <p class="text-xs text-muted-foreground">
-                Minimum similarity score for retrieved chunks. Higher values return more relevant results.
+                Minimum similarity score for retrieved chunks. Higher values
+                return more relevant results.
             </p>
-            <InputError :message="errors['config.rag_params.similarity_threshold']" />
+            <InputError
+                :message="errors['config.rag_params.similarity_threshold']"
+            />
         </div>
     </div>
 </template>

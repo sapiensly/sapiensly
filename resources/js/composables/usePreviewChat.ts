@@ -1,6 +1,6 @@
-import { ref, onMounted, onUnmounted } from 'vue';
-import axios from 'axios';
 import * as ChatbotPreviewController from '@/actions/App/Http/Controllers/ChatbotPreviewController';
+import axios from 'axios';
+import { onMounted, onUnmounted, ref } from 'vue';
 
 export interface PreviewMessage {
     id?: string;
@@ -35,7 +35,7 @@ export function usePreviewChat(chatbotId: string) {
             error.value = null;
 
             const response = await axios.post(
-                ChatbotPreviewController.init.url({ chatbot: chatbotId })
+                ChatbotPreviewController.init.url({ chatbot: chatbotId }),
             );
 
             conversationId.value = response.data.conversation_id;
@@ -44,10 +44,12 @@ export function usePreviewChat(chatbotId: string) {
                     id: msg.id,
                     role: msg.role as 'user' | 'assistant',
                     content: msg.content,
-                })
+                }),
             );
         } catch (e: unknown) {
-            const axiosError = e as { response?: { data?: { message?: string } } };
+            const axiosError = e as {
+                response?: { data?: { message?: string } };
+            };
             error.value =
                 axiosError.response?.data?.message ||
                 'Failed to initialize preview chat';
@@ -78,7 +80,7 @@ export function usePreviewChat(chatbotId: string) {
                 {
                     conversation_id: conversationId.value,
                     content: content.trim(),
-                }
+                },
             );
 
             userMessage.id = response.data.message_id;
@@ -97,7 +99,9 @@ export function usePreviewChat(chatbotId: string) {
             // Start streaming response
             await startStream(assistantIndex);
         } catch (e: unknown) {
-            const axiosError = e as { response?: { data?: { error?: string } } };
+            const axiosError = e as {
+                response?: { data?: { error?: string } };
+            };
             const errorMsg =
                 axiosError.response?.data?.error || 'Failed to send message';
             error.value = errorMsg;
@@ -108,7 +112,10 @@ export function usePreviewChat(chatbotId: string) {
             const lastMessage = messages.value[messages.value.length - 1];
             if (lastMessage?.role === 'user') {
                 messages.value.pop();
-            } else if (lastMessage?.role === 'assistant' && !lastMessage.content) {
+            } else if (
+                lastMessage?.role === 'assistant' &&
+                !lastMessage.content
+            ) {
                 // Remove empty assistant placeholder if stream failed
                 messages.value.pop();
             }
@@ -164,7 +171,8 @@ export function usePreviewChat(chatbotId: string) {
 
                             if (payload === '[DONE]') {
                                 if (messages.value[messageIndex]) {
-                                    messages.value[messageIndex].isStreaming = false;
+                                    messages.value[messageIndex].isStreaming =
+                                        false;
                                 }
                                 stopStream();
                                 resolve();
@@ -177,7 +185,9 @@ export function usePreviewChat(chatbotId: string) {
                                 if (data.error) {
                                     error.value = data.error;
                                     if (messages.value[messageIndex]) {
-                                        messages.value[messageIndex].isStreaming = false;
+                                        messages.value[
+                                            messageIndex
+                                        ].isStreaming = false;
                                     }
                                     stopStream();
                                     reject(new Error(data.error));
@@ -186,20 +196,35 @@ export function usePreviewChat(chatbotId: string) {
 
                                 if (data.type === 'tool_call' && data.tool) {
                                     toolCalls.value.push({ name: data.tool });
-                                } else if (data.type === 'knowledge_base' && data.name) {
-                                    knowledgeBases.value.push({ name: data.name, id: data.id });
+                                } else if (
+                                    data.type === 'knowledge_base' &&
+                                    data.name
+                                ) {
+                                    knowledgeBases.value.push({
+                                        name: data.name,
+                                        id: data.id,
+                                    });
                                 } else if (data.type === 'done') {
                                     if (messages.value[messageIndex]) {
-                                        messages.value[messageIndex].isStreaming = false;
+                                        messages.value[
+                                            messageIndex
+                                        ].isStreaming = false;
                                     }
                                     stopStream();
                                     resolve();
                                     return;
-                                } else if (data.content && messages.value[messageIndex]) {
-                                    messages.value[messageIndex].content += data.content;
+                                } else if (
+                                    data.content &&
+                                    messages.value[messageIndex]
+                                ) {
+                                    messages.value[messageIndex].content +=
+                                        data.content;
                                 }
                             } catch (e) {
-                                console.error('Failed to parse SSE message:', e);
+                                console.error(
+                                    'Failed to parse SSE message:',
+                                    e,
+                                );
                             }
                         }
                     }
@@ -212,7 +237,8 @@ export function usePreviewChat(chatbotId: string) {
                 })
                 .catch((err) => {
                     if (err.name === 'AbortError') return;
-                    error.value = err.message || 'Connection lost. Please try again.';
+                    error.value =
+                        err.message || 'Connection lost. Please try again.';
                     if (messages.value[messageIndex]) {
                         messages.value[messageIndex].isStreaming = false;
                     }
@@ -239,7 +265,7 @@ export function usePreviewChat(chatbotId: string) {
 
             const response = await axios.post(
                 ChatbotPreviewController.clear.url({ chatbot: chatbotId }),
-                { conversation_id: conversationId.value }
+                { conversation_id: conversationId.value },
             );
 
             conversationId.value = response.data.conversation_id;
@@ -247,9 +273,12 @@ export function usePreviewChat(chatbotId: string) {
             toolCalls.value = [];
             knowledgeBases.value = [];
         } catch (e: unknown) {
-            const axiosError = e as { response?: { data?: { error?: string } } };
+            const axiosError = e as {
+                response?: { data?: { error?: string } };
+            };
             error.value =
-                axiosError.response?.data?.error || 'Failed to clear conversation';
+                axiosError.response?.data?.error ||
+                'Failed to clear conversation';
         } finally {
             isLoading.value = false;
         }

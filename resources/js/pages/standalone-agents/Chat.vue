@@ -10,7 +10,12 @@ import echo from '@/echo';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { Agent, AgentType } from '@/types/agents';
-import type { Conversation, Message, ToolCall, KnowledgeBaseRef } from '@/types/chat';
+import type {
+    Conversation,
+    KnowledgeBaseRef,
+    Message,
+    ToolCall,
+} from '@/types/chat';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Bot, Brain, Plus, Zap } from 'lucide-vue-next';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
@@ -27,7 +32,10 @@ const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: t('agents.show.agents'), href: AgentController.index().url },
-    { title: props.agent.name, href: AgentController.show({ agent: props.agent.id }).url },
+    {
+        title: props.agent.name,
+        href: AgentController.show({ agent: props.agent.id }).url,
+    },
     { title: t('agents.chat.title'), href: '#' },
 ]);
 
@@ -44,6 +52,11 @@ const agentIcon = (type: AgentType) => {
     }
 };
 
+interface FlowMenuData {
+    message: string;
+    options: { id: string; label: string }[];
+}
+
 // Chat state
 const messagesContainer = ref<HTMLDivElement | null>(null);
 const messages = ref<Message[]>([...props.conversation.messages]);
@@ -52,6 +65,7 @@ const isStreaming = ref(false);
 const activeToolCalls = ref<ToolCall[]>([]);
 const activeKnowledgeBases = ref<KnowledgeBaseRef[]>([]);
 const error = ref<string | null>(null);
+const flowMenu = ref<FlowMenuData | null>(null);
 
 // Echo channel
 let channel: ReturnType<typeof echo.private> | null = null;
@@ -67,30 +81,87 @@ function subscribeToConversation() {
 
     channel = echo.private(`conversation.${props.conversation.id}`);
 
-    channel.listen('.AgentStreamChunk', (data: { content?: string; type?: string; tool?: string; name?: string; id?: string }) => {
-        // Clear safety timeout — we're receiving data
-        if (streamingTimeout) {
-            clearTimeout(streamingTimeout);
-            streamingTimeout = null;
-        }
-
-        if (data.type === 'tool_call' && data.tool) {
-            activeToolCalls.value.push({ name: data.tool });
-            return;
-        }
-
-        if (data.type === 'knowledge_base' && data.name) {
-            activeKnowledgeBases.value.push({ name: data.name, id: data.id });
-            return;
-        }
-
-        if (data.content) {
-            if (!isStreaming.value) {
-                isStreaming.value = true;
+    channel.listen(
+        '.AgentStreamChunk',
+        (data: {
+            content?: string;
+            type?: string;
+            tool?: string;
+            name?: string;
+            id?: string;
+        }) => {
+            // Clear safety timeout — we're receiving data
+            if (streamingTimeout) {
+                clearTimeout(streamingTimeout);
+                streamingTimeout = null;
             }
-            streamingMessage.value += data.content;
-        }
-    });
+
+            if (data.type === 'flow_menu' && data.options) {
+                flowMenu.value = {
+                    message: data.message ?? '',
+                    options: data.options,
+                };
+                isStreaming.value = false;
+                // Add menu message as assistant message
+                if (data.message) {
+                    messages.value.push({
+                        id: 'flow-menu-' + Date.now(),
+                        conversation_id: props.conversation.id,
+                        role: 'assistant' as const,
+                        content: data.message,
+                        tokens_used: null,
+                        model: null,
+                        metadata: null,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    });
+                }
+                scrollToBottom();
+                return;
+            }
+
+            if (data.type === 'flow_message' && data.content) {
+                messages.value.push({
+                    id: 'flow-msg-' + Date.now(),
+                    conversation_id: props.conversation.id,
+                    role: 'assistant' as const,
+                    content: data.content,
+                    tokens_used: null,
+                    model: null,
+                    metadata: null,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                });
+                scrollToBottom();
+                return;
+            }
+
+            if (data.type === 'flow_end') {
+                flowMenu.value = null;
+                return;
+            }
+
+            if (data.type === 'tool_call' && data.tool) {
+                activeToolCalls.value.push({ name: data.tool });
+                return;
+            }
+
+            if (data.type === 'knowledge_base' && data.name) {
+                activeKnowledgeBases.value.push({
+                    name: data.name,
+                    id: data.id,
+                });
+                return;
+            }
+
+            if (data.content) {
+                if (!isStreaming.value) {
+                    isStreaming.value = true;
+                }
+                streamingMessage.value += data.content;
+            }
+        },
+    );
 
     channel.listen('.AgentStreamComplete', () => {
         if (streamingTimeout) {
@@ -154,7 +225,8 @@ watch(
 function scrollToBottom() {
     nextTick(() => {
         if (messagesContainer.value) {
-            messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+            messagesContainer.value.scrollTop =
+                messagesContainer.value.scrollHeight;
         }
     });
 }
@@ -190,12 +262,19 @@ function handleNewConversation() {
     router.post(AgentController.newConversation({ agent: props.agent.id }).url);
 }
 
+// Handle flow menu option selection
+function handleFlowOption(option: { id: string; label: string }) {
+    flowMenu.value = null;
+    handleSendMessage(option.label);
+}
+
 // Send message
 async function handleSendMessage(content: string) {
     error.value = null;
     streamingMessage.value = '';
     activeToolCalls.value = [];
     activeKnowledgeBases.value = [];
+    flowMenu.value = null;
 
     // Optimistically add user message
     const userMessage: Message = {
@@ -234,7 +313,9 @@ async function handleSendMessage(content: string) {
                 subscribeToConversation();
             },
             onError: (errors) => {
-                messages.value = messages.value.filter((m) => m.id !== userMessage.id);
+                messages.value = messages.value.filter(
+                    (m) => m.id !== userMessage.id,
+                );
                 error.value = Object.values(errors).flat().join(', ');
                 isStreaming.value = false;
             },
@@ -252,7 +333,11 @@ async function handleSendMessage(content: string) {
             <div class="border-b bg-background px-4 py-3">
                 <div class="mx-auto flex max-w-4xl items-center gap-4">
                     <Button variant="ghost" size="icon" as-child>
-                        <Link :href="AgentController.show({ agent: agent.id }).url">
+                        <Link
+                            :href="
+                                AgentController.show({ agent: agent.id }).url
+                            "
+                        >
                             <ArrowLeft class="h-4 w-4" />
                         </Link>
                     </Button>
@@ -305,9 +390,34 @@ async function handleSendMessage(content: string) {
                         :key="message.id"
                         :message="message"
                         :is-streaming="message.id === 'streaming'"
-                        :tool-calls="message.id === 'streaming' ? activeToolCalls : undefined"
-                        :knowledge-bases="message.id === 'streaming' ? activeKnowledgeBases : undefined"
+                        :tool-calls="
+                            message.id === 'streaming'
+                                ? activeToolCalls
+                                : undefined
+                        "
+                        :knowledge-bases="
+                            message.id === 'streaming'
+                                ? activeKnowledgeBases
+                                : undefined
+                        "
                     />
+
+                    <!-- Flow menu -->
+                    <div
+                        v-if="flowMenu"
+                        class="flex flex-wrap gap-2"
+                    >
+                        <Button
+                            v-for="option in flowMenu.options"
+                            :key="option.id"
+                            variant="outline"
+                            size="sm"
+                            class="rounded-full"
+                            @click="handleFlowOption(option)"
+                        >
+                            {{ option.label }}
+                        </Button>
+                    </div>
 
                     <!-- Error display -->
                     <Card v-if="error" class="border-destructive">

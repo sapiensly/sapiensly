@@ -10,7 +10,14 @@ import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import type { User } from '@/types';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { Building2, Check, LogOut, Plus, Settings, UserCircle } from 'lucide-vue-next';
+import {
+    Building2,
+    Check,
+    LogOut,
+    Plus,
+    Settings,
+    UserCircle,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -29,9 +36,13 @@ const handleLogout = () => {
 };
 
 const switchAccount = (organizationId: string | null) => {
-    router.post('/account/switch', { organization_id: organizationId }, {
-        preserveScroll: true,
-    });
+    router.post(
+        '/account/switch',
+        { organization_id: organizationId },
+        {
+            preserveScroll: true,
+        },
+    );
 };
 </script>
 
@@ -43,11 +54,10 @@ const switchAccount = (organizationId: string | null) => {
     </DropdownMenuLabel>
     <DropdownMenuSeparator />
     <DropdownMenuGroup>
-        <DropdownMenuLabel class="text-xs text-muted-foreground">{{ t('user_menu.accounts') }}</DropdownMenuLabel>
-        <DropdownMenuItem
-            class="cursor-pointer"
-            @click="switchAccount(null)"
-        >
+        <DropdownMenuLabel class="text-xs text-muted-foreground">{{
+            t('user_menu.accounts')
+        }}</DropdownMenuLabel>
+        <DropdownMenuItem class="cursor-pointer" @click="switchAccount(null)">
             <UserCircle class="mr-2 h-4 w-4" />
             {{ t('user_menu.personal_account') }}
             <Check v-if="!user.organization_id" class="ml-auto h-4 w-4" />
@@ -60,10 +70,17 @@ const switchAccount = (organizationId: string | null) => {
         >
             <Building2 class="mr-2 h-4 w-4" />
             {{ membership.organization_name }}
-            <Check v-if="user.organization_id === membership.organization_id" class="ml-auto h-4 w-4" />
+            <Check
+                v-if="user.organization_id === membership.organization_id"
+                class="ml-auto h-4 w-4"
+            />
         </DropdownMenuItem>
         <DropdownMenuItem :as-child="true">
-            <Link class="block w-full" href="/settings/organization/create" as="button">
+            <Link
+                class="block w-full"
+                href="/settings/organization/create"
+                as="button"
+            >
                 <Plus class="mr-2 h-4 w-4" />
                 {{ t('user_menu.create_organization') }}
             </Link>

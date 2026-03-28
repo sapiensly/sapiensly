@@ -87,8 +87,18 @@ export type StreamEvent =
     | { type: 'step_start'; step: number; agent: string }
     | { type: 'step_complete'; step: number; response: string }
     | { type: 'consolidating' }
+    | { type: 'flow_start'; flow_id: string; flow_name: string }
+    | { type: 'flow_menu'; message: string; options: FlowMenuOption[] }
+    | { type: 'flow_message'; content: string }
+    | { type: 'flow_end'; action: string }
+    | { type: 'flow_await_input'; input_type: 'menu_selection' | 'text' }
     | { type: 'done' }
     | { error: string };
+
+export interface FlowMenuOption {
+    id: string;
+    label: string;
+}
 
 /**
  * Widget event types.
@@ -102,7 +112,10 @@ export type WidgetEventType =
     | 'message:received'
     | 'error'
     | 'session:created'
-    | 'conversation:created';
+    | 'conversation:created'
+    | 'flow:start'
+    | 'flow:menu'
+    | 'flow:end';
 
 export type WidgetEventCallback = (data?: unknown) => void;
 

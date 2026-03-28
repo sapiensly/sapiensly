@@ -20,7 +20,16 @@ import type {
     PaginatedAgents,
 } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Bot, Brain, Database, MessageSquare, Plus, Users, Wrench, Zap } from 'lucide-vue-next';
+import {
+    Bot,
+    Brain,
+    Database,
+    MessageSquare,
+    Plus,
+    Users,
+    Wrench,
+    Zap,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -35,7 +44,9 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [{ title: t('agents.index.heading'), href: '#' }]);
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: t('agents.index.heading'), href: '#' },
+]);
 
 const agentIcon = (type: AgentType) => {
     switch (type) {
@@ -62,11 +73,9 @@ const statusVariant = (status: string) => {
 };
 
 const filterByType = (type: string | null) => {
-    router.get(
-        AgentController.index().url,
-        type ? { type } : {},
-        { preserveState: true },
-    );
+    router.get(AgentController.index().url, type ? { type } : {}, {
+        preserveState: true,
+    });
 };
 
 const totalAgents = Object.values(props.agentsByType).reduce(
@@ -97,7 +106,9 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                 <Tabs
                     :default-value="currentType ?? 'all'"
                     class="mb-6"
-                    @update:model-value="filterByType($event === 'all' ? null : $event)"
+                    @update:model-value="
+                        filterByType($event === 'all' ? null : $event)
+                    "
                 >
                     <TabsList>
                         <TabsTrigger value="all">
@@ -112,7 +123,9 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                                 :is="agentIcon(type.value)"
                                 class="mr-2 h-4 w-4"
                             />
-                            {{ type.label }} ({{ agentsByType[type.value] ?? 0 }})
+                            {{ type.label }} ({{
+                                agentsByType[type.value] ?? 0
+                            }})
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
@@ -140,7 +153,11 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                         :key="agent.id"
                         class="h-full transition-colors hover:border-primary/50"
                     >
-                        <Link :href="AgentController.show({ agent: agent.id }).url">
+                        <Link
+                            :href="
+                                AgentController.show({ agent: agent.id }).url
+                            "
+                        >
                             <CardHeader>
                                 <div class="flex items-start justify-between">
                                     <div class="flex items-center gap-2">
@@ -161,7 +178,11 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                                             <Users class="h-3 w-3" />
                                             {{ agent.team.name }}
                                         </Badge>
-                                        <Badge :variant="statusVariant(agent.status)">
+                                        <Badge
+                                            :variant="
+                                                statusVariant(agent.status)
+                                            "
+                                        >
                                             {{ agent.status }}
                                         </Badge>
                                     </div>
@@ -173,9 +194,14 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                         </Link>
                         <CardContent>
                             <div class="flex items-center justify-between">
-                                <div class="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                                <div
+                                    class="flex flex-wrap gap-4 text-sm text-muted-foreground"
+                                >
                                     <div class="flex items-center gap-1">
-                                        <Badge variant="outline" class="capitalize">
+                                        <Badge
+                                            variant="outline"
+                                            class="capitalize"
+                                        >
                                             {{ agent.type }}
                                         </Badge>
                                     </div>
@@ -184,18 +210,26 @@ const totalAgents = Object.values(props.agentsByType).reduce(
                                         class="flex items-center gap-1"
                                     >
                                         <Database class="h-4 w-4" />
-                                        {{ agent.knowledge_bases_count }} {{ t('agents.index.kb') }}
+                                        {{ agent.knowledge_bases_count }}
+                                        {{ t('agents.index.kb') }}
                                     </div>
                                     <div
                                         v-if="agent.tools_count"
                                         class="flex items-center gap-1"
                                     >
                                         <Wrench class="h-4 w-4" />
-                                        {{ agent.tools_count }} {{ t('agents.index.tools') }}
+                                        {{ agent.tools_count }}
+                                        {{ t('agents.index.tools') }}
                                     </div>
                                 </div>
                                 <Button variant="outline" size="sm" as-child>
-                                    <Link :href="AgentController.chat({ agent: agent.id }).url">
+                                    <Link
+                                        :href="
+                                            AgentController.chat({
+                                                agent: agent.id,
+                                            }).url
+                                        "
+                                    >
                                         <MessageSquare class="mr-2 h-4 w-4" />
                                         {{ t('common.test') }}
                                     </Link>

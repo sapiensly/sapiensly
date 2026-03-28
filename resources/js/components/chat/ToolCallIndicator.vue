@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
-import type { ToolCall, KnowledgeBaseRef } from '@/types/chat';
-import { Wrench, Loader2, BookOpen } from 'lucide-vue-next';
+import type { KnowledgeBaseRef, ToolCall } from '@/types/chat';
+import { BookOpen, Loader2, Wrench } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -11,7 +11,9 @@ const props = defineProps<{
 }>();
 
 const hasToolCalls = computed(() => (props.toolCalls?.length ?? 0) > 0);
-const hasKnowledgeBases = computed(() => (props.knowledgeBases?.length ?? 0) > 0);
+const hasKnowledgeBases = computed(
+    () => (props.knowledgeBases?.length ?? 0) > 0,
+);
 
 const formatToolName = (name: string) => {
     // Convert snake_case to Title Case
@@ -29,10 +31,7 @@ const formatToolName = (name: string) => {
             v-if="hasKnowledgeBases"
             class="flex items-center gap-2 text-sm text-muted-foreground"
         >
-            <Loader2
-                v-if="isExecuting"
-                class="h-4 w-4 animate-spin"
-            />
+            <Loader2 v-if="isExecuting" class="h-4 w-4 animate-spin" />
             <BookOpen v-else class="h-4 w-4" />
             <span>{{ isExecuting ? 'Searching' : 'Searched' }}</span>
             <div class="flex flex-wrap gap-1">
@@ -52,10 +51,7 @@ const formatToolName = (name: string) => {
             v-if="hasToolCalls"
             class="flex items-center gap-2 text-sm text-muted-foreground"
         >
-            <Loader2
-                v-if="isExecuting"
-                class="h-4 w-4 animate-spin"
-            />
+            <Loader2 v-if="isExecuting" class="h-4 w-4 animate-spin" />
             <Wrench v-else class="h-4 w-4" />
             <span>{{ isExecuting ? 'Using' : 'Used' }}</span>
             <div class="flex flex-wrap gap-1">

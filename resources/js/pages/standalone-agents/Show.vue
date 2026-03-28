@@ -26,7 +26,17 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { Agent, AgentType } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Bot, Brain, Copy, Database, MessageSquare, Pencil, Trash2, Wrench, Zap } from 'lucide-vue-next';
+import {
+    Bot,
+    Brain,
+    Copy,
+    Database,
+    MessageSquare,
+    Pencil,
+    Trash2,
+    Wrench,
+    Zap,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -91,7 +101,10 @@ const configDisplay = computed(() => {
             items.push({ label: 'Top K', value: String(ragParams.top_k) });
         }
         if (ragParams.similarity_threshold) {
-            items.push({ label: 'Similarity Threshold', value: String(ragParams.similarity_threshold) });
+            items.push({
+                label: 'Similarity Threshold',
+                value: String(ragParams.similarity_threshold),
+            });
         }
     }
 
@@ -101,7 +114,10 @@ const configDisplay = computed(() => {
             items.push({ label: 'Timeout', value: `${toolExec.timeout}ms` });
         }
         if (toolExec.retry_count !== undefined) {
-            items.push({ label: 'Retries', value: String(toolExec.retry_count) });
+            items.push({
+                label: 'Retries',
+                value: String(toolExec.retry_count),
+            });
         }
     }
 
@@ -127,13 +143,21 @@ const configDisplay = computed(() => {
                                 {{ agent.status }}
                             </Badge>
                         </div>
-                        <p v-if="agent.description" class="text-muted-foreground">
+                        <p
+                            v-if="agent.description"
+                            class="text-muted-foreground"
+                        >
                             {{ agent.description }}
                         </p>
                     </div>
                     <div class="flex gap-2">
                         <Button as-child>
-                            <Link :href="AgentController.chat({ agent: agent.id }).url">
+                            <Link
+                                :href="
+                                    AgentController.chat({ agent: agent.id })
+                                        .url
+                                "
+                            >
                                 <MessageSquare class="mr-2 h-4 w-4" />
                                 {{ t('agents.show.test_agent') }}
                             </Link>
@@ -143,7 +167,12 @@ const configDisplay = computed(() => {
                             {{ t('common.duplicate') }}
                         </Button>
                         <Button variant="outline" as-child>
-                            <Link :href="AgentController.edit({ agent: agent.id }).url">
+                            <Link
+                                :href="
+                                    AgentController.edit({ agent: agent.id })
+                                        .url
+                                "
+                            >
                                 <Pencil class="mr-2 h-4 w-4" />
                                 {{ t('common.edit') }}
                             </Link>
@@ -157,16 +186,26 @@ const configDisplay = computed(() => {
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>{{ t('agents.show.delete_agent') }}</DialogTitle>
+                                    <DialogTitle>{{
+                                        t('agents.show.delete_agent')
+                                    }}</DialogTitle>
                                     <DialogDescription>
-                                        {{ t('common.confirm_delete') }} "{{ agent.name }}"? {{ t('common.action_irreversible') }}
+                                        {{ t('common.confirm_delete') }} "{{
+                                            agent.name
+                                        }}"?
+                                        {{ t('common.action_irreversible') }}
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
                                     <DialogClose as-child>
-                                        <Button variant="outline">{{ t('common.cancel') }}</Button>
+                                        <Button variant="outline">{{
+                                            t('common.cancel')
+                                        }}</Button>
                                     </DialogClose>
-                                    <Button variant="destructive" @click="deleteAgent">
+                                    <Button
+                                        variant="destructive"
+                                        @click="deleteAgent"
+                                    >
                                         {{ t('common.delete') }}
                                     </Button>
                                 </DialogFooter>
@@ -178,7 +217,9 @@ const configDisplay = computed(() => {
                 <div class="space-y-8">
                     <Card>
                         <CardHeader>
-                            <CardTitle>{{ t('agents.show.configuration') }}</CardTitle>
+                            <CardTitle>{{
+                                t('agents.show.configuration')
+                            }}</CardTitle>
                             <CardDescription>
                                 {{ t('agents.show.config_description') }}
                             </CardDescription>
@@ -186,15 +227,32 @@ const configDisplay = computed(() => {
                         <CardContent>
                             <dl class="grid gap-4 sm:grid-cols-2">
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">{{ t('agents.show.type') }}</dt>
-                                    <dd class="mt-1 capitalize">{{ agent.type }}</dd>
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
+                                        {{ t('agents.show.type') }}
+                                    </dt>
+                                    <dd class="mt-1 capitalize">
+                                        {{ agent.type }}
+                                    </dd>
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">{{ t('agents.show.model') }}</dt>
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
+                                        {{ t('agents.show.model') }}
+                                    </dt>
                                     <dd class="mt-1">{{ agent.model }}</dd>
                                 </div>
-                                <div v-for="item in configDisplay" :key="item.label">
-                                    <dt class="text-sm font-medium text-muted-foreground">{{ item.label }}</dt>
+                                <div
+                                    v-for="item in configDisplay"
+                                    :key="item.label"
+                                >
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
+                                        {{ item.label }}
+                                    </dt>
                                     <dd class="mt-1">{{ item.value }}</dd>
                                 </div>
                             </dl>
@@ -208,12 +266,20 @@ const configDisplay = computed(() => {
                         />
                         <Card class="mt-4">
                             <CardContent class="pt-6">
-                                <pre class="whitespace-pre-wrap rounded-md bg-muted p-4 font-mono text-sm">{{ agent.prompt_template }}</pre>
+                                <pre
+                                    class="rounded-md bg-muted p-4 font-mono text-sm whitespace-pre-wrap"
+                                    >{{ agent.prompt_template }}</pre
+                                >
                             </CardContent>
                         </Card>
                     </div>
 
-                    <div v-if="agent.knowledge_bases && agent.knowledge_bases.length > 0">
+                    <div
+                        v-if="
+                            agent.knowledge_bases &&
+                            agent.knowledge_bases.length > 0
+                        "
+                    >
                         <HeadingSmall
                             title="Knowledge Bases"
                             description="Connected knowledge bases for RAG"
@@ -223,8 +289,12 @@ const configDisplay = computed(() => {
                                 v-for="kb in agent.knowledge_bases"
                                 :key="kb.id"
                             >
-                                <CardContent class="flex items-center gap-3 py-4">
-                                    <Database class="h-5 w-5 text-muted-foreground" />
+                                <CardContent
+                                    class="flex items-center gap-3 py-4"
+                                >
+                                    <Database
+                                        class="h-5 w-5 text-muted-foreground"
+                                    />
                                     <span>{{ kb.name }}</span>
                                 </CardContent>
                             </Card>
@@ -244,11 +314,20 @@ const configDisplay = computed(() => {
                                 target="_blank"
                                 class="block"
                             >
-                                <Card class="transition-colors hover:bg-muted/50 cursor-pointer">
-                                    <CardContent class="flex items-center gap-3 py-4">
-                                        <Wrench class="h-5 w-5 text-muted-foreground" />
+                                <Card
+                                    class="cursor-pointer transition-colors hover:bg-muted/50"
+                                >
+                                    <CardContent
+                                        class="flex items-center gap-3 py-4"
+                                    >
+                                        <Wrench
+                                            class="h-5 w-5 text-muted-foreground"
+                                        />
                                         <span>{{ tool.name }}</span>
-                                        <Badge variant="outline" class="ml-auto">
+                                        <Badge
+                                            variant="outline"
+                                            class="ml-auto"
+                                        >
                                             {{ tool.type }}
                                         </Badge>
                                     </CardContent>

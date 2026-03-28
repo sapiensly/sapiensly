@@ -28,7 +28,7 @@ export class Container {
             onSend: (message: string) => void;
             onOpen: () => void;
             onClose: () => void;
-        }
+        },
     ) {
         this.onSend = callbacks.onSend;
         this.onOpen = callbacks.onOpen;
@@ -56,7 +56,9 @@ export class Container {
         this.input = new Input(appearance.placeholder_text, this.onSend);
 
         // Assemble the window
-        const messagesContainer = this.window.querySelector('.sapiensly-window-body');
+        const messagesContainer = this.window.querySelector(
+            '.sapiensly-window-body',
+        );
         if (messagesContainer) {
             messagesContainer.appendChild(this.messages.getElement());
             messagesContainer.appendChild(this.input.getElement());
@@ -64,7 +66,8 @@ export class Container {
             if (behavior.show_powered_by) {
                 const powered = document.createElement('div');
                 powered.className = 'sapiensly-powered';
-                powered.innerHTML = 'Powered by <a href="https://sapiensly.com" target="_blank" rel="noopener">Sapiensly</a>';
+                powered.innerHTML =
+                    'Powered by <a href="https://sapiensly.com" target="_blank" rel="noopener">Sapiensly</a>';
                 messagesContainer.appendChild(powered);
             }
         }
@@ -177,6 +180,20 @@ export class Container {
      */
     hideTyping(): void {
         this.messages.hideTyping();
+    }
+
+    /**
+     * Append a raw element to the messages area.
+     */
+    appendToMessages(element: HTMLElement): void {
+        this.messages.appendElement(element);
+    }
+
+    /**
+     * Scroll messages to the bottom.
+     */
+    scrollToBottom(): void {
+        this.messages.scrollToBottom();
     }
 
     /**

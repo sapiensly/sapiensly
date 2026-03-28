@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import type { ExecutionStep } from '@/types/chat';
-import { Bot, Brain, Check, ChevronRight, Loader2, Sparkles, Zap } from 'lucide-vue-next';
+import {
+    Bot,
+    Brain,
+    Check,
+    ChevronRight,
+    Loader2,
+    Sparkles,
+    Zap,
+} from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -63,7 +71,10 @@ const summaryText = computed(() => {
 });
 
 const showConsolidationStep = computed(() => {
-    return props.steps.length > 1 && (props.isConsolidating || allStepsCompleted.value);
+    return (
+        props.steps.length > 1 &&
+        (props.isConsolidating || allStepsCompleted.value)
+    );
 });
 
 const allStepsCompleted = computed(() => {
@@ -77,35 +88,44 @@ const allStepsCompleted = computed(() => {
         <button
             v-if="collapsible"
             type="button"
-            class="flex items-center gap-1.5 hover:text-foreground transition-colors"
+            class="flex items-center gap-1.5 transition-colors hover:text-foreground"
             @click="isExpanded = !isExpanded"
         >
             <ChevronRight
                 class="h-3 w-3 transition-transform"
                 :class="{ 'rotate-90': isExpanded }"
             />
-            <Loader2 v-if="isProcessing && (currentStep !== null || isConsolidating)" class="h-3 w-3 animate-spin" />
+            <Loader2
+                v-if="isProcessing && (currentStep !== null || isConsolidating)"
+                class="h-3 w-3 animate-spin"
+            />
             <span>{{ summaryText }}</span>
 
             <!-- Step badges preview (when collapsed) -->
-            <div v-if="!isExpanded && steps.length > 1" class="flex items-center gap-0.5 ml-1">
+            <div
+                v-if="!isExpanded && steps.length > 1"
+                class="ml-1 flex items-center gap-0.5"
+            >
                 <template v-for="(step, index) in steps" :key="index">
                     <component
                         :is="getAgentIcon(step.agent)"
                         class="h-3 w-3"
                         :class="{
                             'text-primary': getStepStatus(index) === 'active',
-                            'text-green-500': getStepStatus(index) === 'completed',
-                            'text-muted-foreground/50': getStepStatus(index) === 'pending',
+                            'text-green-500':
+                                getStepStatus(index) === 'completed',
+                            'text-muted-foreground/50':
+                                getStepStatus(index) === 'pending',
                         }"
                     />
                 </template>
                 <!-- Consolidation indicator -->
                 <Sparkles
                     v-if="showConsolidationStep"
-                    class="h-3 w-3 ml-0.5"
+                    class="ml-0.5 h-3 w-3"
                     :class="{
-                        'text-primary animate-pulse': isConsolidating && isProcessing,
+                        'animate-pulse text-primary':
+                            isConsolidating && isProcessing,
                         'text-green-500': !isProcessing && allStepsCompleted,
                     }"
                 />
@@ -114,27 +134,30 @@ const allStepsCompleted = computed(() => {
 
         <!-- Non-collapsible header -->
         <div v-else class="flex items-center gap-1.5">
-            <Loader2 v-if="isProcessing && (currentStep !== null || isConsolidating)" class="h-3 w-3 animate-spin" />
+            <Loader2
+                v-if="isProcessing && (currentStep !== null || isConsolidating)"
+                class="h-3 w-3 animate-spin"
+            />
             <span>{{ summaryText }}</span>
         </div>
 
         <!-- Expanded step list -->
-        <div
-            v-if="isExpanded || !collapsible"
-            class="mt-2 ml-2 space-y-2"
-        >
+        <div v-if="isExpanded || !collapsible" class="mt-2 ml-2 space-y-2">
             <div
                 v-for="(step, index) in steps"
                 :key="index"
-                class="flex items-start gap-2 py-1 px-2 rounded-md transition-colors"
+                class="flex items-start gap-2 rounded-md px-2 py-1 transition-colors"
                 :class="{
-                    'bg-primary/5 border-l-2 border-primary': getStepStatus(index) === 'active',
+                    'border-l-2 border-primary bg-primary/5':
+                        getStepStatus(index) === 'active',
                     'bg-green-500/5': getStepStatus(index) === 'completed',
                 }"
             >
                 <!-- Step number and status -->
-                <div class="flex items-center gap-1.5 shrink-0">
-                    <span class="text-[10px] font-medium text-muted-foreground/70">
+                <div class="flex shrink-0 items-center gap-1.5">
+                    <span
+                        class="text-[10px] font-medium text-muted-foreground/70"
+                    >
                         {{ index + 1 }}.
                     </span>
                     <Loader2
@@ -151,27 +174,40 @@ const allStepsCompleted = computed(() => {
                         class="h-3 w-3"
                         :class="{
                             'text-primary': getStepStatus(index) === 'active',
-                            'text-muted-foreground/50': getStepStatus(index) === 'pending',
+                            'text-muted-foreground/50':
+                                getStepStatus(index) === 'pending',
                         }"
                     />
                 </div>
 
                 <!-- Step content -->
-                <div class="flex-1 min-w-0">
+                <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-1.5">
-                        <span class="font-medium">{{ getAgentLabel(step.agent) }}</span>
+                        <span class="font-medium">{{
+                            getAgentLabel(step.agent)
+                        }}</span>
                         <Badge
                             v-if="step.urgency && step.urgency !== 'medium'"
-                            :variant="step.urgency === 'high' ? 'destructive' : 'secondary'"
-                            class="text-[10px] px-1 py-0"
+                            :variant="
+                                step.urgency === 'high'
+                                    ? 'destructive'
+                                    : 'secondary'
+                            "
+                            class="px-1 py-0 text-[10px]"
                         >
                             {{ step.urgency }}
                         </Badge>
                     </div>
-                    <p v-if="step.query" class="text-muted-foreground/70 truncate">
+                    <p
+                        v-if="step.query"
+                        class="truncate text-muted-foreground/70"
+                    >
                         {{ step.query }}
                     </p>
-                    <p v-else-if="step.task" class="text-muted-foreground/70 truncate">
+                    <p
+                        v-else-if="step.task"
+                        class="truncate text-muted-foreground/70"
+                    >
                         {{ step.task }}
                     </p>
                 </div>
@@ -180,14 +216,17 @@ const allStepsCompleted = computed(() => {
             <!-- Consolidation step -->
             <div
                 v-if="showConsolidationStep"
-                class="flex items-start gap-2 py-1 px-2 rounded-md transition-colors"
+                class="flex items-start gap-2 rounded-md px-2 py-1 transition-colors"
                 :class="{
-                    'bg-primary/5 border-l-2 border-primary': isConsolidating && isProcessing,
+                    'border-l-2 border-primary bg-primary/5':
+                        isConsolidating && isProcessing,
                     'bg-green-500/5': !isProcessing && allStepsCompleted,
                 }"
             >
-                <div class="flex items-center gap-1.5 shrink-0">
-                    <span class="text-[10px] font-medium text-muted-foreground/70">
+                <div class="flex shrink-0 items-center gap-1.5">
+                    <span
+                        class="text-[10px] font-medium text-muted-foreground/70"
+                    >
                         {{ steps.length + 1 }}.
                     </span>
                     <Loader2
@@ -198,14 +237,11 @@ const allStepsCompleted = computed(() => {
                         v-else-if="!isProcessing && allStepsCompleted"
                         class="h-3 w-3 text-green-500"
                     />
-                    <Sparkles
-                        v-else
-                        class="h-3 w-3 text-muted-foreground/50"
-                    />
+                    <Sparkles v-else class="h-3 w-3 text-muted-foreground/50" />
                 </div>
-                <div class="flex-1 min-w-0">
+                <div class="min-w-0 flex-1">
                     <span class="font-medium">Consolidate</span>
-                    <p class="text-muted-foreground/70 truncate">
+                    <p class="truncate text-muted-foreground/70">
                         Combining responses into coherent reply
                     </p>
                 </div>

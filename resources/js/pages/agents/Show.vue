@@ -25,7 +25,14 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { AgentTeam } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Bot, Brain, MessageSquare, Pencil, Trash2, Zap } from 'lucide-vue-next';
+import {
+    Bot,
+    Brain,
+    MessageSquare,
+    Pencil,
+    Trash2,
+    Zap,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -38,7 +45,10 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('agent_teams.index.title'), href: AgentTeamController.index().url },
+    {
+        title: t('agent_teams.index.title'),
+        href: AgentTeamController.index().url,
+    },
     { title: props.team.name, href: '#' },
 ]);
 
@@ -67,7 +77,9 @@ const agentIcon = (type: string) => {
 };
 
 const deleteTeam = () => {
-    router.delete(AgentTeamController.destroy({ agent_team: props.team.id }).url);
+    router.delete(
+        AgentTeamController.destroy({ agent_team: props.team.id }).url,
+    );
 };
 </script>
 
@@ -126,11 +138,14 @@ const deleteTeam = () => {
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>{{ t('agent_teams.show.delete_team') }}</DialogTitle>
+                                    <DialogTitle>{{
+                                        t('agent_teams.show.delete_team')
+                                    }}</DialogTitle>
                                     <DialogDescription>
                                         {{ t('common.confirm_delete') }} "{{
                                             team.name
-                                        }}"? {{ t('common.action_irreversible') }}
+                                        }}"?
+                                        {{ t('common.action_irreversible') }}
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
@@ -209,13 +224,11 @@ const deleteTeam = () => {
                                         v-if="agent.prompt_template"
                                         class="mt-2"
                                     >
-                                        <dt
-                                            class="mb-1 text-muted-foreground"
-                                        >
+                                        <dt class="mb-1 text-muted-foreground">
                                             Prompt Template:
                                         </dt>
                                         <dd
-                                            class="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-xs"
+                                            class="rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap"
                                         >
                                             {{ agent.prompt_template }}
                                         </dd>

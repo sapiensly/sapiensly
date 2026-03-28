@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { Bot, User } from 'lucide-vue-next';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import ToolCallIndicator from '@/components/chat/ToolCallIndicator.vue';
-import type { Message, ToolCall, KnowledgeBaseRef } from '@/types/chat';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import type { KnowledgeBaseRef, Message, ToolCall } from '@/types/chat';
+import { Bot, User } from 'lucide-vue-next';
 import { marked } from 'marked';
+import { computed } from 'vue';
 
 const props = defineProps<{
     message: Message | { role: 'assistant' | 'user'; content: string };
@@ -41,14 +41,19 @@ const messageKnowledgeBases = computed<KnowledgeBaseRef[]>(() => {
     if (props.knowledgeBases && props.knowledgeBases.length > 0) {
         return props.knowledgeBases;
     }
-    if ('metadata' in props.message && props.message.metadata?.knowledge_bases) {
+    if (
+        'metadata' in props.message &&
+        props.message.metadata?.knowledge_bases
+    ) {
         return props.message.metadata.knowledge_bases as KnowledgeBaseRef[];
     }
     return [];
 });
 
 const hasIndicators = computed(
-    () => messageToolCalls.value.length > 0 || messageKnowledgeBases.value.length > 0
+    () =>
+        messageToolCalls.value.length > 0 ||
+        messageKnowledgeBases.value.length > 0,
 );
 
 // Configure marked for safe rendering
@@ -73,10 +78,7 @@ const renderedContent = computed(() => {
 <template>
     <div class="space-y-2">
         <!-- Tool/KB indicator -->
-        <div
-            v-if="hasIndicators && !isUser"
-            class="flex gap-3"
-        >
+        <div v-if="hasIndicators && !isUser" class="flex gap-3">
             <div class="h-8 w-8 shrink-0" />
             <ToolCallIndicator
                 :tool-calls="messageToolCalls"
@@ -92,7 +94,11 @@ const renderedContent = computed(() => {
         >
             <Avatar class="h-8 w-8 shrink-0">
                 <AvatarFallback
-                    :class="isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'"
+                    :class="
+                        isUser
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                    "
                 >
                     <User v-if="isUser" class="h-4 w-4" />
                     <Bot v-else class="h-4 w-4" />
@@ -108,17 +114,14 @@ const renderedContent = computed(() => {
                 "
             >
                 <!-- User messages: plain text -->
-                <p
-                    v-if="isUser"
-                    class="whitespace-pre-wrap text-sm"
-                >
+                <p v-if="isUser" class="text-sm whitespace-pre-wrap">
                     {{ message.content }}
                 </p>
 
                 <!-- Assistant messages: markdown -->
                 <div
                     v-else
-                    class="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-background-100 prose-code:text-xs prose-code:before:content-none prose-code:after:content-none"
+                    class="prose-pre:bg-background-100 prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-code:text-xs prose-code:before:content-none prose-code:after:content-none prose-pre:my-2"
                     v-html="renderedContent"
                 />
 
@@ -128,10 +131,7 @@ const renderedContent = computed(() => {
                     class="inline-block h-4 w-1 animate-pulse bg-current"
                 />
 
-                <p
-                    v-if="formattedTime"
-                    class="mt-1 text-xs opacity-70"
-                >
+                <p v-if="formattedTime" class="mt-1 text-xs opacity-70">
                     {{ formattedTime }}
                 </p>
             </div>

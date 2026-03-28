@@ -7,14 +7,13 @@ use App\Enums\MembershipStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
+use App\Models\User;
 use App\Services\OrganizationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
-use WorkOS\Organizations;
-use WorkOS\UserManagement;
 
 class OrganizationController extends Controller
 {
@@ -62,54 +61,21 @@ class OrganizationController extends Controller
 
         $user = $request->user();
 
-        try {
-            $workosOrganizations = new Organizations;
-            $workosOrg = $workosOrganizations->createOrganization($request->name);
+        $organization = Organization::create([
+            'name' => $request->name,
+            'slug' => Str::slug($request->name),
+        ]);
 
-            $organization = Organization::create([
-                'workos_organization_id' => $workosOrg->id,
-                'name' => $workosOrg->name,
-                'slug' => $workosOrg->slug ?? null,
-            ]);
+        OrganizationMembership::create([
+            'organization_id' => $organization->id,
+            'user_id' => $user->id,
+            'role' => MembershipRole::Admin,
+            'status' => MembershipStatus::Active,
+        ]);
 
-            // Create admin membership via WorkOS
-            if ($user->workos_id) {
-                $workosUserMgmt = new UserManagement;
-                $workosMembership = $workosUserMgmt->createOrganizationMembership(
-                    organizationId: $workosOrg->id,
-                    userId: $user->workos_id,
-                    roleSlug: 'admin'
-                );
+        $organizationService->switchAccount($user, $organization->id);
 
-                OrganizationMembership::create([
-                    'organization_id' => $organization->id,
-                    'user_id' => $user->id,
-                    'workos_membership_id' => $workosMembership->id,
-                    'role' => MembershipRole::Admin,
-                    'status' => MembershipStatus::Active,
-                ]);
-            } else {
-                OrganizationMembership::create([
-                    'organization_id' => $organization->id,
-                    'user_id' => $user->id,
-                    'workos_membership_id' => 'local_'.$organization->id,
-                    'role' => MembershipRole::Admin,
-                    'status' => MembershipStatus::Active,
-                ]);
-            }
-
-            // Switch user to the new organization
-            $organizationService->switchAccount($user, $organization->id);
-
-            return to_route('organization.show');
-        } catch (\Throwable $e) {
-            Log::error('Failed to create organization', [
-                'user_id' => $user->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return back()->withErrors(['name' => __('Failed to create organization. Please try again.')]);
-        }
+        return to_route('organization.show');
     }
 
     public function invite(Request $request): RedirectResponse
@@ -126,7 +92,6 @@ class OrganizationController extends Controller
 
         $organization = $user->organization;
 
-        // Verify the user is an admin
         $isAdmin = OrganizationMembership::where('user_id', $user->id)
             ->where('organization_id', $organization->id)
             ->where('role', MembershipRole::Admin)
@@ -136,22 +101,31 @@ class OrganizationController extends Controller
             return back()->withErrors(['email' => __('Only admins can send invitations.')]);
         }
 
-        try {
-            $workosUserMgmt = new UserManagement;
-            $workosUserMgmt->sendInvitation(
-                email: $request->email,
-                organizationId: $organization->workos_organization_id,
-            );
+        // Check if user is already a member
+        $existingMember = OrganizationMembership::whereHas('user', fn ($q) => $q->where('email', $request->email))
+            ->where('organization_id', $organization->id)
+            ->where('status', MembershipStatus::Active)
+            ->exists();
 
-            return back()->with('success', __('Invitation sent to :email', ['email' => $request->email]));
-        } catch (\Throwable $e) {
-            Log::error('Failed to send invitation', [
+        if ($existingMember) {
+            return back()->withErrors(['email' => __('This user is already a member of the organization.')]);
+        }
+
+        // TODO: Implement local invitation system (email notification with token)
+        // For now, if the user exists, add them directly
+        $invitedUser = User::where('email', $request->email)->first();
+
+        if ($invitedUser) {
+            OrganizationMembership::create([
                 'organization_id' => $organization->id,
-                'email' => $request->email,
-                'error' => $e->getMessage(),
+                'user_id' => $invitedUser->id,
+                'role' => MembershipRole::Member,
+                'status' => MembershipStatus::Active,
             ]);
 
-            return back()->withErrors(['email' => __('Failed to send invitation. Please try again.')]);
+            return back()->with('success', __('Member added successfully.'));
         }
+
+        return back()->withErrors(['email' => __('User not found. They must register first.')]);
     }
 }

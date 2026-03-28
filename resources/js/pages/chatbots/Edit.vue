@@ -16,7 +16,12 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
-import type { Chatbot, ChatbotAgent, ChatbotAgentTeam, VisibilityOption } from '@/types/chatbot';
+import type {
+    Chatbot,
+    ChatbotAgent,
+    ChatbotAgentTeam,
+    VisibilityOption,
+} from '@/types/chatbot';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Bot, Users } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
@@ -36,11 +41,16 @@ const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
-    { title: props.chatbot.name, href: ChatbotController.show({ chatbot: props.chatbot.id }).url },
+    {
+        title: props.chatbot.name,
+        href: ChatbotController.show({ chatbot: props.chatbot.id }).url,
+    },
     { title: t('common.edit'), href: '#' },
 ]);
 
-const targetType = ref<'agent' | 'team'>(props.chatbot.agent_id ? 'agent' : 'team');
+const targetType = ref<'agent' | 'team'>(
+    props.chatbot.agent_id ? 'agent' : 'team',
+);
 
 const form = useForm({
     name: props.chatbot.name,
@@ -80,7 +90,9 @@ const submit = () => {
                     <div class="space-y-6">
                         <HeadingSmall
                             :title="t('chatbots.edit.basic_info')"
-                            :description="t('chatbots.edit.basic_info_description')"
+                            :description="
+                                t('chatbots.edit.basic_info_description')
+                            "
                         />
 
                         <div class="grid gap-4">
@@ -90,27 +102,39 @@ const submit = () => {
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    :placeholder="t('chatbots.edit.name_placeholder')"
+                                    :placeholder="
+                                        t('chatbots.edit.name_placeholder')
+                                    "
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">{{ t('chatbots.edit.description_label') }}</Label>
+                                <Label for="description">{{
+                                    t('chatbots.edit.description_label')
+                                }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    :placeholder="t('chatbots.edit.description_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'chatbots.edit.description_placeholder',
+                                        )
+                                    "
                                     rows="3"
                                 />
-                                <InputError :message="form.errors.description" />
+                                <InputError
+                                    :message="form.errors.description"
+                                />
                             </div>
 
                             <div class="grid gap-2">
                                 <Label for="status">Status</Label>
                                 <Select v-model="form.status">
                                     <SelectTrigger id="status">
-                                        <SelectValue placeholder="Select status" />
+                                        <SelectValue
+                                            placeholder="Select status"
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -129,7 +153,9 @@ const submit = () => {
                                 <Label for="visibility">Visibility</Label>
                                 <Select v-model="form.visibility">
                                     <SelectTrigger id="visibility">
-                                        <SelectValue placeholder="Select visibility" />
+                                        <SelectValue
+                                            placeholder="Select visibility"
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -150,7 +176,9 @@ const submit = () => {
                     <div class="space-y-6">
                         <HeadingSmall
                             :title="t('chatbots.edit.agent_section')"
-                            :description="t('chatbots.edit.agent_section_description')"
+                            :description="
+                                t('chatbots.edit.agent_section_description')
+                            "
                         />
 
                         <div class="grid gap-4">
@@ -158,18 +186,32 @@ const submit = () => {
                             <div class="flex gap-4">
                                 <Button
                                     type="button"
-                                    :variant="targetType === 'agent' ? 'default' : 'outline'"
+                                    :variant="
+                                        targetType === 'agent'
+                                            ? 'default'
+                                            : 'outline'
+                                    "
                                     class="flex-1"
-                                    @click="targetType = 'agent'; form.agent_team_id = null"
+                                    @click="
+                                        targetType = 'agent';
+                                        form.agent_team_id = null;
+                                    "
                                 >
                                     <Bot class="mr-2 h-4 w-4" />
                                     {{ t('chatbots.create.single_agent') }}
                                 </Button>
                                 <Button
                                     type="button"
-                                    :variant="targetType === 'team' ? 'default' : 'outline'"
+                                    :variant="
+                                        targetType === 'team'
+                                            ? 'default'
+                                            : 'outline'
+                                    "
                                     class="flex-1"
-                                    @click="targetType = 'team'; form.agent_id = null"
+                                    @click="
+                                        targetType = 'team';
+                                        form.agent_id = null;
+                                    "
                                 >
                                     <Users class="mr-2 h-4 w-4" />
                                     {{ t('chatbots.create.agents_team') }}
@@ -177,11 +219,16 @@ const submit = () => {
                             </div>
 
                             <!-- Agent Selection -->
-                            <div v-if="targetType === 'agent'" class="grid gap-2">
+                            <div
+                                v-if="targetType === 'agent'"
+                                class="grid gap-2"
+                            >
                                 <Label>Select Agent</Label>
                                 <Select v-model="form.agent_id">
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Choose an agent" />
+                                        <SelectValue
+                                            placeholder="Choose an agent"
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -197,11 +244,16 @@ const submit = () => {
                             </div>
 
                             <!-- Team Selection -->
-                            <div v-if="targetType === 'team'" class="grid gap-2">
+                            <div
+                                v-if="targetType === 'team'"
+                                class="grid gap-2"
+                            >
                                 <Label>Select Agents Team</Label>
                                 <Select v-model="form.agent_team_id">
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Choose an agent team" />
+                                        <SelectValue
+                                            placeholder="Choose an agent team"
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -213,7 +265,9 @@ const submit = () => {
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
-                                <InputError :message="form.errors.agent_team_id" />
+                                <InputError
+                                    :message="form.errors.agent_team_id"
+                                />
                             </div>
                         </div>
                     </div>
@@ -230,58 +284,84 @@ const submit = () => {
                                 <Label for="widget_title">Widget Title</Label>
                                 <Input
                                     id="widget_title"
-                                    v-model="form.config.appearance.widget_title"
+                                    v-model="
+                                        form.config.appearance.widget_title
+                                    "
                                     placeholder="Support"
                                 />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="welcome_message">Welcome Message</Label>
+                                <Label for="welcome_message"
+                                    >Welcome Message</Label
+                                >
                                 <Textarea
                                     id="welcome_message"
-                                    v-model="form.config.appearance.welcome_message"
+                                    v-model="
+                                        form.config.appearance.welcome_message
+                                    "
                                     placeholder="Hello! How can I help you today?"
                                     rows="2"
                                 />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="placeholder_text">Input Placeholder</Label>
+                                <Label for="placeholder_text"
+                                    >Input Placeholder</Label
+                                >
                                 <Input
                                     id="placeholder_text"
-                                    v-model="form.config.appearance.placeholder_text"
+                                    v-model="
+                                        form.config.appearance.placeholder_text
+                                    "
                                     placeholder="Type your message..."
                                 />
                             </div>
 
                             <div class="grid gap-4 sm:grid-cols-3">
                                 <div class="grid gap-2">
-                                    <Label for="primary_color">Primary Color</Label>
+                                    <Label for="primary_color"
+                                        >Primary Color</Label
+                                    >
                                     <div class="flex gap-2">
                                         <input
                                             id="primary_color"
                                             type="color"
-                                            v-model="form.config.appearance.primary_color"
+                                            v-model="
+                                                form.config.appearance
+                                                    .primary_color
+                                            "
                                             class="h-10 w-12 cursor-pointer rounded border"
                                         />
                                         <Input
-                                            v-model="form.config.appearance.primary_color"
+                                            v-model="
+                                                form.config.appearance
+                                                    .primary_color
+                                            "
                                             class="flex-1"
                                         />
                                     </div>
                                 </div>
 
                                 <div class="grid gap-2">
-                                    <Label for="background_color">Background</Label>
+                                    <Label for="background_color"
+                                        >Background</Label
+                                    >
                                     <div class="flex gap-2">
                                         <input
                                             id="background_color"
                                             type="color"
-                                            v-model="form.config.appearance.background_color"
+                                            v-model="
+                                                form.config.appearance
+                                                    .background_color
+                                            "
                                             class="h-10 w-12 cursor-pointer rounded border"
                                         />
                                         <Input
-                                            v-model="form.config.appearance.background_color"
+                                            v-model="
+                                                form.config.appearance
+                                                    .background_color
+                                            "
                                             class="flex-1"
                                         />
                                     </div>
@@ -293,11 +373,17 @@ const submit = () => {
                                         <input
                                             id="text_color"
                                             type="color"
-                                            v-model="form.config.appearance.text_color"
+                                            v-model="
+                                                form.config.appearance
+                                                    .text_color
+                                            "
                                             class="h-10 w-12 cursor-pointer rounded border"
                                         />
                                         <Input
-                                            v-model="form.config.appearance.text_color"
+                                            v-model="
+                                                form.config.appearance
+                                                    .text_color
+                                            "
                                             class="flex-1"
                                         />
                                     </div>
@@ -309,17 +395,33 @@ const submit = () => {
                                 <div class="flex gap-4">
                                     <Button
                                         type="button"
-                                        :variant="form.config.appearance.position === 'bottom-right' ? 'default' : 'outline'"
+                                        :variant="
+                                            form.config.appearance.position ===
+                                            'bottom-right'
+                                                ? 'default'
+                                                : 'outline'
+                                        "
                                         size="sm"
-                                        @click="form.config.appearance.position = 'bottom-right'"
+                                        @click="
+                                            form.config.appearance.position =
+                                                'bottom-right'
+                                        "
                                     >
                                         Bottom Right
                                     </Button>
                                     <Button
                                         type="button"
-                                        :variant="form.config.appearance.position === 'bottom-left' ? 'default' : 'outline'"
+                                        :variant="
+                                            form.config.appearance.position ===
+                                            'bottom-left'
+                                                ? 'default'
+                                                : 'outline'
+                                        "
                                         size="sm"
-                                        @click="form.config.appearance.position = 'bottom-left'"
+                                        @click="
+                                            form.config.appearance.position =
+                                                'bottom-left'
+                                        "
                                     >
                                         Bottom Left
                                     </Button>
@@ -345,11 +447,22 @@ const submit = () => {
                                 </div>
                                 <Button
                                     type="button"
-                                    :variant="form.config.behavior.collect_email ? 'default' : 'outline'"
+                                    :variant="
+                                        form.config.behavior.collect_email
+                                            ? 'default'
+                                            : 'outline'
+                                    "
                                     size="sm"
-                                    @click="form.config.behavior.collect_email = !form.config.behavior.collect_email"
+                                    @click="
+                                        form.config.behavior.collect_email =
+                                            !form.config.behavior.collect_email
+                                    "
                                 >
-                                    {{ form.config.behavior.collect_email ? 'On' : 'Off' }}
+                                    {{
+                                        form.config.behavior.collect_email
+                                            ? 'On'
+                                            : 'Off'
+                                    }}
                                 </Button>
                             </div>
 
@@ -362,11 +475,22 @@ const submit = () => {
                                 </div>
                                 <Button
                                     type="button"
-                                    :variant="form.config.behavior.collect_name ? 'default' : 'outline'"
+                                    :variant="
+                                        form.config.behavior.collect_name
+                                            ? 'default'
+                                            : 'outline'
+                                    "
                                     size="sm"
-                                    @click="form.config.behavior.collect_name = !form.config.behavior.collect_name"
+                                    @click="
+                                        form.config.behavior.collect_name =
+                                            !form.config.behavior.collect_name
+                                    "
                                 >
-                                    {{ form.config.behavior.collect_name ? 'On' : 'Off' }}
+                                    {{
+                                        form.config.behavior.collect_name
+                                            ? 'On'
+                                            : 'Off'
+                                    }}
                                 </Button>
                             </div>
 
@@ -379,11 +503,23 @@ const submit = () => {
                                 </div>
                                 <Button
                                     type="button"
-                                    :variant="form.config.behavior.show_powered_by ? 'default' : 'outline'"
+                                    :variant="
+                                        form.config.behavior.show_powered_by
+                                            ? 'default'
+                                            : 'outline'
+                                    "
                                     size="sm"
-                                    @click="form.config.behavior.show_powered_by = !form.config.behavior.show_powered_by"
+                                    @click="
+                                        form.config.behavior.show_powered_by =
+                                            !form.config.behavior
+                                                .show_powered_by
+                                    "
                                 >
-                                    {{ form.config.behavior.show_powered_by ? 'On' : 'Off' }}
+                                    {{
+                                        form.config.behavior.show_powered_by
+                                            ? 'On'
+                                            : 'Off'
+                                    }}
                                 </Button>
                             </div>
                         </div>
@@ -391,7 +527,13 @@ const submit = () => {
 
                     <div class="flex justify-end gap-4">
                         <Button variant="outline" as-child>
-                            <Link :href="ChatbotController.show({ chatbot: chatbot.id }).url">
+                            <Link
+                                :href="
+                                    ChatbotController.show({
+                                        chatbot: chatbot.id,
+                                    }).url
+                                "
+                            >
                                 {{ t('common.cancel') }}
                             </Link>
                         </Button>

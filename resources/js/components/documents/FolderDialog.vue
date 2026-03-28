@@ -43,7 +43,7 @@ watch(
     () => props.parentFolderId,
     (newVal) => {
         form.parent_id = newVal;
-    }
+    },
 );
 
 const handleSubmit = () => {
@@ -89,7 +89,10 @@ const handleClose = () => {
                 <!-- Visibility Select -->
                 <div class="space-y-2">
                     <Label for="folder-visibility">Visibility</Label>
-                    <Select v-model="form.visibility" :disabled="!canShareWithOrg">
+                    <Select
+                        v-model="form.visibility"
+                        :disabled="!canShareWithOrg"
+                    >
                         <SelectTrigger>
                             <SelectValue placeholder="Select visibility" />
                         </SelectTrigger>
@@ -98,11 +101,18 @@ const handleClose = () => {
                                 v-for="option in visibilityOptions"
                                 :key="option.value"
                                 :value="option.value"
-                                :disabled="option.value === 'organization' && !canShareWithOrg"
+                                :disabled="
+                                    option.value === 'organization' &&
+                                    !canShareWithOrg
+                                "
                             >
                                 <div class="flex items-center gap-2">
                                     <component
-                                        :is="option.value === 'organization' ? Users : Lock"
+                                        :is="
+                                            option.value === 'organization'
+                                                ? Users
+                                                : Lock
+                                        "
                                         class="h-4 w-4"
                                     />
                                     {{ option.label }}
@@ -111,12 +121,20 @@ const handleClose = () => {
                         </SelectContent>
                     </Select>
                     <p class="text-xs text-muted-foreground">
-                        {{ visibilityOptions.find(o => o.value === form.visibility)?.description }}
+                        {{
+                            visibilityOptions.find(
+                                (o) => o.value === form.visibility,
+                            )?.description
+                        }}
                     </p>
                 </div>
 
                 <DialogFooter>
-                    <Button type="button" variant="outline" @click="handleClose">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="handleClose"
+                    >
                         Cancel
                     </Button>
                     <Button

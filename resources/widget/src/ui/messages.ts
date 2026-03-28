@@ -1,5 +1,5 @@
 import type { Message } from '../types';
-import { parseMarkdown, escapeHtml } from './markdown';
+import { parseMarkdown } from './markdown';
 
 /**
  * Messages list component.
@@ -72,12 +72,14 @@ export class Messages {
      */
     updateMessage(messageId: string, content: string): void {
         const messageEl = this.element.querySelector(
-            `[data-message-id="${messageId}"]`
+            `[data-message-id="${messageId}"]`,
         ) as HTMLDivElement;
 
         if (messageEl) {
             // Check if it's an assistant message by class
-            const isAssistant = messageEl.classList.contains('sapiensly-message-assistant');
+            const isAssistant = messageEl.classList.contains(
+                'sapiensly-message-assistant',
+            );
             if (isAssistant) {
                 messageEl.innerHTML = parseMarkdown(content);
             } else {
@@ -123,6 +125,15 @@ export class Messages {
         requestAnimationFrame(() => {
             this.element.scrollTop = this.element.scrollHeight;
         });
+    }
+
+    /**
+     * Append a raw DOM element to the messages area.
+     */
+    appendElement(element: HTMLElement): void {
+        this.hideWelcome();
+        this.element.appendChild(element);
+        this.scrollToBottom();
     }
 
     /**

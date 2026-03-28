@@ -33,7 +33,7 @@ export class ApiClient {
     private async request<T>(
         method: string,
         endpoint: string,
-        body?: Record<string, unknown>
+        body?: Record<string, unknown>,
     ): Promise<T> {
         const url = `${this.baseUrl}/api/widget/v1${endpoint}`;
         const headers: Record<string, string> = {
@@ -52,7 +52,9 @@ export class ApiClient {
         });
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ message: 'Request failed' }));
+            const error = await response
+                .json()
+                .catch(() => ({ message: 'Request failed' }));
             throw new Error(error.message || `API error: ${response.status}`);
         }
 
@@ -67,8 +69,12 @@ export class ApiClient {
         const response = await fetch(url);
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ message: 'Failed to load config' }));
-            throw new Error(error.message || `Config error: ${response.status}`);
+            const error = await response
+                .json()
+                .catch(() => ({ message: 'Failed to load config' }));
+            throw new Error(
+                error.message || `Config error: ${response.status}`,
+            );
         }
 
         return response.json();
@@ -103,7 +109,10 @@ export class ApiClient {
     /**
      * Update session with visitor info.
      */
-    async updateSession(sessionId: string, visitorInfo: VisitorInfo): Promise<void> {
+    async updateSession(
+        sessionId: string,
+        visitorInfo: VisitorInfo,
+    ): Promise<void> {
         await this.request('PATCH', `/sessions/${sessionId}`, {
             visitor_email: visitorInfo.email,
             visitor_name: visitorInfo.name,
@@ -117,7 +126,7 @@ export class ApiClient {
      */
     async createConversation(
         sessionToken: string,
-        initialMessage?: string
+        initialMessage?: string,
     ): Promise<ConversationData & { initial_message?: Message }> {
         return this.request('POST', '/conversations', {
             session_token: sessionToken,
@@ -131,7 +140,7 @@ export class ApiClient {
     async getMessages(conversationId: string): Promise<Message[]> {
         const response = await this.request<{ messages: Message[] }>(
             'GET',
-            `/conversations/${conversationId}/messages`
+            `/conversations/${conversationId}/messages`,
         );
         return response.messages;
     }
@@ -141,9 +150,13 @@ export class ApiClient {
      */
     async sendMessage(
         conversationId: string,
-        content: string
+        content: string,
     ): Promise<{ message_id: string; stream_url: string }> {
-        return this.request('POST', `/conversations/${conversationId}/messages`, { content });
+        return this.request(
+            'POST',
+            `/conversations/${conversationId}/messages`,
+            { content },
+        );
     }
 
     /**
@@ -153,7 +166,7 @@ export class ApiClient {
         conversationId: string,
         onEvent: (event: StreamEvent) => void,
         onError: (error: Error) => void,
-        onComplete: () => void
+        onComplete: () => void,
     ): () => void {
         const url = `${this.baseUrl}/api/widget/v1/conversations/${conversationId}/stream`;
 
@@ -242,12 +255,16 @@ export class ApiClient {
         conversationId: string,
         rating: number,
         feedback?: string,
-        isResolved?: boolean
+        isResolved?: boolean,
     ): Promise<void> {
-        await this.request('POST', `/conversations/${conversationId}/feedback`, {
-            rating,
-            feedback,
-            is_resolved: isResolved,
-        });
+        await this.request(
+            'POST',
+            `/conversations/${conversationId}/feedback`,
+            {
+                rating,
+                feedback,
+                is_resolved: isResolved,
+            },
+        );
     }
 }

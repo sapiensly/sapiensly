@@ -21,7 +21,9 @@ const page = usePage();
 const user = page.props.auth.user;
 const { isMobile, state } = useSidebar();
 
-const accountLabel = computed(() => page.props.auth.organization?.name ?? 'Personal');
+const accountLabel = computed(
+    () => page.props.auth.organization?.name ?? 'Personal',
+);
 </script>
 
 <template>

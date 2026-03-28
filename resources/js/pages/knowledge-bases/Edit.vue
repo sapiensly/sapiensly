@@ -24,10 +24,15 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('knowledge_bases.index.heading'), href: KnowledgeBaseController.index().url },
+    {
+        title: t('knowledge_bases.index.heading'),
+        href: KnowledgeBaseController.index().url,
+    },
     {
         title: props.knowledgeBase.name,
-        href: KnowledgeBaseController.show({ knowledge_base: props.knowledgeBase.id }).url,
+        href: KnowledgeBaseController.show({
+            knowledge_base: props.knowledgeBase.id,
+        }).url,
     },
     { title: t('common.edit'), href: '#' },
 ]);
@@ -44,7 +49,9 @@ const form = useForm({
 
 const submit = () => {
     form.put(
-        KnowledgeBaseController.update({ knowledge_base: props.knowledgeBase.id }).url,
+        KnowledgeBaseController.update({
+            knowledge_base: props.knowledgeBase.id,
+        }).url,
     );
 };
 </script>
@@ -87,14 +94,17 @@ const submit = () => {
                                     placeholder="What kind of documents will this knowledge base contain?"
                                     rows="3"
                                 />
-                                <InputError :message="form.errors.description" />
+                                <InputError
+                                    :message="form.errors.description"
+                                />
                             </div>
 
                             <div class="grid gap-2">
                                 <Label for="keywords">Keywords</Label>
                                 <KeywordsInput v-model="form.keywords" />
                                 <p class="text-xs text-muted-foreground">
-                                    Add keywords to help with search and categorization
+                                    Add keywords to help with search and
+                                    categorization
                                 </p>
                                 <InputError :message="form.errors.keywords" />
                             </div>
@@ -120,7 +130,9 @@ const submit = () => {
                                 <p class="text-xs text-muted-foreground">
                                     Number of characters per chunk (100-4000)
                                 </p>
-                                <InputError :message="form.errors['config.chunk_size']" />
+                                <InputError
+                                    :message="form.errors['config.chunk_size']"
+                                />
                             </div>
 
                             <div class="grid gap-2">
@@ -135,7 +147,11 @@ const submit = () => {
                                 <p class="text-xs text-muted-foreground">
                                     Overlap between chunks (0-500)
                                 </p>
-                                <InputError :message="form.errors['config.chunk_overlap']" />
+                                <InputError
+                                    :message="
+                                        form.errors['config.chunk_overlap']
+                                    "
+                                />
                             </div>
                         </div>
                     </div>

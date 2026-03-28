@@ -11,7 +11,11 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { AgentFormData, AgentTypeOption, ModelOption } from '@/types/agents';
+import type {
+    AgentFormData,
+    AgentTypeOption,
+    ModelOption,
+} from '@/types/agents';
 import { Bot, Brain, Zap } from 'lucide-vue-next';
 import { computed } from 'vue';
 
@@ -27,8 +31,8 @@ const emit = defineEmits<{
     (e: 'update:agent', value: AgentFormData): void;
 }>();
 
-const agentType = computed(
-    () => props.agentTypes.find((t) => t.value === props.agent.type),
+const agentType = computed(() =>
+    props.agentTypes.find((t) => t.value === props.agent.type),
 );
 
 const icon = computed(() => {
@@ -77,7 +81,12 @@ const getError = (field: string) => props.errors[fieldName(field)];
                     :default-value="agent.name"
                     required
                     placeholder="Agent name"
-                    @input="updateField('name', ($event.target as HTMLInputElement).value)"
+                    @input="
+                        updateField(
+                            'name',
+                            ($event.target as HTMLInputElement).value,
+                        )
+                    "
                 />
                 <InputError :message="getError('name')" />
             </div>
@@ -113,7 +122,12 @@ const getError = (field: string) => props.errors[fieldName(field)];
                 :name="fieldName('description')"
                 :default-value="agent.description"
                 placeholder="What does this agent do?"
-                @input="updateField('description', ($event.target as HTMLInputElement).value)"
+                @input="
+                    updateField(
+                        'description',
+                        ($event.target as HTMLInputElement).value,
+                    )
+                "
             />
             <InputError :message="getError('description')" />
         </div>
@@ -126,7 +140,12 @@ const getError = (field: string) => props.errors[fieldName(field)];
                 :default-value="agent.prompt_template"
                 placeholder="Enter the system prompt for this agent..."
                 rows="4"
-                @input="updateField('prompt_template', ($event.target as HTMLTextAreaElement).value)"
+                @input="
+                    updateField(
+                        'prompt_template',
+                        ($event.target as HTMLTextAreaElement).value,
+                    )
+                "
             />
             <InputError :message="getError('prompt_template')" />
         </div>

@@ -125,6 +125,8 @@ class AgentController extends Controller
             abort(403);
         }
 
+        $activeFlow = $agent->activeFlow();
+
         return Inertia::render('standalone-agents/Edit', [
             'agent' => $agent->load(['knowledgeBases', 'tools']),
             'agentTypes' => collect(AgentType::cases())->map(fn ($type) => [
@@ -136,6 +138,7 @@ class AgentController extends Controller
             'recommendedModels' => $this->aiProviderService->getRecommendedModels(),
             'knowledgeBases' => KnowledgeBase::forAccountContext($request->user())->where('status', 'ready')->get(['id', 'name']),
             'tools' => Tool::forAccountContext($request->user())->where('status', 'active')->get(['id', 'name', 'type']),
+            'activeFlow' => $activeFlow,
         ]);
     }
 

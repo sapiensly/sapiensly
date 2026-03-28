@@ -27,7 +27,7 @@ const emit = defineEmits<{
 
 const updateField = <K extends keyof GraphqlConfig>(
     field: K,
-    value: GraphqlConfig[K]
+    value: GraphqlConfig[K],
 ) => {
     emit('update:config', {
         ...props.config,
@@ -93,7 +93,7 @@ const mutationPlaceholder = `mutation UpdateOrderStatus($id: ID!, $status: Strin
 }`;
 
 const placeholder = computed(() =>
-    operationType.value === 'mutation' ? mutationPlaceholder : queryPlaceholder
+    operationType.value === 'mutation' ? mutationPlaceholder : queryPlaceholder,
 );
 </script>
 

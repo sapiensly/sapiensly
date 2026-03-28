@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { Send } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Send } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{
     disabled?: boolean;
@@ -43,13 +43,12 @@ function handleKeydown(e: KeyboardEvent) {
             :disabled="disabled || loading"
             @keydown="handleKeydown"
         />
-        <Button
-            :disabled="!canSubmit"
-            class="h-auto"
-            @click="handleSubmit"
-        >
+        <Button :disabled="!canSubmit" class="h-auto" @click="handleSubmit">
             <Send v-if="!loading" class="h-4 w-4" />
-            <span v-else class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <span
+                v-else
+                class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+            />
         </Button>
     </div>
 </template>

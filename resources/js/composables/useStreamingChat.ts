@@ -1,5 +1,15 @@
+import type {
+    ExecutionStep,
+    KnowledgeBaseRef,
+    StreamChunk,
+    ToolCall,
+} from '@/types/chat';
 import { ref } from 'vue';
-import type { StreamChunk, ToolCall, KnowledgeBaseRef, ExecutionStep } from '@/types/chat';
+
+export interface FlowMenuEvent {
+    message: string;
+    options: { id: string; label: string }[];
+}
 
 export interface StreamCallbacks {
     onChunk: (content: string) => void;
@@ -11,6 +21,9 @@ export interface StreamCallbacks {
     onStepStart?: (step: number, agent: string, details: ExecutionStep) => void;
     onStepComplete?: (step: number, response?: string) => void;
     onConsolidating?: () => void;
+    onFlowMenu?: (menu: FlowMenuEvent) => void;
+    onFlowMessage?: (content: string) => void;
+    onFlowEnd?: (action: string) => void;
 }
 
 export function useStreamingChat() {
@@ -34,9 +47,16 @@ export function useStreamingChat() {
         onToolCall?: (tool: ToolCall) => void,
         onKnowledgeBase?: (kb: KnowledgeBaseRef) => void,
         onExecutionPlan?: (steps: ExecutionStep[]) => void,
-        onStepStart?: (step: number, agent: string, details: ExecutionStep) => void,
+        onStepStart?: (
+            step: number,
+            agent: string,
+            details: ExecutionStep,
+        ) => void,
         onStepComplete?: (step: number, response?: string) => void,
-        onConsolidating?: () => void
+        onConsolidating?: () => void,
+        onFlowMenu?: (menu: FlowMenuEvent) => void,
+        onFlowMessage?: (content: string) => void,
+        onFlowEnd?: (action: string) => void,
     ) {
         // Close any existing connection
         stopStream();
@@ -60,18 +80,24 @@ export function useStreamingChat() {
         })
             .then(async (response) => {
                 if (response.redirected) {
-                    throw new Error(`Redirected to ${response.url} — session may have expired`);
+                    throw new Error(
+                        `Redirected to ${response.url} — session may have expired`,
+                    );
                 }
 
                 if (!response.ok) {
                     const body = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${body.substring(0, 200)}`);
+                    throw new Error(
+                        `HTTP ${response.status}: ${body.substring(0, 200)}`,
+                    );
                 }
 
                 const contentType = response.headers.get('content-type') || '';
                 if (!contentType.includes('text/event-stream')) {
                     const body = await response.text();
-                    throw new Error(`Expected event-stream but got ${contentType}: ${body.substring(0, 200)}`);
+                    throw new Error(
+                        `Expected event-stream but got ${contentType}: ${body.substring(0, 200)}`,
+                    );
                 }
 
                 const reader = response.body?.getReader();
@@ -113,11 +139,23 @@ export function useStreamingChat() {
                             if (data.type === 'execution_plan' && data.steps) {
                                 executionPlan.value = data.steps;
                                 onExecutionPlan?.(data.steps);
-                            } else if (data.type === 'step_start' && data.step !== undefined && data.agent && data.details) {
+                            } else if (
+                                data.type === 'step_start' &&
+                                data.step !== undefined &&
+                                data.agent &&
+                                data.details
+                            ) {
                                 currentStep.value = data.step;
                                 currentAgent.value = data.agent;
-                                onStepStart?.(data.step, data.agent, data.details);
-                            } else if (data.type === 'step_complete' && data.step !== undefined) {
+                                onStepStart?.(
+                                    data.step,
+                                    data.agent,
+                                    data.details,
+                                );
+                            } else if (
+                                data.type === 'step_complete' &&
+                                data.step !== undefined
+                            ) {
                                 onStepComplete?.(data.step, data.response);
                             } else if (data.type === 'consolidating') {
                                 isConsolidating.value = true;
@@ -126,10 +164,22 @@ export function useStreamingChat() {
                                 const toolCall: ToolCall = { name: data.tool };
                                 toolCalls.value.push(toolCall);
                                 onToolCall?.(toolCall);
-                            } else if (data.type === 'knowledge_base' && data.name) {
-                                const kb: KnowledgeBaseRef = { name: data.name, id: data.id };
+                            } else if (
+                                data.type === 'knowledge_base' &&
+                                data.name
+                            ) {
+                                const kb: KnowledgeBaseRef = {
+                                    name: data.name,
+                                    id: data.id,
+                                };
                                 knowledgeBases.value.push(kb);
                                 onKnowledgeBase?.(kb);
+                            } else if (data.type === 'flow_menu' && data.options) {
+                                onFlowMenu?.({ message: data.message, options: data.options });
+                            } else if (data.type === 'flow_message' && data.content) {
+                                onFlowMessage?.(data.content);
+                            } else if (data.type === 'flow_end') {
+                                onFlowEnd?.(data.action ?? 'resume_conversation');
                             } else if (data.content) {
                                 streamingContent.value += data.content;
                                 onChunk(data.content);
@@ -146,7 +196,8 @@ export function useStreamingChat() {
             })
             .catch((err) => {
                 if (err.name === 'AbortError') return;
-                error.value = err.message || 'Connection lost. Please try again.';
+                error.value =
+                    err.message || 'Connection lost. Please try again.';
                 stopStream();
                 onError(error.value);
             });

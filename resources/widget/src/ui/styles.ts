@@ -430,6 +430,66 @@ export function generateStyles(config: AppearanceConfig): string {
             fill: white;
         }
 
+        /* Flow Menu */
+        .sapiensly-flow-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 4px 0;
+            align-self: flex-start;
+            max-width: 85%;
+        }
+
+        .sapiensly-flow-menu-message {
+            background: rgba(0, 0, 0, 0.08);
+            padding: 10px 14px;
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .sapiensly-flow-menu-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .sapiensly-flow-option {
+            padding: 8px 16px;
+            border: 1.5px solid var(--sw-primary);
+            border-radius: 20px;
+            background: transparent;
+            color: var(--sw-primary);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .sapiensly-flow-option:hover {
+            background: var(--sw-primary);
+            color: white;
+        }
+
+        .sapiensly-flow-option-selected {
+            background: var(--sw-primary) !important;
+            color: white !important;
+            border-color: var(--sw-primary) !important;
+        }
+
+        .sapiensly-flow-option-disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .sapiensly-flow-option-disabled:hover {
+            background: transparent;
+            color: var(--sw-primary);
+        }
+
         /* Powered By */
         .sapiensly-powered {
             padding: 8px;

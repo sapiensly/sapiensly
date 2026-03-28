@@ -2,7 +2,13 @@
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { AgentType, AgentTypeOption } from '@/types/agents';
@@ -45,24 +51,25 @@ const createUrl = computed(() => {
 </script>
 
 <template>
-    <Card :class="[
-        'transition-all',
-        modelValue ? 'ring-2 ring-primary' : '',
-    ]">
+    <Card :class="['transition-all', modelValue ? 'ring-2 ring-primary' : '']">
         <CardHeader class="pb-3">
             <div class="flex items-center gap-3">
                 <div class="rounded-lg bg-primary/10 p-2">
                     <component :is="typeIcon" class="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                    <CardTitle class="text-base">{{ typeInfo.label }}</CardTitle>
-                    <CardDescription class="text-xs">{{ typeInfo.description }}</CardDescription>
+                    <CardTitle class="text-base">{{
+                        typeInfo.label
+                    }}</CardTitle>
+                    <CardDescription class="text-xs">{{
+                        typeInfo.description
+                    }}</CardDescription>
                 </div>
             </div>
         </CardHeader>
         <CardContent>
-            <div v-if="agents.length === 0" class="text-center py-4">
-                <p class="text-sm text-muted-foreground mb-3">
+            <div v-if="agents.length === 0" class="py-4 text-center">
+                <p class="mb-3 text-sm text-muted-foreground">
                     No {{ typeInfo.label.toLowerCase() }}s available
                 </p>
                 <Button variant="outline" size="sm" as-child>
@@ -83,27 +90,34 @@ const createUrl = computed(() => {
                         v-for="agent in agents"
                         :key="agent.id"
                         :class="[
-                            'flex items-center space-x-3 rounded-lg border p-3 cursor-pointer transition-colors',
-                            modelValue === agent.id ? 'border-primary bg-primary/5' : 'hover:bg-muted/50',
+                            'flex cursor-pointer items-center space-x-3 rounded-lg border p-3 transition-colors',
+                            modelValue === agent.id
+                                ? 'border-primary bg-primary/5'
+                                : 'hover:bg-muted/50',
                         ]"
                         @click="emit('update:modelValue', agent.id)"
                     >
                         <RadioGroupItem :value="agent.id" :id="agent.id" />
                         <Label :for="agent.id" class="flex-1 cursor-pointer">
                             <div class="flex items-center justify-between">
-                                <span class="font-medium">{{ agent.name }}</span>
+                                <span class="font-medium">{{
+                                    agent.name
+                                }}</span>
                                 <Badge variant="outline" class="text-xs">
                                     {{ agent.status }}
                                 </Badge>
                             </div>
-                            <p v-if="agent.description" class="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                            <p
+                                v-if="agent.description"
+                                class="mt-0.5 line-clamp-1 text-xs text-muted-foreground"
+                            >
                                 {{ agent.description }}
                             </p>
                         </Label>
                     </div>
                 </RadioGroup>
 
-                <div class="pt-2 border-t">
+                <div class="border-t pt-2">
                     <Button variant="ghost" size="sm" class="w-full" as-child>
                         <Link :href="createUrl">
                             <Plus class="mr-2 h-4 w-4" />

@@ -27,7 +27,7 @@ const emit = defineEmits<{
 
 const updateField = <K extends keyof RestApiConfig>(
     field: K,
-    value: RestApiConfig[K]
+    value: RestApiConfig[K],
 ) => {
     emit('update:config', {
         ...props.config,
@@ -84,7 +84,7 @@ const authOptions = [
 ];
 
 const showRequestBody = computed(() =>
-    ['POST', 'PUT', 'PATCH'].includes(method.value)
+    ['POST', 'PUT', 'PATCH'].includes(method.value),
 );
 </script>
 
@@ -178,7 +178,9 @@ const showRequestBody = computed(() =>
                 class="min-h-[100px] font-mono text-sm"
             />
             <p class="text-xs text-muted-foreground">
-                JSON template with <code class="bg-muted px-1 rounded">{"{{variable}}"}</code> placeholders
+                JSON template with
+                <code class="rounded bg-muted px-1">{"{{ variable }}"}</code>
+                placeholders
             </p>
             <InputError :message="errors['config.request_body_template']" />
         </div>

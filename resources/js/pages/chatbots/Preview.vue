@@ -3,11 +3,15 @@ import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotContro
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    usePreviewChat,
+    type PreviewMessage,
+} from '@/composables/usePreviewChat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { Chatbot } from '@/types/chatbot';
-import { usePreviewChat, type PreviewMessage } from '@/composables/usePreviewChat';
 import { Head, Link } from '@inertiajs/vue3';
+import hljs from 'highlight.js/lib/core';
 import {
     AlertCircle,
     Book,
@@ -18,22 +22,21 @@ import {
     Wrench,
     X,
 } from 'lucide-vue-next';
+import { marked, Renderer } from 'marked';
 import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
-import { marked, Renderer } from 'marked';
-import hljs from 'highlight.js/lib/core';
 
 // Import common languages
-import javascript from 'highlight.js/lib/languages/javascript';
-import typescript from 'highlight.js/lib/languages/typescript';
-import python from 'highlight.js/lib/languages/python';
-import php from 'highlight.js/lib/languages/php';
-import sql from 'highlight.js/lib/languages/sql';
-import json from 'highlight.js/lib/languages/json';
 import bash from 'highlight.js/lib/languages/bash';
 import css from 'highlight.js/lib/languages/css';
+import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
+import php from 'highlight.js/lib/languages/php';
+import python from 'highlight.js/lib/languages/python';
+import sql from 'highlight.js/lib/languages/sql';
+import typescript from 'highlight.js/lib/languages/typescript';
 import xml from 'highlight.js/lib/languages/xml';
 
 // Register languages
@@ -124,7 +127,7 @@ const {
 const config = computed(() => props.chatbot.config);
 
 const hasTarget = computed(
-    () => props.chatbot.agent_id || props.chatbot.agent_team_id
+    () => props.chatbot.agent_id || props.chatbot.agent_team_id,
 );
 
 const sendMessage = async () => {
@@ -150,7 +153,7 @@ watch(
             }
         });
     },
-    { deep: true }
+    { deep: true },
 );
 </script>
 
@@ -169,7 +172,9 @@ watch(
                         <Button variant="outline" as-child>
                             <Link
                                 :href="
-                                    ChatbotController.edit({ chatbot: chatbot.id }).url
+                                    ChatbotController.edit({
+                                        chatbot: chatbot.id,
+                                    }).url
                                 "
                             >
                                 Edit Settings
@@ -178,7 +183,9 @@ watch(
                         <Button as-child>
                             <Link
                                 :href="
-                                    ChatbotController.embed({ chatbot: chatbot.id }).url
+                                    ChatbotController.embed({
+                                        chatbot: chatbot.id,
+                                    }).url
                                 "
                             >
                                 Get Embed Code
@@ -192,16 +199,25 @@ watch(
                     v-if="!hasTarget"
                     class="mb-6 flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900 dark:bg-yellow-950"
                 >
-                    <AlertCircle class="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                    <AlertCircle
+                        class="h-5 w-5 text-yellow-600 dark:text-yellow-400"
+                    />
                     <div>
-                        <p class="font-medium text-yellow-800 dark:text-yellow-200">
+                        <p
+                            class="font-medium text-yellow-800 dark:text-yellow-200"
+                        >
                             No Agent or Team configured
                         </p>
-                        <p class="mt-1 text-sm text-yellow-700 dark:text-yellow-300">
-                            This chatbot doesn't have an agent or team assigned yet.
+                        <p
+                            class="mt-1 text-sm text-yellow-700 dark:text-yellow-300"
+                        >
+                            This chatbot doesn't have an agent or team assigned
+                            yet.
                             <Link
                                 :href="
-                                    ChatbotController.edit({ chatbot: chatbot.id }).url
+                                    ChatbotController.edit({
+                                        chatbot: chatbot.id,
+                                    }).url
                                 "
                                 class="underline"
                             >
@@ -218,13 +234,27 @@ watch(
                 >
                     <!-- Simulated Website Content -->
                     <div class="space-y-4">
-                        <div class="h-12 w-48 rounded bg-gray-300 dark:bg-gray-700" />
-                        <div class="h-4 w-full rounded bg-gray-300 dark:bg-gray-700" />
-                        <div class="h-4 w-3/4 rounded bg-gray-300 dark:bg-gray-700" />
-                        <div class="h-4 w-5/6 rounded bg-gray-300 dark:bg-gray-700" />
-                        <div class="h-32 w-full rounded bg-gray-300 dark:bg-gray-700" />
-                        <div class="h-4 w-full rounded bg-gray-300 dark:bg-gray-700" />
-                        <div class="h-4 w-2/3 rounded bg-gray-300 dark:bg-gray-700" />
+                        <div
+                            class="h-12 w-48 rounded bg-gray-300 dark:bg-gray-700"
+                        />
+                        <div
+                            class="h-4 w-full rounded bg-gray-300 dark:bg-gray-700"
+                        />
+                        <div
+                            class="h-4 w-3/4 rounded bg-gray-300 dark:bg-gray-700"
+                        />
+                        <div
+                            class="h-4 w-5/6 rounded bg-gray-300 dark:bg-gray-700"
+                        />
+                        <div
+                            class="h-32 w-full rounded bg-gray-300 dark:bg-gray-700"
+                        />
+                        <div
+                            class="h-4 w-full rounded bg-gray-300 dark:bg-gray-700"
+                        />
+                        <div
+                            class="h-4 w-2/3 rounded bg-gray-300 dark:bg-gray-700"
+                        />
                     </div>
 
                     <!-- Widget Preview -->
@@ -240,7 +270,10 @@ watch(
                         <button
                             v-if="!isOpen"
                             class="flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105"
-                            :style="{ backgroundColor: config.appearance.primary_color }"
+                            :style="{
+                                backgroundColor:
+                                    config.appearance.primary_color,
+                            }"
                             @click="isOpen = true"
                         >
                             <MessageSquare class="h-6 w-6 text-white" />
@@ -250,12 +283,18 @@ watch(
                         <div
                             v-else
                             class="flex h-[480px] w-[360px] flex-col overflow-hidden rounded-xl shadow-2xl"
-                            :style="{ backgroundColor: config.appearance.background_color }"
+                            :style="{
+                                backgroundColor:
+                                    config.appearance.background_color,
+                            }"
                         >
                             <!-- Header -->
                             <div
                                 class="flex items-center justify-between px-4 py-3"
-                                :style="{ backgroundColor: config.appearance.primary_color }"
+                                :style="{
+                                    backgroundColor:
+                                        config.appearance.primary_color,
+                                }"
                             >
                                 <span class="font-semibold text-white">
                                     {{ config.appearance.widget_title }}
@@ -279,7 +318,10 @@ watch(
 
                             <!-- Tool/KB Indicators -->
                             <div
-                                v-if="toolCalls.length > 0 || knowledgeBases.length > 0"
+                                v-if="
+                                    toolCalls.length > 0 ||
+                                    knowledgeBases.length > 0
+                                "
                                 class="flex flex-wrap gap-1 border-b px-3 py-2"
                             >
                                 <Badge
@@ -322,7 +364,8 @@ watch(
                                     class="mb-4 rounded-lg p-3"
                                     :style="{
                                         backgroundColor:
-                                            config.appearance.primary_color + '20',
+                                            config.appearance.primary_color +
+                                            '20',
                                     }"
                                 >
                                     {{ config.appearance.welcome_message }}
@@ -342,25 +385,42 @@ watch(
                                     >
                                         <div
                                             class="max-w-[80%] rounded-lg px-3 py-2"
-                                            :class="msg.role === 'assistant' ? 'preview-message-assistant prose prose-sm max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-[#1e1e1e] prose-pre:text-[#d4d4d4] prose-code:text-xs prose-code:before:content-none prose-code:after:content-none' : 'whitespace-pre-wrap'"
+                                            :class="
+                                                msg.role === 'assistant'
+                                                    ? 'preview-message-assistant prose prose-sm max-w-none prose-p:my-1 prose-code:text-xs prose-code:before:content-none prose-code:after:content-none prose-pre:my-2 prose-pre:bg-[#1e1e1e] prose-pre:text-[#d4d4d4]'
+                                                    : 'whitespace-pre-wrap'
+                                            "
                                             :style="{
                                                 backgroundColor:
                                                     msg.role === 'user'
-                                                        ? config.appearance.primary_color
-                                                        : config.appearance.primary_color +
+                                                        ? config.appearance
+                                                              .primary_color
+                                                        : config.appearance
+                                                              .primary_color +
                                                           '20',
                                                 color:
                                                     msg.role === 'user'
                                                         ? '#ffffff'
-                                                        : config.appearance.text_color,
+                                                        : config.appearance
+                                                              .text_color,
                                             }"
                                         >
-                                            <template v-if="msg.isStreaming && !msg.content">
-                                                <Loader2 class="h-4 w-4 animate-spin" />
+                                            <template
+                                                v-if="
+                                                    msg.isStreaming &&
+                                                    !msg.content
+                                                "
+                                            >
+                                                <Loader2
+                                                    class="h-4 w-4 animate-spin"
+                                                />
                                             </template>
                                             <template v-else>
                                                 <!-- User messages: plain text -->
-                                                <span v-if="msg.role === 'user'">{{ msg.content }}</span>
+                                                <span
+                                                    v-if="msg.role === 'user'"
+                                                    >{{ msg.content }}</span
+                                                >
                                                 <!-- Assistant messages: markdown -->
                                                 <div
                                                     v-else
@@ -378,15 +438,22 @@ watch(
 
                             <!-- Input -->
                             <div class="border-t p-3">
-                                <form class="flex gap-2" @submit.prevent="sendMessage">
+                                <form
+                                    class="flex gap-2"
+                                    @submit.prevent="sendMessage"
+                                >
                                     <input
                                         v-model="message"
                                         type="text"
-                                        :placeholder="config.appearance.placeholder_text"
-                                        :disabled="
-                                            isLoading || isStreaming || !hasTarget
+                                        :placeholder="
+                                            config.appearance.placeholder_text
                                         "
-                                        class="flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 disabled:opacity-50"
+                                        :disabled="
+                                            isLoading ||
+                                            isStreaming ||
+                                            !hasTarget
+                                        "
+                                        class="flex-1 rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none disabled:opacity-50"
                                         :style="{
                                             color: config.appearance.text_color,
                                             '--tw-ring-color':
@@ -429,8 +496,8 @@ watch(
 
                 <p class="mt-4 text-center text-sm text-muted-foreground">
                     This preview uses real AI responses from your
-                    {{ chatbot.agent ? 'agent' : 'team' }}. Messages are saved for
-                    testing purposes.
+                    {{ chatbot.agent ? 'agent' : 'team' }}. Messages are saved
+                    for testing purposes.
                 </p>
             </div>
         </div>
@@ -507,6 +574,7 @@ watch(
 }
 
 .preview-message-assistant pre code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 </style>

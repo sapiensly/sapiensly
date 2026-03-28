@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\FlowActionType;
 use App\Enums\MessageRole;
 use App\Models\AgentTeam;
 use App\Models\Conversation;
@@ -25,6 +26,7 @@ class TeamOrchestrationService
     public function __construct(
         private readonly LLMService $llmService,
         private readonly TriageRoutingService $routingService,
+        private readonly FlowExecutorService $flowExecutor,
     ) {}
 
     /**
@@ -48,6 +50,17 @@ class TeamOrchestrationService
     ): Generator {
         // Load team agents
         $team->load(['triageAgent', 'knowledgeAgent', 'actionAgent']);
+
+        // Check for active flow before LLM triage
+        if ($team->triageAgent) {
+            $flowState = $conversation->metadata['flow_state'] ?? null;
+
+            if ($this->flowExecutor->shouldActivateFlow($team->triageAgent, $userMessage, $flowState)) {
+                yield from $this->executeFlow($team, $conversation, $userMessage, $flowState);
+
+                return;
+            }
+        }
 
         // Get conversation history for context
         // Use loaded relation if available (for widget/preview), otherwise query
@@ -463,5 +476,112 @@ PROMPT;
         ]);
 
         return array_merge($history, [$current]);
+    }
+
+    /**
+     * Execute a flow for the triage agent.
+     *
+     * @return Generator<array<string, mixed>>
+     */
+    private function executeFlow(
+        AgentTeam $team,
+        Conversation $conversation,
+        string $userMessage,
+        ?array $flowState
+    ): Generator {
+        $flow = $team->triageAgent->activeFlow();
+        if (! $flow) {
+            return;
+        }
+
+        // Initialize or continue flow
+        if ($flowState === null || ($flowState['completed'] ?? false)) {
+            $flowState = $this->flowExecutor->initializeFlow($flow);
+
+            yield [
+                'type' => 'flow_start',
+                'flow_id' => $flow->id,
+                'flow_name' => $flow->name,
+            ];
+        }
+
+        $action = $this->flowExecutor->processInput($flow, $flowState, $userMessage);
+
+        // Persist updated state
+        $metadata = $conversation->metadata ?? [];
+        $metadata['flow_state'] = $action->updatedState;
+        $conversation->update(['metadata' => $metadata]);
+
+        yield from $this->emitFlowAction($team, $conversation, $action);
+    }
+
+    /**
+     * Convert a FlowAction into SSE events.
+     *
+     * @return Generator<array<string, mixed>>
+     */
+    private function emitFlowAction(
+        AgentTeam $team,
+        Conversation $conversation,
+        FlowAction $action
+    ): Generator {
+        match ($action->type) {
+            FlowActionType::ShowMenu => yield [
+                'type' => 'flow_menu',
+                'message' => $action->data['message'] ?? '',
+                'options' => $action->data['options'] ?? [],
+            ],
+            FlowActionType::SendMessage => (function () use ($action, $team, $conversation) {
+                yield ['type' => 'flow_message', 'content' => $action->data['message'] ?? ''];
+
+                // If there's a next node, auto-advance
+                if (isset($action->data['next_node_id'])) {
+                    $flow = $team->triageAgent->activeFlow();
+                    if ($flow) {
+                        $nextAction = $this->flowExecutor->advanceToNode($flow, $action->updatedState, $action->data['next_node_id']);
+                        $metadata = $conversation->metadata ?? [];
+                        $metadata['flow_state'] = $nextAction->updatedState;
+                        $conversation->update(['metadata' => $metadata]);
+                        yield from $this->emitFlowAction($team, $conversation, $nextAction);
+                    }
+                }
+            })(),
+            FlowActionType::AgentHandoff => (function () use ($action, $team, $conversation) {
+                if ($action->data['message'] ?? null) {
+                    yield ['type' => 'flow_message', 'content' => $action->data['message']];
+                }
+                yield ['type' => 'flow_end', 'action' => 'agent_handoff'];
+
+                // Execute the handoff by running the appropriate agent
+                $messages = $conversation->relationLoaded('messages')
+                    ? $conversation->messages
+                    : $conversation->messages()->get();
+
+                $targetAgent = $action->data['target_agent'] ?? 'triage_llm';
+                $context = $action->data['context'] ?? null;
+
+                $step = match ($targetAgent) {
+                    'knowledge' => ['agent' => 'knowledge', 'query' => $context ?? $messages->last()?->content ?? ''],
+                    'action' => ['agent' => 'action', 'task' => $context ?? $messages->last()?->content ?? '', 'context' => []],
+                    default => null,
+                };
+
+                if ($step) {
+                    $lastMessage = $messages->last()?->content ?? '';
+                    match ($step['agent']) {
+                        'knowledge' => yield from $this->executeKnowledgeWithEvents($team, $messages, $step, $lastMessage),
+                        'action' => yield from $this->executeActionWithEvents($team, $messages, $step, $lastMessage),
+                    };
+                }
+            })(),
+            FlowActionType::End => yield [
+                'type' => 'flow_end',
+                'action' => $action->data['action'] ?? 'resume_conversation',
+            ],
+            FlowActionType::AwaitLlmClassification => yield [
+                'type' => 'flow_await_input',
+                'input_type' => 'text',
+            ],
+        };
     }
 }

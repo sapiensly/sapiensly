@@ -13,8 +13,12 @@ export class Input {
     constructor(placeholder: string, onSend: (message: string) => void) {
         this.onSend = onSend;
         this.element = this.createElement(placeholder);
-        this.input = this.element.querySelector('.sapiensly-input') as HTMLInputElement;
-        this.button = this.element.querySelector('.sapiensly-send') as HTMLButtonElement;
+        this.input = this.element.querySelector(
+            '.sapiensly-input',
+        ) as HTMLInputElement;
+        this.button = this.element.querySelector(
+            '.sapiensly-send',
+        ) as HTMLButtonElement;
     }
 
     private createElement(placeholder: string): HTMLDivElement {

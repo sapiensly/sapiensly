@@ -1,6 +1,12 @@
 import type { AgentStatus } from './agents';
 
-export type ToolType = 'function' | 'mcp' | 'group' | 'rest_api' | 'graphql' | 'database';
+export type ToolType =
+    | 'function'
+    | 'mcp'
+    | 'group'
+    | 'rest_api'
+    | 'graphql'
+    | 'database';
 
 export interface ToolTypeOption {
     value: ToolType;
@@ -65,7 +71,13 @@ export interface DatabaseConfig {
     read_only?: boolean;
 }
 
-export type ToolConfig = FunctionConfig | McpConfig | GroupConfig | RestApiConfig | GraphqlConfig | DatabaseConfig;
+export type ToolConfig =
+    | FunctionConfig
+    | McpConfig
+    | GroupConfig
+    | RestApiConfig
+    | GraphqlConfig
+    | DatabaseConfig;
 
 export interface ToolGroupItem {
     id: number;

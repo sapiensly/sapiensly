@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
@@ -8,7 +9,6 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import type { AgentTeam } from '@/types/agents';
-import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import { Link } from '@inertiajs/vue3';
 import { Users } from 'lucide-vue-next';
 
@@ -30,9 +30,7 @@ const statusVariant = (status: string) => {
 
 <template>
     <Link :href="AgentTeamController.show({ agent_team: team.id })">
-        <Card
-            class="cursor-pointer transition-colors hover:border-primary/50"
-        >
+        <Card class="cursor-pointer transition-colors hover:border-primary/50">
             <CardHeader>
                 <div class="flex items-center justify-between">
                     <CardTitle class="text-lg">{{ team.name }}</CardTitle>

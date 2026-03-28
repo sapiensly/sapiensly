@@ -59,12 +59,12 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
                 </div>
 
                 <EmptyState
-                        v-else
-                        :title="t('agent_teams.index.no_teams')"
-                        :description="t('agent_teams.index.no_teams_description')"
-                        :create-url="AgentTeamController.create()"
-                        :create-label="t('agent_teams.index.create_first')"
-                    />
+                    v-else
+                    :title="t('agent_teams.index.no_teams')"
+                    :description="t('agent_teams.index.no_teams_description')"
+                    :create-url="AgentTeamController.create()"
+                    :create-label="t('agent_teams.index.create_first')"
+                />
             </div>
         </div>
     </AppLayout>

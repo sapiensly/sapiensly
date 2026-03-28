@@ -26,7 +26,10 @@ export class Storage {
                 return JSON.parse(data);
             }
         } catch (error) {
-            console.warn('[Sapiensly] Failed to read session from storage:', error);
+            console.warn(
+                '[Sapiensly] Failed to read session from storage:',
+                error,
+            );
         }
         return null;
     }
@@ -36,9 +39,15 @@ export class Storage {
      */
     setSession(session: SessionData): void {
         try {
-            localStorage.setItem(this.getKey('session'), JSON.stringify(session));
+            localStorage.setItem(
+                this.getKey('session'),
+                JSON.stringify(session),
+            );
         } catch (error) {
-            console.warn('[Sapiensly] Failed to save session to storage:', error);
+            console.warn(
+                '[Sapiensly] Failed to save session to storage:',
+                error,
+            );
         }
     }
 
@@ -52,7 +61,10 @@ export class Storage {
                 return JSON.parse(data);
             }
         } catch (error) {
-            console.warn('[Sapiensly] Failed to read conversation from storage:', error);
+            console.warn(
+                '[Sapiensly] Failed to read conversation from storage:',
+                error,
+            );
         }
         return null;
     }
@@ -62,9 +74,15 @@ export class Storage {
      */
     setConversation(conversation: ConversationData): void {
         try {
-            localStorage.setItem(this.getKey('conversation'), JSON.stringify(conversation));
+            localStorage.setItem(
+                this.getKey('conversation'),
+                JSON.stringify(conversation),
+            );
         } catch (error) {
-            console.warn('[Sapiensly] Failed to save conversation to storage:', error);
+            console.warn(
+                '[Sapiensly] Failed to save conversation to storage:',
+                error,
+            );
         }
     }
 
@@ -75,7 +93,10 @@ export class Storage {
         try {
             localStorage.removeItem(this.getKey('conversation'));
         } catch (error) {
-            console.warn('[Sapiensly] Failed to clear conversation from storage:', error);
+            console.warn(
+                '[Sapiensly] Failed to clear conversation from storage:',
+                error,
+            );
         }
     }
 

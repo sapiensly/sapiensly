@@ -3,11 +3,10 @@
 use App\Http\Controllers\AiProviderController;
 use App\Http\Controllers\StackController;
 use Illuminate\Support\Facades\Route;
-use Laravel\WorkOS\Http\Middleware\ValidateSessionWithWorkOS;
 
 Route::middleware([
     'auth',
-    ValidateSessionWithWorkOS::class,
+    'verified',
 ])->prefix('system')->group(function () {
     Route::resource('ai-providers', AiProviderController::class)
         ->except(['show'])

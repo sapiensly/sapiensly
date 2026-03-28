@@ -19,7 +19,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import type { Folder, GroupedFolders, VisibilityOption } from '@/types/document';
+import type {
+    Folder,
+    GroupedFolders,
+    VisibilityOption,
+} from '@/types/document';
 import { useForm } from '@inertiajs/vue3';
 import { File, FolderIcon, Lock, Upload, Users, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -58,14 +62,19 @@ watch(
     () => props.currentFolderId,
     (newVal) => {
         form.folder_id = newVal;
-    }
+    },
 );
 
 // Flatten folders for the selector dropdown
 const flattenedFolders = computed(() => {
     if (!props.folders) return [];
 
-    const result: { id: string; name: string; depth: number; visibility: string }[] = [];
+    const result: {
+        id: string;
+        name: string;
+        depth: number;
+        visibility: string;
+    }[] = [];
 
     const addFolders = (folders: Folder[], depth: number) => {
         for (const folder of folders) {
@@ -150,7 +159,8 @@ const handleClose = () => {
             <DialogHeader>
                 <DialogTitle>Upload Document</DialogTitle>
                 <DialogDescription>
-                    Upload a document to your library. Supported formats: PDF, TXT, DOCX, MD, CSV, JSON.
+                    Upload a document to your library. Supported formats: PDF,
+                    TXT, DOCX, MD, CSV, JSON.
                 </DialogDescription>
             </DialogHeader>
 
@@ -181,7 +191,9 @@ const handleClose = () => {
                         <div class="flex items-center gap-3">
                             <File class="h-8 w-8 text-muted-foreground" />
                             <div>
-                                <p class="text-sm font-medium">{{ selectedFile.name }}</p>
+                                <p class="text-sm font-medium">
+                                    {{ selectedFile.name }}
+                                </p>
                                 <p class="text-xs text-muted-foreground">
                                     {{ formatFileSize(selectedFile.size) }}
                                 </p>
@@ -202,9 +214,7 @@ const handleClose = () => {
                         <p class="text-sm text-muted-foreground">
                             Drag and drop or click to upload
                         </p>
-                        <p class="text-xs text-muted-foreground">
-                            Max 10MB
-                        </p>
+                        <p class="text-xs text-muted-foreground">Max 10MB</p>
                     </template>
                 </div>
 
@@ -236,7 +246,9 @@ const handleClose = () => {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem :value="null">
-                                <span class="text-muted-foreground">No folder (root)</span>
+                                <span class="text-muted-foreground"
+                                    >No folder (root)</span
+                                >
                             </SelectItem>
                             <SelectItem
                                 v-for="folder in flattenedFolders"
@@ -244,12 +256,20 @@ const handleClose = () => {
                                 :value="folder.id"
                             >
                                 <div class="flex items-center gap-2">
-                                    <span :style="{ paddingLeft: `${folder.depth * 12}px` }">
-                                        <FolderIcon class="inline h-4 w-4 mr-1" />
+                                    <span
+                                        :style="{
+                                            paddingLeft: `${folder.depth * 12}px`,
+                                        }"
+                                    >
+                                        <FolderIcon
+                                            class="mr-1 inline h-4 w-4"
+                                        />
                                         {{ folder.name }}
                                     </span>
                                     <Users
-                                        v-if="folder.visibility === 'organization'"
+                                        v-if="
+                                            folder.visibility === 'organization'
+                                        "
                                         class="h-3 w-3 text-muted-foreground"
                                     />
                                 </div>
@@ -264,7 +284,10 @@ const handleClose = () => {
                 <!-- Visibility Select -->
                 <div class="space-y-2">
                     <Label for="visibility">Visibility</Label>
-                    <Select v-model="form.visibility" :disabled="!canShareWithOrg">
+                    <Select
+                        v-model="form.visibility"
+                        :disabled="!canShareWithOrg"
+                    >
                         <SelectTrigger>
                             <SelectValue placeholder="Select visibility" />
                         </SelectTrigger>
@@ -273,11 +296,18 @@ const handleClose = () => {
                                 v-for="option in visibilityOptions"
                                 :key="option.value"
                                 :value="option.value"
-                                :disabled="option.value === 'organization' && !canShareWithOrg"
+                                :disabled="
+                                    option.value === 'organization' &&
+                                    !canShareWithOrg
+                                "
                             >
                                 <div class="flex items-center gap-2">
                                     <component
-                                        :is="option.value === 'organization' ? Users : Lock"
+                                        :is="
+                                            option.value === 'organization'
+                                                ? Users
+                                                : Lock
+                                        "
                                         class="h-4 w-4"
                                     />
                                     {{ option.label }}
@@ -286,12 +316,20 @@ const handleClose = () => {
                         </SelectContent>
                     </Select>
                     <p class="text-xs text-muted-foreground">
-                        {{ visibilityOptions.find(o => o.value === form.visibility)?.description }}
+                        {{
+                            visibilityOptions.find(
+                                (o) => o.value === form.visibility,
+                            )?.description
+                        }}
                     </p>
                 </div>
 
                 <DialogFooter>
-                    <Button type="button" variant="outline" @click="handleClose">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="handleClose"
+                    >
                         Cancel
                     </Button>
                     <Button

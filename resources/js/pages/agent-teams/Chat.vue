@@ -12,7 +12,13 @@ import { useStreamingChat } from '@/composables/useStreamingChat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { AgentTeam } from '@/types/agents';
-import type { Conversation, Message, ToolCall, KnowledgeBaseRef, ExecutionStep } from '@/types/chat';
+import type {
+    Conversation,
+    ExecutionStep,
+    KnowledgeBaseRef,
+    Message,
+    ToolCall,
+} from '@/types/chat';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Bot, Brain, Plus, Users, Zap } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
@@ -26,7 +32,10 @@ const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Agent Teams', href: AgentTeamController.index().url },
-    { title: props.team.name, href: AgentTeamController.show({ agent_team: props.team.id }).url },
+    {
+        title: props.team.name,
+        href: AgentTeamController.show({ agent_team: props.team.id }).url,
+    },
     { title: 'Chat', href: '#' },
 ]);
 
@@ -49,21 +58,22 @@ watch(
     () => props.conversation.messages,
     (newMessages) => {
         messages.value = [...newMessages];
-    }
+    },
 );
 
 // Auto-scroll to bottom
 function scrollToBottom() {
     nextTick(() => {
         if (messagesContainer.value) {
-            messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+            messagesContainer.value.scrollTop =
+                messagesContainer.value.scrollHeight;
         }
     });
 }
 
 watch(
     () => [messages.value.length, streamingMessage.value],
-    () => scrollToBottom()
+    () => scrollToBottom(),
 );
 
 // Display messages including streaming
@@ -89,7 +99,9 @@ const displayMessages = computed(() => {
 function handleNewConversation() {
     if (isStreaming.value) return;
 
-    router.post(AgentTeamController.newConversation({ agentTeam: props.team.id }).url);
+    router.post(
+        AgentTeamController.newConversation({ agentTeam: props.team.id }).url,
+    );
 }
 
 // Send message
@@ -175,18 +187,22 @@ async function handleSendMessage(content: string) {
                     },
                     () => {
                         // Consolidating - mark all steps complete and show consolidation phase
-                        completedSteps.value = activeExecutionPlan.value.map((_, i) => i);
+                        completedSteps.value = activeExecutionPlan.value.map(
+                            (_, i) => i,
+                        );
                         activeStep.value = null;
                         consolidating.value = true;
-                    }
+                    },
                 );
             },
             onError: (errors) => {
                 // Remove optimistic message on error
-                messages.value = messages.value.filter((m) => m.id !== userMessage.id);
+                messages.value = messages.value.filter(
+                    (m) => m.id !== userMessage.id,
+                );
                 error.value = Object.values(errors).flat().join(', ');
             },
-        }
+        },
     );
 }
 
@@ -195,12 +211,16 @@ const triageAgent = computed(() => props.team.triage_agent);
 const knowledgeAgent = computed(() => props.team.knowledge_agent);
 const actionAgent = computed(() => props.team.action_agent);
 const configuredAgentCount = computed(() => {
-    return [triageAgent.value, knowledgeAgent.value, actionAgent.value].filter(Boolean).length;
+    return [triageAgent.value, knowledgeAgent.value, actionAgent.value].filter(
+        Boolean,
+    ).length;
 });
 
 // Get execution plan from message metadata
 function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
-    const metadata = message.metadata as { execution_plan?: ExecutionStep[] } | null;
+    const metadata = message.metadata as {
+        execution_plan?: ExecutionStep[];
+    } | null;
     return metadata?.execution_plan ?? null;
 }
 </script>
@@ -214,7 +234,13 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
             <div class="border-b bg-background px-4 py-3">
                 <div class="mx-auto flex max-w-4xl items-center gap-4">
                     <Button variant="ghost" size="icon" as-child>
-                        <Link :href="AgentTeamController.show({ agent_team: team.id }).url">
+                        <Link
+                            :href="
+                                AgentTeamController.show({
+                                    agent_team: team.id,
+                                }).url
+                            "
+                        >
                             <ArrowLeft class="h-4 w-4" />
                         </Link>
                     </Button>
@@ -222,11 +248,11 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                     <Heading :title="team.name" />
                     <div class="ml-auto flex items-center gap-2">
                         <!-- Agent badges -->
-                        <div class="hidden sm:flex items-center gap-1">
+                        <div class="hidden items-center gap-1 sm:flex">
                             <Badge
                                 v-if="triageAgent"
                                 variant="outline"
-                                class="text-xs gap-1"
+                                class="gap-1 text-xs"
                             >
                                 <Bot class="h-3 w-3" />
                                 Triage
@@ -234,7 +260,7 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                             <Badge
                                 v-if="knowledgeAgent"
                                 variant="outline"
-                                class="text-xs gap-1"
+                                class="gap-1 text-xs"
                             >
                                 <Brain class="h-3 w-3" />
                                 Knowledge
@@ -242,7 +268,7 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                             <Badge
                                 v-if="actionAgent"
                                 variant="outline"
-                                class="text-xs gap-1"
+                                class="gap-1 text-xs"
                             >
                                 <Zap class="h-3 w-3" />
                                 Action
@@ -281,15 +307,22 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                             Send a message to test {{ team.name }}
                         </p>
                         <p class="mt-2 text-xs text-muted-foreground">
-                            Your message will be analyzed and routed to the appropriate agents
+                            Your message will be analyzed and routed to the
+                            appropriate agents
                         </p>
                     </div>
 
                     <!-- Messages -->
-                    <template v-for="message in displayMessages" :key="message.id">
+                    <template
+                        v-for="message in displayMessages"
+                        :key="message.id"
+                    >
                         <!-- Execution plan indicator for streaming message -->
                         <div
-                            v-if="message.id === 'streaming' && activeExecutionPlan.length > 0"
+                            v-if="
+                                message.id === 'streaming' &&
+                                activeExecutionPlan.length > 0
+                            "
                             class="flex gap-3"
                         >
                             <div class="h-8 w-8 shrink-0" />
@@ -305,13 +338,20 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
 
                         <!-- Execution plan indicator from saved message metadata -->
                         <div
-                            v-else-if="message.role === 'assistant' && getMessageExecutionPlan(message)"
+                            v-else-if="
+                                message.role === 'assistant' &&
+                                getMessageExecutionPlan(message)
+                            "
                             class="flex gap-3"
                         >
                             <div class="h-8 w-8 shrink-0" />
                             <ExecutionPlanIndicator
                                 :steps="getMessageExecutionPlan(message)!"
-                                :completed-steps="getMessageExecutionPlan(message)!.map((_, i) => i)"
+                                :completed-steps="
+                                    getMessageExecutionPlan(message)!.map(
+                                        (_, i) => i,
+                                    )
+                                "
                                 collapsible
                             />
                         </div>
@@ -319,8 +359,16 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                         <ChatMessage
                             :message="message"
                             :is-streaming="message.id === 'streaming'"
-                            :tool-calls="message.id === 'streaming' ? activeToolCalls : undefined"
-                            :knowledge-bases="message.id === 'streaming' ? activeKnowledgeBases : undefined"
+                            :tool-calls="
+                                message.id === 'streaming'
+                                    ? activeToolCalls
+                                    : undefined
+                            "
+                            :knowledge-bases="
+                                message.id === 'streaming'
+                                    ? activeKnowledgeBases
+                                    : undefined
+                            "
                         />
                     </template>
 

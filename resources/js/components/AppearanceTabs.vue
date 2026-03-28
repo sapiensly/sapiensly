@@ -8,9 +8,21 @@ const { t } = useI18n();
 const { appearance, updateAppearance } = useAppearance();
 
 const tabs = computed(() => [
-    { value: 'light' as const, Icon: Sun, label: t('settings.appearance.light') },
-    { value: 'dark' as const, Icon: Moon, label: t('settings.appearance.dark') },
-    { value: 'system' as const, Icon: Monitor, label: t('settings.appearance.system') },
+    {
+        value: 'light' as const,
+        Icon: Sun,
+        label: t('settings.appearance.light'),
+    },
+    {
+        value: 'dark' as const,
+        Icon: Moon,
+        label: t('settings.appearance.dark'),
+    },
+    {
+        value: 'system' as const,
+        Icon: Monitor,
+        label: t('settings.appearance.system'),
+    },
 ]);
 </script>
 

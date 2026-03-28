@@ -15,7 +15,6 @@ class OrganizationMembership extends Model
     protected $fillable = [
         'organization_id',
         'user_id',
-        'workos_membership_id',
         'role',
         'status',
     ];

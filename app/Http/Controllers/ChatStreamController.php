@@ -3,9 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AgentType;
+use App\Enums\FlowActionType;
 use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\Conversation;
+use App\Models\Flow;
+use App\Services\FlowAction;
+use App\Services\FlowExecutorService;
 use App\Services\LLMService;
 use App\Services\RetrievalService;
 use Illuminate\Http\Request;
@@ -15,7 +19,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ChatStreamController extends Controller
 {
     public function __construct(
-        private LLMService $llmService
+        private LLMService $llmService,
+        private FlowExecutorService $flowExecutor,
     ) {}
 
     public function stream(Request $request, Agent $agent, Conversation $conversation): StreamedResponse
@@ -47,6 +52,16 @@ class ChatStreamController extends Controller
                 echo 'data: '.json_encode(['error' => 'Last message must be from user'])."\n\n";
                 $this->flushOutput();
             }, 200, $this->streamHeaders());
+        }
+
+        // Check for active flow on Triage agents
+        if ($agent->type === AgentType::Triage) {
+            $flowState = $conversation->metadata['flow_state'] ?? null;
+            $userMessage = $lastMessage->content;
+
+            if ($this->flowExecutor->shouldActivateFlow($agent, $userMessage, $flowState)) {
+                return $this->streamFlow($agent, $conversation, $userMessage, $flowState);
+            }
         }
 
         // Route Action Agents with tools to tool-enabled chat
@@ -189,6 +204,91 @@ class ChatStreamController extends Controller
             echo "data: [DONE]\n\n";
             $this->flushOutput();
         }, 200, $this->streamHeaders());
+    }
+
+    /**
+     * Stream flow execution for Triage agents with active flows.
+     */
+    private function streamFlow(Agent $agent, Conversation $conversation, string $userMessage, ?array $flowState): StreamedResponse
+    {
+        $flow = $agent->activeFlow();
+        if (! $flow) {
+            return $this->streamWithRAG($agent, $conversation, $conversation->messages()->orderBy('created_at')->get());
+        }
+
+        // Initialize or continue flow
+        if ($flowState === null || ($flowState['completed'] ?? false)) {
+            $flowState = $this->flowExecutor->initializeFlow($flow);
+        }
+
+        $action = $this->flowExecutor->processInput($flow, $flowState, $userMessage);
+
+        // Persist flow state
+        $metadata = $conversation->metadata ?? [];
+        $metadata['flow_state'] = $action->updatedState;
+        $conversation->update(['metadata' => $metadata]);
+
+        return response()->stream(function () use ($action, $flow, $conversation) {
+            try {
+                $this->emitFlowEvents($action, $flow, $conversation);
+            } catch (\Exception $e) {
+                \Log::error('Flow stream error', ['error' => $e->getMessage()]);
+                echo 'data: '.json_encode(['error' => $e->getMessage()])."\n\n";
+                $this->flushOutput();
+            }
+
+            echo "data: [DONE]\n\n";
+            $this->flushOutput();
+        }, 200, $this->streamHeaders());
+    }
+
+    private function emitFlowEvents(FlowAction $action, Flow $flow, Conversation $conversation): void
+    {
+        match ($action->type) {
+            FlowActionType::ShowMenu => $this->emitEvent([
+                'type' => 'flow_menu',
+                'message' => $action->data['message'] ?? '',
+                'options' => $action->data['options'] ?? [],
+            ]),
+            FlowActionType::SendMessage => (function () use ($action, $flow, $conversation) {
+                $this->emitEvent(['type' => 'flow_message', 'content' => $action->data['message'] ?? '']);
+
+                // Save as assistant message
+                $conversation->messages()->create([
+                    'role' => MessageRole::Assistant,
+                    'content' => $action->data['message'] ?? '',
+                ]);
+
+                // Auto-advance to next node if available
+                if (isset($action->data['next_node_id'])) {
+                    $nextAction = $this->flowExecutor->advanceToNode($flow, $action->updatedState, $action->data['next_node_id']);
+                    $metadata = $conversation->metadata ?? [];
+                    $metadata['flow_state'] = $nextAction->updatedState;
+                    $conversation->update(['metadata' => $metadata]);
+                    $this->emitFlowEvents($nextAction, $flow, $conversation);
+                }
+            })(),
+            FlowActionType::AgentHandoff => (function () use ($action) {
+                if ($action->data['message'] ?? null) {
+                    $this->emitEvent(['type' => 'flow_message', 'content' => $action->data['message']]);
+                }
+                $this->emitEvent(['type' => 'flow_end', 'action' => 'agent_handoff']);
+            })(),
+            FlowActionType::End => $this->emitEvent([
+                'type' => 'flow_end',
+                'action' => $action->data['action'] ?? 'resume_conversation',
+            ]),
+            FlowActionType::AwaitLlmClassification => $this->emitEvent([
+                'type' => 'flow_await_input',
+                'input_type' => 'text',
+            ]),
+        };
+    }
+
+    private function emitEvent(array $data): void
+    {
+        echo 'data: '.json_encode($data)."\n\n";
+        $this->flushOutput();
     }
 
     private function streamHeaders(): array

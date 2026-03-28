@@ -3,11 +3,10 @@
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\ChatStreamController;
 use Illuminate\Support\Facades\Route;
-use Laravel\WorkOS\Http\Middleware\ValidateSessionWithWorkOS;
 
 Route::middleware([
     'auth',
-    ValidateSessionWithWorkOS::class,
+    'verified',
 ])->group(function () {
     Route::resource('agents', AgentController::class);
     Route::post('agents/{agent}/duplicate', [AgentController::class, 'duplicate'])->name('agents.duplicate');

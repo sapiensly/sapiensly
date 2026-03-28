@@ -31,7 +31,10 @@ const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
-    { title: props.chatbot.name, href: ChatbotController.show({ chatbot: props.chatbot.id }).url },
+    {
+        title: props.chatbot.name,
+        href: ChatbotController.show({ chatbot: props.chatbot.id }).url,
+    },
     { title: t('chatbots.show.embed'), href: '#' },
 ]);
 
@@ -67,7 +70,12 @@ const formatDate = (date: string | null) => {
                         :description="t('chatbots.embed.description')"
                     />
                     <Button variant="outline" as-child>
-                        <Link :href="ChatbotController.show({ chatbot: chatbot.id }).url">
+                        <Link
+                            :href="
+                                ChatbotController.show({ chatbot: chatbot.id })
+                                    .url
+                            "
+                        >
                             {{ t('chatbots.embed.back') }}
                         </Link>
                     </Button>
@@ -89,13 +97,22 @@ const formatDate = (date: string | null) => {
                                     ><code>{{ embedCode }}</code></pre>
                                     <Button
                                         size="sm"
-                                        class="absolute right-2 top-2"
-                                        :variant="copied ? 'default' : 'outline'"
+                                        class="absolute top-2 right-2"
+                                        :variant="
+                                            copied ? 'default' : 'outline'
+                                        "
                                         @click="copyToClipboard"
                                     >
-                                        <Check v-if="copied" class="mr-2 h-4 w-4" />
+                                        <Check
+                                            v-if="copied"
+                                            class="mr-2 h-4 w-4"
+                                        />
                                         <Copy v-else class="mr-2 h-4 w-4" />
-                                        {{ copied ? t('chatbots.embed.copied') : t('chatbots.embed.copy') }}
+                                        {{
+                                            copied
+                                                ? t('chatbots.embed.copied')
+                                                : t('chatbots.embed.copy')
+                                        }}
                                     </Button>
                                 </div>
                             </CardContent>
@@ -112,27 +129,45 @@ const formatDate = (date: string | null) => {
                         <div class="space-y-4">
                             <Card>
                                 <CardHeader>
-                                    <CardTitle class="text-base">{{ t('chatbots.embed.step_1') }}</CardTitle>
+                                    <CardTitle class="text-base">{{
+                                        t('chatbots.embed.step_1')
+                                    }}</CardTitle>
                                     <CardDescription>
-                                        {{ t('chatbots.embed.step_1_description') }}
+                                        {{
+                                            t(
+                                                'chatbots.embed.step_1_description',
+                                            )
+                                        }}
                                     </CardDescription>
                                 </CardHeader>
                             </Card>
 
                             <Card>
                                 <CardHeader>
-                                    <CardTitle class="text-base">{{ t('chatbots.embed.step_2') }}</CardTitle>
+                                    <CardTitle class="text-base">{{
+                                        t('chatbots.embed.step_2')
+                                    }}</CardTitle>
                                     <CardDescription>
-                                        {{ t('chatbots.embed.step_2_description') }}
+                                        {{
+                                            t(
+                                                'chatbots.embed.step_2_description',
+                                            )
+                                        }}
                                     </CardDescription>
                                 </CardHeader>
                             </Card>
 
                             <Card>
                                 <CardHeader>
-                                    <CardTitle class="text-base">{{ t('chatbots.embed.step_3') }}</CardTitle>
+                                    <CardTitle class="text-base">{{
+                                        t('chatbots.embed.step_3')
+                                    }}</CardTitle>
                                     <CardDescription>
-                                        {{ t('chatbots.embed.step_3_description') }}
+                                        {{
+                                            t(
+                                                'chatbots.embed.step_3_description',
+                                            )
+                                        }}
                                     </CardDescription>
                                 </CardHeader>
                             </Card>
@@ -148,7 +183,9 @@ const formatDate = (date: string | null) => {
 
                         <Card>
                             <CardHeader>
-                                <CardTitle class="text-base">{{ t('chatbots.embed.basic_commands') }}</CardTitle>
+                                <CardTitle class="text-base">{{
+                                    t('chatbots.embed.basic_commands')
+                                }}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <pre
@@ -169,9 +206,12 @@ sapiensly('destroy');</code></pre>
 
                         <Card>
                             <CardHeader>
-                                <CardTitle class="text-base">Visitor Identification</CardTitle>
+                                <CardTitle class="text-base"
+                                    >Visitor Identification</CardTitle
+                                >
                                 <CardDescription>
-                                    Identify logged-in users to personalize their experience and track conversations.
+                                    Identify logged-in users to personalize
+                                    their experience and track conversations.
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -191,9 +231,12 @@ sapiensly('identify', {
 
                         <Card>
                             <CardHeader>
-                                <CardTitle class="text-base">Event Listeners</CardTitle>
+                                <CardTitle class="text-base"
+                                    >Event Listeners</CardTitle
+                                >
                                 <CardDescription>
-                                    Subscribe to widget events for custom integrations.
+                                    Subscribe to widget events for custom
+                                    integrations.
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -239,7 +282,9 @@ sapiensly('on', 'error', function(error) {
 
                         <Card>
                             <CardHeader>
-                                <CardTitle class="text-base">React / Next.js</CardTitle>
+                                <CardTitle class="text-base"
+                                    >React / Next.js</CardTitle
+                                >
                             </CardHeader>
                             <CardContent>
                                 <pre
@@ -280,7 +325,9 @@ export function ChatWidget() {
 
                         <Card>
                             <CardHeader>
-                                <CardTitle class="text-base">Vue.js / Nuxt</CardTitle>
+                                <CardTitle class="text-base"
+                                    >Vue.js / Nuxt</CardTitle
+                                >
                             </CardHeader>
                             <CardContent>
                                 <pre
@@ -322,13 +369,31 @@ onUnmounted(() => {
                         <div class="space-y-4">
                             <Card>
                                 <CardHeader>
-                                    <CardTitle class="text-base">Widget not appearing</CardTitle>
+                                    <CardTitle class="text-base"
+                                        >Widget not appearing</CardTitle
+                                    >
                                     <CardDescription>
-                                        <ul class="mt-2 list-disc space-y-1 pl-4 text-sm">
-                                            <li>Check that the embed code is placed before the closing &lt;/body&gt; tag</li>
-                                            <li>Verify that your domain is in the "Allowed Origins" list in chatbot settings</li>
-                                            <li>Check the browser console for JavaScript errors</li>
-                                            <li>Ensure the chatbot status is "Active"</li>
+                                        <ul
+                                            class="mt-2 list-disc space-y-1 pl-4 text-sm"
+                                        >
+                                            <li>
+                                                Check that the embed code is
+                                                placed before the closing
+                                                &lt;/body&gt; tag
+                                            </li>
+                                            <li>
+                                                Verify that your domain is in
+                                                the "Allowed Origins" list in
+                                                chatbot settings
+                                            </li>
+                                            <li>
+                                                Check the browser console for
+                                                JavaScript errors
+                                            </li>
+                                            <li>
+                                                Ensure the chatbot status is
+                                                "Active"
+                                            </li>
                                         </ul>
                                     </CardDescription>
                                 </CardHeader>
@@ -336,21 +401,35 @@ onUnmounted(() => {
 
                             <Card>
                                 <CardHeader>
-                                    <CardTitle class="text-base">CORS errors</CardTitle>
+                                    <CardTitle class="text-base"
+                                        >CORS errors</CardTitle
+                                    >
                                     <CardDescription>
-                                        Add your website's domain to the "Allowed Origins" in the chatbot settings.
-                                        Use the exact origin format: <code class="rounded bg-muted px-1">https://yourdomain.com</code>
-                                        (no trailing slash). For local development, add <code class="rounded bg-muted px-1">http://localhost:3000</code>.
+                                        Add your website's domain to the
+                                        "Allowed Origins" in the chatbot
+                                        settings. Use the exact origin format:
+                                        <code class="rounded bg-muted px-1"
+                                            >https://yourdomain.com</code
+                                        >
+                                        (no trailing slash). For local
+                                        development, add
+                                        <code class="rounded bg-muted px-1"
+                                            >http://localhost:3000</code
+                                        >.
                                     </CardDescription>
                                 </CardHeader>
                             </Card>
 
                             <Card>
                                 <CardHeader>
-                                    <CardTitle class="text-base">Widget styling conflicts</CardTitle>
+                                    <CardTitle class="text-base"
+                                        >Widget styling conflicts</CardTitle
+                                    >
                                     <CardDescription>
-                                        The widget uses isolated styles, but if you notice conflicts, check for
-                                        global CSS rules that might affect elements inside the widget container
+                                        The widget uses isolated styles, but if
+                                        you notice conflicts, check for global
+                                        CSS rules that might affect elements
+                                        inside the widget container
                                         (#sapiensly-widget).
                                     </CardDescription>
                                 </CardHeader>
@@ -368,22 +447,43 @@ onUnmounted(() => {
                         <div class="space-y-3">
                             <Card v-for="token in apiTokens" :key="token.id">
                                 <CardHeader class="py-4">
-                                    <div class="flex items-center justify-between">
+                                    <div
+                                        class="flex items-center justify-between"
+                                    >
                                         <div class="flex items-center gap-3">
-                                            <Key class="h-4 w-4 text-muted-foreground" />
+                                            <Key
+                                                class="h-4 w-4 text-muted-foreground"
+                                            />
                                             <div>
-                                                <CardTitle class="text-sm">{{ token.name }}</CardTitle>
-                                                <CardDescription class="font-mono text-xs">
+                                                <CardTitle class="text-sm">{{
+                                                    token.name
+                                                }}</CardTitle>
+                                                <CardDescription
+                                                    class="font-mono text-xs"
+                                                >
                                                     {{ token.token }}
                                                 </CardDescription>
                                             </div>
                                         </div>
                                         <div class="flex items-center gap-2">
-                                            <Badge v-if="token.expires_at" variant="outline">
-                                                Expires {{ formatDate(token.expires_at) }}
+                                            <Badge
+                                                v-if="token.expires_at"
+                                                variant="outline"
+                                            >
+                                                Expires
+                                                {{
+                                                    formatDate(token.expires_at)
+                                                }}
                                             </Badge>
-                                            <span class="text-xs text-muted-foreground">
-                                                Last used: {{ formatDate(token.last_used_at) }}
+                                            <span
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                Last used:
+                                                {{
+                                                    formatDate(
+                                                        token.last_used_at,
+                                                    )
+                                                }}
                                             </span>
                                         </div>
                                     </div>

@@ -3,11 +3,10 @@
 use App\Http\Controllers\AgentTeamController;
 use App\Http\Controllers\TeamStreamController;
 use Illuminate\Support\Facades\Route;
-use Laravel\WorkOS\Http\Middleware\ValidateSessionWithWorkOS;
 
 Route::middleware([
     'auth',
-    ValidateSessionWithWorkOS::class,
+    'verified',
 ])->group(function () {
     Route::resource('agent-teams', AgentTeamController::class);
 

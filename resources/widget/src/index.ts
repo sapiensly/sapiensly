@@ -1,4 +1,8 @@
-import type { VisitorInfo, WidgetEventCallback, WidgetEventType } from './types';
+import type {
+    VisitorInfo,
+    WidgetEventCallback,
+    WidgetEventType,
+} from './types';
 import { Widget } from './widget';
 
 /**
@@ -61,7 +65,7 @@ function processCommand(args: CommandArgs): void {
         case 'on':
             widget?.on(
                 params[0] as WidgetEventType,
-                params[1] as WidgetEventCallback
+                params[1] as WidgetEventCallback,
             );
             break;
 
@@ -83,7 +87,9 @@ function processCommand(args: CommandArgs): void {
  */
 function main(): void {
     // Get existing queue
-    const existingQueue = (window as unknown as { sapiensly?: SapienslyFunction }).sapiensly?.q || [];
+    const existingQueue =
+        (window as unknown as { sapiensly?: SapienslyFunction }).sapiensly?.q ||
+        [];
 
     // Create the main function
     const sapiensly: SapienslyFunction = (...args: CommandArgs) => {
@@ -91,7 +97,8 @@ function main(): void {
     };
 
     // Replace the stub with the real function
-    (window as unknown as { sapiensly: SapienslyFunction }).sapiensly = sapiensly;
+    (window as unknown as { sapiensly: SapienslyFunction }).sapiensly =
+        sapiensly;
 
     // Process any queued commands
     for (const args of existingQueue) {

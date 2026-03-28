@@ -27,7 +27,9 @@ interface Props {
 
 defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [{ title: t('chatbots.index.heading'), href: '#' }]);
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: t('chatbots.index.heading'), href: '#' },
+]);
 
 const statusVariant = (status: string) => {
     switch (status) {
@@ -63,7 +65,9 @@ const statusVariant = (status: string) => {
                 <div v-if="chatbots.data.length === 0">
                     <EmptyState
                         :title="t('chatbots.index.no_chatbots')"
-                        :description="t('chatbots.index.no_chatbots_description')"
+                        :description="
+                            t('chatbots.index.no_chatbots_description')
+                        "
                         :create-url="ChatbotController.create().url"
                         :create-label="t('chatbots.index.create_chatbot')"
                     />
@@ -75,16 +79,25 @@ const statusVariant = (status: string) => {
                         :key="chatbot.id"
                         class="h-full transition-colors hover:border-primary/50"
                     >
-                        <Link :href="ChatbotController.show({ chatbot: chatbot.id }).url">
+                        <Link
+                            :href="
+                                ChatbotController.show({ chatbot: chatbot.id })
+                                    .url
+                            "
+                        >
                             <CardHeader>
                                 <div class="flex items-start justify-between">
                                     <div class="flex items-center gap-2">
-                                        <MessageSquare class="h-5 w-5 text-muted-foreground" />
+                                        <MessageSquare
+                                            class="h-5 w-5 text-muted-foreground"
+                                        />
                                         <CardTitle class="text-lg">
                                             {{ chatbot.name }}
                                         </CardTitle>
                                     </div>
-                                    <Badge :variant="statusVariant(chatbot.status)">
+                                    <Badge
+                                        :variant="statusVariant(chatbot.status)"
+                                    >
                                         {{ chatbot.status }}
                                     </Badge>
                                 </div>
@@ -95,25 +108,42 @@ const statusVariant = (status: string) => {
                         </Link>
                         <CardContent>
                             <div class="flex items-center justify-between">
-                                <div class="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                                <div
+                                    class="flex flex-wrap gap-3 text-sm text-muted-foreground"
+                                >
                                     <!-- Target indicator -->
-                                    <div v-if="chatbot.agent" class="flex items-center gap-1">
+                                    <div
+                                        v-if="chatbot.agent"
+                                        class="flex items-center gap-1"
+                                    >
                                         <Bot class="h-4 w-4" />
                                         {{ chatbot.agent.name }}
                                     </div>
-                                    <div v-else-if="chatbot.agent_team" class="flex items-center gap-1">
+                                    <div
+                                        v-else-if="chatbot.agent_team"
+                                        class="flex items-center gap-1"
+                                    >
                                         <Users class="h-4 w-4" />
                                         {{ chatbot.agent_team.name }}
                                     </div>
 
                                     <!-- Stats -->
-                                    <div v-if="chatbot.conversations_count" class="flex items-center gap-1">
+                                    <div
+                                        v-if="chatbot.conversations_count"
+                                        class="flex items-center gap-1"
+                                    >
                                         <MessageSquare class="h-4 w-4" />
                                         {{ chatbot.conversations_count }}
                                     </div>
                                 </div>
                                 <Button variant="outline" size="sm" as-child>
-                                    <Link :href="ChatbotController.embed({ chatbot: chatbot.id }).url">
+                                    <Link
+                                        :href="
+                                            ChatbotController.embed({
+                                                chatbot: chatbot.id,
+                                            }).url
+                                        "
+                                    >
                                         <Code class="mr-1 h-4 w-4" />
                                         {{ t('chatbots.index.embed') }}
                                     </Link>

@@ -42,12 +42,18 @@ const submit = () => {
 
                 <form @submit.prevent="submit" class="space-y-6">
                     <div class="space-y-2">
-                        <Label for="org-name">{{ t('settings.organization_create.name_label') }}</Label>
+                        <Label for="org-name">{{
+                            t('settings.organization_create.name_label')
+                        }}</Label>
                         <Input
                             id="org-name"
                             v-model="form.name"
                             type="text"
-                            :placeholder="t('settings.organization_create.name_placeholder')"
+                            :placeholder="
+                                t(
+                                    'settings.organization_create.name_placeholder',
+                                )
+                            "
                             required
                         />
                         <InputError :message="form.errors.name" />

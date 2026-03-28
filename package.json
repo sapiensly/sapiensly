@@ -36,6 +36,10 @@
     "dependencies": {
         "@inertiajs/vue3": "^2.1.0",
         "@tailwindcss/typography": "^0.5.19",
+        "@vue-flow/background": "^1.3.2",
+        "@vue-flow/controls": "^1.1.3",
+        "@vue-flow/core": "^1.48.2",
+        "@vue-flow/minimap": "^1.5.4",
         "@vueuse/core": "^12.8.2",
         "chart.js": "^4.5.1",
         "class-variance-authority": "^0.7.1",

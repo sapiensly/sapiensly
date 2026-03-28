@@ -3,11 +3,10 @@
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\FolderController;
 use Illuminate\Support\Facades\Route;
-use Laravel\WorkOS\Http\Middleware\ValidateSessionWithWorkOS;
 
 Route::middleware([
     'auth',
-    ValidateSessionWithWorkOS::class,
+    'verified',
 ])->group(function () {
     // Documents
     Route::resource('documents', DocumentController::class)->except(['create', 'edit']);

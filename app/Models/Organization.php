@@ -11,7 +11,6 @@ class Organization extends Model
     use HasPrefixedUlid;
 
     protected $fillable = [
-        'workos_organization_id',
         'name',
         'slug',
         'metadata',

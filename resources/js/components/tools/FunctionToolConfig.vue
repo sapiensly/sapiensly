@@ -61,7 +61,9 @@ const parametersJson = computed({
 <template>
     <div class="space-y-4">
         <div class="grid gap-2">
-            <Label for="function-name">{{ t('tools.config.function.name') }}</Label>
+            <Label for="function-name">{{
+                t('tools.config.function.name')
+            }}</Label>
             <Input
                 id="function-name"
                 v-model="functionName"
@@ -75,7 +77,9 @@ const parametersJson = computed({
         </div>
 
         <div class="grid gap-2">
-            <Label for="function-description">{{ t('tools.config.function.description') }}</Label>
+            <Label for="function-description">{{
+                t('tools.config.function.description')
+            }}</Label>
             <Textarea
                 id="function-description"
                 v-model="functionDescription"
@@ -89,7 +93,9 @@ const parametersJson = computed({
         </div>
 
         <div class="grid gap-2">
-            <Label for="parameters">{{ t('tools.config.function.parameters_schema') }}</Label>
+            <Label for="parameters">{{
+                t('tools.config.function.parameters_schema')
+            }}</Label>
             <Textarea
                 id="parameters"
                 v-model="parametersJson"

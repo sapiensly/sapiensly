@@ -25,7 +25,17 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { Tool, ToolType } from '@/types/tools';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Braces, Code, Database, Globe, Layers, Pencil, Server, Trash2, Wrench } from 'lucide-vue-next';
+import {
+    Braces,
+    Code,
+    Database,
+    Globe,
+    Layers,
+    Pencil,
+    Server,
+    Trash2,
+    Wrench,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -148,13 +158,20 @@ const databaseConfig = computed(() => {
                                 {{ tool.status }}
                             </Badge>
                         </div>
-                        <p v-if="tool.description" class="text-muted-foreground">
+                        <p
+                            v-if="tool.description"
+                            class="text-muted-foreground"
+                        >
                             {{ tool.description }}
                         </p>
                     </div>
                     <div class="flex gap-2">
                         <Button variant="outline" as-child>
-                            <Link :href="ToolController.edit({ tool: tool.id }).url">
+                            <Link
+                                :href="
+                                    ToolController.edit({ tool: tool.id }).url
+                                "
+                            >
                                 <Pencil class="mr-2 h-4 w-4" />
                                 {{ t('common.edit') }}
                             </Link>
@@ -168,16 +185,26 @@ const databaseConfig = computed(() => {
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>{{ t('tools.show.delete_tool') }}</DialogTitle>
+                                    <DialogTitle>{{
+                                        t('tools.show.delete_tool')
+                                    }}</DialogTitle>
                                     <DialogDescription>
-                                        {{ t('common.confirm_delete') }} "{{ tool.name }}"? {{ t('common.action_irreversible') }}
+                                        {{ t('common.confirm_delete') }} "{{
+                                            tool.name
+                                        }}"?
+                                        {{ t('common.action_irreversible') }}
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
                                     <DialogClose as-child>
-                                        <Button variant="outline">{{ t('common.cancel') }}</Button>
+                                        <Button variant="outline">{{
+                                            t('common.cancel')
+                                        }}</Button>
                                     </DialogClose>
-                                    <Button variant="destructive" @click="deleteTool">
+                                    <Button
+                                        variant="destructive"
+                                        @click="deleteTool"
+                                    >
                                         {{ t('common.delete') }}
                                     </Button>
                                 </DialogFooter>
@@ -189,7 +216,9 @@ const databaseConfig = computed(() => {
                 <div class="space-y-8">
                     <Card>
                         <CardHeader>
-                            <CardTitle>{{ t('tools.show.configuration') }}</CardTitle>
+                            <CardTitle>{{
+                                t('tools.show.configuration')
+                            }}</CardTitle>
                             <CardDescription>
                                 {{ t('tools.show.config_description') }}
                             </CardDescription>
@@ -197,12 +226,28 @@ const databaseConfig = computed(() => {
                         <CardContent>
                             <dl class="grid gap-4 sm:grid-cols-2">
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">{{ t('common.type') }}</dt>
-                                    <dd class="mt-1 capitalize">{{ tool.type }}</dd>
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
+                                        {{ t('common.type') }}
+                                    </dt>
+                                    <dd class="mt-1 capitalize">
+                                        {{ tool.type }}
+                                    </dd>
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">{{ t('tools.show.validated') }}</dt>
-                                    <dd class="mt-1">{{ tool.is_validated ? t('common.yes') : t('common.no') }}</dd>
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
+                                        {{ t('tools.show.validated') }}
+                                    </dt>
+                                    <dd class="mt-1">
+                                        {{
+                                            tool.is_validated
+                                                ? t('common.yes')
+                                                : t('common.no')
+                                        }}
+                                    </dd>
                                 </div>
                             </dl>
                         </CardContent>
@@ -217,17 +262,42 @@ const databaseConfig = computed(() => {
                             <CardContent class="pt-6">
                                 <dl class="space-y-4">
                                     <div v-if="functionConfig.name">
-                                        <dt class="text-sm font-medium text-muted-foreground">Function Name</dt>
-                                        <dd class="mt-1 font-mono">{{ functionConfig.name }}</dd>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Function Name
+                                        </dt>
+                                        <dd class="mt-1 font-mono">
+                                            {{ functionConfig.name }}
+                                        </dd>
                                     </div>
                                     <div v-if="functionConfig.description">
-                                        <dt class="text-sm font-medium text-muted-foreground">Description</dt>
-                                        <dd class="mt-1">{{ functionConfig.description }}</dd>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Description
+                                        </dt>
+                                        <dd class="mt-1">
+                                            {{ functionConfig.description }}
+                                        </dd>
                                     </div>
                                     <div v-if="functionConfig.parameters">
-                                        <dt class="text-sm font-medium text-muted-foreground">Parameters Schema</dt>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Parameters Schema
+                                        </dt>
                                         <dd class="mt-2">
-                                            <pre class="whitespace-pre-wrap rounded-md bg-muted p-4 font-mono text-sm">{{ JSON.stringify(functionConfig.parameters, null, 2) }}</pre>
+                                            <pre
+                                                class="rounded-md bg-muted p-4 font-mono text-sm whitespace-pre-wrap"
+                                                >{{
+                                                    JSON.stringify(
+                                                        functionConfig.parameters,
+                                                        null,
+                                                        2,
+                                                    )
+                                                }}</pre
+                                            >
                                         </dd>
                                     </div>
                                 </dl>
@@ -244,12 +314,24 @@ const databaseConfig = computed(() => {
                             <CardContent class="pt-6">
                                 <dl class="grid gap-4 sm:grid-cols-2">
                                     <div v-if="mcpConfig.endpoint">
-                                        <dt class="text-sm font-medium text-muted-foreground">Endpoint</dt>
-                                        <dd class="mt-1 font-mono text-sm">{{ mcpConfig.endpoint }}</dd>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Endpoint
+                                        </dt>
+                                        <dd class="mt-1 font-mono text-sm">
+                                            {{ mcpConfig.endpoint }}
+                                        </dd>
                                     </div>
                                     <div v-if="mcpConfig.auth_type">
-                                        <dt class="text-sm font-medium text-muted-foreground">Auth Type</dt>
-                                        <dd class="mt-1 capitalize">{{ mcpConfig.auth_type }}</dd>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Auth Type
+                                        </dt>
+                                        <dd class="mt-1 capitalize">
+                                            {{ mcpConfig.auth_type }}
+                                        </dd>
                                     </div>
                                 </dl>
                             </CardContent>
@@ -265,26 +347,58 @@ const databaseConfig = computed(() => {
                             <CardContent class="pt-6">
                                 <dl class="grid gap-4 sm:grid-cols-2">
                                     <div v-if="restApiConfig.base_url">
-                                        <dt class="text-sm font-medium text-muted-foreground">Base URL</dt>
-                                        <dd class="mt-1 font-mono text-sm">{{ restApiConfig.base_url }}</dd>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Base URL
+                                        </dt>
+                                        <dd class="mt-1 font-mono text-sm">
+                                            {{ restApiConfig.base_url }}
+                                        </dd>
                                     </div>
                                     <div v-if="restApiConfig.method">
-                                        <dt class="text-sm font-medium text-muted-foreground">Method</dt>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Method
+                                        </dt>
                                         <dd class="mt-1">
-                                            <Badge variant="outline">{{ restApiConfig.method }}</Badge>
+                                            <Badge variant="outline">{{
+                                                restApiConfig.method
+                                            }}</Badge>
                                         </dd>
                                     </div>
                                     <div v-if="restApiConfig.path">
-                                        <dt class="text-sm font-medium text-muted-foreground">Path</dt>
-                                        <dd class="mt-1 font-mono text-sm">{{ restApiConfig.path }}</dd>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Path
+                                        </dt>
+                                        <dd class="mt-1 font-mono text-sm">
+                                            {{ restApiConfig.path }}
+                                        </dd>
                                     </div>
                                     <div v-if="restApiConfig.auth_type">
-                                        <dt class="text-sm font-medium text-muted-foreground">Auth Type</dt>
-                                        <dd class="mt-1 capitalize">{{ restApiConfig.auth_type }}</dd>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Auth Type
+                                        </dt>
+                                        <dd class="mt-1 capitalize">
+                                            {{ restApiConfig.auth_type }}
+                                        </dd>
                                     </div>
-                                    <div v-if="restApiConfig.auth_config_is_set">
-                                        <dt class="text-sm font-medium text-muted-foreground">Credentials</dt>
-                                        <dd class="mt-1 text-green-600">Configured</dd>
+                                    <div
+                                        v-if="restApiConfig.auth_config_is_set"
+                                    >
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Credentials
+                                        </dt>
+                                        <dd class="mt-1 text-green-600">
+                                            Configured
+                                        </dd>
                                     </div>
                                 </dl>
                             </CardContent>
@@ -301,26 +415,67 @@ const databaseConfig = computed(() => {
                                 <dl class="space-y-4">
                                     <div class="grid gap-4 sm:grid-cols-2">
                                         <div v-if="graphqlConfig.endpoint">
-                                            <dt class="text-sm font-medium text-muted-foreground">Endpoint</dt>
-                                            <dd class="mt-1 font-mono text-sm">{{ graphqlConfig.endpoint }}</dd>
+                                            <dt
+                                                class="text-sm font-medium text-muted-foreground"
+                                            >
+                                                Endpoint
+                                            </dt>
+                                            <dd class="mt-1 font-mono text-sm">
+                                                {{ graphqlConfig.endpoint }}
+                                            </dd>
                                         </div>
-                                        <div v-if="graphqlConfig.operation_type">
-                                            <dt class="text-sm font-medium text-muted-foreground">Operation Type</dt>
-                                            <dd class="mt-1 capitalize">{{ graphqlConfig.operation_type }}</dd>
+                                        <div
+                                            v-if="graphqlConfig.operation_type"
+                                        >
+                                            <dt
+                                                class="text-sm font-medium text-muted-foreground"
+                                            >
+                                                Operation Type
+                                            </dt>
+                                            <dd class="mt-1 capitalize">
+                                                {{
+                                                    graphqlConfig.operation_type
+                                                }}
+                                            </dd>
                                         </div>
                                         <div v-if="graphqlConfig.auth_type">
-                                            <dt class="text-sm font-medium text-muted-foreground">Auth Type</dt>
-                                            <dd class="mt-1 capitalize">{{ graphqlConfig.auth_type }}</dd>
+                                            <dt
+                                                class="text-sm font-medium text-muted-foreground"
+                                            >
+                                                Auth Type
+                                            </dt>
+                                            <dd class="mt-1 capitalize">
+                                                {{ graphqlConfig.auth_type }}
+                                            </dd>
                                         </div>
-                                        <div v-if="graphqlConfig.auth_config_is_set">
-                                            <dt class="text-sm font-medium text-muted-foreground">Credentials</dt>
-                                            <dd class="mt-1 text-green-600">Configured</dd>
+                                        <div
+                                            v-if="
+                                                graphqlConfig.auth_config_is_set
+                                            "
+                                        >
+                                            <dt
+                                                class="text-sm font-medium text-muted-foreground"
+                                            >
+                                                Credentials
+                                            </dt>
+                                            <dd class="mt-1 text-green-600">
+                                                Configured
+                                            </dd>
                                         </div>
                                     </div>
                                     <div v-if="graphqlConfig.operation">
-                                        <dt class="text-sm font-medium text-muted-foreground">Operation</dt>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Operation
+                                        </dt>
                                         <dd class="mt-2">
-                                            <pre class="whitespace-pre-wrap rounded-md bg-muted p-4 font-mono text-sm">{{ graphqlConfig.operation }}</pre>
+                                            <pre
+                                                class="rounded-md bg-muted p-4 font-mono text-sm whitespace-pre-wrap"
+                                                >{{
+                                                    graphqlConfig.operation
+                                                }}</pre
+                                            >
                                         </dd>
                                     </div>
                                 </dl>
@@ -338,34 +493,88 @@ const databaseConfig = computed(() => {
                                 <dl class="space-y-4">
                                     <div class="grid gap-4 sm:grid-cols-2">
                                         <div v-if="databaseConfig.driver">
-                                            <dt class="text-sm font-medium text-muted-foreground">Driver</dt>
-                                            <dd class="mt-1 uppercase">{{ databaseConfig.driver }}</dd>
+                                            <dt
+                                                class="text-sm font-medium text-muted-foreground"
+                                            >
+                                                Driver
+                                            </dt>
+                                            <dd class="mt-1 uppercase">
+                                                {{ databaseConfig.driver }}
+                                            </dd>
                                         </div>
                                         <div v-if="databaseConfig.host">
-                                            <dt class="text-sm font-medium text-muted-foreground">Host</dt>
-                                            <dd class="mt-1 font-mono text-sm">{{ databaseConfig.host }}:{{ databaseConfig.port }}</dd>
+                                            <dt
+                                                class="text-sm font-medium text-muted-foreground"
+                                            >
+                                                Host
+                                            </dt>
+                                            <dd class="mt-1 font-mono text-sm">
+                                                {{ databaseConfig.host }}:{{
+                                                    databaseConfig.port
+                                                }}
+                                            </dd>
                                         </div>
                                         <div v-if="databaseConfig.database">
-                                            <dt class="text-sm font-medium text-muted-foreground">Database</dt>
-                                            <dd class="mt-1 font-mono text-sm">{{ databaseConfig.database }}</dd>
+                                            <dt
+                                                class="text-sm font-medium text-muted-foreground"
+                                            >
+                                                Database
+                                            </dt>
+                                            <dd class="mt-1 font-mono text-sm">
+                                                {{ databaseConfig.database }}
+                                            </dd>
                                         </div>
                                         <div>
-                                            <dt class="text-sm font-medium text-muted-foreground">Mode</dt>
+                                            <dt
+                                                class="text-sm font-medium text-muted-foreground"
+                                            >
+                                                Mode
+                                            </dt>
                                             <dd class="mt-1">
-                                                <Badge :variant="databaseConfig.read_only ? 'secondary' : 'destructive'">
-                                                    {{ databaseConfig.read_only ? 'Read Only' : 'Read/Write' }}
+                                                <Badge
+                                                    :variant="
+                                                        databaseConfig.read_only
+                                                            ? 'secondary'
+                                                            : 'destructive'
+                                                    "
+                                                >
+                                                    {{
+                                                        databaseConfig.read_only
+                                                            ? 'Read Only'
+                                                            : 'Read/Write'
+                                                    }}
                                                 </Badge>
                                             </dd>
                                         </div>
-                                        <div v-if="databaseConfig.username_is_set || databaseConfig.password_is_set">
-                                            <dt class="text-sm font-medium text-muted-foreground">Credentials</dt>
-                                            <dd class="mt-1 text-green-600">Configured</dd>
+                                        <div
+                                            v-if="
+                                                databaseConfig.username_is_set ||
+                                                databaseConfig.password_is_set
+                                            "
+                                        >
+                                            <dt
+                                                class="text-sm font-medium text-muted-foreground"
+                                            >
+                                                Credentials
+                                            </dt>
+                                            <dd class="mt-1 text-green-600">
+                                                Configured
+                                            </dd>
                                         </div>
                                     </div>
                                     <div v-if="databaseConfig.query_template">
-                                        <dt class="text-sm font-medium text-muted-foreground">Query Template</dt>
+                                        <dt
+                                            class="text-sm font-medium text-muted-foreground"
+                                        >
+                                            Query Template
+                                        </dt>
                                         <dd class="mt-2">
-                                            <pre class="whitespace-pre-wrap rounded-md bg-muted p-4 font-mono text-sm">{{ databaseConfig.query_template }}</pre>
+                                            <pre
+                                                class="rounded-md bg-muted p-4 font-mono text-sm whitespace-pre-wrap"
+                                                >{{
+                                                    databaseConfig.query_template
+                                                }}</pre
+                                            >
                                         </dd>
                                     </div>
                                 </dl>
@@ -373,20 +582,38 @@ const databaseConfig = computed(() => {
                         </Card>
                     </div>
 
-                    <div v-if="tool.type === 'group' && tool.group_items && tool.group_items.length > 0">
+                    <div
+                        v-if="
+                            tool.type === 'group' &&
+                            tool.group_items &&
+                            tool.group_items.length > 0
+                        "
+                    >
                         <HeadingSmall
                             title="Group Members"
                             description="Tools included in this group"
                         />
                         <div class="mt-4 space-y-3">
-                            <Card v-for="item in tool.group_items" :key="item.id">
-                                <CardContent class="flex items-center gap-3 py-4">
+                            <Card
+                                v-for="item in tool.group_items"
+                                :key="item.id"
+                            >
+                                <CardContent
+                                    class="flex items-center gap-3 py-4"
+                                >
                                     <component
-                                        :is="toolIcon(item.tool?.type ?? 'function')"
+                                        :is="
+                                            toolIcon(
+                                                item.tool?.type ?? 'function',
+                                            )
+                                        "
                                         class="h-5 w-5 text-muted-foreground"
                                     />
                                     <span>{{ item.tool?.name }}</span>
-                                    <Badge variant="outline" class="ml-auto capitalize">
+                                    <Badge
+                                        variant="outline"
+                                        class="ml-auto capitalize"
+                                    >
                                         {{ item.tool?.type }}
                                     </Badge>
                                 </CardContent>

@@ -28,7 +28,7 @@ const emit = defineEmits<{
 
 const updateField = <K extends keyof DatabaseConfig>(
     field: K,
-    value: DatabaseConfig[K]
+    value: DatabaseConfig[K],
 ) => {
     emit('update:config', {
         ...props.config,
@@ -78,9 +78,21 @@ const readOnly = computed({
 });
 
 const driverOptions = [
-    { value: 'pgsql', label: t('tools.config.database.postgresql'), defaultPort: 5432 },
-    { value: 'mysql', label: t('tools.config.database.mysql'), defaultPort: 3306 },
-    { value: 'sqlite', label: t('tools.config.database.sqlite'), defaultPort: null },
+    {
+        value: 'pgsql',
+        label: t('tools.config.database.postgresql'),
+        defaultPort: 5432,
+    },
+    {
+        value: 'mysql',
+        label: t('tools.config.database.mysql'),
+        defaultPort: 3306,
+    },
+    {
+        value: 'sqlite',
+        label: t('tools.config.database.sqlite'),
+        defaultPort: null,
+    },
     { value: 'sqlsrv', label: 'SQL Server', defaultPort: 1433 },
 ];
 
@@ -145,12 +157,18 @@ WHERE o.id = :order_id`;
 
         <div class="grid gap-2">
             <Label for="database">
-                {{ driver === 'sqlite' ? 'Database File Path' : 'Database Name' }}
+                {{
+                    driver === 'sqlite' ? 'Database File Path' : 'Database Name'
+                }}
             </Label>
             <Input
                 id="database"
                 v-model="database"
-                :placeholder="driver === 'sqlite' ? '/path/to/database.sqlite' : 'my_database'"
+                :placeholder="
+                    driver === 'sqlite'
+                        ? '/path/to/database.sqlite'
+                        : 'my_database'
+                "
                 class="font-mono"
             />
             <InputError :message="errors['config.database']" />

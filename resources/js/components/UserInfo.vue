@@ -36,8 +36,10 @@ const showAvatar = computed(
         <span v-if="showEmail" class="truncate text-xs text-muted-foreground">{{
             user.email
         }}</span>
-        <span v-else-if="accountLabel" class="truncate text-xs text-muted-foreground">{{
-            accountLabel
-        }}</span>
+        <span
+            v-else-if="accountLabel"
+            class="truncate text-xs text-muted-foreground"
+            >{{ accountLabel }}</span
+        >
     </div>
 </template>

@@ -14,6 +14,8 @@ import AppLogoIcon from '@/components/AppLogoIcon.vue';
         class="ml-1 grid flex-1 text-left text-sm"
         style="font-family: 'Montserrat', sans-serif; color: rgb(0 89 255)"
     >
-        <span class="ml-[-7px] truncate font-bold italic text-[16px]">SAPIENSLY</span>
+        <span class="ml-[-7px] truncate text-[16px] font-bold italic"
+            >SAPIENSLY</span
+        >
     </div>
 </template>

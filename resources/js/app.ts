@@ -4,8 +4,8 @@ import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
-import { createI18nInstance } from './i18n';
 import { initializeTheme } from './composables/useAppearance';
+import { createI18nInstance } from './i18n';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Sapiensly';
 

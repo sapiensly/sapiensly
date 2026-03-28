@@ -31,13 +31,31 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import echo from '@/echo';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
-import type { Document, GroupedFolders, VisibilityOption } from '@/types/document';
-import type { DocumentTypeOption, KnowledgeBase, KnowledgeBaseDocument } from '@/types/knowledge-base';
-import echo from '@/echo';
+import type {
+    Document,
+    GroupedFolders,
+    VisibilityOption,
+} from '@/types/document';
+import type {
+    DocumentTypeOption,
+    KnowledgeBase,
+    KnowledgeBaseDocument,
+} from '@/types/knowledge-base';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { FileText, FolderPlus, Loader2, MoreVertical, Pencil, Plus, RefreshCw, Trash2, Upload } from 'lucide-vue-next';
+import {
+    FileText,
+    FolderPlus,
+    Loader2,
+    MoreVertical,
+    Pencil,
+    Plus,
+    RefreshCw,
+    Trash2,
+    Upload,
+} from 'lucide-vue-next';
 import { computed, onBeforeUnmount, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -59,44 +77,55 @@ const showDocumentSelector = ref(false);
 const showUploadDialog = ref(false);
 
 // Real-time status tracking via WebSocket
-const statusOverrides = reactive<Record<string, { status: string; errorMessage?: string | null }>>({});
+const statusOverrides = reactive<
+    Record<string, { status: string; errorMessage?: string | null }>
+>({});
 const kbStatusOverride = ref<string | null>(null);
 const kbDocCountOverride = ref<number | null>(null);
 const kbChunkCountOverride = ref<number | null>(null);
 
 const channel = echo.private(`knowledge-base.${props.knowledgeBase.id}`);
 
-channel.listen('.DocumentStatusChanged', (data: {
-    documentId: string;
-    status: string;
-    errorMessage?: string | null;
-    knowledgeBaseStatus?: string | null;
-    documentCount?: number | null;
-    chunkCount?: number | null;
-}) => {
-    statusOverrides[data.documentId] = {
-        status: data.status,
-        errorMessage: data.errorMessage,
-    };
+channel.listen(
+    '.DocumentStatusChanged',
+    (data: {
+        documentId: string;
+        status: string;
+        errorMessage?: string | null;
+        knowledgeBaseStatus?: string | null;
+        documentCount?: number | null;
+        chunkCount?: number | null;
+    }) => {
+        statusOverrides[data.documentId] = {
+            status: data.status,
+            errorMessage: data.errorMessage,
+        };
 
-    if (data.knowledgeBaseStatus) {
-        kbStatusOverride.value = data.knowledgeBaseStatus;
-    }
-    if (data.documentCount !== null && data.documentCount !== undefined) {
-        kbDocCountOverride.value = data.documentCount;
-    }
-    if (data.chunkCount !== null && data.chunkCount !== undefined) {
-        kbChunkCountOverride.value = data.chunkCount;
-    }
-});
+        if (data.knowledgeBaseStatus) {
+            kbStatusOverride.value = data.knowledgeBaseStatus;
+        }
+        if (data.documentCount !== null && data.documentCount !== undefined) {
+            kbDocCountOverride.value = data.documentCount;
+        }
+        if (data.chunkCount !== null && data.chunkCount !== undefined) {
+            kbChunkCountOverride.value = data.chunkCount;
+        }
+    },
+);
 
 onBeforeUnmount(() => {
     echo.leave(`knowledge-base.${props.knowledgeBase.id}`);
 });
 
-const currentKbStatus = computed(() => kbStatusOverride.value ?? props.knowledgeBase.status);
-const currentDocCount = computed(() => kbDocCountOverride.value ?? props.knowledgeBase.document_count);
-const currentChunkCount = computed(() => kbChunkCountOverride.value ?? props.knowledgeBase.chunk_count);
+const currentKbStatus = computed(
+    () => kbStatusOverride.value ?? props.knowledgeBase.status,
+);
+const currentDocCount = computed(
+    () => kbDocCountOverride.value ?? props.knowledgeBase.document_count,
+);
+const currentChunkCount = computed(
+    () => kbChunkCountOverride.value ?? props.knowledgeBase.chunk_count,
+);
 
 // Combine legacy documents and new attached documents
 const allDocuments = computed(() => {
@@ -104,7 +133,7 @@ const allDocuments = computed(() => {
     const attached = props.knowledgeBase.attached_documents || [];
 
     // Map attached documents to have similar structure as legacy
-    const mappedAttached = attached.map(doc => ({
+    const mappedAttached = attached.map((doc) => ({
         id: doc.id,
         original_filename: doc.original_filename,
         name: doc.name,
@@ -116,13 +145,13 @@ const allDocuments = computed(() => {
     }));
 
     // Map legacy documents
-    const mappedLegacy = legacy.map(doc => ({
+    const mappedLegacy = legacy.map((doc) => ({
         ...doc,
         isAttached: false,
     }));
 
     // Apply real-time status overrides
-    return [...mappedLegacy, ...mappedAttached].map(doc => {
+    return [...mappedLegacy, ...mappedAttached].map((doc) => {
         const override = statusOverrides[doc.id];
         if (override) {
             return {
@@ -136,7 +165,10 @@ const allDocuments = computed(() => {
 });
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('knowledge_bases.index.heading'), href: KnowledgeBaseController.index().url },
+    {
+        title: t('knowledge_bases.index.heading'),
+        href: KnowledgeBaseController.index().url,
+    },
     { title: props.knowledgeBase.name, href: '#' },
 ]);
 
@@ -157,7 +189,9 @@ const statusVariant = (status: string) => {
 
 const deleteKnowledgeBase = () => {
     router.delete(
-        KnowledgeBaseController.destroy({ knowledge_base: props.knowledgeBase.id }).url,
+        KnowledgeBaseController.destroy({
+            knowledge_base: props.knowledgeBase.id,
+        }).url,
     );
 };
 
@@ -166,8 +200,13 @@ const documentTypeLabel = (type: string) => {
     return found?.label ?? type.toUpperCase();
 };
 
-const deleteDocument = (doc: KnowledgeBaseDocument & { isAttached?: boolean }) => {
-    if (!confirm(`Remove "${doc.original_filename ?? doc.name ?? doc.source}"?`)) return;
+const deleteDocument = (
+    doc: KnowledgeBaseDocument & { isAttached?: boolean },
+) => {
+    if (
+        !confirm(`Remove "${doc.original_filename ?? doc.name ?? doc.source}"?`)
+    )
+        return;
 
     if (doc.isAttached) {
         // Detach new Document model
@@ -190,7 +229,9 @@ const deleteDocument = (doc: KnowledgeBaseDocument & { isAttached?: boolean }) =
     }
 };
 
-const reprocessDocument = (doc: KnowledgeBaseDocument & { isAttached?: boolean }) => {
+const reprocessDocument = (
+    doc: KnowledgeBaseDocument & { isAttached?: boolean },
+) => {
     // Optimistically update status
     statusOverrides[doc.id] = { status: 'pending', errorMessage: null };
 
@@ -231,7 +272,10 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                         <div class="mb-2 flex items-center gap-3">
                             <Heading :title="knowledgeBase.name" />
                             <Badge :variant="statusVariant(currentKbStatus)">
-                                <Loader2 v-if="currentKbStatus === 'processing'" class="mr-1 h-3 w-3 animate-spin" />
+                                <Loader2
+                                    v-if="currentKbStatus === 'processing'"
+                                    class="mr-1 h-3 w-3 animate-spin"
+                                />
                                 {{ currentKbStatus }}
                             </Badge>
                         </div>
@@ -264,16 +308,21 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>{{ t('knowledge_bases.show.delete_kb') }}</DialogTitle>
+                                    <DialogTitle>{{
+                                        t('knowledge_bases.show.delete_kb')
+                                    }}</DialogTitle>
                                     <DialogDescription>
                                         {{ t('common.confirm_delete') }} "{{
                                             knowledgeBase.name
-                                        }}"? {{ t('common.action_irreversible') }}
+                                        }}"?
+                                        {{ t('common.action_irreversible') }}
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
                                     <DialogClose as-child>
-                                        <Button variant="outline">{{ t('common.cancel') }}</Button>
+                                        <Button variant="outline">{{
+                                            t('common.cancel')
+                                        }}</Button>
                                     </DialogClose>
                                     <Button
                                         variant="destructive"
@@ -290,40 +339,62 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                 <div class="space-y-8">
                     <Card>
                         <CardHeader>
-                            <CardTitle>{{ t('knowledge_bases.show.configuration') }}</CardTitle>
+                            <CardTitle>{{
+                                t('knowledge_bases.show.configuration')
+                            }}</CardTitle>
                             <CardDescription>
-                                {{ t('knowledge_bases.show.config_description') }}
+                                {{
+                                    t('knowledge_bases.show.config_description')
+                                }}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <dl class="grid gap-4 sm:grid-cols-2">
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
                                         Chunk Size
                                     </dt>
                                     <dd class="mt-1">
-                                        {{ knowledgeBase.config?.chunk_size ?? 1000 }} characters
+                                        {{
+                                            knowledgeBase.config?.chunk_size ??
+                                            1000
+                                        }}
+                                        characters
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
                                         Chunk Overlap
                                     </dt>
                                     <dd class="mt-1">
-                                        {{ knowledgeBase.config?.chunk_overlap ?? 200 }} characters
+                                        {{
+                                            knowledgeBase.config
+                                                ?.chunk_overlap ?? 200
+                                        }}
+                                        characters
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
                                         Documents
                                     </dt>
                                     <dd class="mt-1">{{ currentDocCount }}</dd>
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-muted-foreground">
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
                                         Chunks
                                     </dt>
-                                    <dd class="mt-1">{{ currentChunkCount }}</dd>
+                                    <dd class="mt-1">
+                                        {{ currentChunkCount }}
+                                    </dd>
                                 </div>
                             </dl>
                         </CardContent>
@@ -343,12 +414,16 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem @click="showDocumentSelector = true">
+                                    <DropdownMenuItem
+                                        @click="showDocumentSelector = true"
+                                    >
                                         <FolderPlus class="mr-2 h-4 w-4" />
                                         Add Existing Document
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem @click="showUploadDialog = true">
+                                    <DropdownMenuItem
+                                        @click="showUploadDialog = true"
+                                    >
                                         <Upload class="mr-2 h-4 w-4" />
                                         Upload New Document
                                     </DropdownMenuItem>
@@ -361,56 +436,106 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                                 v-if="allDocuments.length === 0"
                                 class="rounded-lg border border-dashed p-8 text-center"
                             >
-                                <FileText class="mx-auto h-8 w-8 text-muted-foreground" />
+                                <FileText
+                                    class="mx-auto h-8 w-8 text-muted-foreground"
+                                />
                                 <p class="mt-2 text-sm text-muted-foreground">
-                                    No documents yet. Upload documents to populate this knowledge base.
+                                    No documents yet. Upload documents to
+                                    populate this knowledge base.
                                 </p>
                             </div>
 
                             <div v-else class="space-y-3">
-                                <Card
-                                    v-for="doc in allDocuments"
-                                    :key="doc.id"
-                                >
-                                    <CardContent class="flex items-center justify-between py-4">
+                                <Card v-for="doc in allDocuments" :key="doc.id">
+                                    <CardContent
+                                        class="flex items-center justify-between py-4"
+                                    >
                                         <div class="flex items-center gap-3">
-                                            <FileText class="h-5 w-5 text-muted-foreground" />
+                                            <FileText
+                                                class="h-5 w-5 text-muted-foreground"
+                                            />
                                             <div>
                                                 <p class="font-medium">
-                                                    {{ doc.original_filename ?? doc.source }}
+                                                    {{
+                                                        doc.original_filename ??
+                                                        doc.source
+                                                    }}
                                                 </p>
-                                                <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                                                    <span>{{ documentTypeLabel(doc.type) }}</span>
-                                                    <span v-if="doc.error_message" class="text-destructive">
-                                                        - {{ doc.error_message }}
+                                                <div
+                                                    class="flex items-center gap-2 text-sm text-muted-foreground"
+                                                >
+                                                    <span>{{
+                                                        documentTypeLabel(
+                                                            doc.type,
+                                                        )
+                                                    }}</span>
+                                                    <span
+                                                        v-if="doc.error_message"
+                                                        class="text-destructive"
+                                                    >
+                                                        -
+                                                        {{ doc.error_message }}
                                                     </span>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="flex items-center gap-2">
-                                            <Badge :variant="statusVariant(doc.embedding_status)">
-                                                <Loader2 v-if="doc.embedding_status === 'processing'" class="mr-1 h-3 w-3 animate-spin" />
+                                            <Badge
+                                                :variant="
+                                                    statusVariant(
+                                                        doc.embedding_status,
+                                                    )
+                                                "
+                                            >
+                                                <Loader2
+                                                    v-if="
+                                                        doc.embedding_status ===
+                                                        'processing'
+                                                    "
+                                                    class="mr-1 h-3 w-3 animate-spin"
+                                                />
                                                 {{ doc.embedding_status }}
                                             </Badge>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger as-child>
-                                                    <Button variant="ghost" size="icon" class="h-8 w-8">
-                                                        <MoreVertical class="h-4 w-4" />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        class="h-8 w-8"
+                                                    >
+                                                        <MoreVertical
+                                                            class="h-4 w-4"
+                                                        />
                                                     </Button>
                                                 </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
+                                                <DropdownMenuContent
+                                                    align="end"
+                                                >
                                                     <DropdownMenuItem
-                                                        v-if="doc.embedding_status === 'failed'"
-                                                        @click="reprocessDocument(doc)"
+                                                        v-if="
+                                                            doc.embedding_status ===
+                                                            'failed'
+                                                        "
+                                                        @click="
+                                                            reprocessDocument(
+                                                                doc,
+                                                            )
+                                                        "
                                                     >
-                                                        <RefreshCw class="mr-2 h-4 w-4" />
+                                                        <RefreshCw
+                                                            class="mr-2 h-4 w-4"
+                                                        />
                                                         Retry Processing
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
                                                         class="text-destructive focus:text-destructive"
-                                                        @click="deleteDocument(doc)"
+                                                        @click="
+                                                            deleteDocument(doc)
+                                                        "
                                                     >
-                                                        <Trash2 class="mr-2 h-4 w-4" />
+                                                        <Trash2
+                                                            class="mr-2 h-4 w-4"
+                                                        />
                                                         Delete
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>

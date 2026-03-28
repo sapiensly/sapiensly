@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
+import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
+import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
+import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
+import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
+import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
+import * as StackController from '@/actions/App/Http/Controllers/StackController';
+import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -11,19 +19,22 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
-import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
-import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
-import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
-import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
-import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
-import * as StackController from '@/actions/App/Http/Controllers/StackController';
-import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
-import { dashboard } from '@/routes';
 import { urlIsActive } from '@/lib/utils';
+import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { BookOpen, Bot, BrainCircuit, Database, FileText, Layers, LayoutGrid, MessageSquare, Users, Wrench } from 'lucide-vue-next';
+import {
+    BookOpen,
+    Bot,
+    BrainCircuit,
+    Database,
+    FileText,
+    Layers,
+    LayoutGrid,
+    MessageSquare,
+    Users,
+    Wrench,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppLogo from './AppLogo.vue';
@@ -119,7 +130,10 @@ const footerNavItems = computed<NavItem[]>(() => [
                 </SidebarMenuItem>
             </SidebarMenu>
             <NavMain :items="mainNavItems" />
-            <NavMain :items="capabilitiesNavItems" :label="t('nav.capabilities')" />
+            <NavMain
+                :items="capabilitiesNavItems"
+                :label="t('nav.capabilities')"
+            />
             <NavMain :items="systemNavItems" :label="t('nav.system')" />
         </SidebarContent>
 

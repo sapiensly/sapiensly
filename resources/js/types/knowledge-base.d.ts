@@ -1,5 +1,12 @@
 export type KnowledgeBaseStatus = 'pending' | 'processing' | 'ready' | 'failed';
-export type DocumentType = 'pdf' | 'txt' | 'docx' | 'md' | 'url' | 'csv' | 'json';
+export type DocumentType =
+    | 'pdf'
+    | 'txt'
+    | 'docx'
+    | 'md'
+    | 'url'
+    | 'csv'
+    | 'json';
 
 export interface DocumentTypeOption {
     value: DocumentType;

@@ -27,7 +27,9 @@ interface Props {
 
 defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [{ title: t('knowledge_bases.index.heading'), href: '#' }]);
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: t('knowledge_bases.index.heading'), href: '#' },
+]);
 
 const statusVariant = (status: string) => {
     switch (status) {
@@ -67,7 +69,9 @@ const statusVariant = (status: string) => {
                 <div v-if="knowledgeBases.data.length === 0">
                     <EmptyState
                         :title="t('knowledge_bases.index.no_kbs')"
-                        :description="t('knowledge_bases.index.no_kbs_description')"
+                        :description="
+                            t('knowledge_bases.index.no_kbs_description')
+                        "
                         :create-url="KnowledgeBaseController.create().url"
                         :create-label="t('knowledge_bases.index.create_kb')"
                     />
@@ -77,7 +81,11 @@ const statusVariant = (status: string) => {
                     <Link
                         v-for="kb in knowledgeBases.data"
                         :key="kb.id"
-                        :href="KnowledgeBaseController.show({ knowledge_base: kb.id }).url"
+                        :href="
+                            KnowledgeBaseController.show({
+                                knowledge_base: kb.id,
+                            }).url
+                        "
                     >
                         <Card
                             class="h-full cursor-pointer transition-colors hover:border-primary/50"
@@ -85,7 +93,9 @@ const statusVariant = (status: string) => {
                             <CardHeader>
                                 <div class="flex items-start justify-between">
                                     <div class="flex items-center gap-2">
-                                        <Database class="h-5 w-5 text-muted-foreground" />
+                                        <Database
+                                            class="h-5 w-5 text-muted-foreground"
+                                        />
                                         <CardTitle class="text-lg">
                                             {{ kb.name }}
                                         </CardTitle>
@@ -99,10 +109,15 @@ const statusVariant = (status: string) => {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div class="flex items-center gap-4 text-sm text-muted-foreground">
+                                <div
+                                    class="flex items-center gap-4 text-sm text-muted-foreground"
+                                >
                                     <div class="flex items-center gap-1">
                                         <FileText class="h-4 w-4" />
-                                        {{ kb.total_documents_count ?? 0 }} {{ t('knowledge_bases.index.documents') }}
+                                        {{ kb.total_documents_count ?? 0 }}
+                                        {{
+                                            t('knowledge_bases.index.documents')
+                                        }}
                                     </div>
                                 </div>
                             </CardContent>

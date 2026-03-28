@@ -89,7 +89,10 @@ const toolTypeLabel = (type: string) => {
     <div class="space-y-6">
         <div class="space-y-4">
             <Label>{{ t('agents.config.action.tools') }}</Label>
-            <div v-if="tools.length === 0" class="rounded-lg border border-dashed p-6 text-center">
+            <div
+                v-if="tools.length === 0"
+                class="rounded-lg border border-dashed p-6 text-center"
+            >
                 <Wrench class="mx-auto h-8 w-8 text-muted-foreground" />
                 <p class="mt-2 text-sm text-muted-foreground">
                     {{ t('agents.config.action.no_tools') }}
@@ -107,9 +110,14 @@ const toolTypeLabel = (type: string) => {
                     <Checkbox
                         :id="`tool-${tool.id}`"
                         :model-value="isSelected(tool.id)"
-                        @update:model-value="toggleTool(tool.id, $event as boolean)"
+                        @update:model-value="
+                            toggleTool(tool.id, $event as boolean)
+                        "
                     />
-                    <Label :for="`tool-${tool.id}`" class="flex-1 cursor-pointer">
+                    <Label
+                        :for="`tool-${tool.id}`"
+                        class="flex-1 cursor-pointer"
+                    >
                         {{ tool.name }}
                     </Label>
                     <span class="text-xs text-muted-foreground">
@@ -118,7 +126,8 @@ const toolTypeLabel = (type: string) => {
                 </div>
             </div>
             <p class="text-xs text-muted-foreground">
-                If no tools are selected, the agent will operate in pass-through mode.
+                If no tools are selected, the agent will operate in pass-through
+                mode.
             </p>
         </div>
 
@@ -136,7 +145,9 @@ const toolTypeLabel = (type: string) => {
                 <p class="text-xs text-muted-foreground">
                     Maximum time to wait for tool execution.
                 </p>
-                <InputError :message="errors['config.tool_execution.timeout']" />
+                <InputError
+                    :message="errors['config.tool_execution.timeout']"
+                />
             </div>
 
             <div class="space-y-2">
@@ -151,7 +162,9 @@ const toolTypeLabel = (type: string) => {
                 <p class="text-xs text-muted-foreground">
                     Number of retries on failure.
                 </p>
-                <InputError :message="errors['config.tool_execution.retry_count']" />
+                <InputError
+                    :message="errors['config.tool_execution.retry_count']"
+                />
             </div>
         </div>
     </div>

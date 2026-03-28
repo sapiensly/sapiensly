@@ -67,13 +67,18 @@ const isSubmitting = ref(false);
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => {
     const crumbs: BreadcrumbItem[] = [
-        { title: t('documents.show.documents'), href: DocumentController.index().url },
+        {
+            title: t('documents.show.documents'),
+            href: DocumentController.index().url,
+        },
     ];
 
     if (props.document.folder) {
         crumbs.push({
             title: props.document.folder.name,
-            href: DocumentController.index({ query: { folder: props.document.folder.id } }).url,
+            href: DocumentController.index({
+                query: { folder: props.document.folder.id },
+            }).url,
         });
     }
 
@@ -117,18 +122,21 @@ const handleEdit = () => {
                 isSubmitting.value = false;
                 showEditDialog.value = false;
             },
-        }
+        },
     );
 };
 
 const handleDelete = () => {
     isSubmitting.value = true;
 
-    router.delete(DocumentController.destroy({ document: props.document.id }).url, {
-        onFinish: () => {
-            isSubmitting.value = false;
+    router.delete(
+        DocumentController.destroy({ document: props.document.id }).url,
+        {
+            onFinish: () => {
+                isSubmitting.value = false;
+            },
         },
-    });
+    );
 };
 </script>
 
@@ -151,28 +159,39 @@ const handleDelete = () => {
                             <div class="flex items-center gap-3">
                                 <Heading :title="document.name" />
                                 <Badge
-                                    :class="typeColors[document.type] || typeColors.txt"
+                                    :class="
+                                        typeColors[document.type] ||
+                                        typeColors.txt
+                                    "
                                     variant="outline"
                                 >
                                     {{ document.type.toUpperCase() }}
                                 </Badge>
                                 <component
-                                    :is="document.visibility === 'organization' ? Users : Lock"
+                                    :is="
+                                        document.visibility === 'organization'
+                                            ? Users
+                                            : Lock
+                                    "
                                     class="h-4 w-4 text-muted-foreground"
-                                    :title="document.visibility === 'organization' ? 'Shared with organization' : 'Private'"
+                                    :title="
+                                        document.visibility === 'organization'
+                                            ? 'Shared with organization'
+                                            : 'Private'
+                                    "
                                 />
                             </div>
-                            <p v-if="document.original_filename" class="mt-1 text-sm text-muted-foreground">
+                            <p
+                                v-if="document.original_filename"
+                                class="mt-1 text-sm text-muted-foreground"
+                            >
                                 {{ document.original_filename }}
                             </p>
                         </div>
                     </div>
 
                     <div class="flex gap-2">
-                        <Button
-                            v-if="temporaryUrl"
-                            @click="handleDownload"
-                        >
+                        <Button v-if="temporaryUrl" @click="handleDownload">
                             <ExternalLink class="mr-2 h-4 w-4" />
                             {{ t('common.open') }}
                         </Button>
@@ -203,7 +222,9 @@ const handleDelete = () => {
                     <CardContent>
                         <dl class="grid gap-4 sm:grid-cols-2">
                             <div>
-                                <dt class="text-sm font-medium text-muted-foreground">
+                                <dt
+                                    class="text-sm font-medium text-muted-foreground"
+                                >
                                     File Size
                                 </dt>
                                 <dd class="mt-1 text-sm">
@@ -211,7 +232,9 @@ const handleDelete = () => {
                                 </dd>
                             </div>
                             <div>
-                                <dt class="text-sm font-medium text-muted-foreground">
+                                <dt
+                                    class="text-sm font-medium text-muted-foreground"
+                                >
                                     Type
                                 </dt>
                                 <dd class="mt-1 text-sm">
@@ -219,24 +242,45 @@ const handleDelete = () => {
                                 </dd>
                             </div>
                             <div>
-                                <dt class="text-sm font-medium text-muted-foreground">
+                                <dt
+                                    class="text-sm font-medium text-muted-foreground"
+                                >
                                     Visibility
                                 </dt>
-                                <dd class="mt-1 flex items-center gap-2 text-sm">
+                                <dd
+                                    class="mt-1 flex items-center gap-2 text-sm"
+                                >
                                     <component
-                                        :is="document.visibility === 'organization' ? Users : Lock"
+                                        :is="
+                                            document.visibility ===
+                                            'organization'
+                                                ? Users
+                                                : Lock
+                                        "
                                         class="h-4 w-4"
                                     />
-                                    {{ document.visibility === 'organization' ? 'Organization' : 'Private' }}
+                                    {{
+                                        document.visibility === 'organization'
+                                            ? 'Organization'
+                                            : 'Private'
+                                    }}
                                 </dd>
                             </div>
                             <div v-if="document.folder">
-                                <dt class="text-sm font-medium text-muted-foreground">
+                                <dt
+                                    class="text-sm font-medium text-muted-foreground"
+                                >
                                     Folder
                                 </dt>
                                 <dd class="mt-1 text-sm">
                                     <Link
-                                        :href="DocumentController.index({ query: { folder: document.folder.id } }).url"
+                                        :href="
+                                            DocumentController.index({
+                                                query: {
+                                                    folder: document.folder.id,
+                                                },
+                                            }).url
+                                        "
                                         class="flex items-center gap-1 text-primary hover:underline"
                                     >
                                         <Folder class="h-4 w-4" />
@@ -245,15 +289,23 @@ const handleDelete = () => {
                                 </dd>
                             </div>
                             <div>
-                                <dt class="text-sm font-medium text-muted-foreground">
+                                <dt
+                                    class="text-sm font-medium text-muted-foreground"
+                                >
                                     Created
                                 </dt>
                                 <dd class="mt-1 text-sm">
-                                    {{ new Date(document.created_at).toLocaleDateString() }}
+                                    {{
+                                        new Date(
+                                            document.created_at,
+                                        ).toLocaleDateString()
+                                    }}
                                 </dd>
                             </div>
                             <div v-if="document.user">
-                                <dt class="text-sm font-medium text-muted-foreground">
+                                <dt
+                                    class="text-sm font-medium text-muted-foreground"
+                                >
                                     Owner
                                 </dt>
                                 <dd class="mt-1 text-sm">
@@ -265,11 +317,17 @@ const handleDelete = () => {
                 </Card>
 
                 <!-- Knowledge Bases Card -->
-                <Card v-if="document.knowledge_bases && document.knowledge_bases.length > 0">
+                <Card
+                    v-if="
+                        document.knowledge_bases &&
+                        document.knowledge_bases.length > 0
+                    "
+                >
                     <CardHeader>
                         <CardTitle>Used in Knowledge Bases</CardTitle>
                         <CardDescription>
-                            This document is attached to the following knowledge bases
+                            This document is attached to the following knowledge
+                            bases
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -279,7 +337,9 @@ const handleDelete = () => {
                                 :key="kb.id"
                                 class="flex items-center gap-2"
                             >
-                                <Database class="h-4 w-4 text-muted-foreground" />
+                                <Database
+                                    class="h-4 w-4 text-muted-foreground"
+                                />
                                 <span>{{ kb.name }}</span>
                             </li>
                         </ul>
@@ -310,7 +370,10 @@ const handleDelete = () => {
 
                     <div class="space-y-2">
                         <Label for="visibility">Visibility</Label>
-                        <Select v-model="editForm.visibility" :disabled="!canShareWithOrg">
+                        <Select
+                            v-model="editForm.visibility"
+                            :disabled="!canShareWithOrg"
+                        >
                             <SelectTrigger>
                                 <SelectValue placeholder="Select visibility" />
                             </SelectTrigger>
@@ -319,11 +382,18 @@ const handleDelete = () => {
                                     v-for="option in visibilityOptions"
                                     :key="option.value"
                                     :value="option.value"
-                                    :disabled="option.value === 'organization' && !canShareWithOrg"
+                                    :disabled="
+                                        option.value === 'organization' &&
+                                        !canShareWithOrg
+                                    "
                                 >
                                     <div class="flex items-center gap-2">
                                         <component
-                                            :is="option.value === 'organization' ? Users : Lock"
+                                            :is="
+                                                option.value === 'organization'
+                                                    ? Users
+                                                    : Lock
+                                            "
                                             class="h-4 w-4"
                                         />
                                         {{ option.label }}
@@ -332,7 +402,11 @@ const handleDelete = () => {
                             </SelectContent>
                         </Select>
                         <p class="text-xs text-muted-foreground">
-                            {{ visibilityOptions.find(o => o.value === editForm.visibility)?.description }}
+                            {{
+                                visibilityOptions.find(
+                                    (o) => o.value === editForm.visibility,
+                                )?.description
+                            }}
                         </p>
                     </div>
                 </div>
@@ -354,7 +428,8 @@ const handleDelete = () => {
                 <DialogHeader>
                     <DialogTitle>Delete Document</DialogTitle>
                     <DialogDescription>
-                        Are you sure you want to delete "{{ document.name }}"? This action cannot be undone.
+                        Are you sure you want to delete "{{ document.name }}"?
+                        This action cannot be undone.
                     </DialogDescription>
                 </DialogHeader>
 

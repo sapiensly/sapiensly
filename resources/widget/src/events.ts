@@ -4,7 +4,8 @@ import type { WidgetEventCallback, WidgetEventType } from './types';
  * Simple event emitter for widget events.
  */
 export class EventEmitter {
-    private listeners: Map<WidgetEventType, Set<WidgetEventCallback>> = new Map();
+    private listeners: Map<WidgetEventType, Set<WidgetEventCallback>> =
+        new Map();
 
     /**
      * Subscribe to an event.
@@ -39,7 +40,10 @@ export class EventEmitter {
                 try {
                     callback(data);
                 } catch (error) {
-                    console.error(`[Sapiensly] Error in event handler for "${event}":`, error);
+                    console.error(
+                        `[Sapiensly] Error in event handler for "${event}":`,
+                        error,
+                    );
                 }
             });
         }

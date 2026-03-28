@@ -10,13 +10,10 @@ return new class extends Migration
     {
         Schema::create('organizations', function (Blueprint $table) {
             $table->string('id', 36)->primary();
-            $table->string('workos_organization_id')->unique();
             $table->string('name');
             $table->string('slug')->nullable();
             $table->json('metadata')->nullable();
             $table->timestamps();
-
-            $table->index('workos_organization_id');
         });
     }
 

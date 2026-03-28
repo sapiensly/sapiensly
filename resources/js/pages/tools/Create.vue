@@ -149,30 +149,44 @@ if (props.selectedType) {
                     <div class="space-y-6">
                         <HeadingSmall
                             :title="t('tools.create.basic_info')"
-                            :description="t('tools.create.basic_info_description')"
+                            :description="
+                                t('tools.create.basic_info_description')
+                            "
                         />
 
                         <div class="grid gap-4">
                             <div class="grid gap-2">
-                                <Label for="name">{{ t('tools.create.tool_name') }}</Label>
+                                <Label for="name">{{
+                                    t('tools.create.tool_name')
+                                }}</Label>
                                 <Input
                                     id="name"
                                     v-model="form.name"
                                     required
-                                    :placeholder="t('tools.create.tool_name_placeholder')"
+                                    :placeholder="
+                                        t('tools.create.tool_name_placeholder')
+                                    "
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
 
                             <div class="grid gap-2">
-                                <Label for="description">{{ t('tools.create.description_label') }}</Label>
+                                <Label for="description">{{
+                                    t('tools.create.description_label')
+                                }}</Label>
                                 <Textarea
                                     id="description"
                                     v-model="form.description"
-                                    :placeholder="t('tools.create.description_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'tools.create.description_placeholder',
+                                        )
+                                    "
                                     rows="3"
                                 />
-                                <InputError :message="form.errors.description" />
+                                <InputError
+                                    :message="form.errors.description"
+                                />
                             </div>
                         </div>
                     </div>
@@ -222,7 +236,11 @@ if (props.selectedType) {
                     </div>
 
                     <div class="flex justify-end gap-4">
-                        <Button variant="outline" type="button" @click="currentType = null">
+                        <Button
+                            variant="outline"
+                            type="button"
+                            @click="currentType = null"
+                        >
                             {{ t('common.change_type') }}
                         </Button>
                         <Button variant="outline" as-child>

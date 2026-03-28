@@ -3,13 +3,17 @@
 namespace App\Jobs;
 
 use App\Enums\AgentType;
+use App\Enums\FlowActionType;
 use App\Enums\MessageRole;
 use App\Events\AgentStreamChunk;
 use App\Events\AgentStreamComplete;
 use App\Events\AgentStreamError;
 use App\Models\Agent;
 use App\Models\Conversation;
+use App\Models\Flow;
 use App\Services\AiProviderService;
+use App\Services\FlowAction;
+use App\Services\FlowExecutorService;
 use App\Services\LLMService;
 use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -42,6 +46,20 @@ class ProcessAgentChat implements ShouldQueue
         }
 
         try {
+            // Check for active flow on Triage agents
+            if ($this->agent->type === AgentType::Triage) {
+                $flowExecutor = app(FlowExecutorService::class);
+                $flowState = $this->conversation->metadata['flow_state'] ?? null;
+                $userMessage = $messages->last()->content;
+
+                if ($flowExecutor->shouldActivateFlow($this->agent, $userMessage, $flowState)) {
+                    $this->handleFlowChat($flowExecutor, $userMessage, $flowState);
+                    $this->sendBroadcast(new AgentStreamComplete($this->conversation->id));
+
+                    return;
+                }
+            }
+
             if ($this->agent->type === AgentType::Action && $this->agent->tools()->where('status', 'active')->exists()) {
                 $this->handleToolChat($llmService, $messages);
             } else {
@@ -104,6 +122,96 @@ class ProcessAgentChat implements ShouldQueue
                 'metadata' => ! empty($knowledgeBases) ? ['knowledge_bases' => $knowledgeBases] : null,
             ]);
         }
+    }
+
+    private function handleFlowChat(FlowExecutorService $flowExecutor, string $userMessage, ?array $flowState): void
+    {
+        $flow = $this->agent->activeFlow();
+        if (! $flow) {
+            return;
+        }
+
+        if ($flowState === null || ($flowState['completed'] ?? false)) {
+            $flowState = $flowExecutor->initializeFlow($flow);
+        }
+
+        $action = $flowExecutor->processInput($flow, $flowState, $userMessage);
+
+        // Persist flow state
+        $metadata = $this->conversation->metadata ?? [];
+        $metadata['flow_state'] = $action->updatedState;
+        $this->conversation->update(['metadata' => $metadata]);
+
+        $this->broadcastFlowAction($flowExecutor, $flow, $action);
+    }
+
+    private function broadcastFlowAction(FlowExecutorService $flowExecutor, Flow $flow, FlowAction $action): void
+    {
+        match ($action->type) {
+            FlowActionType::ShowMenu => $this->sendBroadcast(new AgentStreamChunk(
+                $this->conversation->id,
+                '',
+                'flow_menu',
+                [
+                    'message' => $action->data['message'] ?? '',
+                    'options' => $action->data['options'] ?? [],
+                ],
+            )),
+            FlowActionType::SendMessage => (function () use ($flowExecutor, $flow, $action) {
+                $message = $action->data['message'] ?? '';
+
+                $this->sendBroadcast(new AgentStreamChunk(
+                    $this->conversation->id,
+                    '',
+                    'flow_message',
+                    ['content' => $message],
+                ));
+
+                if ($message !== '') {
+                    $this->conversation->messages()->create([
+                        'role' => MessageRole::Assistant,
+                        'content' => $message,
+                    ]);
+                }
+
+                // Auto-advance to next node
+                if (isset($action->data['next_node_id'])) {
+                    $nextAction = $flowExecutor->advanceToNode($flow, $action->updatedState, $action->data['next_node_id']);
+                    $metadata = $this->conversation->metadata ?? [];
+                    $metadata['flow_state'] = $nextAction->updatedState;
+                    $this->conversation->update(['metadata' => $metadata]);
+                    $this->broadcastFlowAction($flowExecutor, $flow, $nextAction);
+                }
+            })(),
+            FlowActionType::AgentHandoff => (function () use ($action) {
+                if ($action->data['message'] ?? null) {
+                    $this->sendBroadcast(new AgentStreamChunk(
+                        $this->conversation->id,
+                        '',
+                        'flow_message',
+                        ['content' => $action->data['message']],
+                    ));
+                }
+                $this->sendBroadcast(new AgentStreamChunk(
+                    $this->conversation->id,
+                    '',
+                    'flow_end',
+                    ['action' => 'agent_handoff'],
+                ));
+            })(),
+            FlowActionType::End => $this->sendBroadcast(new AgentStreamChunk(
+                $this->conversation->id,
+                '',
+                'flow_end',
+                ['action' => $action->data['action'] ?? 'resume_conversation'],
+            )),
+            FlowActionType::AwaitLlmClassification => $this->sendBroadcast(new AgentStreamChunk(
+                $this->conversation->id,
+                '',
+                'flow_await_input',
+                ['input_type' => 'text'],
+            )),
+        };
     }
 
     private function handleToolChat(LLMService $llmService, $messages): void

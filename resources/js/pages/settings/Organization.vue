@@ -72,7 +72,9 @@ const submitInvite = () => {
                     </div>
                     <div v-if="organization.slug">
                         <Label>{{ t('settings.organization.slug') }}</Label>
-                        <p class="mt-1 text-sm text-muted-foreground">{{ organization.slug }}</p>
+                        <p class="mt-1 text-sm text-muted-foreground">
+                            {{ organization.slug }}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -96,8 +98,12 @@ const submitInvite = () => {
                                 </AvatarFallback>
                             </Avatar>
                             <div>
-                                <p class="text-sm font-medium">{{ member.user.name }}</p>
-                                <p class="text-xs text-muted-foreground">{{ member.user.email }}</p>
+                                <p class="text-sm font-medium">
+                                    {{ member.user.name }}
+                                </p>
+                                <p class="text-xs text-muted-foreground">
+                                    {{ member.user.email }}
+                                </p>
                             </div>
                         </div>
                         <Badge variant="secondary">{{ member.role }}</Badge>
@@ -111,14 +117,21 @@ const submitInvite = () => {
                     :description="t('settings.organization.invite_description')"
                 />
 
-                <form @submit.prevent="submitInvite" class="flex items-end gap-3">
+                <form
+                    @submit.prevent="submitInvite"
+                    class="flex items-end gap-3"
+                >
                     <div class="flex-1 space-y-2">
-                        <Label for="invite-email">{{ t('common.email_address') }}</Label>
+                        <Label for="invite-email">{{
+                            t('common.email_address')
+                        }}</Label>
                         <Input
                             id="invite-email"
                             v-model="inviteForm.email"
                             type="email"
-                            :placeholder="t('settings.organization.invite_placeholder')"
+                            :placeholder="
+                                t('settings.organization.invite_placeholder')
+                            "
                         />
                         <InputError :message="inviteForm.errors.email" />
                     </div>
