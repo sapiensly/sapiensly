@@ -96,9 +96,7 @@ class AiProviderController extends Controller
 
     public function edit(Request $request, AiProvider $aiProvider): Response
     {
-        if (! $aiProvider->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $aiProvider);
 
         return Inertia::render('system/AiProviderForm', [
             'drivers' => $this->aiProviderService->getAvailableDrivers(),
@@ -119,9 +117,7 @@ class AiProviderController extends Controller
 
     public function update(Request $request, AiProvider $aiProvider): RedirectResponse
     {
-        if (! $aiProvider->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $aiProvider);
 
         $validated = $request->validate([
             'display_name' => 'required|string|max:100',
@@ -179,9 +175,7 @@ class AiProviderController extends Controller
 
     public function destroy(Request $request, AiProvider $aiProvider): RedirectResponse
     {
-        if (! $aiProvider->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('delete', $aiProvider);
 
         $aiProvider->delete();
 
@@ -190,9 +184,7 @@ class AiProviderController extends Controller
 
     public function testConnection(Request $request, AiProvider $aiProvider): JsonResponse
     {
-        if (! $aiProvider->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $aiProvider);
 
         $result = $this->aiProviderService->testConnection($aiProvider);
 
@@ -201,9 +193,7 @@ class AiProviderController extends Controller
 
     public function setDefault(Request $request, AiProvider $aiProvider): RedirectResponse
     {
-        if (! $aiProvider->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $aiProvider);
 
         $user = $request->user();
 
@@ -215,9 +205,7 @@ class AiProviderController extends Controller
 
     public function setDefaultEmbeddings(Request $request, AiProvider $aiProvider): RedirectResponse
     {
-        if (! $aiProvider->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $aiProvider);
 
         $user = $request->user();
 

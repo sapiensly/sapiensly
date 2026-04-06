@@ -41,10 +41,7 @@ class OrganizationController extends Controller
         return Inertia::render('settings/Organization', [
             'organization' => $organization,
             'members' => $members,
-            'isAdmin' => OrganizationMembership::where('user_id', $user->id)
-                ->where('organization_id', $organization->id)
-                ->where('role', MembershipRole::Admin)
-                ->exists(),
+            'isAdmin' => $user->hasRole('owner') || $user->hasRole('sysadmin'),
         ]);
     }
 
@@ -69,7 +66,7 @@ class OrganizationController extends Controller
         OrganizationMembership::create([
             'organization_id' => $organization->id,
             'user_id' => $user->id,
-            'role' => MembershipRole::Admin,
+            'role' => MembershipRole::Owner,
             'status' => MembershipStatus::Active,
         ]);
 
@@ -92,13 +89,8 @@ class OrganizationController extends Controller
 
         $organization = $user->organization;
 
-        $isAdmin = OrganizationMembership::where('user_id', $user->id)
-            ->where('organization_id', $organization->id)
-            ->where('role', MembershipRole::Admin)
-            ->exists();
-
-        if (! $isAdmin) {
-            return back()->withErrors(['email' => __('Only admins can send invitations.')]);
+        if (! $user->hasPermissionTo('organization.invite-members')) {
+            return back()->withErrors(['email' => __('You do not have permission to send invitations.')]);
         }
 
         // Check if user is already a member

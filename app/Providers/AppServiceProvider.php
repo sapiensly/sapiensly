@@ -2,7 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\OrganizationMembership;
+use App\Observers\OrganizationMembershipObserver;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Pgvector\Laravel\Schema;
 
@@ -26,5 +29,14 @@ class AppServiceProvider extends ServiceProvider
         if (DB::connection()->getDriverName() === 'pgsql') {
             Schema::register();
         }
+
+        OrganizationMembership::observe(OrganizationMembershipObserver::class);
+
+        // SysAdmin bypasses all authorization gates and policies
+        Gate::before(function ($user, $ability) {
+            if ($user->hasRole('sysadmin')) {
+                return true;
+            }
+        });
     }
 }

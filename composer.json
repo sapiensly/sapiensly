@@ -25,6 +25,7 @@
         "predis/predis": "^3.3",
         "railsware/mailtrap-php": "^3.11",
         "smalot/pdfparser": "^2.12",
+        "spatie/laravel-permission": "^7.2",
         "symfony/http-client": "^8.0",
         "symfony/mailer": "^8.0"
     },

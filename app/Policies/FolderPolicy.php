@@ -7,59 +7,86 @@ use App\Models\User;
 
 class FolderPolicy
 {
-    /**
-     * Determine whether the user can view any models.
-     */
     public function viewAny(User $user): bool
     {
-        return true;
+        if (! $user->organization_id) {
+            return true;
+        }
+
+        return $user->hasPermissionTo('folders.view');
     }
 
-    /**
-     * Determine whether the user can view the model.
-     */
     public function view(User $user, Folder $folder): bool
     {
-        return $folder->isVisibleTo($user);
+        if (! $folder->isVisibleTo($user)) {
+            return false;
+        }
+
+        if (! $user->organization_id) {
+            return true;
+        }
+
+        return $user->hasPermissionTo('folders.view');
     }
 
-    /**
-     * Determine whether the user can create models.
-     */
     public function create(User $user): bool
     {
-        return true;
+        if (! $user->organization_id) {
+            return true;
+        }
+
+        return $user->hasPermissionTo('folders.create');
     }
 
-    /**
-     * Determine whether the user can update the model.
-     */
     public function update(User $user, Folder $folder): bool
     {
-        return $folder->isOwnedBy($user);
+        if (! $user->organization_id) {
+            return $folder->isOwnedBy($user);
+        }
+
+        if (! $folder->isVisibleTo($user)) {
+            return false;
+        }
+
+        return $user->hasPermissionTo('folders.update') && $folder->isOwnedBy($user);
     }
 
-    /**
-     * Determine whether the user can delete the model.
-     */
     public function delete(User $user, Folder $folder): bool
     {
-        return $folder->isOwnedBy($user);
+        if (! $user->organization_id) {
+            return $folder->isOwnedBy($user);
+        }
+
+        if (! $folder->isVisibleTo($user)) {
+            return false;
+        }
+
+        return $user->hasPermissionTo('folders.delete') && $folder->isOwnedBy($user);
     }
 
-    /**
-     * Determine whether the user can restore the model.
-     */
     public function restore(User $user, Folder $folder): bool
     {
-        return $folder->isOwnedBy($user);
+        if (! $user->organization_id) {
+            return $folder->isOwnedBy($user);
+        }
+
+        if (! $folder->isVisibleTo($user)) {
+            return false;
+        }
+
+        return $user->hasPermissionTo('folders.update') && $folder->isOwnedBy($user);
     }
 
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
     public function forceDelete(User $user, Folder $folder): bool
     {
-        return $folder->isOwnedBy($user);
+        if (! $user->organization_id) {
+            return $folder->isOwnedBy($user);
+        }
+
+        if (! $folder->isVisibleTo($user)) {
+            return false;
+        }
+
+        return $user->hasPermissionTo('folders.delete') && $folder->isOwnedBy($user);
     }
 }

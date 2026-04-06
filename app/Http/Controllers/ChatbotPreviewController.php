@@ -31,9 +31,7 @@ class ChatbotPreviewController extends Controller
      */
     public function init(Request $request, Chatbot $chatbot): JsonResponse
     {
-        if (! $chatbot->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $chatbot);
 
         // Get or create a preview session for this user
         $session = WidgetSession::firstOrCreate(
@@ -93,9 +91,7 @@ class ChatbotPreviewController extends Controller
      */
     public function send(Request $request, Chatbot $chatbot): JsonResponse
     {
-        if (! $chatbot->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $chatbot);
 
         $validated = $request->validate([
             'conversation_id' => ['required', 'string'],
@@ -145,9 +141,7 @@ class ChatbotPreviewController extends Controller
      */
     public function stream(Request $request, Chatbot $chatbot, string $conversationId): StreamedResponse|JsonResponse
     {
-        if (! $chatbot->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $chatbot);
 
         $conversation = WidgetConversation::where('chatbot_id', $chatbot->id)
             ->where('id', $conversationId)
@@ -246,9 +240,7 @@ class ChatbotPreviewController extends Controller
      */
     public function clear(Request $request, Chatbot $chatbot): JsonResponse
     {
-        if (! $chatbot->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $chatbot);
 
         $validated = $request->validate([
             'conversation_id' => ['required', 'string'],

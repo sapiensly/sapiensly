@@ -1,0 +1,28 @@
+<script setup lang="ts">
+import AdminSidebar from '@/components/AdminSidebar.vue';
+import AppContent from '@/components/AppContent.vue';
+import AppShell from '@/components/AppShell.vue';
+import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
+import { useLocaleSync } from '@/composables/useLocale';
+import type { BreadcrumbItemType } from '@/types';
+
+useLocaleSync();
+
+interface Props {
+    breadcrumbs?: BreadcrumbItemType[];
+}
+
+withDefaults(defineProps<Props>(), {
+    breadcrumbs: () => [],
+});
+</script>
+
+<template>
+    <AppShell variant="sidebar">
+        <AdminSidebar />
+        <AppContent variant="sidebar" class="overflow-x-hidden">
+            <AppSidebarHeader :breadcrumbs="breadcrumbs" />
+            <slot />
+        </AppContent>
+    </AppShell>
+</template>

@@ -19,9 +19,7 @@ class TeamStreamController extends Controller
     public function stream(Request $request, AgentTeam $agentTeam, Conversation $conversation): StreamedResponse
     {
         // Verify access
-        if (! $agentTeam->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agentTeam);
 
         if ($conversation->user_id !== $request->user()->id) {
             abort(403);

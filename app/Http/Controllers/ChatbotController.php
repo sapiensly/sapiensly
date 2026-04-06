@@ -81,9 +81,7 @@ class ChatbotController extends Controller
 
     public function show(Request $request, Chatbot $chatbot): Response
     {
-        if (! $chatbot->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $chatbot);
 
         $recentConversations = $chatbot->conversations()
             ->with('session:id,visitor_email,visitor_name')
@@ -108,9 +106,7 @@ class ChatbotController extends Controller
 
     public function edit(Request $request, Chatbot $chatbot): Response
     {
-        if (! $chatbot->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $chatbot);
 
         $user = $request->user();
 
@@ -131,9 +127,7 @@ class ChatbotController extends Controller
 
     public function update(UpdateChatbotRequest $request, Chatbot $chatbot): RedirectResponse
     {
-        if (! $chatbot->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $chatbot);
 
         $chatbot->update([
             'name' => $request->name,
@@ -158,9 +152,7 @@ class ChatbotController extends Controller
 
     public function destroy(Request $request, Chatbot $chatbot): RedirectResponse
     {
-        if (! $chatbot->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('delete', $chatbot);
 
         $chatbot->delete();
 
@@ -169,9 +161,7 @@ class ChatbotController extends Controller
 
     public function embed(Request $request, Chatbot $chatbot): Response
     {
-        if (! $chatbot->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $chatbot);
 
         // Get or create default API token
         $token = $chatbot->apiTokens()->first();
@@ -209,9 +199,7 @@ class ChatbotController extends Controller
 
     public function preview(Request $request, Chatbot $chatbot): Response
     {
-        if (! $chatbot->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $chatbot);
 
         return Inertia::render('chatbots/Preview', [
             'chatbot' => $chatbot->load(['agent', 'agentTeam']),
@@ -220,9 +208,7 @@ class ChatbotController extends Controller
 
     public function conversations(Request $request, Chatbot $chatbot): Response
     {
-        if (! $chatbot->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $chatbot);
 
         $conversations = $chatbot->conversations()
             ->with('session:id,visitor_email,visitor_name,last_activity_at')
@@ -238,9 +224,7 @@ class ChatbotController extends Controller
 
     public function conversation(Request $request, Chatbot $chatbot, WidgetConversation $conversation): Response
     {
-        if (! $chatbot->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $chatbot);
 
         if ($conversation->chatbot_id !== $chatbot->id) {
             abort(404);

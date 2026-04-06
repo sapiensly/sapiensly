@@ -10,13 +10,15 @@ export interface Organization {
 export interface Membership {
     organization_id: string;
     organization_name: string;
-    role: 'admin' | 'member';
+    role: 'owner' | 'member';
 }
 
 export interface Auth {
     user: User;
     organization: Organization | null;
     memberships: Membership[];
+    permissions: string[];
+    roles: string[];
 }
 
 export interface BreadcrumbItem {
@@ -37,6 +39,7 @@ export type AppPageProps<
     name: string;
     quote: { message: string; author: string };
     auth: Auth;
+    impersonating: boolean;
     sidebarOpen: boolean;
     locale: string;
     availableLocales: string[];

@@ -26,9 +26,7 @@ class ChatStreamController extends Controller
     public function stream(Request $request, Agent $agent, Conversation $conversation): StreamedResponse
     {
         // Verify access
-        if (! $agent->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agent);
 
         if ($conversation->user_id !== $request->user()->id) {
             abort(403);

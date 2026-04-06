@@ -73,9 +73,7 @@ class KnowledgeBaseController extends Controller
 
     public function show(Request $request, KnowledgeBase $knowledgeBase, FolderService $folderService): Response
     {
-        if (! $knowledgeBase->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $knowledgeBase);
 
         $user = $request->user();
 
@@ -107,9 +105,7 @@ class KnowledgeBaseController extends Controller
 
     public function edit(Request $request, KnowledgeBase $knowledgeBase): Response
     {
-        if (! $knowledgeBase->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $knowledgeBase);
 
         return Inertia::render('knowledge-bases/Edit', [
             'knowledgeBase' => $knowledgeBase,
@@ -130,9 +126,7 @@ class KnowledgeBaseController extends Controller
 
     public function destroy(Request $request, KnowledgeBase $knowledgeBase): RedirectResponse
     {
-        if (! $knowledgeBase->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('delete', $knowledgeBase);
 
         $knowledgeBase->delete();
 
@@ -141,9 +135,7 @@ class KnowledgeBaseController extends Controller
 
     public function attachDocuments(Request $request, KnowledgeBase $knowledgeBase, DocumentService $documentService): RedirectResponse
     {
-        if (! $knowledgeBase->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $knowledgeBase);
 
         $request->validate([
             'document_ids' => ['required', 'array'],
@@ -168,9 +160,7 @@ class KnowledgeBaseController extends Controller
 
     public function reprocessDocument(Request $request, KnowledgeBase $knowledgeBase, Document $document): RedirectResponse
     {
-        if (! $knowledgeBase->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $knowledgeBase);
 
         // Reset pivot status
         $document->knowledgeBases()->updateExistingPivot($knowledgeBase->id, [
@@ -192,9 +182,7 @@ class KnowledgeBaseController extends Controller
 
     public function detachDocument(Request $request, KnowledgeBase $knowledgeBase, Document $document, DocumentService $documentService): RedirectResponse
     {
-        if (! $knowledgeBase->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $knowledgeBase);
 
         $documentService->detachFromKnowledgeBase($document, $knowledgeBase);
 

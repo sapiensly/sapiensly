@@ -6,6 +6,7 @@ use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Actions\Fortify\UpdateUserPassword;
 use App\Actions\Fortify\UpdateUserProfileInformation;
+use App\Models\AppSetting;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -30,9 +31,25 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->configureRegistration();
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+    }
+
+    /**
+     * Dynamically disable registration based on app settings.
+     */
+    private function configureRegistration(): void
+    {
+        if (! AppSetting::isRegistrationEnabled()) {
+            $features = array_filter(
+                config('fortify.features', []),
+                fn ($feature) => $feature !== Features::registration(),
+            );
+
+            config(['fortify.features' => array_values($features)]);
+        }
     }
 
     /**

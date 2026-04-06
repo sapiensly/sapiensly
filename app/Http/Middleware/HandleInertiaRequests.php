@@ -55,7 +55,14 @@ class HandleInertiaRequests extends Middleware
                         'organization_name' => $m->organization->name,
                         'role' => $m->role->value,
                     ]),
+                'permissions' => $request->user()
+                    ? $request->user()->getAllPermissions()->pluck('name')->values()
+                    : [],
+                'roles' => $request->user()
+                    ? $request->user()->getRoleNames()->values()
+                    : [],
             ],
+            'impersonating' => $request->session()->has('impersonating_from'),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'locale' => app()->getLocale(),
             'availableLocales' => ['en', 'es'],

@@ -107,9 +107,7 @@ class ToolController extends Controller
 
     public function show(Request $request, Tool $tool): Response
     {
-        if (! $tool->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $tool);
 
         $tool->load(['groupItems.tool']);
 
@@ -129,9 +127,7 @@ class ToolController extends Controller
 
     public function edit(Request $request, Tool $tool): Response
     {
-        if (! $tool->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $tool);
 
         $tool->load(['groupItems.tool']);
 
@@ -190,9 +186,7 @@ class ToolController extends Controller
 
     public function destroy(Request $request, Tool $tool): RedirectResponse
     {
-        if (! $tool->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('delete', $tool);
 
         $tool->delete();
 

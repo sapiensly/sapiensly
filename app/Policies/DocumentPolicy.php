@@ -7,75 +7,112 @@ use App\Models\User;
 
 class DocumentPolicy
 {
-    /**
-     * Determine whether the user can view any models.
-     */
     public function viewAny(User $user): bool
     {
-        return true;
+        if (! $user->organization_id) {
+            return true;
+        }
+
+        return $user->hasPermissionTo('documents.view');
     }
 
-    /**
-     * Determine whether the user can view the model.
-     */
     public function view(User $user, Document $document): bool
     {
-        return $document->isVisibleTo($user);
+        if (! $document->isVisibleTo($user)) {
+            return false;
+        }
+
+        if (! $user->organization_id) {
+            return true;
+        }
+
+        return $user->hasPermissionTo('documents.view');
     }
 
-    /**
-     * Determine whether the user can create models.
-     */
     public function create(User $user): bool
     {
-        return true;
+        if (! $user->organization_id) {
+            return true;
+        }
+
+        return $user->hasPermissionTo('documents.create');
     }
 
-    /**
-     * Determine whether the user can update the model.
-     */
     public function update(User $user, Document $document): bool
     {
-        return $document->isOwnedBy($user);
+        if (! $user->organization_id) {
+            return $document->isOwnedBy($user);
+        }
+
+        if (! $document->isVisibleTo($user)) {
+            return false;
+        }
+
+        return $user->hasPermissionTo('documents.update') && $document->isOwnedBy($user);
     }
 
-    /**
-     * Determine whether the user can delete the model.
-     */
     public function delete(User $user, Document $document): bool
     {
-        return $document->isOwnedBy($user);
+        if (! $user->organization_id) {
+            return $document->isOwnedBy($user);
+        }
+
+        if (! $document->isVisibleTo($user)) {
+            return false;
+        }
+
+        return $user->hasPermissionTo('documents.delete') && $document->isOwnedBy($user);
     }
 
-    /**
-     * Determine whether the user can restore the model.
-     */
     public function restore(User $user, Document $document): bool
     {
-        return $document->isOwnedBy($user);
+        if (! $user->organization_id) {
+            return $document->isOwnedBy($user);
+        }
+
+        if (! $document->isVisibleTo($user)) {
+            return false;
+        }
+
+        return $user->hasPermissionTo('documents.update') && $document->isOwnedBy($user);
     }
 
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
     public function forceDelete(User $user, Document $document): bool
     {
-        return $document->isOwnedBy($user);
+        if (! $user->organization_id) {
+            return $document->isOwnedBy($user);
+        }
+
+        if (! $document->isVisibleTo($user)) {
+            return false;
+        }
+
+        return $user->hasPermissionTo('documents.delete') && $document->isOwnedBy($user);
     }
 
-    /**
-     * Determine whether the user can download the model.
-     */
     public function download(User $user, Document $document): bool
     {
-        return $document->isVisibleTo($user);
+        if (! $document->isVisibleTo($user)) {
+            return false;
+        }
+
+        if (! $user->organization_id) {
+            return true;
+        }
+
+        return $user->hasPermissionTo('documents.download');
     }
 
-    /**
-     * Determine whether the user can move the model.
-     */
     public function move(User $user, Document $document): bool
     {
-        return $document->isOwnedBy($user);
+        if (! $user->organization_id) {
+            return $document->isOwnedBy($user);
+        }
+
+        if (! $document->isVisibleTo($user)) {
+            return false;
+        }
+
+        return $user->hasPermissionTo('documents.update') && $document->isOwnedBy($user);
     }
 }

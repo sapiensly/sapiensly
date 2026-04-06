@@ -76,9 +76,7 @@ class AgentTeamController extends Controller
         $agents = Agent::whereIn('id', $agentIds)->get();
 
         foreach ($agents as $agent) {
-            if (! $agent->isVisibleTo($user)) {
-                abort(403, __('You do not have access to one or more selected agents.'));
-            }
+            $this->authorize('view', $agent);
         }
 
         $team = AgentTeam::create([
@@ -99,9 +97,7 @@ class AgentTeamController extends Controller
 
     public function show(Request $request, AgentTeam $agentTeam): Response
     {
-        if (! $agentTeam->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agentTeam);
 
         return Inertia::render('agents/Show', [
             'team' => $agentTeam->load('agents'),
@@ -110,9 +106,7 @@ class AgentTeamController extends Controller
 
     public function edit(Request $request, AgentTeam $agentTeam): Response
     {
-        if (! $agentTeam->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $agentTeam);
 
         return Inertia::render('agents/Edit', [
             'team' => $agentTeam->load('agents'),
@@ -145,9 +139,7 @@ class AgentTeamController extends Controller
 
     public function destroy(Request $request, AgentTeam $agentTeam): RedirectResponse
     {
-        if (! $agentTeam->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('delete', $agentTeam);
 
         $agentTeam->delete();
 
@@ -156,9 +148,7 @@ class AgentTeamController extends Controller
 
     public function chat(Request $request, AgentTeam $agentTeam): Response
     {
-        if (! $agentTeam->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agentTeam);
 
         // Get or create a conversation for this team
         $conversation = Conversation::firstOrCreate(
@@ -179,9 +169,7 @@ class AgentTeamController extends Controller
 
     public function sendMessage(Request $request, AgentTeam $agentTeam): RedirectResponse
     {
-        if (! $agentTeam->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agentTeam);
 
         $request->validate([
             'message' => 'required|string|max:10000',
@@ -209,9 +197,7 @@ class AgentTeamController extends Controller
 
     public function newConversation(Request $request, AgentTeam $agentTeam): RedirectResponse
     {
-        if (! $agentTeam->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agentTeam);
 
         // Delete existing conversation for this team
         Conversation::where('user_id', $request->user()->id)

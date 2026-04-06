@@ -24,9 +24,7 @@ class KnowledgeBaseDocumentController extends Controller
      */
     public function store(Request $request, KnowledgeBase $knowledgeBase): RedirectResponse
     {
-        if (! $knowledgeBase->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $knowledgeBase);
 
         $request->validate([
             'file' => [
@@ -83,9 +81,7 @@ class KnowledgeBaseDocumentController extends Controller
      */
     public function storeUrl(Request $request, KnowledgeBase $knowledgeBase): RedirectResponse
     {
-        if (! $knowledgeBase->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $knowledgeBase);
 
         $request->validate([
             'url' => ['required', 'url', 'max:2000'],
@@ -109,9 +105,7 @@ class KnowledgeBaseDocumentController extends Controller
      */
     public function destroy(Request $request, KnowledgeBase $knowledgeBase, KnowledgeBaseDocument $document): RedirectResponse
     {
-        if (! $knowledgeBase->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $knowledgeBase);
 
         if ($document->knowledge_base_id !== $knowledgeBase->id) {
             abort(404);
@@ -139,9 +133,7 @@ class KnowledgeBaseDocumentController extends Controller
      */
     public function reprocess(Request $request, KnowledgeBase $knowledgeBase, KnowledgeBaseDocument $document): RedirectResponse
     {
-        if (! $knowledgeBase->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $knowledgeBase);
 
         if ($document->knowledge_base_id !== $knowledgeBase->id) {
             abort(404);

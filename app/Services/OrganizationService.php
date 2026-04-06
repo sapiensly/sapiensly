@@ -19,6 +19,7 @@ class OrganizationService
     {
         if ($organizationId === null) {
             $user->update(['organization_id' => null]);
+            setPermissionsTeamId(null);
 
             return;
         }
@@ -33,6 +34,7 @@ class OrganizationService
         }
 
         $user->update(['organization_id' => $organizationId]);
+        setPermissionsTeamId($organizationId);
     }
 
     /**

@@ -110,9 +110,7 @@ class AgentController extends Controller
 
     public function show(Request $request, Agent $agent): Response
     {
-        if (! $agent->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agent);
 
         return Inertia::render('standalone-agents/Show', [
             'agent' => $agent->load(['knowledgeBases', 'tools']),
@@ -121,9 +119,7 @@ class AgentController extends Controller
 
     public function edit(Request $request, Agent $agent): Response
     {
-        if (! $agent->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $agent);
 
         $activeFlow = $agent->activeFlow();
 
@@ -167,9 +163,7 @@ class AgentController extends Controller
 
     public function destroy(Request $request, Agent $agent): RedirectResponse
     {
-        if (! $agent->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('delete', $agent);
 
         $agent->delete();
 
@@ -178,9 +172,7 @@ class AgentController extends Controller
 
     public function duplicate(Request $request, Agent $agent): RedirectResponse
     {
-        if (! $agent->isOwnedBy($request->user())) {
-            abort(403);
-        }
+        $this->authorize('update', $agent);
 
         $newAgent = $agent->replicate();
         $newAgent->name = $agent->name.' (Copy)';
@@ -195,9 +187,7 @@ class AgentController extends Controller
 
     public function chat(Request $request, Agent $agent): Response
     {
-        if (! $agent->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agent);
 
         // Get or create a conversation for this agent
         $conversation = Conversation::firstOrCreate(
@@ -218,9 +208,7 @@ class AgentController extends Controller
 
     public function sendMessage(Request $request, Agent $agent): RedirectResponse
     {
-        if (! $agent->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agent);
 
         $request->validate([
             'message' => 'required|string|max:10000',
@@ -251,9 +239,7 @@ class AgentController extends Controller
 
     public function newConversation(Request $request, Agent $agent): RedirectResponse
     {
-        if (! $agent->isVisibleTo($request->user())) {
-            abort(403);
-        }
+        $this->authorize('view', $agent);
 
         // Delete existing conversation for this agent
         Conversation::where('user_id', $request->user()->id)

@@ -4,6 +4,7 @@ import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
+import { Toaster } from 'vue-sonner';
 import { initializeTheme } from './composables/useAppearance';
 import { createI18nInstance } from './i18n';
 
@@ -20,7 +21,7 @@ createInertiaApp({
         const locale = (props.initialPage.props.locale as string) || 'en';
         const i18n = createI18nInstance(locale);
 
-        createApp({ render: () => h(App, props) })
+        createApp({ render: () => h('div', [h(App, props), h(Toaster, { richColors: true, position: 'top-right' })]) })
             .use(plugin)
             .use(i18n)
             .mount(el);

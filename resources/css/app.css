@@ -171,3 +171,13 @@
         @apply bg-background text-foreground;
     }
 }
+
+/* Impersonation: push sidebar and content below the fixed banner */
+.is-impersonating [data-slot="sidebar"] > .fixed {
+    top: 2.5rem !important;
+    height: calc(100svh - 2.5rem) !important;
+}
+
+.is-impersonating [data-slot="sidebar-inset"] {
+    margin-top: 2.5rem;
+}

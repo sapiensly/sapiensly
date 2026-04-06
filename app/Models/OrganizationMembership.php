@@ -47,8 +47,8 @@ class OrganizationMembership extends Model
         return $this->status === MembershipStatus::Active;
     }
 
-    public function isAdmin(): bool
+    public function isOwner(): bool
     {
-        return $this->role === MembershipRole::Admin;
+        return $this->role === MembershipRole::Owner;
     }
 }

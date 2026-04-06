@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AdminDashboardController from '@/actions/App/Http/Controllers/Admin/AdminDashboardController';
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
@@ -19,6 +20,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { usePermissions } from '@/composables/usePermissions';
 import { urlIsActive } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
@@ -32,6 +34,7 @@ import {
     Layers,
     LayoutGrid,
     MessageSquare,
+    Shield,
     Users,
     Wrench,
 } from 'lucide-vue-next';
@@ -41,6 +44,7 @@ import AppLogo from './AppLogo.vue';
 
 const { t } = useI18n();
 const page = usePage();
+const { isSysAdmin } = usePermissions();
 
 const mainNavItems = computed<NavItem[]>(() => [
     {
@@ -138,6 +142,16 @@ const footerNavItems = computed<NavItem[]>(() => [
         </SidebarContent>
 
         <SidebarFooter>
+            <SidebarMenu v-if="isSysAdmin()" class="px-2">
+                <SidebarMenuItem>
+                    <SidebarMenuButton as-child tooltip="Admin Panel" class="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground">
+                        <Link :href="AdminDashboardController()">
+                            <Shield />
+                            <span>Admin Panel</span>
+                        </Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            </SidebarMenu>
             <NavFooter :items="footerNavItems" />
             <NavUser />
         </SidebarFooter>
