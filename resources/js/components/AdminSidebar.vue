@@ -2,6 +2,9 @@
 import * as AccessSettingsController from '@/actions/App/Http/Controllers/Admin/AccessSettingsController';
 import AdminDashboardController from '@/actions/App/Http/Controllers/Admin/AdminDashboardController';
 import * as AdminUserController from '@/actions/App/Http/Controllers/Admin/AdminUserController';
+import * as GlobalAiController from '@/actions/App/Http/Controllers/Admin/GlobalAiController';
+import * as GlobalCloudController from '@/actions/App/Http/Controllers/Admin/GlobalCloudController';
+import * as StackController from '@/actions/App/Http/Controllers/StackController';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -14,15 +17,23 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { urlIsActive } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
-import { Link, usePage } from '@inertiajs/vue3';
-import { ArrowLeft, LayoutGrid, Shield, Users } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import {
+    ArrowLeft,
+    BrainCircuit,
+    Cloud,
+    Layers,
+    LayoutGrid,
+    Shield,
+    Users,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppLogo from './AppLogo.vue';
 
-const page = usePage();
+const { t } = useI18n();
 
 const adminNavItems = computed<NavItem[]>(() => [
     {
@@ -39,6 +50,21 @@ const adminNavItems = computed<NavItem[]>(() => [
         title: 'Access Settings',
         href: AccessSettingsController.index(),
         icon: Shield,
+    },
+    {
+        title: t('admin.global_ai.title'),
+        href: GlobalAiController.index(),
+        icon: BrainCircuit,
+    },
+    {
+        title: t('admin.global_cloud.title'),
+        href: GlobalCloudController.index(),
+        icon: Cloud,
+    },
+    {
+        title: 'Stack',
+        href: StackController.index(),
+        icon: Layers,
     },
 ]);
 </script>

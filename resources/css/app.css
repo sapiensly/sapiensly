@@ -181,3 +181,8 @@
 .is-impersonating [data-slot="sidebar-inset"] {
     margin-top: 2.5rem;
 }
+
+/* Vue Flow background in dark mode */
+.dark .vue-flow__background.vue-flow__container {
+    background-color: #2a2a2a;
+}

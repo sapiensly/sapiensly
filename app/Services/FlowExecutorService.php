@@ -75,6 +75,7 @@ class FlowExecutorService
             'condition' => $this->processConditionInput($flow, $flowState, $currentNode, $userInput),
             'agent_handoff' => $this->processAgentHandoff($flowState, $currentNode),
             'message' => $this->processMessageNode($flow, $flowState, $currentNode),
+            'connector' => $this->processConnectorNode($flow, $flowState, $currentNode),
             'end' => $this->endFlow($flowState, $currentNode['data']['action'] ?? 'resume_conversation'),
             default => $this->endFlow($flowState, 'resume_conversation'),
         };
@@ -111,6 +112,7 @@ class FlowExecutorService
                 $flowState
             ),
             'message' => $this->processMessageNode($flow, $flowState, $node),
+            'connector' => $this->processConnectorNode($flow, $flowState, $node),
             'agent_handoff' => $this->processAgentHandoff($flowState, $node),
             'end' => $this->endFlow($flowState, $node['data']['action'] ?? 'resume_conversation'),
             'condition' => new FlowAction(
@@ -243,6 +245,24 @@ class FlowExecutorService
             ],
             $flowState
         );
+    }
+
+    private function processConnectorNode(Flow $flow, array $flowState, array $node): FlowAction
+    {
+        $targetNodeId = $node['data']['target_node_id'] ?? '__start__';
+
+        // If target is __start__, go to the start node
+        if ($targetNodeId === '__start__') {
+            $startNode = $flow->getStartNode();
+            if ($startNode) {
+                return $this->processStartNode($flow, $flowState, $startNode);
+            }
+
+            return $this->endFlow($flowState, 'resume_conversation');
+        }
+
+        // Otherwise, go to the specified node (menu, etc.)
+        return $this->advanceToNode($flow, $flowState, $targetNodeId);
     }
 
     private function endFlow(array $flowState, string $action): FlowAction

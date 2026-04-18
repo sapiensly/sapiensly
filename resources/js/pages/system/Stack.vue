@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
+import AdminDashboardController from '@/actions/App/Http/Controllers/Admin/AdminDashboardController';
+import AdminLayout from '@/layouts/AdminLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/vue3';
 import { Activity, Radio, Server } from 'lucide-vue-next';
@@ -35,8 +36,8 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.system'), href: '#' },
-    { title: t('system.stack.title'), href: '/system/stack' },
+    { title: 'Admin', href: AdminDashboardController().url },
+    { title: t('system.stack.title'), href: '/admin/system/stack' },
 ]);
 
 const stackItems = computed(() => [
@@ -121,7 +122,7 @@ const statusLabel = (status: string) => {
 <template>
     <Head :title="t('system.stack.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
+    <AdminLayout :breadcrumbs="breadcrumbs">
         <div
             class="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4"
         >
@@ -202,5 +203,5 @@ const statusLabel = (status: string) => {
                 </div>
             </div>
         </div>
-    </AppLayout>
+    </AdminLayout>
 </template>

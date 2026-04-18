@@ -7,17 +7,16 @@ use App\Enums\KnowledgeBaseStatus;
 use App\Jobs\ProcessKnowledgeBaseDocument;
 use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseDocument;
+use App\Services\CloudProviderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class KnowledgeBaseDocumentController extends Controller
 {
-    /**
-     * The disk to use for document storage.
-     */
-    protected string $disk = 'documents';
+    public function __construct(
+        private CloudProviderService $cloudProviderService,
+    ) {}
 
     /**
      * Store a newly created document.
@@ -57,8 +56,9 @@ class KnowledgeBaseDocumentController extends Controller
         $storagePath = "{$userId}/knowledge-bases/{$knowledgeBase->id}";
         $fullPath = "{$storagePath}/{$filename}";
 
-        // Store file to S3 (documents disk)
-        Storage::disk($this->disk)->put($fullPath, file_get_contents($file->getRealPath()));
+        // Store file to the resolved tenant storage disk
+        $disk = $this->cloudProviderService->diskForOrganizationOrFallback($request->user()->organization_id);
+        $disk->put($fullPath, file_get_contents($file->getRealPath()));
 
         // Create document record
         $document = $knowledgeBase->documents()->create([
@@ -111,9 +111,14 @@ class KnowledgeBaseDocumentController extends Controller
             abort(404);
         }
 
-        // Delete file from S3 if exists
-        if ($document->file_path && Storage::disk($this->disk)->exists($document->file_path)) {
-            Storage::disk($this->disk)->delete($document->file_path);
+        // Delete file from the resolved tenant storage disk if it exists
+        if ($document->file_path) {
+            $disk = $this->cloudProviderService->diskForOrganizationOrFallback(
+                $knowledgeBase->organization_id,
+            );
+            if ($disk->exists($document->file_path)) {
+                $disk->delete($document->file_path);
+            }
         }
 
         // Delete document (chunks will cascade delete)

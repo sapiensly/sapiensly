@@ -4,6 +4,7 @@ export type FlowNodeType =
     | 'condition'
     | 'agent_handoff'
     | 'message'
+    | 'connector'
     | 'end';
 
 export interface FlowDefinition {
@@ -22,6 +23,7 @@ export interface FlowNodeData {
         | ConditionNodeConfig
         | AgentHandoffNodeConfig
         | MessageNodeConfig
+        | ConnectorNodeConfig
         | EndNodeConfig;
 }
 
@@ -60,14 +62,31 @@ export interface ConditionRule {
     label?: string;
 }
 
+export interface AgentLayerConfig {
+    enabled: boolean;
+    agent_id: string | null;
+    agent_name?: string | null;
+}
+
 export interface AgentHandoffNodeConfig {
     target_agent: 'knowledge' | 'action' | 'triage_llm';
     context?: string;
     message?: string;
+    layers?: {
+        triage: AgentLayerConfig;
+        knowledge: AgentLayerConfig;
+        tools: AgentLayerConfig;
+    };
 }
 
 export interface MessageNodeConfig {
     message: string;
+}
+
+export interface ConnectorNodeConfig {
+    /** '__start__' to go to flow start, or a node ID of a menu node */
+    target_node_id: string;
+    target_label?: string;
 }
 
 export interface EndNodeConfig {

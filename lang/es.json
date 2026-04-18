@@ -53,7 +53,7 @@
     "Please select a Triage agent.": "Por favor, selecciona un agente de Clasificación.",
     "Please select a Knowledge agent.": "Por favor, selecciona un agente de Conocimiento.",
     "Please select an Action agent.": "Por favor, selecciona un agente de Acción.",
-    "Please select an agent or agent team.": "Por favor, selecciona un agente o equipo de agentes.",
+    "Please select an agent or agent team.": "Por favor, selecciona un agente o Multi-Agente.",
     "Color must be a valid hex code (e.g., #3B82F6).": "El color debe ser un código hexadecimal válido (ej., #3B82F6).",
     "The document must not be larger than 10MB.": "El documento no debe ser mayor a 10MB.",
     "The document must be a PDF, TXT, DOCX, DOC, MD, CSV, or JSON file.": "El documento debe ser un archivo PDF, TXT, DOCX, DOC, MD, CSV o JSON.",

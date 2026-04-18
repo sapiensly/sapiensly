@@ -269,8 +269,8 @@ const formatDate = (date: string) => {
                 <!-- Target Info -->
                 <div class="mb-8 space-y-6">
                     <HeadingSmall
-                        title="Agent or Agents Team"
-                        description="The agent or team powering this chatbot"
+                        title="Agent or Multi-Agent"
+                        description="The agent or Multi-Agent powering this chatbot"
                     />
 
                     <Card>
@@ -291,7 +291,7 @@ const formatDate = (date: string) => {
                                         {{
                                             chatbot.agent
                                                 ? `${chatbot.agent.type} agent`
-                                                : 'Agents Team'
+                                                : 'Multi-Agent'
                                         }}
                                     </CardDescription>
                                 </div>

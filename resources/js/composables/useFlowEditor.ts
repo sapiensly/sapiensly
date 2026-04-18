@@ -60,7 +60,16 @@ export function useFlowEditor(initialDefinition?: FlowDefinition) {
                     rules: [{ id: 'match_0', pattern: '', label: '' }],
                 };
             case 'agent_handoff':
-                return { target_agent: 'knowledge' };
+                return {
+                    target_agent: 'triage_llm',
+                    layers: {
+                        triage: { enabled: true, agent_id: null },
+                        knowledge: { enabled: false, agent_id: null },
+                        tools: { enabled: false, agent_id: null },
+                    },
+                };
+            case 'connector':
+                return { target_node_id: '__start__', target_label: '' };
             case 'message':
                 return { message: '' };
             case 'end':

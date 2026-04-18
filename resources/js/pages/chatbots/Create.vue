@@ -201,11 +201,11 @@ const submit = () => {
                                 v-if="targetType === 'team'"
                                 class="grid gap-2"
                             >
-                                <Label>Select Agents Team</Label>
+                                <Label>Select Multi-Agent</Label>
                                 <Select v-model="form.agent_team_id">
                                     <SelectTrigger>
                                         <SelectValue
-                                            placeholder="Choose an agent team"
+                                            placeholder="Choose a Multi-Agent"
                                         />
                                     </SelectTrigger>
                                     <SelectContent>

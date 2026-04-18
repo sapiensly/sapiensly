@@ -9,6 +9,7 @@ use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseChunk;
 use App\Services\ChunkingService;
+use App\Services\CloudProviderService;
 use App\Services\DocumentParserService;
 use App\Services\DocumentService;
 use App\Services\EmbeddingService;
@@ -16,7 +17,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 class ProcessDocumentForKnowledgeBase implements ShouldQueue
 {
@@ -49,6 +49,7 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
         DocumentParserService $parser,
         ChunkingService $chunker,
         DocumentService $documentService,
+        CloudProviderService $cloudProviderService,
     ): void {
         $document = $this->document;
         $knowledgeBase = $this->knowledgeBase;
@@ -68,9 +69,9 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
                 KnowledgeBaseStatus::Processing->value,
             );
 
-            // Parse document content from S3
+            // Parse document content from the resolved tenant storage disk
             Log::info("Parsing document: {$document->id}");
-            $content = $this->parseDocument($document, $parser);
+            $content = $this->parseDocument($document, $parser, $cloudProviderService);
 
             if (empty(trim($content))) {
                 throw new \RuntimeException('Document content is empty');
@@ -171,15 +172,18 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
     }
 
     /**
-     * Parse document content from S3 storage.
+     * Parse document content from the storage disk resolved for the document's tenant.
      */
-    private function parseDocument(Document $document, DocumentParserService $parser): string
-    {
+    private function parseDocument(
+        Document $document,
+        DocumentParserService $parser,
+        CloudProviderService $cloudProviderService,
+    ): string {
         if (! $document->file_path) {
             throw new \RuntimeException('Document has no file path');
         }
 
-        $storage = Storage::disk('documents');
+        $storage = $cloudProviderService->diskForOrganizationOrFallback($document->organization_id);
 
         if (! $storage->exists($document->file_path)) {
             throw new \RuntimeException("Document file not found: {$document->file_path}");

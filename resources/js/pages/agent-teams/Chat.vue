@@ -31,7 +31,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Agent Teams', href: AgentTeamController.index().url },
+    { title: 'Multi-Agents', href: AgentTeamController.index().url },
     {
         title: props.team.name,
         href: AgentTeamController.show({ agent_team: props.team.id }).url,

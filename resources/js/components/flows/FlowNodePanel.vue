@@ -9,11 +9,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import type {
     AgentHandoffNodeConfig,
+    AgentLayerConfig,
     ConditionNodeConfig,
     ConditionRule,
+    ConnectorNodeConfig,
     EndNodeConfig,
     FlowNodeType,
     MenuNodeConfig,
@@ -21,16 +25,60 @@ import type {
     MessageNodeConfig,
     StartNodeConfig,
 } from '@/types/flows';
+import AgentCreateModal from '@/components/flows/AgentCreateModal.vue';
 import type { Node } from '@vue-flow/core';
-import { Plus, Trash2, X } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { AlertTriangle, Plus, Trash2, X } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const props = defineProps<{
-    node: Node;
-}>();
+interface AvailableModel {
+    value: string;
+    label: string;
+    provider: string;
+}
+
+interface AgentRef {
+    id: string;
+    name: string;
+    model: string;
+}
+
+interface AvailableAgents {
+    triage: AgentRef[];
+    knowledge: AgentRef[];
+    action: AgentRef[];
+}
+
+interface KBRef {
+    id: string;
+    name: string;
+}
+
+interface ToolRef {
+    id: string;
+    name: string;
+    type: string;
+}
+
+const props = withDefaults(
+    defineProps<{
+        node: Node;
+        allNodes?: Node[];
+        availableModels?: AvailableModel[];
+        availableAgents?: AvailableAgents;
+        knowledgeBases?: KBRef[];
+        tools?: ToolRef[];
+    }>(),
+    {
+        allNodes: () => [],
+        availableModels: () => [],
+        availableAgents: () => ({ triage: [], knowledge: [], action: [] }),
+        knowledgeBases: () => [],
+        tools: () => [],
+    },
+);
 
 const emit = defineEmits<{
     close: [];
@@ -45,7 +93,35 @@ const menuData = computed(() => props.node.data as MenuNodeConfig);
 const conditionData = computed(() => props.node.data as ConditionNodeConfig);
 const agentData = computed(() => props.node.data as AgentHandoffNodeConfig);
 const messageData = computed(() => props.node.data as MessageNodeConfig);
+const connectorData = computed(() => props.node.data as ConnectorNodeConfig);
 const endData = computed(() => props.node.data as EndNodeConfig);
+
+// Connector: list of targets (start + all menu nodes)
+const connectorTargets = computed(() => {
+    const targets: { id: string; label: string }[] = [
+        { id: '__start__', label: t('flows.panel.connector_to_start') },
+    ];
+
+    for (const n of props.allNodes) {
+        if (n.type === 'menu' && n.id !== props.node.id) {
+            const menuMsg = (n.data as MenuNodeConfig).message;
+            const label = menuMsg
+                ? menuMsg.substring(0, 40) + (menuMsg.length > 40 ? '...' : '')
+                : `Menu (${n.id})`;
+            targets.push({ id: n.id, label });
+        }
+    }
+
+    return targets;
+});
+
+function selectConnectorTarget(targetId: string) {
+    const target = connectorTargets.value.find((t) => t.id === targetId);
+    update({
+        target_node_id: targetId,
+        target_label: target?.label ?? '',
+    });
+}
 
 const update = (data: Record<string, unknown>) => {
     emit('updateData', props.node.id, data);
@@ -93,6 +169,70 @@ const updateConditionRule = (index: number, field: string, value: string) => {
     rules[index] = { ...rules[index], [field]: value };
     update({ rules });
 };
+
+// --- AI Agents (3-layer team) ---
+
+const agentLayers = computed(() => {
+    const layers = (props.node.data as AgentHandoffNodeConfig).layers;
+    return {
+        triage: layers?.triage ?? { enabled: true, agent_id: null },
+        knowledge: layers?.knowledge ?? { enabled: false, agent_id: null },
+        tools: layers?.tools ?? { enabled: false, agent_id: null },
+    };
+});
+
+const triageMissing = computed(
+    () => agentLayers.value.triage.enabled && !agentLayers.value.triage.agent_id,
+);
+
+function updateLayer(
+    layer: 'triage' | 'knowledge' | 'tools',
+    patch: Partial<AgentLayerConfig>,
+) {
+    const layers = {
+        triage: { ...agentLayers.value.triage },
+        knowledge: { ...agentLayers.value.knowledge },
+        tools: { ...agentLayers.value.tools },
+    };
+    layers[layer] = { ...layers[layer], ...patch };
+    update({ layers });
+}
+
+// Agent type mapping per layer
+const layerAgentType: Record<string, 'triage' | 'knowledge' | 'action'> = {
+    triage: 'triage',
+    knowledge: 'knowledge',
+    tools: 'action',
+};
+
+function agentsForLayer(layer: 'triage' | 'knowledge' | 'tools') {
+    return props.availableAgents[layerAgentType[layer]] ?? [];
+}
+
+// Create agent modal state
+const createModalOpen = ref(false);
+const createModalLayer = ref<'triage' | 'knowledge' | 'tools'>('triage');
+
+function openCreateModal(layer: 'triage' | 'knowledge' | 'tools') {
+    createModalLayer.value = layer;
+    createModalOpen.value = true;
+}
+
+function selectAgent(layer: 'triage' | 'knowledge' | 'tools', agentId: string) {
+    const agents = agentsForLayer(layer);
+    const agent = agents.find((a) => a.id === agentId);
+    updateLayer(layer, {
+        agent_id: agentId || null,
+        agent_name: agent?.name ?? null,
+    });
+}
+
+function onAgentCreated(agentId: string, agentName: string) {
+    updateLayer(createModalLayer.value, {
+        agent_id: agentId,
+        agent_name: agentName,
+    });
+}
 </script>
 
 <template>
@@ -300,52 +440,165 @@ const updateConditionRule = (index: number, field: string, value: string) => {
                 </div>
             </template>
 
-            <!-- Agent Handoff Node -->
+            <!-- AI Agents Node (3-layer team: Triage / Knowledge / Tools) -->
             <template v-if="nodeType === 'agent_handoff'">
-                <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.target_agent') }}</Label>
-                    <Select
-                        :model-value="agentData.target_agent"
-                        @update:model-value="update({ target_agent: $event })"
+                <p class="text-xs text-muted-foreground">
+                    {{ t('flows.panel.agents_team_description') }}
+                </p>
+
+                <Tabs default-value="triage" class="w-full">
+                    <TabsList class="grid w-full grid-cols-3">
+                        <TabsTrigger value="triage" class="text-xs gap-1">
+                            <AlertTriangle
+                                v-if="triageMissing"
+                                class="h-3 w-3 text-amber-500"
+                            />
+                            {{ t('flows.panel.layer_triage') }}
+                        </TabsTrigger>
+                        <TabsTrigger value="knowledge" class="text-xs">
+                            {{ t('flows.panel.layer_knowledge') }}
+                        </TabsTrigger>
+                        <TabsTrigger value="tools" class="text-xs">
+                            {{ t('flows.panel.layer_tools') }}
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <!-- Triage: always enabled, required -->
+                    <TabsContent value="triage" class="space-y-3 pt-3">
+                        <div
+                            v-if="triageMissing"
+                            class="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950"
+                        >
+                            <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                            <p class="text-xs text-amber-800 dark:text-amber-200">
+                                {{ t('flows.panel.triage_required_warning') }}
+                            </p>
+                        </div>
+
+                        <div class="grid gap-2">
+                            <Label class="text-xs">
+                                {{ t('flows.panel.layer_select_agent') }}
+                            </Label>
+                            <Select
+                                :model-value="agentLayers.triage.agent_id ?? ''"
+                                @update:model-value="selectAgent('triage', $event as string)"
+                            >
+                                <SelectTrigger class="h-8 text-xs">
+                                    <SelectValue :placeholder="t('flows.panel.layer_select_agent_placeholder')" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="a in agentsForLayer('triage')"
+                                        :key="a.id"
+                                        :value="a.id"
+                                    >
+                                        {{ a.name }}
+                                        <span class="ml-1 text-muted-foreground">({{ a.model }})</span>
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <div class="h-px flex-1 bg-border" />
+                            <span class="text-[10px] text-muted-foreground uppercase">
+                                {{ t('flows.panel.layer_or') }}
+                            </span>
+                            <div class="h-px flex-1 bg-border" />
+                        </div>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="w-full gap-1.5 text-xs"
+                            @click="openCreateModal('triage')"
+                        >
+                            <Plus class="h-3.5 w-3.5" />
+                            {{ t('flows.panel.layer_create_agent') }}
+                        </Button>
+                    </TabsContent>
+
+                    <!-- Knowledge & Tools: optional, toggle -->
+                    <TabsContent
+                        v-for="layer in (['knowledge', 'tools'] as const)"
+                        :key="layer"
+                        :value="layer"
+                        class="space-y-3 pt-3"
                     >
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="knowledge">{{
-                                t('flows.nodes.agent_knowledge')
-                            }}</SelectItem>
-                            <SelectItem value="action">{{
-                                t('flows.nodes.agent_action')
-                            }}</SelectItem>
-                            <SelectItem value="triage_llm">{{
-                                t('flows.nodes.agent_triage_llm')
-                            }}</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
+                        <div class="flex items-center justify-between">
+                            <Label class="text-xs">
+                                {{ t('flows.panel.layer_enabled') }}
+                            </Label>
+                            <Switch
+                                :model-value="agentLayers[layer].enabled"
+                                @update:model-value="
+                                    updateLayer(layer, { enabled: $event as boolean })
+                                "
+                            />
+                        </div>
 
-                <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.context') }}</Label>
-                    <Textarea
-                        :model-value="agentData.context || ''"
-                        :placeholder="t('flows.panel.context_placeholder')"
-                        rows="3"
-                        @update:model-value="update({ context: $event })"
-                    />
-                </div>
+                        <template v-if="agentLayers[layer].enabled">
+                            <div class="grid gap-2">
+                                <Label class="text-xs">
+                                    {{ t('flows.panel.layer_select_agent') }}
+                                </Label>
+                                <Select
+                                    :model-value="agentLayers[layer].agent_id ?? ''"
+                                    @update:model-value="selectAgent(layer, $event as string)"
+                                >
+                                    <SelectTrigger class="h-8 text-xs">
+                                        <SelectValue :placeholder="t('flows.panel.layer_select_agent_placeholder')" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem
+                                            v-for="a in agentsForLayer(layer)"
+                                            :key="a.id"
+                                            :value="a.id"
+                                        >
+                                            {{ a.name }}
+                                            <span class="ml-1 text-muted-foreground">({{ a.model }})</span>
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.handoff_message') }}</Label>
-                    <Textarea
-                        :model-value="agentData.message || ''"
-                        :placeholder="
-                            t('flows.panel.handoff_message_placeholder')
-                        "
-                        rows="2"
-                        @update:model-value="update({ message: $event })"
-                    />
-                </div>
+                            <div class="flex items-center gap-2">
+                                <div class="h-px flex-1 bg-border" />
+                                <span class="text-[10px] text-muted-foreground uppercase">
+                                    {{ t('flows.panel.layer_or') }}
+                                </span>
+                                <div class="h-px flex-1 bg-border" />
+                            </div>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="w-full gap-1.5 text-xs"
+                                @click="openCreateModal(layer)"
+                            >
+                                <Plus class="h-3.5 w-3.5" />
+                                {{ t('flows.panel.layer_create_agent') }}
+                            </Button>
+                        </template>
+
+                        <p
+                            v-else
+                            class="rounded-md bg-muted/50 px-3 py-2 text-xs italic text-muted-foreground"
+                        >
+                            {{ t('flows.panel.layer_disabled_hint') }}
+                        </p>
+                    </TabsContent>
+                </Tabs>
+
+                <AgentCreateModal
+                    :open="createModalOpen"
+                    :type="layerAgentType[createModalLayer]"
+                    :available-models="availableModels"
+                    :knowledge-bases="knowledgeBases"
+                    :tools="tools"
+                    @update:open="createModalOpen = $event"
+                    @created="onAgentCreated"
+                />
             </template>
 
             <!-- Message Node -->
@@ -359,6 +612,33 @@ const updateConditionRule = (index: number, field: string, value: string) => {
                         @update:model-value="update({ message: $event })"
                     />
                 </div>
+            </template>
+
+            <!-- Connector Node -->
+            <template v-if="nodeType === 'connector'">
+                <div class="grid gap-2">
+                    <Label>{{ t('flows.panel.connector_target') }}</Label>
+                    <Select
+                        :model-value="connectorData.target_node_id"
+                        @update:model-value="selectConnectorTarget($event as string)"
+                    >
+                        <SelectTrigger>
+                            <SelectValue :placeholder="t('flows.panel.connector_target_placeholder')" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                v-for="target in connectorTargets"
+                                :key="target.id"
+                                :value="target.id"
+                            >
+                                {{ target.label }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    {{ t('flows.panel.connector_description') }}
+                </p>
             </template>
 
             <!-- End Node -->

@@ -82,7 +82,7 @@ class ValidFlowDefinition implements ValidationRule
         }
 
         // Validate valid node types
-        $validTypes = ['start', 'menu', 'condition', 'agent_handoff', 'message', 'end'];
+        $validTypes = ['start', 'menu', 'condition', 'agent_handoff', 'message', 'connector', 'end'];
         foreach ($nodes as $node) {
             if (! in_array($node['type'], $validTypes)) {
                 $fail("Node {$node['id']} has invalid type {$node['type']}.");

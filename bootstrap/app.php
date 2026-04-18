@@ -3,6 +3,8 @@
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\InjectAiProviderConfig;
+use App\Http\Middleware\RejectBlockedUsers;
+use App\Http\Middleware\ResolveTenantConnection;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\SetPermissionsTeam;
 use Illuminate\Foundation\Application;
@@ -28,12 +30,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->web(append: [
+            RejectBlockedUsers::class,
             HandleAppearance::class,
             SetLocale::class,
             SetPermissionsTeam::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             InjectAiProviderConfig::class,
+            ResolveTenantConnection::class,
         ]);
 
         $middleware->alias([

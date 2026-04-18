@@ -29,6 +29,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'organization_id',
         'avatar',
         'locale',
+        'blocked_at',
     ];
 
     /**
@@ -54,6 +55,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'blocked_at' => 'datetime',
         ];
     }
 
@@ -105,6 +107,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function memberships(): HasMany
     {
         return $this->hasMany(OrganizationMembership::class);
+    }
+
+    public function isBlocked(): bool
+    {
+        return $this->blocked_at !== null;
     }
 
     public function hasOrganization(): bool

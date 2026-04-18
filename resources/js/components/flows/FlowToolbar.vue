@@ -3,17 +3,25 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Link } from '@inertiajs/vue3';
-import { ArrowLeft, Power, PowerOff, Save } from 'lucide-vue-next';
+import { ArrowLeft, Check, Cloud, CloudOff, Loader2, Power, PowerOff, Save } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const props = defineProps<{
-    backUrl: string;
-    name: string;
-    status: 'draft' | 'active' | 'inactive';
-    processing: boolean;
-}>();
+const props = withDefaults(
+    defineProps<{
+        backUrl: string;
+        name: string;
+        status: 'draft' | 'active' | 'inactive';
+        processing: boolean;
+        autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error';
+        isCreating?: boolean;
+    }>(),
+    {
+        autoSaveStatus: 'idle',
+        isCreating: false,
+    },
+);
 
 const emit = defineEmits<{
     'update:name': [value: string];
@@ -49,6 +57,26 @@ const statusVariant = {
 
         <div class="flex-1" />
 
+        <!-- Auto-save indicator (edit mode only) -->
+        <div v-if="!isCreating" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <template v-if="autoSaveStatus === 'saving'">
+                <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                <span>{{ t('flows.toolbar.saving') }}</span>
+            </template>
+            <template v-else-if="autoSaveStatus === 'saved'">
+                <Cloud class="h-3.5 w-3.5 text-green-500" />
+                <span class="text-green-600 dark:text-green-400">{{ t('flows.toolbar.saved') }}</span>
+            </template>
+            <template v-else-if="autoSaveStatus === 'error'">
+                <CloudOff class="h-3.5 w-3.5 text-destructive" />
+                <span class="text-destructive">{{ t('flows.toolbar.save_error') }}</span>
+            </template>
+            <template v-else>
+                <Check class="h-3.5 w-3.5" />
+                <span>{{ t('flows.toolbar.up_to_date') }}</span>
+            </template>
+        </div>
+
         <Button
             variant="outline"
             size="sm"
@@ -67,7 +95,8 @@ const statusVariant = {
             }}
         </Button>
 
-        <Button size="sm" :disabled="props.processing" @click="emit('save')">
+        <!-- Save button: only in create mode -->
+        <Button v-if="isCreating" size="sm" :disabled="props.processing" @click="emit('save')">
             <Save class="mr-1.5 h-3.5 w-3.5" />
             {{ t('flows.toolbar.save') }}
         </Button>

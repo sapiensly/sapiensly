@@ -11,7 +11,7 @@
     "require": {
         "php": "^8.4",
         "inertiajs/inertia-laravel": "^2.0",
-        "laravel/ai": "^0.3.2",
+        "laravel/ai": "^0.5.1",
         "laravel/fortify": "^1.36",
         "laravel/framework": "^13.0",
         "laravel/horizon": "^5.40",
@@ -30,6 +30,7 @@
         "symfony/mailer": "^8.0"
     },
     "require-dev": {
+        "doctrine/dbal": "^4.4",
         "fakerphp/faker": "^1.23",
         "laravel/boost": "^2.3",
         "laravel/pail": "^1.2.2",

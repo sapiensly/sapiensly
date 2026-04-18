@@ -8,6 +8,7 @@ use App\Services\AiProviderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -53,45 +54,129 @@ class AiProviderController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:50',
-            'driver' => 'required|string|max:50',
-            'display_name' => 'required|string|max:100',
-            'credentials' => 'required|array',
-            'credentials.api_key' => 'required|string',
-            'models' => 'nullable|array',
-            'models.*.id' => 'required|string',
-            'models.*.label' => 'required|string',
-            'models.*.capabilities' => 'required|array',
-            'is_default' => 'boolean',
-            'is_default_embeddings' => 'boolean',
-            'status' => 'string|in:active,inactive',
+            'llm.driver' => 'required|string|max:50',
+            'llm.model_id' => 'required|string|max:100',
+            'llm.credentials' => 'required|array',
+            'llm.credentials.api_key' => 'required|string',
+            'embeddings.driver' => 'required|string|max:50',
+            'embeddings.model_id' => 'required|string|max:100',
+            'embeddings.credentials' => 'required|array',
+            'embeddings.credentials.api_key' => 'required|string',
         ]);
+
+        $llm = $validated['llm'];
+        $embeddings = $validated['embeddings'];
+
+        $llmModel = $this->aiProviderService->findModelInCatalog($llm['driver'], $llm['model_id']);
+        $embeddingsModel = $this->aiProviderService->findModelInCatalog($embeddings['driver'], $embeddings['model_id']);
+
+        if ($llmModel === null || ! in_array('chat', $llmModel['capabilities'], true)) {
+            throw ValidationException::withMessages([
+                'llm.model_id' => __('Selected LLM model is not a valid chat model.'),
+            ]);
+        }
+        if ($embeddingsModel === null || ! in_array('embeddings', $embeddingsModel['capabilities'], true)) {
+            throw ValidationException::withMessages([
+                'embeddings.model_id' => __('Selected embeddings model is not a valid embeddings model.'),
+            ]);
+        }
 
         $user = $request->user();
+        $visibility = $user->organization_id ? Visibility::Organization : Visibility::Private;
 
-        // If setting as default, unset others in the same context
-        if ($validated['is_default'] ?? false) {
-            AiProvider::forAccountContext($user)->update(['is_default' => false]);
-        }
-        if ($validated['is_default_embeddings'] ?? false) {
-            AiProvider::forAccountContext($user)->update(['is_default_embeddings' => false]);
-        }
-
-        AiProvider::create([
-            'user_id' => $user->id,
-            'organization_id' => $user->organization_id,
-            'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
-            'name' => $validated['name'],
-            'driver' => $validated['driver'],
-            'display_name' => $validated['display_name'],
-            'credentials' => $validated['credentials'],
-            'models' => $validated['models'] ?? [],
-            'is_default' => $validated['is_default'] ?? false,
-            'is_default_embeddings' => $validated['is_default_embeddings'] ?? false,
-            'status' => $validated['status'] ?? 'active',
+        // Reset any existing defaults in the current account context
+        AiProvider::forAccountContext($user)->update([
+            'is_default' => false,
+            'is_default_embeddings' => false,
         ]);
 
+        $sameDriver = $llm['driver'] === $embeddings['driver'];
+
+        if ($sameDriver) {
+            // Single provider carries both the chat model and the embeddings model,
+            // and is marked as both defaults.
+            $provider = $this->upsertProviderForDriver($user, $visibility, $llm['driver'], $llm['credentials']);
+            $provider->update([
+                'models' => $this->mergeModels($llmModel, $embeddingsModel),
+                'is_default' => true,
+                'is_default_embeddings' => true,
+                'status' => 'active',
+            ]);
+        } else {
+            $llmProvider = $this->upsertProviderForDriver($user, $visibility, $llm['driver'], $llm['credentials']);
+            $llmProvider->update([
+                'models' => [$llmModel],
+                'is_default' => true,
+                'is_default_embeddings' => false,
+                'status' => 'active',
+            ]);
+
+            $embeddingsProvider = $this->upsertProviderForDriver($user, $visibility, $embeddings['driver'], $embeddings['credentials']);
+            $embeddingsProvider->update([
+                'models' => [$embeddingsModel],
+                'is_default' => false,
+                'is_default_embeddings' => true,
+                'status' => 'active',
+            ]);
+        }
+
         return to_route('system.ai-providers.index');
+    }
+
+    /**
+     * Find or create a provider row for the given driver in the user's account context,
+     * refreshing its credentials and display name. Other fields (models, defaults) are
+     * set by the caller.
+     */
+    private function upsertProviderForDriver(
+        $user,
+        Visibility $visibility,
+        string $driver,
+        array $credentials,
+    ): AiProvider {
+        $existing = AiProvider::forAccountContext($user)
+            ->where('name', $driver)
+            ->first();
+
+        if ($existing) {
+            $existing->update([
+                'driver' => $driver,
+                'display_name' => AiProviderService::DRIVER_LABELS[$driver] ?? $driver,
+                'credentials' => $credentials,
+            ]);
+
+            return $existing;
+        }
+
+        return AiProvider::create([
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+            'visibility' => $visibility,
+            'name' => $driver,
+            'driver' => $driver,
+            'display_name' => AiProviderService::DRIVER_LABELS[$driver] ?? $driver,
+            'credentials' => $credentials,
+            'models' => [],
+            'is_default' => false,
+            'is_default_embeddings' => false,
+            'status' => 'active',
+        ]);
+    }
+
+    /**
+     * Merge two model catalog entries, de-duplicated by id.
+     *
+     * @param  array{id: string, label: string, capabilities: array<int, string>}  $a
+     * @param  array{id: string, label: string, capabilities: array<int, string>}  $b
+     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
+     */
+    private function mergeModels(array $a, array $b): array
+    {
+        if ($a['id'] === $b['id']) {
+            return [$a];
+        }
+
+        return [$a, $b];
     }
 
     public function edit(Request $request, AiProvider $aiProvider): Response

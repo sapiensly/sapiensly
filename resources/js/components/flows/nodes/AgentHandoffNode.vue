@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AgentHandoffNodeConfig } from '@/types/flows';
 import { Handle, Position } from '@vue-flow/core';
-import { BookOpen, Brain, Wrench } from 'lucide-vue-next';
+import { AlertTriangle } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -12,54 +12,77 @@ const props = defineProps<{
     data: AgentHandoffNodeConfig;
 }>();
 
-const agentConfig = computed(() => {
-    const configs: Record<
-        string,
-        { icon: typeof BookOpen; color: string; bgColor: string }
-    > = {
-        knowledge: {
-            icon: BookOpen,
-            color: 'text-blue-700 dark:text-blue-300',
-            bgColor: 'border-blue-500 bg-blue-50 dark:bg-blue-950/40',
+interface LayerDisplay {
+    key: string;
+    label: string;
+    dotColor: string;
+    enabled: boolean;
+    agentName: string | null;
+}
+
+const layers = computed<LayerDisplay[]>(() => {
+    const l = props.data.layers;
+    return [
+        {
+            key: 'triage',
+            label: t('flows.panel.layer_triage'),
+            dotColor: 'bg-purple-500',
+            enabled: l?.triage?.enabled ?? true,
+            agentName: l?.triage?.agent_name ?? null,
         },
-        action: {
-            icon: Wrench,
-            color: 'text-orange-700 dark:text-orange-300',
-            bgColor: 'border-orange-500 bg-orange-50 dark:bg-orange-950/40',
+        {
+            key: 'knowledge',
+            label: t('flows.panel.layer_knowledge'),
+            dotColor: 'bg-blue-500',
+            enabled: l?.knowledge?.enabled ?? false,
+            agentName: l?.knowledge?.agent_name ?? null,
         },
-        triage_llm: {
-            icon: Brain,
-            color: 'text-purple-700 dark:text-purple-300',
-            bgColor: 'border-purple-500 bg-purple-50 dark:bg-purple-950/40',
+        {
+            key: 'tools',
+            label: t('flows.panel.layer_tools'),
+            dotColor: 'bg-orange-500',
+            enabled: l?.tools?.enabled ?? false,
+            agentName: l?.tools?.agent_name ?? null,
         },
-    };
-    return configs[props.data.target_agent] ?? configs.knowledge;
+    ];
 });
 
-const agentLabel = computed(() => {
-    const labels: Record<string, string> = {
-        knowledge: t('flows.nodes.agent_knowledge'),
-        action: t('flows.nodes.agent_action'),
-        triage_llm: t('flows.nodes.agent_triage_llm'),
-    };
-    return labels[props.data.target_agent] ?? props.data.target_agent;
-});
+const hasWarning = computed(() =>
+    layers.value.some((l) => l.enabled && !l.agentName),
+);
 </script>
 
 <template>
     <div
-        class="min-w-[180px] rounded-lg border-2 p-3 shadow-sm"
-        :class="agentConfig.bgColor"
+        class="min-w-[200px] rounded-lg border p-3 shadow-sm"
+        :class="hasWarning ? 'border-amber-500 bg-card' : 'border-border bg-card'"
     >
         <Handle type="target" :position="Position.Top" class="!bg-primary" />
 
-        <div class="mb-1 text-xs font-medium text-muted-foreground">
+        <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <AlertTriangle v-if="hasWarning" class="h-3.5 w-3.5 text-amber-500" />
             {{ t('flows.nodes.agent_handoff') }}
         </div>
 
-        <div class="flex items-center gap-2" :class="agentConfig.color">
-            <component :is="agentConfig.icon" class="h-4 w-4" />
-            <span class="text-sm font-medium">{{ agentLabel }}</span>
+        <div class="space-y-1.5">
+            <div
+                v-for="layer in layers"
+                :key="layer.key"
+                class="flex items-center gap-2 text-xs"
+                :class="layer.enabled ? '' : 'opacity-35'"
+            >
+                <span
+                    class="inline-block h-2 w-2 shrink-0 rounded-full"
+                    :class="layer.dotColor"
+                />
+                <span class="font-medium">{{ layer.label }}</span>
+                <span
+                    v-if="layer.enabled && layer.agentName"
+                    class="max-w-[120px] truncate text-muted-foreground"
+                >
+                    · {{ layer.agentName }}
+                </span>
+            </div>
         </div>
 
         <Handle type="source" :position="Position.Bottom" class="!bg-primary" />

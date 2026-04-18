@@ -4,8 +4,8 @@ namespace App\Services;
 
 use App\Enums\DocumentType;
 use App\Models\KnowledgeBaseDocument;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpWord\Element\Text;
 use PhpOffice\PhpWord\Element\TextRun;
 use PhpOffice\PhpWord\IOFactory;
@@ -13,10 +13,9 @@ use Smalot\PdfParser\Parser as PdfParser;
 
 class DocumentParserService
 {
-    /**
-     * The disk to use for document storage.
-     */
-    protected string $disk = 'documents';
+    public function __construct(
+        private CloudProviderService $cloudProviderService,
+    ) {}
 
     /**
      * Parse a KnowledgeBaseDocument and extract its text content.
@@ -40,8 +39,11 @@ class DocumentParserService
             throw new \RuntimeException('Document has no file path');
         }
 
-        // Get file content from S3 and save to temp file for parsing
-        $tempFile = $this->downloadToTemp($document->file_path, $type);
+        $organizationId = $document->knowledgeBase?->organization_id;
+        $storage = $this->cloudProviderService->diskForOrganizationOrFallback($organizationId);
+
+        // Get file content from the resolved disk and save to temp file for parsing
+        $tempFile = $this->downloadToTemp($storage, $document->file_path, $type);
 
         try {
             return $this->parseFile($tempFile, $type);
@@ -54,12 +56,10 @@ class DocumentParserService
     }
 
     /**
-     * Download file from storage to a temporary local file.
+     * Download file from the resolved storage disk to a temporary local file.
      */
-    protected function downloadToTemp(string $filePath, DocumentType $type): string
+    protected function downloadToTemp(Filesystem $storage, string $filePath, DocumentType $type): string
     {
-        $storage = Storage::disk($this->disk);
-
         if (! $storage->exists($filePath)) {
             throw new \RuntimeException("File not found in storage: {$filePath}");
         }

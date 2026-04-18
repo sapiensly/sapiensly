@@ -1,7 +1,8 @@
 <?php
 
 use App\Http\Controllers\AiProviderController;
-use App\Http\Controllers\StackController;
+use App\Http\Controllers\CloudProviderController;
+use App\Http\Controllers\IntegrationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware([
@@ -26,5 +27,20 @@ Route::middleware([
     Route::post('ai-providers/{ai_provider}/set-default-embeddings', [AiProviderController::class, 'setDefaultEmbeddings'])
         ->name('system.ai-providers.set-default-embeddings');
 
-    Route::get('stack', [StackController::class, 'index'])->name('system.stack');
+    Route::get('cloud-providers', [CloudProviderController::class, 'index'])
+        ->name('system.cloud-providers.index');
+    Route::post('cloud-providers/storage', [CloudProviderController::class, 'storeStorage'])
+        ->name('system.cloud-providers.storage.store');
+    Route::post('cloud-providers/database', [CloudProviderController::class, 'storeDatabase'])
+        ->name('system.cloud-providers.database.store');
+    Route::post('cloud-providers/storage/test-connection', [CloudProviderController::class, 'testStorage'])
+        ->name('system.cloud-providers.storage.test-connection');
+    Route::post('cloud-providers/database/test-connection', [CloudProviderController::class, 'testDatabase'])
+        ->name('system.cloud-providers.database.test-connection');
+    Route::delete('cloud-providers/{kind}', [CloudProviderController::class, 'destroy'])
+        ->whereIn('kind', ['storage', 'database'])
+        ->name('system.cloud-providers.destroy');
+
+    Route::get('integrations', [IntegrationController::class, 'index'])
+        ->name('system.integrations.index');
 });

@@ -3,6 +3,7 @@ import type { FlowNodeType } from '@/types/flows';
 import {
     ArrowRightLeft,
     CircleStop,
+    CornerDownLeft,
     GitBranch,
     ListOrdered,
     MessageSquare,
@@ -27,6 +28,7 @@ const items: PaletteItem[] = [
         icon: ArrowRightLeft,
     },
     { type: 'message', label: 'flows.nodes.message', icon: MessageSquare },
+    { type: 'connector', label: 'flows.nodes.connector', icon: CornerDownLeft },
     { type: 'end', label: 'flows.nodes.end', icon: CircleStop },
 ];
 

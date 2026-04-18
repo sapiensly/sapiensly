@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Enums\Visibility;
+use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -258,11 +260,143 @@ class AiProviderService
     }
 
     /**
-     * Get the model catalog for a given driver.
+     * Get the model catalog for a given driver, reading enabled rows from the
+     * database. Returns the same shape as the legacy MODEL_CATALOGS constant
+     * so call-sites can treat both transparently.
+     *
+     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
      */
     public function getModelCatalog(string $driver): array
     {
-        return self::MODEL_CATALOGS[$driver] ?? [];
+        $rows = AiCatalogModel::query()
+            ->enabled()
+            ->where('driver', $driver)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        return $this->groupCatalogRows($rows);
+    }
+
+    /**
+     * Build the full catalog across all drivers as [driver => models[]].
+     *
+     * @return array<string, array<int, array{id: string, label: string, capabilities: array<int, string>}>>
+     */
+    public function getFullCatalog(): array
+    {
+        $rows = AiCatalogModel::query()
+            ->enabled()
+            ->orderBy('driver')
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        $catalog = [];
+        foreach ($rows->groupBy('driver') as $driver => $driverRows) {
+            $catalog[$driver] = $this->groupCatalogRows($driverRows);
+        }
+
+        return $catalog;
+    }
+
+    /**
+     * Collapse multiple catalog rows (one per capability) into the legacy
+     * `[{id, label, capabilities: [...]}]` shape.
+     *
+     * @param  iterable<AiCatalogModel>  $rows
+     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
+     */
+    private function groupCatalogRows(iterable $rows): array
+    {
+        $byId = [];
+        foreach ($rows as $row) {
+            $key = $row->model_id;
+            if (! isset($byId[$key])) {
+                $byId[$key] = [
+                    'id' => $row->model_id,
+                    'label' => $row->label,
+                    'capabilities' => [],
+                ];
+            }
+            $byId[$key]['capabilities'][] = $row->capability;
+        }
+
+        return array_values($byId);
+    }
+
+    /**
+     * Find a model in a driver's catalog by id.
+     *
+     * @return array{id: string, label: string, capabilities: array<int, string>}|null
+     */
+    public function findModelInCatalog(string $driver, string $modelId): ?array
+    {
+        foreach ($this->getModelCatalog($driver) as $model) {
+            if ($model['id'] === $modelId) {
+                return $model;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Find or create a platform-wide (Global) provider for the given driver, refreshing
+     * its credentials. Other fields (models, defaults) are set by the caller.
+     */
+    public function upsertGlobalProviderForDriver(string $driver, array $credentials): AiProvider
+    {
+        $existing = AiProvider::query()
+            ->where('visibility', Visibility::Global)
+            ->where('name', $driver)
+            ->first();
+
+        if ($existing) {
+            $existing->update([
+                'driver' => $driver,
+                'display_name' => self::DRIVER_LABELS[$driver] ?? $driver,
+                'credentials' => $credentials,
+            ]);
+
+            return $existing;
+        }
+
+        return AiProvider::create([
+            'user_id' => null,
+            'organization_id' => null,
+            'visibility' => Visibility::Global,
+            'name' => $driver,
+            'driver' => $driver,
+            'display_name' => self::DRIVER_LABELS[$driver] ?? $driver,
+            'credentials' => $credentials,
+            'models' => [],
+            'is_default' => false,
+            'is_default_embeddings' => false,
+            'status' => 'active',
+        ]);
+    }
+
+    /**
+     * Get the global default LLM provider, if any.
+     */
+    public function getGlobalDefaultLlmProvider(): ?AiProvider
+    {
+        return AiProvider::query()
+            ->where('visibility', Visibility::Global)
+            ->where('is_default', true)
+            ->first();
+    }
+
+    /**
+     * Get the global default embeddings provider, if any.
+     */
+    public function getGlobalDefaultEmbeddingsProvider(): ?AiProvider
+    {
+        return AiProvider::query()
+            ->where('visibility', Visibility::Global)
+            ->where('is_default_embeddings', true)
+            ->first();
     }
 
     /**
@@ -270,12 +404,33 @@ class AiProviderService
      */
     public function getAvailableDrivers(): array
     {
+        $catalog = $this->getFullCatalog();
+
         return collect(self::DRIVER_LABELS)->map(fn (string $label, string $driver) => [
             'value' => $driver,
             'label' => $label,
             'credential_fields' => self::DRIVER_CREDENTIAL_FIELDS[$driver] ?? ['api_key'],
-            'models' => self::MODEL_CATALOGS[$driver] ?? [],
+            'models' => $catalog[$driver] ?? [],
         ])->values()->all();
+    }
+
+    /**
+     * Test a connection using raw driver + credentials without persisting a provider row.
+     * Convenience wrapper around testConnection() for admin setup flows.
+     *
+     * @return array{success: bool, message: string}
+     */
+    public function testConnectionForPayload(string $driver, array $credentials, ?string $modelId = null): array
+    {
+        $model = $modelId ? $this->findModelInCatalog($driver, $modelId) : null;
+
+        $unsaved = new AiProvider([
+            'driver' => $driver,
+            'credentials' => $credentials,
+            'models' => $model ? [$model] : [],
+        ]);
+
+        return $this->testConnection($unsaved);
     }
 
     /**
@@ -325,6 +480,18 @@ class AiProviderService
                 'cohere' => Http::withToken($apiKey)
                     ->timeout(10)
                     ->get('https://api.cohere.com/v2/models'),
+                'voyageai' => Http::withToken($apiKey)
+                    ->timeout(10)
+                    ->post('https://api.voyageai.com/v1/embeddings', [
+                        'model' => collect($provider->getEmbeddingModels())->first()['id'] ?? 'voyage-3-lite',
+                        'input' => ['ping'],
+                    ]),
+                'jina' => Http::withToken($apiKey)
+                    ->timeout(10)
+                    ->post('https://api.jina.ai/v1/embeddings', [
+                        'model' => collect($provider->getEmbeddingModels())->first()['id'] ?? 'jina-embeddings-v3',
+                        'input' => ['ping'],
+                    ]),
                 'ollama' => Http::timeout(10)
                     ->get(rtrim($credentials['url'] ?? 'http://localhost:11434', '/').'/api/tags'),
                 default => null,

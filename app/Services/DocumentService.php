@@ -10,15 +10,24 @@ use App\Models\Document;
 use App\Models\Folder;
 use App\Models\KnowledgeBase;
 use App\Models\User;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 
 class DocumentService
 {
+    public function __construct(
+        private CloudProviderService $cloudProviderService,
+    ) {}
+
     /**
-     * The disk to use for document storage.
+     * Resolve the storage disk for a given organization id, with fallback to
+     * the env-based 'documents' disk when neither a tenant nor a global
+     * cloud provider is configured.
      */
-    protected string $disk = 'documents';
+    private function disk(?string $organizationId): Filesystem
+    {
+        return $this->cloudProviderService->diskForOrganizationOrFallback($organizationId);
+    }
 
     /**
      * Upload a new document.
@@ -51,7 +60,7 @@ class DocumentService
 
         // Now store the file with the document ID in the path
         $storagePath = "{$user->id}/documents/{$document->id}/{$file->getClientOriginalName()}";
-        Storage::disk($this->disk)->put($storagePath, $file->get());
+        $this->disk($user->organization_id)->put($storagePath, $file->get());
 
         // Update the document with the file path
         $document->update(['file_path' => $storagePath]);
@@ -106,7 +115,7 @@ class DocumentService
             return null;
         }
 
-        $storage = Storage::disk($this->disk);
+        $storage = $this->disk($document->organization_id);
 
         if (! $storage->exists($document->file_path)) {
             return null;
@@ -165,7 +174,7 @@ class DocumentService
 
         // Delete file from storage
         if ($document->file_path) {
-            Storage::disk($this->disk)->delete($document->file_path);
+            $this->disk($document->organization_id)->delete($document->file_path);
         }
 
         // Soft delete the document
@@ -185,7 +194,7 @@ class DocumentService
 
         // Delete file from storage
         if ($document->file_path) {
-            Storage::disk($this->disk)->delete($document->file_path);
+            $this->disk($document->organization_id)->delete($document->file_path);
         }
 
         // Permanently delete the document
@@ -201,7 +210,7 @@ class DocumentService
             return null;
         }
 
-        $storage = Storage::disk($this->disk);
+        $storage = $this->disk($document->organization_id);
 
         if (! $storage->exists($document->file_path)) {
             return null;

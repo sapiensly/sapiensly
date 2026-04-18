@@ -4,9 +4,11 @@ import * as AgentController from '@/actions/App/Http/Controllers/AgentController
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
+import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
+import * as IntegrationController from '@/actions/App/Http/Controllers/IntegrationController';
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
+import * as FlowController from '@/actions/App/Http/Controllers/FlowController';
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
-import * as StackController from '@/actions/App/Http/Controllers/StackController';
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
@@ -29,11 +31,13 @@ import {
     BookOpen,
     Bot,
     BrainCircuit,
+    Cloud,
     Database,
     FileText,
-    Layers,
+    GitBranch,
     LayoutGrid,
     MessageSquare,
+    Plug,
     Shield,
     Users,
     Wrench,
@@ -47,6 +51,11 @@ const page = usePage();
 const { isSysAdmin } = usePermissions();
 
 const mainNavItems = computed<NavItem[]>(() => [
+    {
+        title: t('nav.flows'),
+        href: FlowController.globalIndex(),
+        icon: GitBranch,
+    },
     {
         title: t('nav.chatbots'),
         href: ChatbotController.index(),
@@ -89,9 +98,14 @@ const systemNavItems = computed<NavItem[]>(() => [
         icon: BrainCircuit,
     },
     {
-        title: t('nav.stack'),
-        href: StackController.index(),
-        icon: Layers,
+        title: t('nav.cloud_providers'),
+        href: CloudProviderController.index(),
+        icon: Cloud,
+    },
+    {
+        title: t('nav.integrations'),
+        href: IntegrationController.index(),
+        icon: Plug,
     },
 ]);
 
