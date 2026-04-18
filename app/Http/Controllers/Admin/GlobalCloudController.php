@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\CloudProvider;
 use App\Services\CloudProviderService;
+use App\Services\KnowledgeScopeWiper;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,7 @@ class GlobalCloudController extends Controller
 {
     public function __construct(
         private CloudProviderService $cloudProviderService,
+        private KnowledgeScopeWiper $knowledgeScopeWiper,
     ) {}
 
     public function index(): Response
@@ -52,6 +54,27 @@ class GlobalCloudController extends Controller
     {
         $validated = $this->validateProviderPayload($request, CloudProviderService::KIND_DATABASE);
 
+        $impactedOrgIds = $this->knowledgeScopeWiper
+            ->impactedOrganizationIdsForDatabaseScope('global');
+        $counts = $this->knowledgeScopeWiper->countForOrganizations($impactedOrgIds);
+
+        $hasData = $counts['knowledge_bases'] > 0
+            || $counts['documents'] > 0
+            || $counts['chunks'] > 0;
+
+        if ($hasData && $request->input('confirm') !== 'DELETE') {
+            return back()
+                ->withInput()
+                ->with('wipe_required', $counts);
+        }
+
+        if ($hasData) {
+            $this->knowledgeScopeWiper->wipeForOrganizations(
+                $impactedOrgIds,
+                'admin: global database provider change by user '.$request->user()->id,
+            );
+        }
+
         $this->cloudProviderService->upsertGlobalProvider(
             CloudProviderService::KIND_DATABASE,
             $validated['driver'],
@@ -69,6 +92,36 @@ class GlobalCloudController extends Controller
     public function testDatabase(Request $request): JsonResponse
     {
         return response()->json($this->runTest($request, CloudProviderService::KIND_DATABASE));
+    }
+
+    public function inspectVector(): JsonResponse
+    {
+        $provider = $this->cloudProviderService->getGlobalDatabase();
+
+        if (! $provider) {
+            return response()->json([
+                'configured' => false,
+                'message' => __('No global database provider configured.'),
+            ]);
+        }
+
+        return response()->json([
+            'configured' => true,
+        ] + $this->cloudProviderService->inspectDatabase($provider));
+    }
+
+    public function installVector(): JsonResponse
+    {
+        $provider = $this->cloudProviderService->getGlobalDatabase();
+
+        if (! $provider) {
+            return response()->json([
+                'success' => false,
+                'message' => __('No global database provider configured.'),
+            ]);
+        }
+
+        return response()->json($this->cloudProviderService->installVectorExtension($provider));
     }
 
     /**

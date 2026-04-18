@@ -7,15 +7,14 @@ use App\Enums\KnowledgeBaseStatus;
 use App\Events\DocumentStatusChanged;
 use App\Models\Document;
 use App\Models\KnowledgeBase;
-use App\Models\KnowledgeBaseChunk;
 use App\Services\ChunkingService;
 use App\Services\CloudProviderService;
 use App\Services\DocumentParserService;
 use App\Services\DocumentService;
 use App\Services\EmbeddingService;
+use App\Services\VectorStoreService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ProcessDocumentForKnowledgeBase implements ShouldQueue
@@ -50,6 +49,7 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
         ChunkingService $chunker,
         DocumentService $documentService,
         CloudProviderService $cloudProviderService,
+        VectorStoreService $vectorStoreService,
     ): void {
         $document = $this->document;
         $knowledgeBase = $this->knowledgeBase;
@@ -104,34 +104,33 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
                 $allEmbeddings = array_merge($allEmbeddings, $embeddings);
             }
 
-            // Delete existing chunks for this document in this KB
-            KnowledgeBaseChunk::where('knowledge_base_id', $knowledgeBase->id)
-                ->where('document_id', $document->id)
-                ->delete();
+            // Delete existing chunks for this document in this KB via the
+            // vector-store service so the write routes to whichever database
+            // the knowledge base resolves to.
+            $vectorStoreService->deleteForDocumentInKnowledgeBase($knowledgeBase, $document->id);
 
             // Store chunks with embeddings
             Log::info("Storing chunks for document: {$document->id}");
             $embeddingModel = $embeddingService->getModel();
 
-            DB::transaction(function () use ($document, $knowledgeBase, $chunks, $allEmbeddings, $embeddingModel) {
-                foreach ($chunks as $index => $chunk) {
-                    KnowledgeBaseChunk::create([
-                        'document_id' => $document->id,
-                        'knowledge_base_id' => $knowledgeBase->id,
-                        'content' => $chunk['content'],
-                        'chunk_index' => $chunk['index'],
-                        'metadata' => $chunk['metadata'],
-                        'embedding' => $allEmbeddings[$index] ?? null,
-                        'embedding_model' => $embeddingModel,
-                    ]);
-                }
-            });
+            $chunksWithEmbeddings = array_map(
+                fn (int $index, array $chunk) => $chunk + ['embedding' => $allEmbeddings[$index] ?? null],
+                array_keys($chunks),
+                $chunks,
+            );
+
+            $vectorStoreService->insertChunks(
+                $knowledgeBase,
+                $chunksWithEmbeddings,
+                $embeddingModel,
+                documentId: $document->id,
+            );
 
             // Update pivot status to ready
             $this->updatePivotStatus(EmbeddingStatus::Ready);
 
             // Update knowledge base counts and status
-            $this->updateKnowledgeBaseCounts($knowledgeBase);
+            $this->updateKnowledgeBaseCounts($knowledgeBase, $vectorStoreService);
             $this->updateKnowledgeBaseStatus($knowledgeBase);
 
             $knowledgeBase->refresh();
@@ -220,7 +219,7 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
     /**
      * Update the knowledge base document and chunk counts.
      */
-    private function updateKnowledgeBaseCounts(KnowledgeBase $knowledgeBase): void
+    private function updateKnowledgeBaseCounts(KnowledgeBase $knowledgeBase, VectorStoreService $vectorStoreService): void
     {
         // Count both legacy documents and new attached documents
         $legacyCount = $knowledgeBase->documents()->count();
@@ -228,7 +227,7 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
 
         $knowledgeBase->update([
             'document_count' => $legacyCount + $newCount,
-            'chunk_count' => $knowledgeBase->chunks()->count(),
+            'chunk_count' => $vectorStoreService->chunkCount($knowledgeBase),
         ]);
     }
 

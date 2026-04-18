@@ -18,6 +18,10 @@ use Throwable;
 
 class CloudProviderService
 {
+    public function __construct(
+        private VectorStoreSchema $vectorStoreSchema,
+    ) {}
+
     public const KIND_STORAGE = 'storage';
 
     public const KIND_DATABASE = 'database';
@@ -431,6 +435,124 @@ class CloudProviderService
             return [
                 'success' => false,
                 'message' => __('Connection failed.'),
+                'detail' => $e->getMessage(),
+            ];
+        }
+    }
+
+    // =========================================================================
+    // Vector store bootstrapping
+    // =========================================================================
+
+    /**
+     * Inspect the current vector-store state on the database behind $provider:
+     * whether pgvector is installed and whether the chunks table exists. When
+     * the target database is unreachable the call degrades gracefully with
+     * `reachable=false` so UIs can surface a credential/network error without
+     * 500-ing the request.
+     *
+     * @return array{reachable: bool, driver: string, has_extension: bool, has_schema: bool, error?: string}
+     */
+    public function inspectDatabase(CloudProvider $provider): array
+    {
+        $connection = $this->buildConnection($provider);
+
+        try {
+            $hasSchema = $this->vectorStoreSchema->hasSchema($connection);
+
+            return [
+                'reachable' => true,
+                'driver' => $connection->getDriverName(),
+                'has_extension' => $this->vectorStoreSchema->hasExtension($connection),
+                'has_schema' => $hasSchema,
+                'chunk_count' => $hasSchema
+                    ? $connection->table(VectorStoreSchema::TABLE)->count()
+                    : 0,
+            ];
+        } catch (Throwable $e) {
+            return [
+                'reachable' => false,
+                'driver' => $provider->driver,
+                'has_extension' => false,
+                'has_schema' => false,
+                'chunk_count' => 0,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Install pgvector on $provider's database. Returns the raw install result
+     * plus a post-install inspection so the UI can update its state in one
+     * round-trip.
+     *
+     * @return array{success: bool, message: string, detail?: string, instructions?: string, state: array{has_extension: bool, has_schema: bool, driver: string}}
+     */
+    public function installVectorExtension(CloudProvider $provider): array
+    {
+        $connection = $this->buildConnection($provider);
+
+        try {
+            $result = $this->vectorStoreSchema->installExtension($connection);
+        } catch (Throwable $e) {
+            return [
+                'success' => false,
+                'message' => __('Could not reach the database.'),
+                'detail' => $e->getMessage(),
+                'state' => [
+                    'reachable' => false,
+                    'driver' => $provider->driver,
+                    'has_extension' => false,
+                    'has_schema' => false,
+                ],
+            ];
+        }
+
+        if ($result['success']) {
+            try {
+                $this->vectorStoreSchema->ensureSchema($connection);
+            } catch (Throwable $e) {
+                // Extension installed but schema bootstrap failed: surface it
+                // without flipping success to false, since the extension part
+                // worked and the admin can retry bootstrapping.
+                $result['schema_error'] = $e->getMessage();
+            }
+        }
+
+        $result['state'] = $this->inspectDatabase($provider);
+
+        return $result;
+    }
+
+    /**
+     * Try to bootstrap the vector-store schema on $provider's database. Safe
+     * to call after every save: it is idempotent and skips the table creation
+     * if it already exists.
+     *
+     * @return array{success: bool, message: string, detail?: string}
+     */
+    public function bootstrapVectorSchema(CloudProvider $provider): array
+    {
+        $connection = $this->buildConnection($provider);
+
+        if (! $this->vectorStoreSchema->hasExtension($connection)) {
+            return [
+                'success' => false,
+                'message' => __('pgvector extension is not installed on this database.'),
+            ];
+        }
+
+        try {
+            $this->vectorStoreSchema->ensureSchema($connection);
+
+            return [
+                'success' => true,
+                'message' => __('Vector store schema ready.'),
+            ];
+        } catch (Throwable $e) {
+            return [
+                'success' => false,
+                'message' => __('Failed to bootstrap the vector store schema.'),
                 'detail' => $e->getMessage(),
             ];
         }

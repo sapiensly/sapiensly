@@ -33,6 +33,8 @@ Route::middleware(['auth', 'verified', 'role:sysadmin'])->prefix('admin')->group
     Route::post('/system/global-cloud/database', [GlobalCloudController::class, 'storeDatabase'])->name('admin.system.global-cloud.database.store');
     Route::post('/system/global-cloud/storage/test-connection', [GlobalCloudController::class, 'testStorage'])->name('admin.system.global-cloud.storage.test-connection');
     Route::post('/system/global-cloud/database/test-connection', [GlobalCloudController::class, 'testDatabase'])->name('admin.system.global-cloud.database.test-connection');
+    Route::post('/system/global-cloud/database/inspect-vector', [GlobalCloudController::class, 'inspectVector'])->name('admin.system.global-cloud.database.inspect-vector');
+    Route::post('/system/global-cloud/database/install-vector', [GlobalCloudController::class, 'installVector'])->name('admin.system.global-cloud.database.install-vector');
 });
 
 // Stop impersonation — only requires session key, no role check

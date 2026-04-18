@@ -3,6 +3,8 @@ import AdminDashboardController from '@/actions/App/Http/Controllers/Admin/Admin
 import * as GlobalCloudController from '@/actions/App/Http/Controllers/Admin/GlobalCloudController';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
+import VectorStoreStatus from '@/components/VectorStoreStatus.vue';
+import WipeConfirmDialog, { type WipeCounts } from '@/components/WipeConfirmDialog.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,7 +20,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import {
     CheckCircle2,
@@ -160,13 +162,39 @@ watch(
     },
 );
 
+const vectorRefreshToken = ref(0);
+
+const wipeDialogOpen = ref(false);
+const wipeCounts = ref<WipeCounts | null>(null);
+
+const postDatabase = (withConfirm: boolean) => {
+    databaseForm
+        .transform((data) => (withConfirm ? { ...data, confirm: 'DELETE' } : data))
+        .post(GlobalCloudController.storeDatabase().url, {
+            preserveScroll: true,
+            onSuccess: () => {
+                const wipe = (usePage().props.flash as { wipe_required?: WipeCounts } | undefined)
+                    ?.wipe_required;
+                if (wipe) {
+                    wipeCounts.value = wipe;
+                    wipeDialogOpen.value = true;
+                    return;
+                }
+
+                wipeDialogOpen.value = false;
+                wipeCounts.value = null;
+                databaseForm.credentials = emptyDatabaseCredentials();
+                vectorRefreshToken.value++;
+            },
+        });
+};
+
 const submitDatabase = () => {
-    databaseForm.post(GlobalCloudController.storeDatabase().url, {
-        preserveScroll: true,
-        onSuccess: () => {
-            databaseForm.credentials = emptyDatabaseCredentials();
-        },
-    });
+    postDatabase(false);
+};
+
+const confirmWipeAndSave = () => {
+    postDatabase(true);
 };
 
 // ============================================================================
@@ -625,9 +653,27 @@ watch(
                                 </div>
                             </form>
                         </section>
+
+                        <VectorStoreStatus
+                            v-if="existing.database"
+                            class="mt-6"
+                            i18n-namespace="admin.global_cloud"
+                            :inspect-url="GlobalCloudController.inspectVector().url"
+                            :install-url="GlobalCloudController.installVector().url"
+                            :refresh-token="vectorRefreshToken"
+                        />
                     </TabsContent>
                 </Tabs>
             </div>
         </div>
+
+        <WipeConfirmDialog
+            v-model:open="wipeDialogOpen"
+            :counts="wipeCounts"
+            :is-global-scope="true"
+            :processing="databaseForm.processing"
+            @confirm="confirmWipeAndSave"
+            @cancel="wipeCounts = null"
+        />
     </AdminLayout>
 </template>

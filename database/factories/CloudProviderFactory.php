@@ -55,12 +55,16 @@ class CloudProviderFactory extends Factory
             'driver' => 'postgresql',
             'display_name' => 'PostgreSQL',
             'credentials' => [
+                // Use an unreachable port by default so tests don't accidentally
+                // hit a local PostgreSQL running on 5432 when resolving this
+                // provider's connection. Override explicitly when a real DB
+                // is required by the test.
                 'host' => '127.0.0.1',
-                'port' => '5432',
-                'database' => 'tenant_db',
+                'port' => '5999',
+                'database' => 'tenant_db_'.fake()->unique()->bothify('???###'),
                 'username' => 'tenant',
                 'password' => fake()->password(),
-                'sslmode' => 'prefer',
+                'sslmode' => 'disable',
             ],
         ]);
     }

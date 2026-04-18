@@ -4,14 +4,13 @@ namespace App\Jobs;
 
 use App\Enums\KnowledgeBaseStatus;
 use App\Events\DocumentStatusChanged;
-use App\Models\KnowledgeBaseChunk;
 use App\Models\KnowledgeBaseDocument;
 use App\Services\ChunkingService;
 use App\Services\DocumentParserService;
 use App\Services\EmbeddingService;
+use App\Services\VectorStoreService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ProcessKnowledgeBaseDocument implements ShouldQueue
@@ -43,6 +42,7 @@ class ProcessKnowledgeBaseDocument implements ShouldQueue
     public function handle(
         DocumentParserService $parser,
         ChunkingService $chunker,
+        VectorStoreService $vectorStoreService,
     ): void {
         $document = $this->document;
         $knowledgeBase = $document->knowledgeBase;
@@ -94,32 +94,32 @@ class ProcessKnowledgeBaseDocument implements ShouldQueue
                 $allEmbeddings = array_merge($allEmbeddings, $embeddings);
             }
 
-            // Delete existing chunks for this document
-            KnowledgeBaseChunk::where('knowledge_base_document_id', $document->id)->delete();
+            // Delete existing chunks for this document via the vector-store
+            // service so the write routes to the KB's resolved connection.
+            $vectorStoreService->deleteForKnowledgeBaseDocument($knowledgeBase, $document->id);
 
             // Store chunks with embeddings
             Log::info("Storing chunks for document: {$document->id}");
             $embeddingModel = $embeddingService->getModel();
 
-            DB::transaction(function () use ($document, $knowledgeBase, $chunks, $allEmbeddings, $embeddingModel) {
-                foreach ($chunks as $index => $chunk) {
-                    KnowledgeBaseChunk::create([
-                        'knowledge_base_document_id' => $document->id,
-                        'knowledge_base_id' => $knowledgeBase->id,
-                        'content' => $chunk['content'],
-                        'chunk_index' => $chunk['index'],
-                        'metadata' => $chunk['metadata'],
-                        'embedding' => $allEmbeddings[$index] ?? null,
-                        'embedding_model' => $embeddingModel,
-                    ]);
-                }
-            });
+            $chunksWithEmbeddings = array_map(
+                fn (int $index, array $chunk) => $chunk + ['embedding' => $allEmbeddings[$index] ?? null],
+                array_keys($chunks),
+                $chunks,
+            );
+
+            $vectorStoreService->insertChunks(
+                $knowledgeBase,
+                $chunksWithEmbeddings,
+                $embeddingModel,
+                knowledgeBaseDocumentId: $document->id,
+            );
 
             // Update document status
             $document->update(['embedding_status' => KnowledgeBaseStatus::Ready]);
 
             // Update knowledge base counts and status
-            $this->updateKnowledgeBaseCounts($knowledgeBase);
+            $this->updateKnowledgeBaseCounts($knowledgeBase, $vectorStoreService);
             $this->updateKnowledgeBaseStatus($knowledgeBase);
 
             $this->broadcastStatus($document, $knowledgeBase->fresh(), KnowledgeBaseStatus::Ready);
@@ -177,11 +177,11 @@ class ProcessKnowledgeBaseDocument implements ShouldQueue
     /**
      * Update the knowledge base document and chunk counts.
      */
-    private function updateKnowledgeBaseCounts($knowledgeBase): void
+    private function updateKnowledgeBaseCounts($knowledgeBase, VectorStoreService $vectorStoreService): void
     {
         $knowledgeBase->update([
             'document_count' => $knowledgeBase->documents()->count(),
-            'chunk_count' => $knowledgeBase->chunks()->count(),
+            'chunk_count' => $vectorStoreService->chunkCount($knowledgeBase),
         ]);
     }
 

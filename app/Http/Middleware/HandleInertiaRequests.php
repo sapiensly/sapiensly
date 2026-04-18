@@ -66,6 +66,9 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'locale' => app()->getLocale(),
             'availableLocales' => ['en', 'es'],
+            'flash' => [
+                'wipe_required' => fn () => $request->session()->get('wipe_required'),
+            ],
         ];
     }
 }

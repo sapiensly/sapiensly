@@ -41,6 +41,11 @@ Route::middleware([
         ->whereIn('kind', ['storage', 'database'])
         ->name('system.cloud-providers.destroy');
 
+    Route::post('cloud-providers/database/inspect-vector', [CloudProviderController::class, 'inspectVector'])
+        ->name('system.cloud-providers.database.inspect-vector');
+    Route::post('cloud-providers/database/install-vector', [CloudProviderController::class, 'installVector'])
+        ->name('system.cloud-providers.database.install-vector');
+
     Route::get('integrations', [IntegrationController::class, 'index'])
         ->name('system.integrations.index');
 });

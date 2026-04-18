@@ -13,6 +13,7 @@ use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Services\DocumentService;
 use App\Services\FolderService;
+use App\Services\VectorStoreService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -158,8 +159,12 @@ class KnowledgeBaseController extends Controller
         return back();
     }
 
-    public function reprocessDocument(Request $request, KnowledgeBase $knowledgeBase, Document $document): RedirectResponse
-    {
+    public function reprocessDocument(
+        Request $request,
+        KnowledgeBase $knowledgeBase,
+        Document $document,
+        VectorStoreService $vectorStoreService,
+    ): RedirectResponse {
         $this->authorize('view', $knowledgeBase);
 
         // Reset pivot status
@@ -169,10 +174,9 @@ class KnowledgeBaseController extends Controller
             'updated_at' => now(),
         ]);
 
-        // Delete existing chunks for this document in this KB
-        $knowledgeBase->chunks()
-            ->where('document_id', $document->id)
-            ->delete();
+        // Delete existing chunks via the vector-store service so the write
+        // routes to the KB's resolved connection.
+        $vectorStoreService->deleteForDocumentInKnowledgeBase($knowledgeBase, $document->id);
 
         // Dispatch processing job
         ProcessDocumentForKnowledgeBase::dispatch($document, $knowledgeBase);

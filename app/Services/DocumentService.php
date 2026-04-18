@@ -17,6 +17,7 @@ class DocumentService
 {
     public function __construct(
         private CloudProviderService $cloudProviderService,
+        private VectorStoreService $vectorStoreService,
     ) {}
 
     /**
@@ -94,16 +95,18 @@ class DocumentService
      */
     public function detachFromKnowledgeBase(Document $document, KnowledgeBase $knowledgeBase): void
     {
-        // Delete chunks associated with this document in this KB
-        $knowledgeBase->chunks()
-            ->where('document_id', $document->id)
-            ->delete();
+        // Delete chunks associated with this document in this KB via the
+        // vector-store service so the write hits the KB's resolved connection.
+        $this->vectorStoreService->deleteForDocumentInKnowledgeBase($knowledgeBase, $document->id);
 
         // Detach the document
         $document->knowledgeBases()->detach($knowledgeBase->id);
 
         // Update KB counts
-        $knowledgeBase->updateCounts();
+        $knowledgeBase->update([
+            'document_count' => $knowledgeBase->documents()->count() + $knowledgeBase->attachedDocuments()->count(),
+            'chunk_count' => $this->vectorStoreService->chunkCount($knowledgeBase),
+        ]);
     }
 
     /**
@@ -166,8 +169,8 @@ class DocumentService
      */
     public function delete(Document $document): void
     {
-        // Delete chunks in all KBs
-        $document->chunks()->delete();
+        // Delete chunks wherever they live for this document
+        $this->vectorStoreService->deleteAllForDocument($document);
 
         // Detach from all KBs
         $document->knowledgeBases()->detach();
@@ -186,8 +189,8 @@ class DocumentService
      */
     public function forceDelete(Document $document): void
     {
-        // Delete chunks in all KBs
-        $document->chunks()->delete();
+        // Delete chunks wherever they live for this document
+        $this->vectorStoreService->deleteAllForDocument($document);
 
         // Detach from all KBs
         $document->knowledgeBases()->detach();

@@ -8,6 +8,7 @@ use App\Jobs\ProcessKnowledgeBaseDocument;
 use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseDocument;
 use App\Services\CloudProviderService;
+use App\Services\VectorStoreService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -16,6 +17,7 @@ class KnowledgeBaseDocumentController extends Controller
 {
     public function __construct(
         private CloudProviderService $cloudProviderService,
+        private VectorStoreService $vectorStoreService,
     ) {}
 
     /**
@@ -121,13 +123,15 @@ class KnowledgeBaseDocumentController extends Controller
             }
         }
 
-        // Delete document (chunks will cascade delete)
+        // Delete chunks via the vector-store service so the write routes to
+        // the KB's resolved connection, then delete the document row.
+        $this->vectorStoreService->deleteForKnowledgeBaseDocument($knowledgeBase, $document->id);
         $document->delete();
 
         // Update knowledge base counts
         $knowledgeBase->update([
             'document_count' => $knowledgeBase->documents()->count(),
-            'chunk_count' => $knowledgeBase->chunks()->count(),
+            'chunk_count' => $this->vectorStoreService->chunkCount($knowledgeBase),
         ]);
 
         return back()->with('success', __('Document deleted.'));

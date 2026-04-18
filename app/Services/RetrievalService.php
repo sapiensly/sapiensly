@@ -2,81 +2,81 @@
 
 namespace App\Services;
 
+use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseChunk;
+use App\Models\KnowledgeBaseDocument;
 use Illuminate\Support\Collection;
-use Pgvector\Laravel\Vector;
 
 class RetrievalService
 {
     private EmbeddingService $embeddingService;
 
-    public function __construct(?EmbeddingService $embeddingService = null)
-    {
+    private VectorStoreService $vectorStoreService;
+
+    public function __construct(
+        ?EmbeddingService $embeddingService = null,
+        ?VectorStoreService $vectorStoreService = null,
+    ) {
         $this->embeddingService = $embeddingService ?? new EmbeddingService;
+        $this->vectorStoreService = $vectorStoreService ?? app(VectorStoreService::class);
     }
 
     /**
-     * Search for relevant chunks across knowledge bases.
+     * Search for relevant chunks across knowledge bases. Routing to the
+     * correct database connection per KB is handled by VectorStoreService;
+     * this method only concerns itself with generating the query embedding
+     * and returning the ordered chunk collection.
      *
-     * @param  array<int>  $knowledgeBaseIds
-     * @return Collection<KnowledgeBaseChunk>
+     * @param  array<int, string>  $knowledgeBaseIds
+     * @return Collection<int, KnowledgeBaseChunk>
      */
     public function search(
         string $query,
         array $knowledgeBaseIds,
         int $topK = 5,
-        float $threshold = 0.7
+        float $threshold = 0.7,
     ): Collection {
         if (empty($knowledgeBaseIds)) {
             return collect();
         }
 
-        // Generate embedding for the query
         $queryEmbedding = $this->embeddingService->embed($query);
-        $vectorString = '['.implode(',', $queryEmbedding).']';
 
-        // Perform vector similarity search using cosine distance
-        // pgvector's <=> operator calculates cosine distance (1 - cosine similarity)
-        // So distance = 0 means identical, distance = 2 means opposite
-        // We convert threshold (similarity) to distance threshold
-        $distanceThreshold = 1 - $threshold;
-
-        $chunks = KnowledgeBaseChunk::query()
-            ->whereIn('knowledge_base_id', $knowledgeBaseIds)
-            ->whereNotNull('embedding')
-            ->whereRaw('embedding <=> ? <= ?', [$vectorString, $distanceThreshold])
-            ->selectRaw('*, embedding <=> ? as distance', [$vectorString])
-            ->orderByRaw('embedding <=> ? ASC', [$vectorString])
-            ->limit($topK)
-            ->get();
-
-        return $chunks;
+        return $this->vectorStoreService->searchSimilar(
+            $knowledgeBaseIds,
+            $queryEmbedding,
+            $topK,
+            $threshold,
+        );
     }
 
     /**
      * Search using a specific KnowledgeBase's embedding configuration.
      *
-     * @return Collection<KnowledgeBaseChunk>
+     * @return Collection<int, KnowledgeBaseChunk>
      */
     public function searchForKnowledgeBase(
         string $query,
         KnowledgeBase $knowledgeBase,
         int $topK = 5,
-        float $threshold = 0.7
+        float $threshold = 0.7,
     ): Collection {
-        // Use the knowledge base's embedding configuration
         $embeddingService = EmbeddingService::forKnowledgeBase($knowledgeBase);
 
-        $retriever = new self($embeddingService);
+        $retriever = new self($embeddingService, $this->vectorStoreService);
 
         return $retriever->search($query, [$knowledgeBase->id], $topK, $threshold);
     }
 
     /**
-     * Build a context string from retrieved chunks.
+     * Build a context string from retrieved chunks. The $chunks collection
+     * may come from a tenant connection, so we hydrate Document / KB metadata
+     * from the application database in a single batched pass instead of
+     * relying on Eloquent's lazy relations (which would try to query across
+     * the wrong connection).
      *
-     * @param  Collection<KnowledgeBaseChunk>  $chunks
+     * @param  Collection<int, KnowledgeBaseChunk>  $chunks
      */
     public function buildContext(Collection $chunks): string
     {
@@ -84,10 +84,14 @@ class RetrievalService
             return '';
         }
 
+        $documentSources = $this->hydrateSources($chunks);
+
         $contextParts = [];
 
         foreach ($chunks as $index => $chunk) {
-            $source = $chunk->document?->source ?? 'Unknown source';
+            $source = $documentSources[$chunk->document_id ?? null]
+                ?? $documentSources[$chunk->knowledge_base_document_id ?? null]
+                ?? 'Unknown source';
             $contextParts[] = "[Source {$index}: {$source}]\n{$chunk->content}";
         }
 
@@ -95,21 +99,54 @@ class RetrievalService
     }
 
     /**
+     * @param  Collection<int, KnowledgeBaseChunk>  $chunks
+     * @return array<string, string>
+     */
+    private function hydrateSources(Collection $chunks): array
+    {
+        $documentIds = $chunks->pluck('document_id')->filter()->unique()->all();
+        $kbDocIds = $chunks->pluck('knowledge_base_document_id')->filter()->unique()->all();
+
+        $sources = [];
+
+        if (! empty($documentIds)) {
+            Document::query()
+                ->whereIn('id', $documentIds)
+                ->get(['id', 'original_filename', 'name'])
+                ->each(function ($doc) use (&$sources) {
+                    $sources[$doc->id] = $doc->original_filename ?? $doc->name ?? (string) $doc->id;
+                });
+        }
+
+        if (! empty($kbDocIds)) {
+            KnowledgeBaseDocument::query()
+                ->whereIn('id', $kbDocIds)
+                ->get(['id', 'source', 'original_filename'])
+                ->each(function ($doc) use (&$sources) {
+                    $sources[$doc->id] = $doc->original_filename ?? $doc->source ?? (string) $doc->id;
+                });
+        }
+
+        return $sources;
+    }
+
+    /**
      * Perform RAG retrieval: search and build context in one step.
      *
-     * @param  array<int>  $knowledgeBaseIds
-     * @return array{chunks: Collection, context: string, chunk_count: int, knowledge_bases: array<array{id: string, name: string}>}
+     * @param  array<int, string>  $knowledgeBaseIds
+     * @return array{chunks: Collection, context: string, chunk_count: int, knowledge_bases: array<int, array{id: string, name: string}>}
      */
     public function retrieve(
         string $query,
         array $knowledgeBaseIds,
         int $topK = 5,
-        float $threshold = 0.7
+        float $threshold = 0.7,
     ): array {
         $chunks = $this->search($query, $knowledgeBaseIds, $topK, $threshold);
         $context = $this->buildContext($chunks);
 
-        // Get unique knowledge bases that had matching chunks
+        // Pull KB metadata from the application DB — KBs always live there,
+        // only the chunks may live elsewhere.
         $kbIds = $chunks->pluck('knowledge_base_id')->unique()->values()->all();
         $knowledgeBases = KnowledgeBase::whereIn('id', $kbIds)
             ->get(['id', 'name'])

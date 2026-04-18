@@ -83,14 +83,6 @@ class KnowledgeBase extends Model
             ->withTimestamps();
     }
 
-    public function updateCounts(): void
-    {
-        $this->update([
-            'document_count' => $this->documents()->count(),
-            'chunk_count' => $this->chunks()->count(),
-        ]);
-    }
-
     public function isReady(): bool
     {
         return $this->status === KnowledgeBaseStatus::Ready;

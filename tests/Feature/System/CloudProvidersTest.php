@@ -4,12 +4,39 @@ use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
 use App\Enums\Visibility;
 use App\Models\CloudProvider;
+use App\Models\Document;
+use App\Models\KnowledgeBase;
+use App\Models\KnowledgeBaseChunk;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 
 use function Pest\Laravel\actingAs;
+
+function seedTenantKnowledge(Organization $org, User $user): void
+{
+    $kb = KnowledgeBase::factory()->create([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        'visibility' => Visibility::Organization,
+    ]);
+    $doc = Document::create([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        'name' => 'D',
+        'original_filename' => 'd.txt',
+        'type' => 'txt',
+        'file_size' => 1,
+        'visibility' => Visibility::Organization,
+    ]);
+    KnowledgeBaseChunk::create([
+        'knowledge_base_id' => $kb->id,
+        'document_id' => $doc->id,
+        'content' => 'c',
+        'chunk_index' => 0,
+    ]);
+}
 
 beforeEach(function () {
     $this->seed(RolesAndPermissionsSeeder::class);
@@ -296,4 +323,142 @@ test('owner test-connection without a saved provider returns an informative fail
         ->postJson('/system/cloud-providers/storage/test-connection', ['use_saved' => true])
         ->assertOk()
         ->assertJson(['success' => false]);
+});
+
+test('saving a tenant DB with existing data and no confirm flashes wipe_required', function () {
+    [$org, $owner] = makeOrgWithOwner();
+    seedTenantKnowledge($org, $owner);
+
+    $response = actingAs($owner)->post('/system/cloud-providers/database', [
+        'driver' => 'postgresql',
+        'credentials' => [
+            'host' => 'db', 'port' => '5432', 'database' => 't',
+            'username' => 'u', 'password' => 'p', 'sslmode' => 'disable',
+        ],
+    ]);
+
+    $response->assertSessionHas('wipe_required');
+    expect(KnowledgeBase::count())->toBe(1)
+        ->and(CloudProvider::where('kind', 'database')->count())->toBe(0);
+});
+
+test('saving a tenant DB with confirm=DELETE wipes only the tenant scope', function () {
+    [$orgA, $ownerA] = makeOrgWithOwner();
+    [$orgB, $ownerB] = makeOrgWithOwner();
+    seedTenantKnowledge($orgA, $ownerA);
+    seedTenantKnowledge($orgB, $ownerB);
+
+    actingAs($ownerA)->post('/system/cloud-providers/database', [
+        'driver' => 'postgresql',
+        'credentials' => [
+            'host' => 'db', 'port' => '5432', 'database' => 't',
+            'username' => 'u', 'password' => 'p', 'sslmode' => 'disable',
+        ],
+        'confirm' => 'DELETE',
+    ])->assertRedirect('/system/cloud-providers');
+
+    expect(KnowledgeBase::where('organization_id', $orgA->id)->count())->toBe(0)
+        ->and(KnowledgeBase::where('organization_id', $orgB->id)->count())->toBe(1)
+        ->and(CloudProvider::where('organization_id', $orgA->id)->count())->toBe(1);
+});
+
+test('destroying a tenant DB with existing data and no confirm flashes wipe_required', function () {
+    [$org, $owner] = makeOrgWithOwner();
+    $user = User::factory()->create(['organization_id' => $org->id]);
+    CloudProvider::factory()->postgres()->forOrganization($org, $user)->create();
+    seedTenantKnowledge($org, $owner);
+
+    $response = actingAs($owner)->delete('/system/cloud-providers/database');
+
+    $response->assertSessionHas('wipe_required');
+    expect(CloudProvider::where('organization_id', $org->id)->where('kind', 'database')->count())->toBe(1)
+        ->and(KnowledgeBase::count())->toBe(1);
+});
+
+test('destroying a tenant DB with confirm=DELETE wipes and removes the override', function () {
+    [$org, $owner] = makeOrgWithOwner();
+    $user = User::factory()->create(['organization_id' => $org->id]);
+    CloudProvider::factory()->postgres()->forOrganization($org, $user)->create();
+    seedTenantKnowledge($org, $owner);
+
+    actingAs($owner)->delete('/system/cloud-providers/database', ['confirm' => 'DELETE'])
+        ->assertRedirect('/system/cloud-providers');
+
+    expect(CloudProvider::where('organization_id', $org->id)->count())->toBe(0)
+        ->and(KnowledgeBase::count())->toBe(0);
+});
+
+test('destroying a tenant storage override does not require wipe confirmation', function () {
+    [$org, $owner] = makeOrgWithOwner();
+    CloudProvider::factory()->storage()->forOrganization($org, $owner)->create();
+
+    actingAs($owner)->delete('/system/cloud-providers/storage')
+        ->assertRedirect('/system/cloud-providers');
+
+    expect(CloudProvider::count())->toBe(0);
+});
+
+test('inspect-vector returns configured=false when the tenant has no DB override', function () {
+    [, $owner] = makeOrgWithOwner();
+
+    actingAs($owner)
+        ->postJson('/system/cloud-providers/database/inspect-vector')
+        ->assertOk()
+        ->assertJson(['configured' => false]);
+});
+
+test('inspect-vector reports reachability when the tenant has a DB override', function () {
+    [$org, $owner] = makeOrgWithOwner();
+    CloudProvider::factory()->postgres()->forOrganization($org, $owner)->create([
+        'credentials' => [
+            'host' => '127.0.0.1',
+            'port' => '5999',
+            'database' => 'nonexistent_'.uniqid(),
+            'username' => 'u',
+            'password' => 'p',
+            'sslmode' => 'disable',
+        ],
+    ]);
+
+    $response = actingAs($owner)
+        ->postJson('/system/cloud-providers/database/inspect-vector')
+        ->assertOk()
+        ->assertJson(['configured' => true]);
+
+    expect($response->json('reachable'))->toBeFalse();
+});
+
+test('member cannot call inspect-vector or install-vector', function () {
+    [$org] = makeOrgWithOwner();
+    $member = makeMember($org);
+
+    actingAs($member)
+        ->postJson('/system/cloud-providers/database/inspect-vector')
+        ->assertForbidden();
+
+    actingAs($member)
+        ->postJson('/system/cloud-providers/database/install-vector')
+        ->assertForbidden();
+});
+
+test('install-vector returns a failure with detail when the DB is unreachable', function () {
+    [$org, $owner] = makeOrgWithOwner();
+    CloudProvider::factory()->postgres()->forOrganization($org, $owner)->create([
+        'credentials' => [
+            'host' => '127.0.0.1',
+            'port' => '5999',
+            'database' => 'nonexistent_'.uniqid(),
+            'username' => 'u',
+            'password' => 'p',
+            'sslmode' => 'disable',
+        ],
+    ]);
+
+    $response = actingAs($owner)
+        ->postJson('/system/cloud-providers/database/install-vector')
+        ->assertOk();
+
+    $data = $response->json();
+    expect($data['success'])->toBeFalse()
+        ->and($data)->toHaveKey('detail');
 });

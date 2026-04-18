@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\User;
 use App\Services\CloudProviderService;
+use App\Services\KnowledgeScopeWiper;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -21,6 +22,7 @@ class CloudProviderController extends Controller
 {
     public function __construct(
         private CloudProviderService $cloudProviderService,
+        private KnowledgeScopeWiper $knowledgeScopeWiper,
     ) {}
 
     public function index(Request $request): Response
@@ -74,6 +76,27 @@ class CloudProviderController extends Controller
 
         $validated = $this->validateProviderPayload($request, CloudProviderService::KIND_DATABASE);
 
+        $impactedOrgIds = $this->knowledgeScopeWiper
+            ->impactedOrganizationIdsForDatabaseScope('tenant', $organization);
+        $counts = $this->knowledgeScopeWiper->countForOrganizations($impactedOrgIds);
+
+        $hasData = $counts['knowledge_bases'] > 0
+            || $counts['documents'] > 0
+            || $counts['chunks'] > 0;
+
+        if ($hasData && $request->input('confirm') !== 'DELETE') {
+            return back()
+                ->withInput()
+                ->with('wipe_required', $counts);
+        }
+
+        if ($hasData) {
+            $this->knowledgeScopeWiper->wipeForOrganizations(
+                $impactedOrgIds,
+                'tenant: workspace database override change by user '.$request->user()->id,
+            );
+        }
+
         $this->cloudProviderService->upsertTenantProvider(
             $organization,
             CloudProviderService::KIND_DATABASE,
@@ -98,6 +121,30 @@ class CloudProviderController extends Controller
             ? $this->cloudProviderService->getTenantStorage($organization)
             : $this->cloudProviderService->getTenantDatabase($organization);
 
+        // Removing a tenant database override means chunks/KBs/docs belonging
+        // to this tenant lose their home — decision #5 says delete rather
+        // than leave orphans.
+        if ($kind === CloudProviderService::KIND_DATABASE && $provider) {
+            $impactedOrgIds = $this->knowledgeScopeWiper
+                ->impactedOrganizationIdsForDatabaseScope('tenant', $organization);
+            $counts = $this->knowledgeScopeWiper->countForOrganizations($impactedOrgIds);
+
+            $hasData = $counts['knowledge_bases'] > 0
+                || $counts['documents'] > 0
+                || $counts['chunks'] > 0;
+
+            if ($hasData && $request->input('confirm') !== 'DELETE') {
+                return back()->with('wipe_required', $counts);
+            }
+
+            if ($hasData) {
+                $this->knowledgeScopeWiper->wipeForOrganizations(
+                    $impactedOrgIds,
+                    'tenant: workspace database override removed by user '.$request->user()->id,
+                );
+            }
+        }
+
         $provider?->delete();
 
         return to_route('system.cloud-providers.index');
@@ -117,6 +164,42 @@ class CloudProviderController extends Controller
         $this->authorizeManage($request->user(), $organization);
 
         return response()->json($this->runTest($request, $organization, CloudProviderService::KIND_DATABASE));
+    }
+
+    public function inspectVector(Request $request): JsonResponse
+    {
+        $organization = $this->requireOrganization($request->user());
+        $this->authorizeManage($request->user(), $organization);
+
+        $provider = $this->cloudProviderService->getTenantDatabase($organization);
+
+        if (! $provider) {
+            return response()->json([
+                'configured' => false,
+                'message' => __('No workspace database provider configured.'),
+            ]);
+        }
+
+        return response()->json([
+            'configured' => true,
+        ] + $this->cloudProviderService->inspectDatabase($provider));
+    }
+
+    public function installVector(Request $request): JsonResponse
+    {
+        $organization = $this->requireOrganization($request->user());
+        $this->authorizeManage($request->user(), $organization);
+
+        $provider = $this->cloudProviderService->getTenantDatabase($organization);
+
+        if (! $provider) {
+            return response()->json([
+                'success' => false,
+                'message' => __('No workspace database provider configured.'),
+            ]);
+        }
+
+        return response()->json($this->cloudProviderService->installVectorExtension($provider));
     }
 
     private function runTest(Request $request, Organization $organization, string $kind): array

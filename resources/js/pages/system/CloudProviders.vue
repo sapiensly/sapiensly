@@ -2,6 +2,8 @@
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
+import VectorStoreStatus from '@/components/VectorStoreStatus.vue';
+import WipeConfirmDialog, { type WipeCounts } from '@/components/WipeConfirmDialog.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,7 +19,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import {
     CheckCircle2,
@@ -165,23 +167,82 @@ watch(
     },
 );
 
+const vectorRefreshToken = ref(0);
+
+const wipeDialogOpen = ref(false);
+const wipeCounts = ref<WipeCounts | null>(null);
+const wipePendingAction = ref<'save' | 'destroy' | null>(null);
+
+const readFlashWipe = (): WipeCounts | undefined =>
+    (usePage().props.flash as { wipe_required?: WipeCounts } | undefined)?.wipe_required;
+
+const postDatabase = (withConfirm: boolean) => {
+    databaseForm
+        .transform((data) => (withConfirm ? { ...data, confirm: 'DELETE' } : data))
+        .post(CloudProviderController.storeDatabase().url, {
+            preserveScroll: true,
+            onSuccess: () => {
+                const wipe = readFlashWipe();
+                if (wipe) {
+                    wipeCounts.value = wipe;
+                    wipePendingAction.value = 'save';
+                    wipeDialogOpen.value = true;
+                    return;
+                }
+
+                wipeDialogOpen.value = false;
+                wipeCounts.value = null;
+                databaseForm.credentials = {};
+                vectorRefreshToken.value++;
+            },
+        });
+};
+
 const submitDatabase = () => {
-    databaseForm.post(CloudProviderController.storeDatabase().url, {
-        preserveScroll: true,
-        onSuccess: () => {
-            databaseForm.credentials = {};
-        },
-    });
+    postDatabase(false);
 };
 
 // ============================================================================
 // Remove override
 // ============================================================================
+const destroyDatabase = (withConfirm: boolean) => {
+    router.delete(CloudProviderController.destroy({ kind: 'database' }).url, {
+        data: withConfirm ? { confirm: 'DELETE' } : {},
+        preserveScroll: true,
+        onSuccess: () => {
+            const wipe = readFlashWipe();
+            if (wipe) {
+                wipeCounts.value = wipe;
+                wipePendingAction.value = 'destroy';
+                wipeDialogOpen.value = true;
+                return;
+            }
+
+            wipeDialogOpen.value = false;
+            wipeCounts.value = null;
+            vectorRefreshToken.value++;
+        },
+    });
+};
+
 const removeOverride = (kind: 'storage' | 'database') => {
+    if (kind === 'database') {
+        destroyDatabase(false);
+        return;
+    }
+
     if (!confirm(t('system.cloud_providers.remove_override_confirm'))) return;
     router.delete(CloudProviderController.destroy({ kind }).url, {
         preserveScroll: true,
     });
+};
+
+const confirmWipeAndProceed = () => {
+    if (wipePendingAction.value === 'save') {
+        postDatabase(true);
+    } else if (wipePendingAction.value === 'destroy') {
+        destroyDatabase(true);
+    }
 };
 
 // ============================================================================
@@ -712,9 +773,30 @@ watch(
                                 </div>
                             </form>
                         </section>
+
+                        <VectorStoreStatus
+                            v-if="tenant.database"
+                            class="mt-6"
+                            i18n-namespace="system.cloud_providers"
+                            :inspect-url="CloudProviderController.inspectVector().url"
+                            :install-url="CloudProviderController.installVector().url"
+                            :refresh-token="vectorRefreshToken"
+                        />
                     </TabsContent>
                 </Tabs>
             </div>
         </div>
+
+        <WipeConfirmDialog
+            v-model:open="wipeDialogOpen"
+            :counts="wipeCounts"
+            :is-global-scope="false"
+            :processing="databaseForm.processing"
+            @confirm="confirmWipeAndProceed"
+            @cancel="
+                wipeCounts = null;
+                wipePendingAction = null;
+            "
+        />
     </AppLayout>
 </template>

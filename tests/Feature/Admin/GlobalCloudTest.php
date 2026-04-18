@@ -2,10 +2,42 @@
 
 use App\Enums\Visibility;
 use App\Models\CloudProvider;
+use App\Models\Document;
+use App\Models\KnowledgeBase;
+use App\Models\KnowledgeBaseChunk;
+use App\Models\Organization;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 
 use function Pest\Laravel\actingAs;
+
+function seedOrgWithKnowledge(): Organization
+{
+    $org = Organization::create(['name' => 'T', 'slug' => 'seeded-'.uniqid()]);
+    $user = User::factory()->create(['organization_id' => $org->id]);
+    $kb = KnowledgeBase::factory()->create([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        'visibility' => Visibility::Organization,
+    ]);
+    $doc = Document::create([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        'name' => 'D',
+        'original_filename' => 'd.txt',
+        'type' => 'txt',
+        'file_size' => 1,
+        'visibility' => Visibility::Organization,
+    ]);
+    KnowledgeBaseChunk::create([
+        'knowledge_base_id' => $kb->id,
+        'document_id' => $doc->id,
+        'content' => 'c',
+        'chunk_index' => 0,
+    ]);
+
+    return $org;
+}
 
 beforeEach(function () {
     $this->seed(RolesAndPermissionsSeeder::class);
@@ -181,6 +213,138 @@ test('non-admin cannot test connections', function () {
 
     actingAs($user)
         ->postJson('/admin/system/global-cloud/storage/test-connection', ['use_saved' => true])
+        ->assertForbidden();
+});
+
+test('inspect-vector returns configured=false when no global DB provider exists', function () {
+    actingAs($this->admin)
+        ->postJson('/admin/system/global-cloud/database/inspect-vector')
+        ->assertOk()
+        ->assertJson(['configured' => false]);
+});
+
+test('inspect-vector reports reachability when a DB provider exists', function () {
+    CloudProvider::factory()->postgres()->global()->create();
+
+    $response = actingAs($this->admin)
+        ->postJson('/admin/system/global-cloud/database/inspect-vector')
+        ->assertOk()
+        ->assertJson(['configured' => true]);
+
+    $data = $response->json();
+    expect($data)->toHaveKey('reachable')
+        ->and($data['reachable'])->toBeFalse()
+        ->and($data['chunk_count'])->toBe(0);
+});
+
+test('install-vector returns a failure with detail when the DB is unreachable', function () {
+    CloudProvider::factory()->postgres()->global()->create([
+        'credentials' => [
+            'host' => '127.0.0.1',
+            'port' => '5999',
+            'database' => 'nonexistent_'.uniqid(),
+            'username' => 'u',
+            'password' => 'p',
+            'sslmode' => 'disable',
+        ],
+    ]);
+
+    $response = actingAs($this->admin)
+        ->postJson('/admin/system/global-cloud/database/install-vector')
+        ->assertOk();
+
+    $data = $response->json();
+    expect($data['success'])->toBeFalse()
+        ->and($data)->toHaveKey('detail');
+});
+
+test('install-vector returns configured=false when no DB provider exists', function () {
+    actingAs($this->admin)
+        ->postJson('/admin/system/global-cloud/database/install-vector')
+        ->assertOk()
+        ->assertJson(['success' => false]);
+});
+
+test('first-time save of global DB provider with no existing data saves directly', function () {
+    actingAs($this->admin)->post('/admin/system/global-cloud/database', [
+        'driver' => 'postgresql',
+        'credentials' => [
+            'host' => 'db.local', 'port' => '5432', 'database' => 'd',
+            'username' => 'u', 'password' => 'p', 'sslmode' => 'disable',
+        ],
+    ])->assertRedirect('/admin/system/global-cloud')
+        ->assertSessionMissing('wipe_required');
+
+    expect(CloudProvider::where('kind', 'database')->count())->toBe(1);
+});
+
+test('saving global DB with existing data and no confirm flashes wipe_required', function () {
+    seedOrgWithKnowledge();
+
+    $response = actingAs($this->admin)->post('/admin/system/global-cloud/database', [
+        'driver' => 'postgresql',
+        'credentials' => [
+            'host' => 'db.local', 'port' => '5432', 'database' => 'd',
+            'username' => 'u', 'password' => 'p', 'sslmode' => 'disable',
+        ],
+    ]);
+
+    $response->assertSessionHas('wipe_required');
+    expect(KnowledgeBase::count())->toBe(1) // not wiped
+        ->and(CloudProvider::where('kind', 'database')->count())->toBe(0); // not saved
+});
+
+test('saving global DB with confirm=DELETE wipes data and saves the provider', function () {
+    seedOrgWithKnowledge();
+    seedOrgWithKnowledge(); // two orgs so we see the global scope in action
+
+    expect(KnowledgeBase::count())->toBe(2);
+
+    actingAs($this->admin)->post('/admin/system/global-cloud/database', [
+        'driver' => 'postgresql',
+        'credentials' => [
+            'host' => 'db.local', 'port' => '5432', 'database' => 'd',
+            'username' => 'u', 'password' => 'p', 'sslmode' => 'disable',
+        ],
+        'confirm' => 'DELETE',
+    ])->assertRedirect('/admin/system/global-cloud');
+
+    expect(KnowledgeBase::count())->toBe(0)
+        ->and(Document::count())->toBe(0)
+        ->and(KnowledgeBaseChunk::count())->toBe(0)
+        ->and(CloudProvider::where('kind', 'database')->count())->toBe(1);
+});
+
+test('global scope wipe skips orgs that have their own database override', function () {
+    $orgWithOverride = seedOrgWithKnowledge();
+    $orgWithoutOverride = seedOrgWithKnowledge();
+
+    $override = CloudProvider::factory()->postgres()
+        ->forOrganization($orgWithOverride, User::factory()->create(['organization_id' => $orgWithOverride->id]))
+        ->create();
+
+    actingAs($this->admin)->post('/admin/system/global-cloud/database', [
+        'driver' => 'postgresql',
+        'credentials' => [
+            'host' => 'db.local', 'port' => '5432', 'database' => 'd',
+            'username' => 'u', 'password' => 'p', 'sslmode' => 'disable',
+        ],
+        'confirm' => 'DELETE',
+    ])->assertRedirect('/admin/system/global-cloud');
+
+    expect(KnowledgeBase::where('organization_id', $orgWithOverride->id)->count())->toBe(1)
+        ->and(KnowledgeBase::where('organization_id', $orgWithoutOverride->id)->count())->toBe(0);
+});
+
+test('non-admin cannot call inspect-vector or install-vector', function () {
+    $user = User::factory()->create();
+
+    actingAs($user)
+        ->postJson('/admin/system/global-cloud/database/inspect-vector')
+        ->assertForbidden();
+
+    actingAs($user)
+        ->postJson('/admin/system/global-cloud/database/install-vector')
         ->assertForbidden();
 });
 
