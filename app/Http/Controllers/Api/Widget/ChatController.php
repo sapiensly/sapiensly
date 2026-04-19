@@ -52,9 +52,12 @@ class ChatController extends Controller
             ], 404);
         }
 
-        // Create the conversation
+        // Create the conversation — propagate channel_id + contact_id so the
+        // shared abstraction stays consistent with the Chatbot's channel.
         $conversation = WidgetConversation::create([
             'chatbot_id' => $chatbot->id,
+            'channel_id' => $chatbot->channel_id,
+            'contact_id' => $session->contact_id,
             'widget_session_id' => $session->id,
             'title' => null,
             'message_count' => 0,

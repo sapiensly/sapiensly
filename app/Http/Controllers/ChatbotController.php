@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ChannelStatus;
+use App\Enums\ChannelType;
 use App\Enums\ChatbotStatus;
 use App\Enums\Visibility;
 use App\Http\Requests\Chatbot\StoreChatbotRequest;
 use App\Http\Requests\Chatbot\UpdateChatbotRequest;
 use App\Models\Agent;
 use App\Models\AgentTeam;
+use App\Models\Channel;
 use App\Models\Chatbot;
 use App\Models\ChatbotApiToken;
 use App\Models\WidgetConversation;
@@ -55,10 +58,27 @@ class ChatbotController extends Controller
     {
         $user = $request->user();
 
+        $visibility = $user->organization_id ? Visibility::Organization : Visibility::Private;
+
+        // Create the companion Channel row first so the Chatbot can reference
+        // it. Channels centralise tenant scope, target (agent/team), and
+        // status across all channel types (widget, WhatsApp, …).
+        $channel = Channel::create([
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+            'visibility' => $visibility,
+            'channel_type' => ChannelType::Widget,
+            'name' => $request->name,
+            'agent_id' => $request->agent_id,
+            'agent_team_id' => $request->agent_team_id,
+            'status' => ChannelStatus::Draft,
+        ]);
+
         $chatbot = Chatbot::create([
             'user_id' => $user->id,
             'organization_id' => $user->organization_id,
-            'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
+            'visibility' => $visibility,
+            'channel_id' => $channel->id,
             'agent_id' => $request->agent_id,
             'agent_team_id' => $request->agent_team_id,
             'name' => $request->name,

@@ -69,6 +69,20 @@ class RolesAndPermissionsSeeder extends Seeder
             'ai-providers.update',
             'ai-providers.delete',
 
+            // Integrations
+            'integrations.view',
+            'integrations.create',
+            'integrations.update',
+            'integrations.delete',
+            'integrations.execute',
+
+            // WhatsApp connections
+            'whatsapp-connections.view',
+            'whatsapp-connections.create',
+            'whatsapp-connections.update',
+            'whatsapp-connections.delete',
+            'whatsapp-connections.reply',
+
             // Organization
             'organization.manage',
             'organization.invite-members',

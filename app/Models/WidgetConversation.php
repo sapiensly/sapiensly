@@ -15,6 +15,8 @@ class WidgetConversation extends Model
 
     protected $fillable = [
         'chatbot_id',
+        'channel_id',
+        'contact_id',
         'widget_session_id',
         'title',
         'metadata',
@@ -47,6 +49,16 @@ class WidgetConversation extends Model
     public function chatbot(): BelongsTo
     {
         return $this->belongsTo(Chatbot::class);
+    }
+
+    public function channel(): BelongsTo
+    {
+        return $this->belongsTo(Channel::class);
+    }
+
+    public function contact(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class);
     }
 
     public function session(): BelongsTo

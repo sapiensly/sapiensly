@@ -36,6 +36,7 @@ import {
     FileText,
     GitBranch,
     LayoutGrid,
+    MessageCircle,
     MessageSquare,
     Plug,
     Shield,
@@ -106,6 +107,11 @@ const systemNavItems = computed<NavItem[]>(() => [
         title: t('nav.integrations'),
         href: IntegrationController.index(),
         icon: Plug,
+    },
+    {
+        title: t('nav.whatsapp'),
+        href: '/system/whatsapp',
+        icon: MessageCircle,
     },
 ]);
 

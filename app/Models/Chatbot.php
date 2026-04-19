@@ -20,6 +20,7 @@ class Chatbot extends Model
         'user_id',
         'organization_id',
         'visibility',
+        'channel_id',
         'agent_id',
         'agent_team_id',
         'name',
@@ -78,6 +79,11 @@ class Chatbot extends Model
     public function analytics(): HasMany
     {
         return $this->hasMany(ChatbotAnalytics::class);
+    }
+
+    public function channel(): BelongsTo
+    {
+        return $this->belongsTo(Channel::class);
     }
 
     // Helper Methods

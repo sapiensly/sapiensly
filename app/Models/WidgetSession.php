@@ -15,6 +15,7 @@ class WidgetSession extends Model
 
     protected $fillable = [
         'chatbot_id',
+        'contact_id',
         'session_token',
         'visitor_email',
         'visitor_name',
@@ -46,6 +47,11 @@ class WidgetSession extends Model
     public function chatbot(): BelongsTo
     {
         return $this->belongsTo(Chatbot::class);
+    }
+
+    public function contact(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class);
     }
 
     public function conversations(): HasMany

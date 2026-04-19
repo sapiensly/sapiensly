@@ -13,3 +13,9 @@ Schedule::command('chatbot:aggregate-analytics --mark-abandoned')
     ->dailyAt('01:00')
     ->withoutOverlapping()
     ->runInBackground();
+
+// Prune integration execution history nightly.
+Schedule::command('integrations:prune-executions')
+    ->dailyAt('02:30')
+    ->withoutOverlapping()
+    ->runInBackground();

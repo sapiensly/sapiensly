@@ -65,17 +65,17 @@ function createSysAdmin(): User
 
 test('seeder creates all roles and permissions', function () {
     expect(Role::count())->toBe(3);
-    expect(Permission::count())->toBe(41);
+    expect(Permission::count())->toBe(51);
 });
 
 test('sysadmin role has all permissions', function () {
     $sysAdminRole = Role::findByName('sysadmin', 'web');
-    expect($sysAdminRole->permissions->count())->toBe(41);
+    expect($sysAdminRole->permissions->count())->toBe(51);
 });
 
 test('owner role has all permissions', function () {
     $ownerRole = Role::findByName('owner', 'web');
-    expect($ownerRole->permissions->count())->toBe(41);
+    expect($ownerRole->permissions->count())->toBe(51);
 });
 
 test('member role lacks org management permissions', function () {

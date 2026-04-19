@@ -3,6 +3,10 @@
 use App\Http\Controllers\AiProviderController;
 use App\Http\Controllers\CloudProviderController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\IntegrationEnvironmentController;
+use App\Http\Controllers\IntegrationExecutionController;
+use App\Http\Controllers\IntegrationRequestController;
+use App\Http\Controllers\IntegrationVariableController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware([
@@ -46,6 +50,61 @@ Route::middleware([
     Route::post('cloud-providers/database/install-vector', [CloudProviderController::class, 'installVector'])
         ->name('system.cloud-providers.database.install-vector');
 
-    Route::get('integrations', [IntegrationController::class, 'index'])
-        ->name('system.integrations.index');
+    // =========================================================================
+    // Integrations
+    // =========================================================================
+    Route::get('integrations', [IntegrationController::class, 'index'])->name('system.integrations.index');
+    Route::get('integrations/create', [IntegrationController::class, 'create'])->name('system.integrations.create');
+    Route::post('integrations', [IntegrationController::class, 'store'])->name('system.integrations.store');
+    Route::post('integrations/test-connection', [IntegrationController::class, 'testConnectionForPayload'])
+        ->name('system.integrations.test-connection-payload');
+    Route::get('integrations/{integration}', [IntegrationController::class, 'show'])->name('system.integrations.show');
+    Route::get('integrations/{integration}/edit', [IntegrationController::class, 'edit'])->name('system.integrations.edit');
+    Route::put('integrations/{integration}', [IntegrationController::class, 'update'])->name('system.integrations.update');
+    Route::delete('integrations/{integration}', [IntegrationController::class, 'destroy'])->name('system.integrations.destroy');
+    Route::post('integrations/{integration}/duplicate', [IntegrationController::class, 'duplicate'])->name('system.integrations.duplicate');
+    Route::post('integrations/{integration}/test-connection', [IntegrationController::class, 'testConnection'])
+        ->name('system.integrations.test-connection');
+
+    // Environments
+    Route::post('integrations/{integration}/environments', [IntegrationEnvironmentController::class, 'store'])
+        ->name('system.integrations.environments.store');
+    Route::put('integrations/environments/{environment}', [IntegrationEnvironmentController::class, 'update'])
+        ->name('system.integrations.environments.update');
+    Route::delete('integrations/environments/{environment}', [IntegrationEnvironmentController::class, 'destroy'])
+        ->name('system.integrations.environments.destroy');
+    Route::post('integrations/environments/{environment}/activate', [IntegrationEnvironmentController::class, 'activate'])
+        ->name('system.integrations.environments.activate');
+
+    // Variables (nested under environment)
+    Route::post('integrations/environments/{environment}/variables', [IntegrationVariableController::class, 'store'])
+        ->name('system.integrations.variables.store');
+    Route::put('integrations/variables/{variable}', [IntegrationVariableController::class, 'update'])
+        ->name('system.integrations.variables.update');
+    Route::delete('integrations/variables/{variable}', [IntegrationVariableController::class, 'destroy'])
+        ->name('system.integrations.variables.destroy');
+
+    // Requests
+    Route::post('integrations/{integration}/requests', [IntegrationRequestController::class, 'store'])
+        ->name('system.integrations.requests.store');
+    Route::get('integrations/requests/{request}', [IntegrationRequestController::class, 'show'])
+        ->name('system.integrations.requests.show');
+    Route::put('integrations/requests/{request}', [IntegrationRequestController::class, 'update'])
+        ->name('system.integrations.requests.update');
+    Route::delete('integrations/requests/{request}', [IntegrationRequestController::class, 'destroy'])
+        ->name('system.integrations.requests.destroy');
+    Route::post('integrations/requests/{request}/duplicate', [IntegrationRequestController::class, 'duplicate'])
+        ->name('system.integrations.requests.duplicate');
+    Route::post('integrations/requests/{request}/execute', [IntegrationRequestController::class, 'execute'])
+        ->middleware('throttle:integration-execute')
+        ->name('system.integrations.requests.execute');
+    Route::post('integrations/{integration}/execute-ad-hoc', [IntegrationRequestController::class, 'executeAdHoc'])
+        ->middleware('throttle:integration-execute')
+        ->name('system.integrations.execute-ad-hoc');
+
+    // Executions (read-only)
+    Route::get('integrations/{integration}/executions', [IntegrationExecutionController::class, 'index'])
+        ->name('system.integrations.executions.index');
+    Route::get('integrations/executions/{execution}', [IntegrationExecutionController::class, 'show'])
+        ->name('system.integrations.executions.show');
 });

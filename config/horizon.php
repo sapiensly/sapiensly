@@ -223,6 +223,26 @@ return [
             'timeout' => 300, // 5 minutes for embedding generation
             'nice' => 0,
         ],
+        'supervisor-whatsapp-webhooks' => [
+            'connection' => 'redis',
+            'queue' => ['whatsapp-webhooks'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'memory' => 128,
+            'tries' => 3,
+            'timeout' => 60,
+        ],
+        'supervisor-whatsapp-outbound' => [
+            'connection' => 'redis',
+            'queue' => ['whatsapp-outbound'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'memory' => 128,
+            'tries' => 3,
+            'timeout' => 60,
+        ],
     ],
 
     'environments' => [
@@ -237,6 +257,16 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-whatsapp-webhooks' => [
+                'maxProcesses' => 5,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
+            'supervisor-whatsapp-outbound' => [
+                'maxProcesses' => 3,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
         ],
 
         'local' => [
@@ -245,6 +275,12 @@ return [
             ],
             'supervisor-ai' => [
                 'maxProcesses' => 2,
+            ],
+            'supervisor-whatsapp-webhooks' => [
+                'maxProcesses' => 2,
+            ],
+            'supervisor-whatsapp-outbound' => [
+                'maxProcesses' => 1,
             ],
         ],
     ],

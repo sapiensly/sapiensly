@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Widget;
 
 use App\Http\Controllers\Controller;
 use App\Models\Chatbot;
+use App\Models\Contact;
 use App\Models\WidgetSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,8 +38,25 @@ class SessionController extends Controller
         // Generate a unique session token
         $sessionToken = Str::random(64);
 
+        // Provision the cross-channel Contact for this visitor. For widget the
+        // identifier is the session token itself (visitors are anonymous).
+        $contact = null;
+        if ($chatbot->channel_id) {
+            $contact = Contact::create([
+                'channel_id' => $chatbot->channel_id,
+                'identifier' => $sessionToken,
+                'profile_name' => $validated['visitor_name'] ?? null,
+                'email' => $validated['visitor_email'] ?? null,
+                'metadata' => $validated['visitor_metadata'] ?? null,
+                'user_agent' => $request->userAgent(),
+                'ip_address' => $request->ip(),
+                'last_inbound_at' => now(),
+            ]);
+        }
+
         $session = WidgetSession::create([
             'chatbot_id' => $chatbot->id,
+            'contact_id' => $contact?->id,
             'session_token' => $sessionToken,
             'visitor_email' => $validated['visitor_email'] ?? null,
             'visitor_name' => $validated['visitor_name'] ?? null,
