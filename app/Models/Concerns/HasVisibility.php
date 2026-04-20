@@ -90,9 +90,14 @@ trait HasVisibility
 
     /**
      * Check if the resource is visible to the user in their current account context.
+     * Publicly-shared resources bypass the tenant checks entirely.
      */
     public function isVisibleTo(User $user): bool
     {
+        if ($this->visibility === Visibility::Public) {
+            return true;
+        }
+
         if ($user->organization_id === null) {
             // Personal context: only own resources with no org
             return $this->user_id === $user->id && $this->organization_id === null;
@@ -105,6 +110,14 @@ trait HasVisibility
 
         // Own resources or organization-shared resources
         return $this->user_id === $user->id || $this->visibility === Visibility::Organization;
+    }
+
+    /**
+     * True when the resource is world-readable (no login required).
+     */
+    public function isPublic(): bool
+    {
+        return $this->visibility === Visibility::Public;
     }
 
     /**

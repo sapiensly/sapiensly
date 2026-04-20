@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
 import VectorStoreStatus from '@/components/VectorStoreStatus.vue';
 import WipeConfirmDialog, { type WipeCounts } from '@/components/WipeConfirmDialog.vue';
@@ -17,8 +17,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import {
@@ -69,14 +68,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.system'), href: '#' },
-    {
-        title: t('system.cloud_providers.title'),
-        href: CloudProviderController.index().url,
-    },
-]);
 
 const activeTab = ref<'storage' | 'database'>('storage');
 
@@ -356,13 +347,12 @@ watch(
 <template>
     <Head :title="t('system.cloud_providers.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <Heading
-                    :title="t('system.cloud_providers.title')"
-                    :description="t('system.cloud_providers.description')"
-                />
+    <AppLayoutV2 :title="t('app_v2.nav.cloud_providers')">
+        <div class="mx-auto max-w-4xl space-y-5">
+            <PageHeader
+                :title="t('system.cloud_providers.title')"
+                :description="t('system.cloud_providers.description')"
+            />
 
                 <div
                     v-if="!canManage"
@@ -784,7 +774,6 @@ watch(
                         />
                     </TabsContent>
                 </Tabs>
-            </div>
         </div>
 
         <WipeConfirmDialog
@@ -798,5 +787,5 @@ watch(
                 wipePendingAction = null;
             "
         />
-    </AppLayout>
+    </AppLayoutV2>
 </template>

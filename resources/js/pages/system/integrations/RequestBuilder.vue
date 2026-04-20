@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import HeaderEditor from '@/components/integrations/HeaderEditor.vue';
 import JsonViewer from '@/components/integrations/JsonViewer.vue';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,8 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 import { Loader2, Play, Save } from 'lucide-vue-next';
@@ -75,12 +74,6 @@ const props = defineProps<Props>();
 
 const { t } = useI18n();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.system'), href: '#' },
-    { title: t('system.integrations.title'), href: '/system/integrations' },
-    { title: props.integration.name, href: `/system/integrations/${props.integration.id}` },
-    { title: props.request.name, href: '#' },
-]);
 
 const form = useForm({
     name: props.request.name,
@@ -181,11 +174,10 @@ function insertVariable(key: string): void {
 <template>
     <Head :title="request.name" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-7xl">
-                <div class="mb-4 flex items-start justify-between gap-4">
-                    <Heading
+    <AppLayoutV2 :title="t('app_v2.nav.integrations')">
+        <div class="mx-auto max-w-7xl space-y-6">
+                <div class="flex items-start justify-between gap-4">
+                    <PageHeader
                         :title="request.name"
                         :description="integration.base_url"
                     />
@@ -360,7 +352,6 @@ function insertVariable(key: string): void {
                         </CardContent>
                     </Card>
                 </div>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

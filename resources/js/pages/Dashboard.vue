@@ -1,51 +1,39 @@
 <script setup lang="ts">
-import AppLayout from '@/layouts/AppLayout.vue';
-import { dashboard } from '@/routes';
-import { type BreadcrumbItem } from '@/types';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head } from '@inertiajs/vue3';
-import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import PlaceholderPattern from '../components/PlaceholderPattern.vue';
 
 const { t } = useI18n();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    {
-        title: t('dashboard.title'),
-        href: dashboard().url,
-    },
-]);
 </script>
 
 <template>
-    <Head :title="t('dashboard.title')" />
+    <Head :title="t('app_v2.nav.dashboard')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div
-            class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4"
-        >
-            <div class="grid auto-rows-min gap-4 md:grid-cols-3">
-                <div
-                    class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
-                >
-                    <PlaceholderPattern />
-                </div>
-                <div
-                    class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
-                >
-                    <PlaceholderPattern />
-                </div>
-                <div
-                    class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
-                >
-                    <PlaceholderPattern />
-                </div>
-            </div>
-            <div
-                class="relative min-h-[100vh] flex-1 rounded-xl border border-sidebar-border/70 md:min-h-min dark:border-sidebar-border"
+    <AppLayoutV2 :title="t('app_v2.nav.dashboard')">
+        <div class="space-y-6">
+            <PageHeader
+                :title="t('app_v2.dashboard.heading')"
+                :description="t('app_v2.dashboard.description')"
+            />
+
+            <!--
+              Placeholder welcome panel — real widgets (stats, recent activity,
+              live tickets) land in a follow-up plan. Kept intentionally light
+              so the shell rolls out without waiting on backend aggregation.
+            -->
+            <section
+                class="rounded-sp-sm border border-soft bg-navy p-8 text-center"
             >
-                <PlaceholderPattern />
-            </div>
+                <h2 class="text-base font-semibold text-ink">
+                    {{ t('app_v2.dashboard.welcome_title') }}
+                </h2>
+                <p
+                    class="mx-auto mt-2 max-w-[520px] text-sm text-ink-muted"
+                >
+                    {{ t('app_v2.dashboard.welcome_body') }}
+                </p>
+            </section>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

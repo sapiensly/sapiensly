@@ -70,6 +70,40 @@ class DocumentService
     }
 
     /**
+     * Create an inline-authored document (Text, Markdown, or HTML artifact).
+     * The content lives in `documents.body` — no file is written to storage,
+     * no `file_path` is set. KB chunking reads directly from `body`.
+     */
+    public function createInline(
+        User $user,
+        DocumentType $type,
+        string $body,
+        string $name,
+        Visibility $visibility = Visibility::Private,
+        ?string $folderId = null,
+        ?array $keywords = null,
+    ): Document {
+        if (! $type->isInlineAuthorable()) {
+            throw new \InvalidArgumentException("Type {$type->value} cannot be authored inline.");
+        }
+
+        $organizationId = $visibility === Visibility::Organization
+            ? $user->organization_id
+            : ($user->organization_id ?: null);
+
+        return Document::create([
+            'user_id' => $user->id,
+            'organization_id' => $organizationId,
+            'folder_id' => $folderId,
+            'name' => $name,
+            'keywords' => $keywords ?? [],
+            'type' => $type,
+            'body' => $body,
+            'visibility' => $visibility,
+        ]);
+    }
+
+    /**
      * Attach a document to a knowledge base.
      */
     public function attachToKnowledgeBase(Document $document, KnowledgeBase $knowledgeBase): void
@@ -147,6 +181,10 @@ class DocumentService
      */
     public function updateVisibility(Document $document, Visibility $visibility, User $user): Document
     {
+        if ($visibility === Visibility::Public && $document->type !== DocumentType::Artifact) {
+            throw new \InvalidArgumentException('Public visibility is only available for Artifact documents.');
+        }
+
         $organizationId = null;
 
         if ($visibility === Visibility::Organization) {

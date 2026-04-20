@@ -236,21 +236,20 @@ function onAgentCreated(agentId: string, agentName: string) {
 </script>
 
 <template>
-    <div class="flex h-full w-[300px] flex-col border-l bg-background">
-        <div class="flex items-center justify-between border-b px-3 py-2">
+    <div class="flex h-full w-[320px] flex-col border-l border-soft bg-navy">
+        <div class="flex items-center justify-between border-b border-soft px-3 py-3">
             <h3
-                class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
             >
                 {{ t('flows.panel.title') }}
             </h3>
-            <Button
-                variant="ghost"
-                size="icon"
-                class="h-6 w-6"
+            <button
+                type="button"
+                class="flex size-7 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
                 @click="emit('close')"
             >
-                <X class="h-3.5 w-3.5" />
-            </Button>
+                <X class="size-3.5" />
+            </button>
         </div>
 
         <div class="flex-1 space-y-4 overflow-y-auto p-3">
@@ -675,17 +674,16 @@ function onAgentCreated(agentId: string, agentName: string) {
             </template>
         </div>
 
-        <div class="border-t p-3">
-            <Button
-                variant="destructive"
-                size="sm"
-                class="w-full"
+        <div class="border-t border-soft p-3">
+            <button
+                type="button"
+                class="inline-flex w-full items-center justify-center gap-1.5 rounded-pill border border-sp-danger/40 bg-sp-danger/10 px-3.5 py-1.5 text-xs text-sp-danger transition-colors hover:bg-sp-danger/20 disabled:cursor-not-allowed disabled:opacity-40"
                 :disabled="nodeType === 'start'"
                 @click="emit('removeNode', node.id)"
             >
-                <Trash2 class="mr-1.5 h-3.5 w-3.5" />
+                <Trash2 class="size-3.5" />
                 {{ t('flows.panel.delete_node') }}
-            </Button>
+            </button>
         </div>
     </div>
 </template>

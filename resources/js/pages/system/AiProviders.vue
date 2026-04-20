@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { Badge } from '@/components/ui/badge';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Check,
@@ -22,7 +20,7 @@ import {
     Trash2,
     X,
 } from 'lucide-vue-next';
-import { computed, reactive } from 'vue';
+import { reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -46,18 +44,13 @@ defineProps<{
     configuredDrivers: string[];
 }>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.system'), href: '#' },
-    { title: t('system.ai_providers.title'), href: '/system/ai-providers' },
-]);
-
-const setDefault = (id: string) => {
+function setDefault(id: string) {
     router.post(`/system/ai-providers/${id}/set-default`);
-};
+}
 
-const setDefaultEmbeddings = (id: string) => {
+function setDefaultEmbeddings(id: string) {
     router.post(`/system/ai-providers/${id}/set-default-embeddings`);
-};
+}
 
 const connectionTests = reactive<
     Record<
@@ -73,23 +66,20 @@ const connectionTests = reactive<
     >
 >({});
 
-const testConnection = async (id: string) => {
+async function testConnection(id: string) {
     connectionTests[id] = { loading: true, result: null };
 
     try {
-        const response = await fetch(
-            `/system/ai-providers/${id}/test-connection`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-XSRF-TOKEN': decodeURIComponent(
-                        document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
-                    ),
-                    Accept: 'application/json',
-                },
+        const response = await fetch(`/system/ai-providers/${id}/test-connection`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-XSRF-TOKEN': decodeURIComponent(
+                    document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
+                ),
+                Accept: 'application/json',
             },
-        );
+        });
 
         const data = await response.json();
         connectionTests[id] = { loading: false, result: data };
@@ -109,272 +99,227 @@ const testConnection = async (id: string) => {
             connectionTests[id].result = null;
         }
     }, delay);
-};
+}
 
-const deleteProvider = (id: string) => {
+function deleteProvider(id: string) {
     if (confirm('Are you sure you want to remove this provider?')) {
         router.delete(`/system/ai-providers/${id}`);
     }
-};
+}
 </script>
 
 <template>
     <Head :title="t('system.ai_providers.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div
-            class="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4"
-        >
-            <div class="flex items-center justify-between">
-                <div>
-                    <h2 class="text-lg font-semibold">
-                        {{ t('system.ai_providers.title') }}
-                    </h2>
-                    <p class="text-sm text-muted-foreground">
-                        {{ t('system.ai_providers.description') }}
-                    </p>
-                </div>
-                <Button as-child>
+    <AppLayoutV2 :title="t('app_v2.nav.ai_providers')">
+        <div class="space-y-6">
+            <PageHeader
+                :title="t('system.ai_providers.title')"
+                :description="t('system.ai_providers.description')"
+            >
+                <template #actions>
                     <Link href="/system/ai-providers/create">
-                        <Plus class="mr-2 h-4 w-4" />
-                        {{ t('system.ai_providers.add') }}
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                        >
+                            <Plus class="size-3.5" />
+                            {{ t('system.ai_providers.add') }}
+                        </button>
                     </Link>
-                </Button>
-            </div>
+                </template>
+            </PageHeader>
 
             <div
                 v-if="providers.length === 0"
-                class="flex flex-col items-center justify-center rounded-lg border border-dashed p-12"
+                class="rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
             >
-                <Database class="mb-4 h-12 w-12 text-muted-foreground" />
-                <h3 class="mb-2 text-lg font-medium">
+                <div
+                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                >
+                    <Database class="size-5" />
+                </div>
+                <h3 class="mt-4 text-sm font-semibold text-ink">
                     {{ t('system.ai_providers.no_providers') }}
                 </h3>
-                <p class="mb-4 text-center text-sm text-muted-foreground">
+                <p class="mt-1 text-xs text-ink-muted">
                     {{ t('system.ai_providers.no_providers_description') }}
                 </p>
-                <Button as-child>
-                    <Link href="/system/ai-providers/create">
-                        <Plus class="mr-2 h-4 w-4" />
+                <Link href="/system/ai-providers/create" class="mt-4 inline-block">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                    >
+                        <Plus class="size-3.5" />
                         {{ t('system.ai_providers.add_first') }}
-                    </Link>
-                </Button>
+                    </button>
+                </Link>
             </div>
 
             <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <Card
+                <div
                     v-for="provider in providers"
                     :key="provider.id"
-                    :class="{ 'opacity-60': provider.status === 'inactive' }"
+                    :class="[
+                        'flex flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30',
+                        provider.status === 'inactive' ? 'opacity-60' : '',
+                    ]"
                 >
-                    <CardHeader>
-                        <div class="flex items-center justify-between">
-                            <CardTitle class="text-sm font-medium">
-                                {{ provider.display_name }}
-                            </CardTitle>
-                            <div class="flex gap-1.5">
-                                <Badge
-                                    v-if="provider.is_default"
-                                    variant="default"
-                                    class="text-xs"
-                                >
-                                    {{ t('system.ai_providers.default') }}
-                                </Badge>
-                                <Badge
-                                    v-if="provider.is_default_embeddings"
-                                    variant="secondary"
-                                    class="text-xs"
-                                >
-                                    {{ t('system.ai_providers.embeddings') }}
-                                </Badge>
-                                <Badge
-                                    v-if="provider.status === 'inactive'"
-                                    variant="outline"
-                                    class="text-xs"
-                                >
-                                    Inactive
-                                </Badge>
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex items-start gap-3">
+                            <div
+                                class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue"
+                            >
+                                <Plug class="size-4" />
+                            </div>
+                            <div class="min-w-0">
+                                <h3 class="truncate text-sm font-semibold text-ink">
+                                    {{ provider.display_name }}
+                                </h3>
+                                <p class="mt-0.5 text-[11px] text-ink-subtle">
+                                    {{ provider.chat_models_count }}
+                                    {{ t('system.ai_providers.chat_models') }}
+                                    <span v-if="provider.embedding_models_count > 0">
+                                        · {{ provider.embedding_models_count }}
+                                        {{ t('system.ai_providers.embedding_models') }}
+                                    </span>
+                                </p>
                             </div>
                         </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div class="space-y-3">
-                            <div
-                                class="flex items-center gap-4 text-sm text-muted-foreground"
+                        <div class="flex flex-wrap justify-end gap-1">
+                            <span
+                                v-if="provider.is_default"
+                                class="inline-flex items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
+                                style="color: var(--sp-accent-blue); border-color: color-mix(in oklab, var(--sp-accent-blue) 45%, transparent)"
                             >
-                                <span
-                                    >{{ provider.chat_models_count }}
-                                    {{
-                                        t('system.ai_providers.chat_models')
-                                    }}</span
-                                >
-                                <span
-                                    v-if="provider.embedding_models_count > 0"
-                                >
-                                    {{ provider.embedding_models_count }}
-                                    {{
-                                        t(
-                                            'system.ai_providers.embedding_models',
-                                        )
-                                    }}
-                                </span>
-                            </div>
+                                {{ t('system.ai_providers.default') }}
+                            </span>
+                            <span
+                                v-if="provider.is_default_embeddings"
+                                class="inline-flex items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
+                                style="color: var(--sp-spectrum-magenta); border-color: color-mix(in oklab, var(--sp-spectrum-magenta) 45%, transparent)"
+                            >
+                                {{ t('system.ai_providers.embeddings') }}
+                            </span>
+                            <span
+                                v-if="provider.status === 'inactive'"
+                                class="inline-flex items-center rounded-pill border border-medium px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                            >
+                                Inactive
+                            </span>
+                        </div>
+                    </div>
 
-                            <TooltipProvider>
-                                <div class="flex flex-wrap items-center gap-1">
-                                    <Tooltip>
-                                        <TooltipTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                class="h-7 w-7"
-                                                :disabled="
-                                                    connectionTests[provider.id]
-                                                        ?.loading
-                                                "
-                                                @click="
-                                                    testConnection(provider.id)
-                                                "
-                                            >
-                                                <Loader2
-                                                    v-if="
-                                                        connectionTests[
-                                                            provider.id
-                                                        ]?.loading
-                                                    "
-                                                    class="h-3.5 w-3.5 animate-spin"
-                                                />
-                                                <Check
-                                                    v-else-if="
-                                                        connectionTests[
-                                                            provider.id
-                                                        ]?.result?.success
-                                                    "
-                                                    class="h-3.5 w-3.5 text-green-600"
-                                                />
-                                                <X
-                                                    v-else-if="
-                                                        connectionTests[
-                                                            provider.id
-                                                        ]?.result &&
-                                                        !connectionTests[
-                                                            provider.id
-                                                        ]?.result?.success
-                                                    "
-                                                    class="h-3.5 w-3.5 text-destructive"
-                                                />
-                                                <Plug
-                                                    v-else
-                                                    class="h-3.5 w-3.5"
-                                                />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{{
-                                            t(
-                                                'system.ai_providers.test_connection',
-                                            )
-                                        }}</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip v-if="!provider.is_default">
-                                        <TooltipTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                class="h-7 w-7"
-                                                @click="setDefault(provider.id)"
-                                            >
-                                                <Star class="h-3.5 w-3.5" />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{{
-                                            t('system.ai_providers.set_default')
-                                        }}</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip
-                                        v-if="
-                                            !provider.is_default_embeddings &&
-                                            provider.embedding_models_count > 0
-                                        "
+                    <div
+                        class="mt-4 flex flex-wrap items-center gap-1 border-t border-soft pt-3"
+                    >
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger as-child>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        class="size-7 text-ink-muted hover:bg-white/5 hover:text-ink"
+                                        :disabled="connectionTests[provider.id]?.loading"
+                                        @click="testConnection(provider.id)"
                                     >
-                                        <TooltipTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                class="h-7 w-7"
-                                                @click="
-                                                    setDefaultEmbeddings(
-                                                        provider.id,
-                                                    )
-                                                "
-                                            >
-                                                <Database class="h-3.5 w-3.5" />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{{
-                                            t(
-                                                'system.ai_providers.set_embeddings',
-                                            )
-                                        }}</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                        <TooltipTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                class="h-7 w-7"
-                                                as-child
-                                            >
-                                                <Link
-                                                    :href="`/system/ai-providers/${provider.id}/edit`"
-                                                >
-                                                    <Pencil
-                                                        class="h-3.5 w-3.5"
-                                                    />
-                                                </Link>
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{{
-                                            t('common.edit')
-                                        }}</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                        <TooltipTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                class="h-7 w-7 text-destructive hover:text-destructive"
-                                                @click="
-                                                    deleteProvider(provider.id)
-                                                "
-                                            >
-                                                <Trash2 class="h-3.5 w-3.5" />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{{
-                                            t('common.delete')
-                                        }}</TooltipContent>
-                                    </Tooltip>
-                                </div>
-                            </TooltipProvider>
+                                        <Loader2
+                                            v-if="connectionTests[provider.id]?.loading"
+                                            class="size-3.5 animate-spin"
+                                        />
+                                        <Check
+                                            v-else-if="connectionTests[provider.id]?.result?.success"
+                                            class="size-3.5 text-sp-success"
+                                        />
+                                        <X
+                                            v-else-if="connectionTests[provider.id]?.result && !connectionTests[provider.id]?.result?.success"
+                                            class="size-3.5 text-sp-danger"
+                                        />
+                                        <Plug v-else class="size-3.5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    {{ t('system.ai_providers.test_connection') }}
+                                </TooltipContent>
+                            </Tooltip>
+                            <Tooltip v-if="!provider.is_default">
+                                <TooltipTrigger as-child>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        class="size-7 text-ink-muted hover:bg-white/5 hover:text-ink"
+                                        @click="setDefault(provider.id)"
+                                    >
+                                        <Star class="size-3.5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    {{ t('system.ai_providers.set_default') }}
+                                </TooltipContent>
+                            </Tooltip>
+                            <Tooltip v-if="!provider.is_default_embeddings && provider.embedding_models_count > 0">
+                                <TooltipTrigger as-child>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        class="size-7 text-ink-muted hover:bg-white/5 hover:text-ink"
+                                        @click="setDefaultEmbeddings(provider.id)"
+                                    >
+                                        <Database class="size-3.5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    {{ t('system.ai_providers.set_embeddings') }}
+                                </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger as-child>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        class="size-7 text-ink-muted hover:bg-white/5 hover:text-ink"
+                                        as-child
+                                    >
+                                        <Link :href="`/system/ai-providers/${provider.id}/edit`">
+                                            <Pencil class="size-3.5" />
+                                        </Link>
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    {{ t('common.edit') }}
+                                </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger as-child>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        class="size-7 text-sp-danger hover:bg-sp-danger/10 hover:text-sp-danger"
+                                        @click="deleteProvider(provider.id)"
+                                    >
+                                        <Trash2 class="size-3.5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    {{ t('common.delete') }}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
 
-                            <div
-                                v-if="
-                                    connectionTests[provider.id]?.result?.detail
-                                "
-                                class="rounded-md border px-3 py-2 text-xs"
-                                :class="
-                                    connectionTests[provider.id]?.result
-                                        ?.success
-                                        ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300'
-                                        : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-                                "
-                            >
-                                {{ connectionTests[provider.id].result.detail }}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                    <div
+                        v-if="connectionTests[provider.id]?.result?.detail"
+                        :class="[
+                            'mt-3 rounded-xs border px-3 py-2 text-[11px]',
+                            connectionTests[provider.id]?.result?.success
+                                ? 'border-sp-success/30 bg-sp-success/10 text-sp-success'
+                                : 'border-sp-danger/30 bg-sp-danger/10 text-sp-danger',
+                        ]"
+                    >
+                        {{ connectionTests[provider.id].result.detail }}
+                    </div>
+                </div>
             </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

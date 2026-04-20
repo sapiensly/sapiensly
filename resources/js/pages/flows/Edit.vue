@@ -12,21 +12,41 @@ import MenuNode from '@/components/flows/nodes/MenuNode.vue';
 import MessageNode from '@/components/flows/nodes/MessageNode.vue';
 import StartNode from '@/components/flows/nodes/StartNode.vue';
 import { useFlowEditor } from '@/composables/useFlowEditor';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Agent } from '@/types/agents';
 import type { Flow, FlowDefinition, FlowNodeType } from '@/types/flows';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { VueFlow } from '@vue-flow/core';
+import { MiniMap } from '@vue-flow/minimap';
+import type { Node } from '@vue-flow/core';
 import axios from 'axios';
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import '@vue-flow/controls/dist/style.css';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
+import '@vue-flow/minimap/dist/style.css';
+
+/**
+ * Map each node type to the same tint we use in the palette + node cards,
+ * so the mini-map pips match their canvas counterparts at a glance.
+ */
+const nodeTintMap: Record<string, string> = {
+    start: 'var(--sp-success)',
+    menu: 'var(--sp-warning)',
+    condition: 'var(--sp-accent-cyan)',
+    agent_handoff: 'var(--sp-spectrum-magenta)',
+    message: 'var(--sp-accent-blue)',
+    connector: 'var(--sp-spectrum-indigo)',
+    end: 'var(--sp-danger)',
+};
+
+function minimapNodeColor(node: Node): string {
+    return nodeTintMap[node.type ?? ''] ?? 'var(--sp-text-secondary)';
+}
 
 defineOptions({
     inheritAttrs: true,
@@ -282,17 +302,16 @@ const backUrl = props.agent
     ? FlowController.index({ agent: props.agent.id }).url
     : FlowController.globalIndex().url;
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.flows'), href: backUrl },
-    { title: flowName.value, href: '#' },
-]);
-
 </script>
 
 <template>
     <Head :title="flowName" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
+    <AppLayoutV2
+        :title="t('app_v2.nav.flows')"
+        full-bleed
+        force-collapsed-on-mount
+    >
         <div class="flex min-h-0 flex-1 flex-col">
         <FlowToolbar
             :back-url="backUrl"
@@ -351,8 +370,23 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
                         <EndNode v-bind="nodeProps" />
                     </template>
 
-                    <Background />
-                    <Controls />
+                    <Background
+                        pattern-color="rgba(255, 255, 255, 0.06)"
+                        :gap="20"
+                        :size="1.2"
+                    />
+                    <Controls class="sp-flow-controls" position="top-right" />
+                    <MiniMap
+                        class="sp-flow-minimap"
+                        position="bottom-left"
+                        :node-color="minimapNodeColor"
+                        :node-stroke-color="minimapNodeColor"
+                        :node-stroke-width="2"
+                        :node-border-radius="4"
+                        mask-color="rgba(0, 3, 28, 0.6)"
+                        pannable
+                        zoomable
+                    />
                 </VueFlow>
 
                 <FlowTestWidget v-if="flow" :flow-id="flow.id" />
@@ -373,5 +407,5 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
         </div>
 
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

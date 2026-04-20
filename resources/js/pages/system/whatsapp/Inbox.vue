@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Link } from '@inertiajs/vue3';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 defineProps<{
     conversations: {
@@ -15,8 +18,8 @@ defineProps<{
 </script>
 
 <template>
-    <AppLayout>
-        <div class="p-6">
+    <AppLayoutV2 :title="t('app_v2.nav.whatsapp')">
+        <div>
             <h1 class="mb-6 text-2xl font-semibold">{{ $t('whatsapp.inbox.title') }}</h1>
             <div v-if="conversations.data.length === 0" class="rounded border p-8 text-center text-muted-foreground">
                 {{ $t('whatsapp.inbox.empty') }}
@@ -33,5 +36,5 @@ defineProps<{
                 </li>
             </ul>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

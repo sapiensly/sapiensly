@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 defineProps<{
     connection: { id: string; display_phone_number: string };
@@ -16,8 +19,8 @@ defineProps<{
 </script>
 
 <template>
-    <AppLayout>
-        <div class="p-6">
+    <AppLayoutV2 :title="t('app_v2.nav.whatsapp')">
+        <div>
             <h1 class="mb-6 text-2xl font-semibold">{{ $t('whatsapp.analytics.title') }}</h1>
             <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <div class="rounded border bg-card p-4">
@@ -38,5 +41,5 @@ defineProps<{
                 </div>
             </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

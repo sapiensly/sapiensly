@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import * as ChatbotAnalyticsController from '@/actions/App/Http/Controllers/ChatbotAnalyticsController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
-import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,8 +21,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     Chatbot,
     ChatbotStats,
@@ -55,11 +53,6 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
-    { title: props.chatbot.name, href: '#' },
-]);
-
 const statusVariant = (status: string) => {
     switch (status) {
         case 'active':
@@ -88,20 +81,19 @@ const formatDate = (date: string) => {
 <template>
     <Head :title="chatbot.name" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <div class="mb-8 flex items-start justify-between">
+    <AppLayoutV2 :title="t('app_v2.nav.chatbots')">
+        <div class="mx-auto max-w-4xl space-y-6">
+                <div class="flex items-start justify-between">
                     <div>
                         <div class="mb-2 flex items-center gap-3">
-                            <Heading :title="chatbot.name" />
+                            <h1 class="text-[22px] font-semibold leading-tight text-ink">{{ chatbot.name }}</h1>
                             <Badge :variant="statusVariant(chatbot.status)">
                                 {{ chatbot.status }}
                             </Badge>
                         </div>
                         <p
                             v-if="chatbot.description"
-                            class="text-muted-foreground"
+                            class="text-xs text-ink-muted"
                         >
                             {{ chatbot.description }}
                         </p>
@@ -411,7 +403,6 @@ const formatDate = (date: string) => {
                         </Card>
                     </div>
                 </div>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

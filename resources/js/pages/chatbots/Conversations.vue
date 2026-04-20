@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,8 +9,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Chatbot, PaginatedConversations } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
 import {
@@ -31,15 +30,6 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
-    {
-        title: props.chatbot.name,
-        href: ChatbotController.show({ chatbot: props.chatbot.id }).url,
-    },
-    { title: t('chatbots.conversations.title'), href: '#' },
-]);
-
 const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
         month: 'short',
@@ -53,11 +43,10 @@ const formatDate = (date: string) => {
 <template>
     <Head :title="t('chatbots.conversations.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <div class="mb-8 flex items-center justify-between">
-                    <Heading
+    <AppLayoutV2 :title="t('app_v2.nav.chatbots')">
+        <div class="mx-auto max-w-4xl space-y-6">
+                <div class="flex items-center justify-between">
+                    <PageHeader
                         :title="t('chatbots.conversations.title')"
                         :description="`${t('chatbots.conversations.all_for')} ${chatbot.name}`"
                     />
@@ -291,7 +280,6 @@ const formatDate = (date: string) => {
                         </div>
                     </div>
                 </div>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import AgentForm from '@/components/agents/AgentForm.vue';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import KeywordsInput from '@/components/KeywordsInput.vue';
@@ -15,8 +15,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     AgentFormData,
     AgentTeam,
@@ -36,18 +35,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    {
-        title: t('agent_teams.index.title'),
-        href: AgentTeamController.index().url,
-    },
-    {
-        title: props.team.name,
-        href: AgentTeamController.show({ agent_team: props.team.id }).url,
-    },
-    { title: t('common.edit'), href: '#' },
-]);
 
 const agents = ref<AgentFormData[]>(
     props.team.agents?.map((agent) => ({
@@ -88,13 +75,12 @@ const statusOptions = computed(() => [
 <template>
     <Head :title="`${t('agent_teams.edit.title')} ${team.name}`" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <Heading
-                    :title="`${t('agent_teams.edit.title')} ${team.name}`"
-                    :description="t('agent_teams.edit.description')"
-                />
+    <AppLayoutV2 :title="t('app_v2.nav.agent_teams')">
+        <div class="mx-auto max-w-4xl space-y-6">
+            <PageHeader
+                :title="`${t('agent_teams.edit.title')} ${team.name}`"
+                :description="t('agent_teams.edit.description')"
+            />
 
                 <form class="space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
@@ -220,7 +206,6 @@ const statusOptions = computed(() => [
                         </Button>
                     </div>
                 </form>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

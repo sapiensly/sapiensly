@@ -11,6 +11,7 @@ enum DocumentType: string
     case Url = 'url';
     case Csv = 'csv';
     case Json = 'json';
+    case Artifact = 'artifact';
 
     public function label(): string
     {
@@ -22,6 +23,7 @@ enum DocumentType: string
             self::Url => __('URL'),
             self::Csv => __('CSV'),
             self::Json => __('JSON'),
+            self::Artifact => __('Artifact (HTML)'),
         };
     }
 
@@ -35,6 +37,7 @@ enum DocumentType: string
             self::Url => [],
             self::Csv => ['text/csv', 'application/csv'],
             self::Json => ['application/json'],
+            self::Artifact => ['text/html'],
         };
     }
 
@@ -48,7 +51,17 @@ enum DocumentType: string
             self::Url => '',
             self::Csv => 'csv',
             self::Json => 'json',
+            self::Artifact => 'html',
         };
+    }
+
+    /**
+     * True for types whose content is authored inline in the UI (stored in
+     * `documents.body`) rather than uploaded as a file.
+     */
+    public function isInlineAuthorable(): bool
+    {
+        return in_array($this, [self::Txt, self::Md, self::Artifact], true);
     }
 
     public static function fromExtension(string $extension): self
@@ -60,6 +73,7 @@ enum DocumentType: string
             'md', 'markdown' => self::Md,
             'csv' => self::Csv,
             'json' => self::Json,
+            'html', 'htm' => self::Artifact,
             default => throw new \InvalidArgumentException("Unsupported file extension: {$extension}"),
         };
     }

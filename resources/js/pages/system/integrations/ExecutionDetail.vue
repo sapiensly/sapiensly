@@ -1,14 +1,11 @@
 <script setup lang="ts">
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import JsonViewer from '@/components/integrations/JsonViewer.vue';
-import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface Execution {
@@ -30,32 +27,26 @@ interface Execution {
     created_at: string | null;
 }
 
-const props = defineProps<{ execution: Execution }>();
+defineProps<{ execution: Execution }>();
 
 const { t } = useI18n();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.system'), href: '#' },
-    { title: t('system.integrations.title'), href: '/system/integrations' },
-    { title: t('system.integrations.tabs.executions'), href: `/system/integrations/${props.execution.integration_id}/executions` },
-    { title: props.execution.id, href: '#' },
-]);
 </script>
 
 <template>
     <Head :title="`Execution ${execution.id}`" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <div class="mb-6 flex items-start justify-between gap-4">
-                    <Heading title="Execution" :description="execution.id" />
-                    <Button variant="outline" as-child>
-                        <Link :href="`/system/integrations/${execution.integration_id}/executions`">
-                            {{ t('common.back') }}
-                        </Link>
-                    </Button>
-                </div>
+    <AppLayoutV2 :title="t('app_v2.nav.integrations')">
+        <div class="mx-auto max-w-4xl space-y-6">
+            <PageHeader title="Execution" :description="execution.id">
+                <template #actions>
+                    <Link
+                        :href="`/system/integrations/${execution.integration_id}/executions`"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                    >
+                        {{ t('common.back') }}
+                    </Link>
+                </template>
+            </PageHeader>
 
                 <Card class="mb-4">
                     <CardContent class="space-y-3 pt-6">
@@ -134,7 +125,6 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
                         >{{ execution.metadata ? JSON.stringify(execution.metadata, null, 2) : '—' }}</pre>
                     </TabsContent>
                 </Tabs>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

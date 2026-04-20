@@ -13,16 +13,20 @@ defineProps<{
 
 <template>
     <div
-        class="flex h-16 w-16 items-center justify-center rounded-full border-2 border-green-500 bg-green-50 shadow-sm dark:bg-green-950/40"
+        class="flex h-16 w-16 items-center justify-center rounded-full border-2 shadow-sp-float"
+        style="
+            border-color: var(--sp-success);
+            background: color-mix(in oklab, var(--sp-success) 15%, var(--sp-bg-secondary));
+        "
     >
-        <span class="text-xs font-semibold text-green-700 dark:text-green-300">
+        <span class="text-xs font-semibold text-sp-success">
             {{ t('flows.nodes.start') }}
         </span>
 
         <Handle
             type="source"
             :position="Position.Bottom"
-            class="!bg-green-500"
+            class="!bg-sp-success"
         />
     </div>
 </template>

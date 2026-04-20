@@ -1,8 +1,7 @@
 <script setup lang="ts">
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import IntegrationCard from '@/components/integrations/IntegrationCard.vue';
 import IntegrationEmptyState from '@/components/integrations/IntegrationEmptyState.vue';
-import Heading from '@/components/Heading.vue';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
     Select,
@@ -11,11 +10,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Plus, Search } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface IntegrationSummary {
@@ -40,11 +38,6 @@ interface Props {
 const props = defineProps<Props>();
 
 const { t } = useI18n();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.system'), href: '#' },
-    { title: t('system.integrations.title'), href: '/system/integrations' },
-]);
 
 const search = ref<string>(props.filters.search ?? '');
 const authTypeFilter = ref<string>(props.filters.auth_type ?? 'all');
@@ -82,68 +75,72 @@ function handleDelete(id: string): void {
 <template>
     <Head :title="t('system.integrations.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-5xl">
-                <div class="mb-6 flex items-start justify-between gap-4">
-                    <Heading
-                        :title="t('system.integrations.title')"
-                        :description="t('system.integrations.description')"
-                    />
-                    <Button as-child>
-                        <Link href="/system/integrations/create">
-                            <Plus class="mr-2 h-4 w-4" />
+    <AppLayoutV2 :title="t('app_v2.nav.integrations')">
+        <div class="space-y-5">
+            <PageHeader
+                :title="t('app_v2.integrations.heading')"
+                :description="t('app_v2.integrations.description')"
+            >
+                <template #actions>
+                    <Link href="/system/integrations/create">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                        >
+                            <Plus class="size-3.5" />
                             {{ t('system.integrations.new') }}
-                        </Link>
-                    </Button>
-                </div>
+                        </button>
+                    </Link>
+                </template>
+            </PageHeader>
 
-                <div
-                    v-if="integrations.length > 0"
-                    class="mb-4 flex flex-wrap items-center gap-2"
-                >
-                    <div class="relative flex-1 min-w-[220px]">
-                        <Search
-                            class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <Input
-                            v-model="search"
-                            type="search"
-                            :placeholder="t('system.integrations.search_placeholder')"
-                            class="pl-9"
-                        />
-                    </div>
-                    <Select v-model="authTypeFilter">
-                        <SelectTrigger class="w-56">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">
-                                {{ t('system.integrations.filter_all_auth') }}
-                            </SelectItem>
-                            <SelectItem
-                                v-for="option in authTypes"
-                                :key="option.value"
-                                :value="option.value"
-                            >
-                                {{ option.label }}
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-
-                <IntegrationEmptyState v-if="integrations.length === 0" />
-
-                <div v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <IntegrationCard
-                        v-for="integration in integrations"
-                        :key="integration.id"
-                        :integration="integration"
-                        @duplicate="handleDuplicate"
-                        @delete="handleDelete"
+            <div
+                v-if="integrations.length > 0"
+                class="flex flex-wrap items-center gap-3"
+            >
+                <div class="relative flex-1 min-w-[220px]">
+                    <Search
+                        class="absolute top-1/2 left-4 size-3.5 -translate-y-1/2 text-ink-subtle"
+                    />
+                    <Input
+                        v-model="search"
+                        type="search"
+                        :placeholder="t('system.integrations.search_placeholder')"
+                        class="h-10 rounded-pill border-medium bg-white/5 pl-10 text-sm text-ink placeholder:text-ink-subtle"
                     />
                 </div>
+                <Select v-model="authTypeFilter">
+                    <SelectTrigger
+                        class="h-10 w-56 border-medium bg-white/5 text-sm"
+                    >
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">
+                            {{ t('system.integrations.filter_all_auth') }}
+                        </SelectItem>
+                        <SelectItem
+                            v-for="option in authTypes"
+                            :key="option.value"
+                            :value="option.value"
+                        >
+                            {{ option.label }}
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <IntegrationEmptyState v-if="integrations.length === 0" />
+
+            <div v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <IntegrationCard
+                    v-for="integration in integrations"
+                    :key="integration.id"
+                    :integration="integration"
+                    @duplicate="handleDuplicate"
+                    @delete="handleDelete"
+                />
             </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

@@ -172,12 +172,18 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
 
     /**
      * Parse document content from the storage disk resolved for the document's tenant.
+     * Inline-authored documents short-circuit: their content lives on the model
+     * directly so we hand it to the parser without any disk round-trip.
      */
     private function parseDocument(
         Document $document,
         DocumentParserService $parser,
         CloudProviderService $cloudProviderService,
     ): string {
+        if ($document->isInline()) {
+            return (string) $document->body;
+        }
+
         if (! $document->file_path) {
             throw new \RuntimeException('Document has no file path');
         }

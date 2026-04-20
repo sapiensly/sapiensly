@@ -1,0 +1,593 @@
+/**
+ * Admin V2 page chrome + background treatments.
+ * All values mirror `handoff/layout_spec.md` verbatim — do not eyeball
+ * different numbers unless the spec is revised.
+ *
+ * Only imported from AdminV2Layout.vue so the treatments stay scoped to
+ * the admin surface (main app bg is shadcn neutral).
+ */
+
+/* -----------------------------------------------------------------------
+ * Shell
+ * ----------------------------------------------------------------------- */
+
+.sp-admin-shell {
+    position: relative;
+    min-height: 100vh;
+    background-color: var(--sp-bg-primary);
+    color: var(--sp-text-primary);
+    font-family: 'Poppins', 'Instrument Sans', system-ui, sans-serif;
+    isolation: isolate;
+}
+
+/* Content sits above the decorative pseudo-elements. */
+.sp-admin-shell > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* -----------------------------------------------------------------------
+ * Background treatments — pick via data-bg="blueprint|flat|spectrum|subtle"
+ *
+ * Defaults to blueprint when the attribute is missing.
+ *
+ * Layer split:
+ *   - glow   → .sp-admin-shell::before (viewport-wide fixed, spans sidebar
+ *              and content so both columns share the same light)
+ *   - grid   → .sp-admin-content::before (scoped to the content column only,
+ *              so the 50px lines stop at the sidebar's right border)
+ * ----------------------------------------------------------------------- */
+
+.sp-admin-shell[data-bg]::before,
+.sp-admin-shell:not([data-bg])::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.sp-admin-content {
+    position: relative;
+    isolation: isolate;
+}
+
+.sp-admin-content > * {
+    position: relative;
+    z-index: 1;
+}
+
+.sp-admin-content::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ── Treatment A: blueprint (default) ───────────────────────────────── */
+
+.sp-admin-shell:not([data-bg])::before,
+.sp-admin-shell[data-bg='blueprint']::before {
+    background-image:
+        radial-gradient(
+            ellipse 80% 50% at 60% -10%,
+            rgba(0, 150, 255, 0.15),
+            transparent 60%
+        ),
+        /* Bottom-left indigo glow — dimmed + shifted right so it reads as
+           ambient rather than a second light source competing with the top-right. */
+        radial-gradient(
+            ellipse 45% 30% at 20% 100%,
+            rgba(79, 70, 229, 0.035),
+            transparent 55%
+        );
+}
+
+.sp-admin-shell:not([data-bg]) .sp-admin-content::before,
+.sp-admin-shell[data-bg='blueprint'] .sp-admin-content::before {
+    background-image:
+        linear-gradient(
+            rgba(255, 255, 255, 0.03) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.03) 1px,
+            transparent 1px
+        );
+    background-size: 50px 50px;
+    mask-image: radial-gradient(
+        ellipse 80% 60% at 50% 30%,
+        #000,
+        transparent 90%
+    );
+    -webkit-mask-image: radial-gradient(
+        ellipse 80% 60% at 50% 30%,
+        #000,
+        transparent 90%
+    );
+}
+
+/* ── Treatment B: flat ──────────────────────────────────────────────── */
+
+.sp-admin-shell[data-bg='flat']::before,
+.sp-admin-shell[data-bg='flat'] .sp-admin-content::before {
+    background-image: none;
+}
+
+/* ── Treatment C: spectrum (narrative only) ─────────────────────────── */
+
+.sp-admin-shell[data-bg='spectrum']::before {
+    background-image:
+        radial-gradient(
+            ellipse 45% 35% at 90% 10%,
+            rgba(217, 70, 239, 0.14),
+            transparent 60%
+        ),
+        radial-gradient(
+            ellipse 45% 35% at 10% 95%,
+            rgba(0, 229, 255, 0.12),
+            transparent 60%
+        ),
+        radial-gradient(
+            ellipse 55% 40% at 50% 50%,
+            rgba(79, 70, 229, 0.08),
+            transparent 60%
+        );
+}
+
+.sp-admin-shell[data-bg='spectrum'] .sp-admin-content::before {
+    background-image: none;
+}
+
+/* ── Treatment D: subtle ────────────────────────────────────────────── */
+
+.sp-admin-shell[data-bg='subtle']::before {
+    background-image: radial-gradient(
+        ellipse 80% 50% at 60% -10%,
+        rgba(0, 150, 255, 0.08),
+        transparent 60%
+    );
+}
+
+.sp-admin-shell[data-bg='subtle'] .sp-admin-content::before {
+    background-image: none;
+}
+
+/* -----------------------------------------------------------------------
+ * Glass panels — shared by Topbar + Sidebar per spec §1.
+ * Topbar uses bg-navy-deep/80, Sidebar uses bg-navy/80 — both with
+ * 10px backdrop-blur. Kept in CSS (not Tailwind) so the backdrop-filter
+ * cascade doesn't fight utility ordering.
+ * ----------------------------------------------------------------------- */
+
+.sp-glass {
+    background: color-mix(
+        in oklab,
+        var(--sp-bg-primary) 80%,
+        transparent
+    );
+    backdrop-filter: blur(10px) saturate(1.2);
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    border-bottom: 1px solid var(--sp-border-soft);
+}
+
+/*
+ * Sidebar has no opaque background — the blueprint treatment's glow + grid
+ * span the whole viewport continuously, so the sidebar and content area
+ * read as one lit surface separated only by the right border.
+ *
+ * The shell's `> * { z-index: 1 }` rule keeps the sidebar's content above
+ * the pseudo-element gradient layers; `background: transparent` means the
+ * gradient shows through underneath.
+ */
+.sp-glass-sidebar {
+    background: transparent;
+    border-right: 1px solid var(--sp-border-soft);
+}
+
+/* -----------------------------------------------------------------------
+ * Admin-v2 popover / menu skin.
+ *
+ * Shadcn's dropdown primitives read from the neutral `--background`,
+ * `--foreground`, `--muted-foreground` etc. CSS variables. By *scoping*
+ * those variables on `.sp-admin-menu`, every child — whether it's a
+ * DropdownMenuItem, UserInfo, or anything deeper in UserMenuContent —
+ * automatically picks up admin-v2 tones without needing per-slot rules.
+ *
+ * Also pins the font family to Poppins (same as the sidebar) since the
+ * menu renders in a portal outside the `.sp-admin-shell` parent and
+ * would otherwise fall back to the app-wide Instrument Sans.
+ * ----------------------------------------------------------------------- */
+
+.sp-admin-menu {
+    /* Surface */
+    --background: var(--sp-bg-secondary);
+    --foreground: var(--sp-text-primary);
+    --card: var(--sp-bg-secondary);
+    --card-foreground: var(--sp-text-primary);
+    --popover: var(--sp-bg-secondary);
+    --popover-foreground: var(--sp-text-primary);
+
+    /* Text */
+    --muted: rgba(255, 255, 255, 0.04);
+    --muted-foreground: var(--sp-text-secondary);
+
+    /* Interactive */
+    --accent: rgba(255, 255, 255, 0.06);
+    --accent-foreground: var(--sp-text-primary);
+    --primary: var(--sp-accent-blue);
+    --primary-foreground: #fff;
+
+    /* Structural */
+    --border: var(--sp-border-soft);
+    --input: var(--sp-border-medium);
+    --ring: var(--sp-accent-blue);
+
+    /* Destructive */
+    --destructive: var(--sp-danger);
+    --destructive-foreground: #fff;
+
+    background: var(--sp-bg-secondary);
+    border: 1px solid var(--sp-border-soft);
+    color: var(--sp-text-primary);
+    font-family: 'Poppins', 'Instrument Sans', system-ui, sans-serif;
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.04) inset,
+        0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+/* Normalise inner font sizes — admin scale uses 13 px for body text and
+   11 px for labels/meta (email, account hint), coherent with the sidebar. */
+.sp-admin-menu [data-slot='dropdown-menu-label'],
+.sp-admin-menu [data-slot='dropdown-menu-item'],
+.sp-admin-menu [data-slot='dropdown-menu-checkbox-item'],
+.sp-admin-menu [data-slot='dropdown-menu-radio-item'] {
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.sp-admin-menu [data-slot='dropdown-menu-shortcut'] {
+    font-size: 11px;
+    color: var(--sp-text-tertiary);
+}
+
+/* UserInfo renders an email / account label under the name — tone it down
+   to the muted ink so it reads as secondary like the sidebar's user card. */
+.sp-admin-menu .truncate.text-xs {
+    font-size: 11px;
+    color: var(--sp-text-secondary);
+}
+
+/* Destructive items (e.g. Log out) use shadcn's `data-variant="destructive"`
+   to paint red; keep that intent but deepen the hover bg. */
+.sp-admin-menu [data-slot='dropdown-menu-item'][data-variant='destructive'] {
+    color: var(--sp-danger);
+}
+.sp-admin-menu
+    [data-slot='dropdown-menu-item'][data-variant='destructive']:hover,
+.sp-admin-menu
+    [data-slot='dropdown-menu-item'][data-variant='destructive']:focus,
+.sp-admin-menu
+    [data-slot='dropdown-menu-item'][data-variant='destructive'][data-highlighted] {
+    background: color-mix(in oklab, var(--sp-danger) 15%, transparent);
+    color: var(--sp-danger);
+}
+
+/* -----------------------------------------------------------------------
+ * Command palette (⌘K) — shares the .sp-admin-menu skin for colors /
+ * font family, with extra sizing rules to match the admin scale.
+ *
+ * The palette renders inside a Dialog portal, so we rely on the CSS var
+ * overrides inherited from .sp-admin-menu (--background, --popover,
+ * --accent, --muted-foreground, --border) to adopt admin-v2 tones.
+ * ----------------------------------------------------------------------- */
+
+/* Search input row — taller than the default 36px, with a proper soft
+   divider below so it reads as a separate section from the results. */
+.sp-admin-palette [data-slot='command-input-wrapper'] {
+    height: 48px;
+    padding-inline: 14px;
+    border-bottom-color: var(--sp-border-soft);
+}
+
+.sp-admin-palette [data-slot='command-input-wrapper'] svg {
+    color: var(--sp-text-secondary);
+    opacity: 1;
+}
+
+.sp-admin-palette [data-slot='command-input'] {
+    font-size: 13px;
+    color: var(--sp-text-primary);
+}
+
+.sp-admin-palette [data-slot='command-input']::placeholder {
+    color: var(--sp-text-secondary);
+}
+
+/* Group heading (e.g. "Navigation") — mirrors the sidebar section eyebrow:
+   small, spaced, tertiary ink. */
+.sp-admin-palette [data-slot='command-group-heading'] {
+    padding: 10px 12px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.25);
+}
+
+/* Items — 13px body copy like the sidebar nav, tinted on highlight. */
+.sp-admin-palette [data-slot='command-item'] {
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    color: var(--sp-text-primary);
+}
+
+.sp-admin-palette [data-slot='command-item'][data-highlighted] {
+    background: color-mix(in oklab, var(--sp-accent-blue) 10%, transparent);
+    color: var(--sp-text-primary);
+}
+
+.sp-admin-palette [data-slot='command-item'] svg {
+    color: var(--sp-text-secondary);
+}
+
+/* Empty state — centered, muted. */
+.sp-admin-palette [data-slot='command-empty'] {
+    padding: 24px 12px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--sp-text-secondary);
+}
+
+/* Separator between groups. */
+.sp-admin-palette [data-slot='command-separator'] {
+    background: var(--sp-border-soft);
+}
+
+/* -----------------------------------------------------------------------
+ * Tenant shell (`AppLayoutV2`) — parallel class block so the tenant
+ * surface at /dashboard inherits the same blueprint/flat/spectrum/subtle
+ * backdrop treatments as /admin2, without restyling any admin-v2 selector.
+ *
+ * Everything mirrors the `.sp-admin-shell` / `.sp-admin-content` block
+ * above. Kept as a separate block (rather than merging selectors with
+ * `:is()`) so admin-v2 chrome stays 1:1 with the signed-off version.
+ * ----------------------------------------------------------------------- */
+
+.sp-app-shell {
+    position: relative;
+    min-height: 100vh;
+    background-color: var(--sp-bg-primary);
+    color: var(--sp-text-primary);
+    font-family: 'Poppins', 'Instrument Sans', system-ui, sans-serif;
+    isolation: isolate;
+}
+
+.sp-app-shell > * {
+    position: relative;
+    z-index: 1;
+}
+
+.sp-app-shell[data-bg]::before,
+.sp-app-shell:not([data-bg])::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.sp-app-content {
+    position: relative;
+    isolation: isolate;
+}
+
+.sp-app-content > * {
+    position: relative;
+    z-index: 1;
+}
+
+.sp-app-content::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Treatment A: blueprint (default). */
+.sp-app-shell:not([data-bg])::before,
+.sp-app-shell[data-bg='blueprint']::before {
+    background-image:
+        radial-gradient(
+            ellipse 80% 50% at 60% -10%,
+            rgba(0, 150, 255, 0.15),
+            transparent 60%
+        ),
+        radial-gradient(
+            ellipse 45% 30% at 20% 100%,
+            rgba(79, 70, 229, 0.035),
+            transparent 55%
+        );
+}
+
+.sp-app-shell:not([data-bg]) .sp-app-content::before,
+.sp-app-shell[data-bg='blueprint'] .sp-app-content::before {
+    background-image:
+        linear-gradient(
+            rgba(255, 255, 255, 0.03) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.03) 1px,
+            transparent 1px
+        );
+    background-size: 50px 50px;
+    mask-image: radial-gradient(
+        ellipse 80% 60% at 50% 30%,
+        #000,
+        transparent 90%
+    );
+    -webkit-mask-image: radial-gradient(
+        ellipse 80% 60% at 50% 30%,
+        #000,
+        transparent 90%
+    );
+}
+
+/* Treatment B: flat. */
+.sp-app-shell[data-bg='flat']::before,
+.sp-app-shell[data-bg='flat'] .sp-app-content::before {
+    background-image: none;
+}
+
+/* Treatment C: spectrum. */
+.sp-app-shell[data-bg='spectrum']::before {
+    background-image:
+        radial-gradient(
+            ellipse 45% 35% at 90% 10%,
+            rgba(217, 70, 239, 0.14),
+            transparent 60%
+        ),
+        radial-gradient(
+            ellipse 45% 35% at 10% 95%,
+            rgba(0, 229, 255, 0.12),
+            transparent 60%
+        ),
+        radial-gradient(
+            ellipse 55% 40% at 50% 50%,
+            rgba(79, 70, 229, 0.08),
+            transparent 60%
+        );
+}
+
+.sp-app-shell[data-bg='spectrum'] .sp-app-content::before {
+    background-image: none;
+}
+
+/* Treatment D: subtle. */
+.sp-app-shell[data-bg='subtle']::before {
+    background-image: radial-gradient(
+        ellipse 80% 50% at 60% -10%,
+        rgba(0, 150, 255, 0.08),
+        transparent 60%
+    );
+}
+
+.sp-app-shell[data-bg='subtle'] .sp-app-content::before {
+    background-image: none;
+}
+
+/* -----------------------------------------------------------------------
+ * VueFlow editor — tune default chrome to sit on the dark backdrop.
+ *
+ * The VueFlow library ships light-theme defaults in
+ * `@vue-flow/core/dist/theme-default.css`. We override the attachment
+ * surface (edges, handles, minimap) and the Controls widget so the canvas
+ * reads against bg-navy-deep without clashing with the node cards.
+ * ----------------------------------------------------------------------- */
+
+/* Canvas surface behind the nodes — transparent so the blueprint backdrop
+   shows through; the pattern-color prop on <Background> draws the dots. */
+.vue-flow__pane {
+    background: transparent;
+}
+
+/* Edges + connection preview lines. */
+.vue-flow__edge-path,
+.vue-flow__connection-path {
+    stroke: var(--sp-text-secondary);
+    stroke-width: 1.5;
+}
+
+.vue-flow__edge.selected .vue-flow__edge-path,
+.vue-flow__edge:focus .vue-flow__edge-path,
+.vue-flow__edge:focus-visible .vue-flow__edge-path {
+    stroke: var(--sp-accent-blue);
+}
+
+/* Default handles — circles on node sides. */
+.vue-flow__handle {
+    background: var(--sp-bg-secondary);
+    border: 1.5px solid var(--sp-text-secondary);
+    width: 10px;
+    height: 10px;
+}
+
+.vue-flow__handle:hover,
+.vue-flow__handle.connecting {
+    border-color: var(--sp-accent-blue);
+    background: color-mix(in oklab, var(--sp-accent-blue) 30%, transparent);
+}
+
+/* Selection rectangle when box-selecting multiple nodes. */
+.vue-flow__selection {
+    background: color-mix(in oklab, var(--sp-accent-blue) 8%, transparent);
+    border: 1px solid var(--sp-accent-blue);
+}
+
+/* Zoom / fit-view controls — bottom-left pill cluster. */
+.sp-flow-controls.vue-flow__controls {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    border-radius: 8px;
+    overflow: hidden;
+    background: color-mix(in oklab, var(--sp-bg-secondary) 85%, transparent);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--sp-border-soft);
+}
+
+.sp-flow-controls .vue-flow__controls-button {
+    background: transparent;
+    border-bottom: 1px solid var(--sp-border-soft);
+    color: var(--sp-text-secondary);
+    transition: color 150ms ease, background 150ms ease;
+}
+
+.sp-flow-controls .vue-flow__controls-button:last-child {
+    border-bottom: none;
+}
+
+.sp-flow-controls .vue-flow__controls-button:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--sp-text-primary);
+}
+
+.sp-flow-controls .vue-flow__controls-button svg {
+    fill: currentColor;
+}
+
+/* Mini-map — bottom-right viewport overview. Rounded card, glass bg,
+   subtle soft border so it reads as "another admin-v2 surface" rather
+   than a stock VueFlow widget. */
+.sp-flow-minimap.vue-flow__minimap {
+    background: color-mix(in oklab, var(--sp-bg-secondary) 85%, transparent);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--sp-border-soft);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    margin: 16px;
+    /* Default VueFlow size is 200×150 — bump slightly so node pips read. */
+    width: 220px;
+    height: 160px;
+}
+
+/* The inner SVG surface — transparent so our card bg shows through.
+   Force the SVG to fill the minimap panel so the viewBox scales to the
+   card dimensions instead of leaving whitespace on the right/bottom when
+   VueFlow's default sizing doesn't match our custom 220×160 frame. */
+.sp-flow-minimap .vue-flow__minimap-svg,
+.sp-flow-minimap.vue-flow__panel > svg {
+    background: transparent;
+    width: 100%;
+    height: 100%;
+}
+
+/* Viewport rectangle (the window showing what's currently in view). */
+.sp-flow-minimap .vue-flow__minimap-mask {
+    fill: rgba(0, 3, 28, 0.55);
+}

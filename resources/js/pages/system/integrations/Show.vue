@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,8 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     CheckCircle2,
@@ -69,12 +68,6 @@ interface Integration {
 const props = defineProps<{ integration: Integration }>();
 
 const { t } = useI18n();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.system'), href: '#' },
-    { title: t('system.integrations.title'), href: '/system/integrations' },
-    { title: props.integration.name, href: `/system/integrations/${props.integration.id}` },
-]);
 
 const activeTab = ref<'requests' | 'environments' | 'settings'>('requests');
 
@@ -165,17 +158,16 @@ function destroyIntegration(): void {
 <template>
     <Head :title="integration.name" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-5xl">
-                <div class="mb-6 flex items-start justify-between gap-4">
+    <AppLayoutV2 :title="t('app_v2.nav.integrations')">
+        <div class="mx-auto max-w-5xl space-y-6">
+                <div class="flex items-start justify-between gap-4">
                     <div class="flex items-start gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue">
                             <Plug class="h-5 w-5" />
                         </div>
                         <div>
                             <div class="flex items-center gap-2">
-                                <Heading
+                                <PageHeader
                                     :title="integration.name"
                                     :description="integration.base_url"
                                 />
@@ -438,7 +430,6 @@ function destroyIntegration(): void {
                         </Card>
                     </TabsContent>
                 </Tabs>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

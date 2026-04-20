@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 defineProps<{
     connection: Record<string, unknown>;
@@ -9,8 +12,8 @@ defineProps<{
 </script>
 
 <template>
-    <AppLayout>
-        <div class="max-w-3xl p-6">
+    <AppLayoutV2 :title="t('app_v2.nav.whatsapp')">
+        <div class="mx-auto max-w-3xl">
             <h1 class="mb-4 text-2xl font-semibold">{{ (connection as any).display_phone_number }}</h1>
             <div class="mb-4 rounded border bg-card p-4">
                 <div class="mb-2 text-sm font-medium">{{ $t('whatsapp.webhook.url') }}</div>
@@ -23,5 +26,5 @@ defineProps<{
                 <pre class="overflow-x-auto text-xs">{{ (connection as any).masked_auth }}</pre>
             </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

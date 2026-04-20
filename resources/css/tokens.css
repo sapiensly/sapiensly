@@ -1,0 +1,53 @@
+/**
+ * Sapiensly brand tokens.
+ *
+ * Reconstructed from the handoff/design_tokens.md reference values because the
+ * source colors_and_type.css was not included in the handoff drop. Keep the
+ * variable names (--sp-*) stable — Tailwind's @theme block in app.css points
+ * at these, and future drops of the brand CSS should replace this file 1:1.
+ */
+
+:root {
+    /* ── surfaces ─────────────────────────────────────────────────── */
+    --sp-bg-primary: #00031c; /* page */
+    --sp-bg-secondary: #0b0f29; /* cards */
+    --sp-bg-elevated: #1a2255; /* elevated panels */
+    --sp-bg-footer: #000210;
+
+    /* ── text ─────────────────────────────────────────────────────── */
+    --sp-text-primary: #ffffff;
+    --sp-text-secondary: #8890a6;
+    --sp-text-tertiary: rgba(255, 255, 255, 0.4);
+
+    /* ── accent (UI chrome) ───────────────────────────────────────── */
+    --sp-accent-blue: #0096ff;
+    --sp-accent-blue-hover: #007acc;
+    --sp-accent-cyan: #00ffff;
+
+    /* ── spectrum (three-layer brand story; narrative only) ───────── */
+    --sp-spectrum-magenta: #d946ef; /* Understand / Sales */
+    --sp-spectrum-cyan: #00e5ff; /* Discover / Shopping */
+    --sp-spectrum-indigo: #4f46e5; /* Resolve / Service */
+
+    /* ── semantic ─────────────────────────────────────────────────── */
+    --sp-success: #22c55e;
+    --sp-warning: #f59e0b;
+    --sp-danger: #ef4444;
+
+    /* ── borders ──────────────────────────────────────────────────── */
+    --sp-border-soft: rgba(255, 255, 255, 0.05);
+    --sp-border-medium: rgba(255, 255, 255, 0.1);
+    --sp-border-strong: rgba(255, 255, 255, 0.2);
+
+    /* ── radii ────────────────────────────────────────────────────── */
+    --sp-radius-xs: 8px; /* inputs, chips */
+    --sp-radius-sm: 15px; /* floating cards, FAQ */
+    --sp-radius-md: 20px; /* benefit cards */
+    --sp-radius-lg: 30px; /* value cards, CTA */
+    --sp-radius-pill: 9999px; /* buttons, badges, inputs */
+
+    /* ── shadows ──────────────────────────────────────────────────── */
+    --sp-shadow-btn-primary: 0 0 20px rgba(0, 150, 255, 0.3);
+    --sp-shadow-float: 0 10px 30px rgba(0, 0, 0, 0.35);
+    --sp-shadow-image: 0 20px 60px rgba(0, 0, 0, 0.45);
+}

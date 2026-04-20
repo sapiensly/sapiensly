@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { useForm } from '@inertiajs/vue3';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     agents: Array<{ id: string; name: string; type: string; status: string }>;
@@ -29,8 +32,8 @@ function submit() {
 </script>
 
 <template>
-    <AppLayout>
-        <div class="max-w-2xl p-6">
+    <AppLayoutV2 :title="t('app_v2.nav.whatsapp')">
+        <div class="mx-auto max-w-2xl">
             <h1 class="mb-6 text-2xl font-semibold">{{ $t('whatsapp.connections.new') }}</h1>
             <form class="space-y-4" @submit.prevent="submit">
                 <label class="block">
@@ -73,5 +76,5 @@ function submit() {
                 </button>
             </form>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

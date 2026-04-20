@@ -1,5 +1,12 @@
-export type Visibility = 'private' | 'organization';
-export type DocumentType = 'pdf' | 'txt' | 'docx' | 'md' | 'csv' | 'json';
+export type Visibility = 'private' | 'organization' | 'public';
+export type DocumentType =
+    | 'pdf'
+    | 'txt'
+    | 'docx'
+    | 'md'
+    | 'csv'
+    | 'json'
+    | 'artifact';
 export type EmbeddingStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
 export interface VisibilityOption {
@@ -38,6 +45,7 @@ export interface Document {
     original_filename: string | null;
     file_path: string | null;
     file_size: number | null;
+    body: string | null;
     visibility: Visibility;
     metadata: Record<string, unknown> | null;
     formatted_file_size?: string;

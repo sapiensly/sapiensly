@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import DatabaseToolConfig from '@/components/tools/DatabaseToolConfig.vue';
@@ -14,8 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { ToolReference, ToolType, ToolTypeOption } from '@/types/tools';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
@@ -30,11 +29,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('tools.index.heading'), href: ToolController.index().url },
-    { title: t('common.create'), href: '#' },
-]);
 
 const currentType = ref<ToolType | null>(props.selectedType);
 
@@ -125,13 +119,12 @@ if (props.selectedType) {
 <template>
     <Head :title="t('tools.create.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-2xl">
-                <Heading
-                    :title="t('tools.create.heading')"
-                    :description="t('tools.create.description')"
-                />
+    <AppLayoutV2 :title="t('app_v2.nav.tools')">
+        <div class="mx-auto max-w-2xl space-y-6">
+            <PageHeader
+                :title="t('tools.create.heading')"
+                :description="t('tools.create.description')"
+            />
 
                 <div v-if="!currentType" class="mt-8">
                     <HeadingSmall
@@ -253,7 +246,6 @@ if (props.selectedType) {
                         </Button>
                     </div>
                 </form>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

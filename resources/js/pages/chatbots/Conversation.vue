@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
-import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     Chatbot,
     WidgetConversation,
@@ -30,20 +28,6 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
-    {
-        title: props.chatbot.name,
-        href: ChatbotController.show({ chatbot: props.chatbot.id }).url,
-    },
-    {
-        title: t('chatbots.conversations.title'),
-        href: ChatbotController.conversations({ chatbot: props.chatbot.id })
-            .url,
-    },
-    { title: t('chatbots.conversation.title'), href: '#' },
-]);
-
 const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
         weekday: 'short',
@@ -66,15 +50,14 @@ const formatTime = (date: string) => {
 <template>
     <Head :title="t('chatbots.conversation.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <div class="mb-8 flex items-start justify-between">
+    <AppLayoutV2 :title="t('app_v2.nav.chatbots')">
+        <div class="mx-auto max-w-4xl space-y-6">
+                <div class="flex items-start justify-between">
                     <div>
                         <div class="mb-2 flex items-center gap-3">
-                            <Heading
-                                :title="t('chatbots.conversation.heading')"
-                            />
+                            <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                                {{ t('chatbots.conversation.heading') }}
+                            </h1>
                             <Badge
                                 v-if="conversation.is_resolved"
                                 variant="default"
@@ -310,7 +293,6 @@ const formatTime = (date: string) => {
                         </div>
                     </div>
                 </div>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

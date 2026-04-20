@@ -1,19 +1,7 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
-import EmptyState from '@/components/agents/EmptyState.vue';
-import Heading from '@/components/Heading.vue';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     AgentType,
     AgentTypeOption,
@@ -30,6 +18,7 @@ import {
     Wrench,
     Zap,
 } from 'lucide-vue-next';
+import type { Component } from 'vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -44,11 +33,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('agents.index.heading'), href: '#' },
-]);
-
-const agentIcon = (type: AgentType) => {
+function agentIcon(type: AgentType): Component {
     switch (type) {
         case 'triage':
             return Bot;
@@ -59,186 +44,215 @@ const agentIcon = (type: AgentType) => {
         default:
             return Bot;
     }
+}
+
+const statusTint: Record<string, string> = {
+    active: 'var(--sp-success)',
+    inactive: 'var(--sp-text-secondary)',
+    draft: 'var(--sp-accent-blue)',
 };
 
-const statusVariant = (status: string) => {
-    switch (status) {
-        case 'active':
-            return 'default';
-        case 'inactive':
-            return 'secondary';
-        default:
-            return 'outline';
-    }
-};
+function tintFor(status: string) {
+    return statusTint[status] ?? 'var(--sp-text-secondary)';
+}
 
-const filterByType = (type: string | null) => {
+function filterByType(type: string | null) {
     router.get(AgentController.index().url, type ? { type } : {}, {
         preserveState: true,
     });
-};
+}
 
-const totalAgents = Object.values(props.agentsByType).reduce(
-    (sum, count) => sum + count,
-    0,
+const totalAgents = computed(() =>
+    Object.values(props.agentsByType).reduce((sum, count) => sum + count, 0),
 );
 </script>
 
 <template>
     <Head :title="t('agents.index.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-6xl">
-                <div class="mb-8 flex items-center justify-between">
-                    <Heading
-                        :title="t('agents.index.heading')"
-                        :description="t('agents.index.description')"
-                    />
-                    <Button as-child>
-                        <Link :href="AgentController.create().url">
-                            <Plus class="mr-2 h-4 w-4" />
+    <AppLayoutV2 :title="t('app_v2.nav.agents')">
+        <div class="space-y-6">
+            <PageHeader
+                :title="t('app_v2.agents.heading')"
+                :description="t('app_v2.agents.description')"
+            >
+                <template #actions>
+                    <Link :href="AgentController.create().url">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                        >
+                            <Plus class="size-3.5" />
                             {{ t('agents.index.new_agent') }}
-                        </Link>
-                    </Button>
-                </div>
+                        </button>
+                    </Link>
+                </template>
+            </PageHeader>
 
-                <Tabs
-                    :default-value="currentType ?? 'all'"
-                    class="mb-6"
-                    @update:model-value="
-                        filterByType($event === 'all' ? null : $event)
-                    "
+            <!-- Type filter — pill tabs matching admin-v2 ToggleGroup rhythm. -->
+            <div class="flex flex-wrap items-center gap-1.5">
+                <button
+                    type="button"
+                    :class="[
+                        'inline-flex items-center gap-1.5 rounded-pill border px-3 py-1 text-xs transition-colors',
+                        !currentType
+                            ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
+                            : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                    ]"
+                    @click="filterByType(null)"
                 >
-                    <TabsList>
-                        <TabsTrigger value="all">
-                            {{ t('common.all') }} ({{ totalAgents }})
-                        </TabsTrigger>
-                        <TabsTrigger
-                            v-for="type in agentTypes"
-                            :key="type.value"
-                            :value="type.value"
-                        >
-                            <component
-                                :is="agentIcon(type.value)"
-                                class="mr-2 h-4 w-4"
-                            />
-                            {{ type.label }} ({{
-                                agentsByType[type.value] ?? 0
-                            }})
-                        </TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                    {{ t('common.all') }}
+                    <span class="text-ink-subtle">({{ totalAgents }})</span>
+                </button>
+                <button
+                    v-for="type in agentTypes"
+                    :key="type.value"
+                    type="button"
+                    :class="[
+                        'inline-flex items-center gap-1.5 rounded-pill border px-3 py-1 text-xs transition-colors',
+                        currentType === type.value
+                            ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
+                            : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                    ]"
+                    @click="filterByType(type.value)"
+                >
+                    <component :is="agentIcon(type.value)" class="size-3" />
+                    {{ type.label }}
+                    <span class="text-ink-subtle">
+                        ({{ agentsByType[type.value] ?? 0 }})
+                    </span>
+                </button>
+            </div>
 
-                <div v-if="agents.data.length === 0">
-                    <EmptyState
-                        v-if="!currentType"
-                        :title="t('agents.index.no_agents')"
-                        :description="t('agents.index.no_agents_description')"
-                        :create-url="AgentController.create().url"
-                        :create-label="t('agents.index.create_agent')"
-                    />
-                    <EmptyState
-                        v-else
-                        :title="t('agents.index.no_agents_filtered')"
-                        :description="t('agents.index.no_agents_type')"
-                        :create-url="`${AgentController.create().url}?type=${currentType}`"
-                        :create-label="t('agents.index.create_agent')"
-                    />
+            <div
+                v-if="agents.data.length === 0"
+                class="rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
+            >
+                <div
+                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                >
+                    <Bot class="size-5" />
                 </div>
-
-                <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <Card
-                        v-for="agent in agents.data"
-                        :key="agent.id"
-                        class="h-full transition-colors hover:border-primary/50"
+                <h3 class="mt-4 text-sm font-semibold text-ink">
+                    {{
+                        currentType
+                            ? t('agents.index.no_agents_filtered')
+                            : t('agents.index.no_agents')
+                    }}
+                </h3>
+                <p class="mt-1 text-xs text-ink-muted">
+                    {{
+                        currentType
+                            ? t('agents.index.no_agents_type')
+                            : t('agents.index.no_agents_description')
+                    }}
+                </p>
+                <Link
+                    :href="
+                        currentType
+                            ? `${AgentController.create().url}?type=${currentType}`
+                            : AgentController.create().url
+                    "
+                    class="mt-4 inline-block"
+                >
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
                     >
-                        <Link
-                            :href="
-                                AgentController.show({ agent: agent.id }).url
-                            "
-                        >
-                            <CardHeader>
-                                <div class="flex items-start justify-between">
-                                    <div class="flex items-center gap-2">
-                                        <component
-                                            :is="agentIcon(agent.type)"
-                                            class="h-5 w-5 text-muted-foreground"
-                                        />
-                                        <CardTitle class="text-lg">
-                                            {{ agent.name }}
-                                        </CardTitle>
-                                    </div>
-                                    <div class="flex items-center gap-1">
-                                        <Badge
-                                            v-if="agent.team"
-                                            variant="secondary"
-                                            class="gap-1 text-xs"
-                                        >
-                                            <Users class="h-3 w-3" />
-                                            {{ agent.team.name }}
-                                        </Badge>
-                                        <Badge
-                                            :variant="
-                                                statusVariant(agent.status)
-                                            "
-                                        >
-                                            {{ agent.status }}
-                                        </Badge>
-                                    </div>
-                                </div>
-                                <CardDescription v-if="agent.description">
-                                    {{ agent.description }}
-                                </CardDescription>
-                            </CardHeader>
-                        </Link>
-                        <CardContent>
-                            <div class="flex items-center justify-between">
+                        <Plus class="size-3.5" />
+                        {{ t('agents.index.create_agent') }}
+                    </button>
+                </Link>
+            </div>
+
+            <div
+                v-else
+                class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+            >
+                <div
+                    v-for="agent in agents.data"
+                    :key="agent.id"
+                    class="flex flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
+                >
+                    <Link
+                        :href="AgentController.show({ agent: agent.id }).url"
+                        class="flex-1"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-start gap-3">
                                 <div
-                                    class="flex flex-wrap gap-4 text-sm text-muted-foreground"
+                                    class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue"
                                 >
-                                    <div class="flex items-center gap-1">
-                                        <Badge
-                                            variant="outline"
-                                            class="capitalize"
-                                        >
-                                            {{ agent.type }}
-                                        </Badge>
-                                    </div>
-                                    <div
-                                        v-if="agent.knowledge_bases_count"
-                                        class="flex items-center gap-1"
-                                    >
-                                        <Database class="h-4 w-4" />
-                                        {{ agent.knowledge_bases_count }}
-                                        {{ t('agents.index.kb') }}
-                                    </div>
-                                    <div
-                                        v-if="agent.tools_count"
-                                        class="flex items-center gap-1"
-                                    >
-                                        <Wrench class="h-4 w-4" />
-                                        {{ agent.tools_count }}
-                                        {{ t('agents.index.tools') }}
-                                    </div>
+                                    <component
+                                        :is="agentIcon(agent.type)"
+                                        class="size-4"
+                                    />
                                 </div>
-                                <Button variant="outline" size="sm" as-child>
-                                    <Link
-                                        :href="
-                                            AgentController.chat({
-                                                agent: agent.id,
-                                            }).url
-                                        "
+                                <div class="min-w-0">
+                                    <h3 class="truncate text-sm font-semibold text-ink">
+                                        {{ agent.name }}
+                                    </h3>
+                                    <p
+                                        v-if="agent.description"
+                                        class="mt-0.5 line-clamp-2 text-xs text-ink-muted"
                                     >
-                                        <MessageSquare class="mr-2 h-4 w-4" />
-                                        {{ t('common.test') }}
-                                    </Link>
-                                </Button>
+                                        {{ agent.description }}
+                                    </p>
+                                </div>
                             </div>
-                        </CardContent>
-                    </Card>
+                            <span
+                                class="inline-flex shrink-0 items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
+                                :style="{
+                                    color: tintFor(agent.status),
+                                    borderColor: `color-mix(in oklab, ${tintFor(agent.status)} 45%, transparent)`,
+                                }"
+                            >
+                                {{ agent.status }}
+                            </span>
+                        </div>
+                    </Link>
+
+                    <div
+                        class="mt-4 flex items-center justify-between gap-3 border-t border-soft pt-3"
+                    >
+                        <div class="flex flex-wrap items-center gap-3 text-[11px] text-ink-subtle">
+                            <span
+                                class="inline-flex items-center rounded-pill border border-medium px-2 py-0.5 text-[10px] capitalize"
+                            >
+                                {{ agent.type }}
+                            </span>
+                            <span
+                                v-if="agent.team"
+                                class="inline-flex items-center gap-1"
+                            >
+                                <Users class="size-3" />
+                                {{ agent.team.name }}
+                            </span>
+                            <span
+                                v-if="agent.knowledge_bases_count"
+                                class="inline-flex items-center gap-1"
+                            >
+                                <Database class="size-3" />
+                                {{ agent.knowledge_bases_count }}
+                            </span>
+                            <span
+                                v-if="agent.tools_count"
+                                class="inline-flex items-center gap-1"
+                            >
+                                <Wrench class="size-3" />
+                                {{ agent.tools_count }}
+                            </span>
+                        </div>
+                        <Link
+                            :href="AgentController.chat({ agent: agent.id }).url"
+                            class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                        >
+                            <MessageSquare class="size-3" />
+                            {{ t('common.test') }}
+                        </Link>
+                    </div>
                 </div>
             </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

@@ -21,14 +21,20 @@ const label = computed(() => {
 </script>
 
 <template>
-    <div class="min-w-[180px] rounded-lg border border-dashed border-indigo-400 bg-indigo-50 p-3 shadow-sm dark:bg-indigo-950/40">
-        <Handle type="target" :position="Position.Top" class="!bg-indigo-500" />
+    <div
+        class="min-w-[180px] rounded-sp-sm border border-dashed p-3 shadow-sp-float"
+        style="
+            border-color: color-mix(in oklab, var(--sp-spectrum-indigo) 45%, transparent);
+            background: color-mix(in oklab, var(--sp-spectrum-indigo) 12%, var(--sp-bg-secondary));
+        "
+    >
+        <Handle type="target" :position="Position.Top" class="!bg-spectrum-indigo" />
 
-        <div class="mb-1 text-xs font-medium text-muted-foreground">
+        <div class="mb-1 text-xs font-medium text-ink-muted">
             {{ t('flows.nodes.connector') }}
         </div>
 
-        <div class="flex items-center gap-2 text-sm text-indigo-700 dark:text-indigo-300">
+        <div class="flex items-center gap-2 text-sm text-spectrum-indigo">
             <CornerDownLeft class="h-4 w-4" />
             <span class="font-medium">{{ label }}</span>
         </div>

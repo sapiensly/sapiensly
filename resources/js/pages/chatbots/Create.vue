@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     ChatbotAgent,
     ChatbotAgentTeam,
@@ -24,7 +23,7 @@ import type {
 } from '@/types/chatbot';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Bot, Users } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -38,11 +37,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
-    { title: t('common.create'), href: '#' },
-]);
 
 const form = useForm({
     name: '',
@@ -63,13 +57,12 @@ const submit = () => {
 <template>
     <Head :title="t('chatbots.create.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-2xl">
-                <Heading
-                    :title="t('chatbots.create.heading')"
-                    :description="t('chatbots.create.description')"
-                />
+    <AppLayoutV2 :title="t('app_v2.nav.chatbots')">
+        <div class="mx-auto max-w-2xl space-y-6">
+            <PageHeader
+                :title="t('chatbots.create.heading')"
+                :description="t('chatbots.create.description')"
+            />
 
                 <form class="mt-8 space-y-8" @submit.prevent="submit">
                     <!-- Basic Information -->
@@ -385,7 +378,6 @@ const submit = () => {
                         </Button>
                     </div>
                 </form>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

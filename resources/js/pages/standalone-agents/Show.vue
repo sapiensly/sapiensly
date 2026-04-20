@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,8 +22,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Agent, AgentType } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -47,11 +46,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('agents.show.agents'), href: AgentController.index().url },
-    { title: props.agent.name, href: '#' },
-]);
 
 const agentIcon = (type: AgentType) => {
     switch (type) {
@@ -128,24 +122,23 @@ const configDisplay = computed(() => {
 <template>
     <Head :title="agent.name" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <div class="mb-8 flex items-start justify-between">
+    <AppLayoutV2 :title="t('app_v2.nav.agents')">
+        <div class="mx-auto max-w-4xl space-y-6">
+                <div class="flex items-start justify-between">
                     <div>
                         <div class="mb-2 flex items-center gap-3">
                             <component
                                 :is="agentIcon(agent.type)"
-                                class="h-6 w-6 text-muted-foreground"
+                                class="h-6 w-6 text-ink-muted"
                             />
-                            <Heading :title="agent.name" />
+                            <h1 class="text-[22px] font-semibold leading-tight text-ink">{{ agent.name }}</h1>
                             <Badge :variant="statusVariant(agent.status)">
                                 {{ agent.status }}
                             </Badge>
                         </div>
                         <p
                             v-if="agent.description"
-                            class="text-muted-foreground"
+                            class="text-xs text-ink-muted"
                         >
                             {{ agent.description }}
                         </p>
@@ -336,7 +329,6 @@ const configDisplay = computed(() => {
                         </div>
                     </div>
                 </div>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

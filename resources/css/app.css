@@ -2,6 +2,7 @@
 @plugin '@tailwindcss/typography';
 
 @import 'tw-animate-css';
+@import './tokens.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -185,4 +186,112 @@
 /* Vue Flow background in dark mode */
 .dark .vue-flow__background.vue-flow__container {
     background-color: #2a2a2a;
+}
+
+/*
+ * ── Sapiensly admin palette ───────────────────────────────────────────────
+ * Opt-in utilities for the admin v2 UI. Does not touch shadcn-vue's
+ * neutral palette (--color-primary, --color-background, etc.) — those
+ * drive every other screen in the app.
+ *
+ * New utility classes unlocked by this block:
+ *   bg-navy-deep / bg-navy / bg-navy-elevated / bg-navy-footer
+ *   text-ink / text-ink-muted / text-ink-subtle / text-ink-faint
+ *   bg-accent-blue / text-accent-blue / shadow-btn-primary
+ *   bg-spectrum-magenta / -cyan / -indigo
+ *   border-soft / border-medium / border-strong
+ *   rounded-xs / rounded-sp-sm / rounded-sp-md / rounded-sp-lg / rounded-pill
+ *   text-sp-success / bg-sp-warning / bg-sp-danger / ...
+ *   font-display / font-admin / font-mono
+ *   animate-sp-fade-up / -scale-in / -slide-in-right / -toast-up
+ */
+@theme inline {
+    --color-navy-deep: var(--sp-bg-primary);
+    --color-navy: var(--sp-bg-secondary);
+    --color-navy-elevated: var(--sp-bg-elevated);
+    --color-navy-footer: var(--sp-bg-footer);
+
+    --color-ink: var(--sp-text-primary);
+    --color-ink-muted: var(--sp-text-secondary);
+    --color-ink-subtle: var(--sp-text-tertiary);
+    --color-ink-faint: rgba(255, 255, 255, 0.25);
+
+    --color-accent-blue: var(--sp-accent-blue);
+    --color-accent-blue-hover: var(--sp-accent-blue-hover);
+    --color-accent-cyan: var(--sp-accent-cyan);
+
+    --color-spectrum-magenta: var(--sp-spectrum-magenta);
+    --color-spectrum-cyan: var(--sp-spectrum-cyan);
+    --color-spectrum-indigo: var(--sp-spectrum-indigo);
+
+    --color-soft: var(--sp-border-soft);
+    --color-medium: var(--sp-border-medium);
+    --color-strong: var(--sp-border-strong);
+
+    --color-sp-success: var(--sp-success);
+    --color-sp-warning: var(--sp-warning);
+    --color-sp-danger: var(--sp-danger);
+
+    /* Prefixed with sp- where a plain name would collide with shadcn-vue's
+       existing radius/shadow tokens. */
+    --radius-xs: var(--sp-radius-xs);
+    --radius-sp-sm: var(--sp-radius-sm);
+    --radius-sp-md: var(--sp-radius-md);
+    --radius-sp-lg: var(--sp-radius-lg);
+    --radius-pill: var(--sp-radius-pill);
+
+    --font-display: Montserrat, Poppins, 'Instrument Sans', sans-serif;
+    --font-admin: Poppins, 'Instrument Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --shadow-btn-primary: var(--sp-shadow-btn-primary);
+    --shadow-sp-float: var(--sp-shadow-float);
+    --shadow-sp-image: var(--sp-shadow-image);
+
+    --animate-sp-fade-up: sp-fade-up 0.3s ease;
+    --animate-sp-scale-in: sp-scale-in 0.18s ease;
+    --animate-sp-slide-in-right: sp-slide-in-right 0.22s ease;
+    --animate-sp-toast-up: sp-toast-up 0.24s ease;
+}
+
+@keyframes sp-fade-up {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes sp-scale-in {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.94);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+@keyframes sp-slide-in-right {
+    0% {
+        transform: translateX(100%);
+    }
+    100% {
+        transform: translateX(0);
+    }
+}
+
+@keyframes sp-toast-up {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, 12px);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
 }

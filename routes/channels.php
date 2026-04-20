@@ -15,3 +15,8 @@ Broadcast::channel('knowledge-base.{knowledgeBaseId}', function ($user, string $
 
     return $kb && $kb->isVisibleTo($user);
 });
+
+// Admin V2 dashboard — sysadmins only. Events (health snapshot changes, audit
+// rows, stat recomputes) will be broadcast onto this channel by the dashboard
+// step; for now only the authorization gate is registered.
+Broadcast::channel('admin.dashboard', fn ($user) => $user?->hasRole('sysadmin') ?? false);

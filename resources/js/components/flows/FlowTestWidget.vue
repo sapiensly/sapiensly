@@ -169,7 +169,7 @@ watch(
         <!-- Floating button when closed -->
         <button
             v-if="!isOpen"
-            class="flex h-14 items-center gap-2 rounded-full bg-primary pl-4 pr-5 text-primary-foreground shadow-xl transition-transform hover:scale-105"
+            class="flex h-14 items-center gap-2 rounded-pill bg-accent-blue pl-4 pr-5 text-white shadow-btn-primary transition-transform hover:scale-105"
             title="Test flow"
             @click="open"
         >
@@ -180,24 +180,24 @@ watch(
         <!-- Chat window when open -->
         <div
             v-else
-            class="flex h-[520px] w-[380px] flex-col overflow-hidden rounded-xl border bg-card shadow-2xl"
+            class="flex h-[520px] w-[380px] flex-col overflow-hidden rounded-sp-sm border border-soft bg-navy shadow-sp-image"
         >
             <!-- Header -->
-            <div class="flex items-center justify-between border-b bg-primary px-4 py-3 text-primary-foreground">
+            <div class="flex items-center justify-between border-b border-soft bg-accent-blue px-4 py-3 text-white">
                 <div class="flex items-center gap-2">
                     <Bot class="h-4 w-4" />
                     <span class="text-sm font-semibold">Flow Test</span>
                 </div>
                 <div class="flex items-center gap-1">
                     <button
-                        class="rounded p-1 text-primary-foreground/80 hover:bg-white/10 hover:text-primary-foreground"
+                        class="rounded p-1 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
                         title="Reset conversation"
                         @click="reset"
                     >
                         <RefreshCw class="h-4 w-4" />
                     </button>
                     <button
-                        class="rounded p-1 text-primary-foreground/80 hover:bg-white/10 hover:text-primary-foreground"
+                        class="rounded p-1 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
                         @click="isOpen = false"
                     >
                         <X class="h-4 w-4" />
@@ -208,13 +208,13 @@ watch(
             <!-- Error -->
             <div
                 v-if="error"
-                class="border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+                class="border-b border-sp-danger/30 bg-sp-danger/10 px-3 py-2 text-xs text-sp-danger"
             >
                 {{ error }}
             </div>
 
             <!-- Hint -->
-            <div class="border-b bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <div class="border-b border-sp-warning/30 bg-sp-warning/10 px-3 py-2 text-xs text-sp-warning">
                 Save your flow before testing. Reset to apply changes.
             </div>
 
@@ -227,11 +227,11 @@ watch(
                     >
                         <div
                             v-if="msg.content"
-                            class="max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm"
+                            class="max-w-[85%] whitespace-pre-wrap rounded-sp-sm px-3 py-2 text-sm"
                             :class="
                                 msg.role === 'user'
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted text-foreground'
+                                    ? 'bg-accent-blue text-white'
+                                    : 'bg-white/5 text-ink'
                             "
                         >
                             {{ msg.content }}
@@ -246,11 +246,11 @@ watch(
                             v-for="opt in msg.options"
                             :key="opt.id"
                             type="button"
-                            class="inline-flex items-center justify-start gap-1 rounded-full border px-3 py-1 text-left text-xs font-medium transition-colors"
+                            class="inline-flex items-center justify-start gap-1 rounded-pill border px-3 py-1 text-left text-xs font-medium transition-colors"
                             :class="
                                 index === activeOptionsIndex
-                                    ? 'cursor-pointer border-primary/40 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground'
-                                    : 'cursor-not-allowed border-muted-foreground/20 bg-muted/30 text-muted-foreground'
+                                    ? 'cursor-pointer border-accent-blue/40 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue hover:text-white'
+                                    : 'cursor-not-allowed border-soft bg-white/5 text-ink-subtle'
                             "
                             :disabled="index !== activeOptionsIndex || isLoading"
                             @click="selectOption(opt)"
@@ -265,20 +265,20 @@ watch(
                 </template>
 
                 <div v-if="isLoading" class="flex justify-start">
-                    <div class="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                    <div class="rounded-sp-sm bg-white/5 px-3 py-2 text-sm text-ink-muted">
                         ...
                     </div>
                 </div>
             </div>
 
             <!-- Input -->
-            <form class="flex gap-2 border-t p-3" @submit.prevent="sendMessage()">
+            <form class="flex gap-2 border-t border-soft p-3" @submit.prevent="sendMessage()">
                 <input
                     v-model="message"
                     type="text"
                     placeholder="Type a message..."
                     :disabled="isLoading || !state"
-                    class="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                    class="flex-1 rounded-xs border border-medium bg-white/5 px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue disabled:opacity-50"
                 />
                 <Button
                     type="submit"

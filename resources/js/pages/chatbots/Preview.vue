@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     usePreviewChat,
     type PreviewMessage,
 } from '@/composables/usePreviewChat';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Chatbot } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
 import hljs from 'highlight.js/lib/core';
@@ -100,15 +99,6 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
-    {
-        title: props.chatbot.name,
-        href: ChatbotController.show({ chatbot: props.chatbot.id }).url,
-    },
-    { title: t('chatbots.preview.title'), href: '#' },
-]);
-
 const isOpen = ref(true);
 const message = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
@@ -160,11 +150,10 @@ watch(
 <template>
     <Head :title="t('chatbots.preview.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <div class="mb-8 flex items-center justify-between">
-                    <Heading
+    <AppLayoutV2 :title="t('app_v2.nav.chatbots')">
+        <div class="mx-auto max-w-4xl space-y-6">
+                <div class="flex items-center justify-between">
+                    <PageHeader
                         title="Preview Widget"
                         :description="`Test ${chatbot.name} with real AI responses`"
                     />
@@ -499,9 +488,8 @@ watch(
                     {{ chatbot.agent ? 'agent' : 'team' }}. Messages are saved
                     for testing purposes.
                 </p>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>
 
 <style>

@@ -54,13 +54,13 @@ const hasWarning = computed(() =>
 
 <template>
     <div
-        class="min-w-[200px] rounded-lg border p-3 shadow-sm"
-        :class="hasWarning ? 'border-amber-500 bg-card' : 'border-border bg-card'"
+        class="min-w-[200px] rounded-sp-sm border bg-navy p-3 shadow-sp-float"
+        :class="hasWarning ? 'border-sp-warning/60' : 'border-soft'"
     >
-        <Handle type="target" :position="Position.Top" class="!bg-primary" />
+        <Handle type="target" :position="Position.Top" class="!bg-accent-blue" />
 
-        <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <AlertTriangle v-if="hasWarning" class="h-3.5 w-3.5 text-amber-500" />
+        <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+            <AlertTriangle v-if="hasWarning" class="h-3.5 w-3.5 text-sp-warning" />
             {{ t('flows.nodes.agent_handoff') }}
         </div>
 
@@ -69,7 +69,7 @@ const hasWarning = computed(() =>
                 v-for="layer in layers"
                 :key="layer.key"
                 class="flex items-center gap-2 text-xs"
-                :class="layer.enabled ? '' : 'opacity-35'"
+                :class="layer.enabled ? 'text-ink' : 'opacity-35'"
             >
                 <span
                     class="inline-block h-2 w-2 shrink-0 rounded-full"
@@ -78,13 +78,13 @@ const hasWarning = computed(() =>
                 <span class="font-medium">{{ layer.label }}</span>
                 <span
                     v-if="layer.enabled && layer.agentName"
-                    class="max-w-[120px] truncate text-muted-foreground"
+                    class="max-w-[120px] truncate text-ink-subtle"
                 >
                     · {{ layer.agentName }}
                 </span>
             </div>
         </div>
 
-        <Handle type="source" :position="Position.Bottom" class="!bg-primary" />
+        <Handle type="source" :position="Position.Bottom" class="!bg-accent-blue" />
     </div>
 </template>

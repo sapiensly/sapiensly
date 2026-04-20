@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthConfigField from '@/components/integrations/AuthConfigField.vue';
 import HeaderEditor from '@/components/integrations/HeaderEditor.vue';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,8 +21,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 import {
@@ -63,15 +62,6 @@ interface Props {
 const props = defineProps<Props>();
 
 const { t } = useI18n();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.system'), href: '#' },
-    { title: t('system.integrations.title'), href: '/system/integrations' },
-    {
-        title: props.mode === 'create' ? t('system.integrations.new') : (props.integration?.name ?? ''),
-        href: '#',
-    },
-]);
 
 const form = useForm({
     name: props.integration?.name ?? '',
@@ -128,13 +118,12 @@ function submit(): void {
 <template>
     <Head :title="t('system.integrations.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-3xl">
-                <Heading
-                    :title="mode === 'create' ? t('system.integrations.new') : (integration?.name ?? '')"
-                    :description="t('system.integrations.description')"
-                />
+    <AppLayoutV2 :title="t('app_v2.nav.integrations')">
+        <div class="mx-auto max-w-3xl space-y-6">
+            <PageHeader
+                :title="mode === 'create' ? t('system.integrations.new') : (integration?.name ?? '')"
+                :description="t('system.integrations.description')"
+            />
 
                 <form class="mt-6 space-y-4" @submit.prevent="submit">
                     <!-- Basics -->
@@ -356,7 +345,6 @@ function submit(): void {
                         </Button>
                     </div>
                 </form>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

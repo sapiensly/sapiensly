@@ -48,10 +48,10 @@ function onKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-    <div class="min-w-[220px] max-w-[280px] rounded-lg border bg-card p-3 shadow-sm">
-        <Handle type="target" :position="Position.Top" class="!bg-primary" />
+    <div class="min-w-[220px] max-w-[280px] rounded-sp-sm border border-soft bg-navy p-3 shadow-sp-float">
+        <Handle type="target" :position="Position.Top" class="!bg-accent-blue" />
 
-        <div class="mb-1 text-xs font-medium text-muted-foreground">
+        <div class="mb-1 text-xs font-medium text-ink-muted">
             {{ t('flows.nodes.message') }}
         </div>
 
@@ -59,7 +59,7 @@ function onKeydown(event: KeyboardEvent) {
             v-if="isEditing"
             ref="textarea"
             v-model="draft"
-            class="nodrag w-full resize-none rounded border bg-background p-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            class="nodrag w-full resize-none rounded-xs border border-medium bg-white/5 p-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
             rows="3"
             :placeholder="t('flows.nodes.no_message')"
             @blur="commit"
@@ -68,13 +68,13 @@ function onKeydown(event: KeyboardEvent) {
         />
         <div
             v-else
-            class="cursor-text whitespace-pre-wrap rounded px-1 py-0.5 text-sm hover:bg-muted/50"
-            :class="{ 'italic text-muted-foreground': !data.message }"
+            class="cursor-text whitespace-pre-wrap rounded-xs px-1 py-0.5 text-sm text-ink hover:bg-white/5"
+            :class="{ 'italic text-ink-subtle': !data.message }"
             @dblclick="startEdit"
         >
             {{ data.message || t('flows.nodes.no_message') }}
         </div>
 
-        <Handle type="source" :position="Position.Bottom" class="!bg-primary" />
+        <Handle type="source" :position="Position.Bottom" class="!bg-accent-blue" />
     </div>
 </template>

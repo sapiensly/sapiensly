@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\DocumentType;
 use App\Enums\Visibility;
 use App\Http\Requests\Document\StoreDocumentRequest;
+use App\Http\Requests\Document\StoreInlineDocumentRequest;
 use App\Http\Requests\Document\UpdateDocumentRequest;
 use App\Models\Document;
 use App\Models\Folder;
@@ -72,11 +73,24 @@ class DocumentController extends Controller
                 ])
                 ->values()
                 ->all(),
-            'visibilityOptions' => collect(Visibility::cases())->map(fn ($v) => [
-                'value' => $v->value,
-                'label' => $v->label(),
-                'description' => $v->description(),
-            ])->values()->all(),
+            'inlineDocumentTypes' => collect(DocumentType::cases())
+                ->filter(fn ($type) => $type->isInlineAuthorable())
+                ->map(fn ($type) => [
+                    'value' => $type->value,
+                    'label' => $type->label(),
+                    'extension' => $type->extension(),
+                ])
+                ->values()
+                ->all(),
+            'visibilityOptions' => collect(Visibility::cases())
+                ->filter(fn ($v) => $v !== Visibility::Global)
+                ->map(fn ($v) => [
+                    'value' => $v->value,
+                    'label' => $v->label(),
+                    'description' => $v->description(),
+                ])
+                ->values()
+                ->all(),
             'canShareWithOrg' => $user->hasOrganization(),
             'canDeleteFolder' => $currentFolder?->isOwnedBy($user) ?? false,
         ]);
@@ -95,12 +109,19 @@ class DocumentController extends Controller
             'document' => $document,
             'temporaryUrl' => $temporaryUrl,
             'canEdit' => $document->isOwnedBy($request->user()),
-            'visibilityOptions' => collect(Visibility::cases())->map(fn ($v) => [
-                'value' => $v->value,
-                'label' => $v->label(),
-                'description' => $v->description(),
-            ])->values()->all(),
+            'visibilityOptions' => collect(Visibility::cases())
+                ->filter(fn ($v) => $v !== Visibility::Global)
+                ->map(fn ($v) => [
+                    'value' => $v->value,
+                    'label' => $v->label(),
+                    'description' => $v->description(),
+                ])
+                ->values()
+                ->all(),
             'canShareWithOrg' => $request->user()->hasOrganization(),
+            'publicUrl' => $document->isPublic()
+                ? route('documents.public', $document->id)
+                : null,
         ]);
     }
 
@@ -145,6 +166,47 @@ class DocumentController extends Controller
         return to_route('documents.show', $document);
     }
 
+    public function storeInline(StoreInlineDocumentRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+        $visibility = Visibility::tryFrom($request->visibility) ?? Visibility::Private;
+
+        if ($request->folder_id) {
+            $folder = Folder::find($request->folder_id);
+            if (! $folder || ! $folder->isVisibleTo($user)) {
+                return back()->withErrors(['folder_id' => __('Invalid folder.')]);
+            }
+        }
+
+        $knowledgeBase = null;
+        if ($request->knowledge_base_id) {
+            $knowledgeBase = KnowledgeBase::find($request->knowledge_base_id);
+            if (! $knowledgeBase || $knowledgeBase->user_id !== $user->id) {
+                return back()->withErrors(['knowledge_base_id' => __('Invalid knowledge base.')]);
+            }
+        }
+
+        $type = DocumentType::from($request->type);
+
+        $document = $this->documentService->createInline(
+            user: $user,
+            type: $type,
+            body: $request->body,
+            name: $request->name,
+            visibility: $visibility,
+            folderId: $request->folder_id,
+            keywords: $request->keywords,
+        );
+
+        if ($knowledgeBase) {
+            $this->documentService->attachToKnowledgeBase($document, $knowledgeBase);
+
+            return to_route('knowledge-bases.show', $knowledgeBase);
+        }
+
+        return to_route('documents.show', $document);
+    }
+
     public function update(UpdateDocumentRequest $request, Document $document): RedirectResponse
     {
         $this->authorize('update', $document);
@@ -163,9 +225,20 @@ class DocumentController extends Controller
             $data['folder_id'] = $request->folder_id;
         }
 
+        if ($request->has('body')) {
+            if (! $document->isInline()) {
+                return back()->withErrors(['body' => __('Body edits are only allowed on inline documents.')]);
+            }
+            $data['body'] = (string) $request->body;
+        }
+
         if ($request->has('visibility')) {
             $visibility = Visibility::from($request->visibility);
-            $document = $this->documentService->updateVisibility($document, $visibility, $request->user());
+            try {
+                $document = $this->documentService->updateVisibility($document, $visibility, $request->user());
+            } catch (\InvalidArgumentException $e) {
+                return back()->withErrors(['visibility' => $e->getMessage()]);
+            }
         }
 
         if (! empty($data)) {

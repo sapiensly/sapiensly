@@ -1,20 +1,9 @@
 <script setup lang="ts">
 import * as FlowController from '@/actions/App/Http/Controllers/FlowController';
-import Heading from '@/components/Heading.vue';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { Bot, GitBranch, Pencil, Plus } from 'lucide-vue-next';
-import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -49,20 +38,15 @@ interface Props {
 
 defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.flows'), href: FlowController.globalIndex().url },
-]);
-
-const statusVariant = (status: string) => {
-    switch (status) {
-        case 'active':
-            return 'default';
-        case 'inactive':
-            return 'secondary';
-        default:
-            return 'outline';
-    }
+const statusTint: Record<string, string> = {
+    active: 'var(--sp-success)',
+    inactive: 'var(--sp-text-secondary)',
+    draft: 'var(--sp-accent-blue)',
 };
+
+function tintFor(status: string) {
+    return statusTint[status] ?? 'var(--sp-text-secondary)';
+}
 
 const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString(undefined, {
@@ -75,117 +59,148 @@ const formatDate = (dateString: string) =>
 </script>
 
 <template>
-    <Head :title="t('nav.flows')" />
+    <Head :title="t('app_v2.nav.flows')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-5xl">
-                <div class="mb-8 flex items-center justify-between">
-                    <Heading
-                        :title="t('nav.flows')"
-                        :description="t('flows.global.description')"
-                    />
-                    <Button as-child>
-                        <Link :href="FlowController.globalCreate().url">
-                            <Plus class="mr-2 h-4 w-4" />
+    <AppLayoutV2 :title="t('app_v2.nav.flows')">
+        <div class="space-y-6">
+            <PageHeader
+                :title="t('app_v2.flows.heading')"
+                :description="t('app_v2.flows.description')"
+            >
+                <template #actions>
+                    <Link :href="FlowController.globalCreate().url">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                        >
+                            <Plus class="size-3.5" />
                             {{ t('flows.global.create_flow') }}
-                        </Link>
-                    </Button>
-                </div>
+                        </button>
+                    </Link>
+                </template>
+            </PageHeader>
 
-                <div v-if="flows.data.length > 0" class="space-y-3">
-                    <Card v-for="flow in flows.data" :key="flow.id">
-                        <CardHeader class="pb-3">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <GitBranch class="h-5 w-5 text-muted-foreground" />
-                                    <div>
-                                        <CardTitle class="text-base">
-                                            {{ flow.name }}
-                                        </CardTitle>
-                                        <CardDescription v-if="flow.description">
-                                            {{ flow.description }}
-                                        </CardDescription>
-                                    </div>
-                                </div>
-                                <Badge :variant="statusVariant(flow.status)">
-                                    {{ t(`flows.status.${flow.status}`) }}
-                                </Badge>
+            <div v-if="flows.data.length > 0" class="space-y-3">
+                <div
+                    v-for="flow in flows.data"
+                    :key="flow.id"
+                    class="rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
+                >
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <div
+                                class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue"
+                            >
+                                <GitBranch class="size-4" />
                             </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-4 text-xs text-muted-foreground">
-                                    <span v-if="flow.agent" class="inline-flex items-center gap-1.5">
-                                        <Bot class="h-3.5 w-3.5" />
+                            <div class="min-w-0">
+                                <h3 class="text-sm font-semibold text-ink">
+                                    {{ flow.name }}
+                                </h3>
+                                <p
+                                    v-if="flow.description"
+                                    class="mt-0.5 text-xs text-ink-muted"
+                                >
+                                    {{ flow.description }}
+                                </p>
+                                <div
+                                    class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-ink-subtle"
+                                >
+                                    <span
+                                        v-if="flow.agent"
+                                        class="inline-flex items-center gap-1"
+                                    >
+                                        <Bot class="size-3" />
                                         {{ flow.agent.name }}
                                     </span>
                                     <span>v{{ flow.version }}</span>
                                     <span>{{ formatDate(flow.updated_at) }}</span>
                                 </div>
-                                <div class="flex items-center gap-1">
-                                    <Button variant="ghost" size="sm" as-child>
-                                        <Link
-                                            :href="
-                                                flow.agent
-                                                    ? FlowController.edit({ agent: flow.agent_id, flow: flow.id }).url
-                                                    : FlowController.globalEdit({ flow: flow.id }).url
-                                            "
-                                        >
-                                            <Pencil class="mr-1.5 h-3.5 w-3.5" />
-                                            {{ t('common.edit') }}
-                                        </Link>
-                                    </Button>
-                                </div>
                             </div>
-                        </CardContent>
-                    </Card>
+                        </div>
 
-                    <div
-                        v-if="flows.last_page > 1"
-                        class="flex items-center justify-between pt-4"
-                    >
-                        <span class="text-sm text-muted-foreground">
-                            {{ t('common.page') }} {{ flows.current_page }} {{ t('common.of') }} {{ flows.last_page }}
-                        </span>
-                        <div class="flex gap-2">
-                            <Link
-                                v-if="flows.prev_page_url"
-                                :href="flows.prev_page_url"
-                                class="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+                        <div class="flex shrink-0 items-center gap-2">
+                            <span
+                                class="inline-flex items-center rounded-pill border px-2.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
+                                :style="{
+                                    color: tintFor(flow.status),
+                                    borderColor: `color-mix(in oklab, ${tintFor(flow.status)} 45%, transparent)`,
+                                }"
                             >
-                                {{ t('common.previous') }}
-                            </Link>
+                                {{ t(`flows.status.${flow.status}`) }}
+                            </span>
                             <Link
-                                v-if="flows.next_page_url"
-                                :href="flows.next_page_url"
-                                class="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+                                :href="
+                                    flow.agent
+                                        ? FlowController.edit({
+                                              agent: flow.agent_id,
+                                              flow: flow.id,
+                                          }).url
+                                        : FlowController.globalEdit({
+                                              flow: flow.id,
+                                          }).url
+                                "
+                                class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
                             >
-                                {{ t('common.next') }}
+                                <Pencil class="size-3" />
+                                {{ t('common.edit') }}
                             </Link>
                         </div>
                     </div>
                 </div>
 
-                <div
-                    v-else
-                    class="flex flex-col items-center justify-center rounded-lg border border-dashed py-12"
+                <nav
+                    v-if="flows.last_page > 1"
+                    class="flex items-center justify-between pt-2 text-xs text-ink-muted"
                 >
-                    <GitBranch class="mb-4 h-10 w-10 text-muted-foreground" />
-                    <h3 class="mb-1 text-lg font-medium">
-                        {{ t('flows.global.no_flows') }}
-                    </h3>
-                    <p class="mb-4 text-sm text-muted-foreground">
-                        {{ t('flows.global.no_flows_description') }}
-                    </p>
-                    <Button as-child>
-                        <Link :href="FlowController.globalCreate().url">
-                            <Plus class="mr-2 h-4 w-4" />
-                            {{ t('flows.global.create_flow') }}
+                    <span>
+                        {{ t('common.page') }} {{ flows.current_page }}
+                        {{ t('common.of') }} {{ flows.last_page }}
+                    </span>
+                    <div class="flex items-center gap-4">
+                        <Link
+                            v-if="flows.prev_page_url"
+                            :href="flows.prev_page_url"
+                            class="transition-colors hover:text-ink"
+                        >
+                            {{ t('common.previous') }}
                         </Link>
-                    </Button>
+                        <Link
+                            v-if="flows.next_page_url"
+                            :href="flows.next_page_url"
+                            class="transition-colors hover:text-ink"
+                        >
+                            {{ t('common.next') }}
+                        </Link>
+                    </div>
+                </nav>
+            </div>
+
+            <div
+                v-else
+                class="rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
+            >
+                <div
+                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                >
+                    <GitBranch class="size-5" />
                 </div>
+                <h3 class="mt-4 text-sm font-semibold text-ink">
+                    {{ t('flows.global.no_flows') }}
+                </h3>
+                <p class="mt-1 text-xs text-ink-muted">
+                    {{ t('flows.global.no_flows_description') }}
+                </p>
+                <Link :href="FlowController.globalCreate().url" class="mt-4 inline-block">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                    >
+                        <Plus class="size-3.5" />
+                        {{ t('flows.global.create_flow') }}
+                    </button>
+                </Link>
             </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

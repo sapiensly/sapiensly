@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import KeywordsInput from '@/components/KeywordsInput.vue';
@@ -19,8 +19,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     AgentType,
     AgentTypeOption,
@@ -45,11 +44,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('agents.index.heading'), href: AgentController.index().url },
-    { title: t('common.create'), href: '#' },
-]);
 
 const currentType = ref<AgentType | null>(props.selectedType);
 
@@ -167,13 +161,12 @@ if (props.selectedType) {
 <template>
     <Head :title="t('agents.create.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <Heading
-                    :title="headingTitle"
-                    :description="t('agents.create.description')"
-                />
+    <AppLayoutV2 :title="t('app_v2.nav.agents')">
+        <div class="mx-auto max-w-4xl space-y-6">
+            <PageHeader
+                :title="headingTitle"
+                :description="t('agents.create.description')"
+            />
 
                 <div v-if="!currentType" class="mt-8">
                     <HeadingSmall
@@ -346,7 +339,6 @@ if (props.selectedType) {
                         </Button>
                     </div>
                 </form>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

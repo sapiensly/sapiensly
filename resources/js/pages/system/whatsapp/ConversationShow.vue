@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { router, useForm } from '@inertiajs/vue3';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     conversation: {
@@ -31,8 +34,8 @@ function submitReply() {
 </script>
 
 <template>
-    <AppLayout>
-        <div class="max-w-3xl p-6">
+    <AppLayoutV2 :title="t('app_v2.nav.whatsapp')">
+        <div class="mx-auto max-w-3xl">
             <div class="mb-4 flex items-center justify-between">
                 <h1 class="text-xl font-semibold">{{ props.conversation.contact.profile_name ?? props.conversation.contact.phone_e164 }}</h1>
                 <div class="flex gap-2">
@@ -79,5 +82,5 @@ function submitReply() {
                 </button>
             </form>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

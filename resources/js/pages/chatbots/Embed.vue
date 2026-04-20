@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Chatbot, ChatbotApiToken } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
 import { Check, Copy, Key } from 'lucide-vue-next';
@@ -28,15 +27,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
-    {
-        title: props.chatbot.name,
-        href: ChatbotController.show({ chatbot: props.chatbot.id }).url,
-    },
-    { title: t('chatbots.show.embed'), href: '#' },
-]);
 
 const copied = ref(false);
 
@@ -61,11 +51,10 @@ const formatDate = (date: string | null) => {
 <template>
     <Head :title="t('chatbots.embed.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-3xl">
-                <div class="mb-8 flex items-center justify-between">
-                    <Heading
+    <AppLayoutV2 :title="t('app_v2.nav.chatbots')">
+        <div class="mx-auto max-w-3xl space-y-6">
+                <div class="flex items-center justify-between">
+                    <PageHeader
                         :title="t('chatbots.embed.title')"
                         :description="t('chatbots.embed.description')"
                     />
@@ -492,7 +481,6 @@ onUnmounted(() => {
                         </div>
                     </div>
                 </div>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import AgentSelector from '@/components/agents/AgentSelector.vue';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import KeywordsInput from '@/components/KeywordsInput.vue';
@@ -9,8 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { AgentType, AgentTypeOption, ModelOption } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -40,13 +39,6 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    {
-        title: t('agent_teams.index.title'),
-        href: AgentTeamController.index().url,
-    },
-    { title: t('agent_teams.create.title'), href: '#' },
-]);
 
 const selectedAgents = ref<Record<AgentType, string | null>>({
     triage: null,
@@ -93,13 +85,12 @@ const submit = () => {
 <template>
     <Head :title="t('agent_teams.create.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-5xl">
-                <Heading
-                    :title="t('agent_teams.create.heading')"
-                    :description="t('agent_teams.create.description')"
-                />
+    <AppLayoutV2 :title="t('app_v2.nav.agent_teams')">
+        <div class="mx-auto max-w-5xl space-y-6">
+            <PageHeader
+                :title="t('agent_teams.create.heading')"
+                :description="t('agent_teams.create.description')"
+            />
 
                 <form class="mt-8 space-y-8" @submit.prevent="submit">
                     <div class="space-y-6">
@@ -221,7 +212,6 @@ const submit = () => {
                         </Button>
                     </div>
                 </form>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

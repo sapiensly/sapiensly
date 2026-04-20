@@ -27,6 +27,7 @@ class Document extends Model
         'original_filename',
         'file_path',
         'file_size',
+        'body',
         'visibility',
         'metadata',
     ];
@@ -71,6 +72,15 @@ class Document extends Model
     public function chunks(): HasMany
     {
         return $this->hasMany(KnowledgeBaseChunk::class);
+    }
+
+    /**
+     * Inline-authored documents store their content in `body` and have no
+     * companion file on disk.
+     */
+    public function isInline(): bool
+    {
+        return $this->body !== null && $this->file_path === null;
     }
 
     /**

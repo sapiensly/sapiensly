@@ -3,7 +3,6 @@ import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/Knowled
 import * as KnowledgeBaseDocumentController from '@/actions/App/Http/Controllers/KnowledgeBaseDocumentController';
 import DocumentSelectorDialog from '@/components/documents/DocumentSelectorDialog.vue';
 import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue';
-import Heading from '@/components/Heading.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,8 +31,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import echo from '@/echo';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     Document,
     GroupedFolders,
@@ -164,14 +162,6 @@ const allDocuments = computed(() => {
     });
 });
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    {
-        title: t('knowledge_bases.index.heading'),
-        href: KnowledgeBaseController.index().url,
-    },
-    { title: props.knowledgeBase.name, href: '#' },
-]);
-
 const statusVariant = (status: string) => {
     switch (status) {
         case 'ready':
@@ -264,13 +254,12 @@ const handleDocumentsSelected = (documentIds: string[]) => {
 <template>
     <Head :title="knowledgeBase.name" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-4xl">
-                <div class="mb-8 flex items-start justify-between">
+    <AppLayoutV2 :title="t('app_v2.nav.knowledge_base')">
+        <div class="mx-auto max-w-4xl space-y-6">
+                <div class="flex items-start justify-between">
                     <div>
                         <div class="mb-2 flex items-center gap-3">
-                            <Heading :title="knowledgeBase.name" />
+                            <h1 class="text-[22px] font-semibold leading-tight text-ink">{{ knowledgeBase.name }}</h1>
                             <Badge :variant="statusVariant(currentKbStatus)">
                                 <Loader2
                                     v-if="currentKbStatus === 'processing'"
@@ -281,7 +270,7 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                         </div>
                         <p
                             v-if="knowledgeBase.description"
-                            class="text-muted-foreground"
+                            class="text-xs text-ink-muted"
                         >
                             {{ knowledgeBase.description }}
                         </p>
@@ -547,7 +536,6 @@ const handleDocumentsSelected = (documentIds: string[]) => {
                         </div>
                     </div>
                 </div>
-            </div>
         </div>
 
         <!-- Document Selector Dialog -->
@@ -568,5 +556,5 @@ const handleDocumentsSelected = (documentIds: string[]) => {
             :show-folder-selector="true"
             :knowledge-base-id="knowledgeBase.id"
         />
-    </AppLayout>
+    </AppLayoutV2>
 </template>

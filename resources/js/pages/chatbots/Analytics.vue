@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -11,8 +11,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     AnalyticsOverview,
     DailyData,
@@ -85,15 +84,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('chatbots.index.heading'), href: ChatbotController.index().url },
-    {
-        title: props.chatbot.name,
-        href: ChatbotController.show({ chatbot: props.chatbot.id }).url,
-    },
-    { title: t('chatbots.analytics.title'), href: '#' },
-]);
 
 // Date range form
 const startDate = ref(props.dateRange.start);
@@ -242,16 +232,12 @@ const hasResponseTimes = computed(() => {
 <template>
     <Head :title="`${t('chatbots.analytics.title')} - ${chatbot.name}`" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-6xl">
-                <!-- Header -->
-                <div class="mb-8 flex items-start justify-between">
-                    <Heading
-                        :title="`Analytics: ${chatbot.name}`"
-                        description="Track conversations, performance, and engagement"
-                    />
-                </div>
+    <AppLayoutV2 :title="t('app_v2.nav.chatbots')">
+        <div class="mx-auto max-w-6xl space-y-6">
+            <PageHeader
+                :title="`Analytics: ${chatbot.name}`"
+                description="Track conversations, performance, and engagement"
+            />
 
                 <!-- Date Range Filter -->
                 <Card class="mb-6">
@@ -571,7 +557,6 @@ const hasResponseTimes = computed(() => {
                         </div>
                     </CardContent>
                 </Card>
-            </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>
