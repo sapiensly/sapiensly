@@ -48,18 +48,18 @@ const hasChildren = (folder: Folder) =>
         <Link
             :href="DocumentController.index().url"
             :class="[
-                'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
-                !currentFolderId ? 'bg-accent text-accent-foreground' : '',
+                'flex items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
+                !currentFolderId ? 'bg-accent-blue/10 text-ink' : 'text-ink-muted',
             ]"
         >
-            <Home class="h-4 w-4 text-muted-foreground" />
+            <Home class="h-4 w-4 text-ink-subtle" />
             <span>All Documents</span>
         </Link>
 
         <!-- My Folders -->
         <div v-if="folders.my.length > 0">
             <h4
-                class="mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase"
+                class="mb-2 px-2 text-xs font-semibold text-ink-subtle uppercase"
             >
                 My Folders
             </h4>
@@ -68,9 +68,9 @@ const hasChildren = (folder: Folder) =>
                     <div>
                         <div
                             :class="[
-                                'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
+                                'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
                                 isActive(folder.id)
-                                    ? 'bg-accent text-accent-foreground'
+                                    ? 'bg-accent-blue/10 text-ink'
                                     : '',
                             ]"
                             @click="navigateToFolder(folder.id)"
@@ -78,7 +78,7 @@ const hasChildren = (folder: Folder) =>
                             <button
                                 v-if="hasChildren(folder)"
                                 type="button"
-                                class="shrink-0 rounded p-0.5 hover:bg-muted"
+                                class="shrink-0 rounded p-0.5 hover:bg-white/10"
                                 @click.stop="toggleFolder(folder.id, $event)"
                             >
                                 <ChevronDown
@@ -93,22 +93,22 @@ const hasChildren = (folder: Folder) =>
                                 v-if="
                                     isExpanded(folder.id) || isActive(folder.id)
                                 "
-                                class="h-4 w-4 text-muted-foreground"
+                                class="h-4 w-4 text-ink-subtle"
                             />
                             <FolderIcon
                                 v-else
-                                class="h-4 w-4 text-muted-foreground"
+                                class="h-4 w-4 text-ink-subtle"
                             />
                             <span class="flex-1 truncate">{{
                                 folder.name
                             }}</span>
                             <Users
                                 v-if="folder.visibility === 'organization'"
-                                class="h-3 w-3 text-muted-foreground"
+                                class="h-3 w-3 text-ink-subtle"
                             />
                             <Lock
                                 v-else
-                                class="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100"
+                                class="h-3 w-3 text-ink-subtle opacity-0 group-hover:opacity-100"
                             />
                         </div>
 
@@ -124,9 +124,9 @@ const hasChildren = (folder: Folder) =>
                                 <div>
                                     <div
                                         :class="[
-                                            'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
+                                            'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
                                             isActive(child.id)
-                                                ? 'bg-accent text-accent-foreground'
+                                                ? 'bg-accent-blue/10 text-ink'
                                                 : '',
                                         ]"
                                         @click="navigateToFolder(child.id)"
@@ -134,7 +134,7 @@ const hasChildren = (folder: Folder) =>
                                         <button
                                             v-if="hasChildren(child)"
                                             type="button"
-                                            class="shrink-0 rounded p-0.5 hover:bg-muted"
+                                            class="shrink-0 rounded p-0.5 hover:bg-white/10"
                                             @click.stop="
                                                 toggleFolder(child.id, $event)
                                             "
@@ -155,11 +155,11 @@ const hasChildren = (folder: Folder) =>
                                                 isExpanded(child.id) ||
                                                 isActive(child.id)
                                             "
-                                            class="h-4 w-4 text-muted-foreground"
+                                            class="h-4 w-4 text-ink-subtle"
                                         />
                                         <FolderIcon
                                             v-else
-                                            class="h-4 w-4 text-muted-foreground"
+                                            class="h-4 w-4 text-ink-subtle"
                                         />
                                         <span class="flex-1 truncate">{{
                                             child.name
@@ -169,11 +169,11 @@ const hasChildren = (folder: Folder) =>
                                                 child.visibility ===
                                                 'organization'
                                             "
-                                            class="h-3 w-3 text-muted-foreground"
+                                            class="h-3 w-3 text-ink-subtle"
                                         />
                                         <Lock
                                             v-else
-                                            class="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100"
+                                            class="h-3 w-3 text-ink-subtle opacity-0 group-hover:opacity-100"
                                         />
                                     </div>
 
@@ -189,9 +189,9 @@ const hasChildren = (folder: Folder) =>
                                             v-for="grandchild in child.children"
                                             :key="grandchild.id"
                                             :class="[
-                                                'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
+                                                'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
                                                 isActive(grandchild.id)
-                                                    ? 'bg-accent text-accent-foreground'
+                                                    ? 'bg-accent-blue/10 text-ink'
                                                     : '',
                                             ]"
                                             @click="
@@ -201,11 +201,11 @@ const hasChildren = (folder: Folder) =>
                                             <span class="w-4" />
                                             <FolderOpen
                                                 v-if="isActive(grandchild.id)"
-                                                class="h-4 w-4 text-muted-foreground"
+                                                class="h-4 w-4 text-ink-subtle"
                                             />
                                             <FolderIcon
                                                 v-else
-                                                class="h-4 w-4 text-muted-foreground"
+                                                class="h-4 w-4 text-ink-subtle"
                                             />
                                             <span class="flex-1 truncate">{{
                                                 grandchild.name
@@ -215,11 +215,11 @@ const hasChildren = (folder: Folder) =>
                                                     grandchild.visibility ===
                                                     'organization'
                                                 "
-                                                class="h-3 w-3 text-muted-foreground"
+                                                class="h-3 w-3 text-ink-subtle"
                                             />
                                             <Lock
                                                 v-else
-                                                class="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100"
+                                                class="h-3 w-3 text-ink-subtle opacity-0 group-hover:opacity-100"
                                             />
                                         </div>
                                     </div>
@@ -234,7 +234,7 @@ const hasChildren = (folder: Folder) =>
         <!-- Organization Folders -->
         <div v-if="folders.organization.length > 0">
             <h4
-                class="mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase"
+                class="mb-2 px-2 text-xs font-semibold text-ink-subtle uppercase"
             >
                 Organization
             </h4>
@@ -246,9 +246,9 @@ const hasChildren = (folder: Folder) =>
                     <div>
                         <div
                             :class="[
-                                'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
+                                'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
                                 isActive(folder.id)
-                                    ? 'bg-accent text-accent-foreground'
+                                    ? 'bg-accent-blue/10 text-ink'
                                     : '',
                             ]"
                             @click="navigateToFolder(folder.id)"
@@ -256,7 +256,7 @@ const hasChildren = (folder: Folder) =>
                             <button
                                 v-if="hasChildren(folder)"
                                 type="button"
-                                class="shrink-0 rounded p-0.5 hover:bg-muted"
+                                class="shrink-0 rounded p-0.5 hover:bg-white/10"
                                 @click.stop="toggleFolder(folder.id, $event)"
                             >
                                 <ChevronDown
@@ -271,16 +271,16 @@ const hasChildren = (folder: Folder) =>
                                 v-if="
                                     isExpanded(folder.id) || isActive(folder.id)
                                 "
-                                class="h-4 w-4 text-muted-foreground"
+                                class="h-4 w-4 text-ink-subtle"
                             />
                             <FolderIcon
                                 v-else
-                                class="h-4 w-4 text-muted-foreground"
+                                class="h-4 w-4 text-ink-subtle"
                             />
                             <span class="flex-1 truncate">{{
                                 folder.name
                             }}</span>
-                            <Users class="h-3 w-3 text-muted-foreground" />
+                            <Users class="h-3 w-3 text-ink-subtle" />
                         </div>
 
                         <!-- Children -->
@@ -292,9 +292,9 @@ const hasChildren = (folder: Folder) =>
                                 v-for="child in folder.children"
                                 :key="child.id"
                                 :class="[
-                                    'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent',
+                                    'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
                                     isActive(child.id)
-                                        ? 'bg-accent text-accent-foreground'
+                                        ? 'bg-accent-blue/10 text-ink'
                                         : '',
                                 ]"
                                 @click="navigateToFolder(child.id)"
@@ -302,16 +302,16 @@ const hasChildren = (folder: Folder) =>
                                 <span class="w-4" />
                                 <FolderOpen
                                     v-if="isActive(child.id)"
-                                    class="h-4 w-4 text-muted-foreground"
+                                    class="h-4 w-4 text-ink-subtle"
                                 />
                                 <FolderIcon
                                     v-else
-                                    class="h-4 w-4 text-muted-foreground"
+                                    class="h-4 w-4 text-ink-subtle"
                                 />
                                 <span class="flex-1 truncate">{{
                                     child.name
                                 }}</span>
-                                <Users class="h-3 w-3 text-muted-foreground" />
+                                <Users class="h-3 w-3 text-ink-subtle" />
                             </div>
                         </div>
                     </div>

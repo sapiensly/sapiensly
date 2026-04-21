@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import Heading from '@/components/Heading.vue';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { toUrl, urlIsActive } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editProfile } from '@/routes/profile';
@@ -41,40 +40,42 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
 </script>
 
 <template>
-    <div class="px-4 py-6">
-        <Heading
-            :title="t('settings.title')"
-            :description="t('settings.description')"
-        />
+    <AppLayoutV2 :title="t('settings.title')">
+        <div class="mx-auto max-w-5xl space-y-6">
+            <PageHeader
+                :title="t('settings.title')"
+                :description="t('settings.description')"
+            />
 
-        <div class="flex flex-col lg:flex-row lg:space-x-12">
-            <aside class="w-full max-w-xl lg:w-48">
-                <nav class="flex flex-col space-y-1 space-x-0">
-                    <Button
-                        v-for="item in sidebarNavItems"
-                        :key="toUrl(item.href)"
-                        variant="ghost"
-                        :class="[
-                            'w-full justify-start',
-                            { 'bg-muted': urlIsActive(item.href, currentPath) },
-                        ]"
-                        as-child
-                    >
-                        <Link :href="item.href">
-                            <component :is="item.icon" class="h-4 w-4" />
-                            {{ item.title }}
+            <div class="flex flex-col gap-6 lg:flex-row lg:gap-10">
+                <!-- Settings sub-navigation — admin-v2 sidebar rhythm. -->
+                <aside class="w-full shrink-0 lg:w-56">
+                    <nav class="flex flex-col gap-1">
+                        <Link
+                            v-for="item in sidebarNavItems"
+                            :key="toUrl(item.href)"
+                            :href="item.href"
+                            :class="[
+                                'relative flex h-9 items-center gap-2 rounded-xs px-3 text-[13px] font-medium transition-colors',
+                                urlIsActive(item.href, currentPath)
+                                    ? 'bg-accent-blue/10 text-ink before:absolute before:top-2 before:bottom-2 before:left-0 before:w-0.5 before:bg-accent-blue before:content-[\'\']'
+                                    : 'text-ink-muted hover:bg-white/5 hover:text-ink',
+                            ]"
+                        >
+                            <component
+                                v-if="item.icon"
+                                :is="item.icon"
+                                class="size-4 shrink-0"
+                            />
+                            <span class="truncate">{{ item.title }}</span>
                         </Link>
-                    </Button>
-                </nav>
-            </aside>
+                    </nav>
+                </aside>
 
-            <Separator class="my-6 lg:hidden" />
-
-            <div class="flex-1 md:max-w-2xl">
-                <section class="max-w-xl space-y-12">
+                <div class="min-w-0 flex-1">
                     <slot />
-                </section>
+                </div>
             </div>
         </div>
-    </div>
+    </AppLayoutV2>
 </template>

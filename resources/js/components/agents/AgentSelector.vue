@@ -1,19 +1,9 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { AgentType, AgentTypeOption } from '@/types/agents';
 import { Link } from '@inertiajs/vue3';
 import { Bot, Brain, Plus, Zap } from 'lucide-vue-next';
+import type { Component } from 'vue';
 import { computed } from 'vue';
 
 interface AgentOption {
@@ -37,13 +27,33 @@ const emit = defineEmits<{
     'update:modelValue': [value: string | null];
 }>();
 
-const icons = {
+const icons: Record<AgentType, Component> = {
     triage: Bot,
     knowledge: Brain,
     action: Zap,
 };
 
-const typeIcon = computed(() => icons[props.type]);
+const typeIcon = computed<Component>(() => icons[props.type]);
+
+// Same tint mapping as the standalone-agents + AgentTypeSelector surfaces
+// so the triad reads as one consistent visual language.
+const tints: Record<AgentType, string> = {
+    triage: 'var(--sp-accent-blue)',
+    knowledge: 'var(--sp-spectrum-magenta)',
+    action: 'var(--sp-warning)',
+};
+
+const typeTint = computed(() => tints[props.type]);
+
+const statusTints: Record<string, string> = {
+    active: 'var(--sp-success)',
+    inactive: 'var(--sp-text-secondary)',
+    draft: 'var(--sp-accent-blue)',
+};
+
+function statusTint(status: string) {
+    return statusTints[status] ?? 'var(--sp-text-secondary)';
+}
 
 const createUrl = computed(() => {
     return AgentController.create({ query: { type: props.type } }).url;
@@ -51,81 +61,105 @@ const createUrl = computed(() => {
 </script>
 
 <template>
-    <Card :class="['transition-all', modelValue ? 'ring-2 ring-primary' : '']">
-        <CardHeader class="pb-3">
-            <div class="flex items-center gap-3">
-                <div class="rounded-lg bg-primary/10 p-2">
-                    <component :is="typeIcon" class="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                    <CardTitle class="text-base">{{
-                        typeInfo.label
-                    }}</CardTitle>
-                    <CardDescription class="text-xs">{{
-                        typeInfo.description
-                    }}</CardDescription>
-                </div>
+    <div
+        :class="[
+            'flex flex-col rounded-sp-sm border bg-navy p-4 transition-colors',
+            modelValue
+                ? 'border-accent-blue/50'
+                : 'border-soft hover:border-accent-blue/30',
+        ]"
+    >
+        <!-- Header: tinted icon tile + type name + short description. -->
+        <header class="flex items-start gap-3">
+            <div
+                class="flex size-9 shrink-0 items-center justify-center rounded-xs"
+                :style="{
+                    backgroundColor: `color-mix(in oklab, ${typeTint} 15%, transparent)`,
+                    color: typeTint,
+                }"
+            >
+                <component :is="typeIcon" class="size-4" />
             </div>
-        </CardHeader>
-        <CardContent>
-            <div v-if="agents.length === 0" class="py-4 text-center">
-                <p class="mb-3 text-sm text-muted-foreground">
-                    No {{ typeInfo.label.toLowerCase() }}s available
+            <div class="min-w-0">
+                <h3 class="text-sm font-semibold text-ink">
+                    {{ typeInfo.label }}
+                </h3>
+                <p class="mt-0.5 text-[11px] text-ink-subtle">
+                    {{ typeInfo.description }}
                 </p>
-                <Button variant="outline" size="sm" as-child>
-                    <Link :href="createUrl">
-                        <Plus class="mr-2 h-4 w-4" />
-                        Create {{ typeInfo.label }}
-                    </Link>
-                </Button>
             </div>
+        </header>
 
-            <div v-else class="space-y-3">
-                <RadioGroup
-                    :model-value="modelValue ?? undefined"
-                    @update:model-value="emit('update:modelValue', $event)"
-                    class="gap-2"
+        <!-- Empty state. -->
+        <div v-if="agents.length === 0" class="mt-5 flex-1 space-y-3 text-center">
+            <p class="text-xs text-ink-muted">
+                No {{ typeInfo.label.toLowerCase() }}s available
+            </p>
+            <Link :href="createUrl" class="inline-block">
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
                 >
-                    <div
-                        v-for="agent in agents"
-                        :key="agent.id"
-                        :class="[
-                            'flex cursor-pointer items-center space-x-3 rounded-lg border p-3 transition-colors',
-                            modelValue === agent.id
-                                ? 'border-primary bg-primary/5'
-                                : 'hover:bg-muted/50',
-                        ]"
-                        @click="emit('update:modelValue', agent.id)"
-                    >
-                        <RadioGroupItem :value="agent.id" :id="agent.id" />
-                        <Label :for="agent.id" class="flex-1 cursor-pointer">
-                            <div class="flex items-center justify-between">
-                                <span class="font-medium">{{
-                                    agent.name
-                                }}</span>
-                                <Badge variant="outline" class="text-xs">
-                                    {{ agent.status }}
-                                </Badge>
-                            </div>
-                            <p
-                                v-if="agent.description"
-                                class="mt-0.5 line-clamp-1 text-xs text-muted-foreground"
-                            >
-                                {{ agent.description }}
-                            </p>
-                        </Label>
-                    </div>
-                </RadioGroup>
+                    <Plus class="size-3.5" />
+                    Create {{ typeInfo.label }}
+                </button>
+            </Link>
+        </div>
 
-                <div class="border-t pt-2">
-                    <Button variant="ghost" size="sm" class="w-full" as-child>
-                        <Link :href="createUrl">
-                            <Plus class="mr-2 h-4 w-4" />
-                            Create New {{ typeInfo.label }}
-                        </Link>
-                    </Button>
+        <!-- Picker — each agent as a selectable row card; checked = accent-blue
+             border + tint. Uses a full-area click so the whole row is the hit
+             target (no hidden radio). -->
+        <div v-else class="mt-4 flex flex-1 flex-col gap-1.5">
+            <label
+                v-for="agent in agents"
+                :key="agent.id"
+                :class="[
+                    'flex cursor-pointer flex-col gap-1 rounded-xs border px-3 py-2.5 transition-colors',
+                    modelValue === agent.id
+                        ? 'border-accent-blue/50 bg-accent-blue/10'
+                        : 'border-soft bg-white/[0.03] hover:border-accent-blue/30 hover:bg-white/[0.06]',
+                ]"
+            >
+                <input
+                    type="radio"
+                    class="sr-only"
+                    :name="`agent-${type}`"
+                    :value="agent.id"
+                    :checked="modelValue === agent.id"
+                    @change="emit('update:modelValue', agent.id)"
+                />
+                <div class="flex items-center justify-between gap-2">
+                    <span class="truncate text-sm font-medium text-ink">
+                        {{ agent.name }}
+                    </span>
+                    <span
+                        class="inline-flex shrink-0 items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
+                        :style="{
+                            color: statusTint(agent.status),
+                            borderColor: `color-mix(in oklab, ${statusTint(agent.status)} 45%, transparent)`,
+                        }"
+                    >
+                        {{ agent.status }}
+                    </span>
                 </div>
-            </div>
-        </CardContent>
-    </Card>
+                <p
+                    v-if="agent.description"
+                    class="line-clamp-1 text-[11px] text-ink-subtle"
+                >
+                    {{ agent.description }}
+                </p>
+            </label>
+
+            <!-- Add-new affordance at the bottom of the picker. -->
+            <Link :href="createUrl" class="mt-1">
+                <button
+                    type="button"
+                    class="flex w-full items-center justify-center gap-1.5 rounded-xs border border-dashed border-soft bg-white/[0.02] px-3 py-2 text-xs text-ink-muted transition-colors hover:border-accent-blue/30 hover:bg-white/[0.05] hover:text-ink"
+                >
+                    <Plus class="size-3.5" />
+                    Create New {{ typeInfo.label }}
+                </button>
+            </Link>
+        </div>
+    </div>
 </template>

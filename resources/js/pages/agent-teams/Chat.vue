@@ -4,13 +4,8 @@ import * as TeamStreamController from '@/actions/App/Http/Controllers/TeamStream
 import ChatInput from '@/components/chat/ChatInput.vue';
 import ChatMessage from '@/components/chat/ChatMessage.vue';
 import ExecutionPlanIndicator from '@/components/chat/ExecutionPlanIndicator.vue';
-import Heading from '@/components/Heading.vue';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { useStreamingChat } from '@/composables/useStreamingChat';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { AgentTeam } from '@/types/agents';
 import type {
     Conversation,
@@ -22,6 +17,9 @@ import type {
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Bot, Brain, Plus, Users, Zap } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Props {
     team: AgentTeam;
@@ -29,15 +27,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Multi-Agents', href: AgentTeamController.index().url },
-    {
-        title: props.team.name,
-        href: AgentTeamController.show({ agent_team: props.team.id }).url,
-    },
-    { title: 'Chat', href: '#' },
-]);
 
 // Chat state
 const messagesContainer = ref<HTMLDivElement | null>(null);
@@ -228,65 +217,65 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
 <template>
     <Head :title="`Chat with ${team.name}`" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-[calc(100vh-4rem)] flex-col">
-            <!-- Header -->
-            <div class="border-b bg-background px-4 py-3">
-                <div class="mx-auto flex max-w-4xl items-center gap-4">
-                    <Button variant="ghost" size="icon" as-child>
-                        <Link
-                            :href="
-                                AgentTeamController.show({
-                                    agent_team: team.id,
-                                }).url
-                            "
+    <AppLayoutV2
+        :title="t('app_v2.nav.agent_teams')"
+        full-bleed
+        force-collapsed-on-mount
+    >
+        <div class="flex min-h-0 flex-1 flex-col">
+            <!-- Header strip — glass + soft border, matches flow toolbar. -->
+            <div
+                class="sp-glass flex h-14 shrink-0 items-center gap-3 border-b border-soft px-4"
+            >
+                <Link
+                    :href="AgentTeamController.show({ agent_team: team.id }).url"
+                    class="flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                >
+                    <ArrowLeft class="size-4" />
+                </Link>
+                <Users class="size-4 text-ink-muted" />
+                <h1 class="truncate text-sm font-semibold text-ink">
+                    {{ team.name }}
+                </h1>
+                <div class="ml-auto flex items-center gap-2">
+                    <!-- Agent chips (hidden on small screens; count pill shown instead). -->
+                    <div class="hidden items-center gap-1 sm:flex">
+                        <span
+                            v-if="triageAgent"
+                            class="inline-flex items-center gap-1 rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                         >
-                            <ArrowLeft class="h-4 w-4" />
-                        </Link>
-                    </Button>
-                    <Users class="h-5 w-5 text-muted-foreground" />
-                    <Heading :title="team.name" />
-                    <div class="ml-auto flex items-center gap-2">
-                        <!-- Agent badges -->
-                        <div class="hidden items-center gap-1 sm:flex">
-                            <Badge
-                                v-if="triageAgent"
-                                variant="outline"
-                                class="gap-1 text-xs"
-                            >
-                                <Bot class="h-3 w-3" />
-                                Triage
-                            </Badge>
-                            <Badge
-                                v-if="knowledgeAgent"
-                                variant="outline"
-                                class="gap-1 text-xs"
-                            >
-                                <Brain class="h-3 w-3" />
-                                Knowledge
-                            </Badge>
-                            <Badge
-                                v-if="actionAgent"
-                                variant="outline"
-                                class="gap-1 text-xs"
-                            >
-                                <Zap class="h-3 w-3" />
-                                Action
-                            </Badge>
-                        </div>
-                        <Badge variant="secondary" class="sm:hidden">
-                            {{ configuredAgentCount }} agents
-                        </Badge>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            :disabled="isStreaming"
-                            @click="handleNewConversation"
+                            <Bot class="size-3" />
+                            Triage
+                        </span>
+                        <span
+                            v-if="knowledgeAgent"
+                            class="inline-flex items-center gap-1 rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                         >
-                            <Plus class="mr-1 h-4 w-4" />
-                            New Chat
-                        </Button>
+                            <Brain class="size-3" />
+                            Knowledge
+                        </span>
+                        <span
+                            v-if="actionAgent"
+                            class="inline-flex items-center gap-1 rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                        >
+                            <Zap class="size-3" />
+                            Action
+                        </span>
                     </div>
+                    <span
+                        class="inline-flex items-center rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase sm:hidden"
+                    >
+                        {{ configuredAgentCount }} agents
+                    </span>
+                    <button
+                        type="button"
+                        :disabled="isStreaming"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10 disabled:opacity-50"
+                        @click="handleNewConversation"
+                    >
+                        <Plus class="size-3.5" />
+                        New Chat
+                    </button>
                 </div>
             </div>
 
@@ -301,12 +290,18 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                         v-if="displayMessages.length === 0"
                         class="flex flex-col items-center justify-center py-12 text-center"
                     >
-                        <Users class="mb-4 h-12 w-12 text-muted-foreground" />
-                        <p class="text-lg font-medium">Start a conversation</p>
-                        <p class="text-sm text-muted-foreground">
+                        <div
+                            class="flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                        >
+                            <Users class="size-5" />
+                        </div>
+                        <p class="mt-4 text-sm font-semibold text-ink">
+                            Start a conversation
+                        </p>
+                        <p class="mt-1 text-xs text-ink-muted">
                             Send a message to test {{ team.name }}
                         </p>
-                        <p class="mt-2 text-xs text-muted-foreground">
+                        <p class="mt-2 text-[11px] text-ink-subtle">
                             Your message will be analyzed and routed to the
                             appropriate agents
                         </p>
@@ -372,17 +367,20 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                         />
                     </template>
 
-                    <!-- Error display -->
-                    <Card v-if="error" class="border-destructive">
-                        <CardContent class="py-3 text-sm text-destructive">
-                            {{ error }}
-                        </CardContent>
-                    </Card>
+                    <!-- Error banner — semantic red on our dark chrome. -->
+                    <div
+                        v-if="error"
+                        class="rounded-sp-sm border border-sp-danger/30 bg-sp-danger/10 px-4 py-3 text-sm text-sp-danger"
+                    >
+                        {{ error }}
+                    </div>
                 </div>
             </div>
 
-            <!-- Input -->
-            <div class="border-t bg-background px-4 py-4">
+            <!-- Input strip. -->
+            <div
+                class="sp-glass shrink-0 border-t border-soft px-4 py-4"
+            >
                 <div class="mx-auto max-w-4xl">
                     <ChatInput
                         :disabled="isStreaming"
@@ -392,5 +390,5 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                 </div>
             </div>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

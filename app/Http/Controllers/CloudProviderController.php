@@ -27,15 +27,16 @@ class CloudProviderController extends Controller
 
     public function index(Request $request): Response
     {
-        $organization = $this->requireOrganization($request->user());
+        $user = $request->user();
+        $organization = $user->organization;
 
-        $tenantStorage = $this->cloudProviderService->getTenantStorage($organization);
-        $tenantDatabase = $this->cloudProviderService->getTenantDatabase($organization);
+        [$tenantStorage, $tenantDatabase] = $this->loadTenantProviders($user, $organization);
+
         $globalStorage = $this->cloudProviderService->getGlobalStorage();
         $globalDatabase = $this->cloudProviderService->getGlobalDatabase();
 
         return Inertia::render('system/CloudProviders', [
-            'canManage' => $this->userCanManage($request->user(), $organization),
+            'canManage' => $this->userCanManage($user, $organization),
             'drivers' => [
                 'storage' => $this->cloudProviderService->getDriverOptions(CloudProviderService::KIND_STORAGE),
                 'database' => $this->cloudProviderService->getDriverOptions(CloudProviderService::KIND_DATABASE),
@@ -53,17 +54,18 @@ class CloudProviderController extends Controller
 
     public function storeStorage(Request $request): RedirectResponse
     {
-        $organization = $this->requireOrganization($request->user());
-        $this->authorizeManage($request->user(), $organization);
+        $user = $request->user();
+        $organization = $user->organization;
+        $this->authorizeManage($user, $organization);
 
         $validated = $this->validateProviderPayload($request, CloudProviderService::KIND_STORAGE);
 
-        $this->cloudProviderService->upsertTenantProvider(
+        $this->upsertTenantProvider(
+            $user,
             $organization,
             CloudProviderService::KIND_STORAGE,
             $validated['driver'],
             $validated['credentials'],
-            $request->user()->id,
         );
 
         return to_route('system.cloud-providers.index');
@@ -71,38 +73,44 @@ class CloudProviderController extends Controller
 
     public function storeDatabase(Request $request): RedirectResponse
     {
-        $organization = $this->requireOrganization($request->user());
-        $this->authorizeManage($request->user(), $organization);
+        $user = $request->user();
+        $organization = $user->organization;
+        $this->authorizeManage($user, $organization);
 
         $validated = $this->validateProviderPayload($request, CloudProviderService::KIND_DATABASE);
 
-        $impactedOrgIds = $this->knowledgeScopeWiper
-            ->impactedOrganizationIdsForDatabaseScope('tenant', $organization);
-        $counts = $this->knowledgeScopeWiper->countForOrganizations($impactedOrgIds);
+        // Knowledge-scope wipe only applies to organization-scoped tenant switches.
+        // Personal users don't currently own org-scoped KBs, so the impacted list
+        // is empty and the wipe is a no-op for them.
+        if ($organization) {
+            $impactedOrgIds = $this->knowledgeScopeWiper
+                ->impactedOrganizationIdsForDatabaseScope('tenant', $organization);
+            $counts = $this->knowledgeScopeWiper->countForOrganizations($impactedOrgIds);
 
-        $hasData = $counts['knowledge_bases'] > 0
-            || $counts['documents'] > 0
-            || $counts['chunks'] > 0;
+            $hasData = $counts['knowledge_bases'] > 0
+                || $counts['documents'] > 0
+                || $counts['chunks'] > 0;
 
-        if ($hasData && $request->input('confirm') !== 'DELETE') {
-            return back()
-                ->withInput()
-                ->with('wipe_required', $counts);
+            if ($hasData && $request->input('confirm') !== 'DELETE') {
+                return back()
+                    ->withInput()
+                    ->with('wipe_required', $counts);
+            }
+
+            if ($hasData) {
+                $this->knowledgeScopeWiper->wipeForOrganizations(
+                    $impactedOrgIds,
+                    'tenant: workspace database override change by user '.$user->id,
+                );
+            }
         }
 
-        if ($hasData) {
-            $this->knowledgeScopeWiper->wipeForOrganizations(
-                $impactedOrgIds,
-                'tenant: workspace database override change by user '.$request->user()->id,
-            );
-        }
-
-        $this->cloudProviderService->upsertTenantProvider(
+        $this->upsertTenantProvider(
+            $user,
             $organization,
             CloudProviderService::KIND_DATABASE,
             $validated['driver'],
             $validated['credentials'],
-            $request->user()->id,
         );
 
         return to_route('system.cloud-providers.index');
@@ -114,17 +122,17 @@ class CloudProviderController extends Controller
             abort(404);
         }
 
-        $organization = $this->requireOrganization($request->user());
-        $this->authorizeManage($request->user(), $organization);
+        $user = $request->user();
+        $organization = $user->organization;
+        $this->authorizeManage($user, $organization);
 
-        $provider = $kind === CloudProviderService::KIND_STORAGE
-            ? $this->cloudProviderService->getTenantStorage($organization)
-            : $this->cloudProviderService->getTenantDatabase($organization);
+        [$tenantStorage, $tenantDatabase] = $this->loadTenantProviders($user, $organization);
+        $provider = $kind === CloudProviderService::KIND_STORAGE ? $tenantStorage : $tenantDatabase;
 
-        // Removing a tenant database override means chunks/KBs/docs belonging
-        // to this tenant lose their home — decision #5 says delete rather
-        // than leave orphans.
-        if ($kind === CloudProviderService::KIND_DATABASE && $provider) {
+        // Removing an org-scoped database override means chunks/KBs/docs belonging
+        // to this tenant lose their home — decision #5 says delete rather than
+        // leave orphans. Personal users aren't wired to this data set yet.
+        if ($kind === CloudProviderService::KIND_DATABASE && $provider && $organization) {
             $impactedOrgIds = $this->knowledgeScopeWiper
                 ->impactedOrganizationIdsForDatabaseScope('tenant', $organization);
             $counts = $this->knowledgeScopeWiper->countForOrganizations($impactedOrgIds);
@@ -140,7 +148,7 @@ class CloudProviderController extends Controller
             if ($hasData) {
                 $this->knowledgeScopeWiper->wipeForOrganizations(
                     $impactedOrgIds,
-                    'tenant: workspace database override removed by user '.$request->user()->id,
+                    'tenant: workspace database override removed by user '.$user->id,
                 );
             }
         }
@@ -152,28 +160,31 @@ class CloudProviderController extends Controller
 
     public function testStorage(Request $request): JsonResponse
     {
-        $organization = $this->requireOrganization($request->user());
-        $this->authorizeManage($request->user(), $organization);
+        $user = $request->user();
+        $organization = $user->organization;
+        $this->authorizeManage($user, $organization);
 
-        return response()->json($this->runTest($request, $organization, CloudProviderService::KIND_STORAGE));
+        return response()->json($this->runTest($request, $user, $organization, CloudProviderService::KIND_STORAGE));
     }
 
     public function testDatabase(Request $request): JsonResponse
     {
-        $organization = $this->requireOrganization($request->user());
-        $this->authorizeManage($request->user(), $organization);
+        $user = $request->user();
+        $organization = $user->organization;
+        $this->authorizeManage($user, $organization);
 
-        return response()->json($this->runTest($request, $organization, CloudProviderService::KIND_DATABASE));
+        return response()->json($this->runTest($request, $user, $organization, CloudProviderService::KIND_DATABASE));
     }
 
     public function inspectVector(Request $request): JsonResponse
     {
-        $organization = $this->requireOrganization($request->user());
-        $this->authorizeManage($request->user(), $organization);
+        $user = $request->user();
+        $organization = $user->organization;
+        $this->authorizeManage($user, $organization);
 
-        $provider = $this->cloudProviderService->getTenantDatabase($organization);
+        [, $tenantDatabase] = $this->loadTenantProviders($user, $organization);
 
-        if (! $provider) {
+        if (! $tenantDatabase) {
             return response()->json([
                 'configured' => false,
                 'message' => __('No workspace database provider configured.'),
@@ -182,32 +193,79 @@ class CloudProviderController extends Controller
 
         return response()->json([
             'configured' => true,
-        ] + $this->cloudProviderService->inspectDatabase($provider));
+        ] + $this->cloudProviderService->inspectDatabase($tenantDatabase));
     }
 
     public function installVector(Request $request): JsonResponse
     {
-        $organization = $this->requireOrganization($request->user());
-        $this->authorizeManage($request->user(), $organization);
+        $user = $request->user();
+        $organization = $user->organization;
+        $this->authorizeManage($user, $organization);
 
-        $provider = $this->cloudProviderService->getTenantDatabase($organization);
+        [, $tenantDatabase] = $this->loadTenantProviders($user, $organization);
 
-        if (! $provider) {
+        if (! $tenantDatabase) {
             return response()->json([
                 'success' => false,
                 'message' => __('No workspace database provider configured.'),
             ]);
         }
 
-        return response()->json($this->cloudProviderService->installVectorExtension($provider));
+        return response()->json($this->cloudProviderService->installVectorExtension($tenantDatabase));
     }
 
-    private function runTest(Request $request, Organization $organization, string $kind): array
+    /**
+     * Load the tenant-scope storage + database providers for the caller. When
+     * the user belongs to an organization, the org-scoped rows are returned;
+     * when personal, their user-scoped rows are returned instead.
+     *
+     * @return array{0: ?CloudProvider, 1: ?CloudProvider}
+     */
+    private function loadTenantProviders(User $user, ?Organization $organization): array
+    {
+        if ($organization) {
+            return [
+                $this->cloudProviderService->getTenantStorage($organization),
+                $this->cloudProviderService->getTenantDatabase($organization),
+            ];
+        }
+
+        return [
+            $this->cloudProviderService->getPersonalStorage($user),
+            $this->cloudProviderService->getPersonalDatabase($user),
+        ];
+    }
+
+    private function upsertTenantProvider(
+        User $user,
+        ?Organization $organization,
+        string $kind,
+        string $driver,
+        array $credentials,
+    ): CloudProvider {
+        if ($organization) {
+            return $this->cloudProviderService->upsertTenantProvider(
+                $organization,
+                $kind,
+                $driver,
+                $credentials,
+                $user->id,
+            );
+        }
+
+        return $this->cloudProviderService->upsertPersonalProvider(
+            $user,
+            $kind,
+            $driver,
+            $credentials,
+        );
+    }
+
+    private function runTest(Request $request, User $user, ?Organization $organization, string $kind): array
     {
         if ($request->boolean('use_saved')) {
-            $provider = $kind === CloudProviderService::KIND_STORAGE
-                ? $this->cloudProviderService->getTenantStorage($organization)
-                : $this->cloudProviderService->getTenantDatabase($organization);
+            [$tenantStorage, $tenantDatabase] = $this->loadTenantProviders($user, $organization);
+            $provider = $kind === CloudProviderService::KIND_STORAGE ? $tenantStorage : $tenantDatabase;
 
             if (! $provider) {
                 return ['success' => false, 'message' => __('No tenant provider configured for this slot.')];
@@ -258,23 +316,17 @@ class CloudProviderController extends Controller
         ];
     }
 
-    private function requireOrganization(User $user): Organization
-    {
-        if (! $user->organization_id) {
-            abort(403, __('You must belong to an organization to manage cloud providers.'));
-        }
-
-        $organization = $user->organization;
-        if (! $organization) {
-            abort(403, __('Organization not found.'));
-        }
-
-        return $organization;
-    }
-
-    private function userCanManage(User $user, Organization $organization): bool
+    /**
+     * Personal users always manage their own providers. Organization users
+     * must be a sysadmin or an active Owner of the organization.
+     */
+    private function userCanManage(User $user, ?Organization $organization): bool
     {
         if ($user->hasRole('sysadmin')) {
+            return true;
+        }
+
+        if (! $organization) {
             return true;
         }
 
@@ -286,7 +338,7 @@ class CloudProviderController extends Controller
             ->exists();
     }
 
-    private function authorizeManage(User $user, Organization $organization): void
+    private function authorizeManage(User $user, ?Organization $organization): void
     {
         if (! $this->userCanManage($user, $organization)) {
             throw new AuthorizationException(__('Only organization owners can manage cloud providers.'));

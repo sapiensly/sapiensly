@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import Heading from '@/components/Heading.vue';
+import SettingsCard from '@/components/admin/SettingsCard.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,10 +13,9 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Bot, Database } from 'lucide-vue-next';
+import { Bot, Database, Key, Layers, Power, Sparkles } from 'lucide-vue-next';
 import { computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -54,18 +53,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: t('nav.system'), href: '#' },
-    { title: t('system.ai_providers.title'), href: '/system/ai-providers' },
-    {
-        title:
-            props.mode === 'create'
-                ? t('system.ai_provider_form.add_breadcrumb')
-                : t('system.ai_provider_form.edit_breadcrumb'),
-        href: '#',
-    },
-]);
 
 const credentialFieldLabel = (field: string): string => {
     const labels: Record<string, string> = {
@@ -146,14 +133,12 @@ const llmDriverHasEmbeddings = computed<boolean>(() =>
     ),
 );
 
-// When LLM driver changes, reset its model + credentials
 watch(
     () => createForm.llm.driver,
     (driver) => {
         createForm.llm.model_id = '';
         createForm.llm.credentials = emptyCredentials();
 
-        // If "same as LLM" is on but the new driver has no embeddings, turn it off
         if (createForm.embeddings.same_as_llm) {
             if (!driver || !llmDriverHasEmbeddings.value) {
                 createForm.embeddings.same_as_llm = false;
@@ -165,7 +150,6 @@ watch(
     },
 );
 
-// When "same as LLM" toggles, sync the embeddings driver
 watch(
     () => createForm.embeddings.same_as_llm,
     (same) => {
@@ -185,7 +169,6 @@ watch(
     },
 );
 
-// Reset embeddings model when its driver changes
 watch(
     () => createForm.embeddings.driver,
     () => {
@@ -209,29 +192,29 @@ const canSubmitCreate = computed<boolean>(() => {
 });
 
 const submitCreate = () => {
-    // When "same as LLM", mirror credentials before posting so the backend
-    // sees matching drivers+credentials and collapses into one provider row.
     if (createForm.embeddings.same_as_llm) {
         createForm.embeddings.driver = createForm.llm.driver;
         createForm.embeddings.credentials = { ...createForm.llm.credentials };
     }
 
-    createForm.transform((data) => ({
-        llm: {
-            driver: data.llm.driver,
-            model_id: data.llm.model_id,
-            credentials: data.llm.credentials,
-        },
-        embeddings: {
-            driver: data.embeddings.driver,
-            model_id: data.embeddings.model_id,
-            credentials: data.embeddings.credentials,
-        },
-    })).post('/system/ai-providers');
+    createForm
+        .transform((data) => ({
+            llm: {
+                driver: data.llm.driver,
+                model_id: data.llm.model_id,
+                credentials: data.llm.credentials,
+            },
+            embeddings: {
+                driver: data.embeddings.driver,
+                model_id: data.embeddings.model_id,
+                credentials: data.embeddings.credentials,
+            },
+        }))
+        .post('/system/ai-providers');
 };
 
 // =====================================================================
-// EDIT MODE — single provider form (unchanged)
+// EDIT MODE — single provider form
 // =====================================================================
 const editForm = useForm({
     display_name: props.provider?.display_name ?? '',
@@ -280,450 +263,380 @@ const submitEdit = () => {
         "
     />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 py-6">
-            <div class="mx-auto max-w-2xl">
-                <Heading
-                    :title="
-                        mode === 'create'
-                            ? t('system.ai_provider_form.add_title')
-                            : t('system.ai_provider_form.edit_title')
-                    "
-                    :description="
-                        mode === 'create'
-                            ? t('system.ai_provider_form.add_description')
-                            : t('system.ai_provider_form.edit_description')
-                    "
-                />
+    <AppLayoutV2 :title="t('app_v2.nav.ai_providers')">
+        <div class="mx-auto max-w-5xl space-y-6">
+            <PageHeader
+                :title="
+                    mode === 'create'
+                        ? t('system.ai_provider_form.add_title')
+                        : t('system.ai_provider_form.edit_title')
+                "
+                :description="
+                    mode === 'create'
+                        ? t('system.ai_provider_form.add_description')
+                        : t('system.ai_provider_form.edit_description')
+                "
+            />
 
-                <!-- =========================== CREATE MODE =========================== -->
-                <form
-                    v-if="mode === 'create'"
-                    class="mt-8 space-y-6"
-                    @submit.prevent="submitCreate"
+            <!-- =========================== CREATE MODE =========================== -->
+            <form
+                v-if="mode === 'create'"
+                class="space-y-4"
+                @submit.prevent="submitCreate"
+            >
+                <!-- Default LLM. -->
+                <SettingsCard
+                    :icon="Bot"
+                    :title="t('system.ai_provider_form.default_llm')"
+                    :description="t('system.ai_provider_form.default_llm_description')"
                 >
-                    <!-- Default LLM section -->
-                    <section class="rounded-lg border p-5">
-                        <div class="mb-4 flex items-start gap-3">
-                            <div
-                                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"
-                            >
-                                <Bot class="h-5 w-5" />
-                            </div>
-                            <div>
-                                <h3 class="text-base font-semibold">
-                                    {{ t('system.ai_provider_form.default_llm') }}
-                                </h3>
-                                <p class="text-sm text-muted-foreground">
-                                    {{
-                                        t(
-                                            'system.ai_provider_form.default_llm_description',
-                                        )
-                                    }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div class="grid gap-2">
-                                <Label for="llm_driver">{{
-                                    t('system.ai_provider_form.provider')
-                                }}</Label>
-                                <Select v-model="createForm.llm.driver">
-                                    <SelectTrigger id="llm_driver">
-                                        <SelectValue
-                                            :placeholder="
-                                                t(
-                                                    'system.ai_provider_form.select_provider',
-                                                )
-                                            "
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem
-                                            v-for="driver in driversWithChat"
-                                            :key="driver.value"
-                                            :value="driver.value"
-                                        >
-                                            {{ driver.label }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <InputError
-                                    :message="(createForm.errors as any)['llm.driver']"
+                    <div class="space-y-1.5">
+                        <Label for="llm_driver">
+                            {{ t('system.ai_provider_form.provider') }}
+                        </Label>
+                        <Select v-model="createForm.llm.driver">
+                            <SelectTrigger id="llm_driver" class="h-9">
+                                <SelectValue
+                                    :placeholder="t('system.ai_provider_form.select_provider')"
                                 />
-                            </div>
-
-                            <template v-if="createForm.llm.driver">
-                                <div
-                                    v-for="field in llmCredentialFields"
-                                    :key="`llm_${field}`"
-                                    class="grid gap-2"
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="driver in driversWithChat"
+                                    :key="driver.value"
+                                    :value="driver.value"
                                 >
-                                    <Label :for="`llm_cred_${field}`">{{
-                                        credentialFieldLabel(field)
-                                    }}</Label>
-                                    <Input
-                                        :id="`llm_cred_${field}`"
-                                        v-model="createForm.llm.credentials[field]"
-                                        :type="field === 'api_key' ? 'password' : 'text'"
-                                    />
-                                    <InputError
-                                        :message="
-                                            (createForm.errors as any)[
-                                                `llm.credentials.${field}`
-                                            ]
-                                        "
-                                    />
-                                </div>
-
-                                <div class="grid gap-2">
-                                    <Label for="llm_model">{{
-                                        t('system.ai_provider_form.model')
-                                    }}</Label>
-                                    <Select v-model="createForm.llm.model_id">
-                                        <SelectTrigger id="llm_model">
-                                            <SelectValue
-                                                :placeholder="
-                                                    t(
-                                                        'system.ai_provider_form.select_model',
-                                                    )
-                                                "
-                                            />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem
-                                                v-for="model in llmModels"
-                                                :key="model.id"
-                                                :value="model.id"
-                                            >
-                                                {{ model.label }}
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <InputError
-                                        :message="(createForm.errors as any)['llm.model_id']"
-                                    />
-                                </div>
-                            </template>
-                        </div>
-                    </section>
-
-                    <!-- Default Embeddings section -->
-                    <section class="rounded-lg border p-5">
-                        <div class="mb-4 flex items-start gap-3">
-                            <div
-                                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"
-                            >
-                                <Database class="h-5 w-5" />
-                            </div>
-                            <div>
-                                <h3 class="text-base font-semibold">
-                                    {{
-                                        t('system.ai_provider_form.default_embeddings')
-                                    }}
-                                </h3>
-                                <p class="text-sm text-muted-foreground">
-                                    {{
-                                        t(
-                                            'system.ai_provider_form.default_embeddings_description',
-                                        )
-                                    }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div
-                                v-if="createForm.llm.driver && llmDriverHasEmbeddings"
-                                class="flex items-center gap-3 rounded-md border border-dashed p-3"
-                            >
-                                <Checkbox
-                                    id="same_as_llm"
-                                    :checked="createForm.embeddings.same_as_llm"
-                                    @update:checked="
-                                        createForm.embeddings.same_as_llm = $event
-                                    "
-                                />
-                                <label
-                                    for="same_as_llm"
-                                    class="cursor-pointer text-sm"
-                                >
-                                    {{ t('system.ai_provider_form.same_as_llm') }}
-                                </label>
-                            </div>
-
-                            <template v-if="!createForm.embeddings.same_as_llm">
-                                <div class="grid gap-2">
-                                    <Label for="embeddings_driver">{{
-                                        t('system.ai_provider_form.provider')
-                                    }}</Label>
-                                    <Select v-model="createForm.embeddings.driver">
-                                        <SelectTrigger id="embeddings_driver">
-                                            <SelectValue
-                                                :placeholder="
-                                                    t(
-                                                        'system.ai_provider_form.select_provider',
-                                                    )
-                                                "
-                                            />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem
-                                                v-for="driver in driversWithEmbeddings"
-                                                :key="driver.value"
-                                                :value="driver.value"
-                                            >
-                                                {{ driver.label }}
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <InputError
-                                        :message="
-                                            (createForm.errors as any)['embeddings.driver']
-                                        "
-                                    />
-                                </div>
-
-                                <template v-if="createForm.embeddings.driver">
-                                    <div
-                                        v-for="field in embeddingsCredentialFields"
-                                        :key="`emb_${field}`"
-                                        class="grid gap-2"
-                                    >
-                                        <Label :for="`emb_cred_${field}`">{{
-                                            credentialFieldLabel(field)
-                                        }}</Label>
-                                        <Input
-                                            :id="`emb_cred_${field}`"
-                                            v-model="
-                                                createForm.embeddings.credentials[field]
-                                            "
-                                            :type="
-                                                field === 'api_key' ? 'password' : 'text'
-                                            "
-                                        />
-                                        <InputError
-                                            :message="
-                                                (createForm.errors as any)[
-                                                    `embeddings.credentials.${field}`
-                                                ]
-                                            "
-                                        />
-                                    </div>
-                                </template>
-                            </template>
-
-                            <div
-                                v-if="
-                                    createForm.embeddings.driver ||
-                                    createForm.embeddings.same_as_llm
-                                "
-                                class="grid gap-2"
-                            >
-                                <Label for="embeddings_model">{{
-                                    t('system.ai_provider_form.model')
-                                }}</Label>
-                                <Select v-model="createForm.embeddings.model_id">
-                                    <SelectTrigger id="embeddings_model">
-                                        <SelectValue
-                                            :placeholder="
-                                                t(
-                                                    'system.ai_provider_form.select_model',
-                                                )
-                                            "
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem
-                                            v-for="model in embeddingsModels"
-                                            :key="model.id"
-                                            :value="model.id"
-                                        >
-                                            {{ model.label }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <InputError
-                                    :message="
-                                        (createForm.errors as any)['embeddings.model_id']
-                                    "
-                                />
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- Actions -->
-                    <div class="flex justify-end gap-4">
-                        <Button variant="outline" as-child>
-                            <Link href="/system/ai-providers">{{
-                                t('common.cancel')
-                            }}</Link>
-                        </Button>
-                        <Button
-                            type="submit"
-                            :disabled="createForm.processing || !canSubmitCreate"
-                        >
-                            {{ t('system.ai_provider_form.save') }}
-                        </Button>
+                                    {{ driver.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError :message="(createForm.errors as any)['llm.driver']" />
                     </div>
-                </form>
 
-                <!-- =========================== EDIT MODE =========================== -->
-                <form
-                    v-else
-                    class="mt-8 space-y-6"
-                    @submit.prevent="submitEdit"
+                    <template v-if="createForm.llm.driver">
+                        <div
+                            v-for="field in llmCredentialFields"
+                            :key="`llm_${field}`"
+                            class="space-y-1.5"
+                        >
+                            <Label :for="`llm_cred_${field}`">
+                                {{ credentialFieldLabel(field) }}
+                            </Label>
+                            <Input
+                                :id="`llm_cred_${field}`"
+                                v-model="createForm.llm.credentials[field]"
+                                :type="field === 'api_key' ? 'password' : 'text'"
+                                class="h-9"
+                            />
+                            <InputError
+                                :message="(createForm.errors as any)[`llm.credentials.${field}`]"
+                            />
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <Label for="llm_model">
+                                {{ t('system.ai_provider_form.model') }}
+                            </Label>
+                            <Select v-model="createForm.llm.model_id">
+                                <SelectTrigger id="llm_model" class="h-9">
+                                    <SelectValue
+                                        :placeholder="t('system.ai_provider_form.select_model')"
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="model in llmModels"
+                                        :key="model.id"
+                                        :value="model.id"
+                                    >
+                                        {{ model.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError :message="(createForm.errors as any)['llm.model_id']" />
+                        </div>
+                    </template>
+                </SettingsCard>
+
+                <!-- Default Embeddings. -->
+                <SettingsCard
+                    :icon="Database"
+                    :title="t('system.ai_provider_form.default_embeddings')"
+                    :description="t('system.ai_provider_form.default_embeddings_description')"
+                    tint="var(--sp-spectrum-magenta)"
                 >
-                    <!-- Display name -->
-                    <div class="grid gap-2">
-                        <Label for="display_name">{{
-                            t('system.ai_provider_form.display_name')
-                        }}</Label>
+                    <!-- "Same as LLM" shortcut — only when the LLM driver also ships embeddings. -->
+                    <label
+                        v-if="createForm.llm.driver && llmDriverHasEmbeddings"
+                        for="same_as_llm"
+                        class="flex cursor-pointer items-center gap-3 rounded-xs border border-dashed border-soft bg-white/[0.03] px-3 py-2.5 text-sm text-ink transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
+                    >
+                        <Checkbox
+                            id="same_as_llm"
+                            :checked="createForm.embeddings.same_as_llm"
+                            @update:checked="
+                                createForm.embeddings.same_as_llm = $event
+                            "
+                        />
+                        <span>{{ t('system.ai_provider_form.same_as_llm') }}</span>
+                    </label>
+
+                    <template v-if="!createForm.embeddings.same_as_llm">
+                        <div class="space-y-1.5">
+                            <Label for="embeddings_driver">
+                                {{ t('system.ai_provider_form.provider') }}
+                            </Label>
+                            <Select v-model="createForm.embeddings.driver">
+                                <SelectTrigger id="embeddings_driver" class="h-9">
+                                    <SelectValue
+                                        :placeholder="t('system.ai_provider_form.select_provider')"
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="driver in driversWithEmbeddings"
+                                        :key="driver.value"
+                                        :value="driver.value"
+                                    >
+                                        {{ driver.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError :message="(createForm.errors as any)['embeddings.driver']" />
+                        </div>
+
+                        <template v-if="createForm.embeddings.driver">
+                            <div
+                                v-for="field in embeddingsCredentialFields"
+                                :key="`emb_${field}`"
+                                class="space-y-1.5"
+                            >
+                                <Label :for="`emb_cred_${field}`">
+                                    {{ credentialFieldLabel(field) }}
+                                </Label>
+                                <Input
+                                    :id="`emb_cred_${field}`"
+                                    v-model="createForm.embeddings.credentials[field]"
+                                    :type="field === 'api_key' ? 'password' : 'text'"
+                                    class="h-9"
+                                />
+                                <InputError
+                                    :message="(createForm.errors as any)[`embeddings.credentials.${field}`]"
+                                />
+                            </div>
+                        </template>
+                    </template>
+
+                    <div
+                        v-if="createForm.embeddings.driver || createForm.embeddings.same_as_llm"
+                        class="space-y-1.5"
+                    >
+                        <Label for="embeddings_model">
+                            {{ t('system.ai_provider_form.model') }}
+                        </Label>
+                        <Select v-model="createForm.embeddings.model_id">
+                            <SelectTrigger id="embeddings_model" class="h-9">
+                                <SelectValue
+                                    :placeholder="t('system.ai_provider_form.select_model')"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="model in embeddingsModels"
+                                    :key="model.id"
+                                    :value="model.id"
+                                >
+                                    {{ model.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError :message="(createForm.errors as any)['embeddings.model_id']" />
+                    </div>
+                </SettingsCard>
+
+                <!-- Footer actions. -->
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <Link href="/system/ai-providers">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        >
+                            {{ t('common.cancel') }}
+                        </button>
+                    </Link>
+                    <button
+                        type="submit"
+                        :disabled="createForm.processing || !canSubmitCreate"
+                        class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                    >
+                        {{ t('system.ai_provider_form.save') }}
+                    </button>
+                </div>
+            </form>
+
+            <!-- =========================== EDIT MODE =========================== -->
+            <form
+                v-else
+                class="space-y-4"
+                @submit.prevent="submitEdit"
+            >
+                <!-- Identity + credentials. -->
+                <SettingsCard
+                    :icon="Key"
+                    :title="t('system.ai_provider_form.credentials')"
+                    description="Display name and API keys"
+                >
+                    <div class="space-y-1.5">
+                        <Label for="display_name">
+                            {{ t('system.ai_provider_form.display_name') }}
+                        </Label>
                         <Input
                             id="display_name"
                             v-model="editForm.display_name"
                             placeholder="e.g. Anthropic"
+                            class="h-9"
                         />
                         <InputError :message="editForm.errors.display_name" />
                     </div>
 
-                    <!-- Credentials -->
-                    <div class="space-y-4">
-                        <Label class="text-base font-medium">{{
-                            t('system.ai_provider_form.credentials')
-                        }}</Label>
-                        <div
-                            v-for="field in editCredentialFields"
-                            :key="field"
-                            class="grid gap-2"
-                        >
-                            <Label :for="`cred_${field}`">{{
-                                credentialFieldLabel(field)
-                            }}</Label>
-                            <Input
-                                :id="`cred_${field}`"
-                                v-model="editForm.credentials[field]"
-                                :type="field === 'api_key' ? 'password' : 'text'"
-                                :placeholder="
-                                    field === 'api_key'
-                                        ? 'Leave blank to keep current key'
-                                        : ''
-                                "
-                            />
-                            <InputError
-                                :message="
-                                    (editForm.errors as any)[`credentials.${field}`]
-                                "
-                            />
-                        </div>
+                    <div
+                        v-for="field in editCredentialFields"
+                        :key="field"
+                        class="space-y-1.5"
+                    >
+                        <Label :for="`cred_${field}`">
+                            {{ credentialFieldLabel(field) }}
+                        </Label>
+                        <Input
+                            :id="`cred_${field}`"
+                            v-model="editForm.credentials[field]"
+                            :type="field === 'api_key' ? 'password' : 'text'"
+                            :placeholder="
+                                field === 'api_key'
+                                    ? 'Leave blank to keep current key'
+                                    : ''
+                            "
+                            class="h-9"
+                        />
+                        <InputError
+                            :message="(editForm.errors as any)[`credentials.${field}`]"
+                        />
                     </div>
+                </SettingsCard>
 
-                    <!-- Models -->
-                    <div class="space-y-4">
-                        <div>
-                            <Label class="text-base font-medium"
-                                >Available Models</Label
-                            >
-                            <p class="text-sm text-muted-foreground">
-                                Select which models to make available for agent creation
+                <!-- Available models. -->
+                <SettingsCard
+                    :icon="Layers"
+                    title="Available Models"
+                    description="Select which models to make available for agent creation"
+                    tint="var(--sp-accent-cyan)"
+                >
+                    <div v-if="editCatalogModels.length > 0" class="space-y-1.5">
+                        <label
+                            v-for="model in editCatalogModels"
+                            :key="model.id"
+                            :for="`model_${model.id}`"
+                            class="flex cursor-pointer items-center gap-3 rounded-xs border border-soft bg-white/[0.03] px-3 py-2.5 transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
+                        >
+                            <Checkbox
+                                :id="`model_${model.id}`"
+                                :checked="isEditModelSelected(model.id)"
+                                @update:checked="toggleEditModel(model)"
+                            />
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-medium text-ink">
+                                    {{ model.label }}
+                                </p>
+                                <p class="text-[11px] text-ink-subtle">
+                                    {{ model.id }} · {{ model.capabilities.join(', ') }}
+                                </p>
+                            </div>
+                        </label>
+                    </div>
+                    <p v-else class="text-xs text-ink-muted">
+                        No predefined models for this provider.
+                    </p>
+                </SettingsCard>
+
+                <!-- Defaults. -->
+                <SettingsCard
+                    :icon="Sparkles"
+                    title="Defaults"
+                    description="Mark this provider as the default for chat or embeddings"
+                    tint="var(--sp-spectrum-magenta)"
+                >
+                    <div
+                        class="flex items-center justify-between gap-3 rounded-xs border border-soft bg-white/[0.03] p-3"
+                    >
+                        <div class="min-w-0 space-y-0.5">
+                            <p class="text-sm font-medium text-ink">
+                                Default LLM Provider
+                            </p>
+                            <p class="text-[11px] text-ink-subtle">
+                                Use this provider by default for agent chat
                             </p>
                         </div>
-
-                        <div v-if="editCatalogModels.length > 0" class="space-y-2">
-                            <div
-                                v-for="model in editCatalogModels"
-                                :key="model.id"
-                                class="flex items-center gap-3 rounded-md border p-3"
-                            >
-                                <Checkbox
-                                    :id="`model_${model.id}`"
-                                    :checked="isEditModelSelected(model.id)"
-                                    @update:checked="toggleEditModel(model)"
-                                />
-                                <label
-                                    :for="`model_${model.id}`"
-                                    class="flex-1 cursor-pointer"
-                                >
-                                    <div class="text-sm font-medium">
-                                        {{ model.label }}
-                                    </div>
-                                    <div class="text-xs text-muted-foreground">
-                                        {{ model.id }} &middot;
-                                        {{ model.capabilities.join(', ') }}
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-                        <p v-else class="text-sm text-muted-foreground">
-                            No predefined models for this provider.
-                        </p>
+                        <Switch v-model:checked="editForm.is_default" />
                     </div>
 
-                    <!-- Defaults -->
-                    <div class="space-y-4">
-                        <div
-                            class="flex items-center justify-between rounded-md border p-3"
-                        >
-                            <div>
-                                <div class="text-sm font-medium">
-                                    Default LLM Provider
-                                </div>
-                                <div class="text-xs text-muted-foreground">
-                                    Use this provider by default for agent chat
-                                </div>
-                            </div>
-                            <Switch v-model:checked="editForm.is_default" />
+                    <div
+                        class="flex items-center justify-between gap-3 rounded-xs border border-soft bg-white/[0.03] p-3"
+                    >
+                        <div class="min-w-0 space-y-0.5">
+                            <p class="text-sm font-medium text-ink">
+                                Default Embeddings Provider
+                            </p>
+                            <p class="text-[11px] text-ink-subtle">
+                                Use this provider by default for document embeddings
+                            </p>
                         </div>
-
-                        <div
-                            class="flex items-center justify-between rounded-md border p-3"
-                        >
-                            <div>
-                                <div class="text-sm font-medium">
-                                    Default Embeddings Provider
-                                </div>
-                                <div class="text-xs text-muted-foreground">
-                                    Use this provider by default for document embeddings
-                                </div>
-                            </div>
-                            <Switch
-                                v-model:checked="editForm.is_default_embeddings"
-                            />
-                        </div>
+                        <Switch v-model:checked="editForm.is_default_embeddings" />
                     </div>
+                </SettingsCard>
 
-                    <!-- Status -->
-                    <div class="grid gap-2">
+                <!-- Status. -->
+                <SettingsCard
+                    :icon="Power"
+                    title="Status"
+                    description="Active providers appear in model pickers; inactive ones are hidden"
+                >
+                    <div class="space-y-1.5">
                         <Label for="status">Status</Label>
                         <Select v-model="editForm.status">
-                            <SelectTrigger id="status">
+                            <SelectTrigger id="status" class="h-9">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="active">{{
-                                    t('common.active')
-                                }}</SelectItem>
-                                <SelectItem value="inactive">{{
-                                    t('common.inactive')
-                                }}</SelectItem>
+                                <SelectItem value="active">
+                                    {{ t('common.active') }}
+                                </SelectItem>
+                                <SelectItem value="inactive">
+                                    {{ t('common.inactive') }}
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
+                </SettingsCard>
 
-                    <!-- Actions -->
-                    <div class="flex justify-end gap-4">
-                        <Button variant="outline" as-child>
-                            <Link href="/system/ai-providers">{{
-                                t('common.cancel')
-                            }}</Link>
-                        </Button>
-                        <Button type="submit" :disabled="editForm.processing">
-                            {{ t('system.ai_provider_form.update') }}
-                        </Button>
-                    </div>
-                </form>
-            </div>
+                <!-- Footer actions. -->
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <Link href="/system/ai-providers">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        >
+                            {{ t('common.cancel') }}
+                        </button>
+                    </Link>
+                    <button
+                        type="submit"
+                        :disabled="editForm.processing"
+                        class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                    >
+                        {{ t('system.ai_provider_form.update') }}
+                    </button>
+                </div>
+            </form>
         </div>
-    </AppLayout>
+    </AppLayoutV2>
 </template>

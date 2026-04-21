@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import HeadingSmall from '@/components/HeadingSmall.vue';
+import SettingsCard from '@/components/admin/SettingsCard.vue';
 import InputError from '@/components/InputError.vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useInitials } from '@/composables/useInitials';
-import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
-import type { BreadcrumbItem, Organization, User } from '@/types';
+import type { Organization, User } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Building2, Mail, Users } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -29,14 +26,7 @@ interface Props {
     isAdmin: boolean;
 }
 
-const props = defineProps<Props>();
-
-const breadcrumbItems = computed<BreadcrumbItem[]>(() => [
-    {
-        title: t('settings.organization.breadcrumb'),
-        href: '/settings/organization',
-    },
-]);
+defineProps<Props>();
 
 const inviteForm = useForm({
     email: '',
@@ -55,91 +45,98 @@ const submitInvite = () => {
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbItems">
-        <Head :title="t('settings.organization.breadcrumb')" />
+    <Head :title="t('settings.organization.breadcrumb')" />
 
-        <SettingsLayout>
-            <div class="space-y-6">
-                <HeadingSmall
-                    :title="t('settings.organization.title')"
-                    :description="t('settings.organization.description')"
-                />
-
-                <div class="space-y-4">
-                    <div>
-                        <Label>{{ t('settings.organization.name') }}</Label>
-                        <p class="mt-1 text-sm">{{ organization.name }}</p>
-                    </div>
-                    <div v-if="organization.slug">
-                        <Label>{{ t('settings.organization.slug') }}</Label>
-                        <p class="mt-1 text-sm text-muted-foreground">
-                            {{ organization.slug }}
-                        </p>
-                    </div>
+    <SettingsLayout>
+        <div class="space-y-4">
+            <!-- Organization identity. -->
+            <SettingsCard
+                :icon="Building2"
+                :title="t('settings.organization.title')"
+                :description="t('settings.organization.description')"
+            >
+                <div class="space-y-1">
+                    <Label>{{ t('settings.organization.name') }}</Label>
+                    <p class="text-sm text-ink">{{ organization.name }}</p>
                 </div>
-            </div>
+                <div v-if="organization.slug" class="space-y-1">
+                    <Label>{{ t('settings.organization.slug') }}</Label>
+                    <p class="font-mono text-xs text-ink-subtle">
+                        {{ organization.slug }}
+                    </p>
+                </div>
+            </SettingsCard>
 
-            <div class="space-y-6">
-                <HeadingSmall
-                    :title="t('settings.organization.members')"
-                    :description="`${members.length} member${members.length !== 1 ? 's' : ''}`"
-                />
-
-                <div class="divide-y rounded-md border">
+            <!-- Members. -->
+            <SettingsCard
+                :icon="Users"
+                :title="t('settings.organization.members')"
+                :description="`${members.length} member${members.length !== 1 ? 's' : ''}`"
+                tint="var(--sp-spectrum-magenta)"
+            >
+                <div class="space-y-1.5">
                     <div
                         v-for="member in members"
                         :key="member.id"
-                        class="flex items-center justify-between p-4"
+                        class="flex items-center justify-between gap-3 rounded-xs border border-soft bg-white/[0.03] p-3"
                     >
                         <div class="flex items-center gap-3">
-                            <Avatar class="h-8 w-8">
-                                <AvatarFallback class="text-xs">
+                            <Avatar class="size-8">
+                                <AvatarFallback
+                                    class="bg-accent-blue/15 text-[11px] font-semibold text-accent-blue"
+                                >
                                     {{ getInitials(member.user.name) }}
                                 </AvatarFallback>
                             </Avatar>
-                            <div>
-                                <p class="text-sm font-medium">
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-medium text-ink">
                                     {{ member.user.name }}
                                 </p>
-                                <p class="text-xs text-muted-foreground">
+                                <p class="truncate text-[11px] text-ink-subtle">
                                     {{ member.user.email }}
                                 </p>
                             </div>
                         </div>
-                        <Badge variant="secondary">{{ member.role }}</Badge>
+                        <span
+                            class="inline-flex items-center rounded-pill border border-medium bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                        >
+                            {{ member.role }}
+                        </span>
                     </div>
                 </div>
-            </div>
+            </SettingsCard>
 
-            <div v-if="isAdmin" class="space-y-6">
-                <HeadingSmall
-                    :title="t('settings.organization.invite_title')"
-                    :description="t('settings.organization.invite_description')"
-                />
-
-                <form
-                    @submit.prevent="submitInvite"
-                    class="flex items-end gap-3"
-                >
-                    <div class="flex-1 space-y-2">
-                        <Label for="invite-email">{{
-                            t('common.email_address')
-                        }}</Label>
+            <!-- Invite. -->
+            <SettingsCard
+                v-if="isAdmin"
+                :icon="Mail"
+                :title="t('settings.organization.invite_title')"
+                :description="t('settings.organization.invite_description')"
+                tint="var(--sp-accent-cyan)"
+            >
+                <form class="flex items-end gap-3" @submit.prevent="submitInvite">
+                    <div class="flex-1 space-y-1.5">
+                        <Label for="invite-email">
+                            {{ t('common.email_address') }}
+                        </Label>
                         <Input
                             id="invite-email"
                             v-model="inviteForm.email"
                             type="email"
-                            :placeholder="
-                                t('settings.organization.invite_placeholder')
-                            "
+                            :placeholder="t('settings.organization.invite_placeholder')"
+                            class="h-9"
                         />
                         <InputError :message="inviteForm.errors.email" />
                     </div>
-                    <Button type="submit" :disabled="inviteForm.processing">
+                    <button
+                        type="submit"
+                        :disabled="inviteForm.processing"
+                        class="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                    >
                         {{ t('settings.organization.send_invitation') }}
-                    </Button>
+                    </button>
                 </form>
-            </div>
-        </SettingsLayout>
-    </AppLayout>
+            </SettingsCard>
+        </div>
+    </SettingsLayout>
 </template>

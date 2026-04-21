@@ -375,7 +375,7 @@ const backUrl = props.agent
                         :gap="20"
                         :size="1.2"
                     />
-                    <Controls class="sp-flow-controls" position="top-right" />
+                    <Controls class="sp-flow-controls" position="bottom-left" />
                     <MiniMap
                         class="sp-flow-minimap"
                         position="bottom-left"

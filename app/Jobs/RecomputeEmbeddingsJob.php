@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Reindexes a single Knowledge Base with a new embedding model. Fired from
- * AdminV2AiController when the global embedding model changes. Strategy:
+ * AdminAiController when the global embedding model changes. Strategy:
  * drop every chunk the KB currently owns, then re-dispatch the existing
  * ProcessDocumentForKnowledgeBase job per attached document so the current
  * chunking + embedding pipeline runs end-to-end with the new model.

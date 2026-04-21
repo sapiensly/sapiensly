@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import {
-    Card,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import type { AgentType, AgentTypeOption } from '@/types/agents';
 import { Bot, Brain, Zap } from 'lucide-vue-next';
+import type { Component } from 'vue';
 
 defineProps<{
     agentTypes: AgentTypeOption[];
@@ -16,7 +11,7 @@ const emit = defineEmits<{
     select: [type: AgentType];
 }>();
 
-const agentIcon = (type: AgentType) => {
+function agentIcon(type: AgentType): Component {
     switch (type) {
         case 'triage':
             return Bot;
@@ -27,41 +22,45 @@ const agentIcon = (type: AgentType) => {
         default:
             return Bot;
     }
-};
+}
 
-const agentColor = (type: AgentType) => {
+// Same tint map used by the Create / Edit pages so the type icons stay
+// consistent across the agent flow (selector → form cards → canvas).
+function agentTint(type: AgentType): string {
     switch (type) {
         case 'triage':
-            return 'text-blue-500';
+            return 'var(--sp-accent-blue)';
         case 'knowledge':
-            return 'text-purple-500';
+            return 'var(--sp-spectrum-magenta)';
         case 'action':
-            return 'text-orange-500';
+            return 'var(--sp-warning)';
         default:
-            return 'text-muted-foreground';
+            return 'var(--sp-text-secondary)';
     }
-};
+}
 </script>
 
 <template>
-    <div class="grid gap-4 md:grid-cols-3">
-        <Card
+    <div class="grid gap-3 md:grid-cols-3">
+        <button
             v-for="type in agentTypes"
             :key="type.value"
-            class="cursor-pointer transition-all hover:border-primary hover:shadow-md"
+            type="button"
+            class="flex cursor-pointer flex-col items-start gap-2 rounded-sp-sm border border-soft bg-white/[0.03] p-5 text-left transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
             @click="emit('select', type.value)"
         >
-            <CardHeader>
-                <div class="mb-2">
-                    <component
-                        :is="agentIcon(type.value)"
-                        class="h-8 w-8"
-                        :class="agentColor(type.value)"
-                    />
-                </div>
-                <CardTitle class="text-lg">{{ type.label }}</CardTitle>
-                <CardDescription>{{ type.description }}</CardDescription>
-            </CardHeader>
-        </Card>
+            <!-- Icon tile — tinted by agent type, matching the form card header. -->
+            <div
+                class="flex size-9 items-center justify-center rounded-xs"
+                :style="{
+                    backgroundColor: `color-mix(in oklab, ${agentTint(type.value)} 15%, transparent)`,
+                    color: agentTint(type.value),
+                }"
+            >
+                <component :is="agentIcon(type.value)" class="size-4" />
+            </div>
+            <h3 class="text-sm font-semibold text-ink">{{ type.label }}</h3>
+            <p class="text-xs text-ink-muted">{{ type.description }}</p>
+        </button>
     </div>
 </template>

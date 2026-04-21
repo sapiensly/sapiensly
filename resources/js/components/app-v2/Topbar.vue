@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { AppPageProps } from '@/types';
+import { usePage } from '@inertiajs/vue3';
 import { Bell, Menu, Search } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -20,6 +22,11 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const page = usePage<AppPageProps>();
+
+const workspaceLabel = computed(
+    () => page.props.auth.organization?.name ?? t('app_v2.breadcrumb.personal'),
+);
 
 const modKey = computed(() =>
     typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform)
@@ -49,7 +56,7 @@ const modKey = computed(() =>
             aria-label="Breadcrumb"
             class="flex items-center gap-1.5 text-sm text-ink-muted"
         >
-            <span>{{ t('app_v2.breadcrumb.root') }}</span>
+            <span>{{ workspaceLabel }}</span>
             <span class="text-ink-faint">/</span>
             <span class="font-medium text-ink">{{ title }}</span>
         </nav>

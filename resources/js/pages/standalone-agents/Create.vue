@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
+import SettingsCard from '@/components/admin/SettingsCard.vue';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
-import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import KeywordsInput from '@/components/KeywordsInput.vue';
 import ActionAgentConfig from '@/components/standalone-agents/ActionAgentConfig.vue';
 import AgentTypeSelector from '@/components/standalone-agents/AgentTypeSelector.vue';
 import KnowledgeAgentConfig from '@/components/standalone-agents/KnowledgeAgentConfig.vue';
 import TriageAgentConfig from '@/components/standalone-agents/TriageAgentConfig.vue';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -29,6 +28,16 @@ import type {
     ToolReference,
 } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import {
+    Bot,
+    Brain,
+    Hash,
+    Settings2,
+    Sparkles,
+    User,
+    Zap,
+} from 'lucide-vue-next';
+import type { Component } from 'vue';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -156,189 +165,200 @@ watch(currentType, (type) => {
 if (props.selectedType) {
     selectType(props.selectedType);
 }
+
+// Per-type visual metadata so the form cards read as "triage vs knowledge vs
+// action" at a glance without the user re-reading the description each time.
+const typeTintMap: Record<string, string> = {
+    triage: 'var(--sp-accent-blue)',
+    knowledge: 'var(--sp-spectrum-magenta)',
+    action: 'var(--sp-warning)',
+};
+
+const typeIconMap: Record<string, Component> = {
+    triage: Bot,
+    knowledge: Brain,
+    action: Zap,
+};
+
+const typeTint = computed(() => typeTintMap[currentType.value ?? ''] ?? 'var(--sp-accent-blue)');
+const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] ?? Bot);
 </script>
 
 <template>
     <Head :title="t('agents.create.title')" />
 
     <AppLayoutV2 :title="t('app_v2.nav.agents')">
-        <div class="mx-auto max-w-4xl space-y-6">
+        <div class="mx-auto max-w-5xl space-y-6">
             <PageHeader
                 :title="headingTitle"
                 :description="t('agents.create.description')"
             />
 
-                <div v-if="!currentType" class="mt-8">
-                    <HeadingSmall
-                        :title="t('agents.create.select_type')"
-                        :description="
-                            t('agents.create.select_type_description')
-                        "
-                    />
-                    <AgentTypeSelector
-                        :agent-types="agentTypes"
-                        class="mt-4"
-                        @select="selectType"
-                    />
-                </div>
+            <!-- Type picker shown until a type is selected. -->
+            <SettingsCard
+                v-if="!currentType"
+                :icon="Sparkles"
+                :title="t('agents.create.select_type')"
+                :description="t('agents.create.select_type_description')"
+                tint="var(--sp-accent-cyan)"
+            >
+                <AgentTypeSelector
+                    :agent-types="agentTypes"
+                    @select="selectType"
+                />
+            </SettingsCard>
 
-                <form v-else class="mt-8 space-y-8" @submit.prevent="submit">
-                    <div class="space-y-6">
-                        <HeadingSmall
-                            :title="t('agents.create.basic_info')"
-                            :description="
-                                t('agents.create.basic_info_description')
-                            "
+            <form v-else class="space-y-4" @submit.prevent="submit">
+                <!-- Basic info. -->
+                <SettingsCard
+                    :icon="typeIcon"
+                    :title="t('agents.create.basic_info')"
+                    :description="t('agents.create.basic_info_description')"
+                    :tint="typeTint"
+                >
+                    <div class="space-y-1.5">
+                        <Label for="name" class="text-xs text-ink-muted">
+                            {{ t('agents.create.agent_name') }}
+                        </Label>
+                        <Input
+                            id="name"
+                            v-model="form.name"
+                            required
+                            :placeholder="t('agents.create.agent_name_placeholder')"
+                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
                         />
-
-                        <div class="grid gap-4">
-                            <div class="grid gap-2">
-                                <Label for="name">{{
-                                    t('agents.create.agent_name')
-                                }}</Label>
-                                <Input
-                                    id="name"
-                                    v-model="form.name"
-                                    required
-                                    :placeholder="
-                                        t(
-                                            'agents.create.agent_name_placeholder',
-                                        )
-                                    "
-                                />
-                                <InputError :message="form.errors.name" />
-                            </div>
-
-                            <div class="grid gap-2">
-                                <Label for="description">{{
-                                    t('agents.create.description_label')
-                                }}</Label>
-                                <Input
-                                    id="description"
-                                    v-model="form.description"
-                                    :placeholder="
-                                        t(
-                                            'agents.create.description_placeholder',
-                                        )
-                                    "
-                                />
-                                <InputError
-                                    :message="form.errors.description"
-                                />
-                            </div>
-
-                            <div class="grid gap-2">
-                                <Label for="keywords">{{
-                                    t('agents.create.keywords_label')
-                                }}</Label>
-                                <KeywordsInput v-model="form.keywords" />
-                                <p class="text-xs text-muted-foreground">
-                                    {{
-                                        t('agents.create.keywords_description')
-                                    }}
-                                </p>
-                                <InputError :message="form.errors.keywords" />
-                            </div>
-
-                            <div class="grid gap-2">
-                                <Label for="model">{{
-                                    t('agents.create.model')
-                                }}</Label>
-                                <Select v-model="form.model">
-                                    <SelectTrigger id="model">
-                                        <SelectValue
-                                            :placeholder="
-                                                t('agents.create.select_model')
-                                            "
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem
-                                            v-for="model in availableModels"
-                                            :key="model.value"
-                                            :value="model.value"
-                                        >
-                                            {{ model.label }}
-                                            <span
-                                                v-if="
-                                                    isRecommended(model.value)
-                                                "
-                                                class="ml-2 text-xs text-green-600"
-                                            >
-                                                (Recommended)
-                                            </span>
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <InputError :message="form.errors.model" />
-                            </div>
-
-                            <div class="grid gap-2">
-                                <Label for="prompt_template">{{
-                                    t('agents.create.prompt_template')
-                                }}</Label>
-                                <Textarea
-                                    id="prompt_template"
-                                    v-model="form.prompt_template"
-                                    :placeholder="
-                                        t('agents.create.prompt_placeholder')
-                                    "
-                                    rows="6"
-                                />
-                                <InputError
-                                    :message="form.errors.prompt_template"
-                                />
-                            </div>
-                        </div>
+                        <InputError :message="form.errors.name" />
                     </div>
 
-                    <div class="space-y-6">
-                        <HeadingSmall
-                            :title="t('agents.create.config_title')"
-                            :description="t('agents.create.config_description')"
+                    <div class="space-y-1.5">
+                        <Label for="description" class="text-xs text-ink-muted">
+                            {{ t('agents.create.description_label') }}
+                        </Label>
+                        <Input
+                            id="description"
+                            v-model="form.description"
+                            :placeholder="t('agents.create.description_placeholder')"
+                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
                         />
-
-                        <TriageAgentConfig
-                            v-if="currentType === 'triage'"
-                            v-model:config="form.config"
-                            :errors="form.errors"
-                        />
-
-                        <KnowledgeAgentConfig
-                            v-else-if="currentType === 'knowledge'"
-                            v-model:config="form.config"
-                            v-model:knowledge-base-ids="form.knowledge_base_ids"
-                            :knowledge-bases="knowledgeBases"
-                            :errors="form.errors"
-                        />
-
-                        <ActionAgentConfig
-                            v-else-if="currentType === 'action'"
-                            v-model:config="form.config"
-                            v-model:tool-ids="form.tool_ids"
-                            :tools="tools"
-                            :errors="form.errors"
-                        />
+                        <InputError :message="form.errors.description" />
                     </div>
 
-                    <div class="flex justify-end gap-4">
-                        <Button
-                            variant="outline"
-                            type="button"
-                            @click="currentType = null"
-                        >
-                            {{ t('common.change_type') }}
-                        </Button>
-                        <Button variant="outline" as-child>
-                            <Link :href="AgentController.index().url">
+                    <div class="space-y-1.5">
+                        <Label for="keywords" class="text-xs text-ink-muted">
+                            {{ t('agents.create.keywords_label') }}
+                        </Label>
+                        <KeywordsInput v-model="form.keywords" />
+                        <p class="text-[11px] text-ink-subtle">
+                            {{ t('agents.create.keywords_description') }}
+                        </p>
+                        <InputError :message="form.errors.keywords" />
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <Label for="model" class="text-xs text-ink-muted">
+                            {{ t('agents.create.model') }}
+                        </Label>
+                        <Select v-model="form.model">
+                            <SelectTrigger
+                                id="model"
+                                class="h-9 border-medium bg-white/5"
+                            >
+                                <SelectValue
+                                    :placeholder="t('agents.create.select_model')"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="model in availableModels"
+                                    :key="model.value"
+                                    :value="model.value"
+                                >
+                                    {{ model.label }}
+                                    <span
+                                        v-if="isRecommended(model.value)"
+                                        class="ml-2 text-[10px] text-sp-success"
+                                    >
+                                        (Recommended)
+                                    </span>
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError :message="form.errors.model" />
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <Label for="prompt_template" class="text-xs text-ink-muted">
+                            {{ t('agents.create.prompt_template') }}
+                        </Label>
+                        <Textarea
+                            id="prompt_template"
+                            v-model="form.prompt_template"
+                            :placeholder="t('agents.create.prompt_placeholder')"
+                            rows="6"
+                            class="border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                        />
+                        <InputError :message="form.errors.prompt_template" />
+                    </div>
+                </SettingsCard>
+
+                <!-- Type-specific configuration. -->
+                <SettingsCard
+                    :icon="Settings2"
+                    :title="t('agents.create.config_title')"
+                    :description="t('agents.create.config_description')"
+                    :tint="typeTint"
+                >
+                    <TriageAgentConfig
+                        v-if="currentType === 'triage'"
+                        v-model:config="form.config"
+                        :errors="form.errors"
+                    />
+
+                    <KnowledgeAgentConfig
+                        v-else-if="currentType === 'knowledge'"
+                        v-model:config="form.config"
+                        v-model:knowledge-base-ids="form.knowledge_base_ids"
+                        :knowledge-bases="knowledgeBases"
+                        :errors="form.errors"
+                    />
+
+                    <ActionAgentConfig
+                        v-else-if="currentType === 'action'"
+                        v-model:config="form.config"
+                        v-model:tool-ids="form.tool_ids"
+                        :tools="tools"
+                        :errors="form.errors"
+                    />
+                </SettingsCard>
+
+                <!-- Footer actions — pill pair + "change type" ghost left. -->
+                <div class="flex items-center justify-between gap-2 pt-2">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                        @click="currentType = null"
+                    >
+                        {{ t('common.change_type') }}
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <Link :href="AgentController.index().url">
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                            >
                                 {{ t('common.cancel') }}
-                            </Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing">
+                            </button>
+                        </Link>
+                        <button
+                            type="submit"
+                            :disabled="form.processing"
+                            class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                        >
                             {{ t('agents.create.submit') }}
-                        </Button>
+                        </button>
                     </div>
-                </form>
+                </div>
+            </form>
         </div>
     </AppLayoutV2>
 </template>

@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -25,7 +22,7 @@ interface Integration {
     request_count: number;
 }
 
-const props = defineProps<{ integration: Integration }>();
+defineProps<{ integration: Integration }>();
 
 defineEmits<{
     duplicate: [id: string];
@@ -36,67 +33,73 @@ const { t } = useI18n();
 </script>
 
 <template>
-    <Card class="transition hover:shadow-md">
-        <CardContent class="pt-6">
-            <div class="flex items-start justify-between gap-3">
-                <Link
-                    :href="`/system/integrations/${integration.id}`"
-                    class="flex min-w-0 flex-1 items-start gap-3"
-                >
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                        <Plug class="h-5 w-5" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2">
-                            <p class="truncate text-sm font-semibold">
-                                {{ integration.name }}
-                            </p>
-                            <CheckCircle2
-                                v-if="integration.last_test_status === 'success'"
-                                class="h-4 w-4 text-emerald-500"
-                            />
-                            <XCircle
-                                v-else-if="integration.last_test_status === 'failure'"
-                                class="h-4 w-4 text-red-500"
-                            />
-                        </div>
-                        <p class="truncate text-xs text-muted-foreground">
-                            {{ integration.base_url }}
-                        </p>
-                        <div class="mt-2 flex flex-wrap gap-1.5">
-                            <Badge variant="secondary" class="text-xs">
-                                {{ integration.auth_type }}
-                            </Badge>
-                            <Badge
-                                v-if="integration.visibility !== 'private'"
-                                variant="outline"
-                                class="text-xs"
-                            >
-                                {{ integration.visibility }}
-                            </Badge>
-                            <Badge variant="outline" class="text-xs">
-                                {{ t('system.integrations.requests_count', { count: integration.request_count }) }}
-                            </Badge>
-                        </div>
-                    </div>
-                </Link>
-
-                <DropdownMenu>
-                    <DropdownMenuTrigger as-child>
-                        <Button variant="ghost" size="icon">
-                            <MoreVertical class="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem @select="$emit('duplicate', integration.id)">
-                            {{ t('system.integrations.duplicate') }}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem @select="$emit('delete', integration.id)">
-                            {{ t('common.delete') }}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+    <div
+        class="flex items-start justify-between gap-3 rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
+    >
+        <Link
+            :href="`/system/integrations/${integration.id}`"
+            class="flex min-w-0 flex-1 items-start gap-3"
+        >
+            <div
+                class="flex size-10 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue"
+            >
+                <Plug class="size-5" />
             </div>
-        </CardContent>
-    </Card>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                    <p class="truncate text-sm font-semibold text-ink">
+                        {{ integration.name }}
+                    </p>
+                    <CheckCircle2
+                        v-if="integration.last_test_status === 'success'"
+                        class="size-3.5 text-sp-success"
+                    />
+                    <XCircle
+                        v-else-if="integration.last_test_status === 'failure'"
+                        class="size-3.5 text-sp-danger"
+                    />
+                </div>
+                <p class="truncate text-xs text-ink-muted">
+                    {{ integration.base_url }}
+                </p>
+                <div class="mt-2.5 flex flex-wrap gap-1">
+                    <span
+                        class="inline-flex items-center rounded-pill border border-medium bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                    >
+                        {{ integration.auth_type }}
+                    </span>
+                    <span
+                        v-if="integration.visibility !== 'private'"
+                        class="inline-flex items-center rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                    >
+                        {{ integration.visibility }}
+                    </span>
+                    <span
+                        class="inline-flex items-center rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                    >
+                        {{ t('system.integrations.requests_count', { count: integration.request_count }) }}
+                    </span>
+                </div>
+            </div>
+        </Link>
+
+        <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+                <button
+                    type="button"
+                    class="flex size-7 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                >
+                    <MoreVertical class="size-4" />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" class="sp-admin-menu">
+                <DropdownMenuItem @select="$emit('duplicate', integration.id)">
+                    {{ t('system.integrations.duplicate') }}
+                </DropdownMenuItem>
+                <DropdownMenuItem @select="$emit('delete', integration.id)">
+                    {{ t('common.delete') }}
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    </div>
 </template>

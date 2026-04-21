@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
@@ -63,11 +62,14 @@ const contentFilters = computed({
 </script>
 
 <template>
-    <div class="space-y-6">
-        <div class="space-y-4">
+    <div class="space-y-5">
+        <!-- Temperature slider. -->
+        <div class="space-y-2">
             <div class="flex items-center justify-between">
-                <Label>{{ t('agents.config.triage.temperature') }}</Label>
-                <span class="text-sm text-muted-foreground">
+                <Label class="text-xs text-ink-muted">
+                    {{ t('agents.config.triage.temperature') }}
+                </Label>
+                <span class="font-mono text-xs text-ink">
                     {{ temperature[0].toFixed(2) }}
                 </span>
             </div>
@@ -78,29 +80,32 @@ const contentFilters = computed({
                 :step="0.01"
                 class="w-full"
             />
-            <p class="text-xs text-muted-foreground">
+            <p class="text-[11px] text-ink-subtle">
                 {{ t('agents.config.triage.temperature_description') }}
             </p>
             <InputError :message="errors['config.temperature']" />
         </div>
 
-        <div class="space-y-4">
-            <Label>{{ t('agents.config.triage.flow') }}</Label>
+        <!-- Flow row. -->
+        <div class="space-y-2">
+            <Label class="text-xs text-ink-muted">
+                {{ t('agents.config.triage.flow') }}
+            </Label>
             <div
-                class="flex items-center justify-between rounded-lg border p-4"
+                class="flex items-center justify-between gap-3 rounded-xs border border-soft bg-white/[0.03] p-3"
             >
-                <div class="space-y-0.5">
-                    <div class="text-sm font-medium">
+                <div class="min-w-0 space-y-0.5">
+                    <p class="text-sm font-medium text-ink">
                         {{ t('agents.config.triage.flow_title') }}
-                    </div>
-                    <div class="text-xs text-muted-foreground">
+                    </p>
+                    <p class="text-[11px] text-ink-subtle">
                         {{ t('agents.config.triage.flow_description') }}
-                    </div>
+                    </p>
                 </div>
-                <Button
-                    variant="outline"
+                <button
                     type="button"
                     :disabled="!agentId"
+                    class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                     @click="navigateToFlow"
                 >
                     {{
@@ -108,26 +113,25 @@ const contentFilters = computed({
                             ? t('agents.config.triage.edit_flow')
                             : t('agents.config.triage.add_flow')
                     }}
-                </Button>
+                </button>
             </div>
         </div>
 
-        <div class="space-y-4">
-            <Label>{{ t('agents.config.triage.guardrails') }}</Label>
+        <!-- Guardrails — content filters toggle row. -->
+        <div class="space-y-2">
+            <Label class="text-xs text-ink-muted">
+                {{ t('agents.config.triage.guardrails') }}
+            </Label>
             <div
-                class="flex items-center justify-between rounded-lg border p-4"
+                class="flex items-center justify-between gap-3 rounded-xs border border-soft bg-white/[0.03] p-3"
             >
-                <div class="space-y-0.5">
-                    <div class="text-sm font-medium">
+                <div class="min-w-0 space-y-0.5">
+                    <p class="text-sm font-medium text-ink">
                         {{ t('agents.config.triage.content_filters') }}
-                    </div>
-                    <div class="text-xs text-muted-foreground">
-                        {{
-                            t(
-                                'agents.config.triage.content_filters_description',
-                            )
-                        }}
-                    </div>
+                    </p>
+                    <p class="text-[11px] text-ink-subtle">
+                        {{ t('agents.config.triage.content_filters_description') }}
+                    </p>
                 </div>
                 <Switch v-model:checked="contentFilters" />
             </div>

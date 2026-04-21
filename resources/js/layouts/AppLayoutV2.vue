@@ -2,12 +2,13 @@
 import '@/../css/admin.css';
 
 import CommandPalette from '@/components/app-v2/CommandPalette.vue';
+import ImpersonationBanner from '@/components/app-v2/ImpersonationBanner.vue';
 import Sidebar from '@/components/app-v2/Sidebar.vue';
 import Topbar from '@/components/app-v2/Topbar.vue';
 import { useLocaleSync } from '@/composables/useLocale';
 import type { AppPageProps } from '@/types';
 import { usePage } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 useLocaleSync();
 
@@ -38,13 +39,14 @@ const props = withDefaults(defineProps<Props>(), {
     forceCollapsedOnMount: false,
 });
 
-// Shared cookie with legacy /admin and /admin2 so sidebar collapse state
+// Shared cookie with legacy /admin and /admin so sidebar collapse state
 // persists across all three surfaces. When `forceCollapsedOnMount` is set,
 // start collapsed without writing to the cookie — the user's persistent
 // preference is preserved for when they leave the editor.
 const page = usePage<AppPageProps>();
 const initialOpen = (page.props.sidebarOpen ?? true) as boolean;
 const sidebarCollapsed = ref(props.forceCollapsedOnMount ? true : !initialOpen);
+const impersonating = computed(() => Boolean(page.props.impersonating));
 
 const paletteRef = ref<InstanceType<typeof CommandPalette> | null>(null);
 
@@ -60,38 +62,46 @@ function openPalette() {
 </script>
 
 <template>
-    <div class="sp-app-shell flex min-h-screen" :data-bg="bg">
-        <Sidebar :collapsed="sidebarCollapsed" class="hidden lg:flex" />
+    <div class="flex min-h-screen flex-col">
+        <ImpersonationBanner />
 
-        <div class="sp-app-content flex min-w-0 flex-1 flex-col">
-            <Topbar
-                :title="title"
-                :sidebar-collapsed="sidebarCollapsed"
-                @toggle-sidebar="toggleSidebar"
-                @open-palette="openPalette"
-            />
+        <div
+            class="sp-app-shell flex flex-1 min-h-0"
+            :class="{ 'is-impersonating': impersonating }"
+            :data-bg="bg"
+        >
+            <Sidebar :collapsed="sidebarCollapsed" class="hidden lg:flex" />
 
-            <!--
-              `main` is always a flex column so a `fullBleed` child can use
-              `flex-1` to fill the remaining viewport height. For regular
-              (non-bleed) pages the inner div renders at its natural height
-              inside this column, which is functionally identical to the
-              previous single-div layout.
-            -->
-            <main class="flex min-h-0 flex-1 flex-col">
-                <div
-                    v-if="fullBleed"
-                    class="flex min-h-0 flex-1 flex-col"
-                >
-                    <slot />
-                </div>
-                <div
-                    v-else
-                    class="mx-auto w-full max-w-[1440px] px-7 py-[22px]"
-                >
-                    <slot />
-                </div>
-            </main>
+            <div class="sp-app-content flex min-w-0 flex-1 flex-col">
+                <Topbar
+                    :title="title"
+                    :sidebar-collapsed="sidebarCollapsed"
+                    @toggle-sidebar="toggleSidebar"
+                    @open-palette="openPalette"
+                />
+
+                <!--
+                  `main` is always a flex column so a `fullBleed` child can use
+                  `flex-1` to fill the remaining viewport height. For regular
+                  (non-bleed) pages the inner div renders at its natural height
+                  inside this column, which is functionally identical to the
+                  previous single-div layout.
+                -->
+                <main class="flex min-h-0 flex-1 flex-col">
+                    <div
+                        v-if="fullBleed"
+                        class="flex min-h-0 flex-1 flex-col"
+                    >
+                        <slot />
+                    </div>
+                    <div
+                        v-else
+                        class="mx-auto w-full max-w-[1440px] px-7 py-[22px]"
+                    >
+                        <slot />
+                    </div>
+                </main>
+            </div>
         </div>
 
         <CommandPalette ref="paletteRef" />

@@ -121,6 +121,16 @@ class CloudProviderService
         return $this->getTenant(self::KIND_DATABASE, $organization);
     }
 
+    public function getPersonalStorage(User $user): ?CloudProvider
+    {
+        return $this->getPersonal(self::KIND_STORAGE, $user);
+    }
+
+    public function getPersonalDatabase(User $user): ?CloudProvider
+    {
+        return $this->getPersonal(self::KIND_DATABASE, $user);
+    }
+
     private function resolve(string $kind, ?Organization $organization): ?CloudProvider
     {
         if ($organization !== null) {
@@ -148,6 +158,18 @@ class CloudProviderService
     {
         return CloudProvider::query()
             ->where('visibility', Visibility::Global)
+            ->where('kind', $kind)
+            ->where('status', 'active')
+            ->orderByDesc('is_default')
+            ->first();
+    }
+
+    private function getPersonal(string $kind, User $user): ?CloudProvider
+    {
+        return CloudProvider::query()
+            ->whereNull('organization_id')
+            ->where('user_id', $user->id)
+            ->where('visibility', Visibility::Private)
             ->where('kind', $kind)
             ->where('status', 'active')
             ->orderByDesc('is_default')
@@ -228,6 +250,48 @@ class CloudProviderService
             'user_id' => $userId,
             'organization_id' => $organization->id,
             'visibility' => Visibility::Organization,
+            'kind' => $kind,
+        ]);
+    }
+
+    /**
+     * Replace the personal (user-scoped) provider for a given kind. Personal
+     * providers have no organization — they belong to a single user and use
+     * the Private visibility. Only one personal provider exists per user+kind.
+     */
+    public function upsertPersonalProvider(
+        User $user,
+        string $kind,
+        string $driver,
+        array $credentials,
+    ): CloudProvider {
+        $this->assertDriverSupported($kind, $driver);
+
+        $existing = CloudProvider::query()
+            ->whereNull('organization_id')
+            ->where('user_id', $user->id)
+            ->where('visibility', Visibility::Private)
+            ->where('kind', $kind)
+            ->first();
+
+        $attributes = [
+            'driver' => $driver,
+            'display_name' => self::DRIVER_LABELS[$driver] ?? $driver,
+            'credentials' => $credentials,
+            'is_default' => true,
+            'status' => 'active',
+        ];
+
+        if ($existing) {
+            $existing->update($attributes);
+
+            return $existing;
+        }
+
+        return CloudProvider::create($attributes + [
+            'user_id' => $user->id,
+            'organization_id' => null,
+            'visibility' => Visibility::Private,
             'kind' => $kind,
         ]);
     }

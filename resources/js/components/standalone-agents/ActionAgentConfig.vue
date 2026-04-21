@@ -86,26 +86,34 @@ const toolTypeLabel = (type: string) => {
 </script>
 
 <template>
-    <div class="space-y-6">
-        <div class="space-y-4">
-            <Label>{{ t('agents.config.action.tools') }}</Label>
+    <div class="space-y-5">
+        <!-- Tool picker. -->
+        <div class="space-y-2">
+            <Label class="text-xs text-ink-muted">
+                {{ t('agents.config.action.tools') }}
+            </Label>
             <div
                 v-if="tools.length === 0"
-                class="rounded-lg border border-dashed p-6 text-center"
+                class="rounded-xs border border-dashed border-soft bg-navy/40 p-6 text-center"
             >
-                <Wrench class="mx-auto h-8 w-8 text-muted-foreground" />
-                <p class="mt-2 text-sm text-muted-foreground">
+                <div
+                    class="mx-auto flex size-9 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                >
+                    <Wrench class="size-4" />
+                </div>
+                <p class="mt-3 text-sm font-medium text-ink">
                     {{ t('agents.config.action.no_tools') }}
                 </p>
-                <p class="mt-1 text-xs text-muted-foreground">
+                <p class="mt-0.5 text-[11px] text-ink-subtle">
                     {{ t('agents.config.action.create_tools_note') }}
                 </p>
             </div>
-            <div v-else class="space-y-2">
-                <div
+            <div v-else class="space-y-1.5">
+                <label
                     v-for="tool in tools"
                     :key="tool.id"
-                    class="flex items-center space-x-3 rounded-lg border p-3"
+                    :for="`tool-${tool.id}`"
+                    class="flex cursor-pointer items-center gap-3 rounded-xs border border-soft bg-white/[0.03] px-3 py-2.5 transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
                 >
                     <Checkbox
                         :id="`tool-${tool.id}`"
@@ -114,26 +122,26 @@ const toolTypeLabel = (type: string) => {
                             toggleTool(tool.id, $event as boolean)
                         "
                     />
-                    <Label
-                        :for="`tool-${tool.id}`"
-                        class="flex-1 cursor-pointer"
+                    <span class="flex-1 text-sm text-ink">{{ tool.name }}</span>
+                    <span
+                        class="inline-flex items-center rounded-pill border border-medium px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                     >
-                        {{ tool.name }}
-                    </Label>
-                    <span class="text-xs text-muted-foreground">
                         {{ toolTypeLabel(tool.type) }}
                     </span>
-                </div>
+                </label>
             </div>
-            <p class="text-xs text-muted-foreground">
+            <p class="text-[11px] text-ink-subtle">
                 If no tools are selected, the agent will operate in pass-through
                 mode.
             </p>
         </div>
 
-        <div class="grid gap-4 sm:grid-cols-2">
-            <div class="space-y-2">
-                <Label for="timeout">Timeout (ms)</Label>
+        <!-- Tool execution params. -->
+        <div class="grid gap-3 sm:grid-cols-2">
+            <div class="space-y-1.5">
+                <Label for="timeout" class="text-xs text-ink-muted">
+                    Timeout (ms)
+                </Label>
                 <Input
                     id="timeout"
                     v-model.number="timeout"
@@ -141,30 +149,30 @@ const toolTypeLabel = (type: string) => {
                     min="1000"
                     max="300000"
                     step="1000"
+                    class="h-9 border-medium bg-white/5 text-sm text-ink"
                 />
-                <p class="text-xs text-muted-foreground">
+                <p class="text-[11px] text-ink-subtle">
                     Maximum time to wait for tool execution.
                 </p>
-                <InputError
-                    :message="errors['config.tool_execution.timeout']"
-                />
+                <InputError :message="errors['config.tool_execution.timeout']" />
             </div>
 
-            <div class="space-y-2">
-                <Label for="retry-count">Retry Count</Label>
+            <div class="space-y-1.5">
+                <Label for="retry-count" class="text-xs text-ink-muted">
+                    Retry Count
+                </Label>
                 <Input
                     id="retry-count"
                     v-model.number="retryCount"
                     type="number"
                     min="0"
                     max="5"
+                    class="h-9 border-medium bg-white/5 text-sm text-ink"
                 />
-                <p class="text-xs text-muted-foreground">
+                <p class="text-[11px] text-ink-subtle">
                     Number of retries on failure.
                 </p>
-                <InputError
-                    :message="errors['config.tool_execution.retry_count']"
-                />
+                <InputError :message="errors['config.tool_execution.retry_count']" />
             </div>
         </div>
     </div>

@@ -204,6 +204,14 @@ const userRole = computed(() => {
     const roles = page.props.auth?.roles ?? [];
     return roles[0] ?? 'member';
 });
+
+const hasOrganization = computed(() => Boolean(page.props.auth?.organization));
+
+const workspaceLabel = computed(() =>
+    hasOrganization.value
+        ? page.props.auth.organization!.name
+        : t('app_v2.breadcrumb.personal'),
+);
 </script>
 
 <template>
@@ -327,11 +335,11 @@ const userRole = computed(() => {
             </TooltipProvider>
         </nav>
 
-        <!-- Bottom: sysadmin shortcut to /admin2 + user card. -->
+        <!-- Bottom: sysadmin shortcut to /admin + user card. -->
         <div class="shrink-0">
             <Link
                 v-if="isSysAdmin()"
-                href="/admin2"
+                href="/admin"
                 :class="[
                     'flex items-center gap-3 border-b border-soft px-5 py-5 text-[13px] font-medium text-ink-muted transition-colors hover:bg-white/5 hover:text-ink',
                     collapsed ? 'justify-center px-0' : '',
@@ -367,7 +375,7 @@ const userRole = computed(() => {
                                 {{ authUser?.name ?? '—' }}
                             </span>
                             <span class="truncate text-xs text-ink-subtle">
-                                {{ userRole }}
+                                {{ workspaceLabel }}<template v-if="hasOrganization"> · {{ userRole }}</template>
                             </span>
                         </div>
                         <ChevronsUpDown

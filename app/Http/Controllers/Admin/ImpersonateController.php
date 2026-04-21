@@ -39,6 +39,6 @@ class ImpersonateController extends Controller
         Auth::login($originalUser);
         setPermissionsTeamId($originalUser->organization_id);
 
-        return to_route('admin.users');
+        return to_route('admin.users.index');
     }
 }

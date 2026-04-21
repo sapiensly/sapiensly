@@ -97,10 +97,59 @@ function databasePayload(): array
     ];
 }
 
-test('user without an organization cannot access cloud-providers index', function () {
+test('personal user can access cloud-providers index and manage their own rows', function () {
     $user = User::factory()->create(['organization_id' => null]);
 
-    actingAs($user)->get('/system/cloud-providers')->assertForbidden();
+    actingAs($user)
+        ->get('/system/cloud-providers')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('system/CloudProviders')
+            ->where('canManage', true)
+            ->where('tenant.storage', null)
+            ->where('tenant.database', null)
+        );
+});
+
+test('personal user can save and retrieve their own storage provider', function () {
+    $user = User::factory()->create(['organization_id' => null]);
+
+    actingAs($user)
+        ->post('/system/cloud-providers/storage', storagePayload())
+        ->assertRedirect('/system/cloud-providers');
+
+    $provider = CloudProvider::query()
+        ->whereNull('organization_id')
+        ->where('user_id', $user->id)
+        ->where('kind', 'storage')
+        ->first();
+
+    expect($provider)->not->toBeNull();
+    expect($provider->visibility)->toBe(Visibility::Private);
+    expect($provider->driver)->toBe(storagePayload()['driver']);
+
+    actingAs($user)
+        ->get('/system/cloud-providers')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('tenant.storage.driver', storagePayload()['driver'])
+        );
+});
+
+test('one personal user cannot see another personal user\'s cloud providers', function () {
+    $alice = User::factory()->create(['organization_id' => null]);
+    $bob = User::factory()->create(['organization_id' => null]);
+
+    actingAs($alice)
+        ->post('/system/cloud-providers/storage', storagePayload())
+        ->assertRedirect('/system/cloud-providers');
+
+    actingAs($bob)
+        ->get('/system/cloud-providers')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('tenant.storage', null)
+        );
 });
 
 test('index marks canManage=true for the org owner', function () {

@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
-import { edit } from '@/routes/profile';
-import { Form, Head, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
-import { useI18n } from 'vue-i18n';
-
+import SettingsCard from '@/components/admin/SettingsCard.vue';
 import DeleteUser from '@/components/DeleteUser.vue';
-import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
-import { type BreadcrumbItem } from '@/types';
+import { Form, Head, usePage } from '@inertiajs/vue3';
+import { Globe, User } from 'lucide-vue-next';
+import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
@@ -23,57 +26,54 @@ interface Props {
 
 defineProps<Props>();
 
-const breadcrumbItems = computed<BreadcrumbItem[]>(() => [
-    {
-        title: t('settings.profile.breadcrumb'),
-        href: edit().url,
-    },
-]);
-
 const page = usePage();
 const user = page.props.auth.user;
+
+// Mirror the user's stored locale so the shadcn Select can bind v-model while
+// still POSTing via the hidden `<input name="locale">`.
+const locale = ref<string>(user.locale ?? 'en');
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbItems">
-        <Head :title="t('settings.profile.breadcrumb')" />
+    <Head :title="t('settings.profile.breadcrumb')" />
 
-        <SettingsLayout>
-            <div class="flex flex-col space-y-6">
-                <HeadingSmall
+    <SettingsLayout>
+        <div class="space-y-4">
+            <Form
+                v-bind="ProfileController.update.form()"
+                class="space-y-4"
+                v-slot="{ errors, processing, recentlySuccessful }"
+            >
+                <!-- Identity. -->
+                <SettingsCard
+                    :icon="User"
                     :title="t('settings.profile.title')"
                     :description="t('settings.profile.description')"
-                />
-
-                <Form
-                    v-bind="ProfileController.update.form()"
-                    class="space-y-6"
-                    v-slot="{ errors, processing, recentlySuccessful }"
                 >
-                    <div class="grid gap-2">
-                        <Label for="name">{{
-                            t('settings.profile.name')
-                        }}</Label>
+                    <div class="space-y-1.5">
+                        <Label for="name">
+                            {{ t('settings.profile.name') }}
+                        </Label>
                         <Input
                             id="name"
-                            class="mt-1 block w-full"
+                            class="h-9"
                             name="name"
                             :default-value="user.name"
                             required
                             autocomplete="name"
                             placeholder="Full name"
                         />
-                        <InputError class="mt-2" :message="errors.name" />
+                        <InputError :message="errors.name" />
                     </div>
 
-                    <div class="grid gap-2">
-                        <Label for="email">{{
-                            t('settings.profile.email')
-                        }}</Label>
+                    <div class="space-y-1.5">
+                        <Label for="email">
+                            {{ t('settings.profile.email') }}
+                        </Label>
                         <Input
                             id="email"
                             type="email"
-                            class="mt-1 block w-full"
+                            class="h-9"
                             name="email"
                             :default-value="user.email"
                             required
@@ -81,49 +81,63 @@ const user = page.props.auth.user;
                             placeholder="Email address"
                             disabled
                         />
-                        <InputError class="mt-2" :message="errors.email" />
+                        <InputError :message="errors.email" />
                     </div>
+                </SettingsCard>
 
-                    <div class="grid gap-2">
-                        <Label for="locale">{{
-                            t('settings.profile.language')
-                        }}</Label>
-                        <select
-                            id="locale"
-                            name="locale"
-                            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-                            :default-value="user.locale"
-                        >
-                            <option value="en">English</option>
-                            <option value="es">Español</option>
-                        </select>
+                <!-- Language. -->
+                <SettingsCard
+                    :icon="Globe"
+                    :title="t('settings.profile.language')"
+                    description="Interface language for this account"
+                    tint="var(--sp-accent-cyan)"
+                >
+                    <div class="space-y-1.5">
+                        <Label for="locale">
+                            {{ t('settings.profile.language') }}
+                        </Label>
+                        <!-- Hidden input carries the value in the native form POST. -->
+                        <input type="hidden" name="locale" :value="locale" />
+                        <Select v-model="locale">
+                            <SelectTrigger id="locale" class="h-9">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="en">English</SelectItem>
+                                <SelectItem value="es">Español</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
+                </SettingsCard>
 
-                    <div class="flex items-center gap-4">
-                        <Button
-                            :disabled="processing"
-                            data-test="update-profile-button"
-                            >{{ t('settings.profile.save') }}</Button
+                <!-- Footer actions — primary save + saved flash. -->
+                <div class="flex items-center justify-end gap-3 pt-2">
+                    <Transition
+                        enter-active-class="transition ease-in-out"
+                        enter-from-class="opacity-0"
+                        leave-active-class="transition ease-in-out"
+                        leave-to-class="opacity-0"
+                    >
+                        <p
+                            v-show="recentlySuccessful"
+                            class="text-[11px] text-sp-success"
                         >
+                            {{ t('settings.profile.saved') }}
+                        </p>
+                    </Transition>
+                    <button
+                        type="submit"
+                        :disabled="processing"
+                        data-test="update-profile-button"
+                        class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                    >
+                        {{ t('settings.profile.save') }}
+                    </button>
+                </div>
+            </Form>
 
-                        <Transition
-                            enter-active-class="transition ease-in-out"
-                            enter-from-class="opacity-0"
-                            leave-active-class="transition ease-in-out"
-                            leave-to-class="opacity-0"
-                        >
-                            <p
-                                v-show="recentlySuccessful"
-                                class="text-sm text-neutral-600"
-                            >
-                                {{ t('settings.profile.saved') }}
-                            </p>
-                        </Transition>
-                    </div>
-                </Form>
-            </div>
-
+            <!-- Danger zone — component owns its own styling. -->
             <DeleteUser />
-        </SettingsLayout>
-    </AppLayout>
+        </div>
+    </SettingsLayout>
 </template>

@@ -3,7 +3,7 @@
  * All values mirror `handoff/layout_spec.md` verbatim — do not eyeball
  * different numbers unless the spec is revised.
  *
- * Only imported from AdminV2Layout.vue so the treatments stay scoped to
+ * Only imported from AdminLayout.vue so the treatments stay scoped to
  * the admin surface (main app bg is shadcn neutral).
  */
 
@@ -276,6 +276,81 @@
 }
 
 /* -----------------------------------------------------------------------
+ * Admin dialog skin (AlertDialog / Dialog portals).
+ *
+ * Dialogs render through a reka-ui portal mounted on <body>, outside the
+ * `.sp-admin-shell` subtree, so the shell-scoped form-field overrides
+ * further down this file never apply to Input / Label / Button inside a
+ * dialog. Re-scope the shadcn CSS variables here so every primitive
+ * (including the Input text, placeholder, and label) adopts admin palette
+ * tones without per-slot class overrides on the Vue side.
+ *
+ * Apply to the AlertDialogContent or DialogContent root.
+ * ----------------------------------------------------------------------- */
+
+.sp-admin-dialog {
+    /* Surface */
+    --background: var(--sp-bg-secondary);
+    --foreground: var(--sp-text-primary);
+    --card: var(--sp-bg-secondary);
+    --card-foreground: var(--sp-text-primary);
+    --popover: var(--sp-bg-secondary);
+    --popover-foreground: var(--sp-text-primary);
+
+    /* Text */
+    --muted: rgba(255, 255, 255, 0.04);
+    --muted-foreground: var(--sp-text-secondary);
+
+    /* Interactive */
+    --accent: rgba(255, 255, 255, 0.06);
+    --accent-foreground: var(--sp-text-primary);
+    --primary: var(--sp-accent-blue);
+    --primary-foreground: #fff;
+
+    /* Structural */
+    --border: var(--sp-border-soft);
+    --input: var(--sp-border-medium);
+    --ring: var(--sp-accent-blue);
+
+    /* Destructive */
+    --destructive: var(--sp-danger);
+    --destructive-foreground: #fff;
+
+    color: var(--sp-text-primary);
+    font-family: 'Poppins', 'Instrument Sans', system-ui, sans-serif;
+}
+
+/* Form fields inside the dialog — mirror the v2 shell overrides so the
+   Input reads as a subtle white-on-navy field, not shadcn's default light
+   or transparent surface. */
+.sp-admin-dialog [data-slot='input'],
+.sp-admin-dialog [data-slot='textarea'],
+.sp-admin-dialog [data-slot='select-trigger'] {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--sp-border-medium);
+    color: var(--sp-text-primary);
+}
+
+.sp-admin-dialog [data-slot='input']::placeholder,
+.sp-admin-dialog [data-slot='textarea']::placeholder {
+    color: var(--sp-text-tertiary);
+}
+
+.sp-admin-dialog [data-slot='input']:focus-visible,
+.sp-admin-dialog [data-slot='textarea']:focus-visible,
+.sp-admin-dialog [data-slot='select-trigger']:focus-visible {
+    border-color: var(--sp-accent-blue);
+    box-shadow: 0 0 0 3px
+        color-mix(in oklab, var(--sp-accent-blue) 25%, transparent);
+}
+
+.sp-admin-dialog [data-slot='label'] {
+    color: var(--sp-text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* -----------------------------------------------------------------------
  * Command palette (⌘K) — shares the .sp-admin-menu skin for colors /
  * font family, with extra sizing rules to match the admin scale.
  *
@@ -483,6 +558,139 @@
 }
 
 /* -----------------------------------------------------------------------
+ * Impersonation banner — the sticky 40px warning band is the first child
+ * of the flex-col wrapper that wraps the shell. When visible, the shell
+ * sits below it; shrink the shell's base min-height so banner + shell
+ * fit inside a single 100vh wrapper without triggering a 40px body scroll.
+ * Legacy /admin handles its own impersonation offsets in app.css.
+ * ----------------------------------------------------------------------- */
+
+:is(.sp-admin-shell, .sp-app-shell).is-impersonating {
+    min-height: calc(100vh - 2.5rem);
+}
+
+/* -----------------------------------------------------------------------
+ * Interactive primitives — overrides scoped to the v2 shells.
+ *
+ * Shadcn's Slider + Switch default to `bg-primary`, which resolves to
+ * off-white in dark mode. On our navy surface the white track/thumb
+ * reads as a glare — swap it for accent-blue ink so the controls look
+ * like "they belong" on admin-v2 / app-v2 forms. Legacy `/admin` still
+ * gets the shadcn default.
+ * ----------------------------------------------------------------------- */
+
+/* Slider track = muted rail; range = accent-blue fill; thumb = accent-blue
+   with a soft ring on hover/focus. */
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='slider-track'] {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='slider-range'] {
+    background: var(--sp-accent-blue);
+}
+
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='slider-thumb'] {
+    background: var(--sp-accent-blue);
+    border-color: var(--sp-accent-blue);
+    box-shadow: 0 0 0 2px
+        color-mix(in oklab, var(--sp-accent-blue) 25%, transparent);
+}
+
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='slider-thumb']:hover,
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='slider-thumb']:focus-visible {
+    box-shadow: 0 0 0 4px
+        color-mix(in oklab, var(--sp-accent-blue) 30%, transparent);
+}
+
+/* Switch: checked = accent-blue, unchecked = muted rail, thumb = ink. */
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='switch'][data-state='checked'] {
+    background: var(--sp-accent-blue);
+}
+
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='switch'][data-state='unchecked'] {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='switch-thumb'] {
+    background: #ffffff;
+}
+
+/* -----------------------------------------------------------------------
+ * Form field defaults — ink on `bg-white/5` so every Input / Textarea /
+ * SelectTrigger inside a v2 shell adopts the admin-v2 palette without
+ * needing per-form class overrides.
+ *
+ * Selectors use the shell prefix for (0,2,0) specificity so they beat
+ * shadcn's default Tailwind classes (`bg-transparent`, `border-input`,
+ * `text-sm font-medium` on Label) at (0,1,0). The earlier `:not()`
+ * guards were dropped because shadcn's primitives ship with utility
+ * classes (`bg-transparent`, `text-sm`) that made every element match
+ * the exclusion — so the shell styles never applied.
+ * ----------------------------------------------------------------------- */
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='input'],
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='textarea'],
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='select-trigger'] {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--sp-border-medium);
+    color: var(--sp-text-primary);
+}
+
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='input']::placeholder,
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='textarea']::placeholder {
+    color: var(--sp-text-tertiary);
+}
+
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='input']:focus-visible,
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='textarea']:focus-visible,
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='select-trigger']:focus-visible {
+    border-color: var(--sp-accent-blue);
+    box-shadow: 0 0 0 3px
+        color-mix(in oklab, var(--sp-accent-blue) 25%, transparent);
+}
+
+/* Labels — 12px muted secondary so every field label reads as the
+   field's name rather than competing with the value. Overrides shadcn's
+   built-in `text-sm font-medium` on `<Label>`. */
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='label'] {
+    color: var(--sp-text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Checkbox — checked state = accent-blue. */
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='checkbox'][data-state='checked'] {
+    background: var(--sp-accent-blue);
+    border-color: var(--sp-accent-blue);
+    color: #ffffff;
+}
+
+/* Tabs — shadcn's default TabsList uses `bg-muted` and the active trigger
+   switches to `bg-background`, both of which render as bright panels on
+   our dark chrome. Rescope: subtle track + accent-blue tinted active. */
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='tabs-list'] {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--sp-text-secondary);
+    border: 1px solid var(--sp-border-soft);
+}
+
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='tabs-trigger'] {
+    color: var(--sp-text-secondary);
+    background: transparent;
+    border-color: transparent;
+}
+
+:is(.sp-admin-shell, .sp-app-shell)
+    [data-slot='tabs-trigger'][data-state='active'] {
+    background: color-mix(in oklab, var(--sp-accent-blue) 12%, transparent);
+    color: var(--sp-text-primary);
+    border-color: color-mix(in oklab, var(--sp-accent-blue) 35%, transparent);
+}
+
+:is(.sp-admin-shell, .sp-app-shell) [data-slot='tabs-trigger']:hover {
+    color: var(--sp-text-primary);
+}
+
+/* -----------------------------------------------------------------------
  * VueFlow editor — tune default chrome to sit on the dark backdrop.
  *
  * The VueFlow library ships light-theme defaults in
@@ -560,9 +768,11 @@
     fill: currentColor;
 }
 
-/* Mini-map — bottom-right viewport overview. Rounded card, glass bg,
+/* Mini-map — bottom-left viewport overview. Rounded card, glass bg,
    subtle soft border so it reads as "another admin-v2 surface" rather
-   than a stock VueFlow widget. */
+   than a stock VueFlow widget.
+   Controls sit beside it on the left, so the minimap's left margin is
+   large enough to clear the Controls stack (~32px wide) + a 12px gap. */
 .sp-flow-minimap.vue-flow__minimap {
     background: color-mix(in oklab, var(--sp-bg-secondary) 85%, transparent);
     backdrop-filter: blur(6px);
@@ -570,7 +780,7 @@
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-    margin: 16px;
+    margin: 16px 16px 16px 60px;
     /* Default VueFlow size is 200×150 — bump slightly so node pips read. */
     width: 220px;
     height: 160px;
