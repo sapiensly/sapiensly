@@ -1,15 +1,6 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from 'vue';
-
-defineOptions({
-    inheritAttrs: false,
-});
-
-interface Props {
-    className?: HTMLAttributes['class'];
-}
-
-defineProps<Props>();
+// Single-root SVG — `class` / `style` fall through to the root element,
+// so callers can size the icon via Tailwind utilities (e.g. `size-7`).
 </script>
 
 <template>
@@ -17,8 +8,6 @@ defineProps<Props>();
         version="1.1"
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 128 128"
-        width="170.667"
-        height="170.667"
     >
         <path
             fill="#0059ff"

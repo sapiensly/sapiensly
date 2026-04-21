@@ -3,13 +3,13 @@
 use App\Http\Controllers\AccountSwitchController;
 use App\Http\Controllers\Integrations\OAuth2\IntegrationOAuth2Controller;
 use App\Http\Controllers\WidgetAssetController;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use Laravel\Fortify\Features;
 
-Route::get('/', fn () => Inertia::render('Welcome', [
-    'canRegister' => Features::enabled(Features::registration()),
-]));
+Route::get('/', fn () => Auth::check()
+    ? redirect()->route('dashboard')
+    : redirect()->route('login'));
 
 // Widget asset route (public, no auth)
 Route::get('widget/v1/widget.js', [WidgetAssetController::class, 'script'])
