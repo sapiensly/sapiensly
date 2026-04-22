@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { useI18n } from 'vue-i18n';
-
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/AuthLayout.vue';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { LoaderCircle } from 'lucide-vue-next';
+import { useI18n } from 'vue-i18n';
 
 interface Props {
     status?: string;
@@ -29,59 +28,57 @@ function submit(): void {
     <AuthLayout>
         <Head :title="t('auth.forgot_password.title')" />
 
-        <div class="flex flex-col space-y-6">
-            <div class="text-center">
-                <h1 class="text-2xl font-bold tracking-tight">
-                    {{ t('auth.forgot_password.title') }}
-                </h1>
-                <p class="text-sm text-muted-foreground">
-                    {{ t('auth.forgot_password.description') }}
-                </p>
-            </div>
+        <header class="space-y-1">
+            <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                {{ t('auth.forgot_password.title') }}
+            </h1>
+            <p class="text-xs text-ink-muted">
+                {{ t('auth.forgot_password.description') }}
+            </p>
+        </header>
 
-            <div
-                v-if="status"
-                class="rounded-md bg-green-50 p-3 text-center text-sm font-medium text-green-600 dark:bg-green-900/20 dark:text-green-400"
-            >
-                {{ status }}
-            </div>
-
-            <form class="space-y-6" @submit.prevent="submit">
-                <div class="grid gap-2">
-                    <Label for="email">{{
-                        t('auth.forgot_password.email')
-                    }}</Label>
-                    <Input
-                        id="email"
-                        v-model="form.email"
-                        type="email"
-                        required
-                        autofocus
-                        autocomplete="username"
-                        :placeholder="
-                            t('auth.forgot_password.email_placeholder')
-                        "
-                    />
-                    <InputError :message="form.errors.email" />
-                </div>
-
-                <Button
-                    type="submit"
-                    class="w-full"
-                    :disabled="form.processing"
-                >
-                    {{ t('auth.forgot_password.submit') }}
-                </Button>
-
-                <p class="text-center text-sm text-muted-foreground">
-                    <Link
-                        href="/login"
-                        class="underline underline-offset-4 hover:text-foreground"
-                    >
-                        {{ t('auth.forgot_password.back_to_login') }}
-                    </Link>
-                </p>
-            </form>
+        <div
+            v-if="status"
+            class="mt-5 rounded-xs border border-sp-success/40 bg-sp-success/10 px-3 py-2 text-xs text-sp-success"
+        >
+            {{ status }}
         </div>
+
+        <form class="mt-6 space-y-5" @submit.prevent="submit">
+            <div class="space-y-1.5">
+                <Label for="email">{{ t('auth.forgot_password.email') }}</Label>
+                <Input
+                    id="email"
+                    v-model="form.email"
+                    type="email"
+                    required
+                    autofocus
+                    autocomplete="username"
+                    :placeholder="t('auth.forgot_password.email_placeholder')"
+                />
+                <InputError :message="form.errors.email" />
+            </div>
+
+            <button
+                type="submit"
+                :disabled="form.processing"
+                class="flex h-10 w-full items-center justify-center gap-2 rounded-pill bg-accent-blue text-sm font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:opacity-60"
+            >
+                <LoaderCircle
+                    v-if="form.processing"
+                    class="size-4 animate-spin"
+                />
+                {{ t('auth.forgot_password.submit') }}
+            </button>
+        </form>
+
+        <p class="mt-6 text-center text-xs text-ink-muted">
+            <Link
+                href="/login"
+                class="font-medium text-accent-blue transition-colors hover:text-accent-blue-hover"
+            >
+                {{ t('auth.forgot_password.back_to_login') }}
+            </Link>
+        </p>
     </AuthLayout>
 </template>

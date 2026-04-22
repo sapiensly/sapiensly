@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { Head, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
-import { useI18n } from 'vue-i18n';
-
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/AuthLayout.vue';
+import { Head, useForm } from '@inertiajs/vue3';
+import { LoaderCircle } from 'lucide-vue-next';
+import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
@@ -34,76 +33,78 @@ function toggleMode(): void {
     <AuthLayout>
         <Head :title="t('auth.two_factor.title')" />
 
-        <div class="flex flex-col space-y-6">
-            <div class="text-center">
-                <h1 class="text-2xl font-bold tracking-tight">
-                    {{ t('auth.two_factor.title') }}
-                </h1>
-                <p class="text-sm text-muted-foreground">
-                    {{
-                        useRecoveryCode
-                            ? t('auth.two_factor.recovery_description')
-                            : t('auth.two_factor.code_description')
-                    }}
-                </p>
+        <header class="space-y-1">
+            <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                {{ t('auth.two_factor.title') }}
+            </h1>
+            <p class="text-xs text-ink-muted">
+                {{
+                    useRecoveryCode
+                        ? t('auth.two_factor.recovery_description')
+                        : t('auth.two_factor.code_description')
+                }}
+            </p>
+        </header>
+
+        <form class="mt-6 space-y-5" @submit.prevent="submit">
+            <div v-if="!useRecoveryCode" class="space-y-1.5">
+                <Label for="code">{{ t('auth.two_factor.code') }}</Label>
+                <Input
+                    id="code"
+                    v-model="form.code"
+                    type="text"
+                    inputmode="numeric"
+                    required
+                    autofocus
+                    autocomplete="one-time-code"
+                    :placeholder="t('auth.two_factor.code_placeholder')"
+                />
+                <InputError :message="form.errors.code" />
             </div>
 
-            <form class="space-y-6" @submit.prevent="submit">
-                <div v-if="!useRecoveryCode" class="grid gap-2">
-                    <Label for="code">{{ t('auth.two_factor.code') }}</Label>
-                    <Input
-                        id="code"
-                        v-model="form.code"
-                        type="text"
-                        inputmode="numeric"
-                        required
-                        autofocus
-                        autocomplete="one-time-code"
-                        :placeholder="t('auth.two_factor.code_placeholder')"
-                    />
-                    <InputError :message="form.errors.code" />
-                </div>
+            <div v-else class="space-y-1.5">
+                <Label for="recovery_code">{{
+                    t('auth.two_factor.recovery_code')
+                }}</Label>
+                <Input
+                    id="recovery_code"
+                    v-model="form.recovery_code"
+                    type="text"
+                    required
+                    autofocus
+                    autocomplete="one-time-code"
+                    :placeholder="
+                        t('auth.two_factor.recovery_code_placeholder')
+                    "
+                />
+                <InputError :message="form.errors.recovery_code" />
+            </div>
 
-                <div v-else class="grid gap-2">
-                    <Label for="recovery_code">{{
-                        t('auth.two_factor.recovery_code')
-                    }}</Label>
-                    <Input
-                        id="recovery_code"
-                        v-model="form.recovery_code"
-                        type="text"
-                        required
-                        autofocus
-                        autocomplete="one-time-code"
-                        :placeholder="
-                            t('auth.two_factor.recovery_code_placeholder')
-                        "
-                    />
-                    <InputError :message="form.errors.recovery_code" />
-                </div>
+            <button
+                type="submit"
+                :disabled="form.processing"
+                class="flex h-10 w-full items-center justify-center gap-2 rounded-pill bg-accent-blue text-sm font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:opacity-60"
+            >
+                <LoaderCircle
+                    v-if="form.processing"
+                    class="size-4 animate-spin"
+                />
+                {{ t('auth.two_factor.submit') }}
+            </button>
+        </form>
 
-                <Button
-                    type="submit"
-                    class="w-full"
-                    :disabled="form.processing"
-                >
-                    {{ t('auth.two_factor.submit') }}
-                </Button>
-
-                <p class="text-center text-sm text-muted-foreground">
-                    <button
-                        type="button"
-                        class="underline underline-offset-4 hover:text-foreground"
-                        @click="toggleMode"
-                    >
-                        {{
-                            useRecoveryCode
-                                ? t('auth.two_factor.use_code')
-                                : t('auth.two_factor.use_recovery_code')
-                        }}
-                    </button>
-                </p>
-            </form>
-        </div>
+        <p class="mt-6 text-center text-xs text-ink-muted">
+            <button
+                type="button"
+                class="font-medium text-accent-blue transition-colors hover:text-accent-blue-hover"
+                @click="toggleMode"
+            >
+                {{
+                    useRecoveryCode
+                        ? t('auth.two_factor.use_code')
+                        : t('auth.two_factor.use_recovery_code')
+                }}
+            </button>
+        </p>
     </AuthLayout>
 </template>

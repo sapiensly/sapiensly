@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { useI18n } from 'vue-i18n';
-
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/AuthLayout.vue';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { LoaderCircle } from 'lucide-vue-next';
+import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
@@ -28,94 +27,94 @@ function submit(): void {
     <AuthLayout>
         <Head :title="t('auth.register.title')" />
 
-        <div class="flex flex-col space-y-6">
-            <div class="text-center">
-                <h1 class="text-2xl font-bold tracking-tight">
-                    {{ t('auth.register.title') }}
-                </h1>
-                <p class="text-sm text-muted-foreground">
-                    {{ t('auth.register.description') }}
-                </p>
+        <header class="space-y-1">
+            <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                {{ t('auth.register.title') }}
+            </h1>
+            <p class="text-xs text-ink-muted">
+                {{ t('auth.register.description') }}
+            </p>
+        </header>
+
+        <form class="mt-6 space-y-5" @submit.prevent="submit">
+            <div class="space-y-1.5">
+                <Label for="name">{{ t('auth.register.name') }}</Label>
+                <Input
+                    id="name"
+                    v-model="form.name"
+                    type="text"
+                    required
+                    autofocus
+                    autocomplete="name"
+                    :placeholder="t('auth.register.name_placeholder')"
+                />
+                <InputError :message="form.errors.name" />
             </div>
 
-            <form class="space-y-6" @submit.prevent="submit">
-                <div class="grid gap-2">
-                    <Label for="name">{{ t('auth.register.name') }}</Label>
-                    <Input
-                        id="name"
-                        v-model="form.name"
-                        type="text"
-                        required
-                        autofocus
-                        autocomplete="name"
-                        :placeholder="t('auth.register.name_placeholder')"
-                    />
-                    <InputError :message="form.errors.name" />
-                </div>
+            <div class="space-y-1.5">
+                <Label for="email">{{ t('auth.register.email') }}</Label>
+                <Input
+                    id="email"
+                    v-model="form.email"
+                    type="email"
+                    required
+                    autocomplete="username"
+                    :placeholder="t('auth.register.email_placeholder')"
+                />
+                <InputError :message="form.errors.email" />
+            </div>
 
-                <div class="grid gap-2">
-                    <Label for="email">{{ t('auth.register.email') }}</Label>
-                    <Input
-                        id="email"
-                        v-model="form.email"
-                        type="email"
-                        required
-                        autocomplete="username"
-                        :placeholder="t('auth.register.email_placeholder')"
-                    />
-                    <InputError :message="form.errors.email" />
-                </div>
+            <div class="space-y-1.5">
+                <Label for="password">{{ t('auth.register.password') }}</Label>
+                <Input
+                    id="password"
+                    v-model="form.password"
+                    type="password"
+                    required
+                    autocomplete="new-password"
+                    :placeholder="t('auth.register.password_placeholder')"
+                />
+                <InputError :message="form.errors.password" />
+            </div>
 
-                <div class="grid gap-2">
-                    <Label for="password">{{
-                        t('auth.register.password')
-                    }}</Label>
-                    <Input
-                        id="password"
-                        v-model="form.password"
-                        type="password"
-                        required
-                        autocomplete="new-password"
-                        :placeholder="t('auth.register.password_placeholder')"
-                    />
-                    <InputError :message="form.errors.password" />
-                </div>
+            <div class="space-y-1.5">
+                <Label for="password_confirmation">{{
+                    t('auth.register.password_confirmation')
+                }}</Label>
+                <Input
+                    id="password_confirmation"
+                    v-model="form.password_confirmation"
+                    type="password"
+                    required
+                    autocomplete="new-password"
+                    :placeholder="
+                        t('auth.register.password_confirmation_placeholder')
+                    "
+                />
+                <InputError :message="form.errors.password_confirmation" />
+            </div>
 
-                <div class="grid gap-2">
-                    <Label for="password_confirmation">{{
-                        t('auth.register.password_confirmation')
-                    }}</Label>
-                    <Input
-                        id="password_confirmation"
-                        v-model="form.password_confirmation"
-                        type="password"
-                        required
-                        autocomplete="new-password"
-                        :placeholder="
-                            t('auth.register.password_confirmation_placeholder')
-                        "
-                    />
-                    <InputError :message="form.errors.password_confirmation" />
-                </div>
+            <button
+                type="submit"
+                :disabled="form.processing"
+                class="flex h-10 w-full items-center justify-center gap-2 rounded-pill bg-accent-blue text-sm font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:opacity-60"
+            >
+                <LoaderCircle
+                    v-if="form.processing"
+                    class="size-4 animate-spin"
+                />
+                {{ t('auth.register.submit') }}
+            </button>
+        </form>
 
-                <Button
-                    type="submit"
-                    class="w-full"
-                    :disabled="form.processing"
-                >
-                    {{ t('auth.register.submit') }}
-                </Button>
-
-                <p class="text-center text-sm text-muted-foreground">
-                    {{ t('auth.register.has_account') }}
-                    <Link
-                        href="/login"
-                        class="underline underline-offset-4 hover:text-foreground"
-                    >
-                        {{ t('auth.register.login') }}
-                    </Link>
-                </p>
-            </form>
-        </div>
+        <p class="mt-6 text-center text-xs text-ink-muted">
+            {{ t('auth.register.has_account') }}
+            <Link
+                href="/login"
+                class="font-medium text-accent-blue transition-colors hover:text-accent-blue-hover"
+            >
+                {{ t('auth.register.login') }}
+            </Link>
+        </p>
     </AuthLayout>
 </template>

@@ -856,6 +856,7 @@
     "auth.reset_password.password": "New password",
     "auth.reset_password.password_placeholder": "New password",
     "auth.reset_password.password_confirmation": "Confirm password",
+    "auth.reset_password.password_confirmation_placeholder": "Confirm password",
     "auth.reset_password.submit": "Reset password",
 
     "auth.verify_email.title": "Verify email",

@@ -856,6 +856,7 @@
     "auth.reset_password.password": "Nueva contraseña",
     "auth.reset_password.password_placeholder": "Nueva contraseña",
     "auth.reset_password.password_confirmation": "Confirmar contraseña",
+    "auth.reset_password.password_confirmation_placeholder": "Confirmar contraseña",
     "auth.reset_password.submit": "Restablecer contraseña",
 
     "auth.verify_email.title": "Verificar correo",
