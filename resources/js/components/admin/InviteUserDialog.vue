@@ -49,7 +49,9 @@ function close() {
 
 <template>
     <Dialog v-model:open="open">
-        <DialogContent class="rounded-sp-sm border-medium bg-navy sm:max-w-md">
+        <DialogContent
+            class="sp-admin-dialog rounded-sp-sm border-soft bg-navy sm:max-w-md"
+        >
             <DialogHeader>
                 <DialogTitle>{{ t('admin.users.invite.title') }}</DialogTitle>
                 <DialogDescription>
@@ -93,10 +95,10 @@ function close() {
                         t('admin.users.invite.role')
                     }}</Label>
                     <Select v-model="form.role">
-                        <SelectTrigger id="invite-role">
-                            <SelectValue />
+                        <SelectTrigger id="invite-role" class="w-full">
+                            <SelectValue :placeholder="t('admin.users.role.member')" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent class="sp-admin-menu">
                             <SelectItem value="member">{{
                                 t('admin.users.role.member')
                             }}</SelectItem>
