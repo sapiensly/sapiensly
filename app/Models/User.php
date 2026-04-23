@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,7 +13,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable implements MustVerifyEmail
+class User extends Authenticatable implements HasLocalePreference, MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable;
@@ -112,6 +113,17 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isBlocked(): bool
     {
         return $this->blocked_at !== null;
+    }
+
+    /**
+     * Locale used when Laravel renders notifications for this user — the
+     * framework picks this up automatically for queued and sync mail, so
+     * auth emails (verify / reset / 2FA) arrive in the recipient's chosen
+     * language without each notification having to call App::setLocale.
+     */
+    public function preferredLocale(): string
+    {
+        return $this->locale ?? config('app.fallback_locale');
     }
 
     public function hasOrganization(): bool

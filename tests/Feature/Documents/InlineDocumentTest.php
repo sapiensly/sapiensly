@@ -72,7 +72,7 @@ test('storeInline rejects empty body and oversized body', function () {
         ->post('/documents/inline', [
             'type' => 'md',
             'name' => 'Too big',
-            'body' => str_repeat('x', 524289),
+            'body' => str_repeat('x', 10_485_761),
         ])
         ->assertSessionHasErrors(['body']);
 });

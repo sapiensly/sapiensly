@@ -21,7 +21,7 @@ class UpdateDocumentRequest extends FormRequest
             'folder_id' => ['nullable', 'string', 'exists:folders,id'],
             // Body updates are only accepted for inline documents; the controller
             // enforces that rule against the bound model.
-            'body' => ['sometimes', 'string', 'max:524288'],
+            'body' => ['sometimes', 'string', 'max:10485760'],
         ];
     }
 }

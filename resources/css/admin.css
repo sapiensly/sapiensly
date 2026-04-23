@@ -350,6 +350,31 @@
     font-weight: 500;
 }
 
+/* Tabs inside a dialog portal — mirror the shell-scoped rules so the
+   TabsList / TabsTrigger render with the muted track + accent-blue active
+   state instead of shadcn's bright defaults. */
+.sp-admin-dialog [data-slot='tabs-list'] {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--sp-text-secondary);
+    border: 1px solid var(--sp-border-soft);
+}
+
+.sp-admin-dialog [data-slot='tabs-trigger'] {
+    color: var(--sp-text-secondary);
+    background: transparent;
+    border-color: transparent;
+}
+
+.sp-admin-dialog [data-slot='tabs-trigger'][data-state='active'] {
+    background: color-mix(in oklab, var(--sp-accent-blue) 12%, transparent);
+    color: var(--sp-text-primary);
+    border-color: color-mix(in oklab, var(--sp-accent-blue) 35%, transparent);
+}
+
+.sp-admin-dialog [data-slot='tabs-trigger']:hover {
+    color: var(--sp-text-primary);
+}
+
 /* -----------------------------------------------------------------------
  * Command palette (⌘K) — shares the .sp-admin-menu skin for colors /
  * font family, with extra sizing rules to match the admin scale.

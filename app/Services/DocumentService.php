@@ -104,6 +104,37 @@ class DocumentService
     }
 
     /**
+     * Replace an inline document's body / name / keywords in place. Used by
+     * the artifact workbench when the user commits refinements to an already-
+     * saved document. Returns the refreshed model.
+     */
+    public function updateInline(
+        Document $document,
+        string $name,
+        string $body,
+        ?array $keywords = null,
+    ): Document {
+        if (! $document->type->isInlineAuthorable()) {
+            throw new \InvalidArgumentException(
+                "Document {$document->id} ({$document->type->value}) is not inline-authorable."
+            );
+        }
+
+        $update = [
+            'name' => $name,
+            'body' => $body,
+        ];
+
+        if ($keywords !== null) {
+            $update['keywords'] = $keywords;
+        }
+
+        $document->update($update);
+
+        return $document->refresh();
+    }
+
+    /**
      * Attach a document to a knowledge base.
      */
     public function attachToKnowledgeBase(Document $document, KnowledgeBase $knowledgeBase): void

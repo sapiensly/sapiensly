@@ -40,7 +40,11 @@ return [
                     'verify_peer' => false,
                 ] : [],
             ],
-            'max_request_size' => env('REVERB_MAX_REQUEST_SIZE', 10_000),
+            // Default raised from the 10 KB stock value — artifact HTML
+            // streams emit occasional large chunks (a big <style> block
+            // or an inlined image) that would otherwise trip
+            // "Payload too large" on the broadcaster's POST.
+            'max_request_size' => env('REVERB_MAX_REQUEST_SIZE', 1_048_576),
             'scaling' => [
                 'enabled' => env('REVERB_SCALING_ENABLED', false),
                 'channel' => env('REVERB_SCALING_CHANNEL', 'reverb'),

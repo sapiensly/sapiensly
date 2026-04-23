@@ -98,7 +98,7 @@ function close() {
                         <SelectTrigger id="invite-role" class="w-full">
                             <SelectValue :placeholder="t('admin.users.role.member')" />
                         </SelectTrigger>
-                        <SelectContent class="sp-admin-menu">
+                        <SelectContent>
                             <SelectItem value="member">{{
                                 t('admin.users.role.member')
                             }}</SelectItem>

@@ -237,15 +237,14 @@ function handleDelete() {
                         <Share2 class="size-3.5" />
                         {{ t('documents.show.share') }}
                     </button>
-                    <button
+                    <Link
                         v-if="canEdit && document.type === 'artifact' && document.body !== null"
-                        type="button"
+                        :href="`/documents/${document.id}/edit`"
                         class="inline-flex items-center gap-1.5 rounded-pill border border-accent-cyan/40 bg-accent-cyan/10 px-3.5 py-1.5 text-xs font-medium text-accent-cyan transition-colors hover:bg-accent-cyan/20"
-                        @click="showArtifactEditor = true"
                     >
                         <Sparkles class="size-3.5" />
                         {{ t('documents.show.edit_artifact') }}
-                    </button>
+                    </Link>
                     <button
                         v-if="canEdit"
                         type="button"

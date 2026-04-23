@@ -2,7 +2,6 @@
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import * as FolderController from '@/actions/App/Http/Controllers/FolderController';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
-import DocumentCreateDialog from '@/components/documents/DocumentCreateDialog.vue';
 import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue';
 import FolderDialog from '@/components/documents/FolderDialog.vue';
 import FolderTree from '@/components/documents/FolderTree.vue';
@@ -55,11 +54,6 @@ interface Props {
         search: string;
     };
     documentTypes: DocumentTypeOption[];
-    inlineDocumentTypes: {
-        value: string;
-        label: string;
-        extension: string;
-    }[];
     visibilityOptions: VisibilityOption[];
     canShareWithOrg: boolean;
     canDeleteFolder: boolean;
@@ -68,7 +62,6 @@ interface Props {
 const props = defineProps<Props>();
 
 const showUploadDialog = ref(false);
-const showCreateDialog = ref(false);
 const showFolderDialog = ref(false);
 const showDeleteFolderDialog = ref(false);
 const isDeletingFolder = ref(false);
@@ -178,14 +171,17 @@ function handleDeleteFolder() {
                     :description="t('app_v2.documents.description')"
                 >
                     <template #actions>
-                        <button
-                            type="button"
+                        <Link
+                            :href="
+                                currentFolder?.id
+                                    ? `/documents/create?folder=${currentFolder.id}`
+                                    : '/documents/create'
+                            "
                             class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
-                            @click="showCreateDialog = true"
                         >
                             <Plus class="size-3.5" />
                             {{ t('documents.index.create') }}
-                        </button>
+                        </Link>
                         <button
                             type="button"
                             class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
@@ -373,14 +369,6 @@ function handleDeleteFolder() {
             :visibility-options="visibilityOptions"
             :can-share-with-org="canShareWithOrg"
             :current-folder-id="currentFolder?.id ?? null"
-        />
-
-        <DocumentCreateDialog
-            v-model:open="showCreateDialog"
-            :visibility-options="visibilityOptions"
-            :can-share-with-org="canShareWithOrg"
-            :current-folder-id="currentFolder?.id ?? null"
-            :inline-document-types="inlineDocumentTypes"
         />
 
         <FolderDialog

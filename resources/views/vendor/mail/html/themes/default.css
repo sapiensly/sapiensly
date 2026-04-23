@@ -1,0 +1,321 @@
+/* Sapiensly brand theme for transactional email.
+ *
+ * Mirrors the admin-v2 palette while staying inside the email-safe box:
+ * no CSS variables (Outlook / Yahoo drop them), no rgba() alphas, no
+ * backdrop-filter, and colors set explicitly on every text element so
+ * Gmail's dark-mode inversion doesn't mangle contrast.
+ *
+ * Palette (hex mirrors of tokens.css):
+ *   #00031C navy-deep (page)
+ *   #0B0F29 navy (card)
+ *   #1A2255 navy-elevated (border)
+ *   #FFFFFF ink
+ *   #8890A6 ink-muted
+ *   #0059FF accent-blue
+ *   #007ACC accent-blue-hover
+ */
+
+body,
+body *:not(html):not(style):not(br):not(tr):not(code) {
+    box-sizing: border-box;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+        Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji',
+        'Segoe UI Emoji', 'Segoe UI Symbol';
+    position: relative;
+}
+
+body {
+    -webkit-text-size-adjust: none;
+    background-color: #00031c;
+    color: #8890a6;
+    height: 100%;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+    width: 100% !important;
+}
+
+p,
+ul,
+ol,
+blockquote {
+    line-height: 1.5;
+    text-align: start;
+    color: #8890a6;
+}
+
+a {
+    color: #0059ff;
+}
+
+a img {
+    border: none;
+}
+
+/* Typography */
+
+h1 {
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 0;
+    text-align: start;
+}
+
+h2 {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 0;
+    text-align: start;
+}
+
+h3 {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 600;
+    margin-top: 0;
+    text-align: left;
+}
+
+p {
+    font-size: 14px;
+    line-height: 1.6;
+    margin-top: 0;
+    text-align: left;
+    color: #b8bfcf;
+}
+
+p.sub {
+    font-size: 12px;
+    color: #8890a6;
+}
+
+img {
+    max-width: 100%;
+}
+
+/* Layout */
+
+.wrapper {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    background-color: #00031c;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.content {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+/* Header */
+
+.header {
+    padding: 28px 0 8px 0;
+    text-align: center;
+}
+
+.header a {
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 700;
+    font-style: italic;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+}
+
+/* Body */
+
+.body {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    background-color: #00031c;
+    border-bottom: 0;
+    border-top: 0;
+    margin: 0;
+    padding: 40px 0 0 0;
+    width: 100%;
+}
+
+.inner-body {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 600px;
+    background-color: #0b0f29;
+    border-color: #1a2255;
+    border-radius: 15px;
+    border-style: solid;
+    border-width: 1px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    margin: 0 auto;
+    padding: 0;
+    width: 600px;
+}
+
+.inner-body a {
+    color: #0059ff;
+    word-break: break-all;
+}
+
+/* Subcopy */
+
+.subcopy {
+    border-top: 1px solid #1a2255;
+    margin-top: 28px;
+    padding-top: 20px;
+}
+
+.subcopy p {
+    font-size: 12px;
+    color: #8890a6;
+}
+
+.subcopy a {
+    color: #0059ff;
+}
+
+/* Footer */
+
+.footer {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 600px;
+    margin: 0 auto;
+    padding: 0;
+    text-align: center;
+    width: 600px;
+}
+
+.footer p {
+    color: #5a6378;
+    font-size: 11px;
+    text-align: center;
+}
+
+.footer a {
+    color: #8890a6;
+    text-decoration: underline;
+}
+
+/* Tables */
+
+.table table {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    margin: 30px auto;
+    width: 100%;
+}
+
+.table th {
+    border-bottom: 1px solid #1a2255;
+    color: #ffffff;
+    margin: 0;
+    padding-bottom: 8px;
+}
+
+.table td {
+    color: #b8bfcf;
+    font-size: 14px;
+    line-height: 18px;
+    margin: 0;
+    padding: 10px 0;
+}
+
+.content-cell {
+    max-width: 100vw;
+    padding: 32px;
+}
+
+/* Buttons — pill, accent-blue with soft glow. */
+
+.action {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    margin: 28px auto;
+    padding: 0;
+    text-align: center;
+    width: 100%;
+    float: unset;
+}
+
+.button {
+    -webkit-text-size-adjust: none;
+    border-radius: 9999px;
+    color: #ffffff !important;
+    display: inline-block;
+    font-weight: 500;
+    font-size: 14px;
+    overflow: hidden;
+    text-decoration: none;
+}
+
+.button-blue,
+.button-primary {
+    background-color: #0059ff;
+    border-bottom: 10px solid #0059ff;
+    border-left: 22px solid #0059ff;
+    border-right: 22px solid #0059ff;
+    border-top: 10px solid #0059ff;
+}
+
+.button-green,
+.button-success {
+    background-color: #22c55e;
+    border-bottom: 10px solid #22c55e;
+    border-left: 22px solid #22c55e;
+    border-right: 22px solid #22c55e;
+    border-top: 10px solid #22c55e;
+}
+
+.button-red,
+.button-error {
+    background-color: #ef4444;
+    border-bottom: 10px solid #ef4444;
+    border-left: 22px solid #ef4444;
+    border-right: 22px solid #ef4444;
+    border-top: 10px solid #ef4444;
+}
+
+/* Panels */
+
+.panel {
+    border-left: #0059ff solid 4px;
+    margin: 20px 0;
+}
+
+.panel-content {
+    background-color: #1a2255;
+    color: #b8bfcf;
+    padding: 16px;
+}
+
+.panel-content p {
+    color: #b8bfcf;
+}
+
+.panel-item {
+    padding: 0;
+}
+
+.panel-item p:last-of-type {
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+/* Utilities */
+
+.break-all {
+    word-break: break-all;
+}

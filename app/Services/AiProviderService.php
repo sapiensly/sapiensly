@@ -172,6 +172,74 @@ class AiProviderService
     }
 
     /**
+     * Reachable chat models — every chat model the driver supports in the
+     * global catalog for each provider the user has an API key configured
+     * for, not just the ones the tenant explicitly toggled into the
+     * provider's stored `models` array. This is what users expect when
+     * picking a model: "I have an Anthropic key, so I should see all
+     * Anthropic chat models." Returns [{value, label, provider}].
+     *
+     * @return array<int, array{value: string, label: string, provider: string}>
+     */
+    public function getReachableChatModels(User $user): array
+    {
+        $providers = $this->getProvidersForContext($user);
+        $catalogsByDriver = [];
+
+        foreach ($providers as $provider) {
+            $driver = $provider->driver;
+            if (! isset($catalogsByDriver[$driver])) {
+                $catalogsByDriver[$driver] = $this->getModelCatalog($driver);
+            }
+
+            foreach ($catalogsByDriver[$driver] as $model) {
+                if (! in_array('chat', $model['capabilities'] ?? [], true)) {
+                    continue;
+                }
+                // Keep the first occurrence per model id so we don't emit
+                // duplicates when two providers share a driver.
+                $seen[$model['id']] ??= [
+                    'value' => $model['id'],
+                    'label' => $model['label'],
+                    'provider' => $provider->display_name ?? $provider->name,
+                ];
+            }
+        }
+
+        return array_values($seen ?? []);
+    }
+
+    /**
+     * Map a model id to the Lab enum by looking it up in the catalogs of
+     * every driver the user has an active provider for. Unlike
+     * `resolveProvider()` — which only checks models the tenant toggled
+     * on — this accepts any model from the global catalog as long as the
+     * user has credentials for the matching driver. Returns null when
+     * the model isn't reachable from any of the user's providers.
+     */
+    public function resolveProviderForCatalogModel(string $modelId, User $user): ?Lab
+    {
+        $providers = $this->getProvidersForContext($user);
+        $seenDrivers = [];
+
+        foreach ($providers as $provider) {
+            $driver = $provider->driver;
+            if (isset($seenDrivers[$driver])) {
+                continue;
+            }
+            $seenDrivers[$driver] = true;
+
+            foreach ($this->getModelCatalog($driver) as $model) {
+                if ($model['id'] === $modelId) {
+                    return Lab::from($driver);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Get recommended models per agent type.
      */
     public function getRecommendedModels(): array

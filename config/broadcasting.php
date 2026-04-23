@@ -41,11 +41,26 @@ return [
                 'scheme' => env('REVERB_SCHEME', 'https'),
                 'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
             ],
-            'client_options' => [
-                // Disable SSL verification for local dev with self-signed certs (Herd)
-                // In production behind nginx, this is not needed (verify defaults to true)
-                'verify' => ! env('REVERB_TLS_CERT', false),
-            ],
+            'client_options' => array_merge(
+                [
+                    // Disable SSL verification for local dev with self-
+                    // signed certs (Herd). In production behind nginx
+                    // this isn't needed — verify defaults back to true.
+                    'verify' => ! env('REVERB_TLS_CERT', false),
+                ],
+                // Local-only workaround: Reverb's self-served TLS closes
+                // the connection without a close_notify alert, which
+                // OpenSSL 3 treats as fatal through cURL. Swap Guzzle
+                // to its PHP stream handler instead — it uses PHP's own
+                // SSL stack which tolerates the abrupt close and picks
+                // up the crypto_method=TLSv1_2 option Laravel already
+                // sets for Pusher. Skipped in production (no
+                // REVERB_TLS_CERT there; nginx fronts Reverb and the
+                // broadcaster hits plain http://127.0.0.1:8080).
+                env('REVERB_TLS_CERT')
+                    ? ['handler' => \GuzzleHttp\HandlerStack::create(new \GuzzleHttp\Handler\StreamHandler)]
+                    : []
+            ),
         ],
 
         'pusher' => [

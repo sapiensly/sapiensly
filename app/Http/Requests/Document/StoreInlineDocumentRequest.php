@@ -18,7 +18,7 @@ class StoreInlineDocumentRequest extends FormRequest
         return [
             'type' => ['required', 'in:txt,md,artifact'],
             'name' => ['required', 'string', 'max:255'],
-            'body' => ['required', 'string', 'max:524288'],
+            'body' => ['required', 'string', 'max:10485760'],
             'keywords' => ['nullable', 'array', 'max:20'],
             'keywords.*' => ['string', 'max:50'],
             'visibility' => ['nullable', new Enum(Visibility::class)],
@@ -31,7 +31,7 @@ class StoreInlineDocumentRequest extends FormRequest
     {
         return [
             'type.in' => __('Inline documents must be Text, Markdown, or Artifact.'),
-            'body.max' => __('Document body must not exceed 512 KB.'),
+            'body.max' => __('Document body must not exceed 10 MB.'),
         ];
     }
 

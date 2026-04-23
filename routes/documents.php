@@ -14,8 +14,18 @@ Route::middleware([
     'verified',
 ])->group(function () {
     // Documents
+    Route::get('documents/create', [DocumentController::class, 'create'])
+        ->name('documents.create');
+    Route::post('documents/generate', [DocumentController::class, 'generate'])
+        ->name('documents.generate');
+    Route::post('documents/refine', [DocumentController::class, 'refine'])
+        ->name('documents.refine');
     Route::post('documents/inline', [DocumentController::class, 'storeInline'])
         ->name('documents.store-inline');
+    Route::get('documents/{document}/edit', [DocumentController::class, 'edit'])
+        ->name('documents.edit');
+    Route::patch('documents/{document}/inline', [DocumentController::class, 'updateInline'])
+        ->name('documents.update-inline');
     Route::resource('documents', DocumentController::class)->except(['create', 'edit']);
     Route::get('documents/{document}/download', [DocumentController::class, 'download'])
         ->name('documents.download');
