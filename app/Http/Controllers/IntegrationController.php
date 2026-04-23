@@ -40,7 +40,7 @@ class IntegrationController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
         $this->authorize('create', Integration::class);
 
@@ -48,7 +48,15 @@ class IntegrationController extends Controller
             'mode' => 'create',
             'authTypes' => $this->authTypeOptions(),
             'visibilities' => $this->visibilityOptions(),
+            'template' => $this->resolveIntegrationTemplate($request->query('template')),
         ]);
+    }
+
+    public function templates(): Response
+    {
+        $this->authorize('create', Integration::class);
+
+        return Inertia::render('system/integrations/Templates');
     }
 
     public function store(StoreIntegrationRequest $request): RedirectResponse
@@ -225,5 +233,52 @@ class IntegrationController extends Controller
             ->map(fn (Visibility $c) => ['value' => $c->value, 'label' => $c->label()])
             ->values()
             ->all();
+    }
+
+    /**
+     * Holds the server-side source of truth for "Conexiones" presets.
+     * Landing on `/system/integrations/create?template=<slug>` seeds the
+     * Create form with the matching preset; unknown slugs return null and
+     * fall back to the form's blank defaults.
+     *
+     * GitHub uses the OAuth 2.0 Authorization Code flow (browser redirect),
+     * so the preset ships the provider endpoints + the callback URL this
+     * app listens on. The user only has to paste Client ID/Secret, save,
+     * and click "Authorize with GitHub" on the integration's Show page.
+     *
+     * GitHub OAuth Apps do NOT support PKCE (it's a GitHub App feature),
+     * so we ship the preset with pkce=false on purpose.
+     *
+     * @return array{name: string, description: string, base_url: string, auth_type: string, default_headers: array<int, array{key: string, value: string}>, auth_config: array<string, mixed>}|null
+     */
+    private function resolveIntegrationTemplate(?string $slug): ?array
+    {
+        if ($slug === null || $slug === '') {
+            return null;
+        }
+
+        $templates = [
+            'github' => [
+                'name' => 'GitHub API',
+                'description' => 'GitHub REST API',
+                'base_url' => 'https://api.github.com',
+                'auth_type' => IntegrationAuthType::OAuth2AuthorizationCode->value,
+                'default_headers' => [
+                    ['key' => 'Accept', 'value' => 'application/vnd.github+json'],
+                    ['key' => 'X-GitHub-Api-Version', 'value' => '2022-11-28'],
+                ],
+                'auth_config' => [
+                    'authorize_url' => 'https://github.com/login/oauth/authorize',
+                    'token_url' => 'https://github.com/login/oauth/access_token',
+                    'client_id' => '',
+                    'client_secret' => '',
+                    'redirect_uri' => route('integrations.oauth2.callback'),
+                    'scope' => 'repo read:user',
+                    'pkce' => false,
+                ],
+            ],
+        ];
+
+        return $templates[$slug] ?? null;
     }
 }

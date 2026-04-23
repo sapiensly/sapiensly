@@ -31,7 +31,50 @@ test('create page renders the form', function () {
         ->assertInertia(fn ($page) => $page
             ->component('system/integrations/Form')
             ->where('mode', 'create')
+            ->where('template', null)
             ->has('authTypes', 7));
+});
+
+test('templates page renders the picker', function () {
+    $user = User::factory()->create(['organization_id' => null]);
+
+    actingAs($user)
+        ->get('/system/integrations/templates')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('system/integrations/Templates'));
+});
+
+test('create page with ?template=github seeds the form with the GitHub OAuth preset', function () {
+    $user = User::factory()->create(['organization_id' => null]);
+
+    actingAs($user)
+        ->get('/system/integrations/create?template=github')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('system/integrations/Form')
+            ->where('mode', 'create')
+            ->where('template.name', 'GitHub API')
+            ->where('template.base_url', 'https://api.github.com')
+            ->where('template.auth_type', 'oauth2_auth_code')
+            ->where('template.default_headers.0.key', 'Accept')
+            ->where('template.default_headers.0.value', 'application/vnd.github+json')
+            ->where('template.auth_config.authorize_url', 'https://github.com/login/oauth/authorize')
+            ->where('template.auth_config.token_url', 'https://github.com/login/oauth/access_token')
+            ->where('template.auth_config.scope', 'repo read:user')
+            ->where('template.auth_config.pkce', false)
+            ->where('template.auth_config.redirect_uri', route('integrations.oauth2.callback')));
+});
+
+test('create page with an unknown template slug falls back to blank defaults', function () {
+    $user = User::factory()->create(['organization_id' => null]);
+
+    actingAs($user)
+        ->get('/system/integrations/create?template=does-not-exist')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('system/integrations/Form')
+            ->where('template', null));
 });
 
 test('store creates an integration and redirects to show', function () {

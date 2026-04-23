@@ -41,6 +41,15 @@ interface AuthTypeOption {
     label: string;
 }
 
+interface IntegrationTemplate {
+    name: string;
+    description?: string;
+    base_url: string;
+    auth_type: string;
+    default_headers: Array<{ key: string; value: string }>;
+    auth_config?: Record<string, unknown>;
+}
+
 interface Props {
     mode: 'create' | 'edit';
     integration?: {
@@ -59,19 +68,50 @@ interface Props {
     };
     authTypes: AuthTypeOption[];
     visibilities: AuthTypeOption[];
+    template?: IntegrationTemplate | null;
 }
 
 const props = defineProps<Props>();
 
 const { t } = useI18n();
 
+// When a template preset is provided on create, seed the form defaults
+// from it. Blank credential-field shapes make the credential inputs
+// render right away; for OAuth2 templates, the preset also carries the
+// provider endpoints (authorize_url, token_url, scope, redirect_uri).
+const creatingFromTemplate = props.mode === 'create' && !!props.template;
+const templateAuthConfigDefaults: Record<string, Record<string, unknown>> = {
+    api_key: { location: 'header', name: '', value: '' },
+    bearer: { token: '' },
+    basic: { username: '', password: '' },
+    custom_headers: { headers: [] },
+    oauth2_client_credentials: { token_url: '', client_id: '', client_secret: '', scope: '', audience: '' },
+    oauth2_auth_code: { authorize_url: '', token_url: '', client_id: '', client_secret: '', redirect_uri: '', scope: '', pkce: true },
+};
+
+function buildInitialAuthConfig(): Record<string, unknown> {
+    if (!creatingFromTemplate) return {};
+    const shape = templateAuthConfigDefaults[props.template!.auth_type] ?? {};
+    return { ...shape, ...(props.template!.auth_config ?? {}) };
+}
+
 const form = useForm({
-    name: props.integration?.name ?? '',
-    description: props.integration?.description ?? '',
-    base_url: props.integration?.base_url ?? '',
-    auth_type: props.integration?.auth_type ?? 'none',
-    auth_config: {} as Record<string, unknown>,
-    default_headers: props.integration?.default_headers ?? [],
+    name: creatingFromTemplate
+        ? (props.template!.name ?? '')
+        : (props.integration?.name ?? ''),
+    description: creatingFromTemplate
+        ? (props.template!.description ?? '')
+        : (props.integration?.description ?? ''),
+    base_url: creatingFromTemplate
+        ? (props.template!.base_url ?? '')
+        : (props.integration?.base_url ?? ''),
+    auth_type: creatingFromTemplate
+        ? (props.template!.auth_type ?? 'none')
+        : (props.integration?.auth_type ?? 'none'),
+    auth_config: buildInitialAuthConfig(),
+    default_headers: creatingFromTemplate
+        ? (props.template!.default_headers ?? [])
+        : (props.integration?.default_headers ?? []),
     visibility: props.integration?.visibility ?? 'private',
     status: props.integration?.status ?? 'active',
     allow_insecure_tls: props.integration?.allow_insecure_tls ?? false,

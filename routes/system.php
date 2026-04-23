@@ -54,6 +54,7 @@ Route::middleware([
     // Integrations
     // =========================================================================
     Route::get('integrations', [IntegrationController::class, 'index'])->name('system.integrations.index');
+    Route::get('integrations/templates', [IntegrationController::class, 'templates'])->name('system.integrations.templates');
     Route::get('integrations/create', [IntegrationController::class, 'create'])->name('system.integrations.create');
     Route::post('integrations', [IntegrationController::class, 'store'])->name('system.integrations.store');
     Route::post('integrations/test-connection', [IntegrationController::class, 'testConnectionForPayload'])
