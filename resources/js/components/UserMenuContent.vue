@@ -36,13 +36,10 @@ const handleLogout = () => {
 };
 
 const switchAccount = (organizationId: string | null) => {
-    router.post(
-        '/account/switch',
-        { organization_id: organizationId },
-        {
-            preserveScroll: true,
-        },
-    );
+    // Full navigation on success (controller redirects to /dashboard), so
+    // no preserveScroll — the user lands on the neutral entry point with
+    // fresh tenant-scoped props.
+    router.post('/account/switch', { organization_id: organizationId });
 };
 </script>
 
