@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import KeywordsInput from '@/components/KeywordsInput.vue';
-import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
@@ -25,8 +23,20 @@ import type {
     VisibilityOption,
 } from '@/types/document';
 import { useForm } from '@inertiajs/vue3';
-import { File, FolderIcon, Lock, Upload, Users, X } from 'lucide-vue-next';
+import {
+    Code2,
+    File as FileIcon,
+    FileText,
+    FolderIcon,
+    Image,
+    Loader2,
+    Lock,
+    Upload,
+    Users,
+    X,
+} from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 interface Props {
     visibilityOptions: VisibilityOption[];
@@ -44,6 +54,8 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const open = defineModel<boolean>('open', { required: true });
+
+const { t } = useI18n();
 
 const form = useForm({
     file: null as File | null,
@@ -65,7 +77,6 @@ watch(
     },
 );
 
-// Flatten folders for the selector dropdown
 const flattenedFolders = computed(() => {
     if (!props.folders) return [];
 
@@ -101,7 +112,6 @@ const handleFileSelect = (e: Event) => {
     if (target.files?.[0]) {
         selectedFile.value = target.files[0];
         form.file = target.files[0];
-        // Set default name from filename
         if (!form.name) {
             form.name = target.files[0].name.replace(/\.[^/.]+$/, '');
         }
@@ -133,6 +143,20 @@ const formatFileSize = (bytes: number) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+// Pick an icon + tint for the selected file so HTML artifacts read as
+// different from plain docs at a glance.
+const fileKind = computed(() => {
+    if (!selectedFile.value) return { icon: FileIcon, tint: 'var(--sp-text-secondary)' };
+    const ext = selectedFile.value.name.split('.').pop()?.toLowerCase() ?? '';
+    if (ext === 'html' || ext === 'htm') {
+        return { icon: Code2, tint: 'var(--sp-accent-cyan)' };
+    }
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) {
+        return { icon: Image, tint: 'var(--sp-spectrum-magenta)' };
+    }
+    return { icon: FileText, tint: 'var(--sp-accent-blue)' };
+});
+
 const handleSubmit = () => {
     if (!form.file) return;
 
@@ -155,100 +179,139 @@ const handleClose = () => {
 
 <template>
     <Dialog v-model:open="open">
-        <DialogContent class="sm:max-w-md">
+        <!--
+            sp-admin-dialog rewires the shadcn CSS variables inside the Dialog
+            portal to admin-v2 tones (navy surface, text-ink hierarchy, soft
+            borders), so Input/Select/Label/Label slots pick up the right
+            colors without per-slot overrides.
+        -->
+        <DialogContent class="sp-admin-dialog sm:max-w-lg">
             <DialogHeader>
-                <DialogTitle>Upload Document</DialogTitle>
-                <DialogDescription>
-                    Upload a document to your library. Supported formats: PDF,
-                    TXT, DOCX, MD, CSV, JSON.
-                </DialogDescription>
+                <div class="flex items-start gap-3">
+                    <div
+                        class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/15 text-accent-blue"
+                    >
+                        <Upload class="size-4" />
+                    </div>
+                    <div class="min-w-0">
+                        <DialogTitle class="text-base font-semibold text-ink">
+                            {{ t('documents.upload.title') }}
+                        </DialogTitle>
+                        <DialogDescription class="mt-1 text-xs text-ink-muted">
+                            {{ t('documents.upload.description') }}
+                        </DialogDescription>
+                    </div>
+                </div>
             </DialogHeader>
 
-            <form @submit.prevent="handleSubmit" class="space-y-4">
-                <!-- File Drop Zone -->
-                <div
-                    :class="[
-                        'relative flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors',
-                        isDragging
-                            ? 'border-primary bg-primary/5'
-                            : 'border-muted-foreground/25 hover:border-primary/50',
-                    ]"
-                    @dragenter.prevent="isDragging = true"
-                    @dragleave.prevent="isDragging = false"
-                    @dragover.prevent
-                    @drop.prevent="handleDrop"
-                    @click="fileInput?.click()"
-                >
-                    <input
-                        ref="fileInput"
-                        type="file"
-                        class="hidden"
-                        accept=".pdf,.txt,.docx,.doc,.md,.csv,.json"
-                        @change="handleFileSelect"
-                    />
+            <form class="space-y-4" @submit.prevent="handleSubmit">
+                <!-- File drop zone -->
+                <div>
+                    <div
+                        :class="[
+                            'relative flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-sp-sm border-2 border-dashed p-5 transition-colors',
+                            isDragging
+                                ? 'border-accent-blue bg-accent-blue/5'
+                                : 'border-soft bg-white/[0.02] hover:border-medium hover:bg-white/[0.04]',
+                        ]"
+                        @dragenter.prevent="isDragging = true"
+                        @dragleave.prevent="isDragging = false"
+                        @dragover.prevent
+                        @drop.prevent="handleDrop"
+                        @click="fileInput?.click()"
+                    >
+                        <input
+                            ref="fileInput"
+                            type="file"
+                            class="hidden"
+                            accept=".pdf,.txt,.docx,.doc,.md,.csv,.json,.html,.htm"
+                            @change="handleFileSelect"
+                        />
 
-                    <template v-if="selectedFile">
-                        <div class="flex items-center gap-3">
-                            <File class="h-8 w-8 text-muted-foreground" />
-                            <div>
-                                <p class="text-sm font-medium">
-                                    {{ selectedFile.name }}
-                                </p>
-                                <p class="text-xs text-muted-foreground">
-                                    {{ formatFileSize(selectedFile.size) }}
-                                </p>
+                        <template v-if="selectedFile">
+                            <div class="flex w-full items-center gap-3">
+                                <div
+                                    class="flex size-9 shrink-0 items-center justify-center rounded-xs"
+                                    :style="{
+                                        backgroundColor: `color-mix(in oklab, ${fileKind.tint} 15%, transparent)`,
+                                        color: fileKind.tint,
+                                    }"
+                                >
+                                    <component :is="fileKind.icon" class="size-4" />
+                                </div>
+                                <div class="min-w-0 flex-1 text-left">
+                                    <p class="truncate text-sm font-medium text-ink">
+                                        {{ selectedFile.name }}
+                                    </p>
+                                    <p class="text-xs text-ink-subtle">
+                                        {{ formatFileSize(selectedFile.size) }}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="inline-flex size-7 shrink-0 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-sp-danger/10 hover:text-sp-danger"
+                                    @click.stop="removeFile"
+                                >
+                                    <X class="size-4" />
+                                </button>
                             </div>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                class="h-6 w-6"
-                                @click.stop="removeFile"
-                            >
-                                <X class="h-4 w-4" />
-                            </Button>
-                        </div>
-                    </template>
-                    <template v-else>
-                        <Upload class="mb-2 h-8 w-8 text-muted-foreground" />
-                        <p class="text-sm text-muted-foreground">
-                            Drag and drop or click to upload
-                        </p>
-                        <p class="text-xs text-muted-foreground">Max 10MB</p>
-                    </template>
-                </div>
-
-                <!-- Name Input -->
-                <div class="space-y-2">
-                    <Label for="name">Name (optional)</Label>
-                    <Input
-                        id="name"
-                        v-model="form.name"
-                        placeholder="Document name"
-                    />
-                </div>
-
-                <!-- Keywords Input -->
-                <div class="space-y-2">
-                    <Label for="keywords">Keywords (optional)</Label>
-                    <KeywordsInput v-model="form.keywords" />
-                    <p class="text-xs text-muted-foreground">
-                        Add keywords to help with search
+                        </template>
+                        <template v-else>
+                            <Upload class="size-7 text-ink-subtle" />
+                            <p class="text-sm text-ink">
+                                {{ t('documents.upload.dropzone_hint') }}
+                            </p>
+                            <p class="text-xs text-ink-subtle">
+                                {{ t('documents.upload.max_size') }}
+                            </p>
+                        </template>
+                    </div>
+                    <p class="mt-2 text-[11px] text-ink-subtle">
+                        {{ t('documents.upload.supported_formats') }}
                     </p>
                 </div>
 
-                <!-- Folder Select (when showFolderSelector is true) -->
-                <div v-if="showFolderSelector && folders" class="space-y-2">
-                    <Label for="folder">Folder (optional)</Label>
+                <!-- Name -->
+                <div class="space-y-1.5">
+                    <Label for="name">
+                        {{ t('documents.upload.name_label') }}
+                    </Label>
+                    <Input
+                        id="name"
+                        v-model="form.name"
+                        :placeholder="t('documents.upload.name_placeholder')"
+                        class="h-9"
+                    />
+                    <p class="text-[11px] text-ink-subtle">
+                        {{ t('documents.upload.name_hint') }}
+                    </p>
+                </div>
+
+                <!-- Keywords -->
+                <div class="space-y-1.5">
+                    <Label for="keywords">
+                        {{ t('documents.upload.keywords_label') }}
+                    </Label>
+                    <KeywordsInput v-model="form.keywords" />
+                    <p class="text-[11px] text-ink-subtle">
+                        {{ t('documents.upload.keywords_hint') }}
+                    </p>
+                </div>
+
+                <!-- Folder -->
+                <div v-if="showFolderSelector && folders" class="space-y-1.5">
+                    <Label for="folder">
+                        {{ t('documents.upload.folder_label') }}
+                    </Label>
                     <Select v-model="form.folder_id">
-                        <SelectTrigger>
-                            <SelectValue placeholder="No folder (root)" />
+                        <SelectTrigger class="h-9">
+                            <SelectValue :placeholder="t('documents.upload.folder_none')" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem :value="null">
-                                <span class="text-muted-foreground"
-                                    >No folder (root)</span
-                                >
+                                <span class="text-ink-muted">
+                                    {{ t('documents.upload.folder_none') }}
+                                </span>
                             </SelectItem>
                             <SelectItem
                                 v-for="folder in flattenedFolders"
@@ -261,35 +324,30 @@ const handleClose = () => {
                                             paddingLeft: `${folder.depth * 12}px`,
                                         }"
                                     >
-                                        <FolderIcon
-                                            class="mr-1 inline h-4 w-4"
-                                        />
+                                        <FolderIcon class="mr-1 inline size-4" />
                                         {{ folder.name }}
                                     </span>
                                     <Users
-                                        v-if="
-                                            folder.visibility === 'organization'
-                                        "
-                                        class="h-3 w-3 text-muted-foreground"
+                                        v-if="folder.visibility === 'organization'"
+                                        class="size-3 text-ink-subtle"
                                     />
                                 </div>
                             </SelectItem>
                         </SelectContent>
                     </Select>
-                    <p class="text-xs text-muted-foreground">
-                        Choose where to save this document
+                    <p class="text-[11px] text-ink-subtle">
+                        {{ t('documents.upload.folder_hint') }}
                     </p>
                 </div>
 
-                <!-- Visibility Select -->
-                <div class="space-y-2">
-                    <Label for="visibility">Visibility</Label>
-                    <Select
-                        v-model="form.visibility"
-                        :disabled="!canShareWithOrg"
-                    >
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select visibility" />
+                <!-- Visibility -->
+                <div class="space-y-1.5">
+                    <Label for="visibility">
+                        {{ t('documents.upload.visibility_label') }}
+                    </Label>
+                    <Select v-model="form.visibility" :disabled="!canShareWithOrg">
+                        <SelectTrigger class="h-9">
+                            <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem
@@ -308,14 +366,14 @@ const handleClose = () => {
                                                 ? Users
                                                 : Lock
                                         "
-                                        class="h-4 w-4"
+                                        class="size-4"
                                     />
                                     {{ option.label }}
                                 </div>
                             </SelectItem>
                         </SelectContent>
                     </Select>
-                    <p class="text-xs text-muted-foreground">
+                    <p class="text-[11px] text-ink-subtle">
                         {{
                             visibilityOptions.find(
                                 (o) => o.value === form.visibility,
@@ -324,22 +382,29 @@ const handleClose = () => {
                     </p>
                 </div>
 
-                <DialogFooter>
-                    <Button
+                <!-- Footer actions — pill pattern to match the rest of admin-v2. -->
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button
                         type="button"
-                        variant="outline"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
                         @click="handleClose"
                     >
-                        Cancel
-                    </Button>
-                    <Button
+                        {{ t('documents.upload.cancel') }}
+                    </button>
+                    <button
                         type="submit"
                         :disabled="!form.file || form.processing"
+                        class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                     >
-                        <Upload class="mr-2 h-4 w-4" />
-                        Upload
-                    </Button>
-                </DialogFooter>
+                        <Loader2 v-if="form.processing" class="size-3.5 animate-spin" />
+                        <Upload v-else class="size-3.5" />
+                        {{
+                            form.processing
+                                ? t('documents.upload.submitting')
+                                : t('documents.upload.submit')
+                        }}
+                    </button>
+                </div>
             </form>
         </DialogContent>
     </Dialog>

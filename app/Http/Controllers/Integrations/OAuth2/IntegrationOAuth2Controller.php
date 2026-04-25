@@ -23,6 +23,28 @@ class IntegrationOAuth2Controller extends Controller
     {
         $this->authorize('update', $integration);
 
+        // Belt-and-braces: validation already enforces these on store, but
+        // a bare authorize URL sent to the provider with client_id= or
+        // without a matching authorize_url ends in a provider 404, which
+        // leaves the user stranded outside the app.
+        $cfg = $integration->auth_config ?? [];
+        $missing = [];
+        foreach (['authorize_url', 'token_url', 'client_id', 'client_secret'] as $field) {
+            if (empty($cfg[$field])) {
+                $missing[] = $field;
+            }
+        }
+
+        if (! empty($missing)) {
+            return redirect()
+                ->route('system.integrations.show', ['integration' => $integration->id])
+                ->withErrors([
+                    'oauth2' => __('Cannot start authorization — these fields are missing: :fields. Open Edit and fill them in first.', [
+                        'fields' => implode(', ', $missing),
+                    ]),
+                ]);
+        }
+
         $prepared = $this->flow->buildAuthorizeUrl($integration);
 
         $request->session()->put('integrations.oauth2.state', [

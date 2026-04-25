@@ -28,6 +28,7 @@ import type { Document, VisibilityOption } from '@/types/document';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useFullscreen } from '@vueuse/core';
 import {
+    AlertTriangle,
     Check,
     Database,
     Edit,
@@ -37,8 +38,10 @@ import {
     Folder,
     Globe,
     Link as LinkIcon,
+    Loader2,
     Lock,
     Maximize2,
+    Pencil,
     Share2,
     Sparkles,
     Trash2,
@@ -179,36 +182,9 @@ function handleDelete() {
                         <component :is="getDocumentIcon(document.type)" class="size-5" />
                     </div>
                     <div class="min-w-0 space-y-1">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <h1 class="text-[22px] font-semibold leading-tight text-ink">
-                                {{ document.name }}
-                            </h1>
-                            <span
-                                class="inline-flex items-center rounded-pill border px-2.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
-                                :style="{
-                                    color: tintForType(document.type),
-                                    borderColor: `color-mix(in oklab, ${tintForType(document.type)} 45%, transparent)`,
-                                }"
-                            >
-                                {{ document.type }}
-                            </span>
-                            <span
-                                class="inline-flex items-center gap-1 rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
-                                :title="
-                                    document.visibility === 'public'
-                                        ? 'Public'
-                                        : document.visibility === 'organization'
-                                          ? 'Shared with organization'
-                                          : 'Private'
-                                "
-                            >
-                                <component
-                                    :is="visibilityIcon(document.visibility)"
-                                    class="size-3"
-                                />
-                                {{ document.visibility }}
-                            </span>
-                        </div>
+                        <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                            {{ document.name }}
+                        </h1>
                         <p
                             v-if="document.original_filename"
                             class="truncate text-xs text-ink-muted"
@@ -266,65 +242,69 @@ function handleDelete() {
                 </div>
             </div>
 
-            <!-- Details — 2-column grid of labeled fields on a single bg-navy card. -->
-            <section class="rounded-sp-sm border border-soft bg-navy p-5">
-                <h2
-                    class="mb-4 text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
-                >
-                    {{ t('documents.show.title') }}
-                </h2>
-                <dl class="grid gap-4 sm:grid-cols-2">
-                    <div>
-                        <dt class="text-[11px] text-ink-subtle">File Size</dt>
-                        <dd class="mt-0.5 text-sm text-ink">
-                            {{ document.formatted_file_size || '—' }}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-[11px] text-ink-subtle">Type</dt>
-                        <dd class="mt-0.5 text-sm text-ink uppercase">
-                            {{ document.type }}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-[11px] text-ink-subtle">Visibility</dt>
-                        <dd class="mt-0.5 flex items-center gap-1.5 text-sm text-ink">
-                            <component
-                                :is="visibilityIcon(document.visibility)"
-                                class="size-3.5 text-ink-subtle"
-                            />
-                            <span class="capitalize">{{ document.visibility }}</span>
-                        </dd>
-                    </div>
-                    <div v-if="document.folder">
-                        <dt class="text-[11px] text-ink-subtle">Folder</dt>
-                        <dd class="mt-0.5 text-sm">
-                            <Link
-                                :href="
-                                    DocumentController.index({
-                                        query: { folder: document.folder.id },
-                                    }).url
-                                "
-                                class="inline-flex items-center gap-1 text-accent-blue hover:underline"
-                            >
-                                <Folder class="size-3.5" />
-                                {{ document.folder.name }}
-                            </Link>
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-[11px] text-ink-subtle">Created</dt>
-                        <dd class="mt-0.5 text-sm text-ink">
-                            {{ new Date(document.created_at).toLocaleDateString() }}
-                        </dd>
-                    </div>
-                    <div v-if="document.user">
-                        <dt class="text-[11px] text-ink-subtle">Owner</dt>
-                        <dd class="mt-0.5 text-sm text-ink">
-                            {{ document.user.name }}
-                        </dd>
-                    </div>
-                </dl>
+            <!-- Metadata strip — compact inline row of label:value chips so the
+                 important content (the document itself) stays above the fold. -->
+            <section
+                class="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-sp-sm border border-soft bg-navy px-4 py-2.5 text-xs"
+            >
+                <div class="flex items-center gap-1.5">
+                    <span class="text-ink-subtle">
+                        {{ t('documents.show.meta.type') }}:
+                    </span>
+                    <span class="font-medium text-ink uppercase">
+                        {{ document.type }}
+                    </span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-ink-subtle">
+                        {{ t('documents.show.meta.file_size') }}:
+                    </span>
+                    <span class="text-ink">
+                        {{ document.formatted_file_size || '—' }}
+                    </span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-ink-subtle">
+                        {{ t('documents.show.meta.visibility') }}:
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-ink">
+                        <component
+                            :is="visibilityIcon(document.visibility)"
+                            class="size-3 text-ink-subtle"
+                        />
+                        <span class="capitalize">{{ document.visibility }}</span>
+                    </span>
+                </div>
+                <div v-if="document.folder" class="flex items-center gap-1.5">
+                    <span class="text-ink-subtle">
+                        {{ t('documents.show.meta.folder') }}:
+                    </span>
+                    <Link
+                        :href="
+                            DocumentController.index({
+                                query: { folder: document.folder.id },
+                            }).url
+                        "
+                        class="inline-flex items-center gap-1 text-accent-blue hover:underline"
+                    >
+                        <Folder class="size-3" />
+                        {{ document.folder.name }}
+                    </Link>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-ink-subtle">
+                        {{ t('documents.show.meta.created') }}:
+                    </span>
+                    <span class="text-ink">
+                        {{ new Date(document.created_at).toLocaleDateString() }}
+                    </span>
+                </div>
+                <div v-if="document.user" class="flex items-center gap-1.5">
+                    <span class="text-ink-subtle">
+                        {{ t('documents.show.meta.owner') }}:
+                    </span>
+                    <span class="text-ink">{{ document.user.name }}</span>
+                </div>
             </section>
 
             <!-- Inline Content (Raw / Rendered tabs). -->
@@ -445,30 +425,45 @@ function handleDelete() {
 
         <!-- Edit Dialog. -->
         <Dialog v-model:open="showEditDialog">
-            <DialogContent>
+            <DialogContent class="sp-admin-dialog sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Edit Document</DialogTitle>
-                    <DialogDescription>
-                        Update the document name and visibility settings.
-                    </DialogDescription>
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/15 text-accent-blue"
+                        >
+                            <Pencil class="size-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <DialogTitle class="text-base font-semibold text-ink">
+                                {{ t('documents.edit_dialog.title') }}
+                            </DialogTitle>
+                            <DialogDescription class="mt-1 text-xs text-ink-muted">
+                                {{ t('documents.edit_dialog.description') }}
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
 
-                <div class="space-y-4 py-4">
+                <div class="space-y-4">
                     <div class="space-y-1.5">
-                        <Label for="name">Name</Label>
+                        <Label for="edit-name">
+                            {{ t('documents.edit_dialog.name_label') }}
+                        </Label>
                         <Input
-                            id="name"
+                            id="edit-name"
                             v-model="editForm.name"
-                            placeholder="Document name"
+                            :placeholder="t('documents.edit_dialog.name_placeholder')"
                             class="h-9"
                         />
                     </div>
 
                     <div class="space-y-1.5">
-                        <Label for="visibility">Visibility</Label>
+                        <Label for="edit-visibility">
+                            {{ t('documents.edit_dialog.visibility_label') }}
+                        </Label>
                         <Select v-model="editForm.visibility">
                             <SelectTrigger class="h-9">
-                                <SelectValue placeholder="Select visibility" />
+                                <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem
@@ -540,7 +535,7 @@ function handleDelete() {
                         class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
                         @click="showEditDialog = false"
                     >
-                        Cancel
+                        {{ t('documents.edit_dialog.cancel') }}
                     </button>
                     <button
                         type="button"
@@ -548,7 +543,13 @@ function handleDelete() {
                         class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                         @click="handleEdit"
                     >
-                        Save Changes
+                        <Loader2 v-if="isSubmitting" class="size-3.5 animate-spin" />
+                        <Check v-else class="size-3.5" />
+                        {{
+                            isSubmitting
+                                ? t('documents.edit_dialog.saving')
+                                : t('documents.edit_dialog.save')
+                        }}
                     </button>
                 </DialogFooter>
             </DialogContent>
@@ -556,12 +557,23 @@ function handleDelete() {
 
         <!-- Share Dialog. -->
         <Dialog v-if="publicUrl" v-model:open="showShareDialog">
-            <DialogContent>
+            <DialogContent class="sp-admin-dialog sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>{{ t('documents.show.share_title') }}</DialogTitle>
-                    <DialogDescription>
-                        {{ t('documents.show.share_description') }}
-                    </DialogDescription>
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-cyan/15 text-accent-cyan"
+                        >
+                            <Share2 class="size-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <DialogTitle class="text-base font-semibold text-ink">
+                                {{ t('documents.show.share_title') }}
+                            </DialogTitle>
+                            <DialogDescription class="mt-1 text-xs text-ink-muted">
+                                {{ t('documents.show.share_description') }}
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
                 <div class="flex items-center gap-2">
                     <Input
@@ -607,13 +619,27 @@ function handleDelete() {
 
         <!-- Delete confirmation. -->
         <Dialog v-model:open="showDeleteDialog">
-            <DialogContent>
+            <DialogContent class="sp-admin-dialog sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Delete Document</DialogTitle>
-                    <DialogDescription>
-                        Are you sure you want to delete "{{ document.name }}"?
-                        This action cannot be undone.
-                    </DialogDescription>
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-sp-danger/15 text-sp-danger"
+                        >
+                            <AlertTriangle class="size-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <DialogTitle class="text-base font-semibold text-ink">
+                                {{ t('documents.delete_dialog.title') }}
+                            </DialogTitle>
+                            <DialogDescription class="mt-1 text-xs text-ink-muted">
+                                {{
+                                    t('documents.delete_dialog.description', {
+                                        name: document.name,
+                                    })
+                                }}
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
 
                 <DialogFooter>
@@ -622,15 +648,21 @@ function handleDelete() {
                         class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
                         @click="showDeleteDialog = false"
                     >
-                        Cancel
+                        {{ t('documents.delete_dialog.cancel') }}
                     </button>
                     <button
                         type="button"
                         :disabled="isSubmitting"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-sp-danger/40 bg-sp-danger/10 px-3.5 py-1.5 text-xs text-sp-danger transition-colors hover:bg-sp-danger/20 disabled:opacity-50"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-sp-danger/40 bg-sp-danger/10 px-3.5 py-1.5 text-xs font-medium text-sp-danger transition-colors hover:border-sp-danger hover:bg-sp-danger/20 disabled:opacity-50"
                         @click="handleDelete"
                     >
-                        Delete
+                        <Loader2 v-if="isSubmitting" class="size-3.5 animate-spin" />
+                        <Trash2 v-else class="size-3.5" />
+                        {{
+                            isSubmitting
+                                ? t('documents.delete_dialog.deleting')
+                                : t('documents.delete_dialog.confirm')
+                        }}
                     </button>
                 </DialogFooter>
             </DialogContent>

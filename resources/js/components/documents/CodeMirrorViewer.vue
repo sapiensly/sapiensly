@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
-import { useAppearance } from '@/composables/useAppearance';
+import { adminHighlight, adminTheme } from '@/lib/documents/code-editor-theme';
 import { html } from '@codemirror/lang-html';
+import { syntaxHighlighting } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
-import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView, lineNumbers } from '@codemirror/view';
 import { Check, Copy } from 'lucide-vue-next';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps<{ source: string; language?: 'html' }>();
 
@@ -14,26 +14,24 @@ const host = ref<HTMLElement | null>(null);
 const copied = ref(false);
 let view: EditorView | null = null;
 
-const { appearance } = useAppearance();
+const { t } = useI18n();
 
-function buildState(source: string, dark: boolean): EditorState {
-    const extensions = [
-        lineNumbers(),
-        EditorState.readOnly.of(true),
-        EditorView.editable.of(false),
-        EditorView.lineWrapping,
-        html({ matchClosingTags: true, autoCloseTags: false }),
-    ];
-    if (dark) {
-        extensions.push(oneDark);
-    }
-    return EditorState.create({ doc: source, extensions });
-}
-
-function isDark(): boolean {
-    if (appearance.value === 'dark') return true;
-    if (appearance.value === 'light') return false;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+// Read-only counterpart of HtmlCodeEditor — shares the same admin-palette
+// theme + highlight style so the Show page's "Code" tab reads exactly like
+// the workbench editor the user edits in.
+function buildState(source: string): EditorState {
+    return EditorState.create({
+        doc: source,
+        extensions: [
+            lineNumbers(),
+            EditorState.readOnly.of(true),
+            EditorView.editable.of(false),
+            EditorView.lineWrapping,
+            html({ matchClosingTags: true, autoCloseTags: false }),
+            syntaxHighlighting(adminHighlight),
+            adminTheme,
+        ],
+    });
 }
 
 async function copySource() {
@@ -46,7 +44,7 @@ onMounted(() => {
     if (!host.value) return;
     view = new EditorView({
         parent: host.value,
-        state: buildState(props.source, isDark()),
+        state: buildState(props.source),
     });
 });
 
@@ -54,14 +52,9 @@ watch(
     () => props.source,
     (next) => {
         if (!view) return;
-        view.setState(buildState(next, isDark()));
+        view.setState(buildState(next));
     },
 );
-
-watch(appearance, () => {
-    if (!view) return;
-    view.setState(buildState(props.source, isDark()));
-});
 
 onBeforeUnmount(() => {
     view?.destroy();
@@ -70,29 +63,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="relative rounded border bg-card">
-        <Button
-            variant="outline"
-            size="sm"
-            class="absolute top-2 right-2 z-10 h-7 gap-1"
+    <div class="relative rounded-xs border border-medium bg-white/5">
+        <button
+            type="button"
+            class="absolute top-2 right-2 z-10 inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
             @click="copySource"
         >
-            <Check v-if="copied" class="h-3.5 w-3.5" />
-            <Copy v-else class="h-3.5 w-3.5" />
-            <span class="text-xs">{{ copied ? 'Copied' : 'Copy' }}</span>
-        </Button>
-        <div
-            ref="host"
-            class="cm-viewer max-h-[600px] overflow-auto text-sm"
-        />
+            <Check v-if="copied" class="size-3.5" />
+            <Copy v-else class="size-3.5" />
+            {{ copied ? t('common.saved') : t('documents.show.copy_link') }}
+        </button>
+        <div ref="host" class="sp-code-editor max-h-[600px] overflow-auto" />
     </div>
 </template>
-
-<style scoped>
-.cm-viewer :deep(.cm-editor) {
-    height: auto;
-}
-.cm-viewer :deep(.cm-scroller) {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-</style>

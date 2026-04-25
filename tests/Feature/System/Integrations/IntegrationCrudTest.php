@@ -168,6 +168,45 @@ test('duplicate copies the integration and all its nested resources', function (
         ->and($copy->requests)->toHaveCount(1);
 });
 
+test('store rejects oauth2_auth_code integration without client_id', function () {
+    $user = User::factory()->create(['organization_id' => null]);
+
+    actingAs($user)->post('/system/integrations', [
+        'name' => 'Half-baked GitHub',
+        'base_url' => 'https://api.github.com',
+        'auth_type' => 'oauth2_auth_code',
+        'auth_config' => [
+            'authorize_url' => 'https://github.com/login/oauth/authorize',
+            'token_url' => 'https://github.com/login/oauth/access_token',
+            'client_id' => '',
+            'client_secret' => '',
+        ],
+    ])->assertSessionHasErrors([
+        'auth_config.client_id',
+        'auth_config.client_secret',
+    ]);
+});
+
+test('authorize endpoint redirects back with an error when client_id is missing', function () {
+    $user = User::factory()->create(['organization_id' => null]);
+    // Build an integration that sneaked past validation (e.g. created before
+    // the guard existed) with a blank client_id — the authorize redirect
+    // must refuse to send the user to the provider with an empty query.
+    $integration = Integration::factory()->oauth2AuthCode()->forUser($user)->create([
+        'auth_config' => [
+            'authorize_url' => 'https://auth.example.com/oauth/authorize',
+            'token_url' => 'https://auth.example.com/oauth/token',
+            'client_id' => '',
+            'client_secret' => '',
+        ],
+    ]);
+
+    actingAs($user)
+        ->get("/oauth/integrations/{$integration->id}/authorize")
+        ->assertRedirect("/system/integrations/{$integration->id}")
+        ->assertSessionHasErrors('oauth2');
+});
+
 test('global visibility is rejected for non-sysadmin via policy when updating', function () {
     $user = User::factory()->create(['organization_id' => null]);
     $global = Integration::factory()->global()->create();

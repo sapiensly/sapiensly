@@ -332,11 +332,19 @@ class DocumentController extends Controller
             abort(404);
         }
 
+        // Same hydration as show(): uploaded artifacts keep their content on
+        // disk rather than in the body column, but the workbench expects a
+        // non-null body to mount the visual/code editors.
+        $body = $document->body;
+        if ($body === null && $document->file_path !== null) {
+            $body = $this->documentService->readFileBody($document);
+        }
+
         return Inertia::render('documents/Edit', [
             'document' => [
                 'id' => $document->id,
                 'name' => $document->name,
-                'body' => $document->body,
+                'body' => $body,
                 'type' => $document->type->value,
                 'keywords' => $document->keywords ?? [],
                 'visibility' => $document->visibility->value,
@@ -381,6 +389,18 @@ class DocumentController extends Controller
 
         // Get temporary URL for download
         $temporaryUrl = $this->documentService->getTemporaryUrl($document);
+
+        // For Artifacts uploaded as a file (file_path set, body null), hydrate
+        // `body` on the fly so the frontend's artifact viewer/editor work the
+        // same way they do for inline-authored artifacts. This is a view-only
+        // hydration — we never persist the file contents to the DB column.
+        if (
+            $document->type === DocumentType::Artifact
+            && $document->body === null
+            && $document->file_path !== null
+        ) {
+            $document->body = $this->documentService->readFileBody($document);
+        }
 
         return Inertia::render('documents/Show', [
             'document' => $document,

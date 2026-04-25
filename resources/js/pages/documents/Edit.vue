@@ -45,16 +45,17 @@ function goBackToShow() {
         <div class="flex h-[calc(100vh-9rem)] w-full flex-col">
             <div class="mb-3">
                 <!--
-                  Document is already persisted, so "back" goes to the
-                  listing. Discarding unsaved changes is a separate
-                  action (Descartar button inside the workbench).
+                  Document is already persisted, so "back" takes the user
+                  to that document's Show page — their prior context —
+                  not to the flat listing. Discarding unsaved changes is
+                  a separate action (Descartar button inside the workbench).
                 -->
                 <Link
-                    href="/documents"
+                    :href="`/documents/${document.id}`"
                     class="inline-flex items-center gap-1 text-[11px] text-ink-muted transition-colors hover:text-ink"
                 >
                     <ArrowLeft class="size-3" />
-                    {{ t('documents.workbench.back_to_list') }}
+                    {{ t('documents.workbench.back_to_document') }}
                 </Link>
             </div>
             <div class="min-h-0 flex-1">

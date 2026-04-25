@@ -11,8 +11,9 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
+    AlertCircle,
     AlertTriangle,
     ArrowLeft,
     CheckCircle2,
@@ -85,17 +86,41 @@ const activeTab = ref<'requests' | 'environments' | 'settings'>('requests');
 
 // OAuth2 Authorization-Code integrations need a browser roundtrip to get
 // an access token. Detect the integration's current state so we can show
-// either an "Authorize" banner (not yet connected) or a muted "Connected"
-// pill with a "Re-authorize" link.
+// the right banner: config-incomplete (missing client_id / endpoints),
+// not-connected (config ok but handshake pending), or connected.
 const needsOAuth2Authorization = computed(
     () => props.integration.auth_type === 'oauth2_auth_code',
 );
 const oauth2Connected = computed(
     () => !!props.integration.masked_auth_config?.access_token,
 );
+const oauth2ConfigIncomplete = computed(() => {
+    if (!needsOAuth2Authorization.value) return false;
+    const cfg = props.integration.masked_auth_config ?? {};
+    // Non-secret fields pass through unmasked; secrets come back as "abcd...wxyz"
+    // when present, undefined/empty when not. Missing any of these and GitHub
+    // returns 404 on the authorize URL.
+    return (
+        !cfg.authorize_url ||
+        !cfg.token_url ||
+        !cfg.client_id ||
+        !cfg.client_secret
+    );
+});
 const authorizeUrl = computed(
     () => `/oauth/integrations/${props.integration.id}/authorize`,
 );
+const editUrl = computed(
+    () => `/system/integrations/${props.integration.id}/edit`,
+);
+
+// Flash / validation errors from the authorize guard (e.g. "fields missing")
+// come back on the Inertia page props.
+const page = usePage();
+const oauthFlashError = computed(() => {
+    const errors = (page.props.errors ?? {}) as Record<string, string>;
+    return errors.oauth2 ?? null;
+});
 
 // ============== Requests ==============
 const newRequest = useForm({
@@ -258,9 +283,62 @@ function destroyIntegration(): void {
                     plain <a> (not Inertia <Link>) because /oauth/...
                     /authorize returns a 302 to the provider, outside the
                     SPA. The callback redirects back to this Show page.
+
+                    Three states in priority order:
+                      1. Flash/validation error from the authorize guard.
+                      2. Config incomplete (missing client_id / endpoints).
+                      3. Config ok, handshake pending.
+                      4. Config ok, access token stored — "Connected".
                 -->
                 <div
-                    v-if="needsOAuth2Authorization && !oauth2Connected"
+                    v-if="oauthFlashError"
+                    class="flex items-start gap-3 rounded-sp-sm border border-sp-danger/30 bg-sp-danger/10 p-4"
+                >
+                    <div
+                        class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-sp-danger/15 text-sp-danger"
+                    >
+                        <AlertCircle class="size-4" />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-ink">
+                            {{ t('system.integrations.oauth2.error_title') }}
+                        </p>
+                        <p class="mt-0.5 text-xs text-ink-muted">
+                            {{ oauthFlashError }}
+                        </p>
+                    </div>
+                </div>
+
+                <div
+                    v-if="needsOAuth2Authorization && oauth2ConfigIncomplete"
+                    class="flex items-start gap-3 rounded-sp-sm border border-sp-warning/30 bg-sp-warning/10 p-4"
+                >
+                    <div
+                        class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-sp-warning/15 text-sp-warning"
+                    >
+                        <AlertTriangle class="size-4" />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-ink">
+                            {{ t('system.integrations.oauth2.incomplete_title') }}
+                        </p>
+                        <p class="mt-0.5 text-xs text-ink-muted">
+                            {{ t('system.integrations.oauth2.incomplete_hint') }}
+                        </p>
+                    </div>
+                    <Link :href="editUrl">
+                        <button
+                            type="button"
+                            class="inline-flex shrink-0 items-center gap-1.5 self-center rounded-pill bg-sp-warning px-3.5 py-1.5 text-xs font-medium text-navy-deep shadow-btn-primary transition-colors hover:brightness-110"
+                        >
+                            <Pencil class="size-3.5" />
+                            {{ t('system.integrations.oauth2.incomplete_cta') }}
+                        </button>
+                    </Link>
+                </div>
+
+                <div
+                    v-else-if="needsOAuth2Authorization && !oauth2Connected"
                     class="flex items-start gap-3 rounded-sp-sm border border-accent-blue/30 bg-accent-blue/10 p-4"
                 >
                     <div
@@ -268,7 +346,7 @@ function destroyIntegration(): void {
                     >
                         <KeyRound class="size-4" />
                     </div>
-                    <div class="flex-1 min-w-0">
+                    <div class="min-w-0 flex-1">
                         <p class="text-sm font-medium text-ink">
                             {{ t('system.integrations.oauth2.authorize_title') }}
                         </p>
@@ -294,7 +372,7 @@ function destroyIntegration(): void {
                     >
                         <ShieldCheck class="size-4" />
                     </div>
-                    <div class="flex-1 min-w-0">
+                    <div class="min-w-0 flex-1">
                         <p class="text-sm font-medium text-ink">
                             {{ t('system.integrations.oauth2.connected_title') }}
                         </p>

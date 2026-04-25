@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\DocumentType;
 use App\Models\Document;
+use App\Services\DocumentService;
 use Illuminate\Http\Response;
 
 /**
@@ -15,6 +16,10 @@ use Illuminate\Http\Response;
  */
 class PublicDocumentController extends Controller
 {
+    public function __construct(
+        private DocumentService $documentService,
+    ) {}
+
     public function show(string $id): Response
     {
         $document = Document::query()->find($id);
@@ -22,12 +27,21 @@ class PublicDocumentController extends Controller
         if ($document === null
             || ! $document->isPublic()
             || $document->type !== DocumentType::Artifact
-            || $document->body === null
         ) {
             abort(404);
         }
 
-        return response((string) $document->body, 200, [
+        // Two storage modes for Artifact documents:
+        //   - Inline-authored: content lives in the `body` column.
+        //   - Uploaded (.html file): content lives on disk, `body` is null.
+        // Either path is valid — resolve the body from whichever has it.
+        $body = $document->body ?? $this->documentService->readFileBody($document);
+
+        if ($body === null) {
+            abort(404);
+        }
+
+        return response($body, 200, [
             'Content-Type' => 'text/html; charset=utf-8',
             'Content-Security-Policy' => 'sandbox allow-scripts allow-forms allow-popups',
             'X-Content-Type-Options' => 'nosniff',

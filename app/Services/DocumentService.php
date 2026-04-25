@@ -107,6 +107,12 @@ class DocumentService
      * Replace an inline document's body / name / keywords in place. Used by
      * the artifact workbench when the user commits refinements to an already-
      * saved document. Returns the refreshed model.
+     *
+     * For uploaded artifacts (file_path set, body null by default), the new
+     * body is written back to the underlying file — not to the DB column —
+     * so getTemporaryUrl() keeps serving the current version and the file/
+     * body-column split stays consistent. Inline-authored artifacts (body
+     * set, file_path null) go the other way: DB column only.
      */
     public function updateInline(
         Document $document,
@@ -120,10 +126,14 @@ class DocumentService
             );
         }
 
-        $update = [
-            'name' => $name,
-            'body' => $body,
-        ];
+        $update = ['name' => $name];
+
+        if ($document->file_path !== null) {
+            $this->disk($document->organization_id)->put($document->file_path, $body);
+            $update['file_size'] = strlen($body);
+        } else {
+            $update['body'] = $body;
+        }
 
         if ($keywords !== null) {
             $update['keywords'] = $keywords;
@@ -193,6 +203,27 @@ class DocumentService
             $document->file_path,
             now()->addMinutes($minutes)
         );
+    }
+
+    /**
+     * Read the raw file contents for a file-backed document. Used when we
+     * want to show or edit the body of an Artifact/MD document that was
+     * uploaded (file_path set, body column null) rather than created inline.
+     * Returns null if the file is missing on disk.
+     */
+    public function readFileBody(Document $document): ?string
+    {
+        if (! $document->file_path) {
+            return null;
+        }
+
+        $storage = $this->disk($document->organization_id);
+
+        if (! $storage->exists($document->file_path)) {
+            return null;
+        }
+
+        return $storage->get($document->file_path);
     }
 
     /**
