@@ -31,6 +31,11 @@ const impersonating = computed(() => Boolean(page.props.impersonating));
 
 const paletteRef = ref<InstanceType<typeof CommandPalette> | null>(null);
 
+const scrolled = ref(false);
+function onMainScroll(event: Event) {
+    scrolled.value = (event.target as HTMLElement).scrollTop > 0;
+}
+
 function toggleSidebar() {
     sidebarCollapsed.value = !sidebarCollapsed.value;
     const open = !sidebarCollapsed.value;
@@ -44,7 +49,7 @@ function openPalette() {
 </script>
 
 <template>
-    <div class="flex min-h-screen flex-col">
+    <div class="flex h-screen flex-col overflow-hidden">
         <ImpersonationBanner />
 
         <div
@@ -65,14 +70,22 @@ function openPalette() {
               viewport-wide so both columns share the same light source.
             -->
             <div class="sp-admin-content flex min-w-0 flex-1 flex-col">
-                <Topbar
-                    :title="title"
-                    :sidebar-collapsed="sidebarCollapsed"
-                    @toggle-sidebar="toggleSidebar"
-                    @open-palette="openPalette"
-                />
+                <!--
+                  Topbar lives INSIDE `main` so it shares its scroll context.
+                  Sticky top-0 then pins the topbar to the top of main and the
+                  scrolling content passes *behind* it — required for the
+                  topbar's `backdrop-filter: blur(...)` to actually show
+                  frosted glass.
+                -->
+                <main class="flex-1 overflow-y-auto" @scroll.passive="onMainScroll">
+                    <Topbar
+                        :title="title"
+                        :sidebar-collapsed="sidebarCollapsed"
+                        :scrolled="scrolled"
+                        @toggle-sidebar="toggleSidebar"
+                        @open-palette="openPalette"
+                    />
 
-                <main class="flex-1">
                     <div
                         class="mx-auto w-full max-w-[1440px] px-7 py-[22px]"
                     >

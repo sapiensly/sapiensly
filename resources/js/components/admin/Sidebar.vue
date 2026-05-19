@@ -131,7 +131,7 @@ const userRole = computed(() => {
 <template>
     <aside
         :class="[
-            'sp-glass-sidebar sticky top-0 z-10 flex h-screen shrink-0 flex-col transition-[width] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+            'sp-glass-sidebar flex h-full shrink-0 flex-col transition-[width] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
             collapsed ? 'w-16' : 'w-60',
         ]"
     >

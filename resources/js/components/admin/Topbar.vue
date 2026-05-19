@@ -9,11 +9,14 @@ interface Props {
     notifications?: number;
     /** Passed down so the sidebar trigger label reflects state. */
     sidebarCollapsed?: boolean;
+    /** True once the main content area has scrolled away from the top. */
+    scrolled?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
     notifications: 0,
     sidebarCollapsed: false,
+    scrolled: false,
 });
 
 const emit = defineEmits<{
@@ -38,7 +41,10 @@ const modKey = computed(() =>
 -->
 <template>
     <header
-        class="sp-glass sticky top-0 z-10 flex h-14 items-center gap-3 px-6"
+        :class="[
+            'sp-topbar sticky top-0 z-10 flex h-14 items-center gap-3 px-6',
+            scrolled && 'is-scrolled',
+        ]"
     >
         <!--
           Sidebar collapse toggle — plain button (not shadcn's ghost Button,

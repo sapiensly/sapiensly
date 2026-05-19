@@ -9,11 +9,13 @@ interface Props {
     title: string;
     notifications?: number;
     sidebarCollapsed?: boolean;
+    scrolled?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
     notifications: 0,
     sidebarCollapsed: false,
+    scrolled: false,
 });
 
 const emit = defineEmits<{
@@ -37,7 +39,10 @@ const modKey = computed(() =>
 
 <template>
     <header
-        class="sp-glass sticky top-0 z-10 flex h-14 items-center gap-3 px-6"
+        :class="[
+            'sp-topbar sticky top-0 z-10 flex h-14 items-center gap-3 px-6',
+            scrolled && 'is-scrolled',
+        ]"
     >
         <button
             type="button"

@@ -50,6 +50,11 @@ const impersonating = computed(() => Boolean(page.props.impersonating));
 
 const paletteRef = ref<InstanceType<typeof CommandPalette> | null>(null);
 
+const scrolled = ref(false);
+function onMainScroll(event: Event) {
+    scrolled.value = (event.target as HTMLElement).scrollTop > 0;
+}
+
 function toggleSidebar() {
     sidebarCollapsed.value = !sidebarCollapsed.value;
     const open = !sidebarCollapsed.value;
@@ -62,7 +67,7 @@ function openPalette() {
 </script>
 
 <template>
-    <div class="flex min-h-screen flex-col">
+    <div class="flex h-screen flex-col overflow-hidden">
         <ImpersonationBanner />
 
         <div
@@ -73,21 +78,27 @@ function openPalette() {
             <Sidebar :collapsed="sidebarCollapsed" class="hidden lg:flex" />
 
             <div class="sp-app-content flex min-w-0 flex-1 flex-col">
-                <Topbar
-                    :title="title"
-                    :sidebar-collapsed="sidebarCollapsed"
-                    @toggle-sidebar="toggleSidebar"
-                    @open-palette="openPalette"
-                />
-
                 <!--
-                  `main` is always a flex column so a `fullBleed` child can use
-                  `flex-1` to fill the remaining viewport height. For regular
-                  (non-bleed) pages the inner div renders at its natural height
-                  inside this column, which is functionally identical to the
-                  previous single-div layout.
+                  Topbar lives INSIDE `main` so the scroll context belongs to
+                  the same element. That lets the topbar's sticky positioning
+                  pin to the top of the scroll container and the scrolling
+                  content passes *behind* it, which is what makes
+                  `backdrop-filter: blur(...)` actually show frosted glass.
+                  For `fullBleed` pages main is not a scroll container; the
+                  topbar simply sits at the top as a regular flex item.
                 -->
-                <main class="flex min-h-0 flex-1 flex-col">
+                <main
+                    :class="['flex min-h-0 flex-1 flex-col', !fullBleed && 'overflow-y-auto']"
+                    @scroll.passive="onMainScroll"
+                >
+                    <Topbar
+                        :title="title"
+                        :sidebar-collapsed="sidebarCollapsed"
+                        :scrolled="scrolled"
+                        @toggle-sidebar="toggleSidebar"
+                        @open-palette="openPalette"
+                    />
+
                     <div
                         v-if="fullBleed"
                         class="flex min-h-0 flex-1 flex-col"
