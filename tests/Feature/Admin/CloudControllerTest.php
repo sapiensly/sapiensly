@@ -58,18 +58,18 @@ test('cloud page surfaces storage driver, bucket, region when configured', funct
             ->where('storage.usedBytes', null));
 });
 
-test('pgvector section reports disabled when the extension is not installed', function () {
-    // SQLite in the test suite — pgvector is impossible here, so the
-    // endpoint must degrade to `enabled: false` without erroring.
+test('pgvector section reports enabled when the extension is installed', function () {
+    // Postgres test DB has pgvector installed (created by migrations), so the
+    // endpoint reports enabled=true with the embedding index registered.
     $admin = sysadminForCloud();
 
     $this->actingAs($admin)
         ->get('/admin/cloud')
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('pgvector.enabled', false)
-            ->where('pgvector.indexCount', 0)
-            ->where('pgvector.vectorCount', 0));
+            ->where('pgvector.enabled', true)
+            ->has('pgvector.indexCount')
+            ->has('pgvector.vectorCount'));
 });
 
 test('non-sysadmin is blocked from /admin/cloud', function () {

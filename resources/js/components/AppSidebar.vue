@@ -3,6 +3,7 @@ import AdminDashboardController from '@/actions/App/Http/Controllers/Admin/Admin
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
+import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
 import * as IntegrationController from '@/actions/App/Http/Controllers/IntegrationController';
@@ -28,6 +29,7 @@ import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
+    AppWindow,
     BookOpen,
     Bot,
     BrainCircuit,
@@ -52,6 +54,11 @@ const page = usePage();
 const { isSysAdmin } = usePermissions();
 
 const mainNavItems = computed<NavItem[]>(() => [
+    {
+        title: t('nav.apps'),
+        href: AppController.index(),
+        icon: AppWindow,
+    },
     {
         title: t('nav.flows'),
         href: FlowController.globalIndex(),

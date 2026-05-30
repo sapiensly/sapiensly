@@ -56,4 +56,14 @@ return [
         ],
     ],
 
+    /*
+     * Node.js binary used to run the QuickJS sandbox for workflow script.run
+     * steps. PHP-FPM and queue workers often don't inherit the interactive
+     * shell's PATH, so set NODE_BINARY to an absolute path in those
+     * environments (e.g. Herd's bundled node). Defaults to the bare `node`.
+     */
+    'node' => [
+        'binary' => env('NODE_BINARY', 'node'),
+    ],
+
 ];

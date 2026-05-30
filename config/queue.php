@@ -68,7 +68,11 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            // Must be >= the longest job timeout in any supervisor that pulls
+            // from this connection. supervisor-ai is 300s for Builder AI runs;
+            // we add a safety margin so a slow Anthropic response doesn't
+            // trigger a re-enqueue and get killed with MaxAttemptsExceeded.
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 420),
             'block_for' => null,
             'after_commit' => false,
         ],

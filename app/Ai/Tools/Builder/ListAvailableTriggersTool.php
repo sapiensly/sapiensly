@@ -1,0 +1,49 @@
+<?php
+
+namespace App\Ai\Tools\Builder;
+
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+
+/**
+ * Closed catalog of workflow triggers Claude is allowed to propose. The
+ * engine refuses unknown trigger types, so listing them up-front saves the
+ * model from inventing things like 'cron' or 'pubsub' that don't exist yet.
+ */
+class ListAvailableTriggersTool implements Tool
+{
+    public function name(): string
+    {
+        return 'list_available_triggers';
+    }
+
+    public function description(): string
+    {
+        return 'List the trigger types you may use inside workflow.trigger. Each entry includes the required arguments. Call this before proposing a workflow.';
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [];
+    }
+
+    public function handle(Request $request): string
+    {
+        $catalog = [
+            ['type' => 'manual', 'props' => 'label? — fired by a run_workflow action from a button'],
+            ['type' => 'record.created', 'props' => 'object_id (required), filter? — fires after a record of that object is created. Trigger payload: {record: {id, data, object_definition_id, ...}}'],
+            ['type' => 'record.updated', 'props' => 'object_id (required), filter? — fires after a record is updated. Payload also includes `before` snapshot and `changed` array of field slugs.'],
+            ['type' => 'record.deleted', 'props' => 'object_id (required), filter? — fires after a record is deleted. Payload carries the final record snapshot.'],
+        ];
+
+        return json_encode([
+            'triggers' => $catalog,
+            'context_tokens' => [
+                '{{trigger.<path>}}' => 'access trigger payload — e.g. {{trigger.record.data.nombre}}',
+                '{{vars.<X>}}' => 'workflow-scoped variable set by a set_variable step or output_variable',
+                '{{steps.<step_id>.output.<X>}}' => 'output of a previous step in the same workflow',
+            ],
+        ], JSON_THROW_ON_ERROR);
+    }
+}

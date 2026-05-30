@@ -2,3 +2,7 @@
 !private/
 !public/
 !.gitignore
+# The app-manifest JSON Schema is SOURCE the ManifestValidator loads at runtime,
+# not writable storage — it must be version-controlled.
+!schemas/
+!schemas/**

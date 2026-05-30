@@ -1,0 +1,79 @@
+<?php
+
+namespace App\Ai\Tools\Builder;
+
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+
+/**
+ * Catalog of UI block types Claude is allowed to put in a page. Hard-coded so
+ * the model cannot invent unsupported types — the runtime would refuse to
+ * render them anyway, this gives Claude the same context up-front.
+ */
+class ListAvailableComponentsTool implements Tool
+{
+    public function name(): string
+    {
+        return 'list_available_components';
+    }
+
+    public function description(): string
+    {
+        return 'List the UI block types you may use inside page.blocks. The runtime can only render these types — any other type will fail validation.';
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [];
+    }
+
+    public function handle(Request $request): string
+    {
+        $catalog = [
+            ['type' => 'container', 'description' => 'Layout group. Has direction (row|column), gap, and nested blocks.'],
+            ['type' => 'text', 'description' => 'Paragraph of body text. Has content (string) and size (xs|sm|base|lg|xl).'],
+            ['type' => 'heading', 'description' => 'Section heading. Props: content, level (1-6, semantic), and optional size (sm|md|lg|xl|2xl|display) to override the visual size. Defaults are already website-scaled (h2 ≈ 2xl/3xl); use size="display" for a big landing section title or size="sm" to tone one down.'],
+            ['type' => 'divider', 'description' => 'Horizontal rule, no props.'],
+            ['type' => 'spacer', 'description' => 'Vertical gap. Has size (sm|md|lg|xl).'],
+            ['type' => 'table', 'description' => 'Tabular list of records. Requires data_source ({object_id, filter?, sort?}) and columns[]. Each column is EITHER a data column `{id, field_id, label_override?, width?}` OR an action column `{id, type:"action", label, icon?, variant? (primary|secondary|danger|ghost), confirm? {title, message}, on_click: [actions]}`. Inside on_click you can reference the clicked row via {{row.id}} and {{row.data.<slug>}} — e.g. an "update_record" action with record_id_expression="{{row.id}}" and values={completada:true} toggles a checkbox per row. The `icon` prop accepts either a single emoji (✓, ✏️, 🗑️) OR one of these Lucide names: check, pencil, edit, trash, x, close, plus, add, refresh, send. Any other string renders as plain text next to the label. Use action columns for inline Mark / Edit / Delete buttons; do NOT try to use formula fields or extra buttons outside the table.'],
+            ['type' => 'stat', 'description' => 'Single numeric KPI card. Requires label, query ({object_id, filter?}), aggregation (count|sum|avg|min|max). field_id is required for sum/avg/min/max. Optional: format, icon (emoji), and a TREND chip — set `compare` (a second query, e.g. the previous period via a sys_created_at filter) and `delta_good` (up|down: which way is good) to show the % change with an up/down arrow coloured green/red.'],
+            ['type' => 'insight', 'description' => 'A callout card for an insight, conclusion, recommendation or warning written by you from the data. Props: variant (insight|recommendation|conclusion|positive|warning|risk — sets colour + icon), title (required), body?, icon? (emoji override), metric? (a big highlighted figure like "+34%"). Use these in dashboards/reports to summarise findings and next steps — stack several, or pair each with its chart.'],
+            ['type' => 'form', 'description' => 'User-editable form. Requires object_id and mode (create|edit). Optional: fields ([{field_id, label_override?, default_expression?, readonly_expression?, visible_if?, required_if?}]), submit_label, on_submit (action sequence), on_cancel. mode=edit also requires record_id_expression. Per-field options: `default_expression` pre-fills the initial value (resolved server-side; use {{current_user.id}}, {{today()}}, {{now()}}). `readonly_expression` resolves to a boolean that disables the field. `visible_if` / `required_if` are STRUCTURED conditions {field_id, op, value} evaluated live against another field of THIS form — op ∈ eq|neq|gt|gte|lt|lte|in|not_in|contains|is_null|is_not_null|is_truthy|is_falsy (omit value for is_* ops, array for in/not_in). Example: show "motivo" only when estado == "rechazado" → visible_if {field_id:"<estado fld id>", op:"eq", value:"rechazado"}. Hidden fields are not submitted; required_if is enforced before submit.'],
+            ['type' => 'button', 'description' => 'Clickable button that fires on_click (action sequence). Requires label and on_click. Optional: variant (primary|secondary|danger|ghost), size, icon, confirm ({title, message}).'],
+            ['type' => 'modal', 'description' => 'Dialog opened/closed by open_modal/close_modal actions. Props: title (string), description? (string — sub-title that also satisfies the a11y aria-describedby; if omitted, a sr-only fallback is rendered), size (sm|md|lg), blocks (nested, typically a form). Reference its id from a button via open_modal.'],
+            ['type' => 'chart', 'description' => 'Visualisation of aggregated records. Requires chart_type and data_source (query block) + aggregation (count|sum|avg|min|max). chart_type: bar (vertical columns), hbar (horizontal bars/progress), line, area, pie, donut, radar (3+ categories on radial axes — good for multi-metric profiles), scatter (raw x/y points — set x_field_id AND y_field_id, both numeric). For sum/avg/min/max pass y_field_id (numeric). Use group_by_field_id (typically single_select) to split the series; without it the whole result becomes one bucket. hbar suits long labels; bar suits few categories; radar suits comparing one entity across several dimensions; scatter suits correlation between two numeric fields; treemap suits part-to-whole SEGMENTATION (each group_by bucket is a rectangle sized by its share).'],
+            ['type' => 'word_cloud', 'description' => 'Word cloud sized by frequency. Requires data_source and field_id (the field whose values become words — e.g. a single_select/multi_select category or a short text field). Optional: label, max_words (5-120, default 40). Each distinct value is sized by how often it appears.'],
+            ['type' => 'flow', 'description' => 'Flowchart / process diagram (static — you define the steps). Props: steps[] each {label, description?, icon? (emoji)}, direction (row|column, default row), label?. Renders connected steps with numbered nodes and arrows. Use for processes, pipelines, "how it works" sections.'],
+            ['type' => 'kanban', 'description' => 'Read-only kanban board. Requires data_source, group_by_field_id (must be single_select — its options become the columns) and card_title_field_id. Optional: card_meta_fields ([{field_id}]) for secondary lines on each card. No drag-and-drop yet.'],
+            ['type' => 'calendar', 'description' => 'Month calendar of records. Requires data_source, date_field_id (date|datetime field — drives when each event lands) and title_field_id. Optional: color_field_id (single_select) — each event picks up the option color as its accent.'],
+            ['type' => 'markdown', 'description' => 'Static rich text rendered from a markdown string. Just one prop: content. Good for intros, instructions, FAQs, hero copy. Supports headings, lists, bold/italic, links, code blocks, tables and blockquotes.'],
+            ['type' => 'image', 'description' => 'Static image from a URL. Props: src (required), alt, fit (contain|cover|fill), rounded, max_height (px). For real-looking photos on content/marketing pages use a stable stock URL: "https://picsum.photos/seed/<word>/1200/800" — pick a different <word> per image (e.g. solar, forest, ocean) so each is distinct. Do NOT use source.unsplash.com (that endpoint is retired and returns errors). Always set a descriptive alt. NOT for record attachments yet.'],
+            ['type' => 'hero', 'description' => 'Full-width hero banner for the top of a landing/marketing page. Props: title (required), subtitle?, background_image? (stock URL like https://picsum.photos/seed/<word>/1600/900 — NOT source.unsplash.com, which is retired), overlay? (bool, default true — darkens the image so the white hero text stays readable), align? (left|center), min_height? (200-900 px), cta? {label, on_click:[actions]}. Use this as the FIRST block of a website home page for visual impact.'],
+            ['type' => 'feature_grid', 'description' => 'Responsive grid of feature/benefit cards. Props: columns? (2|3|4, default 3), items[] each {icon? (an EMOJI like 🌍⚡🌱), title, description?}. Cards are transparent and inherit the section colour, so place inside a styled section. THE way to do a "3 features / benefits / steps" row — do not fake it with split_view.'],
+            ['type' => 'cta', 'description' => 'Call-to-action band: a centred title + subtitle + one button. Props: title (required), subtitle?, align? (left|center), button? {label, on_click:[actions]}. Put it (usually with a bold style.background or style.gradient + style.full_bleed) as the LAST section to drive an action.'],
+            ['type' => 'stat_band', 'description' => 'A row of big headline numbers. Props: items[] each {value (e.g. "1.1°C", "51B"), label}. The numbers use the brand accent. Great right under the hero to show impact/scale.'],
+            ['type' => 'testimonials', 'description' => 'Quote cards. Props: columns? (1|2|3, default 3), items[] each {quote, author?, role?, avatar? (URL)}. Builds trust on landing pages.'],
+            ['type' => 'faq', 'description' => 'Accordion of questions. Props: items[] each {question, answer}. First item open by default; one expands at a time.'],
+            ['type' => 'pricing', 'description' => 'Pricing tiers. Props: columns? (2|3|4), tiers[] each {name, price (e.g. "$29"), period? ("/mes"), featured? (bool — highlighted with accent), features? [strings], cta? {label, on_click:[actions]}}.'],
+            ['type' => 'metric_grid', 'description' => 'Several stats laid out in a responsive grid. Props: columns (1-6, default 3) and items[] where each item has {id, label, query, aggregation, field_id?, format?, icon?, compare?, delta_good?} — same shape as a stat block (including the optional trend chip). Prefer this over multiple stat blocks side by side, e.g. as the KPI row at the top of a dashboard.'],
+            ['type' => 'sparkline', 'description' => 'Compact line showing a trend without axis labels. Requires data_source. Optional: x_field_id (typically a date, used to bucket+sort), y_field_id (numeric, defaults to count(*)), aggregation (default count), color (hex), label.'],
+            ['type' => 'gauge', 'description' => 'Half-circle gauge showing one aggregate against a max_value (required). Props: label, query, aggregation (count|sum|avg|min|max), field_id (required for non-count), max_value (number — the 100% mark), format (number|currency|percentage), color (hex). Use for goals/quotas.'],
+            ['type' => 'heatmap', 'description' => 'GitHub-style activity heatmap. Requires data_source and date_field_id. Optional: weeks (4-104, default 26), color (hex). Each cell is one day; intensity is the row count for that day.'],
+            ['type' => 'timeline', 'description' => 'Vertical timeline sorted by date (newest first). Requires data_source, date_field_id (date|datetime) and title_field_id. Optional: description_field_id (long_text|string), color_field_id (single_select). Good for activity logs, notes, comms history.'],
+            ['type' => 'funnel', 'description' => 'Conversion funnel — each stage is its own aggregate query (likely the same object with a different filter). Props: label, stages[] where each stage has {id, label, query, aggregation (count|sum|avg), field_id?, color?}. The first stage is the 100% baseline; later stages show conversion %.'],
+            ['type' => 'map', 'description' => 'Interactive map (maplibre + free OpenFreeMap tiles, no API key). Requires data_source, lat_field_id and lng_field_id (both number fields). Optional: popup_field_id (text shown on marker click), color_field_id (single_select), height_px (200-800, default 400). The map auto-fits to the markers.'],
+            ['type' => 'tabs', 'description' => 'Tabbed panel. Each tab has its own nested blocks array. Props: tabs[] ([{id, label, icon?, blocks[]}]), default_tab_id?. Use to organise a busy page (e.g. tabs for Overview / Records / Settings).'],
+            ['type' => 'accordion', 'description' => 'Collapsible sections. Props: sections[] ([{id, title, default_open?, blocks[]}]), allow_multiple? (default false — opening one closes the others). Use for FAQs, advanced settings, optional details.'],
+            ['type' => 'split_view', 'description' => 'Two-column layout. Props: left_blocks[], right_blocks[], left_fraction? (1-11, default 4 → 1/3 left, 2/3 right). Use for master-detail layouts (e.g. left a table, right a summary). MVP is static — no row-click linking between sides yet.'],
+            ['type' => 'card_grid', 'description' => 'Records rendered as cards in a responsive grid (alternative to table when visual scan beats density). Requires data_source and title_field_id. Optional: columns (1-6, default 3), subtitle_field_id, image_field_id (string field with a URL), meta_fields[].'],
+            ['type' => 'multi_step_form', 'description' => 'Wizard form that splits fields across N ordered steps. Requires object_id, mode (create|edit), and steps[] where each step has {id, title, description?, fields[{field_id, label_override?, default_expression?, readonly_expression?, visible_if?, required_if?}]} (same per-field options as the `form` block). Optional: show_progress (default true) for the numbered indicator at the top, submit_label, cancel_label, on_submit (action sequence), on_cancel. mode=edit also requires record_id_expression. Use this instead of `form` when you have 8+ fields or a logical grouping (Personal info → Address → Preferences). Required fields are validated locally before advancing; the backend re-checks everything on submit. Each field_id can appear in at most one step.'],
+        ];
+
+        return json_encode([
+            'components' => $catalog,
+            'site' => 'A website should have site chrome + a cohesive look, set in manifest `settings`: `accent` ("#RRGGBB" — the ONE brand colour; drives all buttons/links/highlights, set it once per site), `font` (sans|serif|rounded|mono), `theme` (light|dark, default light), `brand` {name, logo? (URL), cta? {label, href}} → renders a sticky site header, and `footer` {text?, links?[{label,href}]} → renders a site footer. Always set `accent` and `brand` for a real website so it does not look like a bare document.',
+            'style' => 'EVERY block accepts an optional `style` object to turn it into a section: {padding, margin (none|sm|md|lg), background "#RRGGBB", gradient {from,to,direction:to-b|to-r|to-br|to-tr}, color "#RRGGBB", max_width (sm|md|lg|full), full_bleed (bool)}. Build alternating sections by wrapping a `container` with style.padding="lg" + a background (flat `background` or a `gradient` — keep gradient from/to in the same tonal family). TEXT CONTRAST IS AUTOMATIC: setting background/gradient auto-picks a legible text colour (dark on light, light on dark) — do NOT set `color` and do NOT also put a background on inner heading/markdown. Set style.full_bleed=true on top-level coloured sections so the band spans edge-to-edge. Set style.max_width="md" on text sections so lines stay readable and centre on wide screens. Use this for visual rhythm — never leave a content page as plain text.',
+        ], JSON_THROW_ON_ERROR);
+    }
+}

@@ -44,5 +44,6 @@ require __DIR__.'/chatbots.php';
 require __DIR__.'/system.php';
 require __DIR__.'/whatsapp.php';
 require __DIR__.'/flows.php';
+require __DIR__.'/apps.php';
 require __DIR__.'/admin.php';
 require __DIR__.'/auth.php';

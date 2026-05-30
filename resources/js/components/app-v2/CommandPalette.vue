@@ -2,6 +2,7 @@
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
+import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
@@ -21,6 +22,7 @@ import {
 import { dashboard } from '@/routes';
 import { router } from '@inertiajs/vue3';
 import {
+    AppWindow,
     Bot,
     BrainCircuit,
     Cloud,
@@ -73,6 +75,13 @@ const navCommands = computed<PaletteCommand[]>(() => [
         label: t('app_v2.nav.dashboard'),
         icon: LayoutGrid,
         perform: () => router.visit(dashboard()),
+    },
+    {
+        id: 'nav-apps',
+        group: t('app_v2.palette.navigation'),
+        label: t('app_v2.nav.apps'),
+        icon: AppWindow,
+        perform: () => router.visit(AppController.index()),
     },
     {
         id: 'nav-flows',

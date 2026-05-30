@@ -171,6 +171,22 @@
     body {
         @apply bg-background text-foreground;
     }
+
+    /*
+     * Tailwind's preflight resets <button> cursor to default. That's the
+     * opposite of what the rest of the app wants — interactive controls
+     * should signal "I am clickable". Disabled buttons still get the proper
+     * not-allowed cursor so the affordance stays accurate.
+     */
+    button:not(:disabled),
+    [role='button']:not([aria-disabled='true']),
+    summary {
+        cursor: pointer;
+    }
+    button:disabled,
+    [role='button'][aria-disabled='true'] {
+        cursor: not-allowed;
+    }
 }
 
 /* Impersonation: push sidebar and content below the fixed banner */
@@ -294,4 +310,31 @@
         opacity: 1;
         transform: translate(-50%, 0);
     }
+}
+
+/*
+ * A block styled with a custom background/color (AppRenderer adds `.sp-styled`)
+ * forces its descendant text to inherit that colour. The descendant selector
+ * (0,1,1) outranks the theme token utility class (0,1,0) the block components
+ * apply (e.g. `text-ink`), so author-coloured sections stay legible without
+ * each block component having to opt in. Links keep the accent colour.
+ */
+.sp-styled :is(h1, h2, h3, h4, h5, h6, p, li, strong, em, blockquote, span:not(.sr-only)) {
+    color: inherit;
+}
+
+/*
+ * Full-bleed section: extends edge-to-edge of the page content area by
+ * cancelling the surrounding horizontal padding. The host (runtime page or
+ * Builder preview) sets --sp-bleed to its own content padding; defaults to the
+ * runtime content box's p-5 (1.25rem).
+ */
+.sp-bleed {
+    margin-inline: calc(-1 * var(--sp-bleed, 1.25rem));
+}
+
+/* Scroll-reveal for top-level sections (opt-in via useScrollReveal). */
+@media (prefers-reduced-motion: no-preference) {
+    .sp-reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .sp-reveal-in { opacity: 1; transform: none; }
 }

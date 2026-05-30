@@ -41,6 +41,17 @@ function makeDocumentForKb(KnowledgeBase $kb): Document
     ]);
 }
 
+/**
+ * pgvector column is vector(1536) for text-embedding-3-small. Tests need a
+ * 1536-element array; the first slot drives ordering when needed.
+ *
+ * @return list<float>
+ */
+function dummyEmbedding(float $head = 0.1): array
+{
+    return [$head, ...array_fill(0, 1535, 0.0)];
+}
+
 test('insertChunks writes rows to the KB default connection', function () {
     $kb = makeKbForTest();
     $doc = makeDocumentForKb($kb);
@@ -48,7 +59,7 @@ test('insertChunks writes rows to the KB default connection', function () {
     $this->service->insertChunks(
         $kb,
         [
-            ['content' => 'a', 'index' => 0, 'metadata' => ['p' => 1], 'embedding' => [0.1, 0.2]],
+            ['content' => 'a', 'index' => 0, 'metadata' => ['p' => 1], 'embedding' => dummyEmbedding(0.1)],
             ['content' => 'b', 'index' => 1, 'metadata' => null, 'embedding' => null],
         ],
         'text-embedding-3-small',
@@ -74,16 +85,19 @@ test('insertChunks serializes array embeddings as pgvector strings', function ()
     $kb = makeKbForTest();
     $doc = makeDocumentForKb($kb);
 
+    $embedding = dummyEmbedding(0.1);
     $this->service->insertChunks(
         $kb,
-        [['content' => 'x', 'index' => 0, 'metadata' => null, 'embedding' => [0.1, 0.2, 0.3]]],
+        [['content' => 'x', 'index' => 0, 'metadata' => null, 'embedding' => $embedding]],
         'm',
         documentId: $doc->id,
     );
 
-    // Read the raw column (bypass the Pgvector cast) to assert the wire format.
+    // pgvector returns the canonical text form of the vector. Just check the
+    // wire format starts with our head value and has the expected shape.
     $raw = DB::table('knowledge_base_chunks')->where('knowledge_base_id', $kb->id)->value('embedding');
-    expect($raw)->toBe('[0.1,0.2,0.3]');
+    expect($raw)->toStartWith('[0.1,')
+        ->and(substr_count($raw, ','))->toBe(1535);
 });
 
 test('deleteForDocumentInKnowledgeBase removes only matching rows', function () {
@@ -238,38 +252,34 @@ test('searchSimilar returns empty when the query embedding is empty', function (
     expect($this->service->searchSimilar([$kb->id], [], 5, 0.7))->toBeEmpty();
 });
 
-test('searchSimilar on non-pgsql returns chunks scoped to the given KBs with placeholder distance', function () {
+test('searchSimilar scopes results to the given KB ids', function () {
     $kbA = makeKbForTest();
     $kbB = makeKbForTest();
     $docA = makeDocumentForKb($kbA);
     $docB = makeDocumentForKb($kbB);
 
-    // Write chunks to two different KBs — the sqlite fallback can't compare
-    // vector distance, but it should still scope by KB id.
     $this->service->insertChunks(
         $kbA,
         [
-            ['content' => 'a1', 'index' => 0, 'metadata' => null, 'embedding' => [0.1, 0.2]],
-            ['content' => 'a2', 'index' => 1, 'metadata' => null, 'embedding' => [0.3, 0.4]],
+            ['content' => 'a1', 'index' => 0, 'metadata' => null, 'embedding' => dummyEmbedding(0.1)],
+            ['content' => 'a2', 'index' => 1, 'metadata' => null, 'embedding' => dummyEmbedding(0.2)],
         ],
         'm',
         documentId: $docA->id,
     );
     $this->service->insertChunks(
         $kbB,
-        [['content' => 'b1', 'index' => 0, 'metadata' => null, 'embedding' => [0.5, 0.6]]],
+        [['content' => 'b1', 'index' => 0, 'metadata' => null, 'embedding' => dummyEmbedding(0.9)]],
         'm',
         documentId: $docB->id,
     );
 
-    $results = $this->service->searchSimilar([$kbA->id], [0.1, 0.2], 10, 0.7);
+    // Generous distance threshold so pgvector cosine returns all chunks of the
+    // queried KB regardless of head value.
+    $results = $this->service->searchSimilar([$kbA->id], dummyEmbedding(0.1), 10, -1.0);
 
     expect($results)->toHaveCount(2)
         ->and($results->pluck('knowledge_base_id')->unique()->values()->all())->toBe([$kbA->id]);
-
-    foreach ($results as $row) {
-        expect((float) $row->distance)->toBe(0.0);
-    }
 });
 
 test('searchSimilar respects the topK limit', function () {
@@ -278,11 +288,11 @@ test('searchSimilar respects the topK limit', function () {
 
     $chunks = [];
     for ($i = 0; $i < 6; $i++) {
-        $chunks[] = ['content' => "c{$i}", 'index' => $i, 'metadata' => null, 'embedding' => [0.1]];
+        $chunks[] = ['content' => "c{$i}", 'index' => $i, 'metadata' => null, 'embedding' => dummyEmbedding(0.1 + $i * 0.01)];
     }
     $this->service->insertChunks($kb, $chunks, 'm', documentId: $doc->id);
 
-    $results = $this->service->searchSimilar([$kb->id], [0.1], 3, 0.7);
+    $results = $this->service->searchSimilar([$kb->id], dummyEmbedding(0.1), 3, -1.0);
 
     expect($results)->toHaveCount(3);
 });
@@ -294,14 +304,14 @@ test('searchSimilar skips chunks without an embedding', function () {
     $this->service->insertChunks(
         $kb,
         [
-            ['content' => 'with', 'index' => 0, 'metadata' => null, 'embedding' => [0.1]],
+            ['content' => 'with', 'index' => 0, 'metadata' => null, 'embedding' => dummyEmbedding(0.1)],
             ['content' => 'without', 'index' => 1, 'metadata' => null, 'embedding' => null],
         ],
         'm',
         documentId: $doc->id,
     );
 
-    $results = $this->service->searchSimilar([$kb->id], [0.1], 10, 0.7);
+    $results = $this->service->searchSimilar([$kb->id], dummyEmbedding(0.1), 10, -1.0);
 
     expect($results)->toHaveCount(1)
         ->and($results->first()->content)->toBe('with');
