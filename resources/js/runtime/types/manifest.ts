@@ -121,6 +121,8 @@ export interface BlockStat extends BlockBase {
     aggregation: 'count' | 'sum' | 'avg' | 'min' | 'max';
     field_id?: string;
     format?: 'number' | 'currency' | 'percentage' | 'duration';
+    icon?: string;
+    delta_good?: 'up' | 'down';
 }
 
 export type AnyBlock = BlockContainer | BlockText | BlockHeading | BlockDivider | BlockSpacer | BlockTable | BlockStat;
@@ -149,6 +151,7 @@ export interface TableBlockData {
 
 export interface StatBlockData {
     value: number;
+    compare_value?: number;
 }
 
 /**

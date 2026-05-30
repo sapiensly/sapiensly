@@ -1009,6 +1009,22 @@ class ManifestValidator
                 continue;
             }
 
+            if ($block['type'] === 'pricing') {
+                foreach ($block['tiers'] ?? [] as $tIdx => $tier) {
+                    if (isset($tier['cta']['on_click'])) {
+                        $this->validateActionSequence(
+                            $tier['cta']['on_click'],
+                            "{$blockPath}/tiers/{$tIdx}/cta/on_click",
+                            $objectsById,
+                            $modalIdsInPage,
+                            $errors,
+                        );
+                    }
+                }
+
+                continue;
+            }
+
             if ($block['type'] === 'table') {
                 $objectId = $block['data_source']['object_id'] ?? null;
                 if ($objectId === null || ! isset($objectsById[$objectId])) {

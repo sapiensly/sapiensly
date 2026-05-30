@@ -33,6 +33,13 @@ const BlockMultiStepForm = defineAsyncComponent(() => import('./blocks/BlockMult
 const BlockHero = defineAsyncComponent(() => import('./blocks/BlockHero.vue'));
 const BlockFeatureGrid = defineAsyncComponent(() => import('./blocks/BlockFeatureGrid.vue'));
 const BlockCta = defineAsyncComponent(() => import('./blocks/BlockCta.vue'));
+const BlockStatBand = defineAsyncComponent(() => import('./blocks/BlockStatBand.vue'));
+const BlockInsight = defineAsyncComponent(() => import('./blocks/BlockInsight.vue'));
+const BlockWordCloud = defineAsyncComponent(() => import('./blocks/BlockWordCloud.vue'));
+const BlockFlow = defineAsyncComponent(() => import('./blocks/BlockFlow.vue'));
+const BlockTestimonials = defineAsyncComponent(() => import('./blocks/BlockTestimonials.vue'));
+const BlockFaq = defineAsyncComponent(() => import('./blocks/BlockFaq.vue'));
+const BlockPricing = defineAsyncComponent(() => import('./blocks/BlockPricing.vue'));
 
 const componentForType = {
     container: BlockContainer,
@@ -65,6 +72,13 @@ const componentForType = {
     hero: BlockHero,
     feature_grid: BlockFeatureGrid,
     cta: BlockCta,
+    stat_band: BlockStatBand,
+    insight: BlockInsight,
+    word_cloud: BlockWordCloud,
+    flow: BlockFlow,
+    testimonials: BlockTestimonials,
+    faq: BlockFaq,
+    pricing: BlockPricing,
 } as const;
 
 type SupportedType = keyof typeof componentForType;

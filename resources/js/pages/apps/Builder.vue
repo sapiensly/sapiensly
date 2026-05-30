@@ -13,6 +13,9 @@ import {
 } from '@/lib/builderSlashCommands';
 import echo from '@/echo';
 import AppRenderer from '@/runtime/AppRenderer.vue';
+import SiteHeader from '@/runtime/SiteHeader.vue';
+import SiteFooter from '@/runtime/SiteFooter.vue';
+import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import type { BlockData, ObjectDef, PageDef, PageSummary } from '@/runtime/types/manifest';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -714,6 +717,12 @@ const previewCurrency = computed(() => props.preview?.settings.default_currency 
 const previewTheme = computed<'light' | 'dark'>(() =>
     (props.preview?.settings as { theme?: 'light' | 'dark' } | undefined)?.theme ?? 'light',
 );
+
+// Brand / footer / accent+font for the previewed site (mirrors the runtime page).
+const previewSettings = computed(() => (props.preview?.settings ?? {}) as Record<string, unknown>);
+const previewBrand = computed(() => ({ name: props.app.name, ...((previewSettings.value.brand as object) ?? {}) }));
+const previewFooter = computed(() => previewSettings.value.footer as { text?: string; links?: { label: string; href: string }[] } | undefined);
+const previewSurfaceStyle = computed(() => ({ '--sp-bleed': '1.25rem', ...runtimeSettingsStyle(previewSettings.value as { accent?: string; font?: string }) }));
 
 // Provide the App slug for BlockForm/BlockButton inside the preview so any
 // action they fire goes to /r/{slug}/actions just like in the real runtime.
@@ -1684,15 +1693,19 @@ function statusTone(status: Message['status']): string {
                             preview ? (previewTheme === 'light' ? 'bg-white' : 'bg-slate-950') : '',
                         ]"
                     >
-                        <div v-if="preview" data-preview-content class="space-y-4" :style="{ '--sp-bleed': '1.25rem' }">
-                            <AppRenderer
-                                :blocks="preview.page.blocks"
-                                :block-data="preview.block_data"
-                                :objects="preview.objects"
-                                :locale="previewLocale"
-                                :default-currency="previewCurrency"
-                                :theme="previewTheme"
-                            />
+                        <div v-if="preview" data-preview-content :style="previewSurfaceStyle">
+                            <SiteHeader :brand="previewBrand" :pages="preview.pages" :current-slug="preview.page.slug" />
+                            <div class="space-y-4 py-6">
+                                <AppRenderer
+                                    :blocks="preview.page.blocks"
+                                    :block-data="preview.block_data"
+                                    :objects="preview.objects"
+                                    :locale="previewLocale"
+                                    :default-currency="previewCurrency"
+                                    :theme="previewTheme"
+                                />
+                            </div>
+                            <SiteFooter :footer="previewFooter" :brand-name="previewBrand.name" />
                         </div>
                         <div
                             v-else

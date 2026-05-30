@@ -1,60 +1,57 @@
 <script setup lang="ts">
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import AppRenderer from '@/runtime/AppRenderer.vue';
+import SiteHeader from '@/runtime/SiteHeader.vue';
+import SiteFooter from '@/runtime/SiteFooter.vue';
+import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
+import { useScrollReveal } from '@/runtime/useReveal';
 import type { RuntimePageProps } from '@/runtime/types/manifest';
-import { computed, provide } from 'vue';
+import { computed, provide, ref } from 'vue';
 
 const props = defineProps<RuntimePageProps>();
 
-const locale = computed(() => props.manifest.settings.default_locale ?? 'es-MX');
-const defaultCurrency = computed(() => props.manifest.settings.default_currency ?? 'MXN');
-const theme = computed(() => props.manifest.settings.theme ?? 'light');
+const settings = computed(() => props.manifest.settings ?? {});
+const locale = computed(() => settings.value.default_locale ?? 'es-MX');
+const defaultCurrency = computed(() => settings.value.default_currency ?? 'MXN');
+const theme = computed(() => settings.value.theme ?? 'light');
 
-// Provide the App slug so BlockForm/BlockButton can POST to /r/{slug}/actions
-// without parsing window.location themselves.
+// Brand defaults to the app name so the site header is never empty.
+const brand = computed(() => ({ name: props.app.name, ...(settings.value.brand ?? {}) }));
+const footer = computed(() => settings.value.footer);
+// Accent colour + font family as CSS vars / inline style on the page surface.
+const surfaceStyle = computed(() => ({ '--sp-bleed': '1.25rem', ...runtimeSettingsStyle(settings.value) }));
+
+const hrefFor = (slug: string) => `/r/${props.app.slug}/${slug}`;
+
+// Provide the App slug so BlockForm/BlockButton can POST to /r/{slug}/actions.
 provide('appSlug', props.app.slug);
+
+const sectionsEl = ref<HTMLElement | null>(null);
+useScrollReveal(sectionsEl);
 </script>
 
 <template>
     <Head :title="`${app.name} · ${page.name}`" />
 
     <AppLayoutV2 :title="app.name">
-        <div class="space-y-6">
-            <header class="flex flex-col gap-3 border-b border-soft pb-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                    <p class="text-[11px] uppercase tracking-wider text-ink-subtle">
-                        {{ app.name }}
-                    </p>
-                    <h1 class="text-[22px] font-semibold leading-tight text-ink">
-                        {{ page.name }}
-                    </h1>
-                </div>
+        <div
+            :class="[
+                'overflow-hidden rounded-sp-sm transition-colors',
+                theme === 'light' ? 'bg-white' : 'bg-slate-950',
+            ]"
+            :style="surfaceStyle"
+        >
+            <div class="px-5">
+                <SiteHeader
+                    :brand="brand"
+                    :pages="manifest.pages"
+                    :current-slug="page.slug"
+                    :href-for="hrefFor"
+                />
+            </div>
 
-                <nav v-if="manifest.pages.length > 1" class="flex flex-wrap gap-1.5">
-                    <Link
-                        v-for="p in manifest.pages"
-                        :key="p.id"
-                        :href="`/r/${app.slug}/${p.slug}`"
-                        :class="[
-                            'inline-flex items-center rounded-pill border px-3 py-1 text-xs transition-colors',
-                            p.slug === page.slug
-                                ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                                : 'border-medium bg-white/5 text-ink-muted hover:border-strong hover:text-ink',
-                        ]"
-                    >
-                        {{ p.name }}
-                    </Link>
-                </nav>
-            </header>
-
-            <div
-                :class="[
-                    'space-y-4 overflow-hidden rounded-sp-sm p-5 transition-colors',
-                    theme === 'light' ? 'bg-white' : 'bg-slate-950',
-                ]"
-                :style="{ '--sp-bleed': '1.25rem' }"
-            >
+            <div ref="sectionsEl" class="space-y-4 px-5 py-6">
                 <AppRenderer
                     :blocks="page.blocks"
                     :block-data="blockData"
@@ -63,6 +60,10 @@ provide('appSlug', props.app.slug);
                     :default-currency="defaultCurrency"
                     :theme="theme"
                 />
+            </div>
+
+            <div class="px-5">
+                <SiteFooter :footer="footer" :brand-name="brand.name" />
             </div>
         </div>
     </AppLayoutV2>

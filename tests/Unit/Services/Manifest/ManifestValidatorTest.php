@@ -617,6 +617,103 @@ it('rejects an invalid style.max_width value', function () {
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
 });
 
+it('accepts site settings (accent, font, brand, footer) and the marketing blocks', function () {
+    $manifest = baseManifest();
+    $manifest['settings'] = array_merge($manifest['settings'] ?? [], [
+        'theme' => 'light',
+        'accent' => '#0EA5E9',
+        'font' => 'serif',
+        'brand' => ['name' => 'EcoSite', 'cta' => ['label' => 'Únete', 'href' => '#cta']],
+        'footer' => ['text' => '© EcoSite', 'links' => [['label' => 'Privacidad', 'href' => '#']]],
+    ]);
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [
+            ['id' => id('blk'), 'type' => 'stat_band', 'items' => [['value' => '1.1°C', 'label' => 'Aumento']]],
+            ['id' => id('blk'), 'type' => 'testimonials', 'columns' => 2, 'items' => [['quote' => 'Genial', 'author' => 'Ana', 'role' => 'CEO']]],
+            ['id' => id('blk'), 'type' => 'faq', 'items' => [['question' => '¿Qué?', 'answer' => 'Esto.']]],
+            ['id' => id('blk'), 'type' => 'pricing', 'columns' => 2, 'tiers' => [
+                ['name' => 'Free', 'price' => '$0', 'features' => ['A', 'B']],
+                ['name' => 'Pro', 'price' => '$29', 'period' => '/mes', 'featured' => true, 'features' => ['Todo'], 'cta' => ['label' => 'Comprar', 'on_click' => [['type' => 'navigate', 'to' => '/checkout']]]],
+            ]],
+        ],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects an invalid accent colour', function () {
+    $manifest = baseManifest();
+    $manifest['settings'] = array_merge($manifest['settings'] ?? [], ['accent' => 'blue']);
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
+it('validates a pricing tier CTA action sequence', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [['id' => id('blk'), 'type' => 'pricing', 'tiers' => [
+            ['name' => 'Pro', 'price' => '$9', 'cta' => ['label' => 'X', 'on_click' => [['type' => 'open_modal', 'modal_block_id' => 'blk_does_not_exist']]]],
+        ]]],
+    ]];
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))->toContain('unresolved_ref');
+});
+
+it('accepts dashboard blocks: insight card, stat with compare/trend, radar & scatter charts', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $numField = collect($obj['fields'])->firstWhere('type', 'number') ?? $obj['fields'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'dash', 'name' => 'Dash', 'path' => '/dash',
+        'blocks' => [
+            ['id' => id('blk'), 'type' => 'insight', 'variant' => 'recommendation', 'title' => 'Sube precios', 'body' => 'El margen lo permite.', 'metric' => '+12%'],
+            ['id' => id('blk'), 'type' => 'stat', 'label' => 'Ventas', 'query' => ['object_id' => $obj['id']], 'aggregation' => 'count', 'compare' => ['object_id' => $obj['id']], 'delta_good' => 'up', 'icon' => '📈'],
+            ['id' => id('blk'), 'type' => 'chart', 'chart_type' => 'radar', 'data_source' => ['object_id' => $obj['id']], 'aggregation' => 'count', 'group_by_field_id' => $obj['fields'][0]['id']],
+            ['id' => id('blk'), 'type' => 'chart', 'chart_type' => 'scatter', 'data_source' => ['object_id' => $obj['id']], 'aggregation' => 'count', 'x_field_id' => $numField['id'], 'y_field_id' => $numField['id']],
+        ],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('accepts treemap chart, word_cloud and flow blocks', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [
+            ['id' => id('blk'), 'type' => 'chart', 'chart_type' => 'treemap', 'data_source' => ['object_id' => $obj['id']], 'aggregation' => 'count', 'group_by_field_id' => $obj['fields'][0]['id']],
+            ['id' => id('blk'), 'type' => 'word_cloud', 'data_source' => ['object_id' => $obj['id']], 'field_id' => $obj['fields'][0]['id'], 'max_words' => 30],
+            ['id' => id('blk'), 'type' => 'flow', 'direction' => 'row', 'steps' => [
+                ['label' => 'Captura', 'icon' => '📝'],
+                ['label' => 'Procesa', 'description' => 'Valida y agrega'],
+                ['label' => 'Reporta'],
+            ]],
+        ],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a flow with fewer than 2 steps', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [['id' => id('blk'), 'type' => 'flow', 'steps' => [['label' => 'Solo uno']]]],
+    ]];
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
+it('rejects an unknown chart_type', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [['id' => id('blk'), 'type' => 'chart', 'chart_type' => 'sankey', 'data_source' => ['object_id' => $obj['id']], 'aggregation' => 'count']],
+    ]];
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
 it('accepts a heading size override and rejects an invalid one', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[

@@ -114,10 +114,25 @@ class BlockDataResolver
                 $context,
             );
 
-            return ['value' => $value];
+            $payload = ['value' => $value];
+
+            // Optional comparison value (e.g. previous period) → drives the
+            // trend chip on the card.
+            if (isset($block['compare'])) {
+                $payload['compare_value'] = $this->records->aggregate(
+                    $app,
+                    $block['compare'],
+                    $block['aggregation'],
+                    $block['field_id'] ?? null,
+                    $manifest,
+                    $context,
+                );
+            }
+
+            return $payload;
         }
 
-        if (in_array($block['type'], ['chart', 'kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'map', 'card_grid'], true)) {
+        if (in_array($block['type'], ['chart', 'kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'map', 'card_grid', 'word_cloud'], true)) {
             $records = $this->records->query($app, $block['data_source'], $manifest, $context);
 
             return ['rows' => $this->mapRows($records)];
@@ -127,7 +142,7 @@ class BlockDataResolver
             $items = [];
             foreach ($block['items'] ?? [] as $item) {
                 try {
-                    $items[$item['id']] = [
+                    $entry = [
                         'value' => $this->records->aggregate(
                             $app,
                             $item['query'],
@@ -137,6 +152,17 @@ class BlockDataResolver
                             $context,
                         ),
                     ];
+                    if (isset($item['compare'])) {
+                        $entry['compare_value'] = $this->records->aggregate(
+                            $app,
+                            $item['compare'],
+                            $item['aggregation'],
+                            $item['field_id'] ?? null,
+                            $manifest,
+                            $context,
+                        );
+                    }
+                    $items[$item['id']] = $entry;
                 } catch (Throwable $e) {
                     $items[$item['id']] = ['error' => $e->getMessage()];
                 }

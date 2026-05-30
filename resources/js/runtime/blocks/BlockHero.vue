@@ -65,7 +65,8 @@ async function clickCta() {
                 <button
                     type="button"
                     @click="clickCta"
-                    class="mt-2 inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-5 py-2.5 text-sm font-semibold text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                    class="mt-2 inline-flex items-center gap-1.5 rounded-pill px-5 py-2.5 text-sm font-semibold text-white shadow-btn-primary transition-transform hover:scale-[1.03]"
+                    :style="{ backgroundColor: 'var(--sp-accent, #3b82f6)' }"
                 >
                     {{ block.cta.label }}
                 </button>

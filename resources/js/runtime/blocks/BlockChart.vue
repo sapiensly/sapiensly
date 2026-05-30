@@ -8,7 +8,7 @@ interface ChartBlock {
     id: string;
     type: 'chart';
     label?: string;
-    chart_type: 'bar' | 'hbar' | 'line' | 'area' | 'pie' | 'donut';
+    chart_type: 'bar' | 'hbar' | 'line' | 'area' | 'pie' | 'donut' | 'radar' | 'scatter' | 'treemap';
     data_source: { object_id: string };
     x_field_id?: string;
     y_field_id?: string;
@@ -170,6 +170,116 @@ const linePath = computed(() => {
         ` L ${points[0].x} ${padT + innerH} Z`;
     return { line, area, points };
 });
+
+// Radar: plot the categorical buckets on radial axes (needs >= 3 axes).
+const radar = computed(() => {
+    const n = series.value.length;
+    if (n < 3) return null;
+    const cx = 110;
+    const cy = 110;
+    const r = 84;
+    const max = maxValue.value;
+    const axes = series.value.map((s, i) => {
+        const ang = -Math.PI / 2 + (i / n) * Math.PI * 2;
+        const rr = (s.value / max) * r;
+        return {
+            label: s.label,
+            ax: cx + r * Math.cos(ang),
+            ay: cy + r * Math.sin(ang),
+            px: cx + rr * Math.cos(ang),
+            py: cy + rr * Math.sin(ang),
+            lx: cx + (r + 16) * Math.cos(ang),
+            ly: cy + (r + 16) * Math.sin(ang),
+        };
+    });
+    const poly = axes.map((a, i) => `${i === 0 ? 'M' : 'L'} ${a.px.toFixed(1)} ${a.py.toFixed(1)}`).join(' ') + ' Z';
+    return { cx, cy, r, axes, poly };
+});
+
+// Treemap: squarified rectangles sized by each bucket's value (segmentation).
+const treemap = computed(() => {
+    const total = totalValue.value;
+    if (total === 0) return null;
+    const W = 320;
+    const H = 200;
+    const data = [...series.value].filter((s) => s.value > 0).sort((a, b) => b.value - a.value);
+    if (data.length === 0) return null;
+
+    const rects: { x: number; y: number; w: number; h: number; label: string; value: number; color: string }[] = [];
+    // Simple squarified layout: pack rows along the shorter side.
+    let x = 0;
+    let y = 0;
+    let w = W;
+    let h = H;
+    let i = 0;
+    let remaining = total;
+    while (i < data.length) {
+        const horizontal = w >= h;
+        const side = horizontal ? h : w;
+        // Greedily grow a row while it keeps aspect ratios reasonable.
+        let row: typeof data = [];
+        let rowSum = 0;
+        let bestRatio = Infinity;
+        let j = i;
+        while (j < data.length) {
+            const trySum = rowSum + data[j].value;
+            const length = (trySum / remaining) * (horizontal ? w : h);
+            const next = [...row, data[j]];
+            const worst = Math.max(
+                ...next.map((d) => {
+                    const cell = (d.value / trySum) * side;
+                    return Math.max(length / cell, cell / length);
+                }),
+            );
+            if (worst > bestRatio && row.length > 0) break;
+            bestRatio = worst;
+            row = next;
+            rowSum = trySum;
+            j++;
+        }
+        const rowLen = (rowSum / remaining) * (horizontal ? w : h);
+        let off = 0;
+        for (const d of row) {
+            const cell = (d.value / rowSum) * side;
+            const idx = data.indexOf(d);
+            rects.push({
+                x: horizontal ? x : x + off,
+                y: horizontal ? y + off : y,
+                w: horizontal ? rowLen : cell,
+                h: horizontal ? cell : rowLen,
+                label: d.label,
+                value: d.value,
+                color: colorFor(d.label, idx),
+            });
+            off += cell;
+        }
+        if (horizontal) { x += rowLen; w -= rowLen; } else { y += rowLen; h -= rowLen; }
+        remaining -= rowSum;
+        i = j;
+    }
+    return { W, H, rects };
+});
+
+// Scatter: plot raw (x_field, y_field) points from each row.
+const scatter = computed(() => {
+    const rows = props.data?.rows ?? [];
+    const xSlug = fieldOf(props.block.x_field_id)?.slug;
+    const ySlug = yField.value?.slug;
+    if (!xSlug || !ySlug) return null;
+    const pts = rows
+        .map((row) => ({ x: Number(row.data[xSlug]), y: Number(row.data[ySlug]) }))
+        .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+    if (pts.length === 0) return null;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const w = 320;
+    const h = 180;
+    const pad = 18;
+    const sx = (x: number) => (maxX === minX ? w / 2 : pad + ((x - minX) / (maxX - minX)) * (w - 2 * pad));
+    const sy = (y: number) => (maxY === minY ? h / 2 : h - pad - ((y - minY) / (maxY - minY)) * (h - 2 * pad));
+    return { w, h, points: pts.map((p) => ({ cx: sx(p.x), cy: sy(p.y) })) };
+});
 </script>
 
 <template>
@@ -268,6 +378,51 @@ const linePath = computed(() => {
             </ul>
         </template>
 
+        <template v-else-if="block.chart_type === 'radar' && radar">
+            <svg viewBox="0 0 220 220" class="mx-auto w-full max-w-[280px]" :class="t.text">
+                <circle
+                    v-for="ring in [0.34, 0.67, 1]"
+                    :key="ring"
+                    :cx="radar.cx" :cy="radar.cy" :r="radar.r * ring"
+                    fill="none" stroke="currentColor" stroke-opacity="0.12"
+                />
+                <line
+                    v-for="(a, i) in radar.axes" :key="'ax' + i"
+                    :x1="radar.cx" :y1="radar.cy" :x2="a.ax" :y2="a.ay"
+                    stroke="currentColor" stroke-opacity="0.12"
+                />
+                <path :d="radar.poly" :style="{ fill: 'var(--sp-accent, #3B82F6)', stroke: 'var(--sp-accent, #3B82F6)' }" fill-opacity="0.2" stroke-width="2" />
+                <circle v-for="(a, i) in radar.axes" :key="'pt' + i" :cx="a.px" :cy="a.py" r="3" :style="{ fill: 'var(--sp-accent, #3B82F6)' }" />
+                <text
+                    v-for="(a, i) in radar.axes" :key="'lb' + i"
+                    :x="a.lx" :y="a.ly" text-anchor="middle" dominant-baseline="middle"
+                    fill="currentColor" fill-opacity="0.7" style="font-size: 8px"
+                >{{ a.label }}</text>
+            </svg>
+        </template>
+
+        <template v-else-if="block.chart_type === 'treemap' && treemap">
+            <svg :viewBox="`0 0 ${treemap.W} ${treemap.H}`" class="w-full">
+                <g v-for="(r, i) in treemap.rects" :key="i">
+                    <rect :x="r.x + 1" :y="r.y + 1" :width="Math.max(0, r.w - 2)" :height="Math.max(0, r.h - 2)" :fill="r.color" rx="2" />
+                    <text v-if="r.w > 44 && r.h > 22" :x="r.x + 6" :y="r.y + 16" fill="#fff" style="font-size: 9px; font-weight: 600">{{ r.label }}</text>
+                    <text v-if="r.w > 44 && r.h > 34" :x="r.x + 6" :y="r.y + 28" fill="#fff" fill-opacity="0.8" style="font-size: 8px">{{ formatNumber(r.value) }}</text>
+                </g>
+            </svg>
+        </template>
+
+        <template v-else-if="block.chart_type === 'scatter' && scatter">
+            <svg :viewBox="`0 0 ${scatter.w} ${scatter.h}`" class="w-full" :class="t.text">
+                <line x1="18" :y1="scatter.h - 18" :x2="scatter.w - 8" :y2="scatter.h - 18" stroke="currentColor" stroke-opacity="0.15" />
+                <line x1="18" y1="8" x2="18" :y2="scatter.h - 18" stroke="currentColor" stroke-opacity="0.15" />
+                <circle
+                    v-for="(p, i) in scatter.points" :key="i"
+                    :cx="p.cx" :cy="p.cy" r="3.5" fill-opacity="0.7"
+                    :style="{ fill: 'var(--sp-accent, #3B82F6)' }"
+                />
+            </svg>
+        </template>
+
         <template v-else>
             <!-- bar = vertical columns -->
             <div class="flex h-48 items-end gap-3 px-2 pt-2">
@@ -291,7 +446,7 @@ const linePath = computed(() => {
             </div>
             <div class="flex gap-3 px-2 pt-1">
                 <div
-                    v-for="(s, i) in series"
+                    v-for="s in series"
                     :key="s.label"
                     :class="['min-w-0 flex-1 truncate text-center text-[11px]', t.text]"
                     :title="s.label"
