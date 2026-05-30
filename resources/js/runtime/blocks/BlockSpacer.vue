@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { BlockSpacer } from '../types/manifest';
 
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<{ block: BlockSpacer }>();
 
 const heightClass = {

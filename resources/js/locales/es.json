@@ -335,6 +335,7 @@
     "apps.builder.workflows.panel.copy_id": "Copiar id del step",
     "apps.builder.schema_heading": "Modelo de datos",
     "apps.builder.visual_review": "Revisión visual",
+    "apps.builder.download_html": "Descargar HTML",
     "apps.builder.visual_review_running": "Capturando…",
     "apps.builder.visual_review_tooltip": "Envía un screenshot de esta página al builder para que la revise visualmente.",
     "apps.builder.manifest_heading": "Manifest activo",

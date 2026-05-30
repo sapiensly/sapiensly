@@ -15,6 +15,8 @@ interface FeatureGridBlock {
     items: FeatureItem[];
 }
 
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<{ block: FeatureGridBlock }>();
 
 const colsClass = computed(

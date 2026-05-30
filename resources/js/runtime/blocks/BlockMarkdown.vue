@@ -10,6 +10,8 @@ interface MarkdownBlock {
     content: string;
 }
 
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<{ block: MarkdownBlock }>();
 const t = themeTokens(useRuntimeTheme());
 
@@ -21,7 +23,7 @@ const html = computed(() => {
 
 <template>
     <div
-        :class="['prose prose-sm max-w-none', t.text]"
+        :class="['prose max-w-none leading-relaxed', t.text]"
         v-html="html"
     />
 </template>

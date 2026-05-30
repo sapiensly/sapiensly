@@ -11,6 +11,8 @@ interface ImageBlock {
     max_height?: number;
 }
 
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<{ block: ImageBlock }>();
 
 const fitClass = computed(() =>

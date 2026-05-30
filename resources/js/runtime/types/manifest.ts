@@ -95,6 +95,7 @@ export interface BlockHeading extends BlockBase {
     type: 'heading';
     content: string;
     level?: 1 | 2 | 3 | 4 | 5 | 6;
+    size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'display';
 }
 
 export interface BlockDivider extends BlockBase {

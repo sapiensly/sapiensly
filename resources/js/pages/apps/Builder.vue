@@ -36,7 +36,7 @@ import DOMPurify from 'dompurify';
 // Tailwind v4 emits. The vanilla html2canvas chokes the moment any Tailwind
 // utility lands in the snapshot.
 import html2canvas from 'html2canvas-pro';
-import { ArrowLeft, BarChart3, Camera, Check, ChevronDown, Code, Database, Eye, FileText, GripVertical, ImagePlus, LayoutDashboard, Lightbulb, Link2, ListChecks, Loader2, Maximize2, Minimize2, MoreVertical, MousePointerClick, Paperclip, Plus, RotateCcw, Send, Settings2, Sparkles, Wand2, Workflow as WorkflowIcon, X } from 'lucide-vue-next';
+import { ArrowLeft, BarChart3, Camera, Check, ChevronDown, Code, Database, Download, Eye, FileText, GripVertical, ImagePlus, LayoutDashboard, Lightbulb, Link2, ListChecks, Loader2, Maximize2, Minimize2, MoreVertical, MousePointerClick, Paperclip, Plus, RotateCcw, Send, Settings2, Sparkles, Wand2, Workflow as WorkflowIcon, X } from 'lucide-vue-next';
 import { marked } from 'marked';
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -1095,6 +1095,53 @@ function switchPage(slug: string) {
     router.visit(`/apps/${props.app.id}/builder?page=${slug}`, { preserveScroll: true });
 }
 
+/**
+ * Download the currently-previewed page as a standalone .html file. We take the
+ * actual rendered DOM of the preview and inline every same-origin stylesheet so
+ * the file looks identical when opened on its own (Tailwind utilities + design
+ * tokens travel with it). Images stay as their (external) URLs.
+ */
+function downloadPreviewHtml() {
+    const content = previewPane.value?.querySelector('[data-preview-content]');
+    if (!content || !props.preview) return;
+
+    let css = '';
+    for (const sheet of Array.from(document.styleSheets)) {
+        try {
+            for (const rule of Array.from(sheet.cssRules)) css += rule.cssText + '\n';
+        } catch {
+            // Cross-origin stylesheet — its rules aren't readable; skip it.
+        }
+    }
+
+    const isDark = previewTheme.value === 'dark';
+    const bg = isDark ? '#020617' : '#ffffff';
+    const escape = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] ?? c);
+    const title = escape(`${props.app.name} — ${props.preview.page.name ?? ''}`.trim());
+
+    const html = `<!doctype html>
+<html lang="${escape(previewLocale.value)}"${isDark ? ' class="dark"' : ''}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>${css}</style>
+</head>
+<body style="margin:0;padding:1.25rem;background:${bg};">
+${content.outerHTML}
+</body>
+</html>`;
+
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${props.app.slug || 'app'}-${props.preview.page.slug || 'page'}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
 function prettyPatch(patch: Array<Record<string, unknown>> | null): string {
     if (!patch) return '';
     return JSON.stringify(patch, null, 2);
@@ -1616,6 +1663,14 @@ function statusTone(status: Message['status']): string {
                                         <Camera v-else class="size-4 text-ink-muted" />
                                         {{ requestingReview ? t('apps.builder.visual_review_running') : t('apps.builder.visual_review') }}
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        :disabled="!preview"
+                                        class="gap-2"
+                                        @select="downloadPreviewHtml"
+                                    >
+                                        <Download class="size-4 text-ink-muted" />
+                                        {{ t('apps.builder.download_html') }}
+                                    </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -1629,7 +1684,7 @@ function statusTone(status: Message['status']): string {
                             preview ? (previewTheme === 'light' ? 'bg-white' : 'bg-slate-950') : '',
                         ]"
                     >
-                        <div v-if="preview" class="space-y-4" :style="{ '--sp-bleed': '1.25rem' }">
+                        <div v-if="preview" data-preview-content class="space-y-4" :style="{ '--sp-bleed': '1.25rem' }">
                             <AppRenderer
                                 :blocks="preview.page.blocks"
                                 :block-data="preview.block_data"

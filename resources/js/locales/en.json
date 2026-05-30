@@ -335,6 +335,7 @@
     "apps.builder.workflows.panel.copy_id": "Copy step id",
     "apps.builder.schema_heading": "Data model",
     "apps.builder.visual_review": "Visual review",
+    "apps.builder.download_html": "Download HTML",
     "apps.builder.visual_review_running": "Capturing…",
     "apps.builder.visual_review_tooltip": "Send a screenshot of this page to the AI for a visual review.",
     "apps.builder.manifest_heading": "Active manifest",

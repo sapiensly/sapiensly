@@ -1,0 +1,1910 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://sapiensly.com/schemas/app-manifest/v1.json",
+    "title": "Sapiensly App Manifest v1 (MVP subset)",
+    "description": "MVP subset of the App manifest schema. Excludes workflows, connections, code-custom field types (formula/lookup/rollup), media field types (file/image/rich_text/percentage/time), and write/interactive blocks (form/button/modal/chart/kanban/calendar/list/tabs/accordion). These layers will be added in later phases without breaking changes.",
+    "type": "object",
+    "required": ["schema_version", "id", "slug", "name", "version", "objects", "pages", "permissions"],
+    "additionalProperties": false,
+    "properties": {
+        "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "id": { "$ref": "#/$defs/id" },
+        "slug": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "icon": { "type": "string", "maxLength": 50 },
+        "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "version": { "type": "integer", "minimum": 1 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "objects": { "type": "array", "items": { "$ref": "#/$defs/object_definition" } },
+        "pages": { "type": "array", "items": { "$ref": "#/$defs/page" } },
+        "navigation": { "$ref": "#/$defs/navigation" },
+        "workflows": { "type": "array", "items": { "$ref": "#/$defs/workflow" } },
+        "permissions": { "$ref": "#/$defs/permissions" },
+        "settings": { "$ref": "#/$defs/settings" }
+    },
+    "$defs": {
+        "id": {
+            "type": "string",
+            "pattern": "^([a-z]{2,5}_[a-z0-9_]{8,60}|sys_[a-z_]{1,40})$",
+            "description": "Prefixed identifier: a short lowercase tag (2-5 chars) + underscore + 8-60 alphanumeric/underscore chars. A standard ULID (26 chars) fits comfortably. Examples: app_01j..., obj_01j..., fld_01j... Wider than strict ULID to forgive the AI generating slightly off-spec ids; the runtime treats the value as opaque after the validator accepts it. The sys_ namespace is reserved for system virtual fields (sys_created_at, sys_updated_at)."
+        },
+        "slug": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "minLength": 1,
+            "maxLength": 50
+        },
+        "visibility_rule": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "roles": { "type": "array", "items": { "$ref": "#/$defs/slug" } },
+                "expression": { "type": "string" }
+            }
+        },
+        "style_overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "padding": { "enum": ["none", "sm", "md", "lg"] },
+                "margin": { "enum": ["none", "sm", "md", "lg"] },
+                "background": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                "max_width": { "enum": ["sm", "md", "lg", "full"] },
+                "full_bleed": { "type": "boolean", "description": "Make the section span the full content width (edge to edge) instead of sitting inside the page padding. Use on top-level coloured sections." },
+                "gradient": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["from", "to"],
+                    "description": "Linear-gradient background (overrides `background`). Keep `from`/`to` in the same tonal range so the auto-contrast text colour reads against both ends.",
+                    "properties": {
+                        "from": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                        "to": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                        "direction": { "enum": ["to-b", "to-r", "to-br", "to-tr"], "default": "to-br" }
+                    }
+                }
+            }
+        },
+
+        "object_definition": {
+            "type": "object",
+            "required": ["id", "slug", "name", "fields"],
+            "additionalProperties": false,
+            "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "slug": { "$ref": "#/$defs/slug" },
+                "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "name_plural": { "type": "string", "maxLength": 100 },
+                "icon": { "type": "string" },
+                "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                "description": { "type": "string", "maxLength": 500 },
+                "primary_display_field_id": { "$ref": "#/$defs/id" },
+                "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/field_definition" } }
+            }
+        },
+
+        "field_base": {
+            "type": "object",
+            "required": ["id", "slug", "name", "type"],
+            "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "slug": { "$ref": "#/$defs/slug" },
+                "name": { "type": "string", "maxLength": 100 },
+                "description": { "type": "string", "maxLength": 500 },
+                "required": { "type": "boolean", "default": false },
+                "unique": { "type": "boolean", "default": false },
+                "indexed": { "type": "boolean", "default": false },
+                "readonly": { "type": "boolean", "default": false },
+                "hidden": { "type": "boolean", "default": false },
+                "help_text": { "type": "string", "maxLength": 200 }
+            }
+        },
+        "field_string": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "string" },
+                        "default": { "type": "string" },
+                        "min_length": { "type": "integer", "minimum": 0 },
+                        "max_length": { "type": "integer", "minimum": 1, "maximum": 5000 },
+                        "pattern": { "type": "string" }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_long_text": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "long_text" },
+                        "default": { "type": "string" },
+                        "max_length": { "type": "integer", "minimum": 1, "maximum": 100000 }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_number": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "number" },
+                        "default": { "type": "number" },
+                        "min": { "type": "number" },
+                        "max": { "type": "number" },
+                        "precision": { "type": "integer", "minimum": 0, "maximum": 10 },
+                        "format": { "enum": ["plain", "thousands", "scientific"] }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_currency": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "currency" },
+                        "default": { "type": "number" },
+                        "currency_code": { "type": "string", "pattern": "^[A-Z]{3}$", "default": "MXN" },
+                        "min": { "type": "number" },
+                        "max": { "type": "number" }
+                    },
+                    "required": ["type", "currency_code"]
+                }
+            ]
+        },
+        "field_boolean": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "boolean" },
+                        "default": { "type": "boolean" }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_date": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "date" },
+                        "default": { "type": "string", "format": "date" }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_datetime": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "datetime" },
+                        "default": { "type": "string", "format": "date-time" }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_single_select": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "single_select" },
+                        "options": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "value", "label"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "id": { "$ref": "#/$defs/id" },
+                                    "value": { "type": "string", "maxLength": 50 },
+                                    "label": { "type": "string", "maxLength": 100 },
+                                    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                                }
+                            }
+                        },
+                        "default": { "type": "string" }
+                    },
+                    "required": ["type", "options"]
+                }
+            ]
+        },
+        "field_multi_select": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "multi_select" },
+                        "options": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "value", "label"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "id": { "$ref": "#/$defs/id" },
+                                    "value": { "type": "string", "maxLength": 50 },
+                                    "label": { "type": "string", "maxLength": 100 },
+                                    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                                }
+                            }
+                        },
+                        "default": { "type": "array", "items": { "type": "string" } }
+                    },
+                    "required": ["type", "options"]
+                }
+            ]
+        },
+        "field_relation": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "relation" },
+                        "target_object_id": { "$ref": "#/$defs/id" },
+                        "cardinality": { "enum": ["one_to_one", "many_to_one", "one_to_many", "many_to_many"] },
+                        "on_delete": { "enum": ["restrict", "cascade", "set_null"], "default": "restrict" },
+                        "inverse_field_id": { "$ref": "#/$defs/id" }
+                    },
+                    "required": ["type", "target_object_id", "cardinality"]
+                }
+            ]
+        },
+        "field_formula": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": { "const": true },
+                        "hidden": true, "help_text": true,
+                        "type": { "const": "formula" },
+                        "expression": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                        "return_type": { "enum": ["string", "number", "boolean", "date", "datetime"] },
+                        "currency_code": { "type": "string", "pattern": "^[A-Z]{3}$" }
+                    },
+                    "required": ["type", "expression", "return_type"]
+                }
+            ]
+        },
+        "field_lookup": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": { "const": true },
+                        "hidden": true, "help_text": true,
+                        "type": { "const": "lookup" },
+                        "via_relation_field_id": { "$ref": "#/$defs/id" },
+                        "target_field_id": { "$ref": "#/$defs/id" }
+                    },
+                    "required": ["type", "via_relation_field_id", "target_field_id"]
+                }
+            ]
+        },
+        "field_rollup": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": { "const": true },
+                        "hidden": true, "help_text": true,
+                        "type": { "const": "rollup" },
+                        "via_relation_field_id": { "$ref": "#/$defs/id" },
+                        "target_field_id": { "$ref": "#/$defs/id" },
+                        "aggregator": { "enum": ["sum", "avg", "min", "max", "count", "count_distinct"] },
+                        "filter": { "$ref": "#/$defs/filter_expression" }
+                    },
+                    "required": ["type", "via_relation_field_id", "aggregator"]
+                }
+            ]
+        },
+        "field_rating": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "rating" },
+                        "max": { "type": "integer", "minimum": 2, "maximum": 10, "default": 5 },
+                        "default": { "type": "integer", "minimum": 0 },
+                        "icon": { "enum": ["star", "heart", "thumb"], "default": "star" }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_slider": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "slider" },
+                        "min": { "type": "number", "default": 0 },
+                        "max": { "type": "number", "default": 100 },
+                        "step": { "type": "number", "exclusiveMinimum": 0, "default": 1 },
+                        "default": { "type": "number" },
+                        "format": { "enum": ["plain", "percentage", "currency"], "default": "plain" },
+                        "currency_code": { "type": "string", "pattern": "^[A-Z]{3}$" }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_rich_text": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "rich_text" },
+                        "default": { "type": "string" },
+                        "max_length": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Maximum length of the plain-text content (HTML tags excluded)."
+                        }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_file": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "file" },
+                        "max_size_mb": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+                        "mime_types": {
+                            "type": "array",
+                            "items": { "type": "string", "pattern": "^[a-z0-9.+-]+/(\\*|[a-z0-9.+-]+)$" },
+                            "description": "Optional MIME allowlist. Accepts wildcards like image/*. When omitted, any MIME is allowed (subject to the global size limit)."
+                        }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_date_range": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true,
+                        "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "date_range" },
+                        "include_time": { "type": "boolean", "default": false },
+                        "default": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["from", "to"],
+                            "properties": {
+                                "from": { "type": "string" },
+                                "to": { "type": "string" }
+                            }
+                        }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "field_definition": {
+            "oneOf": [
+                { "$ref": "#/$defs/field_string" },
+                { "$ref": "#/$defs/field_long_text" },
+                { "$ref": "#/$defs/field_number" },
+                { "$ref": "#/$defs/field_currency" },
+                { "$ref": "#/$defs/field_boolean" },
+                { "$ref": "#/$defs/field_date" },
+                { "$ref": "#/$defs/field_datetime" },
+                { "$ref": "#/$defs/field_single_select" },
+                { "$ref": "#/$defs/field_multi_select" },
+                { "$ref": "#/$defs/field_relation" },
+                { "$ref": "#/$defs/field_formula" },
+                { "$ref": "#/$defs/field_lookup" },
+                { "$ref": "#/$defs/field_rollup" },
+                { "$ref": "#/$defs/field_rating" },
+                { "$ref": "#/$defs/field_slider" },
+                { "$ref": "#/$defs/field_date_range" },
+                { "$ref": "#/$defs/field_file" },
+                { "$ref": "#/$defs/field_rich_text" }
+            ]
+        },
+
+        "filter_expression": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "required": ["op", "conditions"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "op": { "enum": ["and", "or"] },
+                        "conditions": { "type": "array", "items": { "$ref": "#/$defs/filter_expression" } }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["op", "condition"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "op": { "const": "not" },
+                        "condition": { "$ref": "#/$defs/filter_expression" }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["op", "field_id"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "op": { "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "contains", "starts_with", "ends_with", "is_null", "is_not_null", "between"] },
+                        "field_id": { "$ref": "#/$defs/id" },
+                        "value": {},
+                        "value_expression": { "type": "string" }
+                    }
+                }
+            ]
+        },
+
+        "field_condition": {
+            "type": "object",
+            "required": ["field_id", "op"],
+            "additionalProperties": false,
+            "description": "A single structured condition over another field of the SAME form, evaluated reactively against the live form values. Used by visible_if / required_if. `value` is a literal compared against the referenced field's current value (an array for in/not_in; omitted for is_null/is_not_null/is_truthy/is_falsy).",
+            "properties": {
+                "field_id": { "$ref": "#/$defs/id" },
+                "op": { "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "contains", "is_null", "is_not_null", "is_truthy", "is_falsy"] },
+                "value": {}
+            }
+        },
+
+        "query": {
+            "type": "object",
+            "required": ["object_id"],
+            "additionalProperties": false,
+            "properties": {
+                "object_id": { "$ref": "#/$defs/id" },
+                "filter": { "$ref": "#/$defs/filter_expression" },
+                "sort": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["field_id", "direction"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "field_id": { "$ref": "#/$defs/id" },
+                            "direction": { "enum": ["asc", "desc"] }
+                        }
+                    }
+                },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 10000 },
+                "offset": { "type": "integer", "minimum": 0 },
+                "include": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["relation_field_id"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "relation_field_id": { "$ref": "#/$defs/id" }
+                        }
+                    }
+                }
+            }
+        },
+
+        "page": {
+            "type": "object",
+            "required": ["id", "slug", "name", "path", "blocks"],
+            "additionalProperties": false,
+            "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "slug": { "$ref": "#/$defs/slug" },
+                "name": { "type": "string", "maxLength": 100 },
+                "path": { "type": "string", "pattern": "^/[a-z0-9/_:-]*$", "maxLength": 200 },
+                "icon": { "type": "string" },
+                "layout": { "enum": ["default", "full_width", "centered", "two_column"] },
+                "visibility": { "$ref": "#/$defs/visibility_rule" },
+                "blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } },
+                "params": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["name", "type"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "name": { "type": "string" },
+                            "type": { "enum": ["string", "number", "id"] }
+                        }
+                    }
+                }
+            }
+        },
+
+        "block_base": {
+            "type": "object",
+            "required": ["id", "type"],
+            "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "visibility": { "$ref": "#/$defs/visibility_rule" },
+                "style": { "$ref": "#/$defs/style_overrides" }
+            }
+        },
+        "block_container": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "container" },
+                        "direction": { "enum": ["row", "column"], "default": "column" },
+                        "gap": { "enum": ["none", "sm", "md", "lg"], "default": "md" },
+                        "blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } }
+                    },
+                    "required": ["type", "blocks"]
+                }
+            ]
+        },
+        "block_text": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "text" },
+                        "content": { "type": "string", "maxLength": 5000 },
+                        "size": { "enum": ["xs", "sm", "base", "lg", "xl"], "default": "base" }
+                    },
+                    "required": ["type", "content"]
+                }
+            ]
+        },
+        "block_heading": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "heading" },
+                        "content": { "type": "string", "maxLength": 200 },
+                        "level": { "type": "integer", "minimum": 1, "maximum": 6, "default": 2 },
+                        "size": { "enum": ["sm", "md", "lg", "xl", "2xl", "display"], "description": "Visual size override, independent of the semantic `level`. Use `xl`/`2xl`/`display` for website section titles; defaults follow `level`." }
+                    },
+                    "required": ["type", "content"]
+                }
+            ]
+        },
+        "block_divider": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "divider" }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "block_spacer": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "spacer" },
+                        "size": { "enum": ["sm", "md", "lg", "xl"], "default": "md" }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
+        "block_table": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "table" },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "columns": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "oneOf": [
+                                    {
+                                        "type": "object",
+                                        "required": ["id", "field_id"],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "id": { "$ref": "#/$defs/id" },
+                                            "field_id": { "$ref": "#/$defs/id" },
+                                            "label_override": { "type": "string" },
+                                            "width": { "type": "integer", "minimum": 50, "maximum": 800 },
+                                            "sortable": { "type": "boolean", "default": true },
+                                            "format": { "type": "string" }
+                                        }
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": ["id", "type", "label", "on_click"],
+                                        "additionalProperties": false,
+                                        "description": "Action column: renders a button per row. on_click resolves {{row.id}} and {{row.data.<slug>}} from the current row at click time.",
+                                        "properties": {
+                                            "id": { "$ref": "#/$defs/id" },
+                                            "type": { "const": "action" },
+                                            "label": { "type": "string", "maxLength": 40 },
+                                            "icon": { "type": "string", "maxLength": 40 },
+                                            "variant": { "enum": ["primary", "secondary", "danger", "ghost"], "default": "ghost" },
+                                            "width": { "type": "integer", "minimum": 50, "maximum": 400 },
+                                            "on_click": { "$ref": "#/$defs/action_sequence" },
+                                            "confirm": {
+                                                "type": "object",
+                                                "additionalProperties": false,
+                                                "required": ["title", "message"],
+                                                "properties": {
+                                                    "title": { "type": "string", "maxLength": 80 },
+                                                    "message": { "type": "string", "maxLength": 300 }
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "pagination": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "page_size": { "type": "integer", "minimum": 10, "maximum": 200, "default": 50 }
+                            }
+                        },
+                        "filters_ui": { "type": "boolean", "default": true },
+                        "search": { "type": "boolean", "default": true },
+                        "empty_state_message": { "type": "string" }
+                    },
+                    "required": ["type", "data_source", "columns"]
+                }
+            ]
+        },
+        "block_stat": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "stat" },
+                        "label": { "type": "string" },
+                        "query": { "$ref": "#/$defs/query" },
+                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                        "field_id": { "$ref": "#/$defs/id" },
+                        "format": { "enum": ["number", "currency", "percentage", "duration"] }
+                    },
+                    "required": ["type", "label", "query", "aggregation"]
+                }
+            ]
+        },
+        "block_form": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "form" },
+                        "object_id": { "$ref": "#/$defs/id" },
+                        "mode": { "enum": ["create", "edit"] },
+                        "record_id_expression": { "type": "string", "description": "Required when mode=edit. Expression resolving to the record id, e.g. {{params.id}}." },
+                        "fields": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["field_id"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "field_id": { "$ref": "#/$defs/id" },
+                                    "label_override": { "type": "string" },
+                                    "default_expression": { "type": "string" },
+                                    "readonly_expression": { "type": "string" },
+                                    "visible_if": { "$ref": "#/$defs/field_condition" },
+                                    "required_if": { "$ref": "#/$defs/field_condition" }
+                                }
+                            }
+                        },
+                        "submit_label": { "type": "string", "default": "Save" },
+                        "cancel_label": { "type": "string", "default": "Cancel" },
+                        "on_submit": { "$ref": "#/$defs/action_sequence" },
+                        "on_cancel": { "$ref": "#/$defs/action_sequence" }
+                    },
+                    "required": ["type", "object_id", "mode"]
+                }
+            ]
+        },
+        "block_multi_step_form": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "multi_step_form" },
+                        "object_id": { "$ref": "#/$defs/id" },
+                        "mode": { "enum": ["create", "edit"] },
+                        "record_id_expression": { "type": "string" },
+                        "steps": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "title", "fields"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "id": { "$ref": "#/$defs/id" },
+                                    "title": { "type": "string", "maxLength": 120 },
+                                    "description": { "type": "string", "maxLength": 500 },
+                                    "fields": {
+                                        "type": "array",
+                                        "minItems": 1,
+                                        "items": {
+                                            "type": "object",
+                                            "required": ["field_id"],
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "field_id": { "$ref": "#/$defs/id" },
+                                                "label_override": { "type": "string" },
+                                                "default_expression": { "type": "string" },
+                                                "readonly_expression": { "type": "string" },
+                                                "visible_if": { "$ref": "#/$defs/field_condition" },
+                                                "required_if": { "$ref": "#/$defs/field_condition" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "show_progress": { "type": "boolean", "default": true },
+                        "submit_label": { "type": "string", "default": "Save" },
+                        "cancel_label": { "type": "string", "default": "Cancel" },
+                        "on_submit": { "$ref": "#/$defs/action_sequence" },
+                        "on_cancel": { "$ref": "#/$defs/action_sequence" }
+                    },
+                    "required": ["type", "object_id", "mode", "steps"]
+                }
+            ]
+        },
+        "block_button": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "button" },
+                        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+                        "icon": { "type": "string", "maxLength": 50 },
+                        "variant": { "enum": ["primary", "secondary", "danger", "ghost"], "default": "secondary" },
+                        "size": { "enum": ["sm", "md", "lg"], "default": "md" },
+                        "on_click": { "$ref": "#/$defs/action_sequence" },
+                        "confirm": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "title": { "type": "string", "maxLength": 120 },
+                                "message": { "type": "string", "maxLength": 500 }
+                            }
+                        }
+                    },
+                    "required": ["type", "label", "on_click"]
+                }
+            ]
+        },
+        "block_modal": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "modal" },
+                        "title": { "type": "string", "maxLength": 120 },
+                        "description": { "type": "string", "maxLength": 300, "description": "Optional sub-title shown below the title; also drives aria-describedby." },
+                        "size": { "enum": ["sm", "md", "lg"], "default": "md" },
+                        "blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } }
+                    },
+                    "required": ["type", "blocks"]
+                }
+            ]
+        },
+        "block_chart": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "chart" },
+                        "label": { "type": "string", "maxLength": 120 },
+                        "chart_type": { "enum": ["bar", "hbar", "line", "area", "pie", "donut"] },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "x_field_id": { "$ref": "#/$defs/id" },
+                        "y_field_id": { "$ref": "#/$defs/id" },
+                        "group_by_field_id": { "$ref": "#/$defs/id" },
+                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] }
+                    },
+                    "required": ["type", "chart_type", "data_source", "aggregation"]
+                }
+            ]
+        },
+        "block_kanban": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "kanban" },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "group_by_field_id": { "$ref": "#/$defs/id" },
+                        "card_title_field_id": { "$ref": "#/$defs/id" },
+                        "card_meta_fields": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["field_id"],
+                                "additionalProperties": false,
+                                "properties": { "field_id": { "$ref": "#/$defs/id" } }
+                            }
+                        }
+                    },
+                    "required": ["type", "data_source", "group_by_field_id", "card_title_field_id"]
+                }
+            ]
+        },
+        "block_calendar": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "calendar" },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "date_field_id": { "$ref": "#/$defs/id" },
+                        "title_field_id": { "$ref": "#/$defs/id" },
+                        "color_field_id": { "$ref": "#/$defs/id" }
+                    },
+                    "required": ["type", "data_source", "date_field_id", "title_field_id"]
+                }
+            ]
+        },
+        "block_markdown": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "markdown" },
+                        "content": { "type": "string", "maxLength": 50000 }
+                    },
+                    "required": ["type", "content"]
+                }
+            ]
+        },
+        "block_image": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "image" },
+                        "src": { "type": "string", "maxLength": 2000 },
+                        "alt": { "type": "string", "maxLength": 200 },
+                        "fit": { "enum": ["contain", "cover", "fill"], "default": "contain" },
+                        "rounded": { "type": "boolean", "default": false },
+                        "max_height": { "type": "integer", "minimum": 40, "maximum": 1200 }
+                    },
+                    "required": ["type", "src"]
+                }
+            ]
+        },
+        "block_hero": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "hero" },
+                        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+                        "subtitle": { "type": "string", "maxLength": 500 },
+                        "background_image": { "type": "string", "maxLength": 2000 },
+                        "overlay": { "type": "boolean", "default": true },
+                        "align": { "enum": ["left", "center"], "default": "center" },
+                        "min_height": { "type": "integer", "minimum": 200, "maximum": 900 },
+                        "cta": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["label", "on_click"],
+                            "properties": {
+                                "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+                                "on_click": { "$ref": "#/$defs/action_sequence" }
+                            }
+                        }
+                    },
+                    "required": ["type", "title"]
+                }
+            ]
+        },
+        "block_feature_grid": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "feature_grid" },
+                        "columns": { "enum": [2, 3, 4], "default": 3 },
+                        "items": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 12,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["title"],
+                                "properties": {
+                                    "id": { "$ref": "#/$defs/id" },
+                                    "icon": { "type": "string", "maxLength": 40, "description": "An emoji (🌍) or a Lucide icon name." },
+                                    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+                                    "description": { "type": "string", "maxLength": 500 }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["type", "items"]
+                }
+            ]
+        },
+        "block_cta": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "cta" },
+                        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+                        "subtitle": { "type": "string", "maxLength": 500 },
+                        "align": { "enum": ["left", "center"], "default": "center" },
+                        "button": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["label", "on_click"],
+                            "properties": {
+                                "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+                                "on_click": { "$ref": "#/$defs/action_sequence" }
+                            }
+                        }
+                    },
+                    "required": ["type", "title"]
+                }
+            ]
+        },
+        "block_metric_grid": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "metric_grid" },
+                        "columns": { "type": "integer", "minimum": 1, "maximum": 6, "default": 3 },
+                        "items": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "label", "query", "aggregation"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "id": { "$ref": "#/$defs/id" },
+                                    "label": { "type": "string", "maxLength": 80 },
+                                    "query": { "$ref": "#/$defs/query" },
+                                    "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                                    "field_id": { "$ref": "#/$defs/id" },
+                                    "format": { "enum": ["number", "currency", "percentage", "duration"] }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["type", "items"]
+                }
+            ]
+        },
+        "block_sparkline": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "sparkline" },
+                        "label": { "type": "string", "maxLength": 80 },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "x_field_id": { "$ref": "#/$defs/id" },
+                        "y_field_id": { "$ref": "#/$defs/id" },
+                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"], "default": "count" },
+                        "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                    },
+                    "required": ["type", "data_source"]
+                }
+            ]
+        },
+        "block_gauge": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "gauge" },
+                        "label": { "type": "string", "maxLength": 80 },
+                        "query": { "$ref": "#/$defs/query" },
+                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                        "field_id": { "$ref": "#/$defs/id" },
+                        "max_value": { "type": "number" },
+                        "format": { "enum": ["number", "currency", "percentage"] },
+                        "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                    },
+                    "required": ["type", "label", "query", "aggregation", "max_value"]
+                }
+            ]
+        },
+        "block_heatmap": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "heatmap" },
+                        "label": { "type": "string", "maxLength": 80 },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "date_field_id": { "$ref": "#/$defs/id" },
+                        "weeks": { "type": "integer", "minimum": 4, "maximum": 104, "default": 26 },
+                        "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                    },
+                    "required": ["type", "data_source", "date_field_id"]
+                }
+            ]
+        },
+        "block_timeline": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "timeline" },
+                        "label": { "type": "string", "maxLength": 80 },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "date_field_id": { "$ref": "#/$defs/id" },
+                        "title_field_id": { "$ref": "#/$defs/id" },
+                        "description_field_id": { "$ref": "#/$defs/id" },
+                        "color_field_id": { "$ref": "#/$defs/id" }
+                    },
+                    "required": ["type", "data_source", "date_field_id", "title_field_id"]
+                }
+            ]
+        },
+        "block_funnel": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "funnel" },
+                        "label": { "type": "string", "maxLength": 80 },
+                        "stages": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "label", "query", "aggregation"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "id": { "$ref": "#/$defs/id" },
+                                    "label": { "type": "string", "maxLength": 80 },
+                                    "query": { "$ref": "#/$defs/query" },
+                                    "aggregation": { "enum": ["count", "sum", "avg"] },
+                                    "field_id": { "$ref": "#/$defs/id" },
+                                    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["type", "stages"]
+                }
+            ]
+        },
+        "block_tabs": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "tabs" },
+                        "tabs": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "label", "blocks"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "id": { "$ref": "#/$defs/id" },
+                                    "label": { "type": "string", "maxLength": 80 },
+                                    "icon": { "type": "string", "maxLength": 50 },
+                                    "blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } }
+                                }
+                            }
+                        },
+                        "default_tab_id": { "$ref": "#/$defs/id" }
+                    },
+                    "required": ["type", "tabs"]
+                }
+            ]
+        },
+        "block_accordion": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "accordion" },
+                        "allow_multiple": { "type": "boolean", "default": false },
+                        "sections": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "title", "blocks"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "id": { "$ref": "#/$defs/id" },
+                                    "title": { "type": "string", "maxLength": 120 },
+                                    "default_open": { "type": "boolean", "default": false },
+                                    "blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["type", "sections"]
+                }
+            ]
+        },
+        "block_split_view": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "split_view" },
+                        "left_blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } },
+                        "right_blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } },
+                        "left_fraction": { "type": "integer", "minimum": 1, "maximum": 11, "default": 4, "description": "1-11; right takes 12 - left_fraction. Default 4 = 1/3 left, 2/3 right." }
+                    },
+                    "required": ["type", "left_blocks", "right_blocks"]
+                }
+            ]
+        },
+        "block_card_grid": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "card_grid" },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "columns": { "type": "integer", "minimum": 1, "maximum": 6, "default": 3 },
+                        "title_field_id": { "$ref": "#/$defs/id" },
+                        "subtitle_field_id": { "$ref": "#/$defs/id" },
+                        "image_field_id": { "$ref": "#/$defs/id" },
+                        "meta_fields": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["field_id"],
+                                "additionalProperties": false,
+                                "properties": { "field_id": { "$ref": "#/$defs/id" } }
+                            }
+                        }
+                    },
+                    "required": ["type", "data_source", "title_field_id"]
+                }
+            ]
+        },
+        "block_map": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "map" },
+                        "label": { "type": "string", "maxLength": 80 },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "lat_field_id": { "$ref": "#/$defs/id" },
+                        "lng_field_id": { "$ref": "#/$defs/id" },
+                        "popup_field_id": { "$ref": "#/$defs/id" },
+                        "color_field_id": { "$ref": "#/$defs/id" },
+                        "height_px": { "type": "integer", "minimum": 200, "maximum": 800, "default": 400 }
+                    },
+                    "required": ["type", "data_source", "lat_field_id", "lng_field_id"]
+                }
+            ]
+        },
+        "block": {
+            "oneOf": [
+                { "$ref": "#/$defs/block_container" },
+                { "$ref": "#/$defs/block_text" },
+                { "$ref": "#/$defs/block_heading" },
+                { "$ref": "#/$defs/block_divider" },
+                { "$ref": "#/$defs/block_spacer" },
+                { "$ref": "#/$defs/block_table" },
+                { "$ref": "#/$defs/block_stat" },
+                { "$ref": "#/$defs/block_form" },
+                { "$ref": "#/$defs/block_button" },
+                { "$ref": "#/$defs/block_modal" },
+                { "$ref": "#/$defs/block_chart" },
+                { "$ref": "#/$defs/block_kanban" },
+                { "$ref": "#/$defs/block_calendar" },
+                { "$ref": "#/$defs/block_markdown" },
+                { "$ref": "#/$defs/block_image" },
+                { "$ref": "#/$defs/block_hero" },
+                { "$ref": "#/$defs/block_feature_grid" },
+                { "$ref": "#/$defs/block_cta" },
+                { "$ref": "#/$defs/block_metric_grid" },
+                { "$ref": "#/$defs/block_sparkline" },
+                { "$ref": "#/$defs/block_gauge" },
+                { "$ref": "#/$defs/block_heatmap" },
+                { "$ref": "#/$defs/block_timeline" },
+                { "$ref": "#/$defs/block_funnel" },
+                { "$ref": "#/$defs/block_map" },
+                { "$ref": "#/$defs/block_tabs" },
+                { "$ref": "#/$defs/block_accordion" },
+                { "$ref": "#/$defs/block_split_view" },
+                { "$ref": "#/$defs/block_card_grid" },
+                { "$ref": "#/$defs/block_multi_step_form" }
+            ]
+        },
+        "action_sequence": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/action" }
+        },
+        "action": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "required": ["type", "to"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "navigate" },
+                        "to": { "type": "string", "maxLength": 500 }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "modal_block_id"],
+                    "additionalProperties": false,
+                    "description": "Open a modal block by id. Optional `params` are injected as the modal's local context — read inside the modal's child blocks with {{params.<key>}}, including the form's record_id_expression for an Edit modal that needs the row id.",
+                    "properties": {
+                        "type": { "const": "open_modal" },
+                        "modal_block_id": { "$ref": "#/$defs/id" },
+                        "params": {
+                            "type": "object",
+                            "description": "Optional key→value map. Values can be expression strings ({{row.id}}, {{form.x}}) or literal scalars. Each key becomes available inside the modal as {{params.<key>}}.",
+                            "additionalProperties": {
+                                "type": ["string", "boolean", "number", "null"]
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "close_modal" },
+                        "modal_block_id": { "$ref": "#/$defs/id" }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "object_id", "values"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "create_record" },
+                        "object_id": { "$ref": "#/$defs/id" },
+                        "values": {
+                            "type": "object",
+                            "description": "Field-slug → value map. Values can be expression strings ({{form.x}}, {{row.id}}, {{current_user.id}}) OR literal scalars (true, 42, \"open\", null). RecordWriteService casts them to the field's type on save.",
+                            "additionalProperties": {
+                                "type": ["string", "boolean", "number", "null"]
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "object_id", "record_id_expression", "values"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "update_record" },
+                        "object_id": { "$ref": "#/$defs/id" },
+                        "record_id_expression": { "type": "string" },
+                        "values": {
+                            "type": "object",
+                            "description": "Field-slug → value map. Values can be expression strings ({{form.x}}, {{row.id}}, {{current_user.id}}) OR literal scalars (true, 42, \"open\", null). RecordWriteService casts them to the field's type on save.",
+                            "additionalProperties": {
+                                "type": ["string", "boolean", "number", "null"]
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "object_id", "record_id_expression"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "delete_record" },
+                        "object_id": { "$ref": "#/$defs/id" },
+                        "record_id_expression": { "type": "string" }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "message"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "show_toast" },
+                        "level": { "enum": ["info", "success", "warning", "error"], "default": "info" },
+                        "message": { "type": "string", "maxLength": 500 }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "refresh" },
+                        "target_block_id": { "$ref": "#/$defs/id" }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "workflow_id"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "run_workflow" },
+                        "workflow_id": { "$ref": "#/$defs/id" },
+                        "input": {
+                            "type": "object",
+                            "additionalProperties": { "type": "string" }
+                        }
+                    }
+                }
+            ]
+        },
+
+        "workflow": {
+            "type": "object",
+            "required": ["id", "slug", "name", "trigger", "steps"],
+            "additionalProperties": false,
+            "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "slug": { "$ref": "#/$defs/slug" },
+                "name": { "type": "string", "maxLength": 120 },
+                "description": { "type": "string", "maxLength": 500 },
+                "enabled": { "type": "boolean", "default": true },
+                "trigger": { "$ref": "#/$defs/trigger" },
+                "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } },
+                "error_handler": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+                "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 3600, "default": 300 },
+                "max_retries": { "type": "integer", "minimum": 0, "maximum": 10, "default": 0 }
+            }
+        },
+        "trigger": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "required": ["type"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "manual" },
+                        "label": { "type": "string", "maxLength": 60 }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "object_id"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "enum": ["record.created", "record.updated", "record.deleted"] },
+                        "object_id": { "$ref": "#/$defs/id" },
+                        "filter": { "$ref": "#/$defs/filter_expression" }
+                    }
+                }
+            ]
+        },
+        "step_base": {
+            "type": "object",
+            "required": ["id", "type"],
+            "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "name": { "type": "string", "maxLength": 80 },
+                "output_variable": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 50 },
+                "skip_if": { "type": "string", "maxLength": 500 },
+                "retry": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "max_attempts": { "type": "integer", "minimum": 1, "maximum": 10 },
+                        "backoff_seconds": { "type": "integer", "minimum": 0, "maximum": 60 }
+                    }
+                }
+            }
+        },
+        "step": {
+            "oneOf": [
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "record.create" },
+                                "object_id": { "$ref": "#/$defs/id" },
+                                "values": {
+                                    "type": "object",
+                                    "additionalProperties": { "type": "string" }
+                                }
+                            },
+                            "required": ["type", "object_id", "values"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "record.update" },
+                                "object_id": { "$ref": "#/$defs/id" },
+                                "record_id_expression": { "type": "string" },
+                                "values": {
+                                    "type": "object",
+                                    "additionalProperties": { "type": "string" }
+                                }
+                            },
+                            "required": ["type", "object_id", "record_id_expression", "values"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "record.delete" },
+                                "object_id": { "$ref": "#/$defs/id" },
+                                "record_id_expression": { "type": "string" }
+                            },
+                            "required": ["type", "object_id", "record_id_expression"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "record.query" },
+                                "object_id": { "$ref": "#/$defs/id" },
+                                "filter": { "$ref": "#/$defs/filter_expression" },
+                                "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+                            },
+                            "required": ["type", "object_id"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "set_variable" },
+                                "variable": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+                                "value": { "type": "string", "description": "Literal or expression — resolved before assignment." }
+                            },
+                            "required": ["type", "variable", "value"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "log" },
+                                "level": { "enum": ["debug", "info", "warning", "error"], "default": "info" },
+                                "message": { "type": "string", "maxLength": 2000 }
+                            },
+                            "required": ["type", "message"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "branch" },
+                                "cases": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "items": {
+                                        "type": "object",
+                                        "required": ["condition", "steps"],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "condition": { "type": "string" },
+                                            "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } }
+                                        }
+                                    }
+                                },
+                                "default_steps": { "type": "array", "items": { "$ref": "#/$defs/step" } }
+                            },
+                            "required": ["type", "cases"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "foreach" },
+                                "items": { "type": "string", "minLength": 1, "description": "Expression resolving to an array, e.g. {{steps.calc.output.primes}}. The sub-steps run once per element." },
+                                "item_variable": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 50, "description": "Variable name the current element is bound to (default 'item'), referenced via {{vars.<name>}}." },
+                                "index_variable": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 50, "description": "Optional variable bound to the 0-based index." },
+                                "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } }
+                            },
+                            "required": ["type", "items", "steps"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "ai.complete" },
+                                "model": { "type": "string", "maxLength": 80 },
+                                "system_prompt": { "type": "string", "maxLength": 10000 },
+                                "user_prompt": { "type": "string", "maxLength": 50000 },
+                                "max_tokens": { "type": "integer", "minimum": 1, "maximum": 8192 },
+                                "temperature": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["type", "user_prompt"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "http.request" },
+                                "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+                                "url": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                                "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                                "query": { "type": "object", "additionalProperties": { "type": "string" } },
+                                "body": {},
+                                "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 60, "default": 30 }
+                            },
+                            "required": ["type", "method", "url"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "script.run" },
+                                "code": { "type": "string", "minLength": 1, "maxLength": 20000, "description": "JavaScript run in an isolated QuickJS sandbox (no network/filesystem/host access). Receives the resolved `input` map as the `input` argument; whatever it `return`s becomes the step output." },
+                                "input": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Map of name → expression resolved against the workflow context before the script runs." },
+                                "timeout_ms": { "type": "integer", "minimum": 50, "maximum": 10000, "default": 2000 }
+                            },
+                            "required": ["type", "code"]
+                        }
+                    ]
+                }
+            ]
+        },
+
+        "navigation": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/navigation_item" }
+                }
+            }
+        },
+        "navigation_item": {
+            "type": "object",
+            "required": ["id", "label"],
+            "additionalProperties": false,
+            "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "label": { "type": "string" },
+                "icon": { "type": "string" },
+                "page_id": { "$ref": "#/$defs/id" },
+                "children": { "type": "array", "items": { "$ref": "#/$defs/navigation_item" } },
+                "visibility": { "$ref": "#/$defs/visibility_rule" }
+            }
+        },
+
+        "permissions": {
+            "type": "object",
+            "required": ["roles"],
+            "additionalProperties": false,
+            "properties": {
+                "roles": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "required": ["id", "slug", "name"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "id": { "$ref": "#/$defs/id" },
+                            "slug": { "$ref": "#/$defs/slug" },
+                            "name": { "type": "string" },
+                            "is_default": { "type": "boolean", "default": false }
+                        }
+                    }
+                },
+                "object_policies": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["object_id", "role_id", "actions"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "object_id": { "$ref": "#/$defs/id" },
+                            "role_id": { "$ref": "#/$defs/id" },
+                            "actions": {
+                                "type": "array",
+                                "items": { "enum": ["create", "read", "update", "delete"] }
+                            },
+                            "row_filter": { "$ref": "#/$defs/filter_expression" },
+                            "field_restrictions": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "hidden": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+                                    "readonly": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+                                }
+                            }
+                        }
+                    }
+                },
+                "page_policies": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["page_id", "role_id"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "page_id": { "$ref": "#/$defs/id" },
+                            "role_id": { "$ref": "#/$defs/id" },
+                            "can_view": { "type": "boolean", "default": true }
+                        }
+                    }
+                }
+            }
+        },
+
+        "settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "default_locale": { "type": "string", "default": "es-MX" },
+                "default_timezone": { "type": "string", "default": "America/Mexico_City" },
+                "default_currency": { "type": "string", "pattern": "^[A-Z]{3}$", "default": "MXN" },
+                "theme": { "enum": ["light", "dark"], "default": "dark", "description": "Color palette applied to the runtime: 'dark' (default, matches the platform chrome) or 'light' (white surfaces, black text)." },
+                "feature_flags": {
+                    "type": "object",
+                    "additionalProperties": { "type": "boolean" }
+                }
+            }
+        }
+    }
+}

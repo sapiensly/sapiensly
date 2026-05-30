@@ -617,6 +617,18 @@ it('rejects an invalid style.max_width value', function () {
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
 });
 
+it('accepts a heading size override and rejects an invalid one', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [['id' => id('blk'), 'type' => 'heading', 'content' => 'Hola', 'level' => 2, 'size' => 'display']],
+    ]];
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+
+    $manifest['pages'][0]['blocks'][0]['size'] = 'gigante';
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
 it('accepts a full-bleed gradient section, a feature_grid and a cta', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[

@@ -11,6 +11,8 @@ interface CtaBlock {
     button?: { label: string; on_click: RuntimeAction[] };
 }
 
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<{ block: CtaBlock }>();
 const { execute } = useActionExecutor();
 

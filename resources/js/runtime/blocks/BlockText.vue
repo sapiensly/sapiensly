@@ -2,6 +2,8 @@
 import type { BlockText } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<{ block: BlockText }>();
 
 const t = themeTokens(useRuntimeTheme());
