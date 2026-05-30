@@ -2,6 +2,7 @@
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
+import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
@@ -28,6 +29,7 @@ import { dashboard } from '@/routes';
 import type { AppPageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
+    AppWindow,
     Bot,
     BrainCircuit,
     ChevronsUpDown,
@@ -89,6 +91,13 @@ const sections = computed<NavSection[]>(() => [
         key: 'main',
         label: t('app_v2.sidebar.section_main'),
         items: [
+            {
+                key: 'apps',
+                label: t('app_v2.nav.apps'),
+                href: AppController.index().url,
+                icon: AppWindow,
+                match: (u) => u.startsWith('/apps') || u.startsWith('/r/'),
+            },
             {
                 key: 'flows',
                 label: t('app_v2.nav.flows'),

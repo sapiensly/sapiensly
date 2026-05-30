@@ -171,6 +171,22 @@
     body {
         @apply bg-background text-foreground;
     }
+
+    /*
+     * Tailwind's preflight resets <button> cursor to default. That's the
+     * opposite of what the rest of the app wants — interactive controls
+     * should signal "I am clickable". Disabled buttons still get the proper
+     * not-allowed cursor so the affordance stays accurate.
+     */
+    button:not(:disabled),
+    [role='button']:not([aria-disabled='true']),
+    summary {
+        cursor: pointer;
+    }
+    button:disabled,
+    [role='button'][aria-disabled='true'] {
+        cursor: not-allowed;
+    }
 }
 
 /* Impersonation: push sidebar and content below the fixed banner */

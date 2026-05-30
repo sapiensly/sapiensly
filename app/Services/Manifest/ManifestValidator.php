@@ -1,0 +1,1774 @@
+<?php
+
+namespace App\Services\Manifest;
+
+use App\Services\Records\RecordQueryService;
+use App\Services\Records\SafeExpressionEvaluator;
+use Opis\JsonSchema\Errors\ErrorFormatter;
+use Opis\JsonSchema\Validator as OpisValidator;
+use Symfony\Component\ExpressionLanguage\Lexer;
+
+/**
+ * Validates an App manifest against the JSON Schema (storage/app/schemas/app-manifest/v1.json)
+ * and then runs cross-cutting semantic rules that JSON Schema cannot express:
+ * resolved references, unique slugs in scope, compatible field types per block,
+ * coherent relation cardinality, well-formed expressions.
+ */
+class ManifestValidator
+{
+    private const SCHEMA_URI = 'https://sapiensly.com/schemas/app-manifest/v1.json';
+
+    private const SCHEMA_PATH = 'app/schemas/app-manifest/v1.json';
+
+    private ?OpisValidator $opis = null;
+
+    private ?Lexer $lexer = null;
+
+    public function __construct(private ?string $schemaPath = null) {}
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     */
+    public function validate(array $manifest): ManifestValidationResult
+    {
+        $schemaErrors = $this->validateSchema($manifest);
+
+        // If the manifest doesn't even match the schema shape, cross-cutting rules
+        // would likely throw on missing keys. Bail early with the schema errors.
+        if ($schemaErrors !== []) {
+            return ManifestValidationResult::fail($schemaErrors);
+        }
+
+        $warnings = $this->collectWarnings($manifest);
+        $semanticErrors = $this->validateCrossCutting($manifest);
+
+        if ($semanticErrors !== []) {
+            return ManifestValidationResult::fail($semanticErrors, $warnings);
+        }
+
+        return ManifestValidationResult::ok($warnings);
+    }
+
+    /**
+     * Non-blocking completeness checks: surface controls that are structurally
+     * valid but DO NOTHING, so the builder AI gets a signal that it left a task
+     * half-wired instead of assuming success. These never fail validation.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<ManifestValidationError>
+     */
+    private function collectWarnings(array $manifest): array
+    {
+        $warnings = [];
+        foreach ($manifest['pages'] ?? [] as $pi => $page) {
+            $this->collectBlockWarnings($page['blocks'] ?? [], "/pages/{$pi}/blocks", $warnings);
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function collectBlockWarnings(array $blocks, string $path, array &$warnings): void
+    {
+        foreach ($blocks as $i => $block) {
+            $bp = "{$path}/{$i}";
+            $type = $block['type'] ?? '';
+
+            if (in_array($type, ['form', 'multi_step_form'], true)
+                && ! $this->sequenceHasEffect($block['on_submit'] ?? [], requirePersist: true)) {
+                $warnings[] = new ManifestValidationError(
+                    "{$bp}/on_submit",
+                    "this {$type} collects input but its on_submit never persists or acts on it (no create_record / update_record / run_workflow) — the submit button looks functional but does nothing. Wire the action, or if the task needs logic the platform can't express, tell the user what's missing instead of leaving it empty.",
+                    'incomplete_action',
+                );
+            }
+
+            if ($type === 'button'
+                && ! $this->sequenceHasEffect($block['on_click'] ?? [], requirePersist: false)) {
+                $warnings[] = new ManifestValidationError(
+                    "{$bp}/on_click",
+                    'this button has no effect — its on_click only shows a toast or refreshes, it never changes data or navigates.',
+                    'no_effect',
+                );
+            }
+
+            if ($type === 'table') {
+                foreach ($block['columns'] ?? [] as $ci => $col) {
+                    if (($col['type'] ?? '') === 'action'
+                        && ! $this->sequenceHasEffect($col['on_click'] ?? [], requirePersist: false)) {
+                        $warnings[] = new ManifestValidationError(
+                            "{$bp}/columns/{$ci}/on_click",
+                            'this action column has no effect — its on_click only shows a toast or refreshes.',
+                            'no_effect',
+                        );
+                    }
+                }
+            }
+
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (! empty($block[$key])) {
+                    $this->collectBlockWarnings($block[$key], "{$bp}/{$key}", $warnings);
+                }
+            }
+            foreach ($block['tabs'] ?? [] as $ti => $tab) {
+                $this->collectBlockWarnings($tab['blocks'] ?? [], "{$bp}/tabs/{$ti}/blocks", $warnings);
+            }
+            foreach ($block['sections'] ?? [] as $si => $section) {
+                $this->collectBlockWarnings($section['blocks'] ?? [], "{$bp}/sections/{$si}/blocks", $warnings);
+            }
+        }
+    }
+
+    /**
+     * Does an action sequence actually do something? For forms we require a
+     * data change or workflow run; for buttons, navigation/modal counts too.
+     *
+     * @param  list<array<string, mixed>>  $actions
+     */
+    private function sequenceHasEffect(array $actions, bool $requirePersist): bool
+    {
+        $effectful = $requirePersist
+            ? ['create_record', 'update_record', 'delete_record', 'run_workflow']
+            : ['create_record', 'update_record', 'delete_record', 'run_workflow', 'navigate', 'open_modal', 'close_modal'];
+
+        foreach ($actions as $action) {
+            if (in_array($action['type'] ?? '', $effectful, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return ManifestValidationError[]
+     */
+    private function validateSchema(array $manifest): array
+    {
+        $result = $this->opis()->validate(
+            $this->toJsonObject($manifest),
+            self::SCHEMA_URI,
+        );
+
+        if ($result->isValid()) {
+            return [];
+        }
+
+        $formatted = (new ErrorFormatter)->format($result->error(), multiple: true);
+
+        $errors = [];
+        foreach ($formatted as $path => $messages) {
+            foreach ((array) $messages as $message) {
+                $errors[] = new ManifestValidationError(
+                    path: $path === '' ? '/' : $path,
+                    message: $message,
+                    code: 'schema',
+                );
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return ManifestValidationError[]
+     */
+    private function validateCrossCutting(array $manifest): array
+    {
+        $errors = [];
+
+        $objects = $manifest['objects'] ?? [];
+        $pages = $manifest['pages'] ?? [];
+        $permissions = $manifest['permissions'] ?? [];
+        $navigation = $manifest['navigation'] ?? null;
+        $workflows = $manifest['workflows'] ?? [];
+
+        $objectsById = [];
+        $objectsBySlug = [];
+        foreach ($objects as $i => $object) {
+            if (isset($objectsById[$object['id']])) {
+                $errors[] = new ManifestValidationError(
+                    "/objects/{$i}/id",
+                    "Duplicate object id '{$object['id']}'",
+                    'duplicate_id',
+                );
+            }
+            if (isset($objectsBySlug[$object['slug']])) {
+                $errors[] = new ManifestValidationError(
+                    "/objects/{$i}/slug",
+                    "Duplicate object slug '{$object['slug']}'",
+                    'duplicate_slug',
+                );
+            }
+            $objectsById[$object['id']] = $object;
+            $objectsBySlug[$object['slug']] = $object;
+        }
+
+        $fieldsByObjectId = [];
+        foreach ($objects as $i => $object) {
+            $fieldsById = [];
+            $fieldsBySlug = [];
+            foreach ($object['fields'] as $j => $field) {
+                if (isset($fieldsById[$field['id']])) {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields/{$j}/id",
+                        "Duplicate field id '{$field['id']}' in object '{$object['slug']}'",
+                        'duplicate_id',
+                    );
+                }
+                if (isset($fieldsBySlug[$field['slug']])) {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields/{$j}/slug",
+                        "Duplicate field slug '{$field['slug']}' in object '{$object['slug']}'",
+                        'duplicate_slug',
+                    );
+                }
+                $fieldsById[$field['id']] = $field;
+                $fieldsBySlug[$field['slug']] = $field;
+            }
+            $fieldsByObjectId[$object['id']] = $fieldsById;
+
+            if (isset($object['primary_display_field_id']) && ! isset($fieldsById[$object['primary_display_field_id']])) {
+                $errors[] = new ManifestValidationError(
+                    "/objects/{$i}/primary_display_field_id",
+                    "primary_display_field_id '{$object['primary_display_field_id']}' does not match any field in object '{$object['slug']}'",
+                    'unresolved_ref',
+                );
+            }
+
+            foreach ($object['fields'] as $j => $field) {
+                if ($field['type'] === 'relation') {
+                    if (! isset($objectsById[$field['target_object_id']])) {
+                        $errors[] = new ManifestValidationError(
+                            "/objects/{$i}/fields/{$j}/target_object_id",
+                            "Relation field '{$field['slug']}' targets unknown object id '{$field['target_object_id']}'",
+                            'unresolved_ref',
+                        );
+                    }
+                }
+
+                // rating: default (if set) must fit in [0, max].
+                if ($field['type'] === 'rating' && isset($field['default'])) {
+                    $max = $field['max'] ?? 5;
+                    if ($field['default'] < 0 || $field['default'] > $max) {
+                        $errors[] = new ManifestValidationError(
+                            "/objects/{$i}/fields/{$j}/default",
+                            "rating default {$field['default']} must be between 0 and {$max}",
+                            'incompatible_value',
+                        );
+                    }
+                }
+
+                // slider: min < max, default within range, currency format
+                // requires a currency_code.
+                if ($field['type'] === 'slider') {
+                    $min = $field['min'] ?? 0;
+                    $max = $field['max'] ?? 100;
+                    if ($min >= $max) {
+                        $errors[] = new ManifestValidationError(
+                            "/objects/{$i}/fields/{$j}",
+                            "slider min ({$min}) must be strictly less than max ({$max})",
+                            'incompatible_value',
+                        );
+                    }
+                    if (isset($field['default']) && ($field['default'] < $min || $field['default'] > $max)) {
+                        $errors[] = new ManifestValidationError(
+                            "/objects/{$i}/fields/{$j}/default",
+                            "slider default {$field['default']} must be between {$min} and {$max}",
+                            'incompatible_value',
+                        );
+                    }
+                    if (($field['format'] ?? null) === 'currency' && ! isset($field['currency_code'])) {
+                        $errors[] = new ManifestValidationError(
+                            "/objects/{$i}/fields/{$j}/currency_code",
+                            'slider with format=currency requires currency_code',
+                            'missing_required',
+                        );
+                    }
+                }
+
+                // date_range: default.from <= default.to when both present.
+                if ($field['type'] === 'date_range' && isset($field['default']['from'], $field['default']['to'])) {
+                    if (strcmp((string) $field['default']['from'], (string) $field['default']['to']) > 0) {
+                        $errors[] = new ManifestValidationError(
+                            "/objects/{$i}/fields/{$j}/default",
+                            "date_range default 'from' must be <= 'to'",
+                            'incompatible_value',
+                        );
+                    }
+                }
+            }
+        }
+
+        // Second pass over fields — validates derived fields (lookup/rollup)
+        // that reference fields on OTHER objects. Done after $fieldsByObjectId
+        // is fully built so forward references resolve.
+        foreach ($objects as $i => $object) {
+            foreach ($object['fields'] as $j => $field) {
+                if (! in_array($field['type'], ['lookup', 'rollup'], true)) {
+                    continue;
+                }
+
+                $viaFieldId = $field['via_relation_field_id'] ?? null;
+                $viaField = $fieldsByObjectId[$object['id']][$viaFieldId] ?? null;
+
+                if ($viaField === null) {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields/{$j}/via_relation_field_id",
+                        "{$field['type']} field references unknown via_relation_field_id '{$viaFieldId}'",
+                        'unresolved_ref',
+                    );
+
+                    continue;
+                }
+
+                if ($viaField['type'] !== 'relation') {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields/{$j}/via_relation_field_id",
+                        "{$field['type']} field must reference a relation field, not '{$viaField['type']}'",
+                        'incompatible_type',
+                    );
+
+                    continue;
+                }
+
+                $targetFieldId = $field['target_field_id'] ?? null;
+                $needsTarget = $field['type'] === 'lookup'
+                    || ! in_array($field['aggregator'] ?? '', ['count', 'count_distinct'], true);
+
+                if (! $needsTarget) {
+                    continue;
+                }
+
+                $targetObjectFields = $fieldsByObjectId[$viaField['target_object_id']] ?? [];
+                if ($targetFieldId === null || ! isset($targetObjectFields[$targetFieldId])) {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields/{$j}/target_field_id",
+                        "{$field['type']} field target_field_id '{$targetFieldId}' does not belong to the related object",
+                        'unresolved_ref',
+                    );
+
+                    continue;
+                }
+
+                if ($field['type'] === 'rollup'
+                    && in_array($field['aggregator'] ?? '', ['sum', 'avg', 'min', 'max'], true)
+                    && ! in_array($targetObjectFields[$targetFieldId]['type'], ['number', 'currency', 'rating', 'slider'], true)) {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields/{$j}/target_field_id",
+                        "rollup aggregator '{$field['aggregator']}' requires a numeric target field, got '{$targetObjectFields[$targetFieldId]['type']}'",
+                        'incompatible_type',
+                    );
+                }
+            }
+        }
+
+        // Detect formula cycles. We build a dependency graph from each formula
+        // field to other formula fields it references via {{<slug>}}, then DFS
+        // for back-edges. Formulas can reference non-formula fields safely.
+        foreach ($objects as $i => $object) {
+            $formulasInObject = [];
+            $slugToField = [];
+            foreach ($object['fields'] as $field) {
+                $slugToField[$field['slug']] = $field;
+                if ($field['type'] === 'formula') {
+                    $formulasInObject[$field['slug']] = $field;
+                }
+            }
+            foreach ($formulasInObject as $slug => $formula) {
+                $visited = [];
+                if ($this->formulaHasCycle($slug, $formulasInObject, $visited)) {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields",
+                        "Formula '{$slug}' takes part in a dependency cycle",
+                        'formula_cycle',
+                    );
+                    break; // one error per object is enough
+                }
+            }
+        }
+
+        foreach ($objects as $i => $object) {
+            foreach ($object['fields'] as $j => $field) {
+                if ($field['type'] !== 'relation' || ! isset($field['inverse_field_id'])) {
+                    continue;
+                }
+                $target = $objectsById[$field['target_object_id']] ?? null;
+                if ($target === null) {
+                    continue; // already reported above
+                }
+                $inverse = null;
+                foreach ($target['fields'] as $tf) {
+                    if ($tf['id'] === $field['inverse_field_id']) {
+                        $inverse = $tf;
+                        break;
+                    }
+                }
+                if ($inverse === null) {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields/{$j}/inverse_field_id",
+                        "inverse_field_id '{$field['inverse_field_id']}' not found in target object",
+                        'unresolved_ref',
+                    );
+
+                    continue;
+                }
+                if (($inverse['type'] ?? null) !== 'relation') {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields/{$j}/inverse_field_id",
+                        "inverse_field_id must refer to a relation field, got '{$inverse['type']}'",
+                        'incompatible_type',
+                    );
+
+                    continue;
+                }
+                if (! $this->cardinalitiesMatch($field['cardinality'], $inverse['cardinality'] ?? '')) {
+                    $errors[] = new ManifestValidationError(
+                        "/objects/{$i}/fields/{$j}/cardinality",
+                        "Cardinality '{$field['cardinality']}' is not the inverse of '{$inverse['cardinality']}'",
+                        'incompatible_cardinality',
+                    );
+                }
+            }
+        }
+
+        $pagesById = [];
+        $pagesBySlug = [];
+        $pathsSeen = [];
+        foreach ($pages as $i => $page) {
+            if (isset($pagesById[$page['id']])) {
+                $errors[] = new ManifestValidationError(
+                    "/pages/{$i}/id",
+                    "Duplicate page id '{$page['id']}'",
+                    'duplicate_id',
+                );
+            }
+            if (isset($pagesBySlug[$page['slug']])) {
+                $errors[] = new ManifestValidationError(
+                    "/pages/{$i}/slug",
+                    "Duplicate page slug '{$page['slug']}'",
+                    'duplicate_slug',
+                );
+            }
+            if (isset($pathsSeen[$page['path']])) {
+                $errors[] = new ManifestValidationError(
+                    "/pages/{$i}/path",
+                    "Duplicate page path '{$page['path']}'",
+                    'duplicate_path',
+                );
+            }
+            $pagesById[$page['id']] = $page;
+            $pagesBySlug[$page['slug']] = $page;
+            $pathsSeen[$page['path']] = true;
+
+            // First pass over the page: collect ids of any modal blocks so
+            // open_modal/close_modal actions inside the same page can reference
+            // them. Modals are page-scoped — referencing a modal from another
+            // page is not allowed in MVP.
+            $modalIdsInPage = [];
+            $this->collectModalIds($page['blocks'] ?? [], $modalIdsInPage);
+
+            $this->validateBlocks(
+                $page['blocks'] ?? [],
+                "/pages/{$i}/blocks",
+                $objectsById,
+                $fieldsByObjectId,
+                $modalIdsInPage,
+                $errors,
+            );
+        }
+
+        $roles = $permissions['roles'] ?? [];
+        $rolesById = [];
+        $rolesBySlug = [];
+        foreach ($roles as $i => $role) {
+            if (isset($rolesById[$role['id']])) {
+                $errors[] = new ManifestValidationError(
+                    "/permissions/roles/{$i}/id",
+                    "Duplicate role id '{$role['id']}'",
+                    'duplicate_id',
+                );
+            }
+            if (isset($rolesBySlug[$role['slug']])) {
+                $errors[] = new ManifestValidationError(
+                    "/permissions/roles/{$i}/slug",
+                    "Duplicate role slug '{$role['slug']}'",
+                    'duplicate_slug',
+                );
+            }
+            $rolesById[$role['id']] = $role;
+            $rolesBySlug[$role['slug']] = $role;
+        }
+
+        foreach ($permissions['object_policies'] ?? [] as $i => $policy) {
+            if (! isset($objectsById[$policy['object_id']])) {
+                $errors[] = new ManifestValidationError(
+                    "/permissions/object_policies/{$i}/object_id",
+                    "object_id '{$policy['object_id']}' does not match any defined object",
+                    'unresolved_ref',
+                );
+            }
+            if (! isset($rolesById[$policy['role_id']])) {
+                $errors[] = new ManifestValidationError(
+                    "/permissions/object_policies/{$i}/role_id",
+                    "role_id '{$policy['role_id']}' does not match any defined role",
+                    'unresolved_ref',
+                );
+            }
+            $objectFields = $fieldsByObjectId[$policy['object_id']] ?? [];
+            foreach ($policy['field_restrictions']['hidden'] ?? [] as $k => $fid) {
+                if (! isset($objectFields[$fid])) {
+                    $errors[] = new ManifestValidationError(
+                        "/permissions/object_policies/{$i}/field_restrictions/hidden/{$k}",
+                        "field_id '{$fid}' does not belong to object '{$policy['object_id']}'",
+                        'unresolved_ref',
+                    );
+                }
+            }
+            foreach ($policy['field_restrictions']['readonly'] ?? [] as $k => $fid) {
+                if (! isset($objectFields[$fid])) {
+                    $errors[] = new ManifestValidationError(
+                        "/permissions/object_policies/{$i}/field_restrictions/readonly/{$k}",
+                        "field_id '{$fid}' does not belong to object '{$policy['object_id']}'",
+                        'unresolved_ref',
+                    );
+                }
+            }
+        }
+
+        foreach ($permissions['page_policies'] ?? [] as $i => $policy) {
+            if (! isset($pagesById[$policy['page_id']])) {
+                $errors[] = new ManifestValidationError(
+                    "/permissions/page_policies/{$i}/page_id",
+                    "page_id '{$policy['page_id']}' does not match any defined page",
+                    'unresolved_ref',
+                );
+            }
+            if (! isset($rolesById[$policy['role_id']])) {
+                $errors[] = new ManifestValidationError(
+                    "/permissions/page_policies/{$i}/role_id",
+                    "role_id '{$policy['role_id']}' does not match any defined role",
+                    'unresolved_ref',
+                );
+            }
+        }
+
+        if ($navigation !== null) {
+            $this->validateNavigation($navigation['items'] ?? [], '/navigation/items', $pagesById, $errors);
+        }
+
+        // Workflows: id/slug uniqueness, trigger object_id resolution, step
+        // record.* object_ids, and run_workflow action targets resolved.
+        $workflowsById = [];
+        $workflowSlugsSeen = [];
+        foreach ($workflows as $i => $workflow) {
+            if (isset($workflowsById[$workflow['id']])) {
+                $errors[] = new ManifestValidationError(
+                    "/workflows/{$i}/id",
+                    "Duplicate workflow id '{$workflow['id']}'",
+                    'duplicate_id',
+                );
+            }
+            if (isset($workflowSlugsSeen[$workflow['slug']])) {
+                $errors[] = new ManifestValidationError(
+                    "/workflows/{$i}/slug",
+                    "Duplicate workflow slug '{$workflow['slug']}'",
+                    'duplicate_slug',
+                );
+            }
+            $workflowsById[$workflow['id']] = $workflow;
+            $workflowSlugsSeen[$workflow['slug']] = true;
+
+            // Trigger validations
+            $trigger = $workflow['trigger'] ?? [];
+            $triggerType = $trigger['type'] ?? null;
+            if (in_array($triggerType, ['record.created', 'record.updated', 'record.deleted'], true)) {
+                $triggerObjectId = $trigger['object_id'] ?? null;
+                if ($triggerObjectId === null || ! isset($objectsById[$triggerObjectId])) {
+                    $errors[] = new ManifestValidationError(
+                        "/workflows/{$i}/trigger/object_id",
+                        "trigger references unknown object_id '{$triggerObjectId}'",
+                        'unresolved_ref',
+                    );
+                } else {
+                    $this->validateFilterExpression(
+                        $trigger['filter'] ?? null,
+                        "/workflows/{$i}/trigger/filter",
+                        $fieldsByObjectId[$triggerObjectId] ?? [],
+                        $errors,
+                    );
+                }
+            }
+
+            $this->validateWorkflowSteps(
+                $workflow['steps'] ?? [],
+                "/workflows/{$i}/steps",
+                $objectsById,
+                $errors,
+            );
+
+            $this->validateWorkflowExpressionContext(
+                $workflow['steps'] ?? [],
+                "/workflows/{$i}/steps",
+                $errors,
+            );
+        }
+
+        // Second pass over pages/blocks: validate run_workflow action targets
+        // now that we have the workflow ids collected.
+        foreach ($pages as $i => $page) {
+            $this->validateRunWorkflowRefs(
+                $page['blocks'] ?? [],
+                "/pages/{$i}/blocks",
+                $workflowsById,
+                $errors,
+            );
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Context roots that exist in the page/UI runtime but NOT inside a workflow.
+     * A workflow only sees trigger, vars, steps and current_user — page values
+     * must be passed in via the run_workflow action's `input` map and then read
+     * as {{trigger.…}}. Referencing these inside a workflow silently resolves to
+     * null at runtime, so we reject them at save with a guiding message.
+     */
+    private const WORKFLOW_FORBIDDEN_ROOTS = ['form', 'params', 'row'];
+
+    /**
+     * Deep-scan every expression string in a workflow's step tree and reject
+     * references to roots that don't exist in the workflow context.
+     *
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function validateWorkflowExpressionContext(mixed $node, string $path, array &$errors): void
+    {
+        if (is_string($node)) {
+            $root = $this->forbiddenRootIn($node, self::WORKFLOW_FORBIDDEN_ROOTS);
+            if ($root !== null) {
+                $errors[] = new ManifestValidationError(
+                    $path,
+                    "expression references '{{{$root}.…}}', which is not available inside a workflow (workflows only see trigger, vars, steps and current_user). Pass the page value into the workflow via the run_workflow action's `input` map, then read it here as '{{trigger.…}}'.",
+                    'invalid_context',
+                );
+            }
+
+            return;
+        }
+
+        if (is_array($node)) {
+            foreach ($node as $key => $value) {
+                if ($key === 'code') {
+                    continue; // script.run JS body — not an expression
+                }
+                $this->validateWorkflowExpressionContext($value, "{$path}/{$key}", $errors);
+            }
+        }
+    }
+
+    /**
+     * Returns the first forbidden context root referenced as a path base inside
+     * any {{ … }} token of $value, or null. String literals are stripped so a
+     * quoted "form" doesn't count, and a property access like `record.form` is
+     * excluded by the lookbehind.
+     *
+     * @param  list<string>  $forbidden
+     */
+    private function forbiddenRootIn(string $value, array $forbidden): ?string
+    {
+        if (! str_contains($value, '{{')) {
+            return null;
+        }
+        if (! preg_match_all('/\{\{\s*(.+?)\s*\}\}/', $value, $matches)) {
+            return null;
+        }
+
+        foreach ($matches[1] as $inner) {
+            $stripped = preg_replace('/([\'"]).*?\1/', '', $inner) ?? $inner;
+            foreach ($forbidden as $root) {
+                if (preg_match('/(?<![\w.])'.preg_quote($root, '/').'\b/', $stripped)) {
+                    return $root;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $steps
+     * @param  array<string, array<string, mixed>>  $objectsById
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function validateWorkflowSteps(array $steps, string $pathPrefix, array $objectsById, array &$errors): void
+    {
+        foreach ($steps as $i => $step) {
+            $stepPath = "{$pathPrefix}/{$i}";
+            $type = $step['type'] ?? null;
+
+            if (in_array($type, ['record.create', 'record.update', 'record.delete', 'record.query'], true)) {
+                $objectId = $step['object_id'] ?? null;
+                if ($objectId === null || ! isset($objectsById[$objectId])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$stepPath}/object_id",
+                        "step '{$type}' references unknown object_id '{$objectId}'",
+                        'unresolved_ref',
+                    );
+                }
+            }
+
+            if ($type === 'branch') {
+                foreach ($step['cases'] ?? [] as $j => $case) {
+                    $this->validateWorkflowSteps(
+                        $case['steps'] ?? [],
+                        "{$stepPath}/cases/{$j}/steps",
+                        $objectsById,
+                        $errors,
+                    );
+                }
+                $this->validateWorkflowSteps(
+                    $step['default_steps'] ?? [],
+                    "{$stepPath}/default_steps",
+                    $objectsById,
+                    $errors,
+                );
+            }
+
+            if ($type === 'foreach') {
+                $this->validateWorkflowSteps(
+                    $step['steps'] ?? [],
+                    "{$stepPath}/steps",
+                    $objectsById,
+                    $errors,
+                );
+            }
+        }
+    }
+
+    /**
+     * Walk page block trees and validate that every run_workflow action's
+     * workflow_id matches a workflow declared at the manifest root.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  array<string, array<string, mixed>>  $workflowsById
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function validateRunWorkflowRefs(array $blocks, string $pathPrefix, array $workflowsById, array &$errors): void
+    {
+        foreach ($blocks as $i => $block) {
+            $blockPath = "{$pathPrefix}/{$i}";
+
+            foreach (['on_click', 'on_submit', 'on_cancel'] as $key) {
+                foreach ($block[$key] ?? [] as $j => $action) {
+                    if (($action['type'] ?? null) === 'run_workflow') {
+                        $wfId = $action['workflow_id'] ?? null;
+                        if ($wfId === null || ! isset($workflowsById[$wfId])) {
+                            $errors[] = new ManifestValidationError(
+                                "{$blockPath}/{$key}/{$j}/workflow_id",
+                                "run_workflow references unknown workflow '{$wfId}'",
+                                'unresolved_ref',
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Action columns inside a table block carry on_click sequences too.
+            if (($block['type'] ?? null) === 'table') {
+                foreach ($block['columns'] ?? [] as $colIdx => $column) {
+                    if (($column['type'] ?? null) !== 'action') {
+                        continue;
+                    }
+                    foreach ($column['on_click'] ?? [] as $aIdx => $action) {
+                        if (($action['type'] ?? null) !== 'run_workflow') {
+                            continue;
+                        }
+                        $wfId = $action['workflow_id'] ?? null;
+                        if ($wfId === null || ! isset($workflowsById[$wfId])) {
+                            $errors[] = new ManifestValidationError(
+                                "{$blockPath}/columns/{$colIdx}/on_click/{$aIdx}/workflow_id",
+                                "run_workflow references unknown workflow '{$wfId}'",
+                                'unresolved_ref',
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Recurse through every container shape so a run_workflow nested
+            // inside a tab/accordion/split_view still gets validated.
+            foreach ($this->childBlockLists($block) as $childPath => $childBlocks) {
+                $this->validateRunWorkflowRefs($childBlocks, "{$blockPath}/{$childPath}", $workflowsById, $errors);
+            }
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  array<string, array<string, mixed>>  $objectsById
+     * @param  array<string, array<string, array<string, mixed>>>  $fieldsByObjectId
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function validateBlocks(array $blocks, string $pathPrefix, array $objectsById, array $fieldsByObjectId, array $modalIdsInPage, array &$errors): void
+    {
+        foreach ($blocks as $i => $block) {
+            $blockPath = "{$pathPrefix}/{$i}";
+
+            // Recurse into every container shape (container, modal, tabs,
+            // accordion, split_view) so a broken descendant is still caught.
+            foreach ($this->childBlockLists($block) as $childPath => $childBlocks) {
+                $this->validateBlocks(
+                    $childBlocks,
+                    "{$blockPath}/{$childPath}",
+                    $objectsById,
+                    $fieldsByObjectId,
+                    $modalIdsInPage,
+                    $errors,
+                );
+            }
+
+            if ($block['type'] === 'container' || $block['type'] === 'modal'
+                || $block['type'] === 'tabs' || $block['type'] === 'accordion'
+                || $block['type'] === 'split_view') {
+                continue;
+            }
+
+            if ($block['type'] === 'form') {
+                $objectId = $block['object_id'] ?? null;
+                if ($objectId === null || ! isset($objectsById[$objectId])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/object_id",
+                        "form block references unknown object_id '{$objectId}'",
+                        'unresolved_ref',
+                    );
+
+                    continue;
+                }
+                $fields = $fieldsByObjectId[$objectId] ?? [];
+                foreach ($block['fields'] ?? [] as $j => $formField) {
+                    if (! isset($fields[$formField['field_id']])) {
+                        $errors[] = new ManifestValidationError(
+                            "{$blockPath}/fields/{$j}/field_id",
+                            "form field_id '{$formField['field_id']}' does not belong to object '{$objectId}'",
+                            'unresolved_ref',
+                        );
+                    }
+                    if (isset($formField['default_expression'])) {
+                        $this->validateExpression($formField['default_expression'], "{$blockPath}/fields/{$j}/default_expression", 'default_expression', $errors);
+                    }
+                    if (isset($formField['readonly_expression'])) {
+                        $this->validateExpression($formField['readonly_expression'], "{$blockPath}/fields/{$j}/readonly_expression", 'readonly_expression', $errors);
+                    }
+                    foreach (['visible_if', 'required_if'] as $condKey) {
+                        if (isset($formField[$condKey])) {
+                            $this->validateFieldCondition($formField[$condKey], $fields, $objectId, "{$blockPath}/fields/{$j}/{$condKey}", $errors);
+                        }
+                    }
+                }
+                if (($block['mode'] ?? null) === 'edit' && ! isset($block['record_id_expression'])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/record_id_expression",
+                        'form with mode=edit requires record_id_expression',
+                        'missing_required',
+                    );
+                }
+                $this->validateActionSequence(
+                    $block['on_submit'] ?? [],
+                    "{$blockPath}/on_submit",
+                    $objectsById,
+                    $modalIdsInPage,
+                    $errors,
+                );
+                $this->validateActionSequence(
+                    $block['on_cancel'] ?? [],
+                    "{$blockPath}/on_cancel",
+                    $objectsById,
+                    $modalIdsInPage,
+                    $errors,
+                );
+
+                continue;
+            }
+
+            if ($block['type'] === 'multi_step_form') {
+                $objectId = $block['object_id'] ?? null;
+                if ($objectId === null || ! isset($objectsById[$objectId])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/object_id",
+                        "multi_step_form block references unknown object_id '{$objectId}'",
+                        'unresolved_ref',
+                    );
+
+                    continue;
+                }
+                $fields = $fieldsByObjectId[$objectId] ?? [];
+                $seenFieldIds = [];
+                foreach ($block['steps'] ?? [] as $sIdx => $step) {
+                    foreach ($step['fields'] ?? [] as $fIdx => $stepField) {
+                        $fid = $stepField['field_id'] ?? null;
+                        if (! isset($fields[$fid])) {
+                            $errors[] = new ManifestValidationError(
+                                "{$blockPath}/steps/{$sIdx}/fields/{$fIdx}/field_id",
+                                "multi_step_form field_id '{$fid}' does not belong to object '{$objectId}'",
+                                'unresolved_ref',
+                            );
+
+                            continue;
+                        }
+                        if (isset($seenFieldIds[$fid])) {
+                            $errors[] = new ManifestValidationError(
+                                "{$blockPath}/steps/{$sIdx}/fields/{$fIdx}/field_id",
+                                "multi_step_form field_id '{$fid}' appears in more than one step",
+                                'duplicate_id',
+                            );
+                        }
+                        $seenFieldIds[$fid] = true;
+
+                        if (isset($stepField['default_expression'])) {
+                            $this->validateExpression($stepField['default_expression'], "{$blockPath}/steps/{$sIdx}/fields/{$fIdx}/default_expression", 'default_expression', $errors);
+                        }
+                        if (isset($stepField['readonly_expression'])) {
+                            $this->validateExpression($stepField['readonly_expression'], "{$blockPath}/steps/{$sIdx}/fields/{$fIdx}/readonly_expression", 'readonly_expression', $errors);
+                        }
+                        foreach (['visible_if', 'required_if'] as $condKey) {
+                            if (isset($stepField[$condKey])) {
+                                $this->validateFieldCondition($stepField[$condKey], $fields, $objectId, "{$blockPath}/steps/{$sIdx}/fields/{$fIdx}/{$condKey}", $errors);
+                            }
+                        }
+                    }
+                }
+                if (($block['mode'] ?? null) === 'edit' && ! isset($block['record_id_expression'])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/record_id_expression",
+                        'multi_step_form with mode=edit requires record_id_expression',
+                        'missing_required',
+                    );
+                }
+                $this->validateActionSequence(
+                    $block['on_submit'] ?? [],
+                    "{$blockPath}/on_submit",
+                    $objectsById,
+                    $modalIdsInPage,
+                    $errors,
+                );
+                $this->validateActionSequence(
+                    $block['on_cancel'] ?? [],
+                    "{$blockPath}/on_cancel",
+                    $objectsById,
+                    $modalIdsInPage,
+                    $errors,
+                );
+
+                continue;
+            }
+
+            if ($block['type'] === 'button') {
+                $this->validateActionSequence(
+                    $block['on_click'] ?? [],
+                    "{$blockPath}/on_click",
+                    $objectsById,
+                    $modalIdsInPage,
+                    $errors,
+                );
+
+                continue;
+            }
+
+            if ($block['type'] === 'table') {
+                $objectId = $block['data_source']['object_id'] ?? null;
+                if ($objectId === null || ! isset($objectsById[$objectId])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/data_source/object_id",
+                        "table block references unknown object_id '{$objectId}'",
+                        'unresolved_ref',
+                    );
+
+                    continue;
+                }
+                $fields = $fieldsByObjectId[$objectId] ?? [];
+                foreach ($block['columns'] ?? [] as $j => $column) {
+                    // Action columns are buttons-per-row — they don't reference
+                    // a field, they reference an on_click action sequence that
+                    // resolves {{row.*}} at click time.
+                    if (($column['type'] ?? null) === 'action') {
+                        $this->validateActionSequence(
+                            $column['on_click'] ?? [],
+                            "{$blockPath}/columns/{$j}/on_click",
+                            $objectsById,
+                            $modalIdsInPage,
+                            $errors,
+                        );
+
+                        continue;
+                    }
+
+                    if (! isset($fields[$column['field_id']])
+                        && RecordQueryService::systemField($column['field_id']) === null) {
+                        $errors[] = new ManifestValidationError(
+                            "{$blockPath}/columns/{$j}/field_id",
+                            "column field_id '{$column['field_id']}' does not belong to object '{$objectId}'",
+                            'unresolved_ref',
+                        );
+                    }
+                }
+                $this->validateFilterExpression(
+                    $block['data_source']['filter'] ?? null,
+                    "{$blockPath}/data_source/filter",
+                    $fields,
+                    $errors,
+                );
+                foreach ($block['data_source']['sort'] ?? [] as $j => $sort) {
+                    if (! isset($fields[$sort['field_id']])
+                        && RecordQueryService::systemField($sort['field_id']) === null) {
+                        $errors[] = new ManifestValidationError(
+                            "{$blockPath}/data_source/sort/{$j}/field_id",
+                            "sort field_id '{$sort['field_id']}' does not belong to object '{$objectId}'",
+                            'unresolved_ref',
+                        );
+                    }
+                }
+            }
+
+            if ($block['type'] === 'stat') {
+                $objectId = $block['query']['object_id'] ?? null;
+                if ($objectId === null || ! isset($objectsById[$objectId])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/query/object_id",
+                        "stat block references unknown object_id '{$objectId}'",
+                        'unresolved_ref',
+                    );
+
+                    continue;
+                }
+                $fields = $fieldsByObjectId[$objectId] ?? [];
+                $aggregation = $block['aggregation'];
+                if ($aggregation !== 'count' && ! isset($block['field_id'])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/field_id",
+                        "stat block with aggregation '{$aggregation}' requires field_id",
+                        'missing_required',
+                    );
+                } elseif (isset($block['field_id']) && ! isset($fields[$block['field_id']])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/field_id",
+                        "stat field_id '{$block['field_id']}' does not belong to object '{$objectId}'",
+                        'unresolved_ref',
+                    );
+                } elseif (isset($block['field_id']) && in_array($aggregation, ['sum', 'avg', 'min', 'max'], true)) {
+                    $field = $fields[$block['field_id']];
+                    if (! in_array($field['type'], ['number', 'currency', 'rating', 'slider'], true)) {
+                        $errors[] = new ManifestValidationError(
+                            "{$blockPath}/field_id",
+                            "aggregation '{$aggregation}' requires a numeric field, got '{$field['type']}'",
+                            'incompatible_type',
+                        );
+                    }
+                }
+                $this->validateFilterExpression(
+                    $block['query']['filter'] ?? null,
+                    "{$blockPath}/query/filter",
+                    $fields,
+                    $errors,
+                );
+            }
+
+            if ($block['type'] === 'chart') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'chart',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $aggregation = $block['aggregation'];
+                if ($aggregation !== 'count' && ! isset($block['y_field_id'])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/y_field_id",
+                        "chart block with aggregation '{$aggregation}' requires y_field_id",
+                        'missing_required',
+                    );
+                }
+                $this->checkFieldRef($fields, $block['y_field_id'] ?? null, "{$blockPath}/y_field_id", 'chart.y_field_id', $errors,
+                    in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                $this->checkFieldRef($fields, $block['x_field_id'] ?? null, "{$blockPath}/x_field_id", 'chart.x_field_id', $errors);
+                $this->checkFieldRef($fields, $block['group_by_field_id'] ?? null, "{$blockPath}/group_by_field_id", 'chart.group_by_field_id', $errors);
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
+            if ($block['type'] === 'kanban') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'kanban',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $this->checkFieldRef($fields, $block['group_by_field_id'] ?? null, "{$blockPath}/group_by_field_id", 'kanban.group_by_field_id', $errors, ['single_select']);
+                $this->checkFieldRef($fields, $block['card_title_field_id'] ?? null, "{$blockPath}/card_title_field_id", 'kanban.card_title_field_id', $errors);
+                foreach ($block['card_meta_fields'] ?? [] as $j => $meta) {
+                    $this->checkFieldRef($fields, $meta['field_id'] ?? null, "{$blockPath}/card_meta_fields/{$j}/field_id", 'kanban.card_meta_fields', $errors);
+                }
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
+            if ($block['type'] === 'calendar') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'calendar',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $this->checkFieldRef($fields, $block['date_field_id'] ?? null, "{$blockPath}/date_field_id", 'calendar.date_field_id', $errors, ['date', 'datetime']);
+                $this->checkFieldRef($fields, $block['title_field_id'] ?? null, "{$blockPath}/title_field_id", 'calendar.title_field_id', $errors);
+                $this->checkFieldRef($fields, $block['color_field_id'] ?? null, "{$blockPath}/color_field_id", 'calendar.color_field_id', $errors, ['single_select']);
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
+            if ($block['type'] === 'sparkline') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'sparkline',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $aggregation = $block['aggregation'] ?? 'count';
+                $this->checkFieldRef($fields, $block['x_field_id'] ?? null, "{$blockPath}/x_field_id", 'sparkline.x_field_id', $errors);
+                $this->checkFieldRef($fields, $block['y_field_id'] ?? null, "{$blockPath}/y_field_id", 'sparkline.y_field_id', $errors,
+                    in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                if ($aggregation !== 'count' && ! isset($block['y_field_id'])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/y_field_id",
+                        "sparkline aggregation '{$aggregation}' requires y_field_id",
+                        'missing_required',
+                    );
+                }
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
+            if ($block['type'] === 'gauge') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['query'] ?? [], 'object_id',
+                    "{$blockPath}/query/object_id", 'gauge',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $aggregation = $block['aggregation'];
+                if ($aggregation !== 'count' && ! isset($block['field_id'])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/field_id",
+                        "gauge aggregation '{$aggregation}' requires field_id",
+                        'missing_required',
+                    );
+                }
+                $this->checkFieldRef($fields, $block['field_id'] ?? null, "{$blockPath}/field_id", 'gauge.field_id', $errors,
+                    in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                $this->validateFilterExpression($block['query']['filter'] ?? null, "{$blockPath}/query/filter", $fields, $errors);
+            }
+
+            if ($block['type'] === 'heatmap') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'heatmap',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $this->checkFieldRef($fields, $block['date_field_id'] ?? null, "{$blockPath}/date_field_id", 'heatmap.date_field_id', $errors, ['date', 'datetime']);
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
+            if ($block['type'] === 'timeline') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'timeline',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $this->checkFieldRef($fields, $block['date_field_id'] ?? null, "{$blockPath}/date_field_id", 'timeline.date_field_id', $errors, ['date', 'datetime']);
+                $this->checkFieldRef($fields, $block['title_field_id'] ?? null, "{$blockPath}/title_field_id", 'timeline.title_field_id', $errors);
+                $this->checkFieldRef($fields, $block['description_field_id'] ?? null, "{$blockPath}/description_field_id", 'timeline.description_field_id', $errors);
+                $this->checkFieldRef($fields, $block['color_field_id'] ?? null, "{$blockPath}/color_field_id", 'timeline.color_field_id', $errors, ['single_select']);
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
+            if ($block['type'] === 'map') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'map',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $this->checkFieldRef($fields, $block['lat_field_id'] ?? null, "{$blockPath}/lat_field_id", 'map.lat_field_id', $errors, ['number']);
+                $this->checkFieldRef($fields, $block['lng_field_id'] ?? null, "{$blockPath}/lng_field_id", 'map.lng_field_id', $errors, ['number']);
+                $this->checkFieldRef($fields, $block['popup_field_id'] ?? null, "{$blockPath}/popup_field_id", 'map.popup_field_id', $errors);
+                $this->checkFieldRef($fields, $block['color_field_id'] ?? null, "{$blockPath}/color_field_id", 'map.color_field_id', $errors, ['single_select']);
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
+            if ($block['type'] === 'card_grid') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'card_grid',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $this->checkFieldRef($fields, $block['title_field_id'] ?? null, "{$blockPath}/title_field_id", 'card_grid.title_field_id', $errors);
+                $this->checkFieldRef($fields, $block['subtitle_field_id'] ?? null, "{$blockPath}/subtitle_field_id", 'card_grid.subtitle_field_id', $errors);
+                $this->checkFieldRef($fields, $block['image_field_id'] ?? null, "{$blockPath}/image_field_id", 'card_grid.image_field_id', $errors);
+                foreach ($block['meta_fields'] ?? [] as $j => $meta) {
+                    $this->checkFieldRef($fields, $meta['field_id'] ?? null, "{$blockPath}/meta_fields/{$j}/field_id", 'card_grid.meta_fields', $errors);
+                }
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
+            if ($block['type'] === 'metric_grid') {
+                foreach ($block['items'] ?? [] as $j => $item) {
+                    $itemPath = "{$blockPath}/items/{$j}";
+                    $fields = $this->resolveBlockObjectFields(
+                        $item['query'] ?? [], 'object_id',
+                        "{$itemPath}/query/object_id", 'metric_grid.item',
+                        $objectsById, $fieldsByObjectId, $errors,
+                    );
+                    if ($fields === null) {
+                        continue;
+                    }
+                    $aggregation = $item['aggregation'];
+                    if ($aggregation !== 'count' && ! isset($item['field_id'])) {
+                        $errors[] = new ManifestValidationError(
+                            "{$itemPath}/field_id",
+                            "metric_grid item with aggregation '{$aggregation}' requires field_id",
+                            'missing_required',
+                        );
+                    }
+                    $this->checkFieldRef($fields, $item['field_id'] ?? null, "{$itemPath}/field_id", 'metric_grid.item.field_id', $errors,
+                        in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                    $this->validateFilterExpression($item['query']['filter'] ?? null, "{$itemPath}/query/filter", $fields, $errors);
+                }
+            }
+
+            if ($block['type'] === 'funnel') {
+                foreach ($block['stages'] ?? [] as $j => $stage) {
+                    $stagePath = "{$blockPath}/stages/{$j}";
+                    $fields = $this->resolveBlockObjectFields(
+                        $stage['query'] ?? [], 'object_id',
+                        "{$stagePath}/query/object_id", 'funnel.stage',
+                        $objectsById, $fieldsByObjectId, $errors,
+                    );
+                    if ($fields === null) {
+                        continue;
+                    }
+                    $aggregation = $stage['aggregation'];
+                    if ($aggregation !== 'count' && ! isset($stage['field_id'])) {
+                        $errors[] = new ManifestValidationError(
+                            "{$stagePath}/field_id",
+                            "funnel stage with aggregation '{$aggregation}' requires field_id",
+                            'missing_required',
+                        );
+                    }
+                    $this->checkFieldRef($fields, $stage['field_id'] ?? null, "{$stagePath}/field_id", 'funnel.stage.field_id', $errors,
+                        in_array($aggregation, ['sum', 'avg'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                    $this->validateFilterExpression($stage['query']['filter'] ?? null, "{$stagePath}/query/filter", $fields, $errors);
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolve the fields map for a block's object reference. Pushes an error
+     * and returns null if the object_id is missing or doesn't resolve — so the
+     * caller can short-circuit further checks that all assume a valid object.
+     *
+     * @param  array<string, mixed>  $source  the sub-object that holds object_id (e.g. data_source, query)
+     * @param  array<string, array<string, mixed>>  $objectsById
+     * @param  array<string, array<string, array<string, mixed>>>  $fieldsByObjectId
+     * @param  ManifestValidationError[]  $errors
+     * @return array<string, array<string, mixed>>|null
+     */
+    private function resolveBlockObjectFields(array $source, string $key, string $errorPath, string $blockLabel, array $objectsById, array $fieldsByObjectId, array &$errors): ?array
+    {
+        $objectId = $source[$key] ?? null;
+        if ($objectId === null || ! isset($objectsById[$objectId])) {
+            $errors[] = new ManifestValidationError(
+                $errorPath,
+                "{$blockLabel} block references unknown object_id '{$objectId}'",
+                'unresolved_ref',
+            );
+
+            return null;
+        }
+
+        return $fieldsByObjectId[$objectId] ?? [];
+    }
+
+    /**
+     * Check a field_id reference against the fields of the block's queried
+     * object. No-op for null (the caller decides whether the ref is required).
+     * If $allowedTypes is set, also enforces that the field's type is one of
+     * them — used to reject e.g. a string field passed as a numeric y_field_id.
+     *
+     * @param  array<string, array<string, mixed>>  $fields
+     * @param  list<string>|null  $allowedTypes
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function checkFieldRef(array $fields, ?string $fieldId, string $errorPath, string $label, array &$errors, ?array $allowedTypes = null): void
+    {
+        if ($fieldId === null) {
+            return;
+        }
+
+        // System fields (sys_created_at, sys_updated_at) are always resolvable
+        // and live outside the manifest's per-object field list.
+        $sysField = RecordQueryService::systemField($fieldId);
+        $resolved = $sysField ?? $fields[$fieldId] ?? null;
+
+        if ($resolved === null) {
+            $errors[] = new ManifestValidationError(
+                $errorPath,
+                "{$label} '{$fieldId}' does not belong to the queried object",
+                'unresolved_ref',
+            );
+
+            return;
+        }
+
+        if ($allowedTypes !== null) {
+            $fieldType = $resolved['type'] ?? null;
+            if (! in_array($fieldType, $allowedTypes, true)) {
+                $errors[] = new ManifestValidationError(
+                    $errorPath,
+                    "{$label} requires a field of type ".implode('|', $allowedTypes).", got '{$fieldType}'",
+                    'incompatible_type',
+                );
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $expr
+     * @param  array<string, array<string, mixed>>  $fields
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function validateFilterExpression(?array $expr, string $path, array $fields, array &$errors): void
+    {
+        if ($expr === null) {
+            return;
+        }
+
+        if (in_array($expr['op'] ?? null, ['and', 'or'], true)) {
+            foreach ($expr['conditions'] ?? [] as $i => $cond) {
+                $this->validateFilterExpression($cond, "{$path}/conditions/{$i}", $fields, $errors);
+            }
+
+            return;
+        }
+
+        if (($expr['op'] ?? null) === 'not') {
+            $this->validateFilterExpression($expr['condition'] ?? null, "{$path}/condition", $fields, $errors);
+
+            return;
+        }
+
+        if (isset($expr['field_id'])
+            && ! isset($fields[$expr['field_id']])
+            && RecordQueryService::systemField($expr['field_id']) === null) {
+            $errors[] = new ManifestValidationError(
+                "{$path}/field_id",
+                "filter field_id '{$expr['field_id']}' does not belong to the queried object",
+                'unresolved_ref',
+            );
+        }
+
+        if (isset($expr['value_expression'])) {
+            $this->validateExpression($expr['value_expression'], "{$path}/value_expression", 'value_expression', $errors);
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @param  array<string, array<string, mixed>>  $pagesById
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function validateNavigation(array $items, string $pathPrefix, array $pagesById, array &$errors): void
+    {
+        foreach ($items as $i => $item) {
+            if (isset($item['page_id']) && ! isset($pagesById[$item['page_id']])) {
+                $errors[] = new ManifestValidationError(
+                    "{$pathPrefix}/{$i}/page_id",
+                    "navigation item page_id '{$item['page_id']}' does not match any defined page",
+                    'unresolved_ref',
+                );
+            }
+            if (isset($item['children'])) {
+                $this->validateNavigation($item['children'], "{$pathPrefix}/{$i}/children", $pagesById, $errors);
+            }
+        }
+    }
+
+    /**
+     * Recursively collect ids of all `modal` blocks inside a block tree so
+     * open_modal/close_modal actions can be validated against them. Descends
+     * through every container shape (container, modal, tabs, accordion,
+     * split_view) so a modal nested inside any of them is still discovered.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  array<string, true>  $collected
+     */
+    private function collectModalIds(array $blocks, array &$collected): void
+    {
+        foreach ($blocks as $block) {
+            if (($block['type'] ?? null) === 'modal') {
+                $collected[$block['id']] = true;
+            }
+            foreach ($this->childBlockLists($block) as $childBlocks) {
+                $this->collectModalIds($childBlocks, $collected);
+            }
+        }
+    }
+
+    /**
+     * Yield every nested block list inside `$block`, keyed by the JSON-Pointer
+     * fragment used to address it. Containers/modals nest under `blocks/N`;
+     * tabs nest under `tabs/I/blocks/N`; accordion under `sections/I/blocks/N`;
+     * split_view under `left_blocks/N` and `right_blocks/N`. Returning the
+     * paths lets callers build accurate error paths during recursion.
+     *
+     * @param  array<string, mixed>  $block
+     * @return iterable<string, list<array<string, mixed>>>
+     */
+    private function childBlockLists(array $block): iterable
+    {
+        $type = $block['type'] ?? null;
+
+        if ($type === 'container' || $type === 'modal') {
+            if (isset($block['blocks']) && is_array($block['blocks'])) {
+                yield 'blocks' => $block['blocks'];
+            }
+
+            return;
+        }
+
+        if ($type === 'tabs') {
+            foreach ($block['tabs'] ?? [] as $i => $tab) {
+                if (isset($tab['blocks']) && is_array($tab['blocks'])) {
+                    yield "tabs/{$i}/blocks" => $tab['blocks'];
+                }
+            }
+
+            return;
+        }
+
+        if ($type === 'accordion') {
+            foreach ($block['sections'] ?? [] as $i => $section) {
+                if (isset($section['blocks']) && is_array($section['blocks'])) {
+                    yield "sections/{$i}/blocks" => $section['blocks'];
+                }
+            }
+
+            return;
+        }
+
+        if ($type === 'split_view') {
+            if (isset($block['left_blocks']) && is_array($block['left_blocks'])) {
+                yield 'left_blocks' => $block['left_blocks'];
+            }
+            if (isset($block['right_blocks']) && is_array($block['right_blocks'])) {
+                yield 'right_blocks' => $block['right_blocks'];
+            }
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $sequence
+     * @param  array<string, array<string, mixed>>  $objectsById
+     * @param  array<string, true>  $modalIdsInPage
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function validateActionSequence(array $sequence, string $pathPrefix, array $objectsById, array $modalIdsInPage, array &$errors): void
+    {
+        foreach ($sequence as $i => $action) {
+            $path = "{$pathPrefix}/{$i}";
+            $type = $action['type'] ?? null;
+
+            if (in_array($type, ['create_record', 'update_record', 'delete_record'], true)) {
+                $objectId = $action['object_id'] ?? null;
+                if ($objectId === null || ! isset($objectsById[$objectId])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$path}/object_id",
+                        "action '{$type}' references unknown object_id '{$objectId}'",
+                        'unresolved_ref',
+                    );
+                }
+                if (in_array($type, ['update_record', 'delete_record'], true)) {
+                    if (! isset($action['record_id_expression'])) {
+                        $errors[] = new ManifestValidationError(
+                            "{$path}/record_id_expression",
+                            "action '{$type}' requires a well-formed record_id_expression",
+                            'malformed_expression',
+                        );
+                    } else {
+                        $this->validateExpression((string) $action['record_id_expression'], "{$path}/record_id_expression", 'record_id_expression', $errors);
+                    }
+                }
+                foreach ($action['values'] ?? [] as $slug => $valueExpr) {
+                    if (! is_string($valueExpr)) {
+                        continue;
+                    }
+                    $this->validateExpression($valueExpr, "{$path}/values/{$slug}", "values.{$slug}", $errors);
+                }
+            }
+
+            if ($type === 'open_modal') {
+                $modalId = $action['modal_block_id'] ?? null;
+                if ($modalId === null || ! isset($modalIdsInPage[$modalId])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$path}/modal_block_id",
+                        "open_modal references modal '{$modalId}' which is not declared in this page",
+                        'unresolved_ref',
+                    );
+                }
+            }
+
+            if ($type === 'close_modal' && isset($action['modal_block_id'])) {
+                if (! isset($modalIdsInPage[$action['modal_block_id']])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$path}/modal_block_id",
+                        "close_modal references modal '{$action['modal_block_id']}' which is not declared in this page",
+                        'unresolved_ref',
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * DFS over the formula→formula reference graph, tracking the current
+     * path. Returns true if `start` reaches itself.
+     *
+     * @param  array<string, array<string, mixed>>  $formulasBySlug
+     * @param  array<string, true>  $path
+     */
+    private function formulaHasCycle(string $start, array $formulasBySlug, array $path): bool
+    {
+        if (isset($path[$start])) {
+            return true;
+        }
+        $path[$start] = true;
+        $self = $formulasBySlug[$start] ?? null;
+        if ($self === null) {
+            return false;
+        }
+        $refs = $this->extractFormulaReferences((string) ($self['expression'] ?? ''));
+        foreach ($refs as $refSlug) {
+            if (isset($formulasBySlug[$refSlug]) && $this->formulaHasCycle($refSlug, $formulasBySlug, $path)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Pull out the field slugs a formula expression references. We only need
+     * approximate accuracy for cycle detection — a false positive (extra slug)
+     * would just trigger a (recoverable) cycle warning.
+     *
+     * @return list<string>
+     */
+    private function extractFormulaReferences(string $expression): array
+    {
+        preg_match_all('/\{\{\s*([a-z][a-z0-9_]*)\s*\}\}/', $expression, $matches);
+
+        return $matches[1] ?? [];
+    }
+
+    private function cardinalitiesMatch(string $a, string $b): bool
+    {
+        $inverse = [
+            'one_to_one' => 'one_to_one',
+            'one_to_many' => 'many_to_one',
+            'many_to_one' => 'one_to_many',
+            'many_to_many' => 'many_to_many',
+        ];
+
+        return ($inverse[$a] ?? null) === $b;
+    }
+
+    /**
+     * Validates that '{{' opens match '}}' closes AND that each token is
+     * lexically sound — the expression lexer flags unbalanced parentheses,
+     * unterminated strings and stray characters at write-time. It stays lenient
+     * on grammar the evaluator handles via its legacy fallback (e.g. numeric
+     * dotted indices like `rows.0`), so it never rejects a working expression.
+     */
+    private function isWellFormedExpression(string $expr): bool
+    {
+        if (substr_count($expr, '{{') !== substr_count($expr, '}}')) {
+            return false;
+        }
+
+        if (preg_match_all('/\{\{\s*(.+?)\s*\}\}/', $expr, $matches) === false) {
+            return true;
+        }
+
+        foreach ($matches[1] as $inner) {
+            try {
+                $this->lexer()->tokenize($inner);
+            } catch (\Throwable) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function lexer(): Lexer
+    {
+        return $this->lexer ??= new Lexer;
+    }
+
+    /**
+     * Validates an expression string and records a specific error if it is
+     * malformed or calls something outside the function catalog. The
+     * unknown-function message points the author (often the builder AI) at the
+     * `script.run` workflow step rather than inviting them to invent a function.
+     *
+     * @param  list<ManifestValidationError>  $errors
+     */
+    private function validateExpression(string $expr, string $path, string $label, array &$errors): void
+    {
+        if (! $this->isWellFormedExpression($expr)) {
+            $errors[] = new ManifestValidationError(
+                $path,
+                "{$label} has unbalanced or malformed '{{...}}' braces",
+                'malformed_expression',
+            );
+
+            return;
+        }
+
+        $issue = $this->expressionFunctionIssue($expr);
+        if ($issue !== null) {
+            $allowed = implode(', ', SafeExpressionEvaluator::FUNCTIONS);
+            $errors[] = new ManifestValidationError(
+                $path,
+                "{$label}: {$issue}. The expression language only supports these functions: {$allowed}. For logic beyond them (loops, parsing, multi-step transforms) use a 'script.run' workflow step that computes the value and writes it into a field — do not call other functions inline.",
+                'unknown_function',
+            );
+        }
+    }
+
+    /**
+     * Returns a human-readable reason if the expression calls something outside
+     * the catalog, else null. Quoted string literals are stripped first so a
+     * "(" inside text isn't mistaken for a call; EL's named operators are
+     * allowed alongside the function catalog. Method-style calls (x.foo()) do
+     * not exist in this dialect, so any ".name(" is flagged.
+     */
+    private function expressionFunctionIssue(string $expr): ?string
+    {
+        if (preg_match_all('/\{\{\s*(.+?)\s*\}\}/', $expr, $matches) === false) {
+            return null;
+        }
+
+        $allowed = array_merge(
+            SafeExpressionEvaluator::FUNCTIONS,
+            ['not', 'and', 'or', 'xor', 'in', 'matches', 'contains'],
+        );
+
+        foreach ($matches[1] ?? [] as $inner) {
+            $stripped = preg_replace('/([\'"]).*?\1/', '', $inner) ?? $inner;
+
+            if (preg_match('/\.\s*[a-zA-Z_]\w*\s*\(/', $stripped)) {
+                return 'JS-style method calls (e.g. x.toFixed(), Math.random()) are not supported';
+            }
+
+            if (preg_match_all('/([a-zA-Z_]\w*)\s*\(/', $stripped, $calls)) {
+                foreach ($calls[1] as $name) {
+                    if (! in_array($name, $allowed, true)) {
+                        return "calls unknown function {$name}()";
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A visible_if / required_if condition must reference a field that belongs
+     * to the form's object (the operator enum is already enforced by the JSON
+     * schema). $fields is keyed by field_id.
+     *
+     * @param  array<string, mixed>  $condition
+     * @param  array<string, mixed>  $fields
+     * @param  list<ManifestValidationError>  $errors
+     */
+    private function validateFieldCondition(array $condition, array $fields, string $objectId, string $path, array &$errors): void
+    {
+        $fieldId = $condition['field_id'] ?? null;
+        if ($fieldId === null || ! isset($fields[$fieldId])) {
+            $errors[] = new ManifestValidationError(
+                "{$path}/field_id",
+                "condition field_id '{$fieldId}' does not belong to object '{$objectId}'",
+                'unresolved_ref',
+            );
+        }
+    }
+
+    private function opis(): OpisValidator
+    {
+        if ($this->opis === null) {
+            $validator = new OpisValidator;
+            $resolver = $validator->resolver();
+            if ($resolver !== null) {
+                $resolver->registerFile(self::SCHEMA_URI, $this->resolveSchemaPath());
+            }
+            $this->opis = $validator;
+        }
+
+        return $this->opis;
+    }
+
+    private function resolveSchemaPath(): string
+    {
+        if ($this->schemaPath !== null) {
+            return $this->schemaPath;
+        }
+
+        // Resolve relative to the source file so unit tests that don't boot Laravel
+        // can still load the schema. Production calls can pass an explicit path.
+        return dirname(__DIR__, 3).'/storage/'.self::SCHEMA_PATH;
+    }
+
+    /**
+     * Opis expects schema data as native PHP objects (stdClass), not assoc arrays.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function toJsonObject(array $data): mixed
+    {
+        return json_decode(json_encode($data, JSON_THROW_ON_ERROR));
+    }
+}

@@ -1,0 +1,299 @@
+<?php
+
+namespace App\Services\Records;
+
+use App\Models\App;
+use App\Models\Record;
+use Illuminate\Support\Facades\Log;
+use Throwable;
+
+/**
+ * Walks a manifest page's block tree and pre-resolves the server-side data
+ * each block needs (table → records, stat → aggregation), so the client can
+ * hydrate the runtime in one round-trip. Shared by the public runtime
+ * controller and the Builder preview pane.
+ *
+ * Per-block resolution is wrapped in try/catch: a single broken block (e.g.
+ * one that references a field_id removed in a later edit) must NOT take down
+ * the whole page. We surface the error via blockData[id].error so the renderer
+ * can paint a placeholder.
+ */
+class BlockDataResolver
+{
+    public function __construct(
+        private RecordQueryService $records,
+        private ExpressionResolver $expressions,
+    ) {}
+
+    /**
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed> block_id → resolved data
+     */
+    public function resolve(App $app, array $blocks, array $manifest, array $context = []): array
+    {
+        $data = [];
+
+        foreach ($blocks as $block) {
+            // Containers and other layout-only nodes recurse so their nested
+            // blocks still get resolved even if a sibling broke.
+            if ($block['type'] === 'container' || $block['type'] === 'modal') {
+                $data += $this->resolve($app, $block['blocks'] ?? [], $manifest, $context);
+
+                continue;
+            }
+
+            if ($block['type'] === 'tabs') {
+                foreach ($block['tabs'] ?? [] as $tab) {
+                    $data += $this->resolve($app, $tab['blocks'] ?? [], $manifest, $context);
+                }
+
+                continue;
+            }
+
+            if ($block['type'] === 'accordion') {
+                foreach ($block['sections'] ?? [] as $section) {
+                    $data += $this->resolve($app, $section['blocks'] ?? [], $manifest, $context);
+                }
+
+                continue;
+            }
+
+            if ($block['type'] === 'split_view') {
+                $data += $this->resolve($app, $block['left_blocks'] ?? [], $manifest, $context);
+                $data += $this->resolve($app, $block['right_blocks'] ?? [], $manifest, $context);
+
+                continue;
+            }
+
+            try {
+                $resolved = $this->resolveDataBlock($app, $block, $manifest, $context);
+                if ($resolved !== null) {
+                    $data[$block['id']] = $resolved;
+                }
+            } catch (Throwable $e) {
+                Log::warning('Block data resolution failed', [
+                    'app_id' => $app->id,
+                    'block_id' => $block['id'] ?? null,
+                    'block_type' => $block['type'] ?? null,
+                    'error' => $e->getMessage(),
+                ]);
+                $data[$block['id']] = ['error' => $e->getMessage()];
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Resolve the server-side payload for a single data-bound block. Returns
+     * null when the block type does not need server data (the renderer is
+     * fully client-side for it, e.g. text/heading/markdown).
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>|null
+     */
+    private function resolveDataBlock(App $app, array $block, array $manifest, array $context): ?array
+    {
+        if ($block['type'] === 'table') {
+            $records = $this->records->query($app, $block['data_source'], $manifest, $context);
+
+            return ['rows' => $this->mapRows($records)];
+        }
+
+        if ($block['type'] === 'stat' || $block['type'] === 'gauge') {
+            $value = $this->records->aggregate(
+                $app,
+                $block['query'],
+                $block['aggregation'],
+                $block['field_id'] ?? null,
+                $manifest,
+                $context,
+            );
+
+            return ['value' => $value];
+        }
+
+        if (in_array($block['type'], ['chart', 'kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'map', 'card_grid'], true)) {
+            $records = $this->records->query($app, $block['data_source'], $manifest, $context);
+
+            return ['rows' => $this->mapRows($records)];
+        }
+
+        if ($block['type'] === 'metric_grid') {
+            $items = [];
+            foreach ($block['items'] ?? [] as $item) {
+                try {
+                    $items[$item['id']] = [
+                        'value' => $this->records->aggregate(
+                            $app,
+                            $item['query'],
+                            $item['aggregation'],
+                            $item['field_id'] ?? null,
+                            $manifest,
+                            $context,
+                        ),
+                    ];
+                } catch (Throwable $e) {
+                    $items[$item['id']] = ['error' => $e->getMessage()];
+                }
+            }
+
+            return ['items' => $items];
+        }
+
+        if ($block['type'] === 'form' || $block['type'] === 'multi_step_form') {
+            return $this->resolveFormBlock($block, $manifest, $context);
+        }
+
+        if ($block['type'] === 'funnel') {
+            $stages = [];
+            foreach ($block['stages'] ?? [] as $stage) {
+                try {
+                    $stages[$stage['id']] = [
+                        'value' => $this->records->aggregate(
+                            $app,
+                            $stage['query'],
+                            $stage['aggregation'],
+                            $stage['field_id'] ?? null,
+                            $manifest,
+                            $context,
+                        ),
+                    ];
+                } catch (Throwable $e) {
+                    $stages[$stage['id']] = ['error' => $e->getMessage()];
+                }
+            }
+
+            return ['stages' => $stages];
+        }
+
+        return null;
+    }
+
+    /**
+     * Pre-resolve a form block's per-field expressions against the render
+     * context (current_user, params) so the client gets concrete values, not
+     * expression strings. `default_expression` becomes the field's initial
+     * value; `readonly_expression` becomes a boolean that disables the field.
+     * Reactive conditions (visible_if / required_if) are evaluated client-side
+     * against live form input and are intentionally NOT touched here.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array{form: array{defaults: array<string, mixed>, readonly: array<string, bool>}}|null
+     */
+    private function resolveFormBlock(array $block, array $manifest, array $context): ?array
+    {
+        $object = $this->findObject($manifest, $block['object_id'] ?? null);
+        if ($object === null) {
+            return null;
+        }
+
+        $defaults = [];
+        $readonly = [];
+
+        foreach ($this->formFields($block) as $formField) {
+            $slug = $this->fieldSlug($object, $formField['field_id'] ?? null);
+            if ($slug === null) {
+                continue;
+            }
+
+            if (isset($formField['default_expression'])) {
+                $defaults[$slug] = $this->expressions->resolve($formField['default_expression'], $context);
+            }
+            if (isset($formField['readonly_expression'])) {
+                $readonly[$slug] = (bool) $this->expressions->resolve($formField['readonly_expression'], $context);
+            }
+        }
+
+        if ($defaults === [] && $readonly === []) {
+            return null;
+        }
+
+        return ['form' => ['defaults' => $defaults, 'readonly' => $readonly]];
+    }
+
+    /**
+     * Flatten a form block's field configs — multi_step_form nests them under
+     * steps[], a plain form lists them directly.
+     *
+     * @param  array<string, mixed>  $block
+     * @return list<array<string, mixed>>
+     */
+    private function formFields(array $block): array
+    {
+        if ($block['type'] === 'multi_step_form') {
+            $fields = [];
+            foreach ($block['steps'] ?? [] as $step) {
+                foreach ($step['fields'] ?? [] as $field) {
+                    $fields[] = $field;
+                }
+            }
+
+            return $fields;
+        }
+
+        return $block['fields'] ?? [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>|null
+     */
+    private function findObject(array $manifest, ?string $objectId): ?array
+    {
+        if ($objectId === null) {
+            return null;
+        }
+        foreach ($manifest['objects'] ?? [] as $object) {
+            if (($object['id'] ?? null) === $objectId) {
+                return $object;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $object
+     */
+    private function fieldSlug(array $object, ?string $fieldId): ?string
+    {
+        if ($fieldId === null) {
+            return null;
+        }
+        foreach ($object['fields'] ?? [] as $field) {
+            if (($field['id'] ?? null) === $fieldId) {
+                return $field['slug'] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Project a record collection to the shape the frontend expects, merging
+     * system fields (sys_created_at, sys_updated_at) into `data` so visualisation
+     * blocks can reference them by id like any other field.
+     *
+     * @param  iterable<int, Record>  $records
+     * @return list<array{id: string, data: array<string, mixed>}>
+     */
+    private function mapRows(iterable $records): array
+    {
+        $out = [];
+        foreach ($records as $r) {
+            $data = $r->data ?? [];
+            $data['sys_created_at'] = optional($r->created_at)->toIso8601String();
+            $data['sys_updated_at'] = optional($r->updated_at)->toIso8601String();
+            $out[] = ['id' => $r->id, 'data' => $data];
+        }
+
+        return $out;
+    }
+}

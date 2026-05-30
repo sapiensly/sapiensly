@@ -1,0 +1,246 @@
+<?php
+
+use App\Models\App;
+use App\Models\Record;
+use App\Services\Records\BlockDataResolver;
+use Illuminate\Support\Str;
+
+/**
+ * BlockDataResolver must NEVER throw because of one broken block — that crash
+ * takes down the whole Builder preview / runtime page. Instead, each block's
+ * resolution is wrapped in try/catch and the error is surfaced as
+ * blockData[id].error so the renderer can paint a placeholder.
+ */
+beforeEach(function () {
+    $this->resolver = app(BlockDataResolver::class);
+    $this->testApp = App::factory()->create();
+    $this->nameField = [
+        'id' => 'fld_'.strtolower((string) Str::ulid()),
+        'slug' => 'nombre',
+        'name' => 'Nombre',
+        'type' => 'string',
+    ];
+    $this->amountField = [
+        'id' => 'fld_'.strtolower((string) Str::ulid()),
+        'slug' => 'monto',
+        'name' => 'Monto',
+        'type' => 'currency',
+        'currency_code' => 'MXN',
+    ];
+    $this->object = [
+        'id' => 'obj_'.strtolower((string) Str::ulid()),
+        'slug' => 'cliente',
+        'name' => 'Cliente',
+        'fields' => [$this->nameField, $this->amountField],
+    ];
+    $this->manifest = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_'.strtolower((string) Str::ulid()),
+        'slug' => 'test_app',
+        'name' => 'Test',
+        'version' => 1,
+        'objects' => [$this->object],
+        'pages' => [],
+        'permissions' => [
+            'roles' => [
+                ['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin'],
+            ],
+        ],
+    ];
+
+    Record::create([
+        'app_id' => $this->testApp->id,
+        'object_definition_id' => $this->object['id'],
+        'data' => ['nombre' => 'Ana', 'monto' => 100],
+    ]);
+});
+
+it('resolves a table block and a stat block side by side', function () {
+    $blocks = [
+        [
+            'id' => 'blk_table',
+            'type' => 'table',
+            'data_source' => ['object_id' => $this->object['id']],
+            'columns' => [['id' => 'col_a', 'field_id' => $this->nameField['id']]],
+        ],
+        [
+            'id' => 'blk_stat',
+            'type' => 'stat',
+            'label' => 'Total',
+            'query' => ['object_id' => $this->object['id']],
+            'aggregation' => 'sum',
+            'field_id' => $this->amountField['id'],
+        ],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data)->toHaveKeys(['blk_table', 'blk_stat'])
+        ->and($data['blk_table']['rows'])->toHaveCount(1)
+        ->and($data['blk_stat']['value'])->toBe(100.0);
+});
+
+it('does not crash when a stat block references a missing field_id', function () {
+    $blocks = [
+        [
+            'id' => 'blk_ok',
+            'type' => 'table',
+            'data_source' => ['object_id' => $this->object['id']],
+            'columns' => [['id' => 'col_a', 'field_id' => $this->nameField['id']]],
+        ],
+        [
+            'id' => 'blk_broken',
+            'type' => 'stat',
+            'label' => 'Bad',
+            'query' => ['object_id' => $this->object['id']],
+            'aggregation' => 'sum',
+            'field_id' => 'fld_does_not_exist',
+        ],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    // The healthy block still resolves.
+    expect($data)->toHaveKey('blk_ok')
+        ->and($data['blk_ok']['rows'])->toHaveCount(1);
+
+    // The broken block surfaces its error rather than crashing.
+    expect($data)->toHaveKey('blk_broken')
+        ->and($data['blk_broken'])->toHaveKey('error')
+        ->and($data['blk_broken']['error'])->toContain('fld_does_not_exist');
+});
+
+it('does not crash when a table block references a missing object_id', function () {
+    $blocks = [
+        [
+            'id' => 'blk_broken',
+            'type' => 'table',
+            'data_source' => ['object_id' => 'obj_does_not_exist'],
+            'columns' => [['id' => 'col_a', 'field_id' => $this->nameField['id']]],
+        ],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data)->toHaveKey('blk_broken')
+        ->and($data['blk_broken'])->toHaveKey('error');
+});
+
+it('isolates errors inside metric_grid items so good items still resolve', function () {
+    $blocks = [
+        [
+            'id' => 'blk_grid',
+            'type' => 'metric_grid',
+            'columns' => 2,
+            'items' => [
+                [
+                    'id' => 'item_ok',
+                    'label' => 'Good',
+                    'query' => ['object_id' => $this->object['id']],
+                    'aggregation' => 'sum',
+                    'field_id' => $this->amountField['id'],
+                ],
+                [
+                    'id' => 'item_bad',
+                    'label' => 'Broken',
+                    'query' => ['object_id' => $this->object['id']],
+                    'aggregation' => 'sum',
+                    'field_id' => 'fld_does_not_exist',
+                ],
+            ],
+        ],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data['blk_grid']['items']['item_ok']['value'])->toBe(100.0)
+        ->and($data['blk_grid']['items']['item_bad'])->toHaveKey('error');
+});
+
+it('pre-resolves form field default and readonly expressions server-side', function () {
+    $blocks = [[
+        'id' => 'blk_form',
+        'type' => 'form',
+        'object_id' => $this->object['id'],
+        'mode' => 'create',
+        'fields' => [
+            ['field_id' => $this->nameField['id'], 'default_expression' => '{{today()}}'],
+            ['field_id' => $this->amountField['id'], 'readonly_expression' => '{{true}}'],
+        ],
+    ]];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data['blk_form']['form']['defaults']['nombre'])->toBe(now()->utc()->toDateString())
+        ->and($data['blk_form']['form']['readonly']['monto'])->toBeTrue();
+});
+
+it('resolves multi_step_form field expressions from a context value', function () {
+    $blocks = [[
+        'id' => 'blk_msf',
+        'type' => 'multi_step_form',
+        'object_id' => $this->object['id'],
+        'mode' => 'create',
+        'steps' => [
+            ['id' => 'stp_1', 'title' => 'One', 'fields' => [
+                ['field_id' => $this->nameField['id'], 'default_expression' => '{{current_user.email}}'],
+            ]],
+        ],
+    ]];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest, [
+        'current_user' => ['id' => 'usr_1', 'email' => 'ana@example.com'],
+    ]);
+
+    expect($data['blk_msf']['form']['defaults']['nombre'])->toBe('ana@example.com');
+});
+
+it('returns no form entry when a form has no field expressions', function () {
+    $blocks = [[
+        'id' => 'blk_plain',
+        'type' => 'form',
+        'object_id' => $this->object['id'],
+        'mode' => 'create',
+        'fields' => [['field_id' => $this->nameField['id']]],
+    ]];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data)->not->toHaveKey('blk_plain');
+});
+
+it('recurses through layout blocks and tolerates broken descendants', function () {
+    $blocks = [
+        [
+            'id' => 'blk_tabs',
+            'type' => 'tabs',
+            'tabs' => [
+                [
+                    'id' => 'tab_a',
+                    'label' => 'A',
+                    'blocks' => [
+                        [
+                            'id' => 'blk_table',
+                            'type' => 'table',
+                            'data_source' => ['object_id' => $this->object['id']],
+                            'columns' => [['id' => 'col_a', 'field_id' => $this->nameField['id']]],
+                        ],
+                        [
+                            'id' => 'blk_broken_stat',
+                            'type' => 'stat',
+                            'label' => 'Bad',
+                            'query' => ['object_id' => $this->object['id']],
+                            'aggregation' => 'sum',
+                            'field_id' => 'fld_does_not_exist',
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data['blk_table']['rows'])->toHaveCount(1)
+        ->and($data['blk_broken_stat'])->toHaveKey('error');
+});
