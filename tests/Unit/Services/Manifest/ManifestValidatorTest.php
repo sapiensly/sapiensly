@@ -562,6 +562,126 @@ it('does not warn when a button opens a modal', function () {
     expect(collect($result->warnings)->pluck('code'))->not->toContain('no_effect');
 });
 
+it('accepts a hero block, a coloured-background section and an external image', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [
+            [
+                'id' => id('blk'), 'type' => 'hero',
+                'title' => 'Cambio Climático',
+                'subtitle' => 'Actúa ahora',
+                'background_image' => 'https://source.unsplash.com/1600x900/?climate,earth',
+                'overlay' => true, 'align' => 'center',
+            ],
+            [
+                'id' => id('blk'), 'type' => 'container', 'direction' => 'column',
+                'style' => ['padding' => 'lg', 'background' => '#0F172A'],
+                'blocks' => [
+                    ['id' => id('blk'), 'type' => 'heading', 'content' => 'Causas', 'level' => 2],
+                    ['id' => id('blk'), 'type' => 'image', 'src' => 'https://picsum.photos/1600/900', 'alt' => 'Planeta'],
+                ],
+            ],
+        ],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('accepts style.color and style.max_width on a section', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'container', 'direction' => 'column',
+            'style' => ['padding' => 'lg', 'background' => '#1e293b', 'color' => '#f8fafc', 'max_width' => 'md'],
+            'blocks' => [
+                ['id' => id('blk'), 'type' => 'heading', 'content' => 'Actúa ahora', 'level' => 2],
+            ],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects an invalid style.max_width value', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'heading', 'content' => 'X', 'level' => 2,
+            'style' => ['max_width' => 'enormous'],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
+it('accepts a full-bleed gradient section, a feature_grid and a cta', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [
+            [
+                'id' => id('blk'), 'type' => 'container', 'direction' => 'column',
+                'style' => ['padding' => 'lg', 'full_bleed' => true, 'max_width' => 'md', 'gradient' => ['from' => '#0ea5e9', 'to' => '#1e3a8a', 'direction' => 'to-br']],
+                'blocks' => [
+                    ['id' => id('blk'), 'type' => 'heading', 'content' => 'Beneficios', 'level' => 2],
+                    ['id' => id('blk'), 'type' => 'feature_grid', 'columns' => 3, 'items' => [
+                        ['icon' => '🌍', 'title' => 'Planeta', 'description' => 'Cuida la tierra'],
+                        ['icon' => '⚡', 'title' => 'Energía', 'description' => 'Renovable'],
+                        ['icon' => '🌱', 'title' => 'Futuro', 'description' => 'Sostenible'],
+                    ]],
+                ],
+            ],
+            ['id' => id('blk'), 'type' => 'cta', 'title' => 'Actúa ahora', 'subtitle' => 'Únete', 'style' => ['full_bleed' => true, 'padding' => 'lg', 'background' => '#0f172a']],
+        ],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a gradient missing its `to` colour', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'heading', 'content' => 'X', 'level' => 2,
+            'style' => ['gradient' => ['from' => '#0ea5e9']],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
+it('validates a cta button action sequence (rejects an unknown modal target)', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'cta', 'title' => 'Go',
+            'button' => ['label' => 'Abrir', 'on_click' => [['type' => 'open_modal', 'modal_block_id' => 'blk_does_not_exist']]],
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('unresolved_ref');
+});
+
+it('validates a hero CTA action sequence (rejects an unknown modal target)', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'hero', 'title' => 'Hi',
+            'cta' => ['label' => 'Abrir', 'on_click' => [['type' => 'open_modal', 'modal_block_id' => 'blk_does_not_exist']]],
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('unresolved_ref');
+});
+
 it('rejects duplicate page slugs and paths', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [

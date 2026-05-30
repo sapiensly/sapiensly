@@ -67,7 +67,15 @@ export function resolveField(object: ObjectDef | undefined, fieldId: string | un
 export interface BlockBase {
     id: string;
     type: string;
-    style?: { padding?: string; margin?: string; background?: string };
+    style?: {
+        padding?: string;
+        margin?: string;
+        background?: string;
+        color?: string;
+        max_width?: string;
+        full_bleed?: boolean;
+        gradient?: { from: string; to: string; direction?: string };
+    };
 }
 
 export interface BlockContainer extends BlockBase {

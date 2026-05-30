@@ -15,6 +15,16 @@ import echo from '@/echo';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import type { BlockData, ObjectDef, PageDef, PageSummary } from '@/runtime/types/manifest';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Head, Link, router } from '@inertiajs/vue3';
 import axios from 'axios';
 // html2canvas-pro is a maintained fork that handles modern CSS color
@@ -26,7 +36,7 @@ import DOMPurify from 'dompurify';
 // Tailwind v4 emits. The vanilla html2canvas chokes the moment any Tailwind
 // utility lands in the snapshot.
 import html2canvas from 'html2canvas-pro';
-import { ArrowLeft, BarChart3, Camera, Check, ChevronDown, Code, Database, Eye, FileText, GripVertical, ImagePlus, LayoutDashboard, Lightbulb, Link2, ListChecks, Loader2, Maximize2, Minimize2, MousePointerClick, Paperclip, Plus, RotateCcw, Send, Sparkles, Wand2, Workflow as WorkflowIcon, X } from 'lucide-vue-next';
+import { ArrowLeft, BarChart3, Camera, Check, ChevronDown, Code, Database, Eye, FileText, GripVertical, ImagePlus, LayoutDashboard, Lightbulb, Link2, ListChecks, Loader2, Maximize2, Minimize2, MoreVertical, MousePointerClick, Paperclip, Plus, RotateCcw, Send, Settings2, Sparkles, Wand2, Workflow as WorkflowIcon, X } from 'lucide-vue-next';
 import { marked } from 'marked';
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -64,9 +74,20 @@ interface Props {
     preview: Preview | null;
     schema: SchemaPayload | null;
     conversation: { id: string; messages: Message[] };
+    models?: Array<{ id: string; label: string }>;
+    defaultModel?: string;
 }
 
 const props = defineProps<Props>();
+
+// Model the AI uses for this conversation's turns. Defaults to the cheap/fast
+// model; the user can pick a stronger one for creative builds (e.g. websites).
+const selectedModel = ref<string>(props.defaultModel ?? props.models?.[0]?.id ?? '');
+
+// Human label of the currently-selected model, for the gear button's tooltip.
+const selectedModelLabel = computed(
+    () => props.models?.find((m) => m.id === selectedModel.value)?.label ?? selectedModel.value,
+);
 
 // Pull the raw locale dicts and current UI locale so we can render chips in
 // the language the user is currently chatting in — which may differ from
@@ -75,7 +96,7 @@ const { t, messages: i18nMessages, locale: uiLocale } = useI18n();
 
 const messages = ref<Message[]>(props.conversation.messages);
 const input = ref('');
-const inputEl = ref<HTMLInputElement | null>(null);
+const inputEl = ref<HTMLTextAreaElement | null>(null);
 const sending = ref(false);
 const errorText = ref<string | null>(null);
 const transcript = ref<HTMLElement | null>(null);
@@ -329,28 +350,44 @@ function selectSlashCommand(cmd: SlashCommand) {
 }
 
 function onComposerKeydown(event: KeyboardEvent) {
-    if (!slashMenuOpen.value) return;
-    if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        moveSlashHighlight(1);
-    } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        moveSlashHighlight(-1);
-    } else if (event.key === 'Escape') {
-        event.preventDefault();
-        // Clear just the slash so the menu closes but the user doesn't lose
-        // anything they were going to type.
-        if (input.value.startsWith('/')) {
-            input.value = '';
+    if (slashMenuOpen.value) {
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            moveSlashHighlight(1);
+            return;
         }
-    } else if (event.key === 'Tab' || (event.key === 'Enter' && slashMatches.value.length > 0 && parseSlashInput(input.value) === null)) {
-        // Enter selects from the menu only while the input is still just
-        // a prefix (e.g. "/se" before becoming "/seed clientes 50"). Once
-        // the user has typed enough that parseSlashInput recognises a full
-        // command, Enter falls through to the normal submit path.
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            moveSlashHighlight(-1);
+            return;
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            // Clear just the slash so the menu closes but the user doesn't lose
+            // anything they were going to type.
+            if (input.value.startsWith('/')) {
+                input.value = '';
+            }
+            return;
+        }
+        if (event.key === 'Tab' || (event.key === 'Enter' && slashMatches.value.length > 0 && parseSlashInput(input.value) === null)) {
+            // Enter selects from the menu only while the input is still just
+            // a prefix (e.g. "/se" before becoming "/seed clientes 50"). Once
+            // the user has typed enough that parseSlashInput recognises a full
+            // command, Enter falls through to the submit path below.
+            event.preventDefault();
+            const match = slashMatches.value[slashHighlightedIndex.value];
+            if (match) selectSlashCommand(match);
+            return;
+        }
+    }
+
+    // Textarea submit semantics: Enter sends, Shift+Enter inserts a newline.
+    // Guard against IME composition so committing a candidate doesn't fire a
+    // turn (relevant for accented input / Asian keyboards).
+    if (event.key === 'Enter' && ! event.shiftKey && ! event.isComposing) {
         event.preventDefault();
-        const match = slashMatches.value[slashHighlightedIndex.value];
-        if (match) selectSlashCommand(match);
+        send();
     }
 }
 
@@ -635,21 +672,20 @@ function chip(id: string, baseKey: string, icon: Component): ChipSuggestion {
     };
 }
 
-// Hide the chip row when there's nothing actionable to add — actively
-// composing, mid-stream, or nothing to suggest in the current context.
-const showSuggestions = computed(() =>
+// Whether the suggestions menu has anything to offer right now. The chips now
+// live behind an icon button, so we no longer hide them while typing — the
+// menu is opt-in. We still suppress it mid-stream / while sending / when the
+// slash menu owns the keyboard.
+const hasSuggestions = computed(() =>
     chipSuggestions.value.length > 0
     && !aiIsThinking.value
     && !sending.value
-    && !slashMenuOpen.value
-    && input.value.trim() === '',
+    && !slashMenuOpen.value,
 );
 
 function applyChip(suggestion: ChipSuggestion) {
     input.value = suggestion.prompt;
-    // Focus the input so the user can tweak or just hit Enter to send. The
-    // chip row disappears after the value lands (showSuggestions watches
-    // input), so we have to focus the input we *kept* visible.
+    // Focus the textarea so the user can tweak or just hit Enter to send.
     nextTick(() => {
         inputEl.value?.focus();
         // Cursor at end of pre-filled text — easier to append a note than
@@ -676,7 +712,7 @@ const conversationId = computed(() => props.conversation.id);
 const previewLocale = computed(() => props.preview?.settings.default_locale ?? 'es-MX');
 const previewCurrency = computed(() => props.preview?.settings.default_currency ?? 'MXN');
 const previewTheme = computed<'light' | 'dark'>(() =>
-    (props.preview?.settings as { theme?: 'light' | 'dark' } | undefined)?.theme ?? 'dark',
+    (props.preview?.settings as { theme?: 'light' | 'dark' } | undefined)?.theme ?? 'light',
 );
 
 // Provide the App slug for BlockForm/BlockButton inside the preview so any
@@ -768,6 +804,7 @@ async function send() {
             form.append('conversation_id', conversationId.value);
             form.append('message', messageText);
             form.append('attachment', stagedFile);
+            if (selectedModel.value) form.append('model', selectedModel.value);
             response = await axios.post(
                 `/apps/${props.app.id}/builder/messages`,
                 form,
@@ -779,7 +816,7 @@ async function send() {
         } else {
             response = await axios.post(
                 `/apps/${props.app.id}/builder/messages`,
-                { conversation_id: conversationId.value, message: messageText },
+                { conversation_id: conversationId.value, message: messageText, model: selectedModel.value || undefined },
                 { timeout: 10_000 },
             );
         }
@@ -810,7 +847,6 @@ async function send() {
         } else {
             errorText.value = err.message ?? 'Network error — server unreachable.';
         }
-        // eslint-disable-next-line no-console
         console.error('Builder sendMessage failed:', e);
     } finally {
         sending.value = false;
@@ -898,7 +934,6 @@ async function requestVisualReview() {
         const status = err.response?.status;
         const body = err.response?.data?.message;
         errorText.value = status ? `HTTP ${status}${body ? ' — ' + body : ''}` : (err.message ?? 'No se pudo capturar el preview.');
-        // eslint-disable-next-line no-console
         console.error('Visual review failed:', e);
     } finally {
         requestingReview.value = false;
@@ -1023,6 +1058,11 @@ function revertMessage(message: Message) {
         { preserveScroll: true, preserveState: false },
     );
 }
+
+// Which message's change-summary tooltip is open. The summary is truncated in
+// the row; clicking it reveals the full text in a tooltip. Only one open at a
+// time — null means none.
+const openSummaryId = ref<string | null>(null);
 
 // Per-message accordion state — closed by default; the JSON patch is detail
 // the user usually doesn't need to see.
@@ -1255,12 +1295,33 @@ function statusTone(status: Message['status']): string {
                                             <RotateCcw v-else-if="m.status === 'reverted'" class="size-3 mr-0.5" />
                                             {{ statusLabel(m.status) }}
                                         </span>
-                                        <span
+                                        <TooltipProvider
                                             v-if="m.status === 'applied' || m.status === 'reverted'"
-                                            class="truncate text-[11px] text-ink-muted"
+                                            :delay-duration="0"
+                                            disable-closing-trigger
                                         >
-                                            {{ m.change_summary || t('apps.builder.change') }}
-                                        </span>
+                                            <!-- Controlled open: only react to close
+                                                 requests (Esc / outside click) so the
+                                                 tooltip opens on click, not hover. -->
+                                            <Tooltip
+                                                :open="openSummaryId === m.id"
+                                                @update:open="(v: boolean) => { if (!v) openSummaryId = null; }"
+                                            >
+                                                <TooltipTrigger as-child>
+                                                    <button
+                                                        type="button"
+                                                        class="min-w-0 truncate text-left text-[11px] text-ink-muted transition-colors hover:text-ink"
+                                                        :title="t('apps.builder.show_full_summary')"
+                                                        @click="openSummaryId = openSummaryId === m.id ? null : m.id"
+                                                    >
+                                                        {{ m.change_summary || t('apps.builder.change') }}
+                                                    </button>
+                                                </TooltipTrigger>
+                                                <TooltipContent class="max-w-xs whitespace-normal break-words text-left">
+                                                    {{ m.change_summary || t('apps.builder.change') }}
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
                                     </div>
                                     <div class="flex shrink-0 items-center gap-1.5">
                                         <button
@@ -1295,27 +1356,6 @@ function statusTone(status: Message['status']): string {
                     </div>
 
                     <footer class="border-t border-soft px-4 py-3">
-                        <!-- Contextual suggestion chips. Hidden while typing /
-                             streaming so the row doesn't push the input around.
-                             Each chip pre-fills the composer with a well-formed
-                             prompt the user can edit before sending. -->
-                        <div
-                            v-if="showSuggestions"
-                            class="mb-2 flex flex-wrap gap-1.5"
-                            :aria-label="t('apps.builder.suggestions_heading')"
-                        >
-                            <button
-                                v-for="suggestion in chipSuggestions"
-                                :key="suggestion.id"
-                                type="button"
-                                @click="applyChip(suggestion)"
-                                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue"
-                            >
-                                <component :is="suggestion.icon" class="size-3" />
-                                {{ suggestion.label }}
-                            </button>
-                        </div>
-
                         <!-- Staged attachment thumbnail — sits above the input so
                              the user sees exactly what'll be sent with the next
                              turn and can drop it before hitting Send. -->
@@ -1341,9 +1381,9 @@ function statusTone(status: Message['status']): string {
                             </button>
                         </div>
 
-                        <form class="relative flex gap-2" @submit.prevent="send">
-                            <!-- Slash command menu — floats above the row. Kept
-                                 inside the form so it positions against it. -->
+                        <form class="relative" @submit.prevent="send">
+                            <!-- Slash command menu — floats above the composer.
+                                 Kept inside the form so it positions against it. -->
                             <SlashCommandMenu
                                 :open="slashMenuOpen"
                                 :commands="slashMatches"
@@ -1360,41 +1400,111 @@ function statusTone(status: Message['status']): string {
                                 class="hidden"
                                 @change="onAttachmentChange"
                             />
-                            <button
-                                type="button"
-                                @click="pickAttachment"
-                                :disabled="sending || aiIsThinking"
-                                :title="t('apps.builder.attach_image')"
-                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-white/5 text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-50"
-                            >
-                                <Paperclip class="size-4" />
-                            </button>
-                            <input
+
+                            <!-- Full-width multi-line composer. Enter sends,
+                                 Shift+Enter inserts a newline (see onComposerKeydown). -->
+                            <textarea
                                 ref="inputEl"
                                 v-model="input"
-                                type="text"
-                                class="h-9 flex-1 rounded-md border border-medium bg-white/5 px-3 text-sm text-ink placeholder:text-ink-subtle"
+                                rows="3"
+                                class="max-h-56 min-h-[76px] w-full resize-none rounded-md border border-medium bg-white/5 px-3 py-2 text-sm text-ink placeholder:text-ink-subtle"
                                 :placeholder="aiIsThinking ? t('apps.builder.input_thinking') : t('apps.builder.input_placeholder')"
                                 :disabled="sending || aiIsThinking"
                                 @paste="onPaste"
                                 @keydown="onComposerKeydown"
                             />
-                            <button
-                                v-if="!aiIsThinking"
-                                type="submit"
-                                class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
-                                :disabled="sending || (!input.trim() && !attachedFile)"
-                            >
-                                <Send class="size-3.5" />
-                                {{ t('apps.builder.send') }}
-                            </button>
-                            <div
-                                v-else
-                                class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/40 bg-accent-blue/10 px-3.5 py-1.5 text-xs font-medium text-accent-blue"
-                                aria-live="polite"
-                            >
-                                <Loader2 class="size-3.5 animate-spin" />
-                                {{ t('apps.builder.thinking') }}
+
+                            <!-- Controls row under the textarea: tools on the
+                                 left, send on the right. -->
+                            <div class="mt-2 flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-1.5">
+                                    <!-- Contextual suggestions, tucked behind an
+                                         icon so they don't crowd the composer.
+                                         Each item pre-fills the textarea. -->
+                                    <DropdownMenu v-if="hasSuggestions">
+                                        <DropdownMenuTrigger as-child>
+                                            <button
+                                                type="button"
+                                                :title="t('apps.builder.suggestions_heading')"
+                                                :aria-label="t('apps.builder.suggestions_heading')"
+                                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-white/5 text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue disabled:opacity-50 data-[state=open]:border-accent-blue/40 data-[state=open]:text-accent-blue"
+                                            >
+                                                <Lightbulb class="size-4" />
+                                            </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start" side="top" :side-offset="6" class="w-64">
+                                            <DropdownMenuLabel class="text-[10px] uppercase tracking-wider text-ink-muted">
+                                                {{ t('apps.builder.suggestions_heading') }}
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuItem
+                                                v-for="suggestion in chipSuggestions"
+                                                :key="suggestion.id"
+                                                class="gap-2"
+                                                @select="applyChip(suggestion)"
+                                            >
+                                                <component :is="suggestion.icon" class="size-4 text-ink-muted" />
+                                                {{ suggestion.label }}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+
+                                    <!-- AI model picker, tucked behind a gear. -->
+                                    <DropdownMenu v-if="props.models && props.models.length > 1">
+                                        <DropdownMenuTrigger as-child>
+                                            <button
+                                                type="button"
+                                                :disabled="sending || aiIsThinking"
+                                                :title="`${t('apps.builder.model_picker_label')}: ${selectedModelLabel}`"
+                                                :aria-label="t('apps.builder.model_picker_label')"
+                                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-white/5 text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-50 data-[state=open]:border-accent-blue/40 data-[state=open]:text-accent-blue"
+                                            >
+                                                <Settings2 class="size-4" />
+                                            </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start" side="top" :side-offset="6" class="w-60">
+                                            <DropdownMenuLabel class="text-[10px] uppercase tracking-wider text-ink-muted">
+                                                {{ t('apps.builder.model_picker_label') }}
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuRadioGroup v-model="selectedModel">
+                                                <DropdownMenuRadioItem
+                                                    v-for="m in props.models"
+                                                    :key="m.id"
+                                                    :value="m.id"
+                                                >
+                                                    {{ m.label }}
+                                                </DropdownMenuRadioItem>
+                                            </DropdownMenuRadioGroup>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+
+                                    <button
+                                        type="button"
+                                        @click="pickAttachment"
+                                        :disabled="sending || aiIsThinking"
+                                        :title="t('apps.builder.attach_image')"
+                                        class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-white/5 text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-50"
+                                    >
+                                        <Paperclip class="size-4" />
+                                    </button>
+                                </div>
+
+                                <button
+                                    v-if="!aiIsThinking"
+                                    type="submit"
+                                    class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                                    :disabled="sending || (!input.trim() && !attachedFile)"
+                                >
+                                    <Send class="size-3.5" />
+                                    {{ t('apps.builder.send') }}
+                                </button>
+                                <div
+                                    v-else
+                                    class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/40 bg-accent-blue/10 px-3.5 py-1.5 text-xs font-medium text-accent-blue"
+                                    aria-live="polite"
+                                >
+                                    <Loader2 class="size-3.5 animate-spin" />
+                                    {{ t('apps.builder.thinking') }}
+                                </div>
                             </div>
                         </form>
                         <p
@@ -1462,27 +1572,6 @@ function statusTone(status: Message['status']): string {
                                     {{ p.name }}
                                 </button>
                             </nav>
-                            <button
-                                type="button"
-                                @click="wireframeOpen = true"
-                                :disabled="sending || aiIsThinking"
-                                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue disabled:opacity-50"
-                                :title="t('apps.builder.wireframe.tooltip')"
-                            >
-                                <ImagePlus class="size-3" />
-                                {{ t('apps.builder.wireframe.button') }}
-                            </button>
-                            <button
-                                type="button"
-                                @click="requestVisualReview"
-                                :disabled="requestingReview || sending || !preview"
-                                class="inline-flex items-center gap-1 rounded-pill border border-accent-blue/40 bg-accent-blue/10 px-2.5 py-1 text-[11px] text-accent-blue transition-colors hover:bg-accent-blue/15 disabled:opacity-50"
-                                :title="t('apps.builder.visual_review_tooltip')"
-                            >
-                                <Loader2 v-if="requestingReview" class="size-3 animate-spin" />
-                                <Camera v-else class="size-3" />
-                                {{ requestingReview ? t('apps.builder.visual_review_running') : t('apps.builder.visual_review') }}
-                            </button>
                             </template>
 
                             <button
@@ -1494,6 +1583,41 @@ function statusTone(status: Message['status']): string {
                                 <Minimize2 v-if="fullscreenPanel === 'work'" class="size-3" />
                                 <Maximize2 v-else class="size-3" />
                             </button>
+
+                            <!-- Panel options, tucked behind a three-dots menu.
+                                 Preview-only actions (import wireframe, visual
+                                 review) live here so the header stays clean. -->
+                            <DropdownMenu v-if="viewMode === 'preview'">
+                                <DropdownMenuTrigger as-child>
+                                    <button
+                                        type="button"
+                                        :title="t('apps.builder.panel_options')"
+                                        :aria-label="t('apps.builder.panel_options')"
+                                        class="inline-flex size-6 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-white/10 hover:text-ink data-[state=open]:bg-white/10 data-[state=open]:text-ink"
+                                    >
+                                        <MoreVertical class="size-3.5" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" :side-offset="6" class="w-56">
+                                    <DropdownMenuItem
+                                        :disabled="sending || aiIsThinking"
+                                        class="gap-2"
+                                        @select="wireframeOpen = true"
+                                    >
+                                        <ImagePlus class="size-4 text-ink-muted" />
+                                        {{ t('apps.builder.wireframe.button') }}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        :disabled="requestingReview || sending || !preview"
+                                        class="gap-2"
+                                        @select="requestVisualReview"
+                                    >
+                                        <Loader2 v-if="requestingReview" class="size-4 animate-spin" />
+                                        <Camera v-else class="size-4 text-ink-muted" />
+                                        {{ requestingReview ? t('apps.builder.visual_review_running') : t('apps.builder.visual_review') }}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </header>
 
@@ -1502,10 +1626,10 @@ function statusTone(status: Message['status']): string {
                         ref="previewPane"
                         :class="[
                             'flex-1 overflow-auto p-5 transition-colors',
-                            preview && previewTheme === 'light' ? 'bg-white' : '',
+                            preview ? (previewTheme === 'light' ? 'bg-white' : 'bg-slate-950') : '',
                         ]"
                     >
-                        <div v-if="preview" class="space-y-4">
+                        <div v-if="preview" class="space-y-4" :style="{ '--sp-bleed': '1.25rem' }">
                             <AppRenderer
                                 :blocks="preview.page.blocks"
                                 :block-data="preview.block_data"

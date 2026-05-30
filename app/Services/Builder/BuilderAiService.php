@@ -2,6 +2,7 @@
 
 namespace App\Services\Builder;
 
+use App\Ai\BuilderAgent;
 use App\Ai\Tools\Builder\DeleteBlockByIdTool;
 use App\Ai\Tools\Builder\InspectRecordsTool;
 use App\Ai\Tools\Builder\ListAvailableActionsTool;
@@ -27,15 +28,16 @@ use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Files\StoredImage;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Streaming\Events\TextDelta;
+use Laravel\Ai\Streaming\Events\TextStart;
 
 /**
  * Orchestrates a Claude conversation that edits an App manifest via tool use.
@@ -73,6 +75,12 @@ class BuilderAiService
     public const VISUAL_REVIEW_MODEL = 'claude-sonnet-4-5-20250929';
 
     private const MAX_HISTORY_MESSAGES = 30;
+
+    /** The default chat model id, exposed so the UI can pre-select it in the model picker. */
+    public static function defaultModel(): string
+    {
+        return self::MODEL;
+    }
 
     public function __construct(
         private AppManifestService $manifestService,
@@ -138,7 +146,7 @@ class BuilderAiService
         $history = $this->buildHistory($conversation);
         $prompt = array_pop($history); // the user turn just stored
 
-        $sdkAgent = new AnonymousAgent(
+        $sdkAgent = new BuilderAgent(
             instructions: $this->systemPrompt($app),
             messages: $history,
             tools: $tools,
@@ -272,7 +280,7 @@ class BuilderAiService
         }
         $promptText = $lastUser?->content ?? $userText;
 
-        $sdkAgent = new AnonymousAgent(
+        $sdkAgent = new BuilderAgent(
             instructions: $this->systemPrompt($app),
             messages: $sdkHistory,
             tools: $tools,
@@ -327,8 +335,32 @@ class BuilderAiService
                 model: $resolvedModel,
             );
 
+            $sawText = false;
             foreach ($stream as $event) {
+                // When Claude uses tools it emits several separate text blocks
+                // across the turn (one before each tool call, one after). Each
+                // is bounded by TextStart/TextEnd, and the SDK puts NOTHING
+                // between them — so concatenating the deltas glued the end of
+                // one block onto the start of the next ("...temáticas.Dejaré").
+                // Insert a paragraph break when a new block opens after we've
+                // already streamed some text, and broadcast it so the live
+                // view matches the persisted buffer.
+                if ($event instanceof TextStart) {
+                    $separator = self::blockSeparator($buffer, $sawText);
+                    if ($separator !== '') {
+                        $buffer .= $separator;
+                        $this->safeBroadcast(fn () => BuilderStreamChunk::dispatch(
+                            $conversation->id,
+                            $placeholder->id,
+                            $separator,
+                        ));
+                    }
+
+                    continue;
+                }
+
                 if ($event instanceof TextDelta && $event->delta !== '') {
+                    $sawText = true;
                     $buffer .= $event->delta;
                     $this->safeBroadcast(fn () => BuilderStreamChunk::dispatch(
                         $conversation->id,
@@ -386,18 +418,30 @@ class BuilderAiService
 
             return $placeholder;
         } catch (\Throwable $e) {
+            // For HTTP failures (e.g. the provider rejecting the request), the
+            // generic message is just "HTTP request returned status code 400" —
+            // the actual reason is in the response body. Surface it so model/
+            // request problems are diagnosable instead of opaque.
+            $providerError = null;
+            if ($e instanceof RequestException && $e->response !== null) {
+                $body = json_decode($e->response->body(), true);
+                $providerError = $body['error']['message'] ?? mb_substr($e->response->body(), 0, 500);
+            }
+
             Log::error('Builder AI stream failed', [
                 'conversation_id' => $conversation->id,
                 'message_id' => $placeholder->id,
                 'duration_seconds' => round(microtime(true) - $startedAt, 2),
                 'error_class' => $e::class,
                 'error' => $e->getMessage(),
+                'provider_error' => $providerError,
+                'model' => $resolvedModel,
             ]);
 
             // Cap the error string so we don't try to persist a 5KB SQL trace
             // (which can recursively trigger the very error we're handling
             // when the original error was a column-length overflow).
-            $errMsg = mb_substr($e->getMessage(), 0, 1500);
+            $errMsg = mb_substr($providerError ?? $e->getMessage(), 0, 1500);
             $placeholder->update([
                 'content' => 'Sorry — the AI request failed: '.$errMsg,
                 'status' => 'none',
@@ -411,6 +455,25 @@ class BuilderAiService
 
             return $placeholder;
         }
+    }
+
+    /**
+     * Decide the separator to insert when a new streamed text block opens.
+     *
+     * Claude emits a fresh TextStart/TextEnd-bounded block before and after
+     * every tool call. The SDK puts nothing between consecutive blocks, so
+     * naive concatenation glues the end of one onto the start of the next
+     * ("...temáticas.Dejaré..."). We insert a paragraph break before any block
+     * that follows already-streamed text, unless the buffer already ends in a
+     * newline (the model closed the previous block with its own break).
+     */
+    public static function blockSeparator(string $buffer, bool $sawText): string
+    {
+        if ($sawText && $buffer !== '' && ! str_ends_with($buffer, "\n")) {
+            return "\n\n";
+        }
+
+        return '';
     }
 
     /**
@@ -588,7 +651,15 @@ Verification (on demand — use judgment, do not call for trivial edits):
 10. SKIP verification for rename-only changes, layout tweaks, or pure structural patches that do not query data.
 
 Visual / theme changes:
-11. To switch the App between light and dark mode, set `settings.theme` to "light" or "dark" via propose_change (path "/settings/theme"). This is the ONLY way to change the global look — there are no per-block color/border overrides in the MVP schema. If the user asks for "light theme", "dark mode", or a different palette, that's the lever.
+11. Two levers for look-and-feel: (a) the GLOBAL theme — set `settings.theme` to "light" or "dark" via propose_change (path "/settings/theme"). The default is "light" (a clean white page), which is right for most websites; only switch to "dark" if the user asks for a dark site. and (b) PER-BLOCK style — every block accepts an optional `style` object `{padding: none|sm|md|lg, margin: none|sm|md|lg, background: "#RRGGBB", color: "#RRGGBB", max_width: sm|md|lg|full}`. Use `style.background` + `style.padding="lg"` to make a `container` into a coloured section. CONTRAST IS AUTOMATIC: when you set `background`, the runtime auto-picks a readable text colour (dark on light, light on dark) — do NOT set `color` yourself and do NOT put a `background` on the inner heading/markdown (that was a bug; the section's background already covers them). Set `max_width: "md"` on text sections so lines stay readable and centre on wide screens.
+
+Content & visual design (websites, landing/marketing pages, anything "make it nice"):
+11a. When the request is a CONTENT site (a "website", landing page, portfolio, "página bonita", etc.) rather than a data app, your job is visual composition, not CRUD. Do NOT settle for a stack of heading + text + spacer — that reads as a plain document, not a website. Build rich, generous pages.
+11b. Recipe for a home page: start with a `hero` (title + subtitle + stock background_image + cta) → a `feature_grid` (3-4 benefit cards with emoji icons) → alternating SECTIONS, each a `container` with `style.padding="lg"`, `style.full_bleed=true`, a `style.background` or `style.gradient`, and `style.max_width="md"`, holding a `heading` + `markdown`/`text` and often a `split_view` (image one side, copy the other) → finish with a `cta` block (bold gradient/background, full_bleed) to drive an action. Vary section backgrounds for rhythm. Use `markdown` for rich body copy, `feature_grid` for "3 features/steps/benefits" (never fake those with split_view), and `gradient` on the hero-adjacent and CTA sections for polish.
+11c. ALWAYS include imagery on a content site — pages without images do not look "bonito". Put stock URLs in `image.src` / `hero.background_image` using `https://picsum.photos/seed/<word>/<w>/<h>` with a DIFFERENT `<word>` per image (e.g. .../seed/solar/1200/800, .../seed/forest/1200/800) so each photo is distinct and stable. Do NOT use `source.unsplash.com` — that endpoint is retired and returns errors (broken images). Always write a descriptive `alt`.
+11d. Be generous and finish the page in one turn: a real landing page is ~8-20 blocks across hero, 3-5 sections, and a CTA — not 4 blocks. Call `list_available_components` to recall the catalog (hero, container, split_view, image, markdown, card_grid…). Heading hierarchy + spacing (`spacer`) + section backgrounds carry the design.
+11e. MODEL: rich visual builds come out far better on a stronger model. If the current turn is a big creative/website request and you sense the output is shallow, you MAY tell the user (in their language) "esto queda mucho mejor con un modelo más potente — puedes cambiarlo en el selector de modelo del builder", then proceed with your best effort.
+12. To recolor a `single_select` field's options, replace each `options[i].color` hex. Each option color is the chip shown in tables and badges for that value.
 12. To recolor a `single_select` field's options, replace each `options[i].color` hex. Each option color is the chip shown in tables and badges for that value.
 
 Data entry (forms, buttons, modals):

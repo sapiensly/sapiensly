@@ -65,6 +65,15 @@ beforeEach(function () {
     );
 });
 
+it('blockSeparator only breaks when a block follows existing text without a trailing newline', function (string $buffer, bool $sawText, string $expected) {
+    expect(BuilderAiService::blockSeparator($buffer, $sawText))->toBe($expected);
+})->with([
+    'first block of the turn' => ['', false, ''],
+    'block after a tool call' => ['texto temáticas.', true, "\n\n"],
+    'previous block already ended in newline' => ["texto.\n", true, ''],
+    'sawText guards a stray buffer' => ['texto.', false, ''],
+]);
+
 it('startConversation creates a row scoped to the App and user', function () {
     $conv = $this->service->startConversation($this->testApp->fresh(), $this->user);
 

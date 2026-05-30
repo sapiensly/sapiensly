@@ -9,7 +9,7 @@ const props = defineProps<RuntimePageProps>();
 
 const locale = computed(() => props.manifest.settings.default_locale ?? 'es-MX');
 const defaultCurrency = computed(() => props.manifest.settings.default_currency ?? 'MXN');
-const theme = computed(() => props.manifest.settings.theme ?? 'dark');
+const theme = computed(() => props.manifest.settings.theme ?? 'light');
 
 // Provide the App slug so BlockForm/BlockButton can POST to /r/{slug}/actions
 // without parsing window.location themselves.
@@ -50,9 +50,10 @@ provide('appSlug', props.app.slug);
 
             <div
                 :class="[
-                    'space-y-4 rounded-sp-sm p-5 transition-colors',
-                    theme === 'light' ? 'bg-white' : '',
+                    'space-y-4 overflow-hidden rounded-sp-sm p-5 transition-colors',
+                    theme === 'light' ? 'bg-white' : 'bg-slate-950',
                 ]"
+                :style="{ '--sp-bleed': '1.25rem' }"
             >
                 <AppRenderer
                     :blocks="page.blocks"

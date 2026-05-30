@@ -73,6 +73,8 @@ it('renders the builder page and starts a conversation lazily', function () {
             ->has('manifest')
             ->has('conversation.id')
             ->has('conversation.messages')
+            ->has('models')
+            ->where('defaultModel', 'claude-haiku-4-5-20251001')
         );
 
     expect(BuilderConversation::query()->where('app_id', $this->testApp->id)->count())->toBe(1);
@@ -494,6 +496,49 @@ it('persists chat image attachments to the tenant S3 disk', function () {
         return $job->attachmentDisk === 's3'
             && $job->attachmentPath === $userMsg->attachment_path;
     });
+});
+
+it('forwards a chosen model to the builder job', function () {
+    Queue::fake();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/messages", [
+            'conversation_id' => $conv->id,
+            'message' => 'crea un website bonito sobre cambio climático',
+            'model' => 'claude-sonnet-4-5-20250929',
+        ])
+        ->assertOk();
+
+    Queue::assertPushed(
+        RunBuilderAiJob::class,
+        fn (RunBuilderAiJob $job) => $job->modelOverride === 'claude-sonnet-4-5-20250929',
+    );
+});
+
+it('rejects a model that is not an enabled chat model', function () {
+    Queue::fake();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/messages", [
+            'conversation_id' => $conv->id,
+            'message' => 'hola',
+            'model' => 'totally-made-up-model',
+        ])
+        ->assertStatus(422);
+
+    Queue::assertNotPushed(RunBuilderAiJob::class);
 });
 
 it('returns 503 when sending a chat attachment with no S3 configured', function () {

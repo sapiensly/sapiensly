@@ -7,6 +7,7 @@ use App\Models\App;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\Record;
+use App\Services\AiProviderService;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Manifest\AppManifestService;
@@ -18,6 +19,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -36,7 +38,36 @@ class AppBuilderController extends Controller
         private RecordQueryService $records,
         private TenantStorage $tenantStorage,
         private WireframeImporter $wireframes,
+        private AiProviderService $aiProviders,
     ) {}
+
+    /**
+     * Chat-capable Claude models the tenant has enabled, for the Builder's model
+     * picker. Restricted to Anthropic: the Builder's tool-use loop is designed
+     * and tested against Claude, and the 32k max-tokens cap (BuilderAgent) is
+     * tuned for Claude 4.x. Falls back to the Anthropic catalog when the DB
+     * catalog is empty so the picker is never blank.
+     *
+     * @return list<array{id: string, label: string}>
+     */
+    private function chatModels(): array
+    {
+        $anthropic = $this->aiProviders->getFullCatalog()['anthropic'] ?? [];
+
+        $models = collect($anthropic)
+            ->filter(fn (array $m) => in_array('chat', $m['capabilities'] ?? [], true))
+            ->map(fn (array $m) => ['id' => $m['id'], 'label' => $m['label']])
+            ->values();
+
+        if ($models->isEmpty()) {
+            $models = collect(AiProviderService::MODEL_CATALOGS['anthropic'])
+                ->filter(fn (array $m) => in_array('chat', $m['capabilities'] ?? [], true))
+                ->map(fn (array $m) => ['id' => $m['id'], 'label' => $m['label']])
+                ->values();
+        }
+
+        return $models->all();
+    }
 
     public function show(Request $request, App $app): Response
     {
@@ -59,6 +90,8 @@ class AppBuilderController extends Controller
 
         return Inertia::render('apps/Builder', [
             'app' => $app->only(['id', 'slug', 'name', 'description']),
+            'models' => $this->chatModels(),
+            'defaultModel' => BuilderAiService::defaultModel(),
             'manifest' => $manifest,
             'preview' => $preview,
             'schema' => $schema,
@@ -202,6 +235,9 @@ class AppBuilderController extends Controller
         $data = $request->validate([
             'conversation_id' => ['required', 'string'],
             'message' => ['required', 'string', 'max:5000'],
+            // Optional per-turn model override chosen from the Builder's model
+            // picker — must be one of the tenant's enabled chat models.
+            'model' => ['nullable', 'string', Rule::in(array_column($this->chatModels(), 'id'))],
             // Optional image attachment. Limited to common raster formats
             // Claude vision accepts. 5 MB matches the model's per-image cap
             // with headroom for multipart overhead.
@@ -254,7 +290,7 @@ class AppBuilderController extends Controller
             'status' => 'streaming',
         ]);
 
-        RunBuilderAiJob::dispatch($placeholder->id, $data['message'], $attachmentPath, $attachmentDisk);
+        RunBuilderAiJob::dispatch($placeholder->id, $data['message'], $attachmentPath, $attachmentDisk, $data['model'] ?? null);
 
         return response()->json([
             'conversation_id' => $conversation->id,

@@ -981,6 +981,34 @@ class ManifestValidator
                 continue;
             }
 
+            if ($block['type'] === 'hero') {
+                if (isset($block['cta']['on_click'])) {
+                    $this->validateActionSequence(
+                        $block['cta']['on_click'],
+                        "{$blockPath}/cta/on_click",
+                        $objectsById,
+                        $modalIdsInPage,
+                        $errors,
+                    );
+                }
+
+                continue;
+            }
+
+            if ($block['type'] === 'cta') {
+                if (isset($block['button']['on_click'])) {
+                    $this->validateActionSequence(
+                        $block['button']['on_click'],
+                        "{$blockPath}/button/on_click",
+                        $objectsById,
+                        $modalIdsInPage,
+                        $errors,
+                    );
+                }
+
+                continue;
+            }
+
             if ($block['type'] === 'table') {
                 $objectId = $block['data_source']['object_id'] ?? null;
                 if ($objectId === null || ! isset($objectsById[$objectId])) {
