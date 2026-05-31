@@ -81,12 +81,12 @@ function isLast(index: number): boolean {
 
 <template>
     <div ref="scroller" class="flex-1 overflow-y-auto" @scroll.passive="onScroll">
-        <div class="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
-            <div class="space-y-8">
+        <div class="mx-auto w-full max-w-[820px] px-7 pb-6 pt-9">
+            <div class="space-y-7">
                 <div v-for="(m, i) in messages" :key="m.id">
                     <!-- User turn -->
                     <div v-if="m.role === 'user'" class="flex justify-end">
-                        <div class="max-w-[80%]">
+                        <div class="max-w-[75%]">
                             <div
                                 v-if="m.attachments.length"
                                 class="mb-1.5 flex flex-wrap justify-end gap-2"
@@ -108,18 +108,18 @@ function isLast(index: number): boolean {
                                     <span class="max-w-[160px] truncate">{{ a.original_name }}</span>
                                 </a>
                             </div>
-                            <div class="rounded-3xl rounded-br-lg bg-accent-blue px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-sm">
+                            <div class="rounded-[1.4rem] bg-accent-blue px-5 py-3 text-[15px] font-medium leading-relaxed text-white shadow-[0_4px_14px_rgba(26,126,240,0.28)]">
                                 <p class="whitespace-pre-wrap break-words">{{ m.content }}</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- Assistant turn -->
-                    <div v-else class="group flex gap-3.5">
-                        <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent-blue/25 to-accent-blue/5 text-accent-blue ring-1 ring-accent-blue/15">
+                    <div v-else class="group flex gap-4">
+                        <div class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent-blue/12 text-accent-blue">
                             <Sparkles class="size-[18px]" />
                         </div>
-                        <div class="min-w-0 flex-1 pt-0.5">
+                        <div class="min-w-0 flex-1 pt-1">
                             <div
                                 v-if="m.status === 'error'"
                                 class="rounded-2xl border border-sp-danger/30 bg-sp-danger/10 p-3.5 text-sm text-sp-danger"

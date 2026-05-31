@@ -4,6 +4,7 @@ import ChatComposer from '@/components/chat/ChatComposer.vue';
 import ChatEmptyState from '@/components/chat/ChatEmptyState.vue';
 import ChatSidebar from '@/components/chat/ChatSidebar.vue';
 import ChatThread from '@/components/chat/ChatThread.vue';
+import Topbar from '@/components/app-v2/Topbar.vue';
 import echo from '@/echo';
 import { type Artifact, parseArtifacts } from '@/lib/artifacts';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
@@ -253,7 +254,13 @@ function retry() {
 <template>
     <Head :title="activeChat?.title || t('app_v2.nav.chat')" />
 
-    <AppLayoutV2 :title="activeChat?.title || t('app_v2.nav.chat')" bg="flat" :full-bleed="true">
+    <AppLayoutV2
+        v-slot="{ openPalette, toggleSidebar, sidebarCollapsed }"
+        :title="activeChat?.title || t('app_v2.nav.chat')"
+        bg="flat"
+        :full-bleed="true"
+        hide-topbar
+    >
         <div class="flex min-h-0 flex-1">
             <ChatSidebar
                 class="hidden md:flex"
@@ -264,6 +271,12 @@ function retry() {
             />
 
             <div class="flex min-h-0 flex-1 flex-col">
+                <Topbar
+                    :title="activeChat?.title || t('app_v2.nav.chat')"
+                    :sidebar-collapsed="sidebarCollapsed"
+                    @toggle-sidebar="toggleSidebar"
+                    @open-palette="openPalette"
+                />
                 <template v-if="activeChat">
                     <ChatThread
                         :messages="messages"
@@ -273,8 +286,8 @@ function retry() {
                         @retry="retry"
                         @open-artifact="openArtifact"
                     />
-                    <div class="px-4 pb-4">
-                        <div class="mx-auto w-full max-w-3xl">
+                    <div class="px-7 pb-4">
+                        <div class="mx-auto w-full max-w-[820px]">
                             <ChatComposer
                                 ref="composer"
                                 :models="models"

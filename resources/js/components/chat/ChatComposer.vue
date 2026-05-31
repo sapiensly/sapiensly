@@ -142,7 +142,7 @@ defineExpose({ focus });
 
 <template>
     <div>
-        <div class="rounded-[1.5rem] border border-medium bg-surface px-1.5 py-1.5 shadow-sm transition-all focus-within:border-strong focus-within:shadow-md">
+        <div class="rounded-[1.625rem] border border-medium bg-surface px-2 py-2 shadow-md transition-all focus-within:border-strong focus-within:shadow-lg">
             <!-- Attachment chips. -->
             <div v-if="attachments.length" class="flex flex-wrap gap-2 px-2 pb-1 pt-1.5">
                 <span
@@ -274,10 +274,10 @@ defineExpose({ focus });
                     v-if="busy"
                     type="button"
                     :title="t('chat.composer.stop')"
-                    class="inline-flex size-8 items-center justify-center rounded-full bg-ink text-surface transition-transform hover:scale-105"
+                    class="inline-flex size-8 items-center justify-center rounded-full bg-accent-blue text-white transition-colors hover:bg-accent-blue-hover"
                     @click="emit('stop')"
                 >
-                    <Square class="size-3.5 fill-current" />
+                    <Square class="size-3 fill-current" />
                 </button>
                 <button
                     v-else

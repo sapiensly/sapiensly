@@ -31,12 +31,21 @@ interface Props {
      * once they leave the editor.
      */
     forceCollapsedOnMount?: boolean;
+    /**
+     * Omit the shared Topbar so a full-bleed page can render its own header
+     * (e.g. Chat puts a slim header only over the conversation, letting its
+     * left panel reach the top). The page receives `openPalette` /
+     * `toggleSidebar` via the default slot to drive the command palette and
+     * the main sidebar from its own header.
+     */
+    hideTopbar?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     bg: 'blueprint',
     fullBleed: false,
     forceCollapsedOnMount: false,
+    hideTopbar: false,
 });
 
 // Shared cookie with legacy /admin and /admin so sidebar collapse state
@@ -92,6 +101,7 @@ function openPalette() {
                     @scroll.passive="onMainScroll"
                 >
                     <Topbar
+                        v-if="!hideTopbar"
                         :title="title"
                         :sidebar-collapsed="sidebarCollapsed"
                         :scrolled="scrolled"
@@ -103,13 +113,21 @@ function openPalette() {
                         v-if="fullBleed"
                         class="flex min-h-0 flex-1 flex-col"
                     >
-                        <slot />
+                        <slot
+                            :open-palette="openPalette"
+                            :toggle-sidebar="toggleSidebar"
+                            :sidebar-collapsed="sidebarCollapsed"
+                        />
                     </div>
                     <div
                         v-else
                         class="mx-auto w-full max-w-[1440px] px-7 py-[22px]"
                     >
-                        <slot />
+                        <slot
+                            :open-palette="openPalette"
+                            :toggle-sidebar="toggleSidebar"
+                            :sidebar-collapsed="sidebarCollapsed"
+                        />
                     </div>
                 </main>
             </div>
