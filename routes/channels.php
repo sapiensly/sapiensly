@@ -3,6 +3,7 @@
 use App\Models\BuilderConversation;
 use App\Models\Chat;
 use App\Models\Conversation;
+use App\Models\Debate;
 use App\Models\KnowledgeBase;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Cache;
@@ -26,6 +27,13 @@ Broadcast::channel('chat.conversation.{chatId}', function ($user, string $chatId
     $chat = Chat::find($chatId);
 
     return $chat && $chat->user_id === $user->id;
+});
+
+// IA Debate stream. Each debate is private to the user who started it.
+Broadcast::channel('debate.{debateId}', function ($user, string $debateId) {
+    $debate = Debate::find($debateId);
+
+    return $debate && $debate->user_id === $user->id;
 });
 
 Broadcast::channel('knowledge-base.{knowledgeBaseId}', function ($user, string $knowledgeBaseId) {

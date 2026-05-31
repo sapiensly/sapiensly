@@ -223,6 +223,19 @@ return [
             'timeout' => 300, // 5 minutes for embedding generation
             'nice' => 0,
         ],
+        'supervisor-debate' => [
+            'connection' => 'redis',
+            'queue' => ['debate'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 300, // 5 minutes — debate turns stream a full argument
+            'nice' => 0,
+        ],
         'supervisor-whatsapp-webhooks' => [
             'connection' => 'redis',
             'queue' => ['whatsapp-webhooks'],
@@ -257,6 +270,11 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-debate' => [
+                'maxProcesses' => 10,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
             'supervisor-whatsapp-webhooks' => [
                 'maxProcesses' => 5,
                 'balanceMaxShift' => 1,
@@ -275,6 +293,9 @@ return [
             ],
             'supervisor-ai' => [
                 'maxProcesses' => 2,
+            ],
+            'supervisor-debate' => [
+                'maxProcesses' => 9,
             ],
             'supervisor-whatsapp-webhooks' => [
                 'maxProcesses' => 2,

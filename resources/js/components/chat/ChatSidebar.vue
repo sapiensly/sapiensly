@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkspaceSwitcher from '@/components/app-v2/WorkspaceSwitcher.vue';
 import {
     Dialog,
     DialogContent,
@@ -294,6 +295,8 @@ function deleteProject(p: ChatProjectDto) {
                 {{ t('chat.no_history') }}
             </p>
         </div>
+
+        <WorkspaceSwitcher active="chat" />
 
         <Dialog v-model:open="projectDialog">
             <DialogContent>

@@ -98,7 +98,7 @@ const sections = computed<NavSection[]>(() => [
                 label: t('app_v2.nav.chat'),
                 href: ChatController.index().url,
                 icon: MessagesSquare,
-                match: (u) => u === '/chat' || u.startsWith('/chat/'),
+                match: (u) => u === '/chat' || u.startsWith('/chat/') || u === '/debates' || u.startsWith('/debates/'),
             },
             {
                 key: 'apps',
