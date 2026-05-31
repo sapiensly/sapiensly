@@ -189,3 +189,111 @@ Grouped by area (`app/Models/`):
    page (subscribed via Echo) appends it live; a final "complete" event swaps in the saved record.
 4. Tenant data, files, and vectors are read/written through the workspace-scoped services
    (`forAccountContext`, `TenantStorage`, `VectorStoreService`).
+
+---
+
+## Architecture diagram
+
+High-level component map:
+
+```mermaid
+flowchart TB
+    subgraph client["Client"]
+        vue["Vue 3 + Inertia 2 SPA<br/>(Wayfinder, reka-ui, Tailwind 4)"]
+        echo["Echo client (WebSocket)"]
+        widget["Embeddable chatbot widget"]
+    end
+
+    subgraph web["Laravel web layer"]
+        inertia["Inertia controllers"]
+        fortify["Fortify auth + 2FA"]
+        perms["spatie roles (sysadmin)"]
+        tenancy["HasVisibility / forAccountContext<br/>(Personal vs Organization)"]
+        widgetapi["Widget API"]
+    end
+
+    subgraph domain["Domain services"]
+        provider["AiProviderService<br/>(providers, model catalog)"]
+        llm["LLMService / ChatAiService<br/>DebateOrchestrator / Builder"]
+        rag["RAG: Chunking → Embedding →<br/>VectorStore → Retrieval"]
+        tools["ToolBuilder / ToolExecution<br/>+ MCP client"]
+    end
+
+    subgraph async["Async + real-time"]
+        redis[("Redis")]
+        horizon["Horizon queues<br/>(default · ai · debate · whatsapp)"]
+        jobs["Jobs: ProcessAgentChat,<br/>RunChatAiJob, RunDebateTurnJob…"]
+        reverb["Reverb (WebSockets)<br/>ShouldBroadcastNow events"]
+    end
+
+    subgraph data["Data & storage"]
+        pg[("PostgreSQL")]
+        pgv[("pgvector store")]
+        s3[("Object storage<br/>S3 / TenantStorage")]
+    end
+
+    subgraph ext["External services"]
+        models["LLM providers<br/>Anthropic · OpenAI · Gemini · …"]
+        apis["Integrations / MCP servers<br/>(REST · GraphQL · DB tools)"]
+        wa["WhatsApp (Meta Cloud API)"]
+    end
+
+    vue -->|"HTTP / Inertia"| inertia
+    widget -->|"HTTP"| widgetapi
+    inertia --> fortify
+    inertia --> perms
+    inertia --> tenancy
+    inertia --> domain
+    widgetapi --> domain
+
+    inertia -->|"dispatch"| horizon
+    horizon --- redis
+    horizon --> jobs
+    jobs --> domain
+    jobs -->|"broadcast tokens"| reverb
+    reverb -->|"private channel"| echo
+    echo --> vue
+
+    provider --> llm
+    llm -->|"laravel/ai SDK"| models
+    llm --> rag
+    llm --> tools
+    rag --> pgv
+    tools --> apis
+    domain --> pg
+    domain --> s3
+    tenancy --> pg
+    wa -->|"webhook"| inertia
+    inertia --> wa
+```
+
+AI streaming request lifecycle:
+
+```mermaid
+sequenceDiagram
+    participant U as User (Vue)
+    participant C as Controller
+    participant Q as Horizon (ai/debate)
+    participant J as Stream job
+    participant P as AiProviderService
+    participant L as LLM provider
+    participant R as Reverb
+    U->>C: Send message (HTTP)
+    C->>C: Validate + scope (forAccountContext)
+    C->>C: Persist user msg + placeholder
+    C->>Q: Dispatch stream job
+    C-->>U: 201 (placeholder)
+    Q->>J: Run
+    J->>P: applyRuntimeConfig + resolve model/provider
+    J->>J: Inject RAG context + build tools
+    J->>L: stream(prompt, tools, attachments)
+    loop Each token / tool call
+        L-->>J: TextDelta / ToolCall
+        J->>R: broadcast (ShouldBroadcastNow)
+        R-->>U: private channel event (Echo)
+    end
+    J->>J: Persist final message
+    J->>R: broadcast complete
+    R-->>U: swap placeholder
+```
+
