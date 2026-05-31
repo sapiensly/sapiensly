@@ -207,7 +207,7 @@ function handleDelete() {
                     <button
                         v-if="publicUrl"
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         @click="showShareDialog = true"
                     >
                         <Share2 class="size-3.5" />
@@ -224,7 +224,7 @@ function handleDelete() {
                     <button
                         v-if="canEdit"
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         @click="showEditDialog = true"
                     >
                         <Edit class="size-3.5" />
@@ -343,7 +343,7 @@ function handleDelete() {
                             </TabsList>
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
                                 @click="toggleFullscreen"
                             >
                                 <Maximize2 class="size-3.5" />
@@ -508,7 +508,7 @@ function handleDelete() {
                             />
                             <button
                                 type="button"
-                                class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                                class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                                 @click="copyShareLink(effectiveShareUrl)"
                             >
                                 <Check v-if="copiedShareLink" class="size-3.5" />
@@ -532,7 +532,7 @@ function handleDelete() {
                 <DialogFooter>
                     <button
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         @click="showEditDialog = false"
                     >
                         {{ t('documents.edit_dialog.cancel') }}
@@ -584,7 +584,7 @@ function handleDelete() {
                     />
                     <button
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         @click="copyShareLink(publicUrl)"
                     >
                         <Check v-if="copiedShareLink" class="size-3.5" />
@@ -645,7 +645,7 @@ function handleDelete() {
                 <DialogFooter>
                     <button
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         @click="showDeleteDialog = false"
                     >
                         {{ t('documents.delete_dialog.cancel') }}

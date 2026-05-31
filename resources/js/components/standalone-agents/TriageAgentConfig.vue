@@ -105,7 +105,7 @@ const contentFilters = computed({
                 <button
                     type="button"
                     :disabled="!agentId"
-                    class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
                     @click="navigateToFlow"
                 >
                     {{

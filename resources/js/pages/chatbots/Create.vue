@@ -79,7 +79,7 @@ const submit = () => {
                             v-model="form.name"
                             required
                             :placeholder="t('chatbots.create.name_placeholder')"
-                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.name" />
                     </div>
@@ -93,7 +93,7 @@ const submit = () => {
                             v-model="form.description"
                             :placeholder="t('chatbots.create.description_placeholder')"
                             rows="3"
-                            class="border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.description" />
                     </div>
@@ -114,7 +114,7 @@ const submit = () => {
                                 'inline-flex flex-1 items-center justify-center gap-1.5 rounded-pill border px-3 py-1.5 text-xs transition-colors',
                                 targetType === 'agent'
                                     ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                                    : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                                    : 'border-medium bg-surface text-ink-muted hover:text-ink',
                             ]"
                             @click="
                                 targetType = 'agent';
@@ -130,7 +130,7 @@ const submit = () => {
                                 'inline-flex flex-1 items-center justify-center gap-1.5 rounded-pill border px-3 py-1.5 text-xs transition-colors',
                                 targetType === 'team'
                                     ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                                    : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                                    : 'border-medium bg-surface text-ink-muted hover:text-ink',
                             ]"
                             @click="
                                 targetType = 'team';
@@ -147,7 +147,7 @@ const submit = () => {
                             {{ t('chatbots.create.select_agent') }}
                         </Label>
                         <Select v-model="form.agent_id">
-                            <SelectTrigger class="h-9 border-medium bg-white/5">
+                            <SelectTrigger class="h-9 border-medium bg-surface">
                                 <SelectValue
                                     :placeholder="t('chatbots.create.choose_agent')"
                                 />
@@ -173,7 +173,7 @@ const submit = () => {
                             Select Multi-Agent
                         </Label>
                         <Select v-model="form.agent_team_id">
-                            <SelectTrigger class="h-9 border-medium bg-white/5">
+                            <SelectTrigger class="h-9 border-medium bg-surface">
                                 <SelectValue placeholder="Choose a Multi-Agent" />
                             </SelectTrigger>
                             <SelectContent>
@@ -208,7 +208,7 @@ const submit = () => {
                             id="widget_title"
                             v-model="form.config.appearance.widget_title"
                             placeholder="Support"
-                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                     </div>
 
@@ -221,7 +221,7 @@ const submit = () => {
                             v-model="form.config.appearance.welcome_message"
                             placeholder="Hello! How can I help you today?"
                             rows="2"
-                            class="border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                     </div>
 
@@ -235,11 +235,11 @@ const submit = () => {
                                     id="primary_color"
                                     type="color"
                                     v-model="form.config.appearance.primary_color"
-                                    class="h-9 w-12 cursor-pointer rounded-xs border border-medium bg-white/5"
+                                    class="h-9 w-12 cursor-pointer rounded-xs border border-medium bg-surface"
                                 />
                                 <Input
                                     v-model="form.config.appearance.primary_color"
-                                    class="h-9 flex-1 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                                    class="h-9 flex-1 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                                 />
                             </div>
                         </div>
@@ -253,11 +253,11 @@ const submit = () => {
                                     id="background_color"
                                     type="color"
                                     v-model="form.config.appearance.background_color"
-                                    class="h-9 w-12 cursor-pointer rounded-xs border border-medium bg-white/5"
+                                    class="h-9 w-12 cursor-pointer rounded-xs border border-medium bg-surface"
                                 />
                                 <Input
                                     v-model="form.config.appearance.background_color"
-                                    class="h-9 flex-1 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                                    class="h-9 flex-1 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                                 />
                             </div>
                         </div>
@@ -271,11 +271,11 @@ const submit = () => {
                                     id="text_color"
                                     type="color"
                                     v-model="form.config.appearance.text_color"
-                                    class="h-9 w-12 cursor-pointer rounded-xs border border-medium bg-white/5"
+                                    class="h-9 w-12 cursor-pointer rounded-xs border border-medium bg-surface"
                                 />
                                 <Input
                                     v-model="form.config.appearance.text_color"
-                                    class="h-9 flex-1 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                                    class="h-9 flex-1 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                                 />
                             </div>
                         </div>
@@ -290,7 +290,7 @@ const submit = () => {
                                     'inline-flex items-center rounded-pill border px-3 py-1 text-xs transition-colors',
                                     form.config.appearance.position === 'bottom-right'
                                         ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                                        : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                                        : 'border-medium bg-surface text-ink-muted hover:text-ink',
                                 ]"
                                 @click="form.config.appearance.position = 'bottom-right'"
                             >
@@ -302,7 +302,7 @@ const submit = () => {
                                     'inline-flex items-center rounded-pill border px-3 py-1 text-xs transition-colors',
                                     form.config.appearance.position === 'bottom-left'
                                         ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                                        : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                                        : 'border-medium bg-surface text-ink-muted hover:text-ink',
                                 ]"
                                 @click="form.config.appearance.position = 'bottom-left'"
                             >
@@ -317,7 +317,7 @@ const submit = () => {
                     <Link :href="ChatbotController.index().url">
                         <button
                             type="button"
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         >
                             {{ t('common.cancel') }}
                         </button>

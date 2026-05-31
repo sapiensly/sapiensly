@@ -237,7 +237,7 @@ function formatRelative(iso: string | null): string {
                             (v) => updatePrimaryChat(v === '' ? null : String(v))
                         "
                     >
-                        <SelectTrigger class="h-9 border-medium bg-white/5">
+                        <SelectTrigger class="h-9 border-medium bg-surface">
                             <SelectValue :placeholder="t('admin.ai.defaults.unset')" />
                         </SelectTrigger>
                         <SelectContent>
@@ -265,7 +265,7 @@ function formatRelative(iso: string | null): string {
                             (v) => updateFallbackChat(v === '' ? null : String(v))
                         "
                     >
-                        <SelectTrigger class="h-9 border-medium bg-white/5">
+                        <SelectTrigger class="h-9 border-medium bg-surface">
                             <SelectValue :placeholder="t('admin.ai.defaults.unset')" />
                         </SelectTrigger>
                         <SelectContent>
@@ -308,7 +308,7 @@ function formatRelative(iso: string | null): string {
                             (v) => updateEmbedding(v === '' ? null : String(v))
                         "
                     >
-                        <SelectTrigger class="h-9 border-medium bg-white/5">
+                        <SelectTrigger class="h-9 border-medium bg-surface">
                             <SelectValue :placeholder="t('admin.ai.defaults.unset')" />
                         </SelectTrigger>
                         <SelectContent>
@@ -350,7 +350,7 @@ function formatRelative(iso: string | null): string {
                             min="0"
                             max="2"
                             step="0.05"
-                            class="h-7 w-20 border-medium bg-white/5 text-right font-mono text-xs"
+                            class="h-7 w-20 border-medium bg-surface text-right font-mono text-xs"
                             @blur="onTemperatureNumber"
                             @keyup.enter="onTemperatureNumber"
                         />
@@ -374,7 +374,7 @@ function formatRelative(iso: string | null): string {
                         type="number"
                         min="1"
                         max="200000"
-                        class="h-9 w-36 border-medium bg-white/5 font-mono"
+                        class="h-9 w-36 border-medium bg-surface font-mono"
                         @blur="commitMaxTokens"
                         @keyup.enter="commitMaxTokens"
                     />
@@ -413,7 +413,7 @@ function formatRelative(iso: string | null): string {
                     <Button
                         variant="outline"
                         size="sm"
-                        class="gap-1 border-medium bg-white/5 text-xs"
+                        class="gap-1 border-medium bg-surface text-xs"
                         @click="openRotate(k)"
                     >
                         <RefreshCw class="size-3" />

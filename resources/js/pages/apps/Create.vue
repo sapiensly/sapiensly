@@ -57,7 +57,7 @@ function submit() {
                             v-model="form.name"
                             required
                             maxlength="100"
-                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <p class="text-[11px] text-ink-subtle">
                             {{ t('apps.create.name_help') }}
@@ -74,7 +74,7 @@ function submit() {
                             v-model="form.slug"
                             required
                             placeholder="mini_crm"
-                            class="h-9 border-medium bg-white/5 font-mono text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface font-mono text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <p class="text-[11px] text-ink-subtle">
                             {{ t('apps.create.slug_help') }}
@@ -91,7 +91,7 @@ function submit() {
                             v-model="form.description"
                             rows="3"
                             maxlength="500"
-                            class="border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <p class="text-[11px] text-ink-subtle">
                             {{ t('apps.create.description_help') }}
@@ -113,7 +113,7 @@ function submit() {
                         <Select v-model="form.visibility">
                             <SelectTrigger
                                 id="visibility"
-                                class="h-9 border-medium bg-white/5 text-sm text-ink"
+                                class="h-9 border-medium bg-surface text-sm text-ink"
                             >
                                 <SelectValue />
                             </SelectTrigger>
@@ -134,7 +134,7 @@ function submit() {
                     <Link :href="AppController.index().url">
                         <button
                             type="button"
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         >
                             {{ t('apps.create.cancel') }}
                         </button>

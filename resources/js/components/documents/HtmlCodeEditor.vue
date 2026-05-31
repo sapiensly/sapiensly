@@ -64,6 +64,6 @@ watch(
 <template>
     <div
         ref="host"
-        class="sp-code-editor h-full w-full rounded-xs border border-medium bg-white/5"
+        class="sp-code-editor h-full w-full rounded-xs border border-medium bg-surface"
     />
 </template>

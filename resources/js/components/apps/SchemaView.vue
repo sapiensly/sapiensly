@@ -422,7 +422,7 @@ function triggerLabel(t: string | null): string {
                 <button
                     type="button"
                     @click="closeDetail"
-                    class="inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                    class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-strong hover:text-ink"
                 >
                     <ArrowLeft class="size-3" />
                     Back
@@ -434,7 +434,7 @@ function triggerLabel(t: string | null): string {
                 <code v-if="detail" class="truncate text-[10px] text-ink-subtle">{{ detail.object.slug }}</code>
                 <span
                     v-if="detail"
-                    class="inline-flex shrink-0 items-center rounded-pill border border-medium bg-white/5 px-2 py-0.5 text-[10px] font-medium text-ink-muted"
+                    class="inline-flex shrink-0 items-center rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] font-medium text-ink-muted"
                 >
                     {{ detail.total.toLocaleString() }} rows
                 </span>
@@ -447,7 +447,7 @@ function triggerLabel(t: string | null): string {
                         v-model="searchInput"
                         type="search"
                         placeholder="Search…"
-                        class="h-7 w-44 rounded border border-medium bg-white/5 pl-7 pr-7 text-[11px] text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none"
+                        class="h-7 w-44 rounded border border-medium bg-surface pl-7 pr-7 text-[11px] text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none"
                     />
                     <button
                         v-if="searchInput"
@@ -465,7 +465,7 @@ function triggerLabel(t: string | null): string {
                         type="button"
                         @click="prevPage"
                         :disabled="!canPrev || detailLoading"
-                        class="rounded border border-medium bg-white/5 px-2 py-0.5 text-ink-muted transition-colors enabled:hover:text-ink disabled:opacity-40"
+                        class="rounded border border-medium bg-surface px-2 py-0.5 text-ink-muted transition-colors enabled:hover:text-ink disabled:opacity-40"
                     >
                         Prev
                     </button>
@@ -473,7 +473,7 @@ function triggerLabel(t: string | null): string {
                         type="button"
                         @click="nextPage"
                         :disabled="!canNext || detailLoading"
-                        class="rounded border border-medium bg-white/5 px-2 py-0.5 text-ink-muted transition-colors enabled:hover:text-ink disabled:opacity-40"
+                        class="rounded border border-medium bg-surface px-2 py-0.5 text-ink-muted transition-colors enabled:hover:text-ink disabled:opacity-40"
                     >
                         Next
                     </button>
@@ -622,7 +622,7 @@ function triggerLabel(t: string | null): string {
                         <code class="truncate text-[10px] text-ink-subtle">{{ obj.slug }}</code>
                     </div>
                     <span
-                        class="inline-flex shrink-0 items-center rounded-pill border border-medium bg-white/5 px-2 py-0.5 text-[10px] font-medium text-ink-muted transition-colors group-hover:text-accent-blue"
+                        class="inline-flex shrink-0 items-center rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] font-medium text-ink-muted transition-colors group-hover:text-accent-blue"
                     >
                         {{ (schema.record_counts[obj.id] ?? 0).toLocaleString() }} rows →
                     </span>

@@ -557,7 +557,7 @@ function visibilityIcon(value: string) {
                         >
                             <div
                                 role="tablist"
-                                class="inline-flex rounded-pill border border-soft bg-white/5 p-0.5 text-[11px] font-medium"
+                                class="inline-flex rounded-pill border border-soft bg-surface p-0.5 text-[11px] font-medium"
                             >
                                 <button
                                     type="button"
@@ -597,7 +597,7 @@ function visibilityIcon(value: string) {
                             v-model="form.body"
                             :placeholder="placeholderForType"
                             rows="18"
-                            class="w-full rounded-xs border border-medium bg-white/5 p-3 font-mono text-sm text-ink placeholder:text-ink-subtle focus-visible:border-accent-blue focus-visible:ring-3 focus-visible:ring-accent-blue/25 focus-visible:outline-none"
+                            class="w-full rounded-xs border border-medium bg-surface p-3 font-mono text-sm text-ink placeholder:text-ink-subtle focus-visible:border-accent-blue focus-visible:ring-3 focus-visible:ring-accent-blue/25 focus-visible:outline-none"
                             spellcheck="false"
                         />
 
@@ -717,7 +717,7 @@ function visibilityIcon(value: string) {
                                 v-model="aiPrompt"
                                 :placeholder="aiPromptPlaceholder"
                                 rows="5"
-                                class="w-full rounded-xs border border-medium bg-white/5 p-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:border-accent-blue focus-visible:ring-3 focus-visible:ring-accent-blue/25 focus-visible:outline-none"
+                                class="w-full rounded-xs border border-medium bg-surface p-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:border-accent-blue focus-visible:ring-3 focus-visible:ring-accent-blue/25 focus-visible:outline-none"
                                 :disabled="aiGenerating"
                             />
                         </div>
@@ -813,7 +813,7 @@ function visibilityIcon(value: string) {
                 <div class="flex items-center justify-end gap-2 border-t border-soft pt-4">
                     <Link
                         :href="backHref"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                     >
                         {{ t('common.cancel') }}
                     </Link>

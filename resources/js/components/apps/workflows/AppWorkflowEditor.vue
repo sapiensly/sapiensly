@@ -308,7 +308,7 @@ function describeStepRunRow(stepId: string): string {
                                         ? 'bg-emerald-400/10 text-emerald-300'
                                         : step.status === 'failed'
                                             ? 'bg-red-400/10 text-red-300'
-                                            : 'bg-white/5 text-ink-muted',
+                                            : 'bg-surface text-ink-muted',
                                 ]"
                             >{{ step.status }}</span>
                         </li>

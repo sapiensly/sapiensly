@@ -56,7 +56,7 @@ function triggerLabel(type: string): string {
 
             <p
                 v-if="workflows.length === 0"
-                class="rounded-sp-sm border border-dashed border-soft bg-white/5 p-6 text-center text-sm text-ink-muted"
+                class="rounded-sp-sm border border-dashed border-soft bg-surface p-6 text-center text-sm text-ink-muted"
             >
                 {{ t('apps.builder.workflows.empty_state') }}
             </p>
@@ -75,7 +75,7 @@ function triggerLabel(type: string): string {
                         </div>
                         <span
                             v-if="wf.enabled === false"
-                            class="rounded-pill border border-medium bg-white/5 px-1.5 py-0.5 text-xs uppercase tracking-wider text-ink-muted"
+                            class="rounded-pill border border-medium bg-surface px-1.5 py-0.5 text-xs uppercase tracking-wider text-ink-muted"
                         >
                             <Power class="mr-0.5 inline size-2.5" />
                             {{ t('apps.builder.workflows.disabled') }}

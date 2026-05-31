@@ -32,7 +32,7 @@ const icons = LucideIcons as unknown as Record<string, unknown>;
             type="button"
             @click="$emit('add', entry.type)"
             :title="t(entry.descriptionKey)"
-            class="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-sm text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+            class="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-sm text-ink-muted transition-colors hover:bg-surface hover:text-ink"
         >
             <component
                 :is="icons[entry.icon]"

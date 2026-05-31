@@ -98,7 +98,7 @@ const createUrl = computed(() => {
             <Link :href="createUrl" class="inline-block">
                 <button
                     type="button"
-                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                 >
                     <Plus class="size-3.5" />
                     Create {{ typeInfo.label }}

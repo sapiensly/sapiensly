@@ -28,7 +28,7 @@ const tabs = computed(() => [
 
 <template>
     <div
-        class="inline-flex gap-1 rounded-pill border border-soft bg-white/5 p-1"
+        class="inline-flex gap-1 rounded-pill border border-soft bg-surface p-1"
     >
         <button
             v-for="{ value, Icon, label } in tabs"
@@ -38,7 +38,7 @@ const tabs = computed(() => [
                 'inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-xs font-medium transition-colors',
                 appearance === value
                     ? 'bg-accent-blue/15 text-ink'
-                    : 'text-ink-muted hover:bg-white/5 hover:text-ink',
+                    : 'text-ink-muted hover:bg-surface hover:text-ink',
             ]"
             @click="updateAppearance(value)"
         >

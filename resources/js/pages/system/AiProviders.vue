@@ -135,7 +135,7 @@ function deleteProvider(id: string) {
                 class="rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
             >
                 <div
-                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-surface text-ink-muted"
                 >
                     <Database class="size-5" />
                 </div>
@@ -219,7 +219,7 @@ function deleteProvider(id: string) {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        class="size-7 text-ink-muted hover:bg-white/5 hover:text-ink"
+                                        class="size-7 text-ink-muted hover:bg-surface hover:text-ink"
                                         :disabled="connectionTests[provider.id]?.loading"
                                         @click="testConnection(provider.id)"
                                     >
@@ -247,7 +247,7 @@ function deleteProvider(id: string) {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        class="size-7 text-ink-muted hover:bg-white/5 hover:text-ink"
+                                        class="size-7 text-ink-muted hover:bg-surface hover:text-ink"
                                         @click="setDefault(provider.id)"
                                     >
                                         <Star class="size-3.5" />
@@ -262,7 +262,7 @@ function deleteProvider(id: string) {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        class="size-7 text-ink-muted hover:bg-white/5 hover:text-ink"
+                                        class="size-7 text-ink-muted hover:bg-surface hover:text-ink"
                                         @click="setDefaultEmbeddings(provider.id)"
                                     >
                                         <Database class="size-3.5" />
@@ -277,7 +277,7 @@ function deleteProvider(id: string) {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        class="size-7 text-ink-muted hover:bg-white/5 hover:text-ink"
+                                        class="size-7 text-ink-muted hover:bg-surface hover:text-ink"
                                         as-child
                                     >
                                         <Link :href="`/system/ai-providers/${provider.id}/edit`">

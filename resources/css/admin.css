@@ -86,27 +86,8 @@
 
 .sp-admin-shell:not([data-bg]) .sp-admin-content::before,
 .sp-admin-shell[data-bg='blueprint'] .sp-admin-content::before {
-    background-image:
-        linear-gradient(
-            rgba(255, 255, 255, 0.03) 1px,
-            transparent 1px
-        ),
-        linear-gradient(
-            90deg,
-            rgba(255, 255, 255, 0.03) 1px,
-            transparent 1px
-        );
-    background-size: 50px 50px;
-    mask-image: radial-gradient(
-        ellipse 80% 60% at 50% 30%,
-        #000,
-        transparent 90%
-    );
-    -webkit-mask-image: radial-gradient(
-        ellipse 80% 60% at 50% 30%,
-        #000,
-        transparent 90%
-    );
+    /* Blueprint grid removed — keep the content layer clean in both themes. */
+    background-image: none;
 }
 
 /* ── Treatment B: flat ──────────────────────────────────────────────── */
@@ -238,11 +219,11 @@
     --popover-foreground: var(--sp-text-primary);
 
     /* Text */
-    --muted: rgba(255, 255, 255, 0.04);
+    --muted: var(--sp-tint-weak);
     --muted-foreground: var(--sp-text-secondary);
 
     /* Interactive */
-    --accent: rgba(255, 255, 255, 0.06);
+    --accent: var(--sp-tint);
     --accent-foreground: var(--sp-text-primary);
     --primary: var(--sp-accent-blue);
     --primary-foreground: #fff;
@@ -261,7 +242,7 @@
     color: var(--sp-text-primary);
     font-family: 'Poppins', 'Instrument Sans', system-ui, sans-serif;
     box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.04) inset,
+        0 1px 0 var(--sp-tint-weak) inset,
         0 10px 30px rgba(0, 0, 0, 0.45);
 }
 
@@ -325,11 +306,11 @@
     --popover-foreground: var(--sp-text-primary);
 
     /* Text */
-    --muted: rgba(255, 255, 255, 0.04);
+    --muted: var(--sp-tint-weak);
     --muted-foreground: var(--sp-text-secondary);
 
     /* Interactive */
-    --accent: rgba(255, 255, 255, 0.06);
+    --accent: var(--sp-tint);
     --accent-foreground: var(--sp-text-primary);
     --primary: var(--sp-accent-blue);
     --primary-foreground: #fff;
@@ -353,7 +334,7 @@
 .sp-admin-dialog [data-slot='input'],
 .sp-admin-dialog [data-slot='textarea'],
 .sp-admin-dialog [data-slot='select-trigger'] {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--sp-tint-weak);
     border-color: var(--sp-border-medium);
     color: var(--sp-text-primary);
 }
@@ -381,7 +362,7 @@
    TabsList / TabsTrigger render with the muted track + accent-blue active
    state instead of shadcn's bright defaults. */
 .sp-admin-dialog [data-slot='tabs-list'] {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--sp-tint-weak);
     color: var(--sp-text-secondary);
     border: 1px solid var(--sp-border-soft);
 }
@@ -441,7 +422,7 @@
     font-weight: 600;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.25);
+    color: var(--sp-text-faint);
 }
 
 /* Items — 13px body copy like the sidebar nav, tinted on highlight. */
@@ -543,27 +524,8 @@
 
 .sp-app-shell:not([data-bg]) .sp-app-content::before,
 .sp-app-shell[data-bg='blueprint'] .sp-app-content::before {
-    background-image:
-        linear-gradient(
-            rgba(255, 255, 255, 0.03) 1px,
-            transparent 1px
-        ),
-        linear-gradient(
-            90deg,
-            rgba(255, 255, 255, 0.03) 1px,
-            transparent 1px
-        );
-    background-size: 50px 50px;
-    mask-image: radial-gradient(
-        ellipse 80% 60% at 50% 30%,
-        #000,
-        transparent 90%
-    );
-    -webkit-mask-image: radial-gradient(
-        ellipse 80% 60% at 50% 30%,
-        #000,
-        transparent 90%
-    );
+    /* Blueprint grid removed — keep the content layer clean in both themes. */
+    background-image: none;
 }
 
 /* Treatment B: flat. */
@@ -634,7 +596,7 @@
 /* Slider track = muted rail; range = accent-blue fill; thumb = accent-blue
    with a soft ring on hover/focus. */
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='slider-track'] {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--sp-tint-strong);
 }
 
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='slider-range'] {
@@ -660,7 +622,7 @@
 }
 
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='switch'][data-state='unchecked'] {
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--sp-tint-strong);
 }
 
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='switch-thumb'] {
@@ -682,7 +644,7 @@
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='input'],
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='textarea'],
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='select-trigger'] {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--sp-tint-weak);
     border-color: var(--sp-border-medium);
     color: var(--sp-text-primary);
 }
@@ -720,7 +682,7 @@
    switches to `bg-background`, both of which render as bright panels on
    our dark chrome. Rescope: subtle track + accent-blue tinted active. */
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='tabs-list'] {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--sp-tint-weak);
     color: var(--sp-text-secondary);
     border: 1px solid var(--sp-border-soft);
 }
@@ -812,7 +774,7 @@
 }
 
 .sp-flow-controls .vue-flow__controls-button:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--sp-tint-weak);
     color: var(--sp-text-primary);
 }
 

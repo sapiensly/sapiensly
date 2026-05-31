@@ -1180,9 +1180,9 @@ function statusTone(status: Message['status']): string {
         case 'rejected':
             return 'border-red-400/40 text-red-300 bg-red-400/10';
         case 'reverted':
-            return 'border-medium text-ink-muted bg-white/5';
+            return 'border-medium text-ink-muted bg-surface';
         default:
-            return 'border-medium text-ink-muted bg-white/5';
+            return 'border-medium text-ink-muted bg-surface';
     }
 }
 </script>
@@ -1196,7 +1196,7 @@ function statusTone(status: Message['status']): string {
                 <div class="flex items-center gap-3">
                     <Link
                         :href="AppController.show(app.id).url"
-                        class="inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-white/5 text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                        class="inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-surface text-ink-muted transition-colors hover:border-strong hover:text-ink"
                     >
                         <ArrowLeft class="size-3.5" />
                     </Link>
@@ -1209,7 +1209,7 @@ function statusTone(status: Message['status']): string {
                     </div>
                 </div>
 
-                <div class="inline-flex items-center rounded-pill border border-medium bg-white/5 p-0.5">
+                <div class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5">
                     <button
                         v-for="m in ([
                             { id: 'preview', label: t('apps.builder.tab_preview'), icon: Eye },
@@ -1268,7 +1268,7 @@ function statusTone(status: Message['status']): string {
                                 @click="startNewConversation"
                                 :disabled="aiIsThinking"
                                 :title="t('apps.builder.new_conversation')"
-                                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-50"
+                                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-50"
                             >
                                 <RotateCcw class="size-3" />
                                 {{ t('apps.builder.new_conversation') }}
@@ -1277,7 +1277,7 @@ function statusTone(status: Message['status']): string {
                                 type="button"
                                 @click="toggleFullscreen('chat')"
                                 :title="fullscreenPanel === 'chat' ? t('apps.builder.exit_fullscreen') : t('apps.builder.enter_fullscreen')"
-                                class="inline-flex size-6 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
+                                class="inline-flex size-6 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
                             >
                                 <Minimize2 v-if="fullscreenPanel === 'chat'" class="size-3" />
                                 <Maximize2 v-else class="size-3" />
@@ -1291,7 +1291,7 @@ function statusTone(status: Message['status']): string {
                     >
                         <p
                             v-if="messages.length === 0"
-                            class="rounded-sp-sm border border-dashed border-soft bg-white/5 p-4 text-xs text-ink-muted"
+                            class="rounded-sp-sm border border-dashed border-soft bg-surface p-4 text-xs text-ink-muted"
                         >
                             {{ t('apps.builder.empty_prompt') }}
                         </p>
@@ -1323,7 +1323,7 @@ function statusTone(status: Message['status']): string {
                             </div>
                             <div
                                 v-else
-                                class="builder-md mr-8 rounded-sp-sm border border-soft bg-white/5 px-3 py-2 text-sm text-ink"
+                                class="builder-md mr-8 rounded-sp-sm border border-soft bg-surface px-3 py-2 text-sm text-ink"
                             >
                                 <div
                                     v-if="m.content"
@@ -1383,7 +1383,7 @@ function statusTone(status: Message['status']): string {
                                         <button
                                             v-if="m.status === 'applied'"
                                             type="button"
-                                            class="inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-2.5 py-1 text-[11px] text-ink transition-colors hover:border-strong hover:bg-white/10"
+                                            class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-[11px] text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                                             @click="revertMessage(m)"
                                         >
                                             <RotateCcw class="size-3" />
@@ -1391,7 +1391,7 @@ function statusTone(status: Message['status']): string {
                                         </button>
                                         <button
                                             type="button"
-                                            class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-[10px] uppercase tracking-wider text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                                            class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-[10px] uppercase tracking-wider text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                                             @click="togglePatch(m.id)"
                                             :aria-expanded="!!openPatches[m.id]"
                                         >
@@ -1417,7 +1417,7 @@ function statusTone(status: Message['status']): string {
                              turn and can drop it before hitting Send. -->
                         <div
                             v-if="attachedPreviewUrl"
-                            class="mb-2 flex items-center gap-2 rounded-sp-sm border border-soft bg-white/5 p-2"
+                            class="mb-2 flex items-center gap-2 rounded-sp-sm border border-soft bg-surface p-2"
                         >
                             <img
                                 :src="attachedPreviewUrl"
@@ -1431,7 +1431,7 @@ function statusTone(status: Message['status']): string {
                                 type="button"
                                 @click="clearAttachment"
                                 :title="t('apps.builder.remove_attachment')"
-                                class="rounded-full p-1 text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
+                                class="rounded-full p-1 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
                             >
                                 <X class="size-3.5" />
                             </button>
@@ -1463,7 +1463,7 @@ function statusTone(status: Message['status']): string {
                                 ref="inputEl"
                                 v-model="input"
                                 rows="3"
-                                class="max-h-56 min-h-[76px] w-full resize-none rounded-md border border-medium bg-white/5 px-3 py-2 text-sm text-ink placeholder:text-ink-subtle"
+                                class="max-h-56 min-h-[76px] w-full resize-none rounded-md border border-medium bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-subtle"
                                 :placeholder="aiIsThinking ? t('apps.builder.input_thinking') : t('apps.builder.input_placeholder')"
                                 :disabled="sending || aiIsThinking"
                                 @paste="onPaste"
@@ -1483,7 +1483,7 @@ function statusTone(status: Message['status']): string {
                                                 type="button"
                                                 :title="t('apps.builder.suggestions_heading')"
                                                 :aria-label="t('apps.builder.suggestions_heading')"
-                                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-white/5 text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue disabled:opacity-50 data-[state=open]:border-accent-blue/40 data-[state=open]:text-accent-blue"
+                                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-surface text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue disabled:opacity-50 data-[state=open]:border-accent-blue/40 data-[state=open]:text-accent-blue"
                                             >
                                                 <Lightbulb class="size-4" />
                                             </button>
@@ -1512,7 +1512,7 @@ function statusTone(status: Message['status']): string {
                                                 :disabled="sending || aiIsThinking"
                                                 :title="`${t('apps.builder.model_picker_label')}: ${selectedModelLabel}`"
                                                 :aria-label="t('apps.builder.model_picker_label')"
-                                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-white/5 text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-50 data-[state=open]:border-accent-blue/40 data-[state=open]:text-accent-blue"
+                                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-surface text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-50 data-[state=open]:border-accent-blue/40 data-[state=open]:text-accent-blue"
                                             >
                                                 <Settings2 class="size-4" />
                                             </button>
@@ -1538,7 +1538,7 @@ function statusTone(status: Message['status']): string {
                                         @click="pickAttachment"
                                         :disabled="sending || aiIsThinking"
                                         :title="t('apps.builder.attach_image')"
-                                        class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-white/5 text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-50"
+                                        class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-medium bg-surface text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-50"
                                     >
                                         <Paperclip class="size-4" />
                                     </button>
@@ -1622,7 +1622,7 @@ function statusTone(status: Message['status']): string {
                                         'inline-flex items-center rounded-pill border px-2.5 py-0.5 text-[11px] transition-colors',
                                         preview.page.slug === p.slug
                                             ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                                            : 'border-medium bg-white/5 text-ink-muted hover:border-strong hover:text-ink',
+                                            : 'border-medium bg-surface text-ink-muted hover:border-strong hover:text-ink',
                                     ]"
                                 >
                                     {{ p.name }}
@@ -1634,7 +1634,7 @@ function statusTone(status: Message['status']): string {
                                 type="button"
                                 @click="toggleFullscreen('work')"
                                 :title="fullscreenPanel === 'work' ? t('apps.builder.exit_fullscreen') : t('apps.builder.enter_fullscreen')"
-                                class="inline-flex size-6 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
+                                class="inline-flex size-6 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
                             >
                                 <Minimize2 v-if="fullscreenPanel === 'work'" class="size-3" />
                                 <Maximize2 v-else class="size-3" />
@@ -1649,7 +1649,7 @@ function statusTone(status: Message['status']): string {
                                         type="button"
                                         :title="t('apps.builder.panel_options')"
                                         :aria-label="t('apps.builder.panel_options')"
-                                        class="inline-flex size-6 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-white/10 hover:text-ink data-[state=open]:bg-white/10 data-[state=open]:text-ink"
+                                        class="inline-flex size-6 items-center justify-center rounded-pill text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink data-[state=open]:bg-surface-hover data-[state=open]:text-ink"
                                     >
                                         <MoreVertical class="size-3.5" />
                                     </button>

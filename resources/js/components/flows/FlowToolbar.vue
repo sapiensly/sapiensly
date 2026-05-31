@@ -45,14 +45,14 @@ const statusTint = computed(() => {
     <div class="sp-glass flex h-14 shrink-0 items-center gap-3 border-b border-soft px-4">
         <Link
             :href="props.backUrl"
-            class="flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+            class="flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
         >
             <ArrowLeft class="size-4" />
         </Link>
 
         <Input
             :model-value="props.name"
-            class="h-8 max-w-[280px] border-medium bg-white/5 text-sm font-medium text-ink placeholder:text-ink-subtle"
+            class="h-8 max-w-[280px] border-medium bg-surface text-sm font-medium text-ink placeholder:text-ink-subtle"
             :placeholder="t('flows.toolbar.name_placeholder')"
             @update:model-value="emit('update:name', $event as string)"
         />
@@ -99,7 +99,7 @@ const statusTint = computed(() => {
         <button
             type="button"
             :disabled="props.processing"
-            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10 disabled:opacity-50"
+            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
             @click="emit('toggleStatus')"
         >
             <Power v-if="props.status !== 'active'" class="size-3.5" />

@@ -97,7 +97,7 @@ const totalAgents = computed(() =>
                         'inline-flex items-center gap-1.5 rounded-pill border px-3 py-1 text-xs transition-colors',
                         !currentType
                             ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                            : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                            : 'border-medium bg-surface text-ink-muted hover:text-ink',
                     ]"
                     @click="filterByType(null)"
                 >
@@ -112,7 +112,7 @@ const totalAgents = computed(() =>
                         'inline-flex items-center gap-1.5 rounded-pill border px-3 py-1 text-xs transition-colors',
                         currentType === type.value
                             ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                            : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                            : 'border-medium bg-surface text-ink-muted hover:text-ink',
                     ]"
                     @click="filterByType(type.value)"
                 >
@@ -129,7 +129,7 @@ const totalAgents = computed(() =>
                 class="rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
             >
                 <div
-                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-surface text-ink-muted"
                 >
                     <Bot class="size-5" />
                 </div>
@@ -245,7 +245,7 @@ const totalAgents = computed(() =>
                         </div>
                         <Link
                             :href="AgentController.chat({ agent: agent.id }).url"
-                            class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                            class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                         >
                             <MessageSquare class="size-3" />
                             {{ t('common.test') }}

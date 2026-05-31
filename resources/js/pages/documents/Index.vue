@@ -151,7 +151,7 @@ function handleDeleteFolder() {
                     </h3>
                     <button
                         type="button"
-                        class="flex size-7 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                        class="flex size-7 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                         @click="showFolderDialog = true"
                     >
                         <FolderPlus class="size-3.5" />
@@ -177,7 +177,7 @@ function handleDeleteFolder() {
                                     ? `/documents/create?folder=${currentFolder.id}`
                                     : '/documents/create'
                             "
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         >
                             <Plus class="size-3.5" />
                             {{ t('documents.index.create') }}
@@ -227,7 +227,7 @@ function handleDeleteFolder() {
                         v-model="searchQuery"
                         type="search"
                         :placeholder="t('app_v2.common.search')"
-                        class="h-10 rounded-pill border-medium bg-white/5 pl-10 text-sm text-ink placeholder:text-ink-subtle"
+                        class="h-10 rounded-pill border-medium bg-surface pl-10 text-sm text-ink placeholder:text-ink-subtle"
                     />
                 </div>
 
@@ -238,7 +238,7 @@ function handleDeleteFolder() {
                         class="rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
                     >
                         <div
-                            class="mx-auto flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                            class="mx-auto flex size-12 items-center justify-center rounded-xs bg-surface text-ink-muted"
                         >
                             <FileText class="size-5" />
                         </div>

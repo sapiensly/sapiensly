@@ -11,7 +11,7 @@ const { t } = useI18n();
         class="flex flex-col items-center justify-center gap-3 rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
     >
         <div
-            class="flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+            class="flex size-12 items-center justify-center rounded-xs bg-surface text-ink-muted"
         >
             <Plug class="size-5" />
         </div>

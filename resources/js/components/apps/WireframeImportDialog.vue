@@ -176,7 +176,7 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
 
             <div class="space-y-4">
                 <!-- Tabs row: only one source is sent. -->
-                <div class="flex gap-1 rounded-md bg-white/5 p-1">
+                <div class="flex gap-1 rounded-md bg-surface p-1">
                     <button
                         v-for="opt in tabs"
                         :key="opt.id"
@@ -208,20 +208,20 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                         v-if="!file"
                         @dragover.prevent
                         @drop="onDrop"
-                        class="flex h-32 flex-col items-center justify-center gap-1 rounded-sp-sm border-2 border-dashed border-soft bg-white/5 text-xs text-ink-muted"
+                        class="flex h-32 flex-col items-center justify-center gap-1 rounded-sp-sm border-2 border-dashed border-soft bg-surface text-xs text-ink-muted"
                     >
                         <Upload class="size-5" />
                         <button
                             type="button"
                             @click="pickFile"
-                            class="rounded-pill border border-medium bg-white/5 px-3 py-1 text-[11px] text-ink transition-colors hover:border-strong"
+                            class="rounded-pill border border-medium bg-surface px-3 py-1 text-[11px] text-ink transition-colors hover:border-strong"
                         >
                             {{ t('apps.builder.attach_image') }}
                         </button>
                     </div>
                     <div
                         v-else
-                        class="flex items-center gap-3 rounded-sp-sm border border-soft bg-white/5 p-2"
+                        class="flex items-center gap-3 rounded-sp-sm border border-soft bg-surface p-2"
                     >
                         <img
                             :src="filePreviewUrl ?? ''"
@@ -232,7 +232,7 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                         <button
                             type="button"
                             @click="clearFile"
-                            class="rounded-full p-1 text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
+                            class="rounded-full p-1 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
                             :title="t('apps.builder.remove_attachment')"
                         >
                             <X class="size-3.5" />
@@ -247,7 +247,7 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                         v-model="url"
                         type="url"
                         :placeholder="t('apps.builder.wireframe.url_placeholder')"
-                        class="h-9 w-full rounded-md border border-medium bg-white/5 px-3 text-sm text-ink placeholder:text-ink-subtle"
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle"
                     />
                 </div>
 
@@ -258,7 +258,7 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                         v-model="html"
                         :placeholder="t('apps.builder.wireframe.html_placeholder')"
                         rows="6"
-                        class="w-full rounded-md border border-medium bg-white/5 px-3 py-2 font-mono text-[11px] leading-relaxed text-ink placeholder:text-ink-subtle"
+                        class="w-full rounded-md border border-medium bg-surface px-3 py-2 font-mono text-[11px] leading-relaxed text-ink placeholder:text-ink-subtle"
                     />
                 </div>
 
@@ -269,7 +269,7 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                         v-model="businessContext"
                         :placeholder="t('apps.builder.wireframe.business_placeholder')"
                         rows="2"
-                        class="w-full rounded-md border border-medium bg-white/5 px-3 py-2 text-xs text-ink placeholder:text-ink-subtle"
+                        class="w-full rounded-md border border-medium bg-surface px-3 py-2 text-xs text-ink placeholder:text-ink-subtle"
                     />
                     <p class="text-[11px] text-ink-subtle">{{ t('apps.builder.wireframe.business_hint') }}</p>
                 </div>
@@ -281,7 +281,7 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                 <button
                     type="button"
                     @click="emit('update:open', false)"
-                    class="inline-flex items-center rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:bg-white/10"
+                    class="inline-flex items-center rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:bg-surface-hover"
                 >
                     {{ t('apps.builder.wireframe.cancel') }}
                 </button>

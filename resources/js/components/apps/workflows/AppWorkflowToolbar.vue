@@ -30,7 +30,7 @@ const { t } = useI18n();
                 v-if="isEditing"
                 type="button"
                 @click="emit('back')"
-                class="rounded-pill px-2 py-1 text-xs uppercase tracking-wider text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                class="rounded-pill px-2 py-1 text-xs uppercase tracking-wider text-ink-muted transition-colors hover:bg-surface hover:text-ink"
             >
                 ← {{ t('apps.builder.workflows.back_to_list') }}
             </button>
@@ -54,7 +54,7 @@ const { t } = useI18n();
                             ? t('apps.builder.workflows.run_only_manual')
                             : t('apps.builder.workflows.run_tooltip')
                 "
-                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-2.5 py-1 text-sm text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-40"
+                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-sm text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-40"
             >
                 <Loader2 v-if="running" class="size-3 animate-spin" />
                 <Play v-else class="size-3" />
@@ -64,7 +64,7 @@ const { t } = useI18n();
                 v-if="isDirty"
                 type="button"
                 @click="emit('discard')"
-                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-2.5 py-1 text-sm text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-sm text-ink-muted transition-colors hover:border-strong hover:text-ink"
             >
                 <X class="size-3" />
                 {{ t('apps.builder.workflows.discard') }}
@@ -84,7 +84,7 @@ const { t } = useI18n();
                 type="button"
                 @click="emit('delete')"
                 :title="t('apps.builder.workflows.delete_tooltip')"
-                class="inline-flex h-7 w-7 items-center justify-center rounded-pill border border-medium bg-white/5 text-ink-muted transition-colors hover:border-red-400/40 hover:bg-red-400/10 hover:text-red-300"
+                class="inline-flex h-7 w-7 items-center justify-center rounded-pill border border-medium bg-surface text-ink-muted transition-colors hover:border-red-400/40 hover:bg-red-400/10 hover:text-red-300"
             >
                 <Trash2 class="size-3" />
             </button>

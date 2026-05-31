@@ -53,7 +53,7 @@ function tintFor(status: string) {
                 class="rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
             >
                 <div
-                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-surface text-ink-muted"
                 >
                     <MessageSquare class="size-5" />
                 </div>
@@ -148,7 +148,7 @@ function tintFor(status: string) {
                         </div>
                         <Link
                             :href="ChatbotController.embed({ chatbot: chatbot.id }).url"
-                            class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                            class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                         >
                             <Code class="size-3" />
                             {{ t('chatbots.index.embed') }}

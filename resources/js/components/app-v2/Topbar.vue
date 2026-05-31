@@ -46,7 +46,7 @@ const modKey = computed(() =>
     >
         <button
             type="button"
-            class="flex size-9 shrink-0 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+            class="flex size-9 shrink-0 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
             :aria-label="
                 sidebarCollapsed
                     ? t('app_v2.topbar.expand_sidebar')
@@ -70,7 +70,7 @@ const modKey = computed(() =>
 
         <button
             type="button"
-            class="group flex h-9 min-w-[260px] items-center gap-2 rounded-pill border border-ink-muted/20 bg-black/40 pr-1.5 pl-3.5 text-[12px] text-ink-muted transition-colors hover:border-ink-muted/40 hover:text-ink"
+            class="group flex h-9 min-w-[260px] items-center gap-2 rounded-pill border border-ink-muted/20 bg-surface pr-1.5 pl-3.5 text-[12px] text-ink-muted transition-colors hover:border-ink-muted/40 hover:text-ink"
             @click="emit('open-palette')"
         >
             <Search class="size-3.5 shrink-0 text-ink-muted" />
@@ -78,7 +78,7 @@ const modKey = computed(() =>
                 {{ t('app_v2.topbar.search_placeholder') }}
             </span>
             <kbd
-                class="shrink-0 rounded-pill border border-soft bg-black/50 px-2 py-0.5 font-mono text-[10px] text-ink-subtle"
+                class="shrink-0 rounded-pill border border-soft bg-surface-hover px-2 py-0.5 font-mono text-[10px] text-ink-subtle"
             >
                 {{ modKey }}K
             </kbd>
@@ -86,7 +86,7 @@ const modKey = computed(() =>
 
         <button
             type="button"
-            class="relative flex size-9 shrink-0 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+            class="relative flex size-9 shrink-0 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
             :aria-label="t('app_v2.topbar.notifications')"
         >
             <Bell class="size-4" />

@@ -229,7 +229,7 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
             >
                 <Link
                     :href="AgentTeamController.show({ agent_team: team.id }).url"
-                    class="flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                    class="flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                 >
                     <ArrowLeft class="size-4" />
                 </Link>
@@ -242,35 +242,35 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                     <div class="hidden items-center gap-1 sm:flex">
                         <span
                             v-if="triageAgent"
-                            class="inline-flex items-center gap-1 rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                            class="inline-flex items-center gap-1 rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                         >
                             <Bot class="size-3" />
                             Triage
                         </span>
                         <span
                             v-if="knowledgeAgent"
-                            class="inline-flex items-center gap-1 rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                            class="inline-flex items-center gap-1 rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                         >
                             <Brain class="size-3" />
                             Knowledge
                         </span>
                         <span
                             v-if="actionAgent"
-                            class="inline-flex items-center gap-1 rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                            class="inline-flex items-center gap-1 rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                         >
                             <Zap class="size-3" />
                             Action
                         </span>
                     </div>
                     <span
-                        class="inline-flex items-center rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase sm:hidden"
+                        class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase sm:hidden"
                     >
                         {{ configuredAgentCount }} agents
                     </span>
                     <button
                         type="button"
                         :disabled="isStreaming"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10 disabled:opacity-50"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
                         @click="handleNewConversation"
                     >
                         <Plus class="size-3.5" />
@@ -291,7 +291,7 @@ function getMessageExecutionPlan(message: Message): ExecutionStep[] | null {
                         class="flex flex-col items-center justify-center py-12 text-center"
                     >
                         <div
-                            class="flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                            class="flex size-12 items-center justify-center rounded-xs bg-surface text-ink-muted"
                         >
                             <Users class="size-5" />
                         </div>

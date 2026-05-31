@@ -98,7 +98,7 @@ const submitInvite = () => {
                             </div>
                         </div>
                         <span
-                            class="inline-flex items-center rounded-pill border border-medium bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                            class="inline-flex items-center rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                         >
                             {{ member.role }}
                         </span>

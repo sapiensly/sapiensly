@@ -63,10 +63,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="relative rounded-xs border border-medium bg-white/5">
+    <div class="relative rounded-xs border border-medium bg-surface">
         <button
             type="button"
-            class="absolute top-2 right-2 z-10 inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+            class="absolute top-2 right-2 z-10 inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
             @click="copySource"
         >
             <Check v-if="copied" class="size-3.5" />

@@ -107,7 +107,7 @@ function toggle(model: AiModel, next: boolean) {
                         <TableRow
                             v-for="m in rows"
                             :key="m.id"
-                            class="border-soft transition-colors hover:bg-white/5"
+                            class="border-soft transition-colors hover:bg-surface"
                         >
                             <TableCell>
                                 <DriverChip :driver="m.driver" size="sm" />

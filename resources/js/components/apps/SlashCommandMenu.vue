@@ -59,7 +59,7 @@ function usageKey(cmd: SlashCommand): string {
                 @mouseenter="emit('hover', idx)"
                 :class="[
                     'cursor-pointer px-3 py-2 transition-colors',
-                    idx === safeIndex ? 'bg-accent-blue/15' : 'hover:bg-white/5',
+                    idx === safeIndex ? 'bg-accent-blue/15' : 'hover:bg-surface',
                 ]"
             >
                 <div class="flex items-baseline gap-2">

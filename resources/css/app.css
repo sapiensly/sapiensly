@@ -230,7 +230,7 @@
     --color-ink: var(--sp-text-primary);
     --color-ink-muted: var(--sp-text-secondary);
     --color-ink-subtle: var(--sp-text-tertiary);
-    --color-ink-faint: rgba(255, 255, 255, 0.25);
+    --color-ink-faint: var(--sp-text-faint);
 
     --color-accent-blue: var(--sp-accent-blue);
     --color-accent-blue-hover: var(--sp-accent-blue-hover);
@@ -243,6 +243,10 @@
     --color-soft: var(--sp-border-soft);
     --color-medium: var(--sp-border-medium);
     --color-strong: var(--sp-border-strong);
+
+    /* Theme-aware translucent fills — replace raw bg-white/5 & bg-white/10. */
+    --color-surface: var(--sp-surface);
+    --color-surface-hover: var(--sp-surface-hover);
 
     --color-sp-success: var(--sp-success);
     --color-sp-warning: var(--sp-warning);
