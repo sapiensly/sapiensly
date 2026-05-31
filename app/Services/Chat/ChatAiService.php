@@ -3,7 +3,9 @@
 namespace App\Services\Chat;
 
 use App\Ai\ChatAgent;
+use App\Ai\Tools\DynamicTool;
 use App\Ai\Tools\McpServerTool;
+use App\Ai\Tools\RuntimeToolFactory;
 use App\Enums\ToolType;
 use App\Events\Chat\ChatStreamChunk;
 use App\Events\Chat\ChatStreamComplete;
@@ -15,14 +17,15 @@ use App\Models\Tool;
 use App\Models\User;
 use App\Services\AiProviderService;
 use App\Services\RetrievalService;
-use App\Services\ToolBuilderService;
 use App\Services\ToolConfigService;
+use App\Services\ToolExecutionService;
 use App\Services\Tools\McpClient;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Laravel\Ai\Contracts\Tool as ToolContract;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Files\StoredAudio;
 use Laravel\Ai\Files\StoredDocument;
@@ -266,40 +269,54 @@ class ChatAiService
             $tools[] = new WebSearch;
         }
 
-        if (! empty($toolIds) && $user !== null) {
-            $dbTools = Tool::query()
-                ->forAccountContext($user)
-                ->whereIn('id', $toolIds)
-                ->where('status', 'active')
-                ->get();
+        if (empty($toolIds) || $user === null) {
+            return $tools;
+        }
 
-            // Executable REST/GraphQL/Database tools via the shared builder.
-            $executable = $dbTools->whereIn('type', [ToolType::RestApi, ToolType::Graphql, ToolType::Database]);
-            $tools = array_merge($tools, app(ToolBuilderService::class)->buildTools($executable));
+        $dbTools = Tool::query()
+            ->forAccountContext($user)
+            ->whereIn('id', $toolIds)
+            ->where('status', 'active')
+            ->get();
 
-            // MCP tools — expand each server's cached tool list into callable tools.
-            $configService = app(ToolConfigService::class);
-            $mcpClient = app(McpClient::class);
-            $seen = [];
-            foreach ($dbTools->where('type', ToolType::Mcp) as $mcpTool) {
-                $config = $configService->decryptConfig($mcpTool->type, $mcpTool->config ?? []);
-                foreach (($config['mcp_tools'] ?? []) as $definition) {
-                    $name = $definition['name'] ?? null;
-                    if (! is_array($definition) || ! is_string($name) || isset($seen[$name])) {
-                        continue;
-                    }
-                    $seen[$name] = true;
-                    $tools[] = new McpServerTool(
-                        [
-                            'name' => $name,
-                            'description' => (string) ($definition['description'] ?? ''),
-                            'input_schema' => is_array($definition['input_schema'] ?? null) ? $definition['input_schema'] : [],
-                        ],
-                        $config,
-                        $user,
-                        $mcpClient,
-                    );
+        // Each tool is wrapped in a uniquely class-named RuntimeTool because the
+        // SDK names tools by class basename; `$seen` dedupes by final name so the
+        // provider never receives two tools with the same name.
+        $seen = [];
+        $add = function (string $name, ToolContract $inner) use (&$tools, &$seen): void {
+            $final = RuntimeToolFactory::toolName($name);
+            if (isset($seen[$final])) {
+                return;
+            }
+            $seen[$final] = true;
+            $tools[] = RuntimeToolFactory::named($name, $inner);
+        };
+
+        $executionService = app(ToolExecutionService::class);
+        foreach ($dbTools->whereIn('type', [ToolType::RestApi, ToolType::Graphql, ToolType::Database]) as $dbTool) {
+            $add($dbTool->name, new DynamicTool($dbTool, $executionService));
+        }
+
+        // MCP tools — expand each server's cached tool list into callable tools.
+        $configService = app(ToolConfigService::class);
+        $mcpClient = app(McpClient::class);
+        foreach ($dbTools->where('type', ToolType::Mcp) as $mcpTool) {
+            $config = $configService->decryptConfig($mcpTool->type, $mcpTool->config ?? []);
+            foreach (($config['mcp_tools'] ?? []) as $definition) {
+                $name = $definition['name'] ?? null;
+                if (! is_array($definition) || ! is_string($name) || $name === '') {
+                    continue;
                 }
+                $add($name, new McpServerTool(
+                    [
+                        'name' => $name,
+                        'description' => (string) ($definition['description'] ?? ''),
+                        'input_schema' => is_array($definition['input_schema'] ?? null) ? $definition['input_schema'] : [],
+                    ],
+                    $config,
+                    $user,
+                    $mcpClient,
+                ));
             }
         }
 
