@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { type Artifact, extensionFor } from '@/lib/artifacts';
 import DOMPurify from 'dompurify';
-import { Check, Code2, Copy, Download, Eye, X } from 'lucide-vue-next';
+import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, X } from 'lucide-vue-next';
 import { marked } from 'marked';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -14,6 +14,7 @@ const emit = defineEmits<{ close: [] }>();
 const previewable = computed(() => ['html', 'svg', 'markdown'].includes(props.artifact.type));
 const view = ref<'preview' | 'code'>('code');
 const copied = ref(false);
+const fullscreen = ref(false);
 
 // Default to preview for renderable types; reset when switching artifacts.
 watch(
@@ -52,7 +53,18 @@ function download() {
 </script>
 
 <template>
-    <section class="flex h-full min-h-0 w-full flex-col border-l border-soft bg-surface">
+    <!-- In fullscreen we teleport to <body> so the panel escapes the chat's
+         stacking context and sits above the topbars; otherwise it renders
+         in place as the side panel. -->
+    <Teleport to="body" :disabled="!fullscreen">
+    <section
+        :class="[
+            'flex min-h-0 flex-col',
+            fullscreen
+                ? 'fixed inset-0 z-[100] h-screen w-screen bg-navy'
+                : 'h-full w-full border-l border-soft bg-surface',
+        ]"
+    >
         <!-- Header -->
         <header class="flex items-center gap-2 border-b border-soft px-4 py-3">
             <div class="min-w-0 flex-1">
@@ -86,6 +98,15 @@ function download() {
             <button type="button" :title="t('chat.artifact.download')" class="rounded-lg p-1.5 text-ink-muted transition-colors hover:bg-white/10 hover:text-ink" @click="download">
                 <Download class="size-4" />
             </button>
+            <button
+                type="button"
+                :title="fullscreen ? t('chat.artifact.exit_fullscreen') : t('chat.artifact.fullscreen')"
+                class="rounded-lg p-1.5 text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
+                @click="fullscreen = !fullscreen"
+            >
+                <Minimize2 v-if="fullscreen" class="size-4" />
+                <Maximize2 v-else class="size-4" />
+            </button>
             <button type="button" :title="t('common.close')" class="rounded-lg p-1.5 text-ink-muted transition-colors hover:bg-white/10 hover:text-ink" @click="emit('close')">
                 <X class="size-4" />
             </button>
@@ -113,4 +134,5 @@ function download() {
             <pre v-else class="m-0 h-full overflow-auto bg-navy p-4 text-[13px] leading-relaxed"><code class="font-mono text-ink">{{ artifact.content }}</code></pre>
         </div>
     </section>
+    </Teleport>
 </template>

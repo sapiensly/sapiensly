@@ -1692,6 +1692,8 @@
     "chat.copied": "Copied",
     "chat.artifact.writing": "Writing…",
     "chat.artifact.download": "Download",
+    "chat.artifact.fullscreen": "Fullscreen",
+    "chat.artifact.exit_fullscreen": "Exit fullscreen",
     "chat.artifact.type_code": "Code",
     "chat.artifact.type_html": "Web page",
     "chat.artifact.type_markdown": "Document",
