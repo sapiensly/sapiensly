@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DebateIcon from '@/components/icons/DebateIcon.vue';
+import CouncilIcon from '@/components/icons/CouncilIcon.vue';
 import { router } from '@inertiajs/vue3';
 import { MessagesSquare } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
@@ -41,7 +41,7 @@ function go(path: string) {
                 :aria-pressed="active === 'debate'"
                 @click="go('/debates')"
             >
-                <DebateIcon class="size-3.5" />
+                <CouncilIcon class="size-3.5" />
                 {{ t('app_v2.nav.debate') }}
             </button>
         </div>
