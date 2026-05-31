@@ -106,8 +106,16 @@ export function useActionExecutor() {
             return { ok: data.ok === true };
         } catch (e) {
             const err = e as {
-                response?: { status?: number; data?: ExecutionResult & { errors?: Record<string, { type?: string; fields?: Record<string, string[]>; message?: string }> } };
+                response?: { status?: number; headers?: Record<string, string>; data?: ExecutionResult & { errors?: Record<string, { type?: string; fields?: Record<string, string[]>; message?: string }> } };
             };
+            // Rate limited (429): surface a clear, retry-aware toast rather than
+            // a generic failure. Retry-After is seconds.
+            if (err.response?.status === 429) {
+                const retry = Number(err.response.headers?.['retry-after']);
+                const wait = Number.isFinite(retry) && retry > 0 ? ` Retry in ${retry}s.` : '';
+                toast.error(`Too many requests.${wait}`);
+                return { ok: false };
+            }
             const body = err.response?.data;
             const validationErrors = body?.errors ?? {};
             const fieldErrors: Record<string, string[]> = {};

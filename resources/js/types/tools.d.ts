@@ -24,11 +24,36 @@ export interface FunctionConfig {
     };
 }
 
+export interface McpServerTool {
+    name: string;
+    description: string;
+    input_schema: Record<string, unknown>;
+}
+
 export interface McpConfig {
     endpoint?: string;
-    auth_type?: 'none' | 'bearer' | 'api_key' | 'basic';
+    auth_type?: 'none' | 'bearer' | 'api_key' | 'basic' | 'oauth2';
     auth_config?: Record<string, unknown>;
     auth_config_is_set?: boolean;
+    integration_id?: string;
+    mcp_tools?: McpServerTool[];
+    mcp_tools_synced_at?: string;
+}
+
+export interface OAuth2IntegrationOption {
+    id: string;
+    name: string;
+    auth_type: string;
+    is_authorization_code: boolean;
+    authorized: boolean;
+}
+
+export interface McpConnectionOption {
+    id: string;
+    name: string;
+    base_url: string;
+    requires_auth: boolean;
+    connected: boolean;
 }
 
 export interface GroupConfig {

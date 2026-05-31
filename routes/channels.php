@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\BuilderConversation;
+use App\Models\Chat;
 use App\Models\Conversation;
 use App\Models\KnowledgeBase;
 use Illuminate\Support\Facades\Broadcast;
@@ -18,6 +19,13 @@ Broadcast::channel('builder.conversation.{conversationId}', function ($user, str
     $conv = BuilderConversation::find($conversationId);
 
     return $conv && $conv->user_id === $user->id;
+});
+
+// General Chat stream. Each chat is private to the user who owns it.
+Broadcast::channel('chat.conversation.{chatId}', function ($user, string $chatId) {
+    $chat = Chat::find($chatId);
+
+    return $chat && $chat->user_id === $user->id;
 });
 
 Broadcast::channel('knowledge-base.{knowledgeBaseId}', function ($user, string $knowledgeBaseId) {

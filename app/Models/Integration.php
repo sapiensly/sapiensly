@@ -24,6 +24,7 @@ class Integration extends Model
         'slug',
         'description',
         'base_url',
+        'is_mcp',
         'auth_type',
         'auth_config',
         'default_headers',
@@ -46,6 +47,7 @@ class Integration extends Model
             'auth_type' => IntegrationAuthType::class,
             'last_tested_at' => 'datetime',
             'allow_insecure_tls' => 'boolean',
+            'is_mcp' => 'boolean',
         ];
     }
 

@@ -24,6 +24,7 @@ class UpdateIntegrationRequest extends FormRequest
             'name' => ['sometimes', 'required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:2000'],
             'base_url' => ['sometimes', 'required', 'string', 'max:500', 'regex:/^https?:\/\//i'],
+            'is_mcp' => ['nullable', 'boolean'],
             'auth_type' => ['sometimes', 'required', 'string', Rule::in(array_column(IntegrationAuthType::cases(), 'value'))],
             'auth_config' => ['nullable', 'array'],
             'default_headers' => ['nullable', 'array'],

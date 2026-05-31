@@ -187,24 +187,23 @@ test('store rejects oauth2_auth_code integration without client_id', function ()
     ]);
 });
 
-test('authorize endpoint redirects back with an error when client_id is missing', function () {
+test('store accepts a public PKCE oauth2_auth_code integration without a client_secret', function () {
     $user = User::factory()->create(['organization_id' => null]);
-    // Build an integration that sneaked past validation (e.g. created before
-    // the guard existed) with a blank client_id — the authorize redirect
-    // must refuse to send the user to the provider with an empty query.
-    $integration = Integration::factory()->oauth2AuthCode()->forUser($user)->create([
-        'auth_config' => [
-            'authorize_url' => 'https://auth.example.com/oauth/authorize',
-            'token_url' => 'https://auth.example.com/oauth/token',
-            'client_id' => '',
-            'client_secret' => '',
-        ],
-    ]);
 
-    actingAs($user)
-        ->get("/oauth/integrations/{$integration->id}/authorize")
-        ->assertRedirect("/system/integrations/{$integration->id}")
-        ->assertSessionHasErrors('oauth2');
+    actingAs($user)->post('/system/integrations', [
+        'name' => 'MCP Public Client',
+        'base_url' => 'https://mcp.example.com',
+        'auth_type' => 'oauth2_auth_code',
+        'auth_config' => [
+            'authorize_url' => 'https://auth.example.com/authorize',
+            'token_url' => 'https://auth.example.com/token',
+            'client_id' => 'dyn-client-123',
+            'client_secret' => '',
+            'pkce' => true,
+        ],
+    ])->assertRedirect();
+
+    expect(Integration::query()->where('name', 'MCP Public Client')->exists())->toBeTrue();
 });
 
 test('global visibility is rejected for non-sysadmin via policy when updating', function () {

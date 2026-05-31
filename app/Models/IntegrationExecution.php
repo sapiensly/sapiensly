@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedRedactedJson;
+use App\Casts\EncryptedRedactedText;
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Services\Integrations\Support\CredentialRedactor;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -36,8 +39,13 @@ class IntegrationExecution extends Model
     protected function casts(): array
     {
         return [
-            'request_headers' => 'array',
-            'response_headers' => 'array',
+            // The four blobs are redacted (known secrets removed for good) and
+            // then encrypted at rest. url + error_message are redacted via the
+            // mutators below (kept readable for the audit UI, so not encrypted).
+            'request_headers' => EncryptedRedactedJson::class,
+            'response_headers' => EncryptedRedactedJson::class,
+            'request_body' => EncryptedRedactedText::class,
+            'response_body' => EncryptedRedactedText::class,
             'metadata' => 'array',
             'success' => 'boolean',
             'response_size_bytes' => 'integer',
@@ -45,6 +53,20 @@ class IntegrationExecution extends Model
             'response_status' => 'integer',
             'created_at' => 'datetime',
         ];
+    }
+
+    protected function setUrlAttribute(?string $value): void
+    {
+        $this->attributes['url'] = $value === null
+            ? null
+            : app(CredentialRedactor::class)->redactUrl($value);
+    }
+
+    protected function setErrorMessageAttribute(?string $value): void
+    {
+        $this->attributes['error_message'] = $value === null
+            ? null
+            : app(CredentialRedactor::class)->redactText($value);
     }
 
     public static function getIdPrefix(): string

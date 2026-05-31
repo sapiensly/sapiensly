@@ -59,6 +59,8 @@ Route::middleware([
     Route::post('integrations', [IntegrationController::class, 'store'])->name('system.integrations.store');
     Route::post('integrations/test-connection', [IntegrationController::class, 'testConnectionForPayload'])
         ->name('system.integrations.test-connection-payload');
+    Route::post('integrations/oauth2/discover', [IntegrationController::class, 'discoverOAuth2'])
+        ->name('system.integrations.oauth2.discover');
     Route::get('integrations/{integration}', [IntegrationController::class, 'show'])->name('system.integrations.show');
     Route::get('integrations/{integration}/edit', [IntegrationController::class, 'edit'])->name('system.integrations.edit');
     Route::put('integrations/{integration}', [IntegrationController::class, 'update'])->name('system.integrations.update');

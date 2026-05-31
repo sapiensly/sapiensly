@@ -7,6 +7,7 @@ use App\Enums\Visibility;
 use App\Models\Integration;
 use App\Models\User;
 use App\Services\Integrations\Support\SsrfGuard;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,20 +22,7 @@ class IntegrationService
 
     public function listForUser(User $user, ?string $search = null, ?string $authType = null): Collection
     {
-        $query = Integration::query()
-            ->where(function ($q) use ($user) {
-                $q->where('visibility', Visibility::Global);
-                if ($user->organization_id) {
-                    $q->orWhere(function ($inner) use ($user) {
-                        $inner->where('organization_id', $user->organization_id)
-                            ->whereIn('visibility', [Visibility::Organization, Visibility::Private]);
-                    });
-                } else {
-                    $q->orWhere(function ($inner) use ($user) {
-                        $inner->where('user_id', $user->id)->whereNull('organization_id');
-                    });
-                }
-            });
+        $query = $this->scopedToUser($user);
 
         if ($search) {
             $query->where(fn ($q) => $q
@@ -47,6 +35,45 @@ class IntegrationService
         }
 
         return $query->orderBy('name')->get();
+    }
+
+    /**
+     * OAuth 2.0 integrations the user may attach to a tool (both the
+     * Authorization Code "web auth" flow and Client Credentials).
+     *
+     * @return Collection<int, Integration>
+     */
+    public function listOAuth2ForUser(User $user): Collection
+    {
+        return $this->scopedToUser($user)
+            ->whereIn('auth_type', [
+                IntegrationAuthType::OAuth2AuthorizationCode->value,
+                IntegrationAuthType::OAuth2ClientCredentials->value,
+            ])
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Base query limited to the integrations the given user may access.
+     *
+     * @return Builder<Integration>
+     */
+    private function scopedToUser(User $user): Builder
+    {
+        return Integration::query()->where(function ($q) use ($user) {
+            $q->where('visibility', Visibility::Global);
+            if ($user->organization_id) {
+                $q->orWhere(function ($inner) use ($user) {
+                    $inner->where('organization_id', $user->organization_id)
+                        ->whereIn('visibility', [Visibility::Organization, Visibility::Private]);
+                });
+            } else {
+                $q->orWhere(function ($inner) use ($user) {
+                    $inner->where('user_id', $user->id)->whereNull('organization_id');
+                });
+            }
+        });
     }
 
     public function create(User $user, array $attributes): Integration
@@ -62,6 +89,7 @@ class IntegrationService
                 'slug' => $attributes['slug'] ?? $this->buildSlug($user, $attributes['name']),
                 'description' => $attributes['description'] ?? null,
                 'base_url' => rtrim($attributes['base_url'], '/'),
+                'is_mcp' => $attributes['is_mcp'] ?? false,
                 'auth_type' => $attributes['auth_type'] ?? IntegrationAuthType::None->value,
                 'auth_config' => $attributes['auth_config'] ?? [],
                 'default_headers' => $attributes['default_headers'] ?? null,
@@ -78,7 +106,7 @@ class IntegrationService
     public function update(Integration $integration, array $attributes): Integration
     {
         $fillable = [
-            'name', 'slug', 'description', 'base_url', 'auth_type',
+            'name', 'slug', 'description', 'base_url', 'is_mcp', 'auth_type',
             'default_headers', 'status', 'color', 'icon', 'allow_insecure_tls',
             'active_environment_id',
         ];
@@ -206,10 +234,12 @@ class IntegrationService
     public function maskAuthConfig(Integration $integration): array
     {
         $masked = [];
-        $sensitive = ['value', 'token', 'password', 'client_secret', 'access_token', 'refresh_token'];
+        // Single source of truth — same list the redactor uses (config), so
+        // display-masking and audit-redaction never drift apart.
+        $sensitive = array_map('strtolower', (array) config('security.redaction.sensitive_fields', []));
 
         foreach ($integration->auth_config ?? [] as $key => $value) {
-            if (in_array($key, $sensitive, true) && is_string($value) && $value !== '') {
+            if (in_array(strtolower((string) $key), $sensitive, true) && is_string($value) && $value !== '') {
                 $masked[$key] = strlen($value) > 8
                     ? substr($value, 0, 4).'...'.substr($value, -4)
                     : str_repeat('•', strlen($value));

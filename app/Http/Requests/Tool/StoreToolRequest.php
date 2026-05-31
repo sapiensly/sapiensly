@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Tool;
 
 use App\Enums\ToolType;
+use App\Rules\AccessibleOAuth2Integration;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -52,8 +53,14 @@ class StoreToolRequest extends FormRequest
     {
         return [
             'config.endpoint' => ['required', 'string', 'url', 'max:500'],
-            'config.auth_type' => ['required', 'string', Rule::in(['none', 'bearer', 'api_key', 'basic'])],
+            'config.auth_type' => ['required', 'string', Rule::in(['none', 'bearer', 'api_key', 'basic', 'oauth2'])],
             'config.auth_config' => ['nullable', 'array'],
+            'config.integration_id' => [
+                'nullable',
+                'required_if:config.auth_type,oauth2',
+                'string',
+                new AccessibleOAuth2Integration($this->user()),
+            ],
         ];
     }
 

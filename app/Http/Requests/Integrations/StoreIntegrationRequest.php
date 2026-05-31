@@ -27,6 +27,7 @@ class StoreIntegrationRequest extends FormRequest
             'name' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:2000'],
             'base_url' => ['required', 'string', 'max:500', 'regex:/^https?:\/\//i'],
+            'is_mcp' => ['nullable', 'boolean'],
             'auth_type' => ['required', 'string', Rule::in(array_column(IntegrationAuthType::cases(), 'value'))],
             'auth_config' => ['nullable', 'array'],
             'default_headers' => ['nullable', 'array'],
@@ -51,7 +52,18 @@ class StoreIntegrationRequest extends FormRequest
             }
 
             $cfg = (array) $this->input('auth_config', []);
-            $required = ['token_url', 'client_id', 'client_secret'];
+
+            // PKCE authorization-code clients are typically public — the
+            // server issues a client_id with no secret (the MCP default via
+            // dynamic registration). Only require a secret for confidential
+            // (non-PKCE) auth-code clients and for client-credentials.
+            $isPublicPkceClient = $authType === 'oauth2_auth_code'
+                && filter_var($cfg['pkce'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+            $required = ['token_url', 'client_id'];
+            if (! $isPublicPkceClient) {
+                $required[] = 'client_secret';
+            }
             if ($authType === 'oauth2_auth_code') {
                 $required[] = 'authorize_url';
             }

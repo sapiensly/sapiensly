@@ -845,10 +845,13 @@ async function send() {
         const err = e as {
             code?: string;
             message?: string;
-            response?: { status?: number; statusText?: string; data?: { message?: string; error?: string } };
+            response?: { status?: number; statusText?: string; headers?: Record<string, string>; data?: { message?: string; error?: string } };
         };
         if (err.code === 'ECONNABORTED') {
             errorText.value = 'Couldn\'t reach the server to start the request.';
+        } else if (err.response?.status === 429) {
+            const retry = Number(err.response.headers?.['retry-after']);
+            errorText.value = t('apps.builder.rate_limited', { seconds: Number.isFinite(retry) && retry > 0 ? retry : 60 });
         } else if (err.response) {
             const status = err.response.status ?? '???';
             const body = err.response.data?.message ?? err.response.data?.error ?? err.response.statusText ?? '';
@@ -938,11 +941,16 @@ async function requestVisualReview() {
     } catch (e) {
         const err = e as {
             message?: string;
-            response?: { status?: number; data?: { message?: string } };
+            response?: { status?: number; headers?: Record<string, string>; data?: { message?: string } };
         };
         const status = err.response?.status;
-        const body = err.response?.data?.message;
-        errorText.value = status ? `HTTP ${status}${body ? ' — ' + body : ''}` : (err.message ?? 'No se pudo capturar el preview.');
+        if (status === 429) {
+            const retry = Number(err.response?.headers?.['retry-after']);
+            errorText.value = t('apps.builder.rate_limited', { seconds: Number.isFinite(retry) && retry > 0 ? retry : 60 });
+        } else {
+            const body = err.response?.data?.message;
+            errorText.value = status ? `HTTP ${status}${body ? ' — ' + body : ''}` : (err.message ?? 'No se pudo capturar el preview.');
+        }
         console.error('Visual review failed:', e);
     } finally {
         requestingReview.value = false;

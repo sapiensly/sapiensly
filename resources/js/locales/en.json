@@ -42,7 +42,6 @@
     "common.email_address": "Email address",
     "common.configuration": "Configuration",
     "common.basic_information": "Basic Information",
-
     "nav.dashboard": "Dashboard",
     "nav.apps": "Apps",
     "nav.flows": "Flows",
@@ -61,19 +60,16 @@
     "nav.capabilities": "Capabilities",
     "nav.system": "System",
     "nav.platform": "Platform",
-
     "user_menu.accounts": "Accounts",
     "user_menu.personal_account": "Personal Account",
     "user_menu.create_organization": "Create Organization",
     "user_menu.settings": "Settings",
     "user_menu.log_out": "Log out",
-
     "settings.title": "Settings",
     "settings.description": "Manage your profile and account settings",
     "settings.nav.profile": "Profile",
     "settings.nav.appearance": "Appearance",
     "settings.nav.organization": "Organization",
-
     "settings.profile.breadcrumb": "Profile settings",
     "settings.profile.title": "Profile information",
     "settings.profile.description": "Update your name and email address",
@@ -82,21 +78,18 @@
     "settings.profile.language": "Language",
     "settings.profile.save": "Save",
     "settings.profile.saved": "Saved.",
-
     "settings.appearance.breadcrumb": "Appearance settings",
     "settings.appearance.title": "Appearance settings",
     "settings.appearance.description": "Update your account's appearance settings",
     "settings.appearance.light": "Light",
     "settings.appearance.dark": "Dark",
     "settings.appearance.system": "System",
-
     "settings.delete_account.title": "Delete account",
     "settings.delete_account.description": "Delete your account and all of its resources",
     "settings.delete_account.warning": "Warning",
     "settings.delete_account.warning_text": "Please proceed with caution, this cannot be undone.",
     "settings.delete_account.confirm_title": "Are you sure you want to delete your account?",
     "settings.delete_account.confirm_description": "Once your account is deleted, all of its resources and data will also be permanently deleted. Please confirm you would like to permanently delete your account.",
-
     "settings.organization.breadcrumb": "Organization",
     "settings.organization.title": "Organization",
     "settings.organization.description": "Manage your organization settings and members.",
@@ -109,14 +102,12 @@
     "settings.organization.invite_description": "Send an invitation to add a new member to your organization.",
     "settings.organization.invite_placeholder": "colleague{'@'}company.com",
     "settings.organization.send_invitation": "Send Invitation",
-
     "settings.organization_create.breadcrumb": "Create Organization",
     "settings.organization_create.title": "Create Organization",
     "settings.organization_create.description": "Create a new business account to collaborate with your team.",
     "settings.organization_create.name_label": "Organization Name",
     "settings.organization_create.name_placeholder": "My Company",
     "settings.organization_create.submit": "Create Organization",
-
     "agents.index.title": "Agents",
     "agents.index.heading": "Agents",
     "agents.index.description": "Manage your standalone agents by type",
@@ -128,7 +119,6 @@
     "agents.index.no_agents_type": "You don't have any agents yet.",
     "agents.index.kb": "KB",
     "agents.index.tools": "tools",
-
     "agents.create.title": "Create Agent",
     "agents.create.heading": "Create Agent",
     "agents.create.description": "Create a new standalone agent with type-specific configuration",
@@ -149,7 +139,6 @@
     "agents.create.config_title": "Configuration",
     "agents.create.config_description": "Type-specific settings for this agent",
     "agents.create.submit": "Create Agent",
-
     "agents.edit.title": "Edit",
     "agents.edit.description": "Update your agent configuration",
     "agents.edit.basic_info": "Basic Information",
@@ -167,7 +156,6 @@
     "agents.edit.prompt_placeholder": "System instructions for the agent...",
     "agents.edit.config_title": "Configuration",
     "agents.edit.config_description": "Type-specific settings for this agent",
-
     "agents.show.agents": "Agents",
     "agents.show.configuration": "Configuration",
     "agents.show.config_description": "Agent type and model settings",
@@ -175,9 +163,7 @@
     "agents.show.model": "Model",
     "agents.show.test_agent": "Test Agent",
     "agents.show.delete_agent": "Delete Agent",
-
     "agents.chat.title": "Chat",
-
     "agents.config.triage.temperature": "Temperature",
     "agents.config.triage.temperature_description": "Lower values make responses more focused and deterministic. Higher values make responses more creative.",
     "agents.config.triage.guardrails": "Guardrails",
@@ -188,16 +174,13 @@
     "agents.config.triage.edit_flow": "Edit Flow",
     "agents.config.triage.content_filters": "Content Filters",
     "agents.config.triage.content_filters_description": "Enable content filtering for safety",
-
     "agents.config.knowledge.knowledge_bases": "Knowledge Bases",
     "agents.config.knowledge.no_kbs": "No knowledge bases available. Create one to enable RAG capabilities.",
     "agents.config.knowledge.passthrough_note": "If no knowledge bases are selected, the agent will operate in pass-through mode.",
     "agents.config.knowledge.top_k": "Top K Results",
-
     "agents.config.action.tools": "Tools",
     "agents.config.action.no_tools": "No active tools available.",
     "agents.config.action.create_tools_note": "Create tools and set their status to \"Active\" to enable action capabilities.",
-
     "apps.index.title": "Apps",
     "apps.index.description": "Custom applications built from manifests — define objects, pages, and workflows without writing code.",
     "apps.index.create_app": "Create App",
@@ -206,7 +189,6 @@
     "apps.index.create_first": "Create your first App",
     "apps.index.version": "Version",
     "apps.index.no_version": "Draft",
-
     "apps.create.title": "Create App",
     "apps.create.heading": "New App",
     "apps.create.description": "Apps start empty. Use the Builder AI to add objects, pages and workflows once it exists.",
@@ -221,7 +203,6 @@
     "apps.create.visibility_organization": "Organization (everyone in your org)",
     "apps.create.cancel": "Cancel",
     "apps.create.submit": "Create",
-
     "apps.show.open_builder": "Open Builder",
     "apps.show.view_runtime": "View runtime",
     "apps.show.open_page": "Open",
@@ -247,7 +228,6 @@
     "apps.show.version_short": "v{number}",
     "apps.show.delete": "Delete app",
     "apps.show.delete_confirm": "Delete this App and every record under it? This cannot be undone.",
-
     "apps.builder.title": "Builder",
     "apps.builder.chat_heading": "Builder chat",
     "apps.builder.preview_heading": "Live preview",
@@ -367,33 +347,25 @@
     "apps.builder.attachment_default_message": "Take a look at the attached image.",
     "apps.builder.drop_to_attach": "Drop the image to attach it",
     "apps.builder.remove_attachment": "Remove image",
-
     "apps.builder.suggestions_heading": "Suggestions",
-
     "apps.builder.slash.menu_heading": "Quick commands",
     "apps.builder.slash.no_matches": "No commands match.",
     "apps.builder.slash.usage_hint": "Usage",
-
     "apps.builder.slash.seed.usage": "<object> <count>",
     "apps.builder.slash.seed.description": "Generate realistic demo records for an object.",
     "apps.builder.slash.seed.prompt": "Generate {count} realistic demo records for the object whose name or slug is '{object}' using the `seed_records` tool. Before calling it, read the manifest to confirm the available fields and their types (including single_select options — use option SLUGS, not display names). If the object has relations, use `inspect_records` to obtain real ids of the related objects. If no object matches '{object}', ask me which one I mean before creating anything. Data must make sense for my app's domain (realistic names, dates, amounts, descriptions — no 'lorem ipsum'). At the end, tell me how many records you created and summarize any errors.",
-
     "apps.builder.slash.clean.usage": "",
     "apps.builder.slash.clean.description": "Detect orphan fields, blocks, or references and propose removing them.",
     "apps.builder.slash.clean.prompt": "Review the full manifest and tell me whether there are orphan blocks, fields or references (to IDs that no longer exist, fields not used in any page, workflows pointing at deleted objects, etc). For each finding, propose removal via propose_change and summarize at the end what was removed.",
-
     "apps.builder.slash.duplicate_page.usage": "<page name>",
     "apps.builder.slash.duplicate_page.description": "Duplicate a page and all of its blocks with fresh IDs.",
     "apps.builder.slash.duplicate_page.prompt": "Duplicate the page whose name or slug is '{page}'. Generate new IDs for the page and for every nested block (including blocks inside tabs / accordion / split_view / card_grid). The new page's name must end with ' (copy)' and its slug must be unique. Don't touch the original page. Apply the change with propose_change.",
-
     "apps.builder.slash.explain.usage": "",
     "apps.builder.slash.explain.description": "Explain in plain language what the current page does.",
     "apps.builder.slash.explain.prompt": "Explain in plain language, in 4-6 bullets, what the page '{currentPage}' does in this app: what data it shows, what blocks it contains, what actions the user can perform and what workflows fire from here. Don't propose changes — just describe.",
-
     "apps.builder.slash.translate.usage": "<language>",
     "apps.builder.slash.translate.description": "Translate every user-facing label in the manifest into the given language.",
     "apps.builder.slash.translate.prompt": "Translate ALL user-facing text in the manifest to '{language}': page names, block titles, column labels, field names, descriptions, submit/cancel labels, modal titles, etc. DO NOT touch IDs, slugs, expressions, action types or any technical identifier. Apply all changes in a single propose_change.",
-
     "apps.builder.wireframe.button": "Import wireframe",
     "apps.builder.wireframe.tooltip": "Reconstruct an existing UI (screenshot, Figma / claude.ai URL, or HTML) as a manifest for your business.",
     "apps.builder.wireframe.title": "Import from wireframe",
@@ -413,65 +385,46 @@
     "apps.builder.wireframe.submitting": "Processing…",
     "apps.builder.wireframe.cancel": "Cancel",
     "apps.builder.wireframe.no_source": "Attach an image, paste a URL, or paste HTML before continuing.",
-
     "apps.builder.chip.app_from_scratch.label": "Create app from scratch",
     "apps.builder.chip.app_from_scratch.prompt": "I want to build an app from scratch. Ask me about my business and propose the initial objects, pages and workflows.",
-
     "apps.builder.chip.first_object.label": "Add my first object",
     "apps.builder.chip.first_object.prompt": "Add the first object to my app. Ask me what I want to model and propose its fields.",
-
     "apps.builder.chip.suggest_objects.label": "Suggest objects for my business",
     "apps.builder.chip.suggest_objects.prompt": "Ask me what my business is about and suggest a set of objects with their fields and relations that would make sense to model.",
-
     "apps.builder.chip.add_relation.label": "Add a relation",
     "apps.builder.chip.add_relation.prompt": "I want to add a relation between two objects. Ask me which two and what cardinality.",
-
     "apps.builder.chip.add_validations.label": "Add validations",
     "apps.builder.chip.add_validations.prompt": "Review every object's fields and suggest reasonable validations (required, min/max, format) where they make sense. Wait for my confirmation before applying.",
-
     "apps.builder.chip.add_field.label": "Add a field",
     "apps.builder.chip.add_field.prompt": "I want to add a field to one of my objects. Ask me which object and what type.",
-
     "apps.builder.chip.seed_data.label": "Generate sample data",
     "apps.builder.chip.seed_data.prompt": "Generate 20 realistic demo records for each of my objects, respecting existing relations.",
-
     "apps.builder.chip.empty_page.add_table.label": "Add a records table",
     "apps.builder.chip.empty_page.add_table.prompt": "Add a table block listing records of this page's main object. Pick the most relevant columns.",
-
     "apps.builder.chip.empty_page.add_dashboard.label": "Build a starter dashboard",
     "apps.builder.chip.empty_page.add_dashboard.prompt": "Build a starter dashboard for this page: a row of stats (3-4 KPIs), a table with recent records, and a trend chart.",
-
     "apps.builder.chip.empty_page.add_form.label": "Add a create form",
     "apps.builder.chip.empty_page.add_form.prompt": "Add a form block in create mode for this page's main object, with all the relevant fields.",
-
     "apps.builder.chip.add_chart.label": "Add a chart",
     "apps.builder.chip.add_chart.prompt": "Add a chart to this page. Pick a metric that makes sense to visualize and the best chart type.",
-
     "apps.builder.chip.add_action_column.label": "Inline row actions",
     "apps.builder.chip.add_action_column.prompt": "Add action columns (Edit / Delete) to this page's main table.",
-
     "apps.builder.chip.improve_layout.label": "Improve the layout",
     "apps.builder.chip.improve_layout.prompt": "Review this page and propose improvements to layout, visual hierarchy and spacing. Wait for my confirmation before applying.",
-
     "apps.builder.chip.add_workflow.label": "Add a workflow",
     "apps.builder.chip.add_workflow.prompt": "Add a useful workflow for this app. Ask me what event should fire it and what steps to run.",
-
     "apps.builder.chip.explain_manifest.label": "Explain this manifest",
     "apps.builder.chip.explain_manifest.prompt": "Explain in plain language, in 4-6 bullets, what this app does: which objects, pages and workflows it has.",
-
     "apps.builder.chip.find_orphans.label": "Find orphans",
     "apps.builder.chip.find_orphans.prompt": "Review the manifest and tell me whether there are orphan blocks, fields or references to non-existent IDs. Propose removing what's left over.",
-
     "apps.builder.chip.optimize.label": "Suggest optimizations",
     "apps.builder.chip.optimize.prompt": "Review the manifest and suggest optimizations: duplicate fields, blocks that could be merged, missing validations, inconsistent naming.",
-
     "agent_teams.index.title": "Multi-Agents",
     "agent_teams.index.description": "Manage your Multi-Agents for customer service automation",
     "agent_teams.index.create_team": "Create Multi-Agent",
     "agent_teams.index.no_teams": "No Multi-Agents yet",
     "agent_teams.index.no_teams_description": "Create your first Multi-Agent to get started with AI-powered customer service automation.",
     "agent_teams.index.create_first": "Create your first Multi-Agent",
-
     "agent_teams.create.title": "Create Multi-Agent",
     "agent_teams.create.heading": "Create Multi-Agent",
     "agent_teams.create.description": "Build a Multi-Agent by selecting existing agents or creating new ones",
@@ -486,7 +439,6 @@
     "agent_teams.create.select_agents": "Select Agents",
     "agent_teams.create.select_agents_description": "Choose an agent for each role or create new ones",
     "agent_teams.create.submit": "Create Multi-Agent",
-
     "agent_teams.edit.title": "Edit",
     "agent_teams.edit.description": "Update your Multi-Agent configuration",
     "agent_teams.edit.details_title": "Multi-Agent Details",
@@ -499,15 +451,12 @@
     "agent_teams.edit.keywords_description": "Add keywords for search and categorization",
     "agent_teams.edit.agent_config": "Agent Configuration",
     "agent_teams.edit.agent_config_description": "Configure each agent in your Multi-Agent",
-
     "agent_teams.show.agents": "Agents",
     "agent_teams.show.agents_description": "The agents in this Multi-Agent",
     "agent_teams.show.type": "Type:",
     "agent_teams.show.delete_team": "Delete Multi-Agent",
     "agent_teams.show.test_team": "Test Multi-Agent",
-
     "agent_teams.chat.title": "Chat",
-
     "chatbots.index.title": "Chatbots",
     "chatbots.index.heading": "Chatbots",
     "chatbots.index.description": "Manage your embeddable chatbot widgets",
@@ -516,7 +465,6 @@
     "chatbots.index.no_chatbots_description": "Create your first chatbot widget to embed on your website.",
     "chatbots.index.create_chatbot": "Create Chatbot",
     "chatbots.index.embed": "Embed",
-
     "chatbots.create.title": "Create Chatbot",
     "chatbots.create.heading": "Create Chatbot",
     "chatbots.create.description": "Create a new embeddable chatbot widget",
@@ -531,7 +479,6 @@
     "chatbots.create.agents_team": "Multi-Agent",
     "chatbots.create.choose_agent": "Choose an agent",
     "chatbots.create.single_agent_note": "Use a single agent for simple use cases",
-
     "chatbots.edit.title": "Edit",
     "chatbots.edit.description": "Update your chatbot configuration",
     "chatbots.edit.basic_info": "Basic Information",
@@ -541,13 +488,11 @@
     "chatbots.edit.description_placeholder": "What does this chatbot help with?",
     "chatbots.edit.agent_section": "Agent or Multi-Agent",
     "chatbots.edit.agent_section_description": "Choose which agent or Multi-Agent will power this chatbot",
-
     "chatbots.show.preview": "Preview",
     "chatbots.show.analytics": "Analytics",
     "chatbots.show.embed": "Embed",
     "chatbots.show.delete_chatbot": "Delete Chatbot",
     "chatbots.show.delete_warning": "This will also delete all conversations and sessions.",
-
     "chatbots.conversations.title": "Conversations",
     "chatbots.conversations.all_for": "All conversations for",
     "chatbots.conversations.back": "Back to Chatbot",
@@ -558,7 +503,6 @@
     "chatbots.conversations.resolved": "Resolved",
     "chatbots.conversations.abandoned": "Abandoned",
     "chatbots.conversations.open": "Open",
-
     "chatbots.conversation.title": "Conversation Details",
     "chatbots.conversation.heading": "Conversation",
     "chatbots.conversation.started": "Started",
@@ -572,12 +516,10 @@
     "chatbots.conversation.star_4": "4 Stars",
     "chatbots.conversation.star_5": "5 Stars",
     "chatbots.conversation.out_of_5": "/5",
-
     "chatbots.analytics.title": "Analytics",
     "chatbots.analytics.conversations": "Conversations",
     "chatbots.analytics.messages": "Messages",
     "chatbots.analytics.ratings": "Ratings",
-
     "chatbots.embed.title": "Embed Chatbot",
     "chatbots.embed.description": "Add to your website",
     "chatbots.embed.back": "Back to Chatbot",
@@ -596,9 +538,7 @@
     "chatbots.embed.api_title": "Widget API",
     "chatbots.embed.api_description": "Control the widget programmatically",
     "chatbots.embed.basic_commands": "Basic Commands",
-
     "chatbots.preview.title": "Preview",
-
     "knowledge_bases.index.title": "Knowledge Base",
     "knowledge_bases.index.heading": "Knowledge Base",
     "knowledge_bases.index.description": "Manage your knowledge bases for RAG-powered agents",
@@ -607,7 +547,6 @@
     "knowledge_bases.index.no_kbs_description": "Create your first knowledge base to enable RAG capabilities for your agents.",
     "knowledge_bases.index.create_kb": "Create Knowledge Base",
     "knowledge_bases.index.documents": "documents",
-
     "knowledge_bases.create.title": "Create Knowledge Base",
     "knowledge_bases.create.heading": "Create Knowledge Base",
     "knowledge_bases.create.description": "Create a new knowledge base for document storage and RAG",
@@ -625,7 +564,6 @@
     "knowledge_bases.create.chunk_overlap": "Chunk Overlap",
     "knowledge_bases.create.chunk_overlap_description": "Overlap between chunks (0-500)",
     "knowledge_bases.create.submit": "Create Knowledge Base",
-
     "knowledge_bases.edit.title": "Edit",
     "knowledge_bases.edit.description": "Update your knowledge base settings",
     "knowledge_bases.edit.basic_info": "Basic Information",
@@ -641,18 +579,15 @@
     "knowledge_bases.edit.chunk_size_description": "Number of characters per chunk (100-4000)",
     "knowledge_bases.edit.chunk_overlap": "Chunk Overlap",
     "knowledge_bases.edit.chunk_overlap_description": "Overlap between chunks (0-500)",
-
     "knowledge_bases.show.configuration": "Configuration",
     "knowledge_bases.show.config_description": "Tool type and settings",
     "knowledge_bases.show.delete_kb": "Delete Knowledge Base",
     "knowledge_bases.show.reprocess": "Reprocess",
-
     "documents.index.title": "Documents",
     "documents.index.description": "Manage your documents and files",
     "documents.index.folders": "Folders",
     "documents.index.upload": "Upload Document",
     "documents.index.create": "Create Document",
-
     "documents.upload.title": "Upload document",
     "documents.upload.description": "Drop a file into your library. HTML uploads become Artifact documents you can preview and edit.",
     "documents.upload.supported_formats": "Supported: PDF, TXT, DOCX, DOC, MD, CSV, JSON, HTML.",
@@ -674,7 +609,6 @@
     "documents.upload.cancel": "Cancel",
     "documents.upload.submit": "Upload",
     "documents.upload.submitting": "Uploading…",
-
     "documents.show.title": "Document Details",
     "documents.show.documents": "Documents",
     "documents.show.content": "Content",
@@ -694,7 +628,6 @@
     "documents.show.meta.folder": "Folder",
     "documents.show.meta.created": "Created",
     "documents.show.meta.owner": "Owner",
-
     "documents.edit_dialog.title": "Edit document",
     "documents.edit_dialog.description": "Update this document's name and who can see it.",
     "documents.edit_dialog.name_label": "Name",
@@ -703,13 +636,11 @@
     "documents.edit_dialog.cancel": "Cancel",
     "documents.edit_dialog.save": "Save changes",
     "documents.edit_dialog.saving": "Saving…",
-
     "documents.delete_dialog.title": "Delete document",
     "documents.delete_dialog.description": "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
     "documents.delete_dialog.cancel": "Cancel",
     "documents.delete_dialog.confirm": "Delete",
     "documents.delete_dialog.deleting": "Deleting…",
-
     "documents.artifact_editor.title": "Edit Artifact",
     "documents.artifact_editor.description": "Edit visually, or switch to the Code tab to work directly with HTML. Scripts are hidden during visual editing for safety.",
     "documents.artifact_editor.visual_tab": "Visual",
@@ -727,7 +658,6 @@
     "documents.artifact_editor.link_prompt": "Link URL",
     "documents.artifact_editor.image_prompt": "Image URL",
     "documents.artifact_editor.scripts_hidden": "Scripts are hidden in the visual editor — switch to Code to edit them.",
-
     "documents.create.title": "Create Document",
     "documents.create.description": "Author a Text, Markdown, or HTML Artifact document directly.",
     "documents.create.type": "Type",
@@ -755,7 +685,6 @@
     "documents.create.ai.generation_failed": "Generation failed. Try a different prompt or check your AI provider settings.",
     "documents.create.ai.gateway_timeout": "The AI took too long to respond. Try a shorter prompt, switch to a faster model, or try again.",
     "documents.create.ai.stream_unavailable": "The generation stream went silent. Make sure the queue worker and Reverb server are running, then try again.",
-
     "documents.workbench.title": "Artifact workbench",
     "documents.workbench.back_to_create": "Back to Create document",
     "documents.workbench.back_to_list": "Back to documents",
@@ -795,7 +724,6 @@
     "documents.create.submit": "Create",
     "documents.create.file_too_large": "File must not exceed 10 MB.",
     "documents.create.read_error": "Could not read the file.",
-
     "tools.index.title": "Tools",
     "tools.index.heading": "Tools",
     "tools.index.description": "Manage your tools for agent actions",
@@ -806,7 +734,6 @@
     "tools.index.no_tools_filtered": "No tools",
     "tools.index.no_tools_type": "You don't have any tools yet.",
     "tools.index.validated": "Validated",
-
     "tools.create.title": "Create Tool",
     "tools.create.heading": "Create Tool",
     "tools.create.description": "Create a new tool for your agents",
@@ -821,7 +748,6 @@
     "tools.create.config_title": "Configuration",
     "tools.create.config_description": "Type-specific settings for this tool",
     "tools.create.submit": "Create Tool",
-
     "tools.edit.title": "Edit",
     "tools.edit.description": "Update your tool configuration",
     "tools.edit.basic_info": "Basic Information",
@@ -832,10 +758,27 @@
     "tools.edit.description_placeholder": "What does this tool do?",
     "tools.edit.config_title": "Configuration",
     "tools.edit.config_description": "Type-specific settings for this tool",
-
     "tools.show.configuration": "Configuration",
     "tools.show.config_description": "Tool type and settings",
     "tools.show.validated": "Validated",
+    "tools.show.connection": "Connection",
+    "tools.show.connected": "Connected",
+    "tools.show.not_connected": "Not connected",
+    "tools.show.authorize_title": "Authorize this MCP server",
+    "tools.show.authorize_hint": "Authorization is per-user. Sign in to the MCP server once and your access token refreshes automatically.",
+    "tools.show.authorize_cta": "Authorize",
+    "tools.show.connected_title": "Connected",
+    "tools.show.connected_hint": "You're authorized for this MCP server. Agents using this tool act with your access.",
+    "tools.show.reauthorize_cta": "Re-authorize",
+    "tools.show.mcp_tools_title": "Available tools",
+    "tools.show.mcp_tools_description": "Tools this MCP server exposes.",
+    "tools.show.mcp_synced_at": "Last refreshed",
+    "tools.show.reload_tools": "Reload tools",
+    "tools.show.mcp_tools_count": "{count} tools",
+    "tools.show.mcp_search_placeholder": "Search tools…",
+    "tools.show.mcp_no_results": "No tools match your search.",
+    "tools.show.mcp_no_tools": "No tools loaded yet. Click \"Reload tools\" to fetch them from the server.",
+    "tools.show.mcp_reload_failed": "Couldn't load tools from the MCP server.",
     "tools.show.function_definition": "Function Definition",
     "tools.show.function_definition_description": "The function schema for this tool",
     "tools.show.function_name": "Function Name",
@@ -867,7 +810,6 @@
     "tools.show.group_members": "Group Members",
     "tools.show.group_description": "Tools included in this group",
     "tools.show.delete_tool": "Delete Tool",
-
     "tools.config.function.name": "Function Name",
     "tools.config.function.name_description": "The name that will be used when calling this function",
     "tools.config.function.name_placeholder": "get_weather",
@@ -875,7 +817,6 @@
     "tools.config.function.description_example": "Gets the current weather for a given location",
     "tools.config.function.description_hint": "Description of what this function does",
     "tools.config.function.parameters_schema": "Parameters Schema (JSON)",
-
     "tools.config.mcp.endpoint": "MCP Server Endpoint",
     "tools.config.mcp.endpoint_description": "The URL of the MCP server",
     "tools.config.mcp.endpoint_placeholder": "https://api.example.com/mcp",
@@ -903,26 +844,21 @@
     "tools.config.mcp.authorize_after_create": "Authorize after creating",
     "tools.config.mcp.no_connections": "No MCP connections yet. Add an MCP server in Integrations first.",
     "tools.config.mcp.create_connection": "Add an MCP connection",
-
     "tools.config.rest.auth_none": "None",
     "tools.config.rest.auth_bearer": "Bearer Token",
     "tools.config.rest.auth_api_key": "API Key",
     "tools.config.rest.auth_basic": "Basic Auth",
     "tools.config.rest.auth_oauth": "OAuth 2.0",
-
     "tools.config.graphql.query": "Query",
     "tools.config.graphql.mutation": "Mutation",
     "tools.config.graphql.auth_none": "None",
     "tools.config.graphql.auth_bearer": "Bearer Token",
     "tools.config.graphql.auth_api_key": "API Key",
-
     "tools.config.database.postgresql": "PostgreSQL",
     "tools.config.database.mysql": "MySQL",
     "tools.config.database.sqlite": "SQLite",
-
     "tools.config.group.select_tools": "Select Tools for Group",
     "tools.config.group.no_tools": "No active function or MCP tools available. Create and activate tools first to add them to a group.",
-
     "system.ai_providers.title": "AI Providers",
     "system.ai_providers.description": "Configure AI providers and API keys for your account",
     "system.ai_providers.add": "Add Provider",
@@ -939,7 +875,6 @@
     "system.ai_providers.testing": "Testing...",
     "system.ai_providers.connection_success": "Connection successful",
     "system.ai_providers.connection_failed": "Connection failed",
-
     "system.cloud_providers.title": "Cloud Providers",
     "system.cloud_providers.description": "Configure object storage and database connections for this workspace",
     "system.cloud_providers.tab_storage": "Object Storage",
@@ -992,7 +927,6 @@
     "system.cloud_providers.vector.install_failed": "Could not install pgvector automatically.",
     "system.cloud_providers.vector.manual_instructions": "Ask your database administrator to run: CREATE EXTENSION vector;",
     "system.cloud_providers.vector.chunk_count_label": "{count} embedding chunks stored",
-
     "system.integrations.title": "Integrations",
     "system.integrations.description": "Connect third-party services and external tools to your workspace",
     "system.integrations.new": "New integration",
@@ -1019,13 +953,11 @@
     "system.integrations.oauth2_discover.failed": "Could not auto-configure from this URL. Enter the endpoints manually below.",
     "system.integrations.duplicate": "Duplicate",
     "system.integrations.delete_confirm": "Delete this integration and all its requests?",
-
     "system.integrations.templates.cta": "Connections",
     "system.integrations.templates.title": "Pre-made connections",
     "system.integrations.templates.description": "Start from a preconfigured integration — paste your credential and save.",
     "system.integrations.templates.back": "Back to integrations",
     "system.integrations.templates.github.description": "OAuth 2.0 — authorize in the browser",
-
     "system.integrations.oauth2.authorize_title": "Authorization required",
     "system.integrations.oauth2.authorize_hint": "Click to open the provider in a new tab, sign in, and grant the requested scopes. You'll be redirected back here with the connection active.",
     "system.integrations.oauth2.authorize_cta": "Authorize",
@@ -1038,7 +970,6 @@
     "system.integrations.oauth2.client_ready_title": "OAuth client configured",
     "system.integrations.oauth2.client_ready_hint": "Authorization is per-user and happens from your MCP tools. Link this integration in a tool, then authorize it there.",
     "system.integrations.oauth2.error_title": "Authorization couldn't start",
-
     "system.integrations.form.basics": "Basics",
     "system.integrations.form.basics_hint": "Give this integration a clear name and a base URL you'll append paths to.",
     "system.integrations.form.name": "Name",
@@ -1063,7 +994,6 @@
     "system.integrations.mcp.panel_title": "MCP server",
     "system.integrations.mcp.panel_hint": "This is an MCP server, not a REST API — there are no requests to build here. Link it in an MCP tool to use it, and authorize it per-user from there.",
     "system.integrations.mcp.create_tool": "Create an MCP tool",
-
     "system.integrations.auth.api_key.location": "Location",
     "system.integrations.auth.api_key.location_header": "Header",
     "system.integrations.auth.api_key.location_query": "Query param",
@@ -1086,7 +1016,6 @@
     "system.integrations.auth.oauth2.connected": "Connected — token valid until {expires}",
     "system.integrations.auth.oauth2.not_connected": "Not yet authorized",
     "system.integrations.auth.kept_secret": "Leave blank to keep the saved value",
-
     "system.integrations.tabs.requests": "Requests",
     "system.integrations.tabs.environments": "Environments",
     "system.integrations.tabs.executions": "Executions",
@@ -1110,13 +1039,11 @@
     "system.integrations.show.danger_title": "Danger zone",
     "system.integrations.show.danger_hint": "Irreversible actions that affect everyone with access to this integration.",
     "system.integrations.show.back": "Back to integrations",
-
     "system.integrations.key_value.key_placeholder": "Name",
     "system.integrations.key_value.value_placeholder": "Value",
     "system.integrations.key_value.add_row": "Add",
     "system.integrations.key_value.remove": "Remove",
     "system.integrations.key_value.no_rows": "No entries",
-
     "admin.global_ai.title": "Global AI",
     "admin.global_ai.description": "Manage the platform-wide AI catalog and default providers",
     "admin.global_ai.active": "Active",
@@ -1147,7 +1074,6 @@
     "admin.global_ai.catalog.all_providers": "All providers",
     "admin.global_ai.coming_soon": "Coming soon",
     "admin.global_ai.coming_soon_description": "Global AI provider management is on the way. Stay tuned.",
-
     "admin.global_cloud.title": "Global Cloud",
     "admin.global_cloud.description": "Platform-wide cloud providers available to every workspace",
     "admin.global_cloud.tab_storage": "Object Storage",
@@ -1192,7 +1118,6 @@
     "admin.global_cloud.vector.install_failed": "Could not install pgvector automatically.",
     "admin.global_cloud.vector.manual_instructions": "Ask your database administrator to run: CREATE EXTENSION vector;",
     "admin.global_cloud.vector.chunk_count_label": "{count} embedding chunks stored",
-
     "wipe_dialog.title": "This will delete knowledge data",
     "wipe_dialog.description_tenant": "Changing the database provider will permanently delete all knowledge bases, documents, and embeddings in this workspace. This cannot be undone.",
     "wipe_dialog.description_global": "Changing the global database provider will permanently delete all knowledge bases, documents, and embeddings in every workspace that has not configured its own database override. This cannot be undone.",
@@ -1205,7 +1130,6 @@
     "wipe_dialog.cancel": "Cancel",
     "wipe_dialog.confirm": "Delete and save",
     "wipe_dialog.processing": "Deleting…",
-
     "system.ai_provider_form.add_title": "Set Up AI Providers",
     "system.ai_provider_form.edit_title": "Edit AI Provider",
     "system.ai_provider_form.add_description": "Pick your default LLM and embeddings model. You can change these later.",
@@ -1230,16 +1154,13 @@
     "system.ai_provider_form.testing": "Testing...",
     "system.ai_provider_form.test_success": "Connection successful",
     "system.ai_provider_form.test_failed": "Connection failed",
-
     "system.stack.title": "Stack",
     "system.stack.php": "PHP",
     "system.stack.laravel": "Laravel",
     "system.stack.laravel_ai": "Laravel AI SDK",
     "system.stack.nodejs": "Node.js",
     "system.stack.vuejs": "Vue.js",
-
     "dashboard.title": "Dashboard",
-
     "auth.login.title": "Log in",
     "auth.login.description": "Enter your credentials to access your account",
     "auth.login.email": "Email",
@@ -1250,7 +1171,6 @@
     "auth.login.submit": "Log in",
     "auth.login.no_account": "Don't have an account?",
     "auth.login.register": "Sign up",
-
     "auth.register.title": "Create an account",
     "auth.register.description": "Enter your details to get started",
     "auth.register.name": "Name",
@@ -1264,14 +1184,12 @@
     "auth.register.submit": "Create account",
     "auth.register.has_account": "Already have an account?",
     "auth.register.login": "Log in",
-
     "auth.forgot_password.title": "Forgot password",
     "auth.forgot_password.description": "Enter your email and we'll send you a link to reset your password.",
     "auth.forgot_password.email": "Email",
     "auth.forgot_password.email_placeholder": "email{'@'}example.com",
     "auth.forgot_password.submit": "Send reset link",
     "auth.forgot_password.back_to_login": "Back to login",
-
     "auth.reset_password.title": "Reset password",
     "auth.reset_password.description": "Enter your new password below.",
     "auth.reset_password.email": "Email",
@@ -1280,13 +1198,11 @@
     "auth.reset_password.password_confirmation": "Confirm password",
     "auth.reset_password.password_confirmation_placeholder": "Confirm password",
     "auth.reset_password.submit": "Reset password",
-
     "auth.verify_email.title": "Verify email",
     "auth.verify_email.description": "Please verify your email address by clicking the link we just sent you.",
     "auth.verify_email.link_sent": "A new verification link has been sent to your email address.",
     "auth.verify_email.resend": "Resend verification email",
     "auth.verify_email.logout": "Log out",
-
     "auth.two_factor.title": "Two-factor authentication",
     "auth.two_factor.code_description": "Please enter the authentication code from your authenticator app.",
     "auth.two_factor.recovery_description": "Please enter one of your emergency recovery codes.",
@@ -1297,13 +1213,11 @@
     "auth.two_factor.submit": "Verify",
     "auth.two_factor.use_code": "Use authentication code",
     "auth.two_factor.use_recovery_code": "Use a recovery code",
-
     "auth.confirm_password.title": "Confirm password",
     "auth.confirm_password.description": "This is a secure area. Please confirm your password before continuing.",
     "auth.confirm_password.password": "Password",
     "auth.confirm_password.password_placeholder": "Password",
     "auth.confirm_password.submit": "Confirm",
-
     "flows.global.description": "Manage your conversational flows",
     "flows.global.no_flows": "No flows yet",
     "flows.global.no_flows_description": "Create your first flow to get started.",
@@ -1322,11 +1236,9 @@
     "flows.index.version": "Version",
     "flows.index.updated": "Updated",
     "flows.index.create_first": "Create your first flow",
-
     "flows.status.draft": "Draft",
     "flows.status.active": "Active",
     "flows.status.inactive": "Inactive",
-
     "flows.toolbar.name_placeholder": "Flow name...",
     "flows.toolbar.save": "Save",
     "flows.toolbar.saving": "Saving...",
@@ -1335,7 +1247,6 @@
     "flows.toolbar.up_to_date": "Up to date",
     "flows.toolbar.activate": "Activate",
     "flows.toolbar.deactivate": "Deactivate",
-
     "flows.editor.title": "Flow Editor",
     "flows.editor.new_flow": "New Flow",
     "flows.editor.save": "Save",
@@ -1344,7 +1255,6 @@
     "flows.editor.activate": "Activate",
     "flows.editor.deactivate": "Deactivate",
     "flows.editor.back": "Back to Agent",
-
     "flows.palette.title": "Nodes",
     "flows.palette.menu": "Menu",
     "flows.palette.menu_description": "Show options to user",
@@ -1358,7 +1268,6 @@
     "flows.palette.connector_description": "Jump to another node",
     "flows.palette.end": "End",
     "flows.palette.end_description": "End the flow",
-
     "flows.panel.properties": "Properties",
     "flows.panel.no_selection": "Select a node to edit its properties",
     "flows.panel.delete_node": "Delete Node",
@@ -1423,7 +1332,6 @@
     "flows.panel.end_close": "Close conversation",
     "flows.panel.end_message": "End Message",
     "flows.panel.end_message_placeholder": "Optional farewell message...",
-
     "flows.nodes.start": "Start",
     "flows.nodes.menu": "Menu",
     "flows.nodes.condition": "Condition",
@@ -1522,7 +1430,6 @@
     "admin.dashboard.audit.heading": "Recent admin activity",
     "admin.dashboard.audit.view_all": "View all",
     "admin.dashboard.audit.empty": "Nothing yet.",
-
     "admin.users.eyebrow": "People",
     "admin.users.heading": "Users",
     "admin.users.description": "Accounts, invitations, and access — all in one place.",
@@ -1587,7 +1494,6 @@
     "admin.users.delete.plan_cascade": "Their resources will be deleted alongside the user.",
     "admin.users.delete.confirm_label": "Type {email} to confirm",
     "admin.users.delete.submit": "Delete user",
-
     "admin.access.eyebrow": "Security",
     "admin.access.heading": "Access",
     "admin.access.description": "Registration, verification, 2FA, and allowlists — tighten or open at will.",
@@ -1620,7 +1526,6 @@
     "admin.access.posture.title": "Security posture",
     "admin.access.posture.description": "Quick look at where hardening is still pending.",
     "admin.access.posture.fix": "Fix",
-
     "admin.ai.eyebrow": "Intelligence",
     "admin.ai.heading": "Global AI",
     "admin.ai.defaults.description": "Default models, sampling, and API keys — applied across every tenant unless overridden.",
@@ -1654,13 +1559,11 @@
     "admin.ai.defaults.keys_empty": "No global providers registered yet.",
     "admin.ai.defaults.rotate_cta": "Rotate",
     "admin.ai.defaults.rotated_prefix": "Rotated",
-
     "admin.ai.rotate.title": "Rotate API key",
     "admin.ai.rotate.description": "Paste the new key from the provider's dashboard. The old key stops working the moment you save.",
     "admin.ai.rotate.new_key_label": "New API key",
     "admin.ai.rotate.new_key_placeholder": "sk-…",
     "admin.ai.rotate.submit": "Rotate and save",
-
     "admin.ai.catalog.intro": "Which models appear in the Defaults dropdowns and agent pickers.",
     "admin.ai.catalog.filter.all": "All",
     "admin.ai.catalog.filter.chat": "Chat",
@@ -1670,10 +1573,8 @@
     "admin.ai.catalog.col.kind": "Kind",
     "admin.ai.catalog.col.enabled": "Enabled",
     "admin.ai.catalog.empty": "No models match this filter.",
-
     "admin.ai.usage.empty_title": "Usage analytics coming soon",
     "admin.ai.usage.empty_body": "Call volume, cost, and per-driver breakdown land once the instrumentation pipeline is wired.",
-
     "admin.cloud.eyebrow": "Infrastructure",
     "admin.cloud.heading": "Global Cloud",
     "admin.cloud.description": "Storage, database, and vector search — what powers the stack underneath.",
@@ -1704,14 +1605,11 @@
     "admin.cloud.pgvector.col.rows": "Rows",
     "admin.cloud.pgvector.no_indexes": "No vector indexes yet — none will exist until the first KB is chunked.",
     "admin.cloud.pgvector.disabled": "pgvector is not installed on this database. Run CREATE EXTENSION vector on the host to enable retrieval.",
-
     "admin.stack.eyebrow": "Platform",
     "admin.stack.heading": "Stack",
     "admin.stack.description": "Every piece of software this platform is built on — versions and status at a glance.",
-
     "app_v2.breadcrumb.root": "Workspace",
     "app_v2.breadcrumb.personal": "Personal",
-
     "impersonation.banner": "Impersonating {name} ({email})",
     "impersonation.stop": "Stop impersonating",
     "app_v2.sidebar.section_main": "Platform",
@@ -1719,6 +1617,7 @@
     "app_v2.sidebar.section_system": "System",
     "app_v2.sidebar.admin_panel": "Admin Panel",
     "app_v2.nav.dashboard": "Dashboard",
+    "app_v2.nav.chat": "Chat",
     "app_v2.nav.apps": "Apps",
     "app_v2.nav.flows": "Flows",
     "app_v2.nav.chatbots": "Chatbots",
@@ -1759,5 +1658,58 @@
     "app_v2.common.upload": "Upload",
     "app_v2.common.search": "Search…",
     "app_v2.common.empty_title": "Nothing here yet",
-    "app_v2.common.empty_body": "Click the button above to create the first one."
+    "app_v2.common.empty_body": "Click the button above to create the first one.",
+    "chat.new_chat": "New chat",
+    "chat.projects": "Projects",
+    "chat.new_project": "New project",
+    "chat.edit_project": "Edit project",
+    "chat.create_project": "Create project",
+    "chat.delete_project_confirm": "Delete this project? Its chats are kept (just ungrouped).",
+    "chat.project_dialog_hint": "Group related chats and give the assistant standing instructions for them.",
+    "chat.project_knowledge": "Knowledge bases",
+    "chat.project_knowledge_hint": "Chats in this project search these knowledge bases for relevant context.",
+    "chat.no_knowledge_bases": "You have no knowledge bases yet. Create one under Knowledge Bases.",
+    "chat.kb_attached": "{count} knowledge base(s) attached",
+    "chat.project_name_placeholder": "Project name",
+    "chat.project_instructions_placeholder": "Custom instructions (optional) — e.g. \"Always answer in formal English and cite sources.\"",
+    "chat.untitled": "New chat",
+    "chat.no_history": "No chats yet.",
+    "chat.rename": "Rename",
+    "chat.delete": "Delete",
+    "chat.delete_confirm": "Delete this chat? This cannot be undone.",
+    "chat.history.today": "Today",
+    "chat.history.yesterday": "Yesterday",
+    "chat.history.previous_7_days": "Previous 7 days",
+    "chat.history.older": "Older",
+    "chat.composer.placeholder": "Message the assistant…",
+    "chat.composer.send": "Send",
+    "chat.composer.stop": "Stop",
+    "chat.web_search": "Search",
+    "chat.tools.label": "Tools",
+    "chat.tools.using": "Using {tool}…",
+    "chat.disclaimer": "AI can make mistakes. Double-check important info.",
+    "chat.copy": "Copy",
+    "chat.copied": "Copied",
+    "chat.artifact.writing": "Writing…",
+    "chat.artifact.download": "Download",
+    "chat.artifact.type_code": "Code",
+    "chat.artifact.type_html": "Web page",
+    "chat.artifact.type_markdown": "Document",
+    "chat.artifact.type_svg": "SVG image",
+    "chat.artifact.type_text": "Text",
+    "chat.attach": "Attach files",
+    "chat.attach_failed": "Couldn't upload that file.",
+    "chat.model_picker.label": "Model",
+    "chat.send_failed": "Couldn't send the message. Try again.",
+    "chat.error_generic": "Something went wrong.",
+    "chat.retry": "Retry",
+    "chat.empty.greeting": "How can I help today?",
+    "chat.empty.subtitle": "Pick a model, attach files, and start chatting.",
+    "chat.suggestions": [
+        "Explain a concept simply",
+        "Draft an email",
+        "Summarize a document",
+        "Write some code"
+    ],
+    "apps.builder.rate_limited": "Too many requests — wait {seconds}s and try again."
 }

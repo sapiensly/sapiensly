@@ -248,10 +248,16 @@ class BuilderAiService
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
         ];
 
-        // History excludes the placeholder we're about to fill.
+        // History excludes the placeholder we're about to fill. reorder()
+        // clears the relation's default created_at ASC sort so orderByDesc
+        // actually selects the most recent N (otherwise it appends a no-op
+        // tiebreaker, the query stays ascending, and we'd take the OLDEST N
+        // and then reverse them into the wrong order — scrambling context).
         $history = $conversation->messages()
             ->where('id', '!=', $placeholder->id)
+            ->reorder()
             ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->limit(self::MAX_HISTORY_MESSAGES)
             ->get()
             ->reverse()

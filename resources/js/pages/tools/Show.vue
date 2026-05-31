@@ -3,6 +3,7 @@ import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
     Card,
     CardContent,
@@ -21,29 +22,83 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import type { Tool, ToolType } from '@/types/tools';
+import type { McpConfig, McpServerTool, Tool, ToolType } from '@/types/tools';
 import { Head, Link, router } from '@inertiajs/vue3';
+import axios from 'axios';
 import {
     Braces,
+    CheckCircle2,
     Code,
     Database,
     Globe,
+    KeyRound,
     Layers,
     Pencil,
+    RefreshCw,
+    Search,
     Server,
     Trash2,
     Wrench,
 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-interface Props {
-    tool: Tool;
+interface McpAuthorization {
+    connected: boolean;
+    authorize_url: string;
+    integration_name: string;
 }
 
-const props = defineProps<Props>();
+interface Props {
+    tool: Tool;
+    mcpAuthorization?: McpAuthorization | null;
+}
+
+const props = withDefaults(defineProps<Props>(), { mcpAuthorization: null });
+
+// MCP server tool catalog — the tools the connected server exposes.
+const initialMcpConfig =
+    props.tool.type === 'mcp' ? (props.tool.config as McpConfig | null) : null;
+const mcpServerTools = ref<McpServerTool[]>(initialMcpConfig?.mcp_tools ?? []);
+const mcpSyncedAt = ref<string | null>(initialMcpConfig?.mcp_tools_synced_at ?? null);
+const refreshing = ref(false);
+const refreshError = ref<string | null>(null);
+
+async function reloadMcpTools(): Promise<void> {
+    refreshing.value = true;
+    refreshError.value = null;
+    try {
+        const { data } = await axios.post(`/tools/${props.tool.id}/mcp/refresh`);
+        mcpServerTools.value = data.tools ?? [];
+        mcpSyncedAt.value = data.synced_at ?? null;
+    } catch (error) {
+        refreshError.value =
+            axios.isAxiosError(error) && error.response?.data?.message
+                ? (error.response.data.message as string)
+                : t('tools.show.mcp_reload_failed');
+    } finally {
+        refreshing.value = false;
+    }
+}
+
+function requiredParams(tool: McpServerTool): string[] {
+    const req = tool.input_schema?.required;
+    return Array.isArray(req) ? (req as string[]) : [];
+}
+
+// Case-insensitive filter over tool name and description.
+const mcpSearch = ref('');
+const filteredMcpTools = computed<McpServerTool[]>(() => {
+    const q = mcpSearch.value.trim().toLowerCase();
+    if (!q) return mcpServerTools.value;
+    return mcpServerTools.value.filter(
+        (t) =>
+            t.name.toLowerCase().includes(q) ||
+            t.description.toLowerCase().includes(q),
+    );
+});
 
 const toolIcon = (type: ToolType) => {
     switch (type) {
@@ -206,6 +261,164 @@ const databaseConfig = computed(() => {
                 </div>
 
                 <div class="space-y-8">
+                    <!-- Per-user MCP authorization. Authorization is specific
+                         to each member, so it lives here on the tool. -->
+                    <div
+                        v-if="mcpAuthorization && !mcpAuthorization.connected"
+                        class="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4"
+                    >
+                        <KeyRound class="mt-0.5 size-5 shrink-0 text-amber-500" />
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium">
+                                {{ t('tools.show.authorize_title') }}
+                            </p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                {{ t('tools.show.authorize_hint') }}
+                            </p>
+                        </div>
+                        <a
+                            :href="mcpAuthorization.authorize_url"
+                            class="inline-flex shrink-0 items-center gap-1.5 self-center rounded-md bg-amber-500 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-600"
+                        >
+                            <KeyRound class="size-3.5" />
+                            {{ t('tools.show.authorize_cta') }}
+                        </a>
+                    </div>
+
+                    <div
+                        v-else-if="mcpAuthorization && mcpAuthorization.connected"
+                        class="flex items-start gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4"
+                    >
+                        <CheckCircle2 class="mt-0.5 size-5 shrink-0 text-emerald-500" />
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium">
+                                {{ t('tools.show.connected_title') }}
+                            </p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                {{ t('tools.show.connected_hint') }}
+                            </p>
+                        </div>
+                        <a
+                            :href="mcpAuthorization.authorize_url"
+                            class="inline-flex shrink-0 items-center gap-1.5 self-center rounded-md border border-medium px-3 py-1.5 text-xs transition-colors hover:bg-surface-hover"
+                        >
+                            {{ t('tools.show.reauthorize_cta') }}
+                        </a>
+                    </div>
+
+                    <!-- MCP server tool catalog. -->
+                    <Card v-if="tool.type === 'mcp'">
+                        <CardHeader>
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <CardTitle>{{ t('tools.show.mcp_tools_title') }}</CardTitle>
+                                    <CardDescription>
+                                        {{ t('tools.show.mcp_tools_description') }}
+                                        <span v-if="mcpSyncedAt" class="block text-xs">
+                                            {{ t('tools.show.mcp_synced_at') }}
+                                            {{ new Date(mcpSyncedAt).toLocaleString() }}
+                                        </span>
+                                    </CardDescription>
+                                </div>
+                                <div class="flex shrink-0 items-center gap-2">
+                                    <Badge
+                                        v-if="mcpServerTools.length > 0"
+                                        variant="secondary"
+                                    >
+                                        {{ t('tools.show.mcp_tools_count', { count: mcpServerTools.length }) }}
+                                    </Badge>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        :disabled="refreshing"
+                                        @click="reloadMcpTools"
+                                    >
+                                        <RefreshCw
+                                            :class="['mr-1.5 size-3.5', refreshing ? 'animate-spin' : '']"
+                                        />
+                                        {{ t('tools.show.reload_tools') }}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <p
+                                v-if="refreshError"
+                                class="mb-3 rounded-md border border-sp-danger/30 bg-sp-danger/10 p-2 text-xs text-sp-danger"
+                            >
+                                {{ refreshError }}
+                            </p>
+
+                            <template v-if="mcpServerTools.length > 0">
+                                <div class="relative mb-3">
+                                    <Search
+                                        class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                    />
+                                    <Input
+                                        v-model="mcpSearch"
+                                        :placeholder="t('tools.show.mcp_search_placeholder')"
+                                        class="h-9 pl-9"
+                                    />
+                                </div>
+
+                                <div
+                                    v-if="filteredMcpTools.length > 0"
+                                    class="grid gap-3 sm:grid-cols-2"
+                                >
+                                    <div
+                                        v-for="serverTool in filteredMcpTools"
+                                        :key="serverTool.name"
+                                        :title="serverTool.description"
+                                        class="rounded-lg border border-medium p-3 transition-colors hover:border-strong hover:bg-surface-hover"
+                                    >
+                                        <div class="flex items-center gap-2">
+                                            <Wrench class="size-3.5 shrink-0 text-muted-foreground" />
+                                            <p class="truncate font-mono text-sm font-medium">
+                                                {{ serverTool.name }}
+                                            </p>
+                                        </div>
+                                        <p
+                                            v-if="serverTool.description"
+                                            class="mt-1 line-clamp-3 text-xs text-muted-foreground group-hover:line-clamp-none"
+                                        >
+                                            {{ serverTool.description }}
+                                        </p>
+                                        <div
+                                            v-if="requiredParams(serverTool).length > 0"
+                                            class="mt-2 flex flex-wrap gap-1"
+                                        >
+                                            <Badge
+                                                v-for="param in requiredParams(serverTool)"
+                                                :key="param"
+                                                variant="secondary"
+                                                class="font-mono text-[10px]"
+                                            >
+                                                {{ param }}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p
+                                    v-else
+                                    class="py-6 text-center text-sm text-muted-foreground"
+                                >
+                                    {{ t('tools.show.mcp_no_results') }}
+                                </p>
+                            </template>
+
+                            <div
+                                v-else
+                                class="rounded-lg border border-dashed p-6 text-center"
+                            >
+                                <Server class="mx-auto size-6 text-muted-foreground" />
+                                <p class="mt-2 text-sm text-muted-foreground">
+                                    {{ t('tools.show.mcp_no_tools') }}
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <Card>
                         <CardHeader>
                             <CardTitle>{{
@@ -227,7 +440,28 @@ const databaseConfig = computed(() => {
                                         {{ tool.type }}
                                     </dd>
                                 </div>
-                                <div>
+                                <div v-if="mcpAuthorization">
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
+                                        {{ t('tools.show.connection') }}
+                                    </dt>
+                                    <dd
+                                        class="mt-1"
+                                        :class="
+                                            mcpAuthorization.connected
+                                                ? 'text-emerald-600 dark:text-emerald-400'
+                                                : 'text-amber-600 dark:text-amber-400'
+                                        "
+                                    >
+                                        {{
+                                            mcpAuthorization.connected
+                                                ? t('tools.show.connected')
+                                                : t('tools.show.not_connected')
+                                        }}
+                                    </dd>
+                                </div>
+                                <div v-else>
                                     <dt
                                         class="text-sm font-medium text-muted-foreground"
                                     >

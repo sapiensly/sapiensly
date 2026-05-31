@@ -19,14 +19,50 @@ class OAuth2TokenRefresher
 
     public function needsRefresh(Integration $integration): bool
     {
-        $cfg = $integration->auth_config ?? [];
-        $expiresAt = (int) ($cfg['expires_at'] ?? 0);
+        return $this->tokensNeedRefresh($integration->auth_config ?? []);
+    }
+
+    /**
+     * Whether a standalone token bag (e.g. a per-user store) is stale.
+     *
+     * @param  array<string, mixed>  $tokens
+     */
+    public function tokensNeedRefresh(array $tokens): bool
+    {
+        $expiresAt = (int) ($tokens['expires_at'] ?? 0);
 
         if ($expiresAt === 0) {
-            return empty($cfg['access_token']);
+            return empty($tokens['access_token']);
         }
 
         return ($expiresAt - self::SKEW_SECONDS) <= time();
+    }
+
+    /**
+     * Refresh a per-user token bag using the integration's client config.
+     * Returns the merged token bag (caller persists it). A no-op when the
+     * access token is still valid.
+     *
+     * @param  array<string, mixed>  $clientConfig  authorize/token URLs + client_id/secret
+     * @param  array<string, mixed>  $tokens  access_token/refresh_token/expires_at
+     * @return array<string, mixed>
+     */
+    public function refreshTokens(array $clientConfig, array $tokens): array
+    {
+        if (! $this->tokensNeedRefresh($tokens)) {
+            return $tokens;
+        }
+
+        if (empty($tokens['refresh_token'])) {
+            throw new \RuntimeException('Authorization expired and no refresh token is available — re-authorize this tool.');
+        }
+
+        // The refresh exchange needs the client credentials from the
+        // integration plus the user's refresh token.
+        $cfg = array_merge($clientConfig, ['refresh_token' => $tokens['refresh_token']]);
+        $fresh = $this->requestWithRefreshToken($cfg);
+
+        return array_merge($tokens, $fresh);
     }
 
     public function refreshIfNeeded(Integration $integration): Integration
@@ -97,10 +133,14 @@ class OAuth2TokenRefresher
         $payload = [
             'grant_type' => 'authorization_code',
             'client_id' => $cfg['client_id'] ?? '',
-            'client_secret' => $cfg['client_secret'] ?? '',
             'code' => $code,
             'redirect_uri' => $cfg['redirect_uri'] ?? '',
         ];
+        // Public PKCE clients have no secret — sending an empty one makes
+        // some providers reject the exchange. Only include it when present.
+        if (! empty($cfg['client_secret'])) {
+            $payload['client_secret'] = $cfg['client_secret'];
+        }
         if ($codeVerifier !== null) {
             $payload['code_verifier'] = $codeVerifier;
         }
@@ -124,9 +164,11 @@ class OAuth2TokenRefresher
         $payload = [
             'grant_type' => 'refresh_token',
             'client_id' => $cfg['client_id'] ?? '',
-            'client_secret' => $cfg['client_secret'] ?? '',
             'refresh_token' => $cfg['refresh_token'] ?? '',
         ];
+        if (! empty($cfg['client_secret'])) {
+            $payload['client_secret'] = $cfg['client_secret'];
+        }
 
         $response = Http::asForm()
             ->timeout(10)
