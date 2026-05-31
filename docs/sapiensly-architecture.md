@@ -7,14 +7,16 @@
 
 ## Stack
 
-- **PHP 8.4**, **Laravel 12** (framework packages reported as v13-era).
+- **PHP 8.4**, **Laravel** (`laravel/framework ^13`).
 - **Inertia.js v2 + Vue 3** (`<script setup lang="ts">`), **Tailwind CSS v4** (CSS-variable
   theming, light/dark via `.dark`), **reka-ui / shadcn-vue** components.
 - **Laravel Wayfinder** — type-safe routes; controllers/named routes are generated into
   `resources/js/actions/*` and `resources/js/routes/*` and imported in Vue.
 - **AI:** `laravel/ai` SDK (LLM abstraction with tool calling, streaming, attachments).
-- **Auth & tenancy:** WorkOS (SSO + organizations) via `laravel/workos`; Fortify for
-  password/2FA.
+- **Auth:** **Laravel Fortify** (registration, email/password login, two-factor, email
+  verification, password reset — all rendered as Inertia pages). **Roles/permissions:**
+  `spatie/laravel-permission` (e.g. the `sysadmin` role). Organizations are **native app
+  models** (no external IdP / SSO).
 - **Async:** Redis + **Laravel Horizon** (queues). **Real-time:** **Laravel Reverb** + Echo
   (WebSockets).
 - **Data:** PostgreSQL + **pgvector** for embeddings/vector search.
@@ -51,8 +53,9 @@
     `Private | Organization | Global | Public`.
 - IDs: most domain models use **`HasPrefixedUlid`** — string PKs like `agent_…`, `chat_…`,
   `dbt_…` (Debate), `tool_…`, `kb_…`. New models implement `getIdPrefix()`.
-- WorkOS provides SSO and the organization membership model; `Organization`,
-  `OrganizationMembership` back the workspace switching.
+- Organizations are **native** (`Organization`, `OrganizationMembership`) and back the
+  Personal⇄Organization workspace switching; platform roles come from
+  `spatie/laravel-permission` (e.g. `sysadmin` gates the admin panel).
 - **Always** scope tenant queries with `forAccountContext($user)` (or `visibleTo`) and authorize
   ownership in controllers/policies. Channel authorization verifies the owning user before
   letting a socket subscribe.

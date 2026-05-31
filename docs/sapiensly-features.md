@@ -195,7 +195,8 @@ Platform administration for sysadmin users.
 - Edit your **profile** and **appearance** (light/dark theme).
 - **Create an organization** and **invite members**; switch between Personal and Organization
   workspaces.
-- Sign in with **email + password and two‑factor authentication**, plus single sign‑on (SSO).
+- Register and sign in with **email + password**, **two‑factor authentication**, **email
+  verification**, and password reset.
 
 ---
 
