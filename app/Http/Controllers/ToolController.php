@@ -7,7 +7,10 @@ use App\Enums\ToolType;
 use App\Enums\Visibility;
 use App\Http\Requests\Tool\StoreToolRequest;
 use App\Http\Requests\Tool\UpdateToolRequest;
+use App\Models\Integration;
+use App\Models\IntegrationUserToken;
 use App\Models\Tool;
+use App\Services\Integrations\IntegrationService;
 use App\Services\ToolConfigService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +20,8 @@ use Inertia\Response;
 class ToolController extends Controller
 {
     public function __construct(
-        private readonly ToolConfigService $toolConfigService
+        private readonly ToolConfigService $toolConfigService,
+        private readonly IntegrationService $integrationService,
     ) {}
 
     public function index(Request $request): Response
@@ -68,6 +72,7 @@ class ToolController extends Controller
                 ->whereIn('type', ['function', 'mcp'])
                 ->where('status', 'active')
                 ->get(['id', 'name', 'type']),
+            'mcpConnections' => $this->mcpConnectionOptions($request),
         ]);
     }
 
@@ -122,7 +127,35 @@ class ToolController extends Controller
 
         return Inertia::render('tools/Show', [
             'tool' => $toolData,
+            'mcpAuthorization' => $this->mcpAuthorizationStatus($request, $tool),
         ]);
+    }
+
+    /**
+     * Per-user OAuth authorization status for an MCP tool, or null when the
+     * tool isn't an OAuth-backed MCP tool.
+     *
+     * @return array{connected: bool, authorize_url: string, integration_name: string}|null
+     */
+    private function mcpAuthorizationStatus(Request $request, Tool $tool): ?array
+    {
+        $config = $tool->config ?? [];
+        if ($tool->type->value !== 'mcp' || ($config['auth_type'] ?? null) !== 'oauth2' || empty($config['integration_id'])) {
+            return null;
+        }
+
+        $integration = Integration::find($config['integration_id']);
+
+        $token = IntegrationUserToken::query()
+            ->where('user_id', $request->user()->id)
+            ->where('integration_id', $config['integration_id'])
+            ->first();
+
+        return [
+            'connected' => $token instanceof IntegrationUserToken && $token->isAuthorized(),
+            'authorize_url' => route('tools.oauth2.authorize', $tool),
+            'integration_name' => $integration?->name ?? '',
+        ];
     }
 
     public function edit(Request $request, Tool $tool): Response
@@ -152,6 +185,8 @@ class ToolController extends Controller
                 ->where('status', 'active')
                 ->where('id', '!=', $tool->id)
                 ->get(['id', 'name', 'type']),
+            'oauth2Integrations' => $this->oauth2IntegrationOptions($request),
+            'oauth2AuthorizeUrl' => route('tools.oauth2.authorize', $tool),
         ]);
     }
 
@@ -191,6 +226,74 @@ class ToolController extends Controller
         $tool->delete();
 
         return to_route('tools.index');
+    }
+
+    /**
+     * MCP connections (integrations flagged as MCP) the user can turn into a
+     * tool, with whether the current user is already connected (authorized).
+     * Non-OAuth MCP servers need no per-user authorization, so they always
+     * count as connected.
+     *
+     * @return array<int, array{id: string, name: string, base_url: string, requires_auth: bool, connected: bool}>
+     */
+    private function mcpConnectionOptions(Request $request): array
+    {
+        $user = $request->user();
+
+        $integrations = $this->integrationService->listForUser($user)
+            ->where('is_mcp', true);
+
+        $authorizedIds = IntegrationUserToken::query()
+            ->where('user_id', $user->id)
+            ->whereIn('integration_id', $integrations->pluck('id'))
+            ->get()
+            ->filter(fn (IntegrationUserToken $token): bool => $token->isAuthorized())
+            ->pluck('integration_id')
+            ->all();
+
+        return $integrations->map(function (Integration $integration) use ($authorizedIds): array {
+            $requiresAuth = $integration->auth_type->isOAuth2();
+
+            return [
+                'id' => $integration->id,
+                'name' => $integration->name,
+                'base_url' => $integration->base_url,
+                'requires_auth' => $requiresAuth,
+                'connected' => $requiresAuth
+                    ? in_array($integration->id, $authorizedIds, true)
+                    : true,
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * OAuth 2.0 integrations the user can link to an MCP tool. The integration
+     * carries the shared client config; whether the *current user* is
+     * authorized comes from their own per-user token store. The actual
+     * authorization happens per-user from the tool (see tools.oauth2.authorize).
+     *
+     * @return array<int, array{id: string, name: string, auth_type: string, is_authorization_code: bool, authorized: bool}>
+     */
+    private function oauth2IntegrationOptions(Request $request): array
+    {
+        $user = $request->user();
+        $integrations = $this->integrationService->listOAuth2ForUser($user);
+
+        $authorizedIds = IntegrationUserToken::query()
+            ->where('user_id', $user->id)
+            ->whereIn('integration_id', $integrations->pluck('id'))
+            ->get()
+            ->filter(fn (IntegrationUserToken $token): bool => $token->isAuthorized())
+            ->pluck('integration_id')
+            ->all();
+
+        return $integrations->map(fn (Integration $integration): array => [
+            'id' => $integration->id,
+            'name' => $integration->name,
+            'auth_type' => $integration->auth_type->value,
+            'is_authorization_code' => $integration->auth_type->value === 'oauth2_auth_code',
+            'authorized' => in_array($integration->id, $authorizedIds, true),
+        ])->all();
     }
 
     /**

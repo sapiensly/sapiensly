@@ -245,7 +245,7 @@ function onAgentCreated(agentId: string, agentName: string) {
             </h3>
             <button
                 type="button"
-                class="flex size-7 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                class="flex size-7 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                 @click="emit('close')"
             >
                 <X class="size-3.5" />

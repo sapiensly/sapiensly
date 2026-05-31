@@ -479,7 +479,7 @@ const canSave = computed(
         </p>
         <button
             type="button"
-            class="mt-4 inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+            class="mt-4 inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
             @click="discard"
         >
             {{ t('documents.workbench.discard') }}
@@ -504,7 +504,7 @@ const canSave = computed(
             <div class="relative flex items-center gap-2">
                 <button
                     type="button"
-                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                     @click="optionsOpen = !optionsOpen"
                 >
                     <Settings2 class="size-3.5" />
@@ -512,7 +512,7 @@ const canSave = computed(
                 </button>
                 <button
                     type="button"
-                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                     @click="discard"
                 >
                     {{ t('documents.workbench.discard') }}
@@ -567,7 +567,7 @@ const canSave = computed(
         <p v-if="saveError" class="text-xs text-sp-danger">{{ saveError }}</p>
 
         <!-- Mode tabs -->
-        <div class="inline-flex rounded-pill border border-soft bg-white/5 p-0.5 text-[11px] font-medium self-start">
+        <div class="inline-flex rounded-pill border border-soft bg-surface p-0.5 text-[11px] font-medium self-start">
             <button
                 type="button"
                 :class="[
@@ -629,7 +629,7 @@ const canSave = computed(
                                 :class="
                                     msg.role === 'user'
                                         ? 'bg-accent-blue/20 text-accent-blue'
-                                        : 'bg-white/5 text-ink-muted'
+                                        : 'bg-surface text-ink-muted'
                                 "
                             >
                                 <User v-if="msg.role === 'user'" class="size-3.5" />
@@ -696,7 +696,7 @@ const canSave = computed(
                                 v-model="chatInput"
                                 :placeholder="t('documents.workbench.ai.composer_placeholder')"
                                 rows="2"
-                                class="flex-1 resize-none rounded-xs border border-medium bg-white/5 p-2 text-[13px] text-ink placeholder:text-ink-subtle focus-visible:border-accent-blue focus-visible:ring-3 focus-visible:ring-accent-blue/25 focus-visible:outline-none"
+                                class="flex-1 resize-none rounded-xs border border-medium bg-surface p-2 text-[13px] text-ink placeholder:text-ink-subtle focus-visible:border-accent-blue focus-visible:ring-3 focus-visible:ring-accent-blue/25 focus-visible:outline-none"
                                 :disabled="chatPending"
                                 @keydown.enter.exact.prevent="sendMessage"
                             />

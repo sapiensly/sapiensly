@@ -132,7 +132,7 @@ function onSearchKeydown(event: KeyboardEvent) {
             type="button"
             @click="toggle"
             :disabled="disabled || objects.length === 0"
-            class="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-medium bg-white/5 px-2 text-left text-sm text-ink transition-colors hover:border-strong disabled:opacity-50"
+            class="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-medium bg-surface px-2 text-left text-sm text-ink transition-colors hover:border-strong disabled:opacity-50"
         >
             <div class="flex min-w-0 items-center gap-2">
                 <Database class="size-3.5 shrink-0 text-ink-muted" />
@@ -181,7 +181,7 @@ function onSearchKeydown(event: KeyboardEvent) {
                     @mouseenter="highlightedIndex = idx"
                     :class="[
                         'cursor-pointer px-2 py-1.5 transition-colors',
-                        idx === highlightedIndex ? 'bg-accent-blue/15' : 'hover:bg-white/5',
+                        idx === highlightedIndex ? 'bg-accent-blue/15' : 'hover:bg-surface',
                     ]"
                 >
                     <div class="flex items-baseline gap-2">

@@ -59,7 +59,7 @@ function bytes(value: number | null): string {
             <span v-else class="text-ink-subtle">—</span>
         </div>
         <div
-            class="h-1.5 overflow-hidden rounded-pill bg-white/5"
+            class="h-1.5 overflow-hidden rounded-pill bg-surface"
             :class="pct === null ? 'border border-dashed border-soft' : ''"
         >
             <div

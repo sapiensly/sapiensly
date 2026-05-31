@@ -127,7 +127,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                             v-model="form.name"
                             required
                             :placeholder="t('agents.edit.agent_name_placeholder')"
-                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.name" />
                     </div>
@@ -140,7 +140,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                             id="description"
                             v-model="form.description"
                             :placeholder="t('agents.edit.description_placeholder')"
-                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.description" />
                     </div>
@@ -163,7 +163,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                         <Select v-model="form.status">
                             <SelectTrigger
                                 id="status"
-                                class="h-9 border-medium bg-white/5"
+                                class="h-9 border-medium bg-surface"
                             >
                                 <SelectValue
                                     :placeholder="t('common.select_status')"
@@ -189,7 +189,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                         <Select v-model="form.model">
                             <SelectTrigger
                                 id="model"
-                                class="h-9 border-medium bg-white/5"
+                                class="h-9 border-medium bg-surface"
                             >
                                 <SelectValue
                                     :placeholder="t('agents.edit.select_model')"
@@ -223,7 +223,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                             v-model="form.prompt_template"
                             :placeholder="t('agents.edit.prompt_placeholder')"
                             rows="6"
-                            class="border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.prompt_template" />
                     </div>
@@ -267,7 +267,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                     <Link :href="AgentController.show({ agent: agent.id }).url">
                         <button
                             type="button"
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         >
                             {{ t('common.cancel') }}
                         </button>

@@ -96,7 +96,7 @@ const layerCards = computed(() => {
                 <div class="flex shrink-0 items-center gap-2">
                     <button
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                     >
                         <Download class="size-3.5" />
                         {{ t('admin.dashboard.export') }}
@@ -181,7 +181,7 @@ const layerCards = computed(() => {
                             </p>
                         </div>
                         <span
-                            class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-soft bg-white/5 px-2.5 py-1 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                            class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-soft bg-surface px-2.5 py-1 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                         >
                             <Zap class="size-3 text-sp-success" />
                             {{ t('admin.dashboard.layers.live') }}
@@ -275,7 +275,7 @@ const layerCards = computed(() => {
                             {{ t('admin.dashboard.spend.heading') }}
                         </h2>
                         <span
-                            class="inline-flex shrink-0 items-center rounded-pill border border-soft bg-white/5 px-2.5 py-1 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                            class="inline-flex shrink-0 items-center rounded-pill border border-soft bg-surface px-2.5 py-1 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                         >
                             {{ t('admin.dashboard.spend.range') }}
                         </span>

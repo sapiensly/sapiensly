@@ -82,7 +82,7 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
                 class="rounded-xs border border-dashed border-soft bg-navy/40 p-6 text-center"
             >
                 <div
-                    class="mx-auto flex size-9 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                    class="mx-auto flex size-9 items-center justify-center rounded-xs bg-surface text-ink-muted"
                 >
                     <Database class="size-4" />
                 </div>
@@ -124,7 +124,7 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
                     type="number"
                     min="1"
                     max="20"
-                    class="h-9 w-20 border-medium bg-white/5 text-sm text-ink"
+                    class="h-9 w-20 border-medium bg-surface text-sm text-ink"
                 />
             </div>
             <p class="text-[11px] text-ink-subtle">

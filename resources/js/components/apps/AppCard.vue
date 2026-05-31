@@ -56,7 +56,7 @@ const visibilityPill = computed<PillStyle>(() => {
         default:
             return {
                 icon: Lock,
-                classes: 'border-medium bg-white/5 text-ink-muted',
+                classes: 'border-medium bg-surface text-ink-muted',
                 label: 'Private',
             };
     }
@@ -66,7 +66,7 @@ const versionPill = computed<PillStyle>(() => {
     if (props.app.current_version) {
         return {
             icon: History,
-            classes: 'border-soft bg-white/5 text-ink-muted',
+            classes: 'border-soft bg-surface text-ink-muted',
             label: `v${props.app.current_version.version_number}`,
         };
     }

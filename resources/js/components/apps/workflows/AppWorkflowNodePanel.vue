@@ -167,7 +167,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                 <select
                     :value="triggerData.type"
                     @change="changeTriggerType(($event.target as HTMLSelectElement).value as WorkflowTrigger['type'])"
-                    class="h-9 w-full rounded-md border border-medium bg-white/5 px-2 text-sm text-ink"
+                    class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
                 >
                     <option value="manual">{{ t('apps.builder.workflows.trigger.manual') }}</option>
                     <option value="record.created">{{ t('apps.builder.workflows.trigger.record_created') }}</option>
@@ -182,7 +182,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                     type="text"
                     :value="triggerData.label ?? ''"
                     @input="patchTrigger({ label: ($event.target as HTMLInputElement).value })"
-                    class="h-9 w-full rounded-md border border-medium bg-white/5 px-2 text-sm text-ink"
+                    class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
                     :placeholder="t('apps.builder.workflows.panel.trigger_label_placeholder')"
                 />
             </label>
@@ -216,14 +216,14 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
             <!-- Step id, copyable. Critical for expression-debugging — other
                  steps reference this one via {{steps.<id>.output}} and the
                  user otherwise has no way to see the real id. -->
-            <div class="flex items-center gap-1 rounded-md border border-soft bg-white/5 px-2 py-1.5">
+            <div class="flex items-center gap-1 rounded-md border border-soft bg-surface px-2 py-1.5">
                 <span class="shrink-0 text-xs text-ink-subtle">ID</span>
                 <code class="flex-1 truncate font-mono text-xs text-ink">{{ stepData.id }}</code>
                 <button
                     type="button"
                     @click="copyStepId"
                     :title="t('apps.builder.workflows.panel.copy_id')"
-                    class="shrink-0 rounded px-1 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
+                    class="shrink-0 rounded px-1 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
                 >
                     {{ idJustCopied ? t('apps.builder.workflows.panel.copied') : t('apps.builder.workflows.panel.copy') }}
                 </button>
@@ -235,7 +235,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                     type="text"
                     :value="stepData.name ?? ''"
                     @input="patchStep({ name: ($event.target as HTMLInputElement).value })"
-                    class="h-9 w-full rounded-md border border-medium bg-white/5 px-2 text-sm text-ink"
+                    class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
                     :placeholder="t('apps.builder.workflows.panel.step_name_placeholder')"
                 />
             </label>
@@ -246,7 +246,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                     type="text"
                     :value="stepData.output_variable ?? ''"
                     @input="patchStep({ output_variable: ($event.target as HTMLInputElement).value || undefined })"
-                    class="h-9 w-full rounded-md border border-medium bg-white/5 px-2 font-mono text-sm text-ink"
+                    class="h-9 w-full rounded-md border border-medium bg-surface px-2 font-mono text-sm text-ink"
                     placeholder="result"
                 />
                 <p class="text-xs text-ink-subtle">
@@ -269,7 +269,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                     :value="(stepData as { message?: string }).message ?? ''"
                     @input="patchStep({ message: ($event.target as HTMLTextAreaElement).value })"
                     rows="3"
-                    class="w-full rounded-md border border-medium bg-white/5 px-2 py-1 text-xs text-ink"
+                    class="w-full rounded-md border border-medium bg-surface px-2 py-1 text-xs text-ink"
                 />
             </label>
 
@@ -280,7 +280,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                         type="text"
                         :value="(stepData as { variable?: string }).variable ?? ''"
                         @input="patchStep({ variable: ($event.target as HTMLInputElement).value })"
-                        class="h-9 w-full rounded-md border border-medium bg-white/5 px-2 font-mono text-sm text-ink"
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 font-mono text-sm text-ink"
                     />
                 </label>
                 <label class="space-y-1">
@@ -289,7 +289,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                         type="text"
                         :value="String((stepData as { value?: unknown }).value ?? '')"
                         @input="patchStep({ value: ($event.target as HTMLInputElement).value })"
-                        class="h-9 w-full rounded-md border border-medium bg-white/5 px-2 font-mono text-sm text-ink"
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 font-mono text-sm text-ink"
                     />
                 </label>
             </template>
@@ -309,7 +309,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                     type="text"
                     :value="(stepData as { record_id?: string }).record_id ?? ''"
                     @input="patchStep({ record_id: ($event.target as HTMLInputElement).value })"
-                    class="h-9 w-full rounded-md border border-medium bg-white/5 px-2 font-mono text-sm text-ink"
+                    class="h-9 w-full rounded-md border border-medium bg-surface px-2 font-mono text-sm text-ink"
                     placeholder="{{trigger.record.id}}"
                 />
             </label>
@@ -320,7 +320,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                     :value="(stepData as { prompt?: string }).prompt ?? ''"
                     @input="patchStep({ prompt: ($event.target as HTMLTextAreaElement).value })"
                     rows="4"
-                    class="w-full rounded-md border border-medium bg-white/5 px-2 py-1 text-xs text-ink"
+                    class="w-full rounded-md border border-medium bg-surface px-2 py-1 text-xs text-ink"
                 />
             </label>
 
@@ -330,7 +330,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                     <select
                         :value="(stepData as { method?: string }).method ?? 'GET'"
                         @change="patchStep({ method: ($event.target as HTMLSelectElement).value })"
-                        class="h-9 w-full rounded-md border border-medium bg-white/5 px-2 text-sm text-ink"
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
                     >
                         <option>GET</option>
                         <option>POST</option>
@@ -345,7 +345,7 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
                         type="text"
                         :value="(stepData as { url?: string }).url ?? ''"
                         @input="patchStep({ url: ($event.target as HTMLInputElement).value })"
-                        class="h-9 w-full rounded-md border border-medium bg-white/5 px-2 font-mono text-sm text-ink"
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 font-mono text-sm text-ink"
                         placeholder="https://..."
                     />
                 </label>

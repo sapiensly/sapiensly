@@ -74,17 +74,17 @@ function onKeydown(e: KeyboardEvent) {
 <template>
     <div>
         <div
-            class="flex flex-wrap items-center gap-1.5 rounded-xs border border-medium bg-white/5 p-1.5"
+            class="flex flex-wrap items-center gap-1.5 rounded-xs border border-medium bg-surface p-1.5"
         >
             <span
                 v-for="chip in modelValue"
                 :key="chip"
-                class="inline-flex items-center gap-1 rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-xs text-ink"
+                class="inline-flex items-center gap-1 rounded-pill border border-soft bg-surface px-2 py-0.5 text-xs text-ink"
             >
                 {{ chip }}
                 <button
                     type="button"
-                    class="flex size-3.5 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink"
+                    class="flex size-3.5 items-center justify-center rounded-full text-ink-muted hover:bg-surface-hover hover:text-ink"
                     @click="remove(chip)"
                 >
                     <X class="size-2.5" />

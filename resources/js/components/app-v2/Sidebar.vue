@@ -3,6 +3,7 @@ import * as AgentController from '@/actions/App/Http/Controllers/AgentController
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
+import * as ChatController from '@/actions/App/Http/Controllers/ChatController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
@@ -40,6 +41,7 @@ import {
     LayoutGrid,
     MessageCircle,
     MessageSquare,
+    MessagesSquare,
     Plug,
     Shield,
     Users,
@@ -91,6 +93,13 @@ const sections = computed<NavSection[]>(() => [
         key: 'main',
         label: t('app_v2.sidebar.section_main'),
         items: [
+            {
+                key: 'chat',
+                label: t('app_v2.nav.chat'),
+                href: ChatController.index().url,
+                icon: MessagesSquare,
+                match: (u) => u === '/chat' || u.startsWith('/chat/'),
+            },
             {
                 key: 'apps',
                 label: t('app_v2.nav.apps'),
@@ -233,7 +242,7 @@ const workspaceLabel = computed(() =>
         <!-- Brand block — same 56px height as the topbar. -->
         <div
             :class="[
-                'flex h-14 items-center border-b border-soft',
+                'flex h-14 items-center',
                 collapsed ? 'justify-center px-3' : 'gap-2 px-5',
             ]"
         >
@@ -268,7 +277,7 @@ const workspaceLabel = computed(() =>
                                             ? 'bg-accent-blue/10 text-ink before:absolute before:top-2 before:bottom-2 before:left-0 before:w-0.5 before:bg-accent-blue before:content-[\'\']'
                                             : isActive(dashboardItem) && collapsed
                                               ? 'bg-accent-blue/10 text-accent-blue'
-                                              : 'text-ink-muted hover:bg-white/5 hover:text-ink',
+                                              : 'text-ink-muted hover:bg-surface hover:text-ink',
                                     ]"
                                 >
                                     <component
@@ -280,11 +289,7 @@ const workspaceLabel = computed(() =>
                                     </span>
                                 </Link>
                             </TooltipTrigger>
-                            <TooltipContent
-                                side="right"
-                                :side-offset="8"
-                                class="border-soft bg-navy text-ink"
-                            >
+                            <TooltipContent side="right" :side-offset="8">
                                 {{ dashboardItem.label }}
                             </TooltipContent>
                         </Tooltip>
@@ -299,7 +304,7 @@ const workspaceLabel = computed(() =>
                 >
                     <p
                         v-if="!collapsed"
-                        class="mb-3 px-3 text-[10px] font-semibold tracking-[0.18em] text-[#ffffff40] uppercase"
+                        class="mb-3 px-3 text-[10px] font-semibold tracking-[0.18em] text-ink-faint uppercase"
                     >
                         {{ section.label }}
                     </p>
@@ -318,7 +323,7 @@ const workspaceLabel = computed(() =>
                                                 ? 'bg-accent-blue/10 text-ink before:absolute before:top-2 before:bottom-2 before:left-0 before:w-0.5 before:bg-accent-blue before:content-[\'\']'
                                                 : isActive(item) && collapsed
                                                   ? 'bg-accent-blue/10 text-accent-blue'
-                                                  : 'text-ink-muted hover:bg-white/5 hover:text-ink',
+                                                  : 'text-ink-muted hover:bg-surface hover:text-ink',
                                         ]"
                                     >
                                         <component
@@ -330,11 +335,7 @@ const workspaceLabel = computed(() =>
                                         </span>
                                     </Link>
                                 </TooltipTrigger>
-                                <TooltipContent
-                                    side="right"
-                                    :side-offset="8"
-                                    class="border-soft bg-navy text-ink"
-                                >
+                                <TooltipContent side="right" :side-offset="8">
                                     {{ item.label }}
                                 </TooltipContent>
                             </Tooltip>
@@ -350,7 +351,7 @@ const workspaceLabel = computed(() =>
                 v-if="isSysAdmin()"
                 href="/admin"
                 :class="[
-                    'flex items-center gap-3 border-b border-soft px-5 py-5 text-[13px] font-medium text-ink-muted transition-colors hover:bg-white/5 hover:text-ink',
+                    'flex items-center gap-3 px-5 py-5 text-[13px] font-medium text-ink-muted transition-colors hover:bg-surface hover:text-ink',
                     collapsed ? 'justify-center px-0' : '',
                 ]"
             >
@@ -365,7 +366,7 @@ const workspaceLabel = computed(() =>
                     <button
                         type="button"
                         :class="[
-                            'flex w-full items-center gap-2 px-5 py-4 text-left text-sm leading-tight transition-colors hover:bg-white/5 data-[state=open]:bg-white/5',
+                            'flex w-full items-center gap-2 px-5 py-4 text-left text-sm leading-tight transition-colors hover:bg-surface data-[state=open]:bg-surface',
                             collapsed ? 'justify-center px-0' : '',
                         ]"
                     >

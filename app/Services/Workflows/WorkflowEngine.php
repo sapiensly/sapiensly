@@ -12,7 +12,7 @@ use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
 use App\Services\Records\SafeExpressionEvaluator;
-use Illuminate\Support\Facades\Http;
+use App\Services\Security\Ssrf\SafeHttpClient;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Enums\Lab;
@@ -42,6 +42,7 @@ class WorkflowEngine
         private ExpressionResolver $expressions,
         private SafeExpressionEvaluator $safe,
         private ScriptRunner $scripts,
+        private SafeHttpClient $safeHttp,
     ) {}
 
     /**
@@ -238,19 +239,26 @@ class WorkflowEngine
             $body = $this->resolveValuesMap($body, $context);
         }
 
-        $pending = Http::withHeaders($headers)->timeout($timeout);
-        if ($query !== []) {
-            $pending = $pending->withQueryParameters($query);
+        if (! in_array($method, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+            throw new StepFailedException("Unsupported HTTP method '{$method}'");
         }
 
-        $response = match ($method) {
-            'GET' => $pending->get($url),
-            'POST' => $pending->post($url, is_array($body) ? $body : []),
-            'PUT' => $pending->put($url, is_array($body) ? $body : []),
-            'PATCH' => $pending->patch($url, is_array($body) ? $body : []),
-            'DELETE' => $pending->delete($url, is_array($body) ? $body : []),
-            default => throw new StepFailedException("Unsupported HTTP method '{$method}'"),
-        };
+        // Route every user-controlled outbound call through the SSRF guard:
+        // it resolves DNS, rejects internal/reserved IPs, pins the connection
+        // to the validated address (anti-rebinding) and follows redirects
+        // re-validating each hop. A blocked destination throws and the step
+        // (and run) fails cleanly via the surrounding catch.
+        $options = ['headers' => $headers, 'timeout' => $timeout];
+        if ($query !== []) {
+            $options['query'] = $query;
+        }
+        if (is_array($body)) {
+            $options['json'] = $body;
+        } elseif ($body !== null) {
+            $options['body'] = $body;
+        }
+
+        $response = $this->safeHttp->request($method, $url, $options);
 
         $decoded = $response->json();
 

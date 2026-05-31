@@ -225,7 +225,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                             v-model="form.name"
                             required
                             :placeholder="t('agents.create.agent_name_placeholder')"
-                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.name" />
                     </div>
@@ -238,7 +238,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                             id="description"
                             v-model="form.description"
                             :placeholder="t('agents.create.description_placeholder')"
-                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.description" />
                     </div>
@@ -261,7 +261,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                         <Select v-model="form.model">
                             <SelectTrigger
                                 id="model"
-                                class="h-9 border-medium bg-white/5"
+                                class="h-9 border-medium bg-surface"
                             >
                                 <SelectValue
                                     :placeholder="t('agents.create.select_model')"
@@ -295,7 +295,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                             v-model="form.prompt_template"
                             :placeholder="t('agents.create.prompt_placeholder')"
                             rows="6"
-                            class="border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.prompt_template" />
                     </div>
@@ -335,7 +335,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                 <div class="flex items-center justify-between gap-2 pt-2">
                     <button
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
                         @click="currentType = null"
                     >
                         {{ t('common.change_type') }}
@@ -344,7 +344,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                         <Link :href="AgentController.index().url">
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                             >
                                 {{ t('common.cancel') }}
                             </button>

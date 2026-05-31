@@ -97,7 +97,7 @@ const toolTypeLabel = (type: string) => {
                 class="rounded-xs border border-dashed border-soft bg-navy/40 p-6 text-center"
             >
                 <div
-                    class="mx-auto flex size-9 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                    class="mx-auto flex size-9 items-center justify-center rounded-xs bg-surface text-ink-muted"
                 >
                     <Wrench class="size-4" />
                 </div>
@@ -149,7 +149,7 @@ const toolTypeLabel = (type: string) => {
                     min="1000"
                     max="300000"
                     step="1000"
-                    class="h-9 border-medium bg-white/5 text-sm text-ink"
+                    class="h-9 border-medium bg-surface text-sm text-ink"
                 />
                 <p class="text-[11px] text-ink-subtle">
                     Maximum time to wait for tool execution.
@@ -167,7 +167,7 @@ const toolTypeLabel = (type: string) => {
                     type="number"
                     min="0"
                     max="5"
-                    class="h-9 border-medium bg-white/5 text-sm text-ink"
+                    class="h-9 border-medium bg-surface text-sm text-ink"
                 />
                 <p class="text-[11px] text-ink-subtle">
                     Number of retries on failure.

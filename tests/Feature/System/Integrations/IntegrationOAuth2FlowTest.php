@@ -143,15 +143,11 @@ test('refresher surfaces provider errors', function () {
     app(OAuth2TokenRefresher::class)->refreshIfNeeded($integration);
 })->throws(RuntimeException::class, 'OAuth2');
 
-test('authorize endpoint stores state in session and redirects to provider', function () {
+test('the org-level integration authorize route no longer exists', function () {
     $user = User::factory()->create(['organization_id' => null]);
     $integration = Integration::factory()->oauth2AuthCode()->forUser($user)->create();
 
     actingAs($user)
         ->get("/oauth/integrations/{$integration->id}/authorize")
-        ->assertRedirect()
-        ->assertRedirectContains('https://auth.example.com/oauth/authorize');
-
-    expect(session('integrations.oauth2.state'))->toBeArray()
-        ->and(session('integrations.oauth2.state.integration_id'))->toBe($integration->id);
+        ->assertNotFound();
 });

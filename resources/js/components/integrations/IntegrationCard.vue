@@ -64,18 +64,18 @@ const { t } = useI18n();
                 </p>
                 <div class="mt-2.5 flex flex-wrap gap-1">
                     <span
-                        class="inline-flex items-center rounded-pill border border-medium bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                        class="inline-flex items-center rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                     >
                         {{ integration.auth_type }}
                     </span>
                     <span
                         v-if="integration.visibility !== 'private'"
-                        class="inline-flex items-center rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                        class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                     >
                         {{ integration.visibility }}
                     </span>
                     <span
-                        class="inline-flex items-center rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                        class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                     >
                         {{ t('system.integrations.requests_count', { count: integration.request_count }) }}
                     </span>
@@ -87,7 +87,7 @@ const { t } = useI18n();
             <DropdownMenuTrigger as-child>
                 <button
                     type="button"
-                    class="flex size-7 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                    class="flex size-7 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                 >
                     <MoreVertical class="size-4" />
                 </button>

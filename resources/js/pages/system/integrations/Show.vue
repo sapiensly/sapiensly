@@ -11,21 +11,18 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
-    AlertCircle,
     AlertTriangle,
     ArrowLeft,
     CheckCircle2,
     ChevronRight,
     Folders,
-    KeyRound,
     Lock,
     Pencil,
     Plug,
     Plus,
     Send,
-    ShieldCheck,
     Star,
     Trash2,
     XCircle,
@@ -62,6 +59,7 @@ interface Integration {
     name: string;
     description: string | null;
     base_url: string;
+    is_mcp: boolean;
     auth_type: string;
     visibility: string;
     status: string;
@@ -82,7 +80,14 @@ const props = defineProps<{ integration: Integration }>();
 
 const { t } = useI18n();
 
-const activeTab = ref<'requests' | 'environments' | 'settings'>('requests');
+// MCP integrations are not REST APIs — the HTTP request/environment builder
+// doesn't apply. They expose tools over the MCP protocol and are consumed by
+// linking them in an MCP tool, so we hide those tabs for them.
+const isMcp = computed(() => props.integration.is_mcp);
+
+const activeTab = ref<'requests' | 'environments' | 'settings'>(
+    props.integration.is_mcp ? 'settings' : 'requests',
+);
 
 // OAuth2 Authorization-Code integrations need a browser roundtrip to get
 // an access token. Detect the integration's current state so we can show
@@ -91,36 +96,26 @@ const activeTab = ref<'requests' | 'environments' | 'settings'>('requests');
 const needsOAuth2Authorization = computed(
     () => props.integration.auth_type === 'oauth2_auth_code',
 );
-const oauth2Connected = computed(
-    () => !!props.integration.masked_auth_config?.access_token,
-);
 const oauth2ConfigIncomplete = computed(() => {
     if (!needsOAuth2Authorization.value) return false;
     const cfg = props.integration.masked_auth_config ?? {};
     // Non-secret fields pass through unmasked; secrets come back as "abcd...wxyz"
     // when present, undefined/empty when not. Missing any of these and GitHub
     // returns 404 on the authorize URL.
+    //
+    // Public PKCE clients (the MCP default via dynamic registration) have no
+    // client_secret by design, so don't demand one when PKCE is on.
+    const requiresSecret = !cfg.pkce;
     return (
         !cfg.authorize_url ||
         !cfg.token_url ||
         !cfg.client_id ||
-        !cfg.client_secret
+        (requiresSecret && !cfg.client_secret)
     );
 });
-const authorizeUrl = computed(
-    () => `/oauth/integrations/${props.integration.id}/authorize`,
-);
 const editUrl = computed(
     () => `/system/integrations/${props.integration.id}/edit`,
 );
-
-// Flash / validation errors from the authorize guard (e.g. "fields missing")
-// come back on the Inertia page props.
-const page = usePage();
-const oauthFlashError = computed(() => {
-    const errors = (page.props.errors ?? {}) as Record<string, string>;
-    return errors.oauth2 ?? null;
-});
 
 // ============== Requests ==============
 const newRequest = useForm({
@@ -235,7 +230,7 @@ function destroyIntegration(): void {
                             />
                             <div class="flex flex-wrap gap-1.5 pt-1">
                                 <span
-                                    class="inline-flex items-center rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-muted"
+                                    class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-muted"
                                 >
                                     {{ integration.auth_type }}
                                 </span>
@@ -261,7 +256,7 @@ function destroyIntegration(): void {
                         <Link :href="`/system/integrations/${integration.id}/executions`">
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                             >
                                 {{ t('system.integrations.tabs.executions') }}
                             </button>
@@ -279,36 +274,12 @@ function destroyIntegration(): void {
                 </div>
 
                 <!--
-                    OAuth 2.0 Authorization-Code browser handshake. Uses a
-                    plain <a> (not Inertia <Link>) because /oauth/...
-                    /authorize returns a 302 to the provider, outside the
-                    SPA. The callback redirects back to this Show page.
-
-                    Three states in priority order:
-                      1. Flash/validation error from the authorize guard.
-                      2. Config incomplete (missing client_id / endpoints).
-                      3. Config ok, handshake pending.
-                      4. Config ok, access token stored — "Connected".
+                    OAuth 2.0 client configuration status (org-level). The
+                    per-user authorization (the browser handshake + tokens)
+                    happens in Tools — never here — because integrations are
+                    shared by the whole organization while authorization is
+                    specific to each user.
                 -->
-                <div
-                    v-if="oauthFlashError"
-                    class="flex items-start gap-3 rounded-sp-sm border border-sp-danger/30 bg-sp-danger/10 p-4"
-                >
-                    <div
-                        class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-sp-danger/15 text-sp-danger"
-                    >
-                        <AlertCircle class="size-4" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <p class="text-sm font-medium text-ink">
-                            {{ t('system.integrations.oauth2.error_title') }}
-                        </p>
-                        <p class="mt-0.5 text-xs text-ink-muted">
-                            {{ oauthFlashError }}
-                        </p>
-                    </div>
-                </div>
-
                 <div
                     v-if="needsOAuth2Authorization && oauth2ConfigIncomplete"
                     class="flex items-start gap-3 rounded-sp-sm border border-sp-warning/30 bg-sp-warning/10 p-4"
@@ -338,67 +309,68 @@ function destroyIntegration(): void {
                 </div>
 
                 <div
-                    v-else-if="needsOAuth2Authorization && !oauth2Connected"
-                    class="flex items-start gap-3 rounded-sp-sm border border-accent-blue/30 bg-accent-blue/10 p-4"
+                    v-else-if="needsOAuth2Authorization"
+                    class="flex items-start gap-3 rounded-sp-sm border border-soft bg-surface p-4"
                 >
                     <div
                         class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/15 text-accent-blue"
                     >
-                        <KeyRound class="size-4" />
+                        <CheckCircle2 class="size-4" />
                     </div>
                     <div class="min-w-0 flex-1">
                         <p class="text-sm font-medium text-ink">
-                            {{ t('system.integrations.oauth2.authorize_title') }}
+                            {{ t('system.integrations.oauth2.client_ready_title') }}
                         </p>
                         <p class="mt-0.5 text-xs text-ink-muted">
-                            {{ t('system.integrations.oauth2.authorize_hint') }}
+                            {{ t('system.integrations.oauth2.client_ready_hint') }}
                         </p>
                     </div>
-                    <a
-                        :href="authorizeUrl"
-                        class="inline-flex shrink-0 items-center gap-1.5 self-center rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
-                    >
-                        <KeyRound class="size-3.5" />
-                        {{ t('system.integrations.oauth2.authorize_cta') }}
-                    </a>
                 </div>
 
+                <!-- MCP servers expose tools over the protocol — there are no
+                     REST requests/environments to build here. Point the user to
+                     where it's actually used instead. -->
                 <div
-                    v-else-if="needsOAuth2Authorization && oauth2Connected"
-                    class="flex items-center gap-3 rounded-sp-sm border border-sp-success/30 bg-sp-success/10 p-4"
+                    v-if="isMcp"
+                    class="rounded-sp-sm border border-soft bg-navy p-5"
                 >
-                    <div
-                        class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-sp-success/15 text-sp-success"
-                    >
-                        <ShieldCheck class="size-4" />
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/15 text-accent-blue"
+                        >
+                            <Plug class="size-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-ink">
+                                {{ t('system.integrations.mcp.panel_title') }}
+                            </p>
+                            <p class="mt-0.5 text-xs text-ink-muted">
+                                {{ t('system.integrations.mcp.panel_hint') }}
+                            </p>
+                            <a
+                                href="/tools/create?type=mcp"
+                                class="mt-3 inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                            >
+                                <Plus class="size-3.5" />
+                                {{ t('system.integrations.mcp.create_tool') }}
+                            </a>
+                        </div>
                     </div>
-                    <div class="min-w-0 flex-1">
-                        <p class="text-sm font-medium text-ink">
-                            {{ t('system.integrations.oauth2.connected_title') }}
-                        </p>
-                        <p class="mt-0.5 text-xs text-ink-muted">
-                            {{ t('system.integrations.oauth2.connected_hint') }}
-                        </p>
-                    </div>
-                    <a
-                        :href="authorizeUrl"
-                        class="inline-flex shrink-0 items-center gap-1.5 self-center rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
-                    >
-                        {{ t('system.integrations.oauth2.reauthorize_cta') }}
-                    </a>
                 </div>
 
                 <Tabs v-model="activeTab">
                     <TabsList
-                        class="h-auto w-fit gap-1 rounded-pill border border-soft bg-white/5 p-1 text-ink-muted"
+                        class="h-auto w-fit gap-1 rounded-pill border border-soft bg-surface p-1 text-ink-muted"
                     >
                         <TabsTrigger
+                            v-if="!isMcp"
                             value="requests"
                             class="rounded-pill px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-accent-blue data-[state=active]:text-white data-[state=active]:shadow-btn-primary"
                         >
                             {{ t('system.integrations.tabs.requests') }}
                         </TabsTrigger>
                         <TabsTrigger
+                            v-if="!isMcp"
                             value="environments"
                             class="rounded-pill px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-accent-blue data-[state=active]:text-white data-[state=active]:shadow-btn-primary"
                         >
@@ -413,7 +385,7 @@ function destroyIntegration(): void {
                     </TabsList>
 
                     <!-- ============================ REQUESTS ============================ -->
-                    <TabsContent value="requests" class="mt-4">
+                    <TabsContent v-if="!isMcp" value="requests" class="mt-4">
                         <div class="rounded-sp-sm border border-soft bg-navy">
                             <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
                                 <div
@@ -488,7 +460,7 @@ function destroyIntegration(): void {
                                         class="flex items-center gap-3 bg-white/[0.03] px-4 py-3 transition-colors hover:bg-white/[0.06]"
                                     >
                                         <span
-                                            class="inline-flex w-16 shrink-0 justify-center rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted"
+                                            class="inline-flex w-16 shrink-0 justify-center rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted"
                                         >
                                             {{ req.method }}
                                         </span>
@@ -500,7 +472,7 @@ function destroyIntegration(): void {
                                         </div>
                                         <Link
                                             :href="`/system/integrations/requests/${req.id}`"
-                                            class="inline-flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+                                            class="inline-flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                                         >
                                             <ChevronRight class="size-4" />
                                         </Link>
@@ -518,7 +490,7 @@ function destroyIntegration(): void {
                     </TabsContent>
 
                     <!-- ============================ ENVIRONMENTS ============================ -->
-                    <TabsContent value="environments" class="mt-4">
+                    <TabsContent v-if="!isMcp" value="environments" class="mt-4">
                         <div class="rounded-sp-sm border border-soft bg-navy">
                             <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
                                 <div
@@ -588,7 +560,7 @@ function destroyIntegration(): void {
                                                 <button
                                                     v-if="env.id !== integration.active_environment_id"
                                                     type="button"
-                                                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                                                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                                                     @click="activateEnvironment(env.id)"
                                                 >
                                                     {{ t('system.integrations.show.activate') }}
@@ -618,7 +590,7 @@ function destroyIntegration(): void {
                                                 </span>
                                                 <span
                                                     v-if="variable.is_secret"
-                                                    class="inline-flex items-center gap-1 rounded-pill border border-soft bg-white/5 px-2 py-0.5 text-[10px] text-ink-muted"
+                                                    class="inline-flex items-center gap-1 rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] text-ink-muted"
                                                 >
                                                     <Lock class="size-2.5" />
                                                     {{ t('system.integrations.show.variable_secret') }}
@@ -659,7 +631,7 @@ function destroyIntegration(): void {
                                             </label>
                                             <button
                                                 type="submit"
-                                                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                                                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                                             >
                                                 <Plus class="size-3.5" />
                                                 {{ t('system.integrations.show.add_variable') }}
@@ -700,7 +672,7 @@ function destroyIntegration(): void {
                                 <Link :href="`/system/integrations/${integration.id}/edit`">
                                     <button
                                         type="button"
-                                        class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                                        class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                                     >
                                         <Pencil class="size-3.5" />
                                         {{ t('common.edit') }}

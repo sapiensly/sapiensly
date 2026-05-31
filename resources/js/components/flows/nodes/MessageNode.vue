@@ -59,7 +59,7 @@ function onKeydown(event: KeyboardEvent) {
             v-if="isEditing"
             ref="textarea"
             v-model="draft"
-            class="nodrag w-full resize-none rounded-xs border border-medium bg-white/5 p-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
+            class="nodrag w-full resize-none rounded-xs border border-medium bg-surface p-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
             rows="3"
             :placeholder="t('flows.nodes.no_message')"
             @blur="commit"
@@ -68,7 +68,7 @@ function onKeydown(event: KeyboardEvent) {
         />
         <div
             v-else
-            class="cursor-text whitespace-pre-wrap rounded-xs px-1 py-0.5 text-sm text-ink hover:bg-white/5"
+            class="cursor-text whitespace-pre-wrap rounded-xs px-1 py-0.5 text-sm text-ink hover:bg-surface"
             :class="{ 'italic text-ink-subtle': !data.message }"
             @dblclick="startEdit"
         >

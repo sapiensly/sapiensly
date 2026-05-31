@@ -30,7 +30,7 @@ function widthPct(value: number): string {
 <template>
     <div>
         <div
-            class="flex w-full overflow-hidden rounded-pill bg-white/5"
+            class="flex w-full overflow-hidden rounded-pill bg-surface"
             :style="{ height: `${height}px` }"
             role="img"
             :aria-label="segments.map((s) => `${s.label} ${s.value}`).join(', ')"

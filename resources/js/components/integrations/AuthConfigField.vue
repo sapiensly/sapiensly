@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HeaderEditor, { type HeaderRow } from '@/components/integrations/HeaderEditor.vue';
+import InputError from '@/components/InputError.vue';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,9 +18,14 @@ interface Props {
     authType: string;
     modelValue: Record<string, unknown>;
     maskedValues?: Record<string, unknown>;
+    errors?: Record<string, string>;
 }
 
 const props = defineProps<Props>();
+
+function errorFor(field: string): string | undefined {
+    return props.errors?.[`auth_config.${field}`];
+}
 
 const emit = defineEmits<{
     'update:modelValue': [config: Record<string, unknown>];
@@ -139,6 +145,7 @@ function placeholderFor(field: string): string {
                 :model-value="(modelValue.token_url as string) ?? ''"
                 @update:model-value="update('token_url', $event)"
             />
+            <InputError :message="errorFor('token_url')" />
         </div>
         <div class="grid gap-2">
             <Label>{{ t('system.integrations.auth.oauth2.client_id') }}</Label>
@@ -146,6 +153,7 @@ function placeholderFor(field: string): string {
                 :model-value="(modelValue.client_id as string) ?? ''"
                 @update:model-value="update('client_id', $event)"
             />
+            <InputError :message="errorFor('client_id')" />
         </div>
         <div class="grid gap-2">
             <Label>{{ t('system.integrations.auth.oauth2.client_secret') }}</Label>
@@ -155,6 +163,7 @@ function placeholderFor(field: string): string {
                 :placeholder="placeholderFor('client_secret')"
                 @update:model-value="update('client_secret', $event)"
             />
+            <InputError :message="errorFor('client_secret')" />
         </div>
         <div class="grid gap-2">
             <Label>{{ t('system.integrations.auth.oauth2.scope') }}</Label>
@@ -179,6 +188,7 @@ function placeholderFor(field: string): string {
                 :model-value="(modelValue.authorize_url as string) ?? ''"
                 @update:model-value="update('authorize_url', $event)"
             />
+            <InputError :message="errorFor('authorize_url')" />
         </div>
         <div class="grid gap-2">
             <Label>{{ t('system.integrations.auth.oauth2.token_url') }}</Label>
@@ -186,6 +196,7 @@ function placeholderFor(field: string): string {
                 :model-value="(modelValue.token_url as string) ?? ''"
                 @update:model-value="update('token_url', $event)"
             />
+            <InputError :message="errorFor('token_url')" />
         </div>
         <div class="grid gap-2">
             <Label>{{ t('system.integrations.auth.oauth2.client_id') }}</Label>
@@ -193,6 +204,7 @@ function placeholderFor(field: string): string {
                 :model-value="(modelValue.client_id as string) ?? ''"
                 @update:model-value="update('client_id', $event)"
             />
+            <InputError :message="errorFor('client_id')" />
         </div>
         <div class="grid gap-2">
             <Label>{{ t('system.integrations.auth.oauth2.client_secret') }}</Label>
@@ -202,6 +214,7 @@ function placeholderFor(field: string): string {
                 :placeholder="placeholderFor('client_secret')"
                 @update:model-value="update('client_secret', $event)"
             />
+            <InputError :message="errorFor('client_secret')" />
         </div>
         <div class="grid gap-2">
             <Label>{{ t('system.integrations.auth.oauth2.redirect_uri') }}</Label>

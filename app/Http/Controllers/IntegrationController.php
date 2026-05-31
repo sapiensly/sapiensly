@@ -8,6 +8,7 @@ use App\Http\Requests\Integrations\StoreIntegrationRequest;
 use App\Http\Requests\Integrations\UpdateIntegrationRequest;
 use App\Models\Integration;
 use App\Services\Integrations\IntegrationService;
+use App\Services\Integrations\OAuth2\OAuth2DiscoveryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -154,6 +155,39 @@ class IntegrationController extends Controller
     }
 
     /**
+     * Auto-configure an OAuth 2.0 Authorization Code integration from a single
+     * URL: discover the authorization server, its endpoints, and register a
+     * client dynamically when the server supports it (the MCP flow).
+     */
+    public function discoverOAuth2(Request $request, OAuth2DiscoveryService $discovery): JsonResponse
+    {
+        $this->authorize('create', Integration::class);
+
+        $validated = $request->validate([
+            'url' => ['required', 'string', 'max:500', 'regex:/^https?:\/\//i'],
+            'name' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        try {
+            $result = $discovery->autoConfigure(
+                url: $validated['url'],
+                redirectUri: route('integrations.oauth2.callback'),
+                clientName: $validated['name'] ?? null,
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            ...$result,
+        ]);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function summarize(Integration $integration): array
@@ -163,6 +197,7 @@ class IntegrationController extends Controller
             'name' => $integration->name,
             'slug' => $integration->slug,
             'base_url' => $integration->base_url,
+            'is_mcp' => (bool) $integration->is_mcp,
             'auth_type' => $integration->auth_type instanceof IntegrationAuthType
                 ? $integration->auth_type->value
                 : $integration->auth_type,

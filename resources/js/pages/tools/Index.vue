@@ -83,7 +83,7 @@ const totalTools = computed(() =>
                         'inline-flex items-center gap-1.5 rounded-pill border px-3 py-1 text-xs transition-colors',
                         !currentType
                             ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                            : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                            : 'border-medium bg-surface text-ink-muted hover:text-ink',
                     ]"
                     @click="filterByType(null)"
                 >
@@ -98,7 +98,7 @@ const totalTools = computed(() =>
                         'inline-flex items-center gap-1.5 rounded-pill border px-3 py-1 text-xs transition-colors',
                         currentType === type.value
                             ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                            : 'border-medium bg-white/5 text-ink-muted hover:text-ink',
+                            : 'border-medium bg-surface text-ink-muted hover:text-ink',
                     ]"
                     @click="filterByType(type.value)"
                 >
@@ -113,7 +113,7 @@ const totalTools = computed(() =>
                 class="rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
             >
                 <div
-                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-white/5 text-ink-muted"
+                    class="mx-auto flex size-12 items-center justify-center rounded-xs bg-surface text-ink-muted"
                 >
                     <Wrench class="size-5" />
                 </div>

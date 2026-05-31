@@ -93,7 +93,7 @@ const { t } = useI18n();
                         <DialogClose as-child>
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                                 @click="
                                     () => {
                                         clearErrors();

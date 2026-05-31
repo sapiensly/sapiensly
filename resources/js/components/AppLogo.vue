@@ -14,8 +14,13 @@ const props = withDefaults(defineProps<Props>(), {
     collapsed: false,
 });
 
-const wordmarkColor = computed(() =>
-    props.tone === 'white' ? '#E3E3EE' : 'rgb(0 89 255)',
+// Brand wordmark colour. tone='brand' is the blue logo in both themes.
+// tone='white' is meant for dark chrome (light grey), but on a light theme
+// the chrome is light too — so it flips to the brand blue there.
+const wordmarkClass = computed(() =>
+    props.tone === 'white'
+        ? 'text-[rgb(0_89_255)] dark:text-[#E3E3EE]'
+        : 'text-[rgb(0_89_255)]',
 );
 </script>
 
@@ -30,10 +35,8 @@ const wordmarkColor = computed(() =>
     <div
         v-if="!collapsed"
         class="ml-1 grid flex-1 text-left text-sm"
-        :style="{
-            fontFamily: 'Montserrat, sans-serif',
-            color: wordmarkColor,
-        }"
+        :class="wordmarkClass"
+        :style="{ fontFamily: 'Montserrat, sans-serif' }"
     >
         <span class="ml-[-7px] truncate text-[16px] font-bold italic"
             >SAPIENSLY</span

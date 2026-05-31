@@ -59,7 +59,7 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
                                 'relative flex h-9 items-center gap-2 rounded-xs px-3 text-[13px] font-medium transition-colors',
                                 urlIsActive(item.href, currentPath)
                                     ? 'bg-accent-blue/10 text-ink before:absolute before:top-2 before:bottom-2 before:left-0 before:w-0.5 before:bg-accent-blue before:content-[\'\']'
-                                    : 'text-ink-muted hover:bg-white/5 hover:text-ink',
+                                    : 'text-ink-muted hover:bg-surface hover:text-ink',
                             ]"
                         >
                             <component

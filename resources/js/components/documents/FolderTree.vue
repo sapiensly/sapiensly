@@ -48,7 +48,7 @@ const hasChildren = (folder: Folder) =>
         <Link
             :href="DocumentController.index().url"
             :class="[
-                'flex items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
+                'flex items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-surface hover:text-ink',
                 !currentFolderId ? 'bg-accent-blue/10 text-ink' : 'text-ink-muted',
             ]"
         >
@@ -68,7 +68,7 @@ const hasChildren = (folder: Folder) =>
                     <div>
                         <div
                             :class="[
-                                'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
+                                'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-surface hover:text-ink',
                                 isActive(folder.id)
                                     ? 'bg-accent-blue/10 text-ink'
                                     : '',
@@ -78,7 +78,7 @@ const hasChildren = (folder: Folder) =>
                             <button
                                 v-if="hasChildren(folder)"
                                 type="button"
-                                class="shrink-0 rounded p-0.5 hover:bg-white/10"
+                                class="shrink-0 rounded p-0.5 hover:bg-surface-hover"
                                 @click.stop="toggleFolder(folder.id, $event)"
                             >
                                 <ChevronDown
@@ -124,7 +124,7 @@ const hasChildren = (folder: Folder) =>
                                 <div>
                                     <div
                                         :class="[
-                                            'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
+                                            'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-surface hover:text-ink',
                                             isActive(child.id)
                                                 ? 'bg-accent-blue/10 text-ink'
                                                 : '',
@@ -134,7 +134,7 @@ const hasChildren = (folder: Folder) =>
                                         <button
                                             v-if="hasChildren(child)"
                                             type="button"
-                                            class="shrink-0 rounded p-0.5 hover:bg-white/10"
+                                            class="shrink-0 rounded p-0.5 hover:bg-surface-hover"
                                             @click.stop="
                                                 toggleFolder(child.id, $event)
                                             "
@@ -189,7 +189,7 @@ const hasChildren = (folder: Folder) =>
                                             v-for="grandchild in child.children"
                                             :key="grandchild.id"
                                             :class="[
-                                                'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
+                                                'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-surface hover:text-ink',
                                                 isActive(grandchild.id)
                                                     ? 'bg-accent-blue/10 text-ink'
                                                     : '',
@@ -246,7 +246,7 @@ const hasChildren = (folder: Folder) =>
                     <div>
                         <div
                             :class="[
-                                'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
+                                'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-surface hover:text-ink',
                                 isActive(folder.id)
                                     ? 'bg-accent-blue/10 text-ink'
                                     : '',
@@ -256,7 +256,7 @@ const hasChildren = (folder: Folder) =>
                             <button
                                 v-if="hasChildren(folder)"
                                 type="button"
-                                class="shrink-0 rounded p-0.5 hover:bg-white/10"
+                                class="shrink-0 rounded p-0.5 hover:bg-surface-hover"
                                 @click.stop="toggleFolder(folder.id, $event)"
                             >
                                 <ChevronDown
@@ -292,7 +292,7 @@ const hasChildren = (folder: Folder) =>
                                 v-for="child in folder.children"
                                 :key="child.id"
                                 :class="[
-                                    'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-ink',
+                                    'group flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-surface hover:text-ink',
                                     isActive(child.id)
                                         ? 'bg-accent-blue/10 text-ink'
                                         : '',

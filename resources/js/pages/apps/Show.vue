@@ -78,7 +78,7 @@ const visibilityPill = computed<VisibilityPill>(() => {
         case 'global':
             return { icon: Globe, classes: 'border-spectrum-magenta/30 bg-spectrum-magenta/10 text-spectrum-magenta', label: 'Global' };
         default:
-            return { icon: Lock, classes: 'border-medium bg-white/5 text-ink-muted', label: 'Private' };
+            return { icon: Lock, classes: 'border-medium bg-surface text-ink-muted', label: 'Private' };
     }
 });
 
@@ -177,7 +177,7 @@ function formatDate(value: string | null): string {
                     <a v-if="overview && overview.pages.length" :href="`/r/${app.slug}`" target="_blank" rel="noopener">
                         <button
                             type="button"
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         >
                             <ExternalLink class="size-3.5" />
                             {{ t('apps.show.view_runtime') }}
@@ -247,7 +247,7 @@ function formatDate(value: string | null): string {
                                 :href="`/r/${app.slug}/${p.slug}`"
                                 target="_blank"
                                 rel="noopener"
-                                class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-medium bg-white/5 px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                                class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-strong hover:text-ink"
                             >
                                 <ExternalLink class="size-3" />
                                 {{ t('apps.show.open_page') }}
@@ -304,7 +304,7 @@ function formatDate(value: string | null): string {
                             <p class="truncate text-sm text-ink">{{ w.name }}</p>
                             <span
                                 v-if="workflowTriggerLabel(w)"
-                                class="shrink-0 rounded-pill border border-medium bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted"
+                                class="shrink-0 rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted"
                             >
                                 {{ workflowTriggerLabel(w) }}
                             </span>
@@ -314,7 +314,7 @@ function formatDate(value: string | null): string {
                         <p class="text-xs text-ink-muted">{{ t('apps.show.no_workflows') }}</p>
                         <Link
                             :href="AppBuilderController.show(app.id).url"
-                            class="inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue"
+                            class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue"
                         >
                             <Plus class="size-3" />
                             {{ t('apps.show.add_workflow') }}

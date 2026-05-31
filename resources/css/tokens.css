@@ -5,9 +5,80 @@
  * source colors_and_type.css was not included in the handoff drop. Keep the
  * variable names (--sp-*) stable — Tailwind's @theme block in app.css points
  * at these, and future drops of the brand CSS should replace this file 1:1.
+ *
+ * THEMING (Phase 1 PoC)
+ * ---------------------
+ * Colour/border/shadow tokens are split into a LIGHT default (`:root`) and a
+ * DARK override (`.dark`), mirroring the shadcn tokens in app.css. The dark
+ * values are byte-for-byte the historical palette, so dark mode is unchanged.
+ * The app toggles the `.dark` class via useAppearance — so flipping the
+ * Appearance setting to "light" now reaches every token-backed utility
+ * (bg-navy, text-ink, border-soft, …) for free.
+ *
+ * Caveat: utilities hardcoded as `bg-white/5`, `text-white`, etc. bypass these
+ * tokens and will NOT flip — that cleanup is Phase 2.
  */
 
 :root {
+    /* ── surfaces (light) ─────────────────────────────────────────── */
+    --sp-bg-primary: #f3f5fb; /* page */
+    --sp-bg-secondary: #ffffff; /* cards */
+    --sp-bg-elevated: #eef1f9; /* elevated panels */
+    --sp-bg-footer: #e7ebf4;
+
+    /* ── text (light) ─────────────────────────────────────────────── */
+    --sp-text-primary: #0b0f29;
+    --sp-text-secondary: #56607a;
+    --sp-text-tertiary: rgba(11, 15, 41, 0.45);
+    --sp-text-faint: rgba(11, 15, 41, 0.28);
+
+    /* ── accent (UI chrome) — readable on both themes, shared ─────── */
+    --sp-accent-blue: #0096ff;
+    --sp-accent-blue-hover: #007acc;
+    --sp-accent-cyan: #00b3b3;
+
+    /* ── spectrum (three-layer brand story; narrative only) ───────── */
+    --sp-spectrum-magenta: #d946ef; /* Understand / Sales */
+    --sp-spectrum-cyan: #00e5ff; /* Discover / Shopping */
+    --sp-spectrum-indigo: #4f46e5; /* Resolve / Service */
+
+    /* ── semantic — shared ────────────────────────────────────────── */
+    --sp-success: #22c55e;
+    --sp-warning: #f59e0b;
+    --sp-danger: #ef4444;
+
+    /* ── borders (light: dark-tinted) ─────────────────────────────── */
+    --sp-border-soft: rgba(11, 15, 41, 0.08);
+    --sp-border-medium: rgba(11, 15, 41, 0.14);
+    --sp-border-strong: rgba(11, 15, 41, 0.22);
+
+    /* ── translucent surfaces (light: dark-tinted) ────────────────────
+       Replace the historical `bg-white/5` (subtle fill) and `bg-white/10`
+       (hover/stronger fill) so those flip with the theme. */
+    --sp-surface: rgba(11, 15, 41, 0.04);
+    --sp-surface-hover: rgba(11, 15, 41, 0.07);
+
+    /* ── chrome tints (light) — used by admin.css for control tracks,
+       dropdown/dialog fills and the blueprint grid texture. */
+    --sp-grid-line: rgba(11, 15, 41, 0.05);
+    --sp-tint-weak: rgba(11, 15, 41, 0.05);
+    --sp-tint: rgba(11, 15, 41, 0.07);
+    --sp-tint-strong: rgba(11, 15, 41, 0.12);
+
+    /* ── radii — shared ───────────────────────────────────────────── */
+    --sp-radius-xs: 8px; /* inputs, chips */
+    --sp-radius-sm: 15px; /* floating cards, FAQ */
+    --sp-radius-md: 20px; /* benefit cards */
+    --sp-radius-lg: 30px; /* value cards, CTA */
+    --sp-radius-pill: 9999px; /* buttons, badges, inputs */
+
+    /* ── shadows (light: softer, navy-tinted) ─────────────────────── */
+    --sp-shadow-btn-primary: 0 0 20px rgba(0, 150, 255, 0.3);
+    --sp-shadow-float: 0 10px 30px rgba(11, 15, 41, 0.12);
+    --sp-shadow-image: 0 20px 60px rgba(11, 15, 41, 0.18);
+}
+
+.dark {
     /* ── surfaces ─────────────────────────────────────────────────── */
     --sp-bg-primary: #00031c; /* page */
     --sp-bg-secondary: #0b0f29; /* cards */
@@ -18,16 +89,12 @@
     --sp-text-primary: #ffffff;
     --sp-text-secondary: #8890a6;
     --sp-text-tertiary: rgba(255, 255, 255, 0.4);
+    --sp-text-faint: rgba(255, 255, 255, 0.25);
 
     /* ── accent (UI chrome) ───────────────────────────────────────── */
     --sp-accent-blue: #0096ff;
     --sp-accent-blue-hover: #007acc;
     --sp-accent-cyan: #00ffff;
-
-    /* ── spectrum (three-layer brand story; narrative only) ───────── */
-    --sp-spectrum-magenta: #d946ef; /* Understand / Sales */
-    --sp-spectrum-cyan: #00e5ff; /* Discover / Shopping */
-    --sp-spectrum-indigo: #4f46e5; /* Resolve / Service */
 
     /* ── semantic ─────────────────────────────────────────────────── */
     --sp-success: #22c55e;
@@ -39,12 +106,15 @@
     --sp-border-medium: rgba(255, 255, 255, 0.1);
     --sp-border-strong: rgba(255, 255, 255, 0.2);
 
-    /* ── radii ────────────────────────────────────────────────────── */
-    --sp-radius-xs: 8px; /* inputs, chips */
-    --sp-radius-sm: 15px; /* floating cards, FAQ */
-    --sp-radius-md: 20px; /* benefit cards */
-    --sp-radius-lg: 30px; /* value cards, CTA */
-    --sp-radius-pill: 9999px; /* buttons, badges, inputs */
+    /* ── translucent surfaces (historical white-on-dark values) ────── */
+    --sp-surface: rgba(255, 255, 255, 0.05);
+    --sp-surface-hover: rgba(255, 255, 255, 0.1);
+
+    /* ── chrome tints (historical white-on-dark values) ────────────── */
+    --sp-grid-line: rgba(255, 255, 255, 0.03);
+    --sp-tint-weak: rgba(255, 255, 255, 0.04);
+    --sp-tint: rgba(255, 255, 255, 0.06);
+    --sp-tint-strong: rgba(255, 255, 255, 0.12);
 
     /* ── shadows ──────────────────────────────────────────────────── */
     --sp-shadow-btn-primary: 0 0 20px rgba(0, 150, 255, 0.3);

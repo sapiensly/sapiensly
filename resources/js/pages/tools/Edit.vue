@@ -20,7 +20,12 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import type { Tool, ToolReference, ToolTypeOption } from '@/types/tools';
+import type {
+    OAuth2IntegrationOption,
+    Tool,
+    ToolReference,
+    ToolTypeOption,
+} from '@/types/tools';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     Braces,
@@ -41,6 +46,8 @@ interface Props {
     tool: Tool;
     toolTypes: ToolTypeOption[];
     availableTools: ToolReference[];
+    oauth2Integrations: OAuth2IntegrationOption[];
+    oauth2AuthorizeUrl: string;
 }
 
 const props = defineProps<Props>();
@@ -112,7 +119,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
                             v-model="form.name"
                             required
                             :placeholder="t('tools.edit.tool_name_placeholder')"
-                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.name" />
                     </div>
@@ -126,7 +133,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
                             v-model="form.description"
                             :placeholder="t('tools.edit.description_placeholder')"
                             rows="3"
-                            class="border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.description" />
                     </div>
@@ -138,7 +145,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
                         <Select v-model="form.status">
                             <SelectTrigger
                                 id="status"
-                                class="h-9 border-medium bg-white/5"
+                                class="h-9 border-medium bg-surface"
                             >
                                 <SelectValue placeholder="Select status" />
                             </SelectTrigger>
@@ -172,6 +179,8 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
                         v-else-if="tool.type === 'mcp'"
                         v-model:config="form.config"
                         :errors="form.errors"
+                        :oauth2-integrations="oauth2Integrations"
+                        :oauth2-authorize-url="oauth2AuthorizeUrl"
                     />
 
                     <RestApiToolConfig
@@ -204,7 +213,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
                     <Link :href="ToolController.show({ tool: tool.id }).url">
                         <button
                             type="button"
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         >
                             {{ t('common.cancel') }}
                         </button>

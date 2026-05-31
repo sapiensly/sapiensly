@@ -126,7 +126,7 @@ const rangeLabel = computed(() =>
                 <div class="flex shrink-0 items-center gap-2">
                     <button
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                     >
                         <Download class="size-3.5" />
                         {{ t('admin.users.export_csv') }}
@@ -151,13 +151,13 @@ const rangeLabel = computed(() =>
                     <Input
                         v-model="q"
                         :placeholder="t('admin.users.filter.search')"
-                        class="h-10 rounded-pill border-medium bg-white/5 pl-10 text-sm text-ink placeholder:text-ink-subtle"
+                        class="h-10 rounded-pill border-medium bg-surface pl-10 text-sm text-ink placeholder:text-ink-subtle"
                     />
                 </div>
 
                 <Select v-model="role">
                     <SelectTrigger
-                        class="h-10 w-full border-medium bg-white/5 text-sm"
+                        class="h-10 w-full border-medium bg-surface text-sm"
                     >
                         <SelectValue />
                     </SelectTrigger>
@@ -182,7 +182,7 @@ const rangeLabel = computed(() =>
 
                 <Select v-model="status">
                     <SelectTrigger
-                        class="h-10 w-full border-medium bg-white/5 text-sm"
+                        class="h-10 w-full border-medium bg-surface text-sm"
                     >
                         <SelectValue />
                     </SelectTrigger>

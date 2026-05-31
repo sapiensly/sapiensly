@@ -305,7 +305,7 @@ function relativeTime(iso: string | null): string {
                     <TableCell class="pr-4" @click.stop>
                         <button
                             type="button"
-                            class="flex size-7 items-center justify-center rounded-xs text-ink-subtle transition-colors hover:bg-white/5 hover:text-ink"
+                            class="flex size-7 items-center justify-center rounded-xs text-ink-subtle transition-colors hover:bg-surface hover:text-ink"
                             @click="emit('open-user', user)"
                         >
                             <MoreVertical class="size-4" />

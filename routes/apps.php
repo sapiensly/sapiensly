@@ -17,9 +17,12 @@ Route::middleware([
     // Builder AI surface — chat that edits the manifest via JSON Patches.
     Route::get('/apps/{app}/builder', [AppBuilderController::class, 'show'])->name('apps.builder');
     Route::post('/apps/{app}/builder/conversations', [AppBuilderController::class, 'startNewConversation'])->name('apps.builder.conversations.new');
-    Route::post('/apps/{app}/builder/messages', [AppBuilderController::class, 'sendMessage'])->name('apps.builder.messages');
-    Route::post('/apps/{app}/builder/visual-review', [AppBuilderController::class, 'visualReview'])->name('apps.builder.visual-review');
-    Route::post('/apps/{app}/builder/wireframe-import', [AppBuilderController::class, 'wireframeImport'])->name('apps.builder.wireframe-import');
+    // Builder AI surfaces — each enqueues a paid Claude job, so they share the
+    // `builder-ai` throttle (per-user + per-org/min + per-org/day cost ceiling).
+    // The 429 fires at HTTP admission, so a throttled request never enqueues a job.
+    Route::post('/apps/{app}/builder/messages', [AppBuilderController::class, 'sendMessage'])->middleware('throttle:builder-ai')->name('apps.builder.messages');
+    Route::post('/apps/{app}/builder/visual-review', [AppBuilderController::class, 'visualReview'])->middleware('throttle:builder-ai')->name('apps.builder.visual-review');
+    Route::post('/apps/{app}/builder/wireframe-import', [AppBuilderController::class, 'wireframeImport'])->middleware('throttle:builder-ai')->name('apps.builder.wireframe-import');
     Route::post('/apps/{app}/builder/messages/{message}/approve', [AppBuilderController::class, 'approve'])->name('apps.builder.approve');
     Route::post('/apps/{app}/builder/messages/{message}/reject', [AppBuilderController::class, 'reject'])->name('apps.builder.reject');
     Route::post('/apps/{app}/builder/messages/{message}/revert', [AppBuilderController::class, 'revert'])->name('apps.builder.revert');
@@ -32,6 +35,7 @@ Route::middleware([
         ->name('apps.builder.workflows.update');
     Route::post('/apps/{app}/builder/workflows/{workflow}/run', [AppWorkflowController::class, 'run'])
         ->where('workflow', 'wkf_[a-z0-9_]+')
+        ->middleware('throttle:builder-workflow-run')
         ->name('apps.builder.workflows.run');
     Route::get('/apps/{app}/builder/objects/{objectId}/records', [AppBuilderController::class, 'objectRecords'])
         ->name('apps.builder.object-records');
@@ -51,6 +55,7 @@ Route::middleware([
 
     Route::post('/r/{app_slug}/actions', AppActionController::class)
         ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:runtime-actions')
         ->name('apps.runtime.actions');
 
     // File upload + serve for file fields in BlockForm. Uploads go via POST

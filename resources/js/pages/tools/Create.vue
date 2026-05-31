@@ -7,14 +7,19 @@ import DatabaseToolConfig from '@/components/tools/DatabaseToolConfig.vue';
 import FunctionToolConfig from '@/components/tools/FunctionToolConfig.vue';
 import GraphqlToolConfig from '@/components/tools/GraphqlToolConfig.vue';
 import GroupToolConfig from '@/components/tools/GroupToolConfig.vue';
-import McpToolConfig from '@/components/tools/McpToolConfig.vue';
+import McpConnectionPicker from '@/components/tools/McpConnectionPicker.vue';
 import RestApiToolConfig from '@/components/tools/RestApiToolConfig.vue';
 import ToolTypeSelector from '@/components/tools/ToolTypeSelector.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import type { ToolReference, ToolType, ToolTypeOption } from '@/types/tools';
+import type {
+    McpConnectionOption,
+    ToolReference,
+    ToolType,
+    ToolTypeOption,
+} from '@/types/tools';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     Braces,
@@ -36,6 +41,7 @@ interface Props {
     selectedType: ToolType | null;
     toolTypes: ToolTypeOption[];
     availableTools: ToolReference[];
+    mcpConnections: McpConnectionOption[];
 }
 
 const props = defineProps<Props>();
@@ -111,6 +117,30 @@ const getDefaultConfig = (type: ToolType): Record<string, unknown> => {
     }
 };
 
+// MCP tools are created by picking an existing connection — the endpoint and
+// auth come from the integration, so there's nothing to fill in by hand.
+const selectedMcpId = ref<string | null>(null);
+
+const selectMcpConnection = (connection: McpConnectionOption) => {
+    selectedMcpId.value = connection.id;
+    form.name = connection.name;
+    form.config = connection.requires_auth
+        ? {
+              endpoint: connection.base_url,
+              auth_type: 'oauth2',
+              integration_id: connection.id,
+          }
+        : {
+              endpoint: connection.base_url,
+              auth_type: 'none',
+              auth_config: {},
+          };
+};
+
+const mcpReady = computed(
+    () => currentType.value !== 'mcp' || selectedMcpId.value !== null,
+);
+
 const submit = () => {
     form.post(ToolController.store().url);
 };
@@ -174,6 +204,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
 
             <form v-else class="space-y-4" @submit.prevent="submit">
                 <SettingsCard
+                    v-if="currentType !== 'mcp'"
                     :icon="typeIcon"
                     :title="t('tools.create.basic_info')"
                     :description="t('tools.create.basic_info_description')"
@@ -188,7 +219,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                             v-model="form.name"
                             required
                             :placeholder="t('tools.create.tool_name_placeholder')"
-                            class="h-9 border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.name" />
                     </div>
@@ -202,7 +233,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                             v-model="form.description"
                             :placeholder="t('tools.create.description_placeholder')"
                             rows="3"
-                            class="border-medium bg-white/5 text-sm text-ink placeholder:text-ink-subtle"
+                            class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.description" />
                     </div>
@@ -220,10 +251,12 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                         :errors="form.errors"
                     />
 
-                    <McpToolConfig
+                    <McpConnectionPicker
                         v-else-if="currentType === 'mcp'"
-                        v-model:config="form.config"
-                        :errors="form.errors"
+                        :connections="mcpConnections"
+                        :selected-id="selectedMcpId"
+                        :error="form.errors['config.integration_id'] || form.errors['config.endpoint']"
+                        @select="selectMcpConnection"
                     />
 
                     <RestApiToolConfig
@@ -255,7 +288,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                 <div class="flex items-center justify-between gap-2 pt-2">
                     <button
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
                         @click="currentType = null"
                     >
                         {{ t('common.change_type') }}
@@ -264,14 +297,14 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                         <Link :href="ToolController.index().url">
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                             >
                                 {{ t('common.cancel') }}
                             </button>
                         </Link>
                         <button
                             type="submit"
-                            :disabled="form.processing"
+                            :disabled="form.processing || !mcpReady"
                             class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                         >
                             {{ t('tools.create.submit') }}

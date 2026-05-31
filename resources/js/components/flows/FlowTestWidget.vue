@@ -190,14 +190,14 @@ watch(
                 </div>
                 <div class="flex items-center gap-1">
                     <button
-                        class="rounded p-1 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+                        class="rounded p-1 text-white/80 transition-colors hover:bg-surface-hover hover:text-white"
                         title="Reset conversation"
                         @click="reset"
                     >
                         <RefreshCw class="h-4 w-4" />
                     </button>
                     <button
-                        class="rounded p-1 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+                        class="rounded p-1 text-white/80 transition-colors hover:bg-surface-hover hover:text-white"
                         @click="isOpen = false"
                     >
                         <X class="h-4 w-4" />
@@ -231,7 +231,7 @@ watch(
                             :class="
                                 msg.role === 'user'
                                     ? 'bg-accent-blue text-white'
-                                    : 'bg-white/5 text-ink'
+                                    : 'bg-surface text-ink'
                             "
                         >
                             {{ msg.content }}
@@ -250,7 +250,7 @@ watch(
                             :class="
                                 index === activeOptionsIndex
                                     ? 'cursor-pointer border-accent-blue/40 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue hover:text-white'
-                                    : 'cursor-not-allowed border-soft bg-white/5 text-ink-subtle'
+                                    : 'cursor-not-allowed border-soft bg-surface text-ink-subtle'
                             "
                             :disabled="index !== activeOptionsIndex || isLoading"
                             @click="selectOption(opt)"
@@ -265,7 +265,7 @@ watch(
                 </template>
 
                 <div v-if="isLoading" class="flex justify-start">
-                    <div class="rounded-sp-sm bg-white/5 px-3 py-2 text-sm text-ink-muted">
+                    <div class="rounded-sp-sm bg-surface px-3 py-2 text-sm text-ink-muted">
                         ...
                     </div>
                 </div>
@@ -278,7 +278,7 @@ watch(
                     type="text"
                     placeholder="Type a message..."
                     :disabled="isLoading || !state"
-                    class="flex-1 rounded-xs border border-medium bg-white/5 px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue disabled:opacity-50"
+                    class="flex-1 rounded-xs border border-medium bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue disabled:opacity-50"
                 />
                 <Button
                     type="submit"

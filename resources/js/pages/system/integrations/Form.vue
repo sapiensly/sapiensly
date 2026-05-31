@@ -30,6 +30,7 @@ import {
     Key,
     Loader2,
     Plug,
+    Sparkles,
     XCircle,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
@@ -57,6 +58,7 @@ interface Props {
         name: string;
         description: string | null;
         base_url: string;
+        is_mcp: boolean;
         auth_type: string;
         visibility: string;
         status: string;
@@ -105,6 +107,7 @@ const form = useForm({
     base_url: creatingFromTemplate
         ? (props.template!.base_url ?? '')
         : (props.integration?.base_url ?? ''),
+    is_mcp: props.integration?.is_mcp ?? false,
     auth_type: creatingFromTemplate
         ? (props.template!.auth_type ?? 'none')
         : (props.integration?.auth_type ?? 'none'),
@@ -161,6 +164,45 @@ async function testConnection(): Promise<void> {
             status: 'error',
             message: t('system.integrations.test_failed'),
         };
+    }
+}
+
+// One-URL OAuth 2.0 auto-configuration (MCP discovery + dynamic registration).
+const discoverUrl = ref('');
+type DiscoverState =
+    | { status: 'idle' }
+    | { status: 'loading' }
+    | { status: 'success'; message: string }
+    | { status: 'error'; message: string };
+const discoverState = ref<DiscoverState>({ status: 'idle' });
+
+async function discoverOAuth2(): Promise<void> {
+    if (!discoverUrl.value) return;
+    discoverState.value = { status: 'loading' };
+    try {
+        const { data } = await axios.post(
+            '/system/integrations/oauth2/discover',
+            { url: discoverUrl.value, name: form.name || undefined },
+        );
+
+        form.base_url = data.base_url ?? form.base_url;
+        if (!form.name) form.name = data.name ?? '';
+        form.auth_type = 'oauth2_auth_code';
+        form.auth_config = data.auth_config ?? {};
+        if (data.is_mcp) form.is_mcp = true;
+
+        discoverState.value = {
+            status: 'success',
+            message: data.dynamically_registered
+                ? t('system.integrations.oauth2_discover.success_registered')
+                : t('system.integrations.oauth2_discover.success_manual_client'),
+        };
+    } catch (error) {
+        const message =
+            axios.isAxiosError(error) && error.response?.data?.message
+                ? (error.response.data.message as string)
+                : t('system.integrations.oauth2_discover.failed');
+        discoverState.value = { status: 'error', message };
     }
 }
 
@@ -333,10 +375,62 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 </Select>
                             </div>
 
+                            <!-- One-URL auto-configuration for OAuth 2.0 web auth (MCP). -->
+                            <div
+                                v-if="form.auth_type === 'oauth2_auth_code'"
+                                class="space-y-2 rounded-xs border border-accent-blue/30 bg-accent-blue/[0.06] p-3"
+                            >
+                                <div class="flex items-center gap-2">
+                                    <Sparkles class="size-4 text-accent-blue" />
+                                    <p class="text-sm font-medium text-ink">
+                                        {{ t('system.integrations.oauth2_discover.title') }}
+                                    </p>
+                                </div>
+                                <p class="text-[11px] text-ink-subtle">
+                                    {{ t('system.integrations.oauth2_discover.hint') }}
+                                </p>
+                                <div class="flex gap-2">
+                                    <Input
+                                        v-model="discoverUrl"
+                                        :placeholder="t('system.integrations.oauth2_discover.placeholder')"
+                                        class="h-9 font-mono"
+                                        @keydown.enter.prevent="discoverOAuth2"
+                                    />
+                                    <button
+                                        type="button"
+                                        :disabled="discoverState.status === 'loading' || !discoverUrl"
+                                        class="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-accent-blue px-3 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                                        @click="discoverOAuth2"
+                                    >
+                                        <Loader2
+                                            v-if="discoverState.status === 'loading'"
+                                            class="size-3.5 animate-spin"
+                                        />
+                                        <Sparkles v-else class="size-3.5" />
+                                        {{ t('system.integrations.oauth2_discover.action') }}
+                                    </button>
+                                </div>
+                                <div
+                                    v-if="discoverState.status === 'success'"
+                                    class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
+                                >
+                                    <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
+                                    <span>{{ discoverState.message }}</span>
+                                </div>
+                                <div
+                                    v-else-if="discoverState.status === 'error'"
+                                    class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
+                                >
+                                    <XCircle class="mt-0.5 size-3.5 shrink-0" />
+                                    <span>{{ discoverState.message }}</span>
+                                </div>
+                            </div>
+
                             <AuthConfigField
                                 :auth-type="form.auth_type"
                                 :model-value="form.auth_config"
                                 :masked-values="integration?.masked_auth_config"
+                                :errors="form.errors"
                                 @update:model-value="form.auth_config = $event"
                             />
 
@@ -345,7 +439,7 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 <button
                                     type="button"
                                     :disabled="testState.status === 'loading' || !form.base_url"
-                                    class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10 disabled:opacity-50"
+                                    class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
                                     @click="testConnection"
                                 >
                                     <Loader2
@@ -473,6 +567,25 @@ const sectionMeta: Record<string, SectionMeta> = {
                             </div>
 
                             <label
+                                for="is_mcp"
+                                class="flex cursor-pointer items-start gap-3 rounded-xs border border-soft bg-white/[0.03] p-3 transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
+                            >
+                                <Checkbox
+                                    id="is_mcp"
+                                    :model-value="form.is_mcp"
+                                    @update:model-value="form.is_mcp = $event === true"
+                                />
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium text-ink">
+                                        {{ t('system.integrations.form.is_mcp') }}
+                                    </p>
+                                    <p class="mt-0.5 text-[11px] text-ink-subtle">
+                                        {{ t('system.integrations.form.is_mcp_hint') }}
+                                    </p>
+                                </div>
+                            </label>
+
+                            <label
                                 for="allow_insecure_tls"
                                 class="flex cursor-pointer items-start gap-3 rounded-xs border border-soft bg-white/[0.03] p-3 transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
                             >
@@ -499,7 +612,7 @@ const sectionMeta: Record<string, SectionMeta> = {
                     <Link href="/system/integrations">
                         <button
                             type="button"
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         >
                             {{ t('system.integrations.form.cancel') }}
                         </button>

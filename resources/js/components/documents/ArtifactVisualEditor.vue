@@ -156,11 +156,11 @@ watch(
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <div
-            class="mb-3 flex flex-wrap items-center gap-1 self-start rounded-pill border border-soft bg-white/5 p-1 text-[11px] font-medium text-ink-muted"
+            class="mb-3 flex flex-wrap items-center gap-1 self-start rounded-pill border border-soft bg-surface p-1 text-[11px] font-medium text-ink-muted"
         >
             <button
                 type="button"
-                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-white/10 hover:text-ink"
+                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-surface-hover hover:text-ink"
                 :aria-label="t('documents.workbench.visual.bold')"
                 @click="toggleBold"
             >
@@ -168,7 +168,7 @@ watch(
             </button>
             <button
                 type="button"
-                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-white/10 hover:text-ink"
+                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-surface-hover hover:text-ink"
                 :aria-label="t('documents.workbench.visual.italic')"
                 @click="toggleItalic"
             >
@@ -176,7 +176,7 @@ watch(
             </button>
             <button
                 type="button"
-                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-white/10 hover:text-ink"
+                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-surface-hover hover:text-ink"
                 :aria-label="t('documents.workbench.visual.underline')"
                 @click="toggleUnderline"
             >
@@ -185,7 +185,7 @@ watch(
             <span class="mx-1 h-4 w-px bg-soft" />
             <button
                 type="button"
-                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-white/10 hover:text-ink"
+                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-surface-hover hover:text-ink"
                 :aria-label="t('documents.workbench.visual.h1')"
                 @click="heading(1)"
             >
@@ -193,7 +193,7 @@ watch(
             </button>
             <button
                 type="button"
-                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-white/10 hover:text-ink"
+                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-surface-hover hover:text-ink"
                 :aria-label="t('documents.workbench.visual.h2')"
                 @click="heading(2)"
             >
@@ -201,7 +201,7 @@ watch(
             </button>
             <button
                 type="button"
-                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-white/10 hover:text-ink"
+                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-surface-hover hover:text-ink"
                 :aria-label="t('documents.workbench.visual.h3')"
                 @click="heading(3)"
             >
@@ -210,7 +210,7 @@ watch(
             <span class="mx-1 h-4 w-px bg-soft" />
             <button
                 type="button"
-                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-white/10 hover:text-ink"
+                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-surface-hover hover:text-ink"
                 :aria-label="t('documents.workbench.visual.bullet_list')"
                 @click="bulletList"
             >
@@ -218,7 +218,7 @@ watch(
             </button>
             <button
                 type="button"
-                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-white/10 hover:text-ink"
+                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-surface-hover hover:text-ink"
                 :aria-label="t('documents.workbench.visual.ordered_list')"
                 @click="orderedList"
             >
@@ -227,7 +227,7 @@ watch(
             <span class="mx-1 h-4 w-px bg-soft" />
             <button
                 type="button"
-                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-white/10 hover:text-ink"
+                class="inline-flex size-7 items-center justify-center rounded-pill transition-colors hover:bg-surface-hover hover:text-ink"
                 :aria-label="t('documents.workbench.visual.link')"
                 @click="setLink"
             >

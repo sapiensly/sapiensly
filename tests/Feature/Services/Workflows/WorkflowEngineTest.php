@@ -4,6 +4,7 @@ use App\Models\App;
 use App\Models\Record;
 use App\Models\WorkflowRun;
 use App\Services\Records\RecordWriteService;
+use App\Services\Security\Ssrf\DnsResolver;
 use App\Services\Workflows\ScriptRunner;
 use App\Services\Workflows\WorkflowEngine;
 use Illuminate\Support\Facades\Http;
@@ -45,6 +46,17 @@ function we_manifest(string $appId, array $objects, array $workflows = []): arra
 }
 
 beforeEach(function () {
+    // http.request flows through the SSRF guard, which resolves DNS for real.
+    // Fake the resolver to a public IP so faked endpoints (.test hosts) pass
+    // the guard; bind BEFORE the engine is built so its guard uses the fake.
+    app()->bind(DnsResolver::class, fn () => new class implements DnsResolver
+    {
+        public function resolve(string $host): array
+        {
+            return ['93.184.216.34'];
+        }
+    });
+
     $this->engine = app(WorkflowEngine::class);
     $this->testApp = App::factory()->create();
     $this->nombre = ['id' => we_id('fld'), 'slug' => 'nombre', 'name' => 'Nombre', 'type' => 'string'];

@@ -529,7 +529,7 @@ watch(
                                             !canTestStorage ||
                                             storageTestState.status === 'loading'
                                         "
-                                        class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10 disabled:opacity-50"
+                                        class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
                                         @click="testStorageConnection"
                                     >
                                         <Loader2
@@ -734,7 +734,7 @@ watch(
                                             !canTestDatabase ||
                                             databaseTestState.status === 'loading'
                                         "
-                                        class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10 disabled:opacity-50"
+                                        class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
                                         @click="testDatabaseConnection"
                                     >
                                         <Loader2

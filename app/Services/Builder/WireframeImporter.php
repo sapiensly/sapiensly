@@ -2,9 +2,11 @@
 
 namespace App\Services\Builder;
 
+use App\Services\Security\Ssrf\SafeHttpClient;
+use App\Services\Security\Ssrf\SsrfBlockedException;
+use App\Services\Security\Ssrf\SsrfGuard;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Symfony\Component\DomCrawler\Crawler;
@@ -41,8 +43,10 @@ class WireframeImporter
      */
     private const MAX_CLEANED_HTML = 30000;
 
-    /** Hosts whose URLs we never even try to reach (defense in depth). */
-    private const BLOCKED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+    public function __construct(
+        private SsrfGuard $ssrf,
+        private SafeHttpClient $safeHttp,
+    ) {}
 
     /**
      * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, source_url: ?string}
@@ -52,15 +56,20 @@ class WireframeImporter
         $this->assertSafeUrl($url);
 
         try {
-            $response = Http::timeout(10)
-                ->withHeaders([
+            // SafeHttpClient re-validates and pins the connection, and follows
+            // redirects re-validating each hop (so a redirect to an internal IP
+            // is refused mid-fetch, not just the initial URL).
+            $response = $this->safeHttp->request('GET', $url, [
+                'timeout' => 10,
+                'headers' => [
                     // Some sites (Figma included) serve different OG metadata
                     // to "real" browser-looking user agents.
                     'User-Agent' => 'Mozilla/5.0 (compatible; SapienslyBuilder/1.0; +https://sapiensly.com)',
                     'Accept' => 'text/html,application/xhtml+xml',
-                ])
-                ->withOptions(['allow_redirects' => ['max' => 5, 'strict' => true]])
-                ->get($url);
+                ],
+            ]);
+        } catch (SsrfBlockedException $e) {
+            throw new InvalidArgumentException('That URL points to a disallowed destination.');
         } catch (ConnectionException $e) {
             throw new InvalidArgumentException('Could not reach that URL: '.$e->getMessage());
         } catch (RequestException $e) {
@@ -255,31 +264,17 @@ class WireframeImporter
     }
 
     /**
-     * Refuse loopback hosts and obvious private ranges. Not a perfect SSRF
-     * shield (DNS rebinding still possible), but good enough to stop the
-     * accidental "paste your internal admin link" case.
+     * Refuse loopback / private / reserved destinations. Delegates to the
+     * central SsrfGuard, which resolves DNS and validates the resolved IP — so
+     * a hostname pointing at an internal IP is caught too (the actual fetch
+     * additionally pins the connection, closing the rebinding window).
      */
     private function assertSafeUrl(string $url): void
     {
-        $parts = parse_url($url);
-        if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
-            throw new InvalidArgumentException('Malformed URL.');
-        }
-        $scheme = strtolower($parts['scheme']);
-        if (! in_array($scheme, ['http', 'https'], true)) {
-            throw new InvalidArgumentException('Only http(s) URLs are allowed.');
-        }
-        $host = strtolower($parts['host']);
-        if (in_array($host, self::BLOCKED_HOSTS, true)) {
-            throw new InvalidArgumentException('Loopback URLs are not allowed.');
-        }
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
-            // Block private + reserved ranges (covers 10/8, 172.16/12,
-            // 192.168/16, 169.254/16, etc).
-            $valid = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
-            if ($valid === false) {
-                throw new InvalidArgumentException('Private / reserved IP ranges are not allowed.');
-            }
+        try {
+            $this->ssrf->inspect($url);
+        } catch (SsrfBlockedException $e) {
+            throw new InvalidArgumentException('That URL points to a disallowed destination.');
         }
     }
 
@@ -295,9 +290,10 @@ class WireframeImporter
     {
         try {
             $this->assertSafeUrl($url);
-            $response = Http::timeout(15)
-                ->withHeaders(['User-Agent' => 'Mozilla/5.0 (compatible; SapienslyBuilder/1.0)'])
-                ->get($url);
+            $response = $this->safeHttp->request('GET', $url, [
+                'timeout' => 15,
+                'headers' => ['User-Agent' => 'Mozilla/5.0 (compatible; SapienslyBuilder/1.0)'],
+            ]);
         } catch (\Throwable $e) {
             Log::warning('WireframeImporter: image download failed', [
                 'url' => $url,

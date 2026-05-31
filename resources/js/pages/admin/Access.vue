@@ -220,7 +220,7 @@ function commitSessionLifetime() {
                         type="number"
                         min="15"
                         max="10080"
-                        class="h-9 w-36 border-medium bg-white/5 text-sm"
+                        class="h-9 w-36 border-medium bg-surface text-sm"
                         @blur="commitSessionLifetime"
                         @keyup.enter="commitSessionLifetime"
                     />

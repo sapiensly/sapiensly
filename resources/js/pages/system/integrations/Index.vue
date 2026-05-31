@@ -85,7 +85,7 @@ function handleDelete(id: string): void {
                     <Link href="/system/integrations/templates">
                         <button
                             type="button"
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-white/10"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                         >
                             <LayoutTemplate class="size-3.5" />
                             {{ t('system.integrations.templates.cta') }}
@@ -115,12 +115,12 @@ function handleDelete(id: string): void {
                         v-model="search"
                         type="search"
                         :placeholder="t('system.integrations.search_placeholder')"
-                        class="h-10 rounded-pill border-medium bg-white/5 pl-10 text-sm text-ink placeholder:text-ink-subtle"
+                        class="h-10 rounded-pill border-medium bg-surface pl-10 text-sm text-ink placeholder:text-ink-subtle"
                     />
                 </div>
                 <Select v-model="authTypeFilter">
                     <SelectTrigger
-                        class="h-10 w-56 border-medium bg-white/5 text-sm"
+                        class="h-10 w-56 border-medium bg-surface text-sm"
                     >
                         <SelectValue />
                     </SelectTrigger>

@@ -28,7 +28,12 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     >
       <slot />
 
-      <TooltipArrow class="bg-foreground fill-foreground z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+      <!-- The diamond is the rotated `bg` box; inherit the content's
+           background so the arrow always matches a custom-coloured tooltip
+           (e.g. the sidebar's bg-navy) instead of the hardcoded foreground,
+           which rendered as a black diamond in light mode. The inner svg
+           polygon is hidden (fill-transparent) so only the box shows. -->
+      <TooltipArrow class="bg-inherit fill-transparent z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
     </TooltipContent>
   </TooltipPortal>
 </template>
