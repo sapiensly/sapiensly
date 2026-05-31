@@ -3,9 +3,12 @@
 namespace App\Jobs;
 
 use App\Events\Debate\DebateTurnError;
+use App\Models\Agent;
 use App\Models\DebateTurn;
 use App\Services\Debate\DebateOrchestrator;
 use App\Services\Debate\DebateTurnStreamer;
+use App\Services\RetrievalService;
+use App\Services\ToolBuilderService;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -47,11 +50,56 @@ class RunDebateTurnJob implements ShouldQueue
             return;
         }
 
-        $instructions = $orchestrator->debaterInstructions($turn->participant);
+        $participant = $turn->participant;
+        $instructions = $orchestrator->debaterInstructions($participant);
         $prompt = $orchestrator->buildTurnPrompt($turn);
-        $model = $turn->model ?? $turn->participant->model;
+        $model = $turn->model ?? $participant->model;
+        $tools = [];
 
-        $streamer->stream($turn, $instructions, $prompt, $model);
+        // When the participant is backed by an agent, it debates AS that agent:
+        // its persona/prompt, its knowledge bases (RAG) and its tools.
+        $agent = $participant->agent_id !== null ? Agent::find($participant->agent_id) : null;
+        if ($agent !== null) {
+            if (trim((string) $agent->prompt_template) !== '') {
+                $instructions .= "\n\n## Your expertise and guidelines\n".$agent->prompt_template;
+            }
+            $instructions .= $this->agentKnowledgeContext($agent, $turn->debate->topic);
+            $tools = app(ToolBuilderService::class)->buildTools(
+                $agent->tools()->where('status', 'active')->get()
+            );
+        }
+
+        $streamer->stream($turn, $instructions, $prompt, $model, $tools);
+    }
+
+    /**
+     * Best-effort RAG block from the agent's knowledge bases for the debate
+     * topic. Returns '' when there are no KBs, nothing matches, or it fails.
+     */
+    private function agentKnowledgeContext(Agent $agent, string $topic): string
+    {
+        $kbIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->all();
+        if (empty($kbIds) || trim($topic) === '') {
+            return '';
+        }
+
+        try {
+            $result = app(RetrievalService::class)->retrieve($topic, $kbIds, topK: 6, threshold: 0.5);
+            if (($result['chunk_count'] ?? 0) === 0 || trim($result['context'] ?? '') === '') {
+                return '';
+            }
+
+            return "\n\n## Relevant context from your knowledge base\n"
+                .'Use the following retrieved information where it helps your argument.'
+                ."\n\n".$result['context'];
+        } catch (Throwable $e) {
+            Log::warning('RunDebateTurnJob: agent RAG retrieval failed (continuing)', [
+                'agent_id' => $agent->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return '';
+        }
     }
 
     public function failed(?Throwable $e): void

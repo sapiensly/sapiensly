@@ -17,6 +17,7 @@ class DebateParticipant extends Model
     protected $fillable = [
         'debate_id',
         'model',
+        'agent_id',
         'provider',
         'display_name',
         'position',
@@ -39,6 +40,11 @@ class DebateParticipant extends Model
     public function debate(): BelongsTo
     {
         return $this->belongsTo(Debate::class, 'debate_id');
+    }
+
+    public function agent(): BelongsTo
+    {
+        return $this->belongsTo(Agent::class, 'agent_id');
     }
 
     public function turns(): HasMany

@@ -78,3 +78,9 @@ export interface DebateListItem {
     status: DebateStatus;
     last_activity_at: string | null;
 }
+
+export interface DebateAgentOption {
+    id: string;
+    name: string;
+    type: string;
+}

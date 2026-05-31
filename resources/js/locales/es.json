@@ -1767,6 +1767,7 @@
     "debate.setup.subheading": "Plantea un problema y deja que varios modelos deliberen hasta llegar a un consenso.",
     "debate.setup.topic_placeholder": "¿Qué quieres que delibere el consejo? Ej.: ¿Construimos o compramos nuestro CRM?",
     "debate.setup.pick_models": "Elige a los participantes",
+    "debate.setup.agents": "Agentes",
     "debate.setup.selected_count": "{count} seleccionados (2–9)",
     "debate.setup.no_models": "No hay modelos disponibles. Configura primero un proveedor de IA.",
     "debate.setup.moderator": "Moderador",

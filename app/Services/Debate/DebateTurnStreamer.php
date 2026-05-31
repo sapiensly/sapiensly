@@ -32,9 +32,13 @@ class DebateTurnStreamer
     ) {}
 
     /**
-     * Stream one turn to completion. Returns the refreshed turn.
+     * Stream one turn to completion. Returns the refreshed turn. When the
+     * participant is backed by an agent, $tools carries the agent's SDK tools so
+     * the model can call them mid-stream.
+     *
+     * @param  array<int, object>  $tools
      */
-    public function stream(DebateTurn $turn, string $instructions, string $prompt, string $model): DebateTurn
+    public function stream(DebateTurn $turn, string $instructions, string $prompt, string $model, array $tools = []): DebateTurn
     {
         set_time_limit(0);
 
@@ -53,7 +57,7 @@ class DebateTurnStreamer
             $agent = new DebateAgent(
                 instructions: $instructions,
                 messages: [],
-                tools: [],
+                tools: $tools,
             );
 
             $turn->update(['status' => 'streaming', 'model' => $model]);

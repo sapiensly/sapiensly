@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DebateIcon from '@/components/icons/DebateIcon.vue';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -8,20 +9,23 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { ChatModelOption } from '@/types/debateModule';
+import type { ChatModelOption, DebateAgentOption } from '@/types/debateModule';
 import { router } from '@inertiajs/vue3';
-import DebateIcon from '@/components/icons/DebateIcon.vue';
-import { Check, ChevronDown, Loader2, Sparkles } from 'lucide-vue-next';
+import { Bot, Check, ChevronDown, Loader2, Sparkles } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const props = defineProps<{
-    models: ChatModelOption[];
-    defaultModel: string | null;
-    defaultModerator: string | null;
-}>();
+const props = withDefaults(
+    defineProps<{
+        models: ChatModelOption[];
+        defaultModel: string | null;
+        defaultModerator: string | null;
+        agents?: DebateAgentOption[];
+    }>(),
+    { agents: () => [] },
+);
 
 const topic = ref('');
 const selected = ref<string[]>([]);
@@ -153,6 +157,49 @@ function start() {
                         }}
                     </span>
                 </div>
+                <!-- Agents first: each debates as that agent (its model/prompt/KBs/tools). -->
+                <div v-if="agents.length" class="mb-3">
+                    <p
+                        class="mb-1.5 text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
+                    >
+                        {{ t('debate.setup.agents') }}
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <button
+                            v-for="a in agents"
+                            :key="a.id"
+                            type="button"
+                            :disabled="
+                                !selected.includes(`agent:${a.id}`) &&
+                                selected.length >= MAX_PARTICIPANTS
+                            "
+                            :class="[
+                                'inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                                selected.includes(`agent:${a.id}`)
+                                    ? 'border-accent-blue bg-accent-blue/10 text-ink'
+                                    : 'border-medium bg-surface text-ink-muted hover:border-strong hover:text-ink',
+                            ]"
+                            @click="toggle(`agent:${a.id}`)"
+                        >
+                            <span
+                                :class="[
+                                    'flex size-4 items-center justify-center rounded-full border',
+                                    selected.includes(`agent:${a.id}`)
+                                        ? 'border-accent-blue bg-accent-blue text-white'
+                                        : 'border-medium',
+                                ]"
+                            >
+                                <Check
+                                    v-if="selected.includes(`agent:${a.id}`)"
+                                    class="size-3"
+                                />
+                            </span>
+                            <Bot class="size-3.5 text-accent-blue" />
+                            {{ a.name }}
+                        </button>
+                    </div>
+                </div>
+
                 <p
                     v-if="!models.length"
                     class="rounded-xl border border-dashed border-medium px-3 py-4 text-center text-xs text-ink-subtle"

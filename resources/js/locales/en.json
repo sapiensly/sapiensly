@@ -1767,6 +1767,7 @@
     "debate.setup.subheading": "State a problem and let several models deliberate until they reach consensus.",
     "debate.setup.topic_placeholder": "What should the council deliberate? e.g. Should we build or buy our CRM?",
     "debate.setup.pick_models": "Choose the participants",
+    "debate.setup.agents": "Agents",
     "debate.setup.selected_count": "{count} selected (2–9)",
     "debate.setup.no_models": "No models available. Configure an AI provider first.",
     "debate.setup.moderator": "Moderator",

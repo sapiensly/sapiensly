@@ -6,6 +6,7 @@ use App\Enums\Visibility;
 use App\Http\Requests\Debate\StoreDebateRequest;
 use App\Http\Requests\Debate\UpdateDebateRequest;
 use App\Jobs\StartDebateJob;
+use App\Models\Agent;
 use App\Models\Debate;
 use App\Services\AiProviderService;
 use App\Services\Debate\DebatePresenter;
@@ -70,14 +71,34 @@ class DebateController extends Controller
             'moderator_model' => $moderator,
         ]);
 
-        $modelIds->each(function (string $modelId, int $index) use ($debate, $reachable) {
-            $entry = $reachable->get($modelId);
+        // Each selection is either a model id or `agent:{id}`. An agent
+        // participant debates as that agent (its model/prompt/KBs/tools).
+        $modelIds->each(function (string $selection, int $index) use ($debate, $reachable, $user) {
+            $accent = self::ACCENTS[$index % count(self::ACCENTS)];
+
+            if (str_starts_with($selection, 'agent:')) {
+                $agent = Agent::query()->forAccountContext($user)->find(substr($selection, 6));
+                if ($agent !== null) {
+                    $debate->participants()->create([
+                        'model' => $agent->model,
+                        'agent_id' => $agent->id,
+                        'provider' => 'Agent',
+                        'display_name' => $agent->name,
+                        'position' => $index,
+                        'accent' => $accent,
+                    ]);
+
+                    return;
+                }
+            }
+
+            $entry = $reachable->get($selection);
             $debate->participants()->create([
-                'model' => $modelId,
+                'model' => $selection,
                 'provider' => $entry['provider'] ?? null,
-                'display_name' => $entry['label'] ?? $modelId,
+                'display_name' => $entry['label'] ?? $selection,
                 'position' => $index,
-                'accent' => self::ACCENTS[$index % count(self::ACCENTS)],
+                'accent' => $accent,
             ]);
         });
 
@@ -137,9 +158,21 @@ class DebateController extends Controller
 
         $models = $this->providers->getReachableChatModels($user);
 
+        $agents = Agent::query()
+            ->forAccountContext($user)
+            ->standalone()
+            ->orderBy('name')
+            ->get(['id', 'name', 'type'])
+            ->map(fn (Agent $agent) => [
+                'id' => $agent->id,
+                'name' => $agent->name,
+                'type' => $agent->type instanceof \BackedEnum ? $agent->type->value : $agent->type,
+            ]);
+
         return [
             'debates' => $debates,
             'models' => $models,
+            'agents' => $agents,
             'defaultModel' => $models[0]['value'] ?? null,
             'defaultModerator' => $models[0]['value'] ?? null,
         ];

@@ -10,6 +10,7 @@ import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     ActiveDebateDto,
     ChatModelOption,
+    DebateAgentOption,
     DebateListItem,
     DebateRoundDto,
     DebateTurnDto,
@@ -24,6 +25,7 @@ const { t } = useI18n();
 const props = defineProps<{
     debates: DebateListItem[];
     models: ChatModelOption[];
+    agents: DebateAgentOption[];
     defaultModel: string | null;
     defaultModerator: string | null;
     activeDebate: ActiveDebateDto | null;
@@ -302,6 +304,7 @@ function stop() {
                 <DebateSetup
                     v-else
                     :models="models"
+                    :agents="agents"
                     :default-model="defaultModel"
                     :default-moderator="defaultModerator"
                 />
