@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Chat\StoreChatMessageRequest;
 use App\Jobs\RunChatAiJob;
+use App\Models\Agent;
 use App\Models\Chat;
 use App\Models\ChatAttachment;
 use App\Models\ChatMessage;
@@ -49,13 +50,10 @@ class ChatMessageController extends Controller
         $data = $request->validated();
         $content = trim((string) ($data['content'] ?? ''));
 
-        // Resolve the chosen model: must be reachable, else fall back to the
-        // chat's current model or the first reachable one.
-        $reachable = collect($this->providers->getReachableChatModels($user))->pluck('value');
-        $model = $data['model'] ?? null;
-        if ($model === null || ! $reachable->contains($model)) {
-            $model = $reachable->contains($chat->model) ? $chat->model : $reachable->first();
-        }
+        // The picker emits either a model id or `agent:{id}`. An agent selection
+        // runs the turn as that agent (its model/prompt/KBs/tools); a plain model
+        // clears any previously selected agent.
+        [$model, $agentId] = $this->resolveSelection($data['model'] ?? null, $user, $chat);
 
         $userMessage = ChatMessage::create([
             'chat_id' => $chat->id,
@@ -84,9 +82,9 @@ class ChatMessageController extends Controller
             'status' => 'pending',
         ]);
 
-        // Remember the chosen model + enabled tools on the chat for next time.
+        // Remember the chosen model/agent + enabled tools on the chat for next time.
         $toolIds = $this->accessibleToolIds($data['tool_ids'] ?? [], $user);
-        $chat->update(['model' => $model, 'tool_ids' => $toolIds ?: null]);
+        $chat->update(['model' => $model, 'agent_id' => $agentId, 'tool_ids' => $toolIds ?: null]);
 
         RunChatAiJob::dispatch(
             $placeholder->id,
@@ -100,6 +98,34 @@ class ChatMessageController extends Controller
             'user_message' => $this->present($userMessage->load('attachments'), $chat),
             'placeholder' => $this->present($placeholder, $chat),
         ], 201);
+    }
+
+    /**
+     * Resolve the picker selection into a [model, agent_id] pair. The picker
+     * sends either a model id or `agent:{id}`; an agent selection runs the turn
+     * as that agent, a plain model clears any selected agent.
+     *
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function resolveSelection(?string $selection, User $user, Chat $chat): array
+    {
+        if (is_string($selection) && str_starts_with($selection, 'agent:')) {
+            $agent = Agent::query()->forAccountContext($user)->find(substr($selection, 6));
+            if ($agent !== null) {
+                return [$agent->model, $agent->id];
+            }
+        }
+
+        $reachable = collect($this->providers->getReachableChatModels($user))->pluck('value');
+        if (is_string($selection) && $reachable->contains($selection)) {
+            return [$selection, null];
+        }
+
+        $fallback = $chat->agent_id === null && $reachable->contains($chat->model)
+            ? $chat->model
+            : $reachable->first();
+
+        return [$fallback, null];
     }
 
     /**

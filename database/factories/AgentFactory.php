@@ -45,6 +45,14 @@ class AgentFactory extends Factory
         ]);
     }
 
+    public function general(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => AgentType::General,
+            'name' => 'General Agent',
+        ]);
+    }
+
     public function triage(): static
     {
         return $this->state(fn (array $attributes) => [

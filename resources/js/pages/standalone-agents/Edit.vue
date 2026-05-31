@@ -5,6 +5,7 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
 import KeywordsInput from '@/components/KeywordsInput.vue';
 import ActionAgentConfig from '@/components/standalone-agents/ActionAgentConfig.vue';
+import GeneralAgentConfig from '@/components/standalone-agents/GeneralAgentConfig.vue';
 import KnowledgeAgentConfig from '@/components/standalone-agents/KnowledgeAgentConfig.vue';
 import TriageAgentConfig from '@/components/standalone-agents/TriageAgentConfig.vue';
 import { Input } from '@/components/ui/input';
@@ -27,7 +28,7 @@ import type {
     ToolReference,
 } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Bot, Brain, Settings2, Zap } from 'lucide-vue-next';
+import { Bot, Brain, Settings2, Sparkles, Zap } from 'lucide-vue-next';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -85,19 +86,25 @@ const submit = () => {
 // Per-type visual cues — same mapping as the create page so edit cards
 // pick up the same tint + icon as the original agent's type.
 const typeTintMap: Record<string, string> = {
+    general: 'var(--sp-accent-cyan)',
     triage: 'var(--sp-accent-blue)',
     knowledge: 'var(--sp-spectrum-magenta)',
     action: 'var(--sp-warning)',
 };
 
 const typeIconMap: Record<string, Component> = {
+    general: Sparkles,
     triage: Bot,
     knowledge: Brain,
     action: Zap,
 };
 
-const typeTint = computed(() => typeTintMap[props.agent.type] ?? 'var(--sp-accent-blue)');
-const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot);
+const typeTint = computed(
+    () => typeTintMap[props.agent.type] ?? 'var(--sp-accent-blue)',
+);
+const typeIcon = computed<Component>(
+    () => typeIconMap[props.agent.type] ?? Bot,
+);
 </script>
 
 <template>
@@ -126,7 +133,9 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                             id="name"
                             v-model="form.name"
                             required
-                            :placeholder="t('agents.edit.agent_name_placeholder')"
+                            :placeholder="
+                                t('agents.edit.agent_name_placeholder')
+                            "
                             class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.name" />
@@ -139,7 +148,9 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                         <Input
                             id="description"
                             v-model="form.description"
-                            :placeholder="t('agents.edit.description_placeholder')"
+                            :placeholder="
+                                t('agents.edit.description_placeholder')
+                            "
                             class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.description" />
@@ -215,7 +226,10 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                     </div>
 
                     <div class="space-y-1.5">
-                        <Label for="prompt_template" class="text-xs text-ink-muted">
+                        <Label
+                            for="prompt_template"
+                            class="text-xs text-ink-muted"
+                        >
                             {{ t('agents.edit.prompt_template') }}
                         </Label>
                         <Textarea
@@ -236,13 +250,27 @@ const typeIcon = computed<Component>(() => typeIconMap[props.agent.type] ?? Bot)
                     :description="t('agents.edit.config_description')"
                     :tint="typeTint"
                 >
+                    <GeneralAgentConfig
+                        v-if="agent.type === 'general'"
+                        v-model:config="form.config"
+                        v-model:knowledge-base-ids="form.knowledge_base_ids"
+                        v-model:tool-ids="form.tool_ids"
+                        :knowledge-bases="knowledgeBases"
+                        :tools="tools"
+                        :errors="form.errors"
+                    />
+
                     <TriageAgentConfig
-                        v-if="agent.type === 'triage'"
+                        v-else-if="agent.type === 'triage'"
                         v-model:config="form.config"
                         :errors="form.errors"
                         :agent-id="agent.id"
                         :has-flow="!!activeFlow"
-                        :flow-url="activeFlow ? `/agents/${agent.id}/flows/${activeFlow.id}/edit` : null"
+                        :flow-url="
+                            activeFlow
+                                ? `/agents/${agent.id}/flows/${activeFlow.id}/edit`
+                                : null
+                        "
                     />
 
                     <KnowledgeAgentConfig

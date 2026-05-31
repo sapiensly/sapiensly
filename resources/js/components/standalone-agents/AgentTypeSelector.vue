@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentType, AgentTypeOption } from '@/types/agents';
-import { Bot, Brain, Zap } from 'lucide-vue-next';
+import { Bot, Brain, Sparkles, Zap } from 'lucide-vue-next';
 import type { Component } from 'vue';
 
 defineProps<{
@@ -13,6 +13,8 @@ const emit = defineEmits<{
 
 function agentIcon(type: AgentType): Component {
     switch (type) {
+        case 'general':
+            return Sparkles;
         case 'triage':
             return Bot;
         case 'knowledge':
@@ -28,6 +30,8 @@ function agentIcon(type: AgentType): Component {
 // consistent across the agent flow (selector → form cards → canvas).
 function agentTint(type: AgentType): string {
     switch (type) {
+        case 'general':
+            return 'var(--sp-accent-cyan)';
         case 'triage':
             return 'var(--sp-accent-blue)';
         case 'knowledge':
@@ -41,7 +45,7 @@ function agentTint(type: AgentType): string {
 </script>
 
 <template>
-    <div class="grid gap-3 md:grid-cols-3">
+    <div class="grid gap-3 sm:grid-cols-2">
         <button
             v-for="type in agentTypes"
             :key="type.value"

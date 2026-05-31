@@ -246,6 +246,7 @@ class AiProviderService
     public function getRecommendedModels(): array
     {
         return [
+            'general' => ['claude-sonnet-4-20250514', 'gpt-4o'],
             'triage' => ['claude-haiku-4-5-20251001', 'gpt-4o-mini'],
             'knowledge' => ['claude-sonnet-4-20250514', 'gpt-4o'],
             'action' => ['claude-sonnet-4-20250514', 'gpt-4o'],

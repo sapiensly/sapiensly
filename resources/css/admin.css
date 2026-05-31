@@ -192,7 +192,6 @@
  */
 .sp-glass-sidebar {
     background: transparent;
-    border-right: 1px solid var(--sp-border-soft);
 }
 
 /* -----------------------------------------------------------------------

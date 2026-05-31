@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Agent;
 
 use App\Enums\AgentType;
+use App\Services\AiProviderService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -22,7 +23,7 @@ class StoreAgentRequest extends FormRequest
             'keywords' => ['nullable', 'array', 'max:20'],
             'keywords.*' => ['string', 'max:50'],
             'prompt_template' => ['nullable', 'string'],
-            'model' => ['required', 'string', Rule::in($this->availableModels())],
+            'model' => $this->modelRule(),
             'config' => ['nullable', 'array'],
 
             'config.temperature' => ['nullable', 'numeric', 'min:0', 'max:1'],
@@ -43,15 +44,22 @@ class StoreAgentRequest extends FormRequest
         ];
     }
 
-    protected function availableModels(): array
+    /**
+     * Validate the model against the user's reachable chat models (same source
+     * as the create form's picker). When the user has no providers configured
+     * the reachable list is empty, so we only require a string rather than
+     * rejecting everything.
+     *
+     * @return array<int, mixed>
+     */
+    protected function modelRule(): array
     {
-        return [
-            'claude-sonnet-4-20250514',
-            'claude-opus-4-20250514',
-            'claude-3-5-haiku-20241022',
-            'gpt-4o',
-            'gpt-4o-mini',
-            'gpt-4-turbo',
-        ];
+        $reachable = collect(app(AiProviderService::class)->getReachableChatModels($this->user()))
+            ->pluck('value')
+            ->all();
+
+        return $reachable === []
+            ? ['required', 'string', 'max:100']
+            : ['required', 'string', Rule::in($reachable)];
     }
 }

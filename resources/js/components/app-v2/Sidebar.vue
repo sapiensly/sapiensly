@@ -101,6 +101,13 @@ const sections = computed<NavSection[]>(() => [
                 match: (u) => u === '/chat' || u.startsWith('/chat/') || u === '/debates' || u.startsWith('/debates/'),
             },
             {
+                key: 'agents',
+                label: t('app_v2.nav.agents'),
+                href: AgentController.index().url,
+                icon: Bot,
+                match: (u) => u.startsWith('/agents'),
+            },
+            {
                 key: 'apps',
                 label: t('app_v2.nav.apps'),
                 href: AppController.index().url,
@@ -120,13 +127,6 @@ const sections = computed<NavSection[]>(() => [
                 href: ChatbotController.index().url,
                 icon: MessageSquare,
                 match: (u) => u.startsWith('/chatbots'),
-            },
-            {
-                key: 'agents',
-                label: t('app_v2.nav.agents'),
-                href: AgentController.index().url,
-                icon: Bot,
-                match: (u) => u.startsWith('/agents'),
             },
             {
                 key: 'agent-teams',
@@ -246,7 +246,7 @@ const workspaceLabel = computed(() =>
                 collapsed ? 'justify-center px-3' : 'gap-2 px-5',
             ]"
         >
-            <Link :href="dashboard()" class="flex items-center gap-2 outline-none">
+            <Link :href="dashboard()" class="flex items-center gap-1 outline-none">
                 <AppLogo tone="white" :collapsed="collapsed" />
             </Link>
         </div>

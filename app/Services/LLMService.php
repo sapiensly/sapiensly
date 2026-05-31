@@ -251,6 +251,67 @@ class LLMService
     }
 
     /**
+     * Unified chat for General Agents: injects knowledge-base RAG context into
+     * the system prompt AND exposes the agent's tools in the same call, so a
+     * single agent can triage, answer from knowledge, and act with tools. The
+     * model itself decides whether to answer from the retrieved context or call
+     * a tool.
+     *
+     * @param  array<Message>  $messages
+     * @return array{response: AgentResponse, knowledge_bases: array<array{id: string, name: string}>, chunk_count: int}
+     */
+    public function chatWithKnowledgeAndTools(Agent $agent, array $messages, int $maxSteps = 5): array
+    {
+        $knowledgeBases = [];
+        $chunkCount = 0;
+        $systemPrompt = $agent->prompt_template ?? '';
+
+        $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
+        $userQuery = $this->lastUserMessageContent($messages);
+
+        if (! empty($knowledgeBaseIds) && trim($userQuery) !== '') {
+            $ragParams = $agent->config['rag_params'] ?? [];
+            $retrieval = $this->getRetrievalService()->retrieve(
+                $userQuery,
+                $knowledgeBaseIds,
+                topK: (int) ($ragParams['top_k'] ?? 5),
+                threshold: (float) ($ragParams['similarity_threshold'] ?? 0.5),
+            );
+
+            if (! empty($retrieval['context'])) {
+                $systemPrompt = $this->buildAugmentedSystemPrompt($systemPrompt, $retrieval['context']);
+                $knowledgeBases = $retrieval['knowledge_bases'];
+                $chunkCount = $retrieval['chunk_count'];
+            }
+        }
+
+        $sdkTools = $this->getToolBuilderService()->buildTools(
+            $agent->tools()->where('status', 'active')->get()
+        );
+
+        Log::info('Building general chat (knowledge + tools)', [
+            'agent_id' => $agent->id,
+            'knowledge_base_count' => count($knowledgeBases),
+            'tool_count' => count($sdkTools),
+        ]);
+
+        [$history, $prompt] = $this->splitMessages($messages);
+        $sdkAgent = $this->buildAgent($agent, $history, $sdkTools, $systemPrompt);
+
+        $response = $sdkAgent->prompt(
+            $prompt,
+            provider: $this->getProvider($agent->model, $agent),
+            model: $agent->model,
+        );
+
+        return [
+            'response' => $response,
+            'knowledge_bases' => $knowledgeBases,
+            'chunk_count' => $chunkCount,
+        ];
+    }
+
+    /**
      * Chat with custom routing tools (for Triage Agents).
      *
      * @param  array<Message>  $messages
@@ -352,6 +413,20 @@ EOT;
         $instructions = $systemPrompt ?? $agent->prompt_template ?? '';
 
         return new AnonymousAgent($instructions, $messages, $tools);
+    }
+
+    /**
+     * Content of the last user message in a conversation array, or '' if none.
+     *
+     * @param  array<Message>  $messages
+     */
+    private function lastUserMessageContent(array $messages): string
+    {
+        $lastUserMessage = collect($messages)
+            ->filter(fn ($m) => ($m->role instanceof MessageRole ? $m->role : MessageRole::from($m->role)) === MessageRole::User)
+            ->last();
+
+        return $lastUserMessage?->content ?? '';
     }
 
     /**

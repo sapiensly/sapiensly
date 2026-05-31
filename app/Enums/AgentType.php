@@ -4,6 +4,7 @@ namespace App\Enums;
 
 enum AgentType: string
 {
+    case General = 'general';
     case Triage = 'triage';
     case Knowledge = 'knowledge';
     case Action = 'action';
@@ -11,6 +12,7 @@ enum AgentType: string
     public function label(): string
     {
         return match ($this) {
+            self::General => __('General Agent'),
             self::Triage => __('Triage Agent'),
             self::Knowledge => __('Knowledge Agent'),
             self::Action => __('Action Agent'),
@@ -20,6 +22,7 @@ enum AgentType: string
     public function description(): string
     {
         return match ($this) {
+            self::General => __('Triages, answers from knowledge, and acts with tools — all in one'),
             self::Triage => __('Classifies intent, urgency, and sentiment'),
             self::Knowledge => __('Searches company documentation with RAG'),
             self::Action => __('Executes real-world operations via tools'),

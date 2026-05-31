@@ -68,7 +68,7 @@ describe('create', function () {
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('standalone-agents/Create')
-                ->has('agentTypes', 3)
+                ->has('agentTypes', 4)
                 ->has('availableModels')
                 ->has('recommendedModels')
             );

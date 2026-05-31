@@ -6,6 +6,7 @@ import InputError from '@/components/InputError.vue';
 import KeywordsInput from '@/components/KeywordsInput.vue';
 import ActionAgentConfig from '@/components/standalone-agents/ActionAgentConfig.vue';
 import AgentTypeSelector from '@/components/standalone-agents/AgentTypeSelector.vue';
+import GeneralAgentConfig from '@/components/standalone-agents/GeneralAgentConfig.vue';
 import KnowledgeAgentConfig from '@/components/standalone-agents/KnowledgeAgentConfig.vue';
 import TriageAgentConfig from '@/components/standalone-agents/TriageAgentConfig.vue';
 import { Input } from '@/components/ui/input';
@@ -28,15 +29,7 @@ import type {
     ToolReference,
 } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import {
-    Bot,
-    Brain,
-    Hash,
-    Settings2,
-    Sparkles,
-    User,
-    Zap,
-} from 'lucide-vue-next';
+import { Bot, Brain, Settings2, Sparkles, Zap } from 'lucide-vue-next';
 import type { Component } from 'vue';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -68,7 +61,7 @@ const headingTitle = computed(() => {
 });
 
 const form = useForm({
-    type: props.selectedType ?? 'triage',
+    type: props.selectedType ?? 'general',
     name: '',
     description: '',
     keywords: [] as string[],
@@ -94,6 +87,17 @@ const selectType = (type: AgentType) => {
 
 const getDefaultConfig = (type: AgentType): Record<string, unknown> => {
     switch (type) {
+        case 'general':
+            return {
+                rag_params: {
+                    top_k: 5,
+                    similarity_threshold: 0.7,
+                },
+                tool_execution: {
+                    timeout: 30000,
+                    retry_count: 2,
+                },
+            };
         case 'triage':
             return { temperature: 0.3 };
         case 'knowledge':
@@ -117,6 +121,20 @@ const getDefaultConfig = (type: AgentType): Record<string, unknown> => {
 
 const getDefaultPromptTemplate = (type: AgentType): string => {
     switch (type) {
+        case 'general':
+            return `You are a capable general-purpose assistant that can reason, answer from a knowledge base, and take actions with tools.
+
+## How to work
+
+1. **Assess the request first**: Figure out what the user actually needs — a direct answer, information from the documentation, or an action/lookup.
+
+2. **Use the knowledge base**: When relevant context is provided, base your answer on it and cite the source (e.g., "According to [document name]..."). If the documentation doesn't contain the answer, say so before relying on general knowledge.
+
+3. **Use tools when an action or live lookup is needed**: If answering requires fetching data, performing an operation, or interacting with an external system, call the appropriate tool rather than guessing. Only call tools that are necessary.
+
+4. **Be honest and concise**: Don't invent information or tool results. Answer clearly, using lists or steps when helpful.
+
+5. **Language**: Respond in the same language as the user.`;
         case 'knowledge':
             return `You are an expert assistant that answers questions based on the provided documentation.
 
@@ -169,19 +187,25 @@ if (props.selectedType) {
 // Per-type visual metadata so the form cards read as "triage vs knowledge vs
 // action" at a glance without the user re-reading the description each time.
 const typeTintMap: Record<string, string> = {
+    general: 'var(--sp-accent-cyan)',
     triage: 'var(--sp-accent-blue)',
     knowledge: 'var(--sp-spectrum-magenta)',
     action: 'var(--sp-warning)',
 };
 
 const typeIconMap: Record<string, Component> = {
+    general: Sparkles,
     triage: Bot,
     knowledge: Brain,
     action: Zap,
 };
 
-const typeTint = computed(() => typeTintMap[currentType.value ?? ''] ?? 'var(--sp-accent-blue)');
-const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] ?? Bot);
+const typeTint = computed(
+    () => typeTintMap[currentType.value ?? ''] ?? 'var(--sp-accent-blue)',
+);
+const typeIcon = computed<Component>(
+    () => typeIconMap[currentType.value ?? ''] ?? Bot,
+);
 </script>
 
 <template>
@@ -224,7 +248,9 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                             id="name"
                             v-model="form.name"
                             required
-                            :placeholder="t('agents.create.agent_name_placeholder')"
+                            :placeholder="
+                                t('agents.create.agent_name_placeholder')
+                            "
                             class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.name" />
@@ -237,7 +263,9 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                         <Input
                             id="description"
                             v-model="form.description"
-                            :placeholder="t('agents.create.description_placeholder')"
+                            :placeholder="
+                                t('agents.create.description_placeholder')
+                            "
                             class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.description" />
@@ -264,7 +292,9 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                                 class="h-9 border-medium bg-surface"
                             >
                                 <SelectValue
-                                    :placeholder="t('agents.create.select_model')"
+                                    :placeholder="
+                                        t('agents.create.select_model')
+                                    "
                                 />
                             </SelectTrigger>
                             <SelectContent>
@@ -287,7 +317,10 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                     </div>
 
                     <div class="space-y-1.5">
-                        <Label for="prompt_template" class="text-xs text-ink-muted">
+                        <Label
+                            for="prompt_template"
+                            class="text-xs text-ink-muted"
+                        >
                             {{ t('agents.create.prompt_template') }}
                         </Label>
                         <Textarea
@@ -308,8 +341,18 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                     :description="t('agents.create.config_description')"
                     :tint="typeTint"
                 >
+                    <GeneralAgentConfig
+                        v-if="currentType === 'general'"
+                        v-model:config="form.config"
+                        v-model:knowledge-base-ids="form.knowledge_base_ids"
+                        v-model:tool-ids="form.tool_ids"
+                        :knowledge-bases="knowledgeBases"
+                        :tools="tools"
+                        :errors="form.errors"
+                    />
+
                     <TriageAgentConfig
-                        v-if="currentType === 'triage'"
+                        v-else-if="currentType === 'triage'"
                         v-model:config="form.config"
                         :errors="form.errors"
                     />

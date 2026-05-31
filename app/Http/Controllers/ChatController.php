@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\Visibility;
 use App\Http\Requests\Chat\UpdateChatRequest;
 use App\Jobs\RunChatAiJob;
+use App\Models\Agent;
 use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Models\ChatProject;
@@ -52,10 +53,20 @@ class ChatController extends Controller
             'tool_ids.*' => ['string'],
         ]);
 
-        $reachable = collect($this->providers->getReachableChatModels($user))->pluck('value');
-        $model = $request->string('model')->toString() ?: null;
-        if ($model === null || ! $reachable->contains($model)) {
-            $model = $reachable->first();
+        // The picker sends either a model id or `agent:{id}`.
+        $selection = $request->string('model')->toString() ?: null;
+        $agentId = null;
+        $model = null;
+        if (is_string($selection) && str_starts_with($selection, 'agent:')) {
+            $agent = Agent::query()->forAccountContext($user)->find(substr($selection, 6));
+            if ($agent !== null) {
+                $agentId = $agent->id;
+                $model = $agent->model;
+            }
+        }
+        if ($agentId === null) {
+            $reachable = collect($this->providers->getReachableChatModels($user))->pluck('value');
+            $model = ($selection !== null && $reachable->contains($selection)) ? $selection : $reachable->first();
         }
 
         $toolIds = Tool::query()
@@ -70,6 +81,7 @@ class ChatController extends Controller
             'organization_id' => $user->organization_id,
             'visibility' => Visibility::Private,
             'model' => $model,
+            'agent_id' => $agentId,
             'tool_ids' => $toolIds ?: null,
             'chat_project_id' => $request->string('chat_project_id')->toString() ?: null,
         ]);
@@ -171,6 +183,17 @@ class ChatController extends Controller
                 'type' => $tool->type instanceof \BackedEnum ? $tool->type->value : $tool->type,
             ]);
 
+        $agents = Agent::query()
+            ->forAccountContext($user)
+            ->standalone()
+            ->orderBy('name')
+            ->get(['id', 'name', 'type'])
+            ->map(fn (Agent $agent) => [
+                'id' => $agent->id,
+                'name' => $agent->name,
+                'type' => $agent->type instanceof \BackedEnum ? $agent->type->value : $agent->type,
+            ]);
+
         return [
             'chats' => $chats,
             'projects' => $projects,
@@ -178,6 +201,7 @@ class ChatController extends Controller
             'defaultModel' => $models[0]['value'] ?? null,
             'knowledgeBases' => $knowledgeBases,
             'tools' => $tools,
+            'agents' => $agents,
         ];
     }
 
@@ -190,6 +214,7 @@ class ChatController extends Controller
             'id' => $chat->id,
             'title' => $chat->title,
             'model' => $chat->model,
+            'agent_id' => $chat->agent_id,
             'tool_ids' => $chat->tool_ids ?? [],
             'chat_project_id' => $chat->chat_project_id,
             'messages' => $chat->messages->map(fn ($m) => [

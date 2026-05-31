@@ -172,7 +172,7 @@ const footerNavItems = computed<NavItem[]>(() => [
             <SidebarMenu v-if="isSysAdmin()" class="px-2">
                 <SidebarMenuItem>
                     <SidebarMenuButton as-child tooltip="Admin Panel" class="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground">
-                        <Link :href="AdminDashboardController()">
+                        <Link :href="AdminDashboardController.index().url">
                             <Shield />
                             <span>Admin Panel</span>
                         </Link>

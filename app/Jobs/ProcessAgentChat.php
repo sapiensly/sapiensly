@@ -19,6 +19,7 @@ use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use Laravel\Ai\Responses\AgentResponse;
 
 class ProcessAgentChat implements ShouldQueue
 {
@@ -46,6 +47,15 @@ class ProcessAgentChat implements ShouldQueue
         }
 
         try {
+            // General agents triage, answer from knowledge, and act with tools
+            // in a single unified call.
+            if ($this->agent->type === AgentType::General) {
+                $this->handleGeneralChat($llmService, $messages);
+                $this->sendBroadcast(new AgentStreamComplete($this->conversation->id));
+
+                return;
+            }
+
             // Check for active flow on Triage agents
             if ($this->agent->type === AgentType::Triage) {
                 $flowExecutor = app(FlowExecutorService::class);
@@ -212,6 +222,78 @@ class ProcessAgentChat implements ShouldQueue
                 ['input_type' => 'text'],
             )),
         };
+    }
+
+    /**
+     * General agent: one call with RAG context injected and tools available.
+     * Emits knowledge-base and tool-call events, then the final answer.
+     */
+    private function handleGeneralChat(LLMService $llmService, $messages): void
+    {
+        $result = $llmService->chatWithKnowledgeAndTools($this->agent, $messages->all());
+        $response = $result['response'];
+        $knowledgeBases = $result['knowledge_bases'];
+
+        foreach ($knowledgeBases as $kb) {
+            $this->sendBroadcast(new AgentStreamChunk(
+                $this->conversation->id,
+                '',
+                'knowledge_base',
+                ['name' => $kb['name'], 'id' => $kb['id']],
+            ));
+        }
+
+        $toolCalls = $this->extractToolCalls($response);
+        foreach ($toolCalls as $toolCall) {
+            $this->sendBroadcast(new AgentStreamChunk(
+                $this->conversation->id,
+                '',
+                'tool_call',
+                ['tool' => $toolCall['name']],
+            ));
+        }
+
+        $responseText = $response->text;
+        if ($responseText !== null && $responseText !== '') {
+            $metadata = [];
+            if (! empty($knowledgeBases)) {
+                $metadata['knowledge_bases'] = $knowledgeBases;
+            }
+            if (! empty($toolCalls)) {
+                $metadata['tool_calls'] = $toolCalls;
+            }
+
+            $this->conversation->messages()->create([
+                'role' => MessageRole::Assistant,
+                'content' => $responseText,
+                'model' => $this->agent->model,
+                'metadata' => $metadata ?: null,
+            ]);
+
+            $this->sendBroadcast(new AgentStreamChunk($this->conversation->id, $responseText));
+        }
+    }
+
+    /**
+     * Flatten tool calls out of an AgentResponse's steps.
+     *
+     * @return array<int, array{name: string, id: string|null}>
+     */
+    private function extractToolCalls(AgentResponse $response): array
+    {
+        $toolCalls = [];
+        foreach ($response->steps ?? [] as $step) {
+            if (! empty($step->toolCalls)) {
+                foreach ($step->toolCalls as $toolCall) {
+                    $toolCalls[] = [
+                        'name' => $toolCall->name ?? 'unknown',
+                        'id' => $toolCall->id ?? null,
+                    ];
+                }
+            }
+        }
+
+        return $toolCalls;
     }
 
     private function handleToolChat(LLMService $llmService, $messages): void

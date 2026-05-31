@@ -53,11 +53,14 @@ class AgentTeamController extends Controller
             ])->values());
 
         return Inertia::render('agents/Create', [
-            'agentTypes' => collect(AgentType::cases())->map(fn ($type) => [
-                'value' => $type->value,
-                'label' => $type->label(),
-                'description' => $type->description(),
-            ]),
+            'agentTypes' => collect(AgentType::cases())
+                ->reject(fn ($type) => $type === AgentType::General)
+                ->map(fn ($type) => [
+                    'value' => $type->value,
+                    'label' => $type->label(),
+                    'description' => $type->description(),
+                ])
+                ->values(),
             'availableModels' => $this->aiProviderService->getAvailableModels($request->user()),
             'standaloneAgents' => [
                 'triage' => $standaloneAgents->get('triage', collect())->all(),
@@ -110,11 +113,14 @@ class AgentTeamController extends Controller
 
         return Inertia::render('agents/Edit', [
             'team' => $agentTeam->load('agents'),
-            'agentTypes' => collect(AgentType::cases())->map(fn ($type) => [
-                'value' => $type->value,
-                'label' => $type->label(),
-                'description' => $type->description(),
-            ]),
+            'agentTypes' => collect(AgentType::cases())
+                ->reject(fn ($type) => $type === AgentType::General)
+                ->map(fn ($type) => [
+                    'value' => $type->value,
+                    'label' => $type->label(),
+                    'description' => $type->description(),
+                ])
+                ->values(),
             'availableModels' => $this->aiProviderService->getAvailableModels($request->user()),
         ]);
     }

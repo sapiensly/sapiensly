@@ -22,6 +22,7 @@ class Chat extends Model
         'chat_project_id',
         'title',
         'model',
+        'agent_id',
         'tool_ids',
         'visibility',
         'last_message_at',
@@ -51,6 +52,11 @@ class Chat extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(ChatProject::class, 'chat_project_id');
+    }
+
+    public function agent(): BelongsTo
+    {
+        return $this->belongsTo(Agent::class, 'agent_id');
     }
 
     public function messages(): HasMany

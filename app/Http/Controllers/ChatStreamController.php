@@ -52,6 +52,12 @@ class ChatStreamController extends Controller
             }, 200, $this->streamHeaders());
         }
 
+        // General agents triage, answer from knowledge, and act with tools in
+        // a single unified call.
+        if ($agent->type === AgentType::General) {
+            return $this->streamGeneral($agent, $conversation, $messages);
+        }
+
         // Check for active flow on Triage agents
         if ($agent->type === AgentType::Triage) {
             $flowState = $conversation->metadata['flow_state'] ?? null;
@@ -130,6 +136,90 @@ class ChatStreamController extends Controller
 
                 echo 'data: '.json_encode(['error' => $e->getMessage()])."\n\n";
                 $this->flushOutput();
+            }
+
+            echo "data: [DONE]\n\n";
+            $this->flushOutput();
+        }, 200, $this->streamHeaders());
+    }
+
+    /**
+     * Stream response for a General Agent: one call with RAG context injected
+     * and tools available. Emits knowledge-base and tool-call events, then the
+     * final answer. Computed synchronously (same output-buffering constraint as
+     * streamWithRAG / streamWithTools).
+     */
+    private function streamGeneral(Agent $agent, Conversation $conversation, Collection $messages): StreamedResponse
+    {
+        $knowledgeBases = [];
+        $toolCalls = [];
+        $responseText = '';
+        $error = null;
+
+        try {
+            $result = $this->llmService->chatWithKnowledgeAndTools($agent, $messages->all());
+            $response = $result['response'];
+            $knowledgeBases = $result['knowledge_bases'];
+            $responseText = $response->text ?? '';
+
+            foreach ($response->steps ?? [] as $step) {
+                if (! empty($step->toolCalls)) {
+                    foreach ($step->toolCalls as $toolCall) {
+                        $toolCalls[] = [
+                            'name' => $toolCall->name ?? 'unknown',
+                            'id' => $toolCall->id ?? null,
+                        ];
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error('General Chat Error', [
+                'agent_id' => $agent->id,
+                'conversation_id' => $conversation->id,
+                'error' => $e->getMessage(),
+            ]);
+            $error = $e->getMessage();
+        }
+
+        return response()->stream(function () use ($agent, $conversation, $knowledgeBases, $toolCalls, $responseText, $error) {
+            foreach ($knowledgeBases as $kb) {
+                echo 'data: '.json_encode([
+                    'type' => 'knowledge_base',
+                    'name' => $kb['name'],
+                    'id' => $kb['id'],
+                ])."\n\n";
+                $this->flushOutput();
+            }
+
+            foreach ($toolCalls as $toolCall) {
+                echo 'data: '.json_encode([
+                    'type' => 'tool_call',
+                    'tool' => $toolCall['name'],
+                ])."\n\n";
+                $this->flushOutput();
+            }
+
+            if ($error) {
+                echo 'data: '.json_encode(['error' => $error])."\n\n";
+                $this->flushOutput();
+            } elseif ($responseText !== '') {
+                echo 'data: '.json_encode(['content' => $responseText])."\n\n";
+                $this->flushOutput();
+
+                $metadata = [];
+                if (! empty($knowledgeBases)) {
+                    $metadata['knowledge_bases'] = $knowledgeBases;
+                }
+                if (! empty($toolCalls)) {
+                    $metadata['tool_calls'] = $toolCalls;
+                }
+
+                $conversation->messages()->create([
+                    'role' => MessageRole::Assistant,
+                    'content' => $responseText,
+                    'model' => $agent->model,
+                    'metadata' => $metadata ?: null,
+                ]);
             }
 
             echo "data: [DONE]\n\n";

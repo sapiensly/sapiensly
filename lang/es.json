@@ -14,9 +14,11 @@
     "If you're having trouble clicking the \":actionText\" button, copy and paste the URL below\ninto your web browser:": "Si tienes problemas para hacer clic en el botón \":actionText\", copia y pega la URL siguiente\nen tu navegador:",
     "All rights reserved.": "Todos los derechos reservados.",
 
+    "General Agent": "Agente General",
     "Triage Agent": "Agente de Clasificación",
     "Knowledge Agent": "Agente de Conocimiento",
     "Action Agent": "Agente de Acción",
+    "Triages, answers from knowledge, and acts with tools — all in one": "Clasifica, responde desde el conocimiento y actúa con herramientas — todo en uno",
     "Classifies intent, urgency, and sentiment": "Clasifica intención, urgencia y sentimiento",
     "Searches company documentation with RAG": "Busca documentación de la empresa con RAG",
     "Executes real-world operations via tools": "Ejecuta operaciones del mundo real mediante herramientas",

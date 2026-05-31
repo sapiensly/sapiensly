@@ -1,4 +1,4 @@
-export type AgentType = 'triage' | 'knowledge' | 'action';
+export type AgentType = 'general' | 'triage' | 'knowledge' | 'action';
 export type AgentStatus = 'draft' | 'active' | 'inactive';
 
 export interface AgentTypeOption {
@@ -36,7 +36,20 @@ export interface ActionAgentConfig {
     };
 }
 
+export interface GeneralAgentConfig {
+    rag_params?: {
+        chunk_size?: number;
+        top_k?: number;
+        similarity_threshold?: number;
+    };
+    tool_execution?: {
+        timeout?: number;
+        retry_count?: number;
+    };
+}
+
 export type AgentConfig =
+    | GeneralAgentConfig
     | TriageAgentConfig
     | KnowledgeAgentConfig
     | ActionAgentConfig;
@@ -133,6 +146,7 @@ export interface PaginatedAgents {
 }
 
 export interface RecommendedModels {
+    general: string[];
     triage: string[];
     knowledge: string[];
     action: string[];

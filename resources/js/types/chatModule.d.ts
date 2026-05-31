@@ -53,10 +53,17 @@ export interface ChatToolOption {
     type: string;
 }
 
+export interface ChatAgentOption {
+    id: string;
+    name: string;
+    type: string;
+}
+
 export interface ActiveChatDto {
     id: string;
     title: string | null;
     model: string | null;
+    agent_id: string | null;
     tool_ids: string[];
     chat_project_id: string | null;
     messages: ChatMessageDto[];

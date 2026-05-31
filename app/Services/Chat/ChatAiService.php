@@ -11,6 +11,7 @@ use App\Events\Chat\ChatStreamChunk;
 use App\Events\Chat\ChatStreamComplete;
 use App\Events\Chat\ChatStreamError;
 use App\Events\Chat\ChatToolCall;
+use App\Models\Agent;
 use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Models\Tool;
@@ -56,7 +57,9 @@ class ChatAiService
         You are a helpful, knowledgeable AI assistant in a chat application. Answer clearly and concisely, and use Markdown (headings, lists, tables, fenced code blocks) when it improves readability. Match the language of the user.
 
         Rely only on the messages actually present in this conversation. Never invent or assume earlier exchanges, and never claim the user said something they did not (for example, do not assert they "confused you with" another assistant). If there is no prior context, simply answer the current message.
+        PROMPT;
 
+    private const ARTIFACTS_INSTRUCTIONS = <<<'PROMPT'
         ## Artifacts
         When you produce a substantial, self-contained deliverable the user will likely keep, reuse, edit, or run — a full code file or program, a complete HTML page, an SVG, or a long document (roughly 15+ lines) — wrap ONLY that deliverable in an artifact tag and keep your conversational reply outside it:
 
@@ -116,12 +119,34 @@ class ChatAiService
             }
         }
 
-        $instructions = self::SYSTEM_PROMPT;
-        if ($chat->project?->custom_instructions) {
-            $instructions .= "\n\n## Project instructions\n".$chat->project->custom_instructions;
+        // A selected agent (chat.agent_id) runs the turn as that agent: its
+        // model, prompt, knowledge bases and tools. Otherwise it's a plain model
+        // chat using the project's instructions/KBs and the composer's tools.
+        $agent = $chat->agent_id !== null ? Agent::find($chat->agent_id) : null;
+        if ($agent !== null && ($user === null || ! $agent->isVisibleTo($user))) {
+            $agent = null;
         }
 
-        $resolvedModel = $modelOverride ?? $placeholder->model ?? $chat->model ?? self::DEFAULT_MODEL;
+        if ($agent !== null) {
+            $instructions = trim((string) $agent->prompt_template) !== ''
+                ? (string) $agent->prompt_template
+                : self::SYSTEM_PROMPT;
+            $resolvedModel = $agent->model ?: ($modelOverride ?? $chat->model ?? self::DEFAULT_MODEL);
+            $ragKbIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->all();
+            $toolIds = $agent->tools()->where('status', 'active')->pluck('tools.id')->all();
+        } else {
+            $instructions = self::SYSTEM_PROMPT;
+            if ($chat->project?->custom_instructions) {
+                $instructions .= "\n\n## Project instructions\n".$chat->project->custom_instructions;
+            }
+            $resolvedModel = $modelOverride ?? $placeholder->model ?? $chat->model ?? self::DEFAULT_MODEL;
+            $ragKbIds = $chat->project
+                ? $chat->project->knowledgeBases()->pluck('knowledge_bases.id')->all()
+                : [];
+        }
+
+        $instructions .= "\n\n".self::ARTIFACTS_INSTRUCTIONS;
+
         $startedAt = microtime(true);
         $buffer = '';
 
@@ -132,10 +157,10 @@ class ChatAiService
                 $provider = $this->providers->resolveProviderForCatalogModel($resolvedModel, $user) ?? Lab::Anthropic;
             }
 
-            // Project knowledge (RAG): retrieve relevant chunks for this turn
-            // and fold them into the instructions. Best-effort — never let a
-            // retrieval hiccup break the chat.
-            $instructions .= $this->retrieveProjectContext($chat, $promptText);
+            // Knowledge (RAG): retrieve relevant chunks (from the agent's or the
+            // project's knowledge bases) and fold them into the instructions.
+            // Best-effort — never let a retrieval hiccup break the chat.
+            $instructions .= $this->retrieveContext($ragKbIds, $promptText, $chat->id);
 
             $tools = $this->buildChatTools($toolIds, $user, $webSearch);
 
@@ -324,19 +349,15 @@ class ChatAiService
     }
 
     /**
-     * Retrieve relevant context from the chat's project knowledge bases and
-     * format it as an appendable instructions block. Returns '' when the chat
-     * has no project KBs, nothing matches, or retrieval fails.
+     * Retrieve relevant context from the given knowledge bases (the agent's or
+     * the project's) and format it as an appendable instructions block. Returns
+     * '' when there are no KBs, nothing matches, or retrieval fails.
+     *
+     * @param  array<int, string>  $kbIds
      */
-    private function retrieveProjectContext(Chat $chat, string $query): string
+    private function retrieveContext(array $kbIds, string $query, string $chatId): string
     {
-        $project = $chat->project;
-        if ($project === null || $query === '') {
-            return '';
-        }
-
-        $kbIds = $project->knowledgeBases()->pluck('knowledge_bases.id')->all();
-        if (empty($kbIds)) {
+        if (empty($kbIds) || trim($query) === '') {
             return '';
         }
 
@@ -347,13 +368,13 @@ class ChatAiService
                 return '';
             }
 
-            return "\n\n## Relevant context from the project's knowledge base\n"
+            return "\n\n## Relevant context from the knowledge base\n"
                 .'Use the following retrieved information when it helps answer the user. '
                 ."If it doesn't contain the answer, rely on your own knowledge.\n\n"
                 .$result['context'];
         } catch (\Throwable $e) {
-            Log::warning('Chat AI: project RAG retrieval failed (continuing without context)', [
-                'chat_id' => $chat->id,
+            Log::warning('Chat AI: RAG retrieval failed (continuing without context)', [
+                'chat_id' => $chatId,
                 'error' => $e->getMessage(),
             ]);
 
