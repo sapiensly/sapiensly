@@ -45,80 +45,87 @@ class AiProviderController extends Controller
 
     public function create(Request $request): Response
     {
+        $user = $request->user();
+        $existing = AiProvider::forAccountContext($user)->get();
+
         return Inertia::render('system/AiProviderForm', [
             'drivers' => $this->aiProviderService->getAvailableDrivers(),
             'mode' => 'create',
+            'configuredDrivers' => $existing->pluck('driver')->unique()->values()->all(),
+            'hasDefaultChat' => $existing->contains('is_default', true),
+            'hasDefaultEmbeddings' => $existing->contains('is_default_embeddings', true),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'llm.driver' => 'required|string|max:50',
-            'llm.model_id' => 'required|string|max:100',
-            'llm.credentials' => 'required|array',
-            'llm.credentials.api_key' => 'required|string',
-            'embeddings.driver' => 'required|string|max:50',
-            'embeddings.model_id' => 'required|string|max:100',
-            'embeddings.credentials' => 'required|array',
-            'embeddings.credentials.api_key' => 'required|string',
+            'driver' => 'required|string|max:50',
+            'credentials' => 'required|array',
+            'credentials.api_key' => 'required|string',
+            'chat_model_id' => 'nullable|string|max:100',
+            'embeddings_model_id' => 'nullable|string|max:100',
+            'make_default_chat' => 'boolean',
+            'make_default_embeddings' => 'boolean',
         ]);
 
-        $llm = $validated['llm'];
-        $embeddings = $validated['embeddings'];
+        $driver = $validated['driver'];
 
-        $llmModel = $this->aiProviderService->findModelInCatalog($llm['driver'], $llm['model_id']);
-        $embeddingsModel = $this->aiProviderService->findModelInCatalog($embeddings['driver'], $embeddings['model_id']);
-
-        if ($llmModel === null || ! in_array('chat', $llmModel['capabilities'], true)) {
+        if (empty($validated['chat_model_id']) && empty($validated['embeddings_model_id'])) {
             throw ValidationException::withMessages([
-                'llm.model_id' => __('Selected LLM model is not a valid chat model.'),
+                'chat_model_id' => __('Select at least a chat model or an embeddings model.'),
             ]);
         }
-        if ($embeddingsModel === null || ! in_array('embeddings', $embeddingsModel['capabilities'], true)) {
-            throw ValidationException::withMessages([
-                'embeddings.model_id' => __('Selected embeddings model is not a valid embeddings model.'),
-            ]);
+
+        $models = [];
+
+        if (! empty($validated['chat_model_id'])) {
+            $chatModel = $this->aiProviderService->findModelInCatalog($driver, $validated['chat_model_id']);
+            if ($chatModel === null || ! in_array('chat', $chatModel['capabilities'], true)) {
+                throw ValidationException::withMessages([
+                    'chat_model_id' => __('Selected chat model is not a valid chat model.'),
+                ]);
+            }
+            $models[] = $chatModel;
+        }
+
+        if (! empty($validated['embeddings_model_id'])) {
+            $embeddingsModel = $this->aiProviderService->findModelInCatalog($driver, $validated['embeddings_model_id']);
+            if ($embeddingsModel === null || ! in_array('embeddings', $embeddingsModel['capabilities'], true)) {
+                throw ValidationException::withMessages([
+                    'embeddings_model_id' => __('Selected embeddings model is not a valid embeddings model.'),
+                ]);
+            }
+            // De-duplicate when the same model carries both capabilities.
+            if (! collect($models)->contains('id', $embeddingsModel['id'])) {
+                $models[] = $embeddingsModel;
+            }
         }
 
         $user = $request->user();
         $visibility = $user->organization_id ? Visibility::Organization : Visibility::Private;
 
-        // Reset any existing defaults in the current account context
-        AiProvider::forAccountContext($user)->update([
-            'is_default' => false,
-            'is_default_embeddings' => false,
+        $provider = $this->upsertProviderForDriver($user, $visibility, $driver, $validated['credentials']);
+        $provider->update([
+            'models' => $models,
+            'status' => 'active',
         ]);
 
-        $sameDriver = $llm['driver'] === $embeddings['driver'];
+        // Defaults change only when the user opts in — adding a provider never
+        // clobbers existing defaults otherwise.
+        $makeDefaultChat = ($validated['make_default_chat'] ?? false) && ! empty($validated['chat_model_id']);
+        $makeDefaultEmbeddings = ($validated['make_default_embeddings'] ?? false) && ! empty($validated['embeddings_model_id']);
 
-        if ($sameDriver) {
-            // Single provider carries both the chat model and the embeddings model,
-            // and is marked as both defaults.
-            $provider = $this->upsertProviderForDriver($user, $visibility, $llm['driver'], $llm['credentials']);
-            $provider->update([
-                'models' => $this->mergeModels($llmModel, $embeddingsModel),
-                'is_default' => true,
-                'is_default_embeddings' => true,
-                'status' => 'active',
-            ]);
-        } else {
-            $llmProvider = $this->upsertProviderForDriver($user, $visibility, $llm['driver'], $llm['credentials']);
-            $llmProvider->update([
-                'models' => [$llmModel],
-                'is_default' => true,
-                'is_default_embeddings' => false,
-                'status' => 'active',
-            ]);
-
-            $embeddingsProvider = $this->upsertProviderForDriver($user, $visibility, $embeddings['driver'], $embeddings['credentials']);
-            $embeddingsProvider->update([
-                'models' => [$embeddingsModel],
-                'is_default' => false,
-                'is_default_embeddings' => true,
-                'status' => 'active',
-            ]);
+        if ($makeDefaultChat) {
+            AiProvider::forAccountContext($user)->where('id', '!=', $provider->id)->update(['is_default' => false]);
         }
+        if ($makeDefaultEmbeddings) {
+            AiProvider::forAccountContext($user)->where('id', '!=', $provider->id)->update(['is_default_embeddings' => false]);
+        }
+        $provider->update([
+            'is_default' => $makeDefaultChat ? true : $provider->is_default,
+            'is_default_embeddings' => $makeDefaultEmbeddings ? true : $provider->is_default_embeddings,
+        ]);
 
         return to_route('system.ai-providers.index');
     }
@@ -161,22 +168,6 @@ class AiProviderController extends Controller
             'is_default_embeddings' => false,
             'status' => 'active',
         ]);
-    }
-
-    /**
-     * Merge two model catalog entries, de-duplicated by id.
-     *
-     * @param  array{id: string, label: string, capabilities: array<int, string>}  $a
-     * @param  array{id: string, label: string, capabilities: array<int, string>}  $b
-     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
-     */
-    private function mergeModels(array $a, array $b): array
-    {
-        if ($a['id'] === $b['id']) {
-            return [$a];
-        }
-
-        return [$a, $b];
     }
 
     public function edit(Request $request, AiProvider $aiProvider): Response

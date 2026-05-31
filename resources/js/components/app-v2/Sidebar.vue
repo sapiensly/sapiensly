@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
-import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import * as ChatController from '@/actions/App/Http/Controllers/ChatController';
@@ -44,7 +43,6 @@ import {
     MessagesSquare,
     Plug,
     Shield,
-    Users,
     Wrench,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
@@ -105,7 +103,7 @@ const sections = computed<NavSection[]>(() => [
                 label: t('app_v2.nav.agents'),
                 href: AgentController.index().url,
                 icon: Bot,
-                match: (u) => u.startsWith('/agents'),
+                match: (u) => u.startsWith('/agents') || u.startsWith('/agent-teams'),
             },
             {
                 key: 'apps',
@@ -127,13 +125,6 @@ const sections = computed<NavSection[]>(() => [
                 href: ChatbotController.index().url,
                 icon: MessageSquare,
                 match: (u) => u.startsWith('/chatbots'),
-            },
-            {
-                key: 'agent-teams',
-                label: t('app_v2.nav.agent_teams'),
-                href: AgentTeamController.index().url,
-                icon: Users,
-                match: (u) => u.startsWith('/agent-teams'),
             },
         ],
     },

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
+import AgentsSwitcher from '@/components/app-v2/AgentsSwitcher.vue';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AgentTeamCard from '@/components/agents/AgentTeamCard.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
@@ -38,6 +39,8 @@ defineProps<Props>();
                     </Link>
                 </template>
             </PageHeader>
+
+            <AgentsSwitcher active="teams" />
 
             <div
                 v-if="teams.data.length > 0"

@@ -9,151 +9,101 @@ beforeEach(function () {
     $this->user = User::factory()->create();
 });
 
-test('storing with same driver for LLM and embeddings creates one provider with both defaults', function () {
+test('storing one provider with both a chat and an embeddings model creates a single provider', function () {
     actingAs($this->user)->post('/system/ai-providers', [
-        'llm' => [
-            'driver' => 'openai',
-            'model_id' => 'gpt-4o',
-            'credentials' => ['api_key' => 'sk-test-key'],
-        ],
-        'embeddings' => [
-            'driver' => 'openai',
-            'model_id' => 'text-embedding-3-small',
-            'credentials' => ['api_key' => 'sk-test-key'],
-        ],
+        'driver' => 'openai',
+        'credentials' => ['api_key' => 'sk-test-key'],
+        'chat_model_id' => 'gpt-4o',
+        'embeddings_model_id' => 'text-embedding-3-small',
+        'make_default_chat' => true,
+        'make_default_embeddings' => true,
     ])->assertRedirect('/system/ai-providers');
 
     $providers = AiProvider::where('user_id', $this->user->id)->get();
-
     expect($providers)->toHaveCount(1);
 
     $provider = $providers->first();
-    expect($provider->driver)->toBe('openai');
-    expect($provider->is_default)->toBeTrue();
-    expect($provider->is_default_embeddings)->toBeTrue();
-    expect($provider->credentials['api_key'])->toBe('sk-test-key');
+    expect($provider->driver)->toBe('openai')
+        ->and($provider->is_default)->toBeTrue()
+        ->and($provider->is_default_embeddings)->toBeTrue()
+        ->and($provider->credentials['api_key'])->toBe('sk-test-key');
 
     $modelIds = collect($provider->models)->pluck('id')->all();
-    expect($modelIds)->toContain('gpt-4o');
-    expect($modelIds)->toContain('text-embedding-3-small');
+    expect($modelIds)->toContain('gpt-4o')->toContain('text-embedding-3-small');
 });
 
-test('storing with different drivers creates two providers', function () {
+test('two separate submissions create two providers', function () {
     actingAs($this->user)->post('/system/ai-providers', [
-        'llm' => [
-            'driver' => 'anthropic',
-            'model_id' => 'claude-sonnet-4-20250514',
-            'credentials' => ['api_key' => 'sk-ant-test'],
-        ],
-        'embeddings' => [
-            'driver' => 'openai',
-            'model_id' => 'text-embedding-3-small',
-            'credentials' => ['api_key' => 'sk-openai-test'],
-        ],
+        'driver' => 'anthropic',
+        'credentials' => ['api_key' => 'sk-ant-test'],
+        'chat_model_id' => 'claude-sonnet-4-20250514',
+        'make_default_chat' => true,
+    ])->assertRedirect('/system/ai-providers');
+
+    actingAs($this->user)->post('/system/ai-providers', [
+        'driver' => 'openai',
+        'credentials' => ['api_key' => 'sk-openai-test'],
+        'embeddings_model_id' => 'text-embedding-3-small',
+        'make_default_embeddings' => true,
     ])->assertRedirect('/system/ai-providers');
 
     $providers = AiProvider::where('user_id', $this->user->id)->get()->keyBy('driver');
-
-    expect($providers)->toHaveCount(2);
-
-    $anthropic = $providers['anthropic'];
-    expect($anthropic->is_default)->toBeTrue();
-    expect($anthropic->is_default_embeddings)->toBeFalse();
-    expect(collect($anthropic->models)->pluck('id')->all())->toBe(['claude-sonnet-4-20250514']);
-
-    $openai = $providers['openai'];
-    expect($openai->is_default)->toBeFalse();
-    expect($openai->is_default_embeddings)->toBeTrue();
-    expect(collect($openai->models)->pluck('id')->all())->toBe(['text-embedding-3-small']);
+    expect($providers)->toHaveCount(2)
+        ->and($providers['anthropic']->is_default)->toBeTrue()
+        ->and($providers['anthropic']->is_default_embeddings)->toBeFalse()
+        ->and($providers['openai']->is_default_embeddings)->toBeTrue()
+        ->and($providers['openai']->is_default)->toBeFalse();
 });
 
-test('storing clears existing defaults in the user context', function () {
+test('adding a provider keeps existing defaults when not opted in', function () {
     AiProvider::factory()->openai()->forUser($this->user)->default()->defaultEmbeddings()->create();
 
     actingAs($this->user)->post('/system/ai-providers', [
-        'llm' => [
-            'driver' => 'anthropic',
-            'model_id' => 'claude-sonnet-4-20250514',
-            'credentials' => ['api_key' => 'sk-ant-new'],
-        ],
-        'embeddings' => [
-            'driver' => 'openai',
-            'model_id' => 'text-embedding-3-large',
-            'credentials' => ['api_key' => 'sk-openai-new'],
-        ],
+        'driver' => 'anthropic',
+        'credentials' => ['api_key' => 'sk-ant-new'],
+        'chat_model_id' => 'claude-sonnet-4-20250514',
     ])->assertRedirect('/system/ai-providers');
 
-    // Exactly one default for each capability across the account context
     $defaults = AiProvider::where('user_id', $this->user->id)->where('is_default', true)->get();
-    expect($defaults)->toHaveCount(1);
-    expect($defaults->first()->driver)->toBe('anthropic');
+    expect($defaults)->toHaveCount(1)
+        ->and($defaults->first()->driver)->toBe('openai');
 
-    $defaultEmbeddings = AiProvider::where('user_id', $this->user->id)->where('is_default_embeddings', true)->get();
-    expect($defaultEmbeddings)->toHaveCount(1);
-    expect($defaultEmbeddings->first()->driver)->toBe('openai');
+    $anthropic = AiProvider::where('user_id', $this->user->id)->where('driver', 'anthropic')->firstOrFail();
+    expect($anthropic->is_default)->toBeFalse();
 });
 
-test('storing rejects a non-chat model for the LLM slot', function () {
+test('storing rejects a non-chat model as the chat model', function () {
     actingAs($this->user)->post('/system/ai-providers', [
-        'llm' => [
-            'driver' => 'openai',
-            'model_id' => 'text-embedding-3-small',
-            'credentials' => ['api_key' => 'sk-test'],
-        ],
-        'embeddings' => [
-            'driver' => 'openai',
-            'model_id' => 'text-embedding-3-small',
-            'credentials' => ['api_key' => 'sk-test'],
-        ],
-    ])->assertSessionHasErrors(['llm.model_id']);
+        'driver' => 'openai',
+        'credentials' => ['api_key' => 'sk-test'],
+        'chat_model_id' => 'text-embedding-3-small',
+    ])->assertSessionHasErrors(['chat_model_id']);
 
     expect(AiProvider::where('user_id', $this->user->id)->count())->toBe(0);
 });
 
-test('storing rejects a non-embeddings model for the embeddings slot', function () {
+test('storing rejects a non-embeddings model as the embeddings model', function () {
     actingAs($this->user)->post('/system/ai-providers', [
-        'llm' => [
-            'driver' => 'openai',
-            'model_id' => 'gpt-4o',
-            'credentials' => ['api_key' => 'sk-test'],
-        ],
-        'embeddings' => [
-            'driver' => 'openai',
-            'model_id' => 'gpt-4o',
-            'credentials' => ['api_key' => 'sk-test'],
-        ],
-    ])->assertSessionHasErrors(['embeddings.model_id']);
+        'driver' => 'openai',
+        'credentials' => ['api_key' => 'sk-test'],
+        'embeddings_model_id' => 'gpt-4o',
+    ])->assertSessionHasErrors(['embeddings_model_id']);
 
     expect(AiProvider::where('user_id', $this->user->id)->count())->toBe(0);
 });
 
-test('resubmitting with a previously used driver updates credentials instead of duplicating', function () {
-    // First setup
+test('re-adding the same driver updates credentials and models instead of duplicating', function () {
     actingAs($this->user)->post('/system/ai-providers', [
-        'llm' => [
-            'driver' => 'openai',
-            'model_id' => 'gpt-4o',
-            'credentials' => ['api_key' => 'sk-old'],
-        ],
-        'embeddings' => [
-            'driver' => 'openai',
-            'model_id' => 'text-embedding-3-small',
-            'credentials' => ['api_key' => 'sk-old'],
-        ],
+        'driver' => 'openai',
+        'credentials' => ['api_key' => 'sk-old'],
+        'chat_model_id' => 'gpt-4o',
     ])->assertRedirect('/system/ai-providers');
 
-    // Second setup with same driver but new key and new model
     actingAs($this->user)->post('/system/ai-providers', [
-        'llm' => [
-            'driver' => 'openai',
-            'model_id' => 'gpt-4o-mini',
-            'credentials' => ['api_key' => 'sk-new'],
-        ],
-        'embeddings' => [
-            'driver' => 'openai',
-            'model_id' => 'text-embedding-3-large',
-            'credentials' => ['api_key' => 'sk-new'],
-        ],
+        'driver' => 'openai',
+        'credentials' => ['api_key' => 'sk-new'],
+        'chat_model_id' => 'gpt-4o-mini',
+        'embeddings_model_id' => 'text-embedding-3-large',
     ])->assertRedirect('/system/ai-providers');
 
     $providers = AiProvider::where('user_id', $this->user->id)->get();
@@ -163,7 +113,7 @@ test('resubmitting with a previously used driver updates credentials instead of 
     expect($provider->credentials['api_key'])->toBe('sk-new');
 
     $modelIds = collect($provider->models)->pluck('id')->all();
-    expect($modelIds)->toContain('gpt-4o-mini');
-    expect($modelIds)->toContain('text-embedding-3-large');
-    expect($modelIds)->not->toContain('gpt-4o');
+    expect($modelIds)->toContain('gpt-4o-mini')
+        ->toContain('text-embedding-3-large')
+        ->not->toContain('gpt-4o');
 });
