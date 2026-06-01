@@ -28,6 +28,7 @@ use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
+use App\Services\Storage\TenantStorage;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -88,6 +89,7 @@ class BuilderAiService
         private AiProviderService $providers,
         private RecordQueryService $records,
         private RecordWriteService $writer,
+        private TenantStorage $tenantStorage,
     ) {}
 
     public function startConversation(App $app, User $user): BuilderConversation
@@ -317,6 +319,11 @@ class BuilderAiService
             // S3-compatible buckets and Storage::fake() in tests.
             $attachments = [];
             if ($attachmentPath !== null && $attachmentDisk !== null) {
+                // Re-register the CloudProvider-backed disk: this runs in a
+                // queue worker that never saw the write-time config, so the
+                // persisted name (and StoredImage's internal disk lookup)
+                // would otherwise fail to resolve.
+                $attachmentDisk = $this->tenantStorage->ensureRegistered($attachmentDisk);
                 $disk = Storage::disk($attachmentDisk);
                 if ($disk->exists($attachmentPath)) {
                     $attachments[] = new StoredImage($attachmentPath, $attachmentDisk);

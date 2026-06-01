@@ -368,3 +368,48 @@ test('buildConnection registers the runtime connection and returns it', function
         ->and(config('database.connections.'.CloudProviderService::RUNTIME_DB_CONNECTION.'.database'))
         ->toStartWith('nonexistent_');
 });
+
+test('diskDriverName embeds the provider id behind the prefix', function () {
+    $provider = CloudProvider::factory()->storage()->global()->create();
+
+    expect($this->service->diskDriverName($provider))
+        ->toBe(CloudProviderService::PROVIDER_DISK_PREFIX.$provider->id);
+});
+
+test('registerDisk wires the provider credentials into the filesystem config', function () {
+    $provider = CloudProvider::factory()->storage()->create([
+        'credentials' => [
+            'bucket' => 'owner-bucket',
+            'region' => 'eu-west-1',
+            'key' => 'AKIAOWNER',
+            'secret' => 'shh',
+        ],
+    ]);
+
+    $name = $this->service->registerDisk($provider);
+
+    expect($name)->toBe(CloudProviderService::PROVIDER_DISK_PREFIX.$provider->id)
+        ->and(config("filesystems.disks.{$name}.driver"))->toBe('s3')
+        ->and(config("filesystems.disks.{$name}.bucket"))->toBe('owner-bucket')
+        ->and(config("filesystems.disks.{$name}.region"))->toBe('eu-west-1');
+});
+
+test('ensureDiskRegistered re-registers a cloud_provider disk by name', function () {
+    $provider = CloudProvider::factory()->storage()->create([
+        'credentials' => ['bucket' => 'round-trip', 'region' => 'us-east-1', 'key' => 'k', 'secret' => 's'],
+    ]);
+    $name = $this->service->diskDriverName($provider);
+    config()->set("filesystems.disks.{$name}", null);
+
+    $returned = $this->service->ensureDiskRegistered($name);
+
+    expect($returned)->toBe($name)
+        ->and(config("filesystems.disks.{$name}.bucket"))->toBe('round-trip');
+});
+
+test('ensureDiskRegistered is a no-op for static disk names', function () {
+    config()->set('filesystems.disks.documents', null);
+
+    expect($this->service->ensureDiskRegistered('documents'))->toBe('documents')
+        ->and(config('filesystems.disks.documents'))->toBeNull();
+});

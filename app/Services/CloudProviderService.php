@@ -87,6 +87,13 @@ class CloudProviderService
      */
     public const RUNTIME_DB_CONNECTION = 'tenant_custom';
 
+    /**
+     * Prefix for the deterministic on-demand disk name a storage provider is
+     * registered under. The provider id follows the prefix so any process can
+     * rebuild the disk from a persisted name. See {@see diskDriverName()}.
+     */
+    public const PROVIDER_DISK_PREFIX = 'cloud_provider_';
+
     // =========================================================================
     // Resolution (tenant → global → null)
     // =========================================================================
@@ -382,13 +389,73 @@ class CloudProviderService
 
     public function buildDisk(CloudProvider $provider): Filesystem
     {
+        return Storage::build($this->diskConfig($provider));
+    }
+
+    /**
+     * Deterministic on-demand disk name for a storage provider. Persisting this
+     * name on a row lets the serve/read path round-trip back to the same disk
+     * via {@see registerDisk()} in any process (HTTP request, queue worker),
+     * which is impossible with an anonymous {@see buildDisk()} instance.
+     */
+    public function diskDriverName(CloudProvider $provider): string
+    {
+        return self::PROVIDER_DISK_PREFIX.$provider->id;
+    }
+
+    /**
+     * Register the provider's disk into the filesystem config under its
+     * deterministic name so `Storage::disk($name)` resolves it in the current
+     * process. Idempotent — safe to call on every request/job. Returns the name.
+     */
+    public function registerDisk(CloudProvider $provider): string
+    {
+        $name = $this->diskDriverName($provider);
+        Config::set('filesystems.disks.'.$name, $this->diskConfig($provider));
+
+        return $name;
+    }
+
+    /**
+     * Re-register a previously-persisted disk name if it points at a storage
+     * provider, so `Storage::disk($name)` resolves it in this process. A no-op
+     * for static disk names (`s3`, `documents`) and for providers that have
+     * since been removed. Returns the (unchanged) name for call chaining.
+     */
+    public function ensureDiskRegistered(string $diskName): string
+    {
+        if (! str_starts_with($diskName, self::PROVIDER_DISK_PREFIX)) {
+            return $diskName;
+        }
+
+        $id = substr($diskName, strlen(self::PROVIDER_DISK_PREFIX));
+        $provider = CloudProvider::query()
+            ->where('id', $id)
+            ->where('kind', self::KIND_STORAGE)
+            ->first();
+
+        if ($provider !== null) {
+            $this->registerDisk($provider);
+        }
+
+        return $diskName;
+    }
+
+    /**
+     * S3-flavored disk config for a storage provider. Shared by buildDisk()
+     * (anonymous instance) and registerDisk() (named, config-backed).
+     *
+     * @return array<string, mixed>
+     */
+    private function diskConfig(CloudProvider $provider): array
+    {
         if ($provider->kind !== self::KIND_STORAGE) {
             throw new \InvalidArgumentException("Provider {$provider->id} is not a storage provider.");
         }
 
         $credentials = $provider->credentials ?? [];
 
-        return Storage::build([
+        return [
             'driver' => 's3',
             'key' => $credentials['key'] ?? '',
             'secret' => $credentials['secret'] ?? '',
@@ -399,7 +466,7 @@ class CloudProviderService
             'use_path_style_endpoint' => $this->usesPathStyleEndpoint($provider->driver),
             'visibility' => 'private',
             'throw' => true,
-        ]);
+        ];
     }
 
     /**

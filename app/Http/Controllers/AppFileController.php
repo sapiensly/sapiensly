@@ -113,7 +113,9 @@ class AppFileController extends Controller
 
         // Old rows from before TenantStorage existed might have an empty
         // disk — fall back to the currently-resolved disk for the App.
-        $disk = Storage::disk($file->disk ?: $this->tenantStorage->diskName($app));
+        // diskFromName re-registers a CloudProvider-backed disk so the
+        // persisted name resolves in this request.
+        $disk = $this->tenantStorage->diskFromName($file->disk ?: $this->tenantStorage->diskName($app));
         if (! $disk->exists($file->storage_path)) {
             throw new NotFoundHttpException("File '{$fileId}' is missing on disk.");
         }

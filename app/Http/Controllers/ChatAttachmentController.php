@@ -30,7 +30,11 @@ class ChatAttachmentController extends Controller
         }
 
         // Resolve the cloud disk up front — throws (→ 503) if no S3 is wired.
-        $diskName = $this->tenantStorage->diskName(null);
+        // Owner-aware: prefers the chat owner's org/personal CloudProvider.
+        $diskName = $this->tenantStorage->diskNameForOwner(
+            $chat->organization_id,
+            $chat->user_id,
+        );
 
         $attachment = new ChatAttachment([
             'chat_id' => $chat->id,
@@ -70,7 +74,7 @@ class ChatAttachmentController extends Controller
             throw new NotFoundHttpException('Attachment not found.');
         }
 
-        $disk = Storage::disk($attachment->disk);
+        $disk = $this->tenantStorage->diskFromName($attachment->disk);
         if (! $disk->exists($attachment->storage_path)) {
             throw new NotFoundHttpException('Attachment is missing on disk.');
         }

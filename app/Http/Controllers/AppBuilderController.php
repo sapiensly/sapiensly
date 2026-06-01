@@ -622,7 +622,7 @@ class AppBuilderController extends Controller
         // the row) so we read from the right bucket even if the tenant has
         // since been migrated to a different S3 disk.
         $diskName = $message->attachment_disk ?: $this->tenantStorage->diskName($app);
-        $disk = Storage::disk($diskName);
+        $disk = $this->tenantStorage->diskFromName($diskName);
         if (! $disk->exists($message->attachment_path)) {
             abort(404);
         }

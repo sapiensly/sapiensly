@@ -19,6 +19,7 @@ use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
+use App\Services\Storage\TenantStorage;
 use Illuminate\Support\Str;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
@@ -62,6 +63,7 @@ beforeEach(function () {
         app(AiProviderService::class),
         app(RecordQueryService::class),
         app(RecordWriteService::class),
+        app(TenantStorage::class),
     );
 });
 

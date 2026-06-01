@@ -4,35 +4,58 @@ namespace App\Services\Storage;
 
 use App\Exceptions\TenantStorageNotConfiguredException;
 use App\Models\App;
+use App\Models\CloudProvider;
+use App\Models\Organization;
+use App\Models\User;
+use App\Services\CloudProviderService;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Resolves which Storage disk to use for an App's user-generated files
- * (chat attachments, screenshots, file-field uploads, etc).
+ * Resolves which Storage disk to use for user-generated files (chat
+ * attachments, builder screenshots, App runtime file-field uploads, etc).
  *
- * Policy (in priority order):
- *   1. Per-tenant override — placeholder for the future, when an Organization
- *      gets its own S3 bucket/credentials. The hook is here so we don't have
- *      to retrofit callers when the Organization model grows that column.
- *   2. Global S3 disk — used when AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
- *      and AWS_BUCKET are all set in the environment.
+ * Resolution is owner-aware and mirrors the knowledge-base / document storage
+ * path: a configured CloudProvider at the org (tenant) or personal (user)
+ * level is preferred, so a tenant's files land in their own bucket. The
+ * priority order is:
+ *   1. CloudProvider — org tenant → personal user → global, via
+ *      {@see CloudProviderService::resolveStorageFor()}. The provider's disk is
+ *      registered under a deterministic name (`cloud_provider_{id}`) so the
+ *      persisted name round-trips back to the same disk on the serve/read path
+ *      in any process (HTTP request or queue worker).
+ *   2. Global S3 disk — used when AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and
+ *      AWS_BUCKET are all set in the environment but no CloudProvider exists.
  *   3. Refuse — throw TenantStorageNotConfiguredException so the controller
- *      surfaces a 503 with an actionable error. We never silently fall back
- *      to the local disk because files would land on the app server's
- *      ephemeral storage and disappear after a deploy/scale event.
+ *      surfaces a 503. We never silently fall back to the local disk because
+ *      files would land on the app server's ephemeral storage and disappear
+ *      after a deploy/scale event.
+ *
+ * Already-stored rows keep whatever disk name they were written with (`s3`,
+ * or a `cloud_provider_*` name), so serving old files is unaffected.
  */
 class TenantStorage
 {
+    public function __construct(private readonly CloudProviderService $cloudProviders) {}
+
     /**
-     * Disk name to persist on the row (so the serve endpoint knows which
-     * disk to read from later, even if config changes).
+     * Disk name to write to and persist on the row, resolved for an App's owner.
      */
     public function diskName(?App $app = null): string
     {
-        $tenantDisk = $this->resolveTenantDisk($app);
-        if ($tenantDisk !== null) {
-            return $tenantDisk;
+        return $this->diskNameForOwner($app?->organization_id, $app?->user_id);
+    }
+
+    /**
+     * Owner-aware disk name to write to and persist. When a CloudProvider is
+     * resolved its disk is registered in this process so the returned name is
+     * immediately usable with `Storage::disk()`.
+     */
+    public function diskNameForOwner(?string $organizationId, ?int $userId): string
+    {
+        $provider = $this->resolveOwnerProvider($organizationId, $userId);
+        if ($provider !== null) {
+            return $this->cloudProviders->registerDisk($provider);
         }
 
         if ($this->globalS3Configured()) {
@@ -43,7 +66,16 @@ class TenantStorage
     }
 
     /**
-     * Resolved disk instance ready to read/write against.
+     * Resolve a Filesystem from a persisted disk name, re-registering the
+     * CloudProvider-backed disk first so the name resolves in this process.
+     */
+    public function diskFromName(string $diskName): Filesystem
+    {
+        return Storage::disk($this->cloudProviders->ensureDiskRegistered($diskName));
+    }
+
+    /**
+     * Resolved disk instance for an App's owner, ready to read/write against.
      */
     public function disk(?App $app = null): Filesystem
     {
@@ -51,28 +83,35 @@ class TenantStorage
     }
 
     /**
-     * Whether storage is configured at all — useful for healthchecks and
-     * for tools that want to short-circuit without forcing a throw.
+     * Ensure a persisted disk name resolves in the current process (e.g. inside
+     * a queue worker that didn't register it on write). Returns the name so it
+     * can be passed straight to `Storage::disk()` or the AI SDK's StoredImage.
+     */
+    public function ensureRegistered(string $diskName): string
+    {
+        return $this->cloudProviders->ensureDiskRegistered($diskName);
+    }
+
+    /**
+     * Whether storage is configured at all — useful for healthchecks and for
+     * tools that want to short-circuit without forcing a throw.
      */
     public function isConfigured(?App $app = null): bool
     {
-        return $this->resolveTenantDisk($app) !== null
+        return $this->resolveOwnerProvider($app?->organization_id, $app?->user_id) !== null
             || $this->globalS3Configured();
     }
 
     /**
-     * Hook for per-tenant disk overrides. Returns null today because we
-     * haven't built the Organization-level S3 config UI yet; the callsite
-     * already expects null to mean "fall back to global".
+     * Resolve the storage CloudProvider for an owner context (org tenant →
+     * personal user → global), or null when none is configured.
      */
-    protected function resolveTenantDisk(?App $app): ?string
+    private function resolveOwnerProvider(?string $organizationId, ?int $userId): ?CloudProvider
     {
-        if ($app === null) {
-            return null;
-        }
+        $organization = $organizationId ? Organization::find($organizationId) : null;
+        $user = ($organization === null && $userId !== null) ? User::find($userId) : null;
 
-        // FUTURE: $app->organization?->s3_disk_name once the column exists.
-        return null;
+        return $this->cloudProviders->resolveStorageFor($organization, $user);
     }
 
     /**
