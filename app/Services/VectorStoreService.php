@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseChunk;
 use App\Models\Organization;
+use App\Models\User;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -117,7 +118,7 @@ class VectorStoreService
      */
     public function deleteAllForDocument(Document $document): int
     {
-        return $this->connectionForOrganizationId($document->organization_id)
+        return $this->resolveConnection($document->organization_id, $document->user_id)
             ->table(self::TABLE)
             ->where('document_id', $document->id)
             ->delete();
@@ -165,7 +166,7 @@ class VectorStoreService
         // that no longer correspond to an existing row are silently dropped.
         $kbs = KnowledgeBase::query()
             ->whereIn('id', $knowledgeBaseIds)
-            ->get(['id', 'organization_id']);
+            ->get(['id', 'organization_id', 'user_id']);
 
         $groups = [];
         foreach ($kbs as $kb) {
@@ -221,13 +222,21 @@ class VectorStoreService
      */
     private function connectionFor(KnowledgeBase $kb): Connection
     {
-        return $this->connectionForOrganizationId($kb->organization_id);
+        return $this->resolveConnection($kb->organization_id, $kb->user_id);
     }
 
-    private function connectionForOrganizationId(?string $organizationId): Connection
+    /**
+     * Resolve the connection where an owner's chunks live: org tenant provider,
+     * else (personal context) the owner's personal provider, else global, else
+     * the application default. Owner-aware so personal-account database
+     * providers are honored — queue jobs never get the HTTP middleware's
+     * pre-bound connection, so this must resolve from the record itself.
+     */
+    private function resolveConnection(?string $organizationId, ?int $userId): Connection
     {
         $organization = $organizationId ? Organization::find($organizationId) : null;
-        $provider = $this->cloudProviderService->resolveDatabase($organization);
+        $user = ($organization === null && $userId !== null) ? User::find($userId) : null;
+        $provider = $this->cloudProviderService->resolveDatabaseFor($organization, $user);
 
         if ($provider === null) {
             return DB::connection();

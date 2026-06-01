@@ -62,6 +62,61 @@ test('resolveDatabase uses the same tenant then global order', function () {
     expect($this->service->resolveDatabase($org)->id)->toBe($tenant->id);
 });
 
+test('resolveDatabaseFor uses a personal user provider in a personal (no-org) context', function () {
+    $user = User::factory()->create(); // personal — no organization
+    $personal = CloudProvider::factory()->postgres()->create(['user_id' => $user->id]);
+
+    $resolved = $this->service->resolveDatabaseFor($user->organization, $user);
+
+    expect($resolved)->not->toBeNull()
+        ->and($resolved->id)->toBe($personal->id)
+        ->and($resolved->visibility)->toBe(Visibility::Private);
+});
+
+test('resolveDatabaseFor prefers a personal provider over a global one', function () {
+    $user = User::factory()->create();
+    CloudProvider::factory()->postgres()->global()->create();
+    $personal = CloudProvider::factory()->postgres()->create(['user_id' => $user->id]);
+
+    expect($this->service->resolveDatabaseFor($user->organization, $user)->id)->toBe($personal->id);
+});
+
+test('resolveDatabaseFor falls back to global when a personal user has no provider', function () {
+    $user = User::factory()->create();
+    $global = CloudProvider::factory()->postgres()->global()->create();
+
+    expect($this->service->resolveDatabaseFor($user->organization, $user)->id)->toBe($global->id);
+});
+
+test('resolveDatabaseFor returns null when a personal user has no provider and no global exists', function () {
+    $user = User::factory()->create();
+
+    expect($this->service->resolveDatabaseFor($user->organization, $user))->toBeNull();
+});
+
+test('resolveDatabaseFor still prefers the org tenant provider in an organization context', function () {
+    $org = makeOrganization('owner-aware-org');
+    $user = User::factory()->create(['organization_id' => $org->id]);
+    CloudProvider::factory()->postgres()->global()->create();
+    $tenant = CloudProvider::factory()->postgres()->forOrganization($org, $user)->create();
+
+    expect($this->service->resolveDatabaseFor($user->organization, $user)->id)->toBe($tenant->id);
+});
+
+test('tenantConnectionFor builds the personal provider connection, not the app default', function () {
+    $user = User::factory()->create();
+    CloudProvider::factory()->postgres()->create(['user_id' => $user->id]);
+
+    expect($this->service->tenantConnectionFor($user)->getName())
+        ->toBe(CloudProviderService::RUNTIME_DB_CONNECTION);
+});
+
+test('tenantConnectionFor returns the app default when a personal user has no provider', function () {
+    $user = User::factory()->create();
+
+    expect($this->service->tenantConnectionFor($user)->getName())->toBe(config('database.default'));
+});
+
 test('resolveStorage with null organization only returns globals', function () {
     $global = CloudProvider::factory()->storage()->global()->create();
 

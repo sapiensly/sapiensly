@@ -101,6 +101,23 @@ class CloudProviderService
         return $this->resolve(self::KIND_DATABASE, $organization);
     }
 
+    /**
+     * Resolve the database provider for an owner context, honoring **personal**
+     * (no-org) providers: tenant (org) → personal (user) → global → null.
+     */
+    public function resolveDatabaseFor(?Organization $organization, ?User $user): ?CloudProvider
+    {
+        return $this->resolveFor(self::KIND_DATABASE, $organization, $user);
+    }
+
+    /**
+     * Resolve the storage provider for an owner context (personal-aware).
+     */
+    public function resolveStorageFor(?Organization $organization, ?User $user): ?CloudProvider
+    {
+        return $this->resolveFor(self::KIND_STORAGE, $organization, $user);
+    }
+
     public function getGlobalStorage(): ?CloudProvider
     {
         return $this->getGlobal(self::KIND_STORAGE);
@@ -137,6 +154,28 @@ class CloudProviderService
             $tenant = $this->getTenant($kind, $organization);
             if ($tenant !== null) {
                 return $tenant;
+            }
+        }
+
+        return $this->getGlobal($kind);
+    }
+
+    /**
+     * Owner-aware resolution. In an organization context, a tenant provider
+     * wins; in a personal context (no org), the user's personal provider wins;
+     * either way a global provider is the final fallback before null.
+     */
+    private function resolveFor(string $kind, ?Organization $organization, ?User $user): ?CloudProvider
+    {
+        if ($organization !== null) {
+            $tenant = $this->getTenant($kind, $organization);
+            if ($tenant !== null) {
+                return $tenant;
+            }
+        } elseif ($user !== null) {
+            $personal = $this->getPersonal($kind, $user);
+            if ($personal !== null) {
+                return $personal;
             }
         }
 
@@ -369,8 +408,7 @@ class CloudProviderService
      */
     public function tenantConnectionFor(?User $user): Connection
     {
-        $organization = $user?->organization;
-        $provider = $this->resolveDatabase($organization);
+        $provider = $this->resolveDatabaseFor($user?->organization, $user);
 
         if ($provider === null) {
             return DB::connection();
