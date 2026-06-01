@@ -22,7 +22,22 @@ class OAuth2AuthorizationCodeFlow
      */
     public function buildAuthorizeUrl(Integration $integration): array
     {
-        $cfg = $integration->auth_config ?? [];
+        return $this->buildAuthorizeUrlFromConfig($integration->auth_config ?? []);
+    }
+
+    /**
+     * Build an Authorization Code (+ optional PKCE) authorize URL from a plain
+     * client config bag. Shared by the integration flow and the per-org SSO
+     * flow. `$extraParams` lets callers append protocol extras such as an OIDC
+     * `nonce` — the caller is responsible for persisting any value it needs to
+     * verify on the callback leg.
+     *
+     * @param  array<string, mixed>  $cfg  authorize_url/client_id/redirect_uri/scope/pkce
+     * @param  array<string, string>  $extraParams
+     * @return array{url: string, state: string, code_verifier: ?string}
+     */
+    public function buildAuthorizeUrlFromConfig(array $cfg, array $extraParams = []): array
+    {
         $state = Str::random(40);
         $codeVerifier = null;
 
@@ -40,6 +55,8 @@ class OAuth2AuthorizationCodeFlow
             $params['code_challenge'] = $challenge;
             $params['code_challenge_method'] = 'S256';
         }
+
+        $params = array_merge($params, $extraParams);
 
         $separator = str_contains($cfg['authorize_url'] ?? '', '?') ? '&' : '?';
         $url = ($cfg['authorize_url'] ?? '').$separator.http_build_query($params);

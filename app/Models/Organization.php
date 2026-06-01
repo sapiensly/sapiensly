@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\HasPrefixedUlid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Organization extends Model
 {
@@ -31,6 +32,11 @@ class Organization extends Model
     public function memberships(): HasMany
     {
         return $this->hasMany(OrganizationMembership::class);
+    }
+
+    public function ssoConnection(): HasOne
+    {
+        return $this->hasOne(OrganizationSsoConnection::class);
     }
 
     public function users(): HasMany

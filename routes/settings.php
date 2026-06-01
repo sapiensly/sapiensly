@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Settings\OrganizationController;
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\SsoConnectionController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -23,4 +24,8 @@ Route::middleware([
     Route::get('settings/organization/create', [OrganizationController::class, 'create'])->name('organization.create');
     Route::post('settings/organization', [OrganizationController::class, 'store'])->name('organization.store');
     Route::post('settings/organization/invite', [OrganizationController::class, 'invite'])->name('organization.invite');
+
+    Route::get('settings/sso', [SsoConnectionController::class, 'show'])->name('sso.show');
+    Route::put('settings/sso', [SsoConnectionController::class, 'update'])->name('sso.update');
+    Route::post('settings/sso/discover', [SsoConnectionController::class, 'discover'])->name('sso.discover');
 });
