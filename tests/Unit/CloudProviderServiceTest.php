@@ -123,6 +123,36 @@ test('resolveStorage with null organization only returns globals', function () {
     expect($this->service->resolveStorage(null)->id)->toBe($global->id);
 });
 
+test('resolveStorageFor uses a personal user storage provider in a personal context', function () {
+    $user = User::factory()->create();
+    $personal = CloudProvider::factory()->storage()->create(['user_id' => $user->id]);
+
+    expect($this->service->resolveStorageFor($user->organization, $user)->id)->toBe($personal->id);
+});
+
+test('resolveStorageFor prefers a personal storage provider over a global one', function () {
+    $user = User::factory()->create();
+    CloudProvider::factory()->storage()->global()->create();
+    $personal = CloudProvider::factory()->storage()->create(['user_id' => $user->id]);
+
+    expect($this->service->resolveStorageFor($user->organization, $user)->id)->toBe($personal->id);
+});
+
+test('resolveStorageFor still prefers the org tenant provider in an organization context', function () {
+    $org = makeOrganization('owner-aware-storage-org');
+    $user = User::factory()->create(['organization_id' => $org->id]);
+    CloudProvider::factory()->storage()->global()->create();
+    $tenant = CloudProvider::factory()->storage()->forOrganization($org, $user)->create();
+
+    expect($this->service->resolveStorageFor($user->organization, $user)->id)->toBe($tenant->id);
+});
+
+test('resolveStorageFor returns null when a personal user has no provider and no global exists', function () {
+    $user = User::factory()->create();
+
+    expect($this->service->resolveStorageFor($user->organization, $user))->toBeNull();
+});
+
 test('resolve ignores inactive providers', function () {
     $org = makeOrganization('inactive');
     CloudProvider::factory()->storage()->forOrganization($org)->create(['status' => 'inactive']);

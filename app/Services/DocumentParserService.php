@@ -39,8 +39,11 @@ class DocumentParserService
             throw new \RuntimeException('Document has no file path');
         }
 
-        $organizationId = $document->knowledgeBase?->organization_id;
-        $storage = $this->cloudProviderService->diskForOrganizationOrFallback($organizationId);
+        $knowledgeBase = $document->knowledgeBase;
+        $storage = $this->cloudProviderService->diskForOwnerOrFallback(
+            $knowledgeBase?->organization_id,
+            $knowledgeBase?->user_id,
+        );
 
         // Get file content from the resolved disk and save to temp file for parsing
         $tempFile = $this->downloadToTemp($storage, $document->file_path, $type);

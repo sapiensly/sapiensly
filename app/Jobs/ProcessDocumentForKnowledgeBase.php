@@ -188,7 +188,7 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
             throw new \RuntimeException('Document has no file path');
         }
 
-        $storage = $cloudProviderService->diskForOrganizationOrFallback($document->organization_id);
+        $storage = $cloudProviderService->diskForOwnerOrFallback($document->organization_id, $document->user_id);
 
         if (! $storage->exists($document->file_path)) {
             throw new \RuntimeException("Document file not found: {$document->file_path}");

@@ -364,6 +364,22 @@ class CloudProviderService
         return $this->diskForTenant($organization) ?? Storage::disk('documents');
     }
 
+    /**
+     * Owner-aware variant of {@see diskForOrganizationOrFallback()}: honors a
+     * **personal** (no-org) storage provider too, so a user's own object
+     * storage is used. Resolution: org tenant → personal → global → the
+     * env-based 'documents' disk.
+     */
+    public function diskForOwnerOrFallback(?string $organizationId, ?int $userId): Filesystem
+    {
+        $organization = $organizationId ? Organization::find($organizationId) : null;
+        $user = ($organization === null && $userId !== null) ? User::find($userId) : null;
+
+        $provider = $this->resolveStorageFor($organization, $user);
+
+        return $provider ? $this->buildDisk($provider) : Storage::disk('documents');
+    }
+
     public function buildDisk(CloudProvider $provider): Filesystem
     {
         if ($provider->kind !== self::KIND_STORAGE) {

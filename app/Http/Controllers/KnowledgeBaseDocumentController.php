@@ -58,8 +58,11 @@ class KnowledgeBaseDocumentController extends Controller
         $storagePath = "{$userId}/knowledge-bases/{$knowledgeBase->id}";
         $fullPath = "{$storagePath}/{$filename}";
 
-        // Store file to the resolved tenant storage disk
-        $disk = $this->cloudProviderService->diskForOrganizationOrFallback($request->user()->organization_id);
+        // Store file to the resolved tenant storage disk (org or personal)
+        $disk = $this->cloudProviderService->diskForOwnerOrFallback(
+            $request->user()->organization_id,
+            $request->user()->id,
+        );
         $disk->put($fullPath, file_get_contents($file->getRealPath()));
 
         // Create document record
@@ -115,8 +118,9 @@ class KnowledgeBaseDocumentController extends Controller
 
         // Delete file from the resolved tenant storage disk if it exists
         if ($document->file_path) {
-            $disk = $this->cloudProviderService->diskForOrganizationOrFallback(
+            $disk = $this->cloudProviderService->diskForOwnerOrFallback(
                 $knowledgeBase->organization_id,
+                $knowledgeBase->user_id,
             );
             if ($disk->exists($document->file_path)) {
                 $disk->delete($document->file_path);

@@ -25,9 +25,9 @@ class DocumentService
      * the env-based 'documents' disk when neither a tenant nor a global
      * cloud provider is configured.
      */
-    private function disk(?string $organizationId): Filesystem
+    private function disk(?string $organizationId, ?int $userId = null): Filesystem
     {
-        return $this->cloudProviderService->diskForOrganizationOrFallback($organizationId);
+        return $this->cloudProviderService->diskForOwnerOrFallback($organizationId, $userId);
     }
 
     /**
@@ -61,7 +61,7 @@ class DocumentService
 
         // Now store the file with the document ID in the path
         $storagePath = "{$user->id}/documents/{$document->id}/{$file->getClientOriginalName()}";
-        $this->disk($user->organization_id)->put($storagePath, $file->get());
+        $this->disk($user->organization_id, $user->id)->put($storagePath, $file->get());
 
         // Update the document with the file path
         $document->update(['file_path' => $storagePath]);
@@ -129,7 +129,7 @@ class DocumentService
         $update = ['name' => $name];
 
         if ($document->file_path !== null) {
-            $this->disk($document->organization_id)->put($document->file_path, $body);
+            $this->disk($document->organization_id, $document->user_id)->put($document->file_path, $body);
             $update['file_size'] = strlen($body);
         } else {
             $update['body'] = $body;
@@ -193,7 +193,7 @@ class DocumentService
             return null;
         }
 
-        $storage = $this->disk($document->organization_id);
+        $storage = $this->disk($document->organization_id, $document->user_id);
 
         if (! $storage->exists($document->file_path)) {
             return null;
@@ -217,7 +217,7 @@ class DocumentService
             return null;
         }
 
-        $storage = $this->disk($document->organization_id);
+        $storage = $this->disk($document->organization_id, $document->user_id);
 
         if (! $storage->exists($document->file_path)) {
             return null;
@@ -277,7 +277,7 @@ class DocumentService
 
         // Delete file from storage
         if ($document->file_path) {
-            $this->disk($document->organization_id)->delete($document->file_path);
+            $this->disk($document->organization_id, $document->user_id)->delete($document->file_path);
         }
 
         // Soft delete the document
@@ -297,7 +297,7 @@ class DocumentService
 
         // Delete file from storage
         if ($document->file_path) {
-            $this->disk($document->organization_id)->delete($document->file_path);
+            $this->disk($document->organization_id, $document->user_id)->delete($document->file_path);
         }
 
         // Permanently delete the document
@@ -313,7 +313,7 @@ class DocumentService
             return null;
         }
 
-        $storage = $this->disk($document->organization_id);
+        $storage = $this->disk($document->organization_id, $document->user_id);
 
         if (! $storage->exists($document->file_path)) {
             return null;
