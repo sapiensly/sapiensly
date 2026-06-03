@@ -189,6 +189,80 @@
     }
 }
 
+/*
+ * Thin, theme-aware, auto-hiding scrollbars. Windows and Linux render chunky
+ * native scrollbars (light track + arrow buttons) that clash with the dark
+ * sidebar and panels; this replaces them with a slim floating thumb that
+ * follows the theme via --foreground.
+ *
+ * Scoped to `.not-apple`, a class lib/scrollbars.ts adds to <html> only on
+ * non-Apple platforms — macOS/iOS keep their native overlay scrollbars
+ * completely untouched.
+ *
+ * The thumb is hidden by default and only revealed while scrolling (the
+ * `.is-scrolling` class is toggled per-element by lib/scrollbars.ts), on
+ * hover, or on focus-within.
+ */
+@layer base {
+    /* scrollbar-width/color are inherited, so the root + every descendant are
+       covered. Hidden (transparent) until revealed. */
+    .not-apple,
+    .not-apple * {
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
+    }
+
+    .not-apple:hover,
+    .not-apple:focus-within,
+    .not-apple.is-scrolling,
+    .not-apple *:hover,
+    .not-apple *:focus-within,
+    .not-apple *.is-scrolling {
+        scrollbar-color: color-mix(in srgb, var(--foreground) 25%, transparent) transparent;
+    }
+
+    /* WebKit/Blink. Each rule matches both the root element's own scrollbar
+       and any descendant scroll container. */
+    .not-apple::-webkit-scrollbar,
+    .not-apple ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    .not-apple::-webkit-scrollbar-track,
+    .not-apple ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .not-apple::-webkit-scrollbar-thumb,
+    .not-apple ::-webkit-scrollbar-thumb {
+        background-color: transparent;
+        border-radius: 9999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+        transition: background-color 0.3s ease;
+    }
+
+    .not-apple:hover::-webkit-scrollbar-thumb,
+    .not-apple:focus-within::-webkit-scrollbar-thumb,
+    .not-apple.is-scrolling::-webkit-scrollbar-thumb,
+    .not-apple :hover::-webkit-scrollbar-thumb,
+    .not-apple :focus-within::-webkit-scrollbar-thumb,
+    .not-apple .is-scrolling::-webkit-scrollbar-thumb {
+        background-color: color-mix(in srgb, var(--foreground) 25%, transparent);
+    }
+
+    .not-apple::-webkit-scrollbar-thumb:hover,
+    .not-apple ::-webkit-scrollbar-thumb:hover {
+        background-color: color-mix(in srgb, var(--foreground) 45%, transparent);
+    }
+
+    .not-apple::-webkit-scrollbar-corner,
+    .not-apple ::-webkit-scrollbar-corner {
+        background: transparent;
+    }
+}
+
 /* Impersonation: push sidebar and content below the fixed banner */
 .is-impersonating [data-slot="sidebar"] > .fixed {
     top: 2.5rem !important;

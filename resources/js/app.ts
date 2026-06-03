@@ -7,6 +7,7 @@ import { createApp, h } from 'vue';
 import { Toaster } from 'vue-sonner';
 import { initializeTheme } from './composables/useAppearance';
 import { createI18nInstance } from './i18n';
+import { initScrollbars } from './lib/scrollbars';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Sapiensly';
 
@@ -33,3 +34,6 @@ createInertiaApp({
 
 // This will set light / dark mode on page load...
 initializeTheme();
+
+// Reveal scrollbars only while scrolling (fade out when idle)...
+initScrollbars();
