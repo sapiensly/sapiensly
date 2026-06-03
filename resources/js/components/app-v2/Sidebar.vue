@@ -46,7 +46,7 @@ import {
     Wrench,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface NavItem {
@@ -75,6 +75,14 @@ const page = usePage<AppPageProps>();
 const { isSysAdmin } = usePermissions();
 
 const currentUrl = computed(() => page.url);
+
+// The brand block stays pinned above the scrolling nav; reveal a bottom
+// border only once that nav is scrolled away from the top, mirroring the
+// topbar's `.is-scrolled` treatment.
+const navScrolled = ref(false);
+function onNavScroll(event: Event): void {
+    navScrolled.value = (event.target as HTMLElement).scrollTop > 0;
+}
 
 const dashboardHref = computed(() => dashboard().url);
 
@@ -230,10 +238,12 @@ const workspaceLabel = computed(() =>
             collapsed ? 'w-16' : 'w-60',
         ]"
     >
-        <!-- Brand block — same 56px height as the topbar. -->
+        <!-- Brand block — same 56px height as the topbar. Border appears only
+             once the nav below is scrolled (matches the topbar on scroll). -->
         <div
             :class="[
-                'flex h-14 items-center',
+                'flex h-14 items-center border-b transition-colors',
+                navScrolled ? 'border-soft' : 'border-transparent',
                 collapsed ? 'justify-center px-3' : 'gap-2 px-5',
             ]"
         >
@@ -250,6 +260,7 @@ const workspaceLabel = computed(() =>
                 'flex-1 overflow-y-auto py-6',
                 collapsed ? 'px-2' : 'px-5',
             ]"
+            @scroll.passive="onNavScroll"
         >
             <TooltipProvider :delay-duration="120" disable-closing-trigger>
                 <!-- Standalone Dashboard row. -->

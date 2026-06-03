@@ -26,7 +26,7 @@ import { ChevronsUpDown } from 'lucide-vue-next';
 import type { AppPageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import type { Component } from 'vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface NavItem {
@@ -48,6 +48,14 @@ const { t } = useI18n();
 const page = usePage<AppPageProps>();
 
 const currentUrl = computed(() => page.url);
+
+// The brand block stays pinned above the scrolling nav; reveal its bottom
+// border only once that nav is scrolled away from the top, mirroring the
+// topbar's `.is-scrolled` treatment.
+const navScrolled = ref(false);
+function onNavScroll(event: Event): void {
+    navScrolled.value = (event.target as HTMLElement).scrollTop > 0;
+}
 
 const navItems = computed<NavItem[]>(() => [
     {
@@ -142,7 +150,8 @@ const userRole = computed(() => {
         -->
         <div
             :class="[
-                'flex h-14 items-center border-b border-soft',
+                'flex h-14 items-center border-b transition-colors',
+                navScrolled ? 'border-soft' : 'border-transparent',
                 collapsed ? 'justify-center px-3' : 'gap-2 px-5',
             ]"
         >
@@ -164,6 +173,7 @@ const userRole = computed(() => {
                 'flex-1 overflow-y-auto py-6',
                 collapsed ? 'px-2' : 'px-5',
             ]"
+            @scroll.passive="onNavScroll"
         >
             <p
                 v-if="!collapsed"
