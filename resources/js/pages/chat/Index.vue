@@ -20,6 +20,7 @@ import type {
 } from '@/types/chatModule';
 import { Head, router } from '@inertiajs/vue3';
 import axios from 'axios';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -54,6 +55,18 @@ const selectedToolIds = ref<string[]>(props.activeChat?.tool_ids ?? []);
 const toolActivity = ref<Record<string, string>>({});
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null);
 const stopped = ref<Set<string>>(new Set());
+
+// ----- Inner chat sidebar (collapsible) -----
+const SIDEBAR_KEY = 'chat:sidebar-open';
+const chatSidebarOpen = ref(
+    typeof window === 'undefined' ||
+        window.localStorage.getItem(SIDEBAR_KEY) !== 'false',
+);
+watch(chatSidebarOpen, (open) => {
+    if (typeof window !== 'undefined') {
+        window.localStorage.setItem(SIDEBAR_KEY, String(open));
+    }
+});
 
 const activeId = computed(() => props.activeChat?.id ?? null);
 const isStreaming = computed(() =>
@@ -329,13 +342,19 @@ function retry() {
         hide-topbar
     >
         <div class="flex min-h-0 flex-1">
-            <ChatSidebar
-                class="hidden md:flex"
-                :chats="chats"
-                :projects="projects"
-                :knowledge-bases="knowledgeBases"
-                :active-id="activeId"
-            />
+            <div
+                :class="[
+                    'hidden shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out md:block',
+                    chatSidebarOpen ? 'w-72' : 'w-0',
+                ]"
+            >
+                <ChatSidebar
+                    :chats="chats"
+                    :projects="projects"
+                    :knowledge-bases="knowledgeBases"
+                    :active-id="activeId"
+                />
+            </div>
 
             <div class="flex min-h-0 flex-1 flex-col">
                 <Topbar
@@ -343,7 +362,23 @@ function retry() {
                     :sidebar-collapsed="sidebarCollapsed"
                     @toggle-sidebar="toggleSidebar"
                     @open-palette="openPalette"
-                />
+                >
+                    <template #leading>
+                        <button
+                            type="button"
+                            class="hidden size-9 shrink-0 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink md:flex"
+                            :aria-label="
+                                chatSidebarOpen
+                                    ? t('chat.hide_sidebar')
+                                    : t('chat.show_sidebar')
+                            "
+                            @click="chatSidebarOpen = !chatSidebarOpen"
+                        >
+                            <PanelLeftClose v-if="chatSidebarOpen" class="size-4" />
+                            <PanelLeftOpen v-else class="size-4" />
+                        </button>
+                    </template>
+                </Topbar>
                 <template v-if="activeChat">
                     <ChatThread
                         :messages="messages"

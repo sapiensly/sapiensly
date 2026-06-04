@@ -1789,6 +1789,8 @@
     "app_v2.common.empty_title": "Nothing here yet",
     "app_v2.common.empty_body": "Click the button above to create the first one.",
     "chat.new_chat": "New chat",
+    "chat.hide_sidebar": "Hide chat list",
+    "chat.show_sidebar": "Show chat list",
     "chat.projects": "Projects",
     "chat.new_project": "New project",
     "chat.edit_project": "Edit project",

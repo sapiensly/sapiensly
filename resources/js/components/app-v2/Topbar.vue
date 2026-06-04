@@ -57,6 +57,8 @@ const modKey = computed(() =>
             <Menu class="size-4" />
         </button>
 
+        <slot name="leading" />
+
         <nav
             aria-label="Breadcrumb"
             class="flex items-center gap-1.5 text-sm text-ink-muted"
