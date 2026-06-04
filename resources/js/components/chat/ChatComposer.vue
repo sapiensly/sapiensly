@@ -309,9 +309,29 @@ defineExpose({ focus });
                                     :key="provider"
                                 >
                                     <DropdownMenuLabel
-                                        class="text-[10px] tracking-wider text-ink-subtle uppercase"
+                                        class="flex items-center gap-1.5 text-[10px] tracking-wider text-ink-subtle uppercase"
                                     >
                                         {{ provider }}
+                                        <span
+                                            v-if="items[0]?.source"
+                                            :class="[
+                                                'rounded-pill px-1.5 py-0 text-[9px] font-semibold tracking-normal normal-case',
+                                                items[0].source === 'byok'
+                                                    ? 'bg-accent-blue/15 text-accent-blue'
+                                                    : 'border border-soft text-ink-subtle',
+                                            ]"
+                                            :title="
+                                                items[0].source === 'byok'
+                                                    ? t('models.byok_hint')
+                                                    : t('models.system_hint')
+                                            "
+                                        >
+                                            {{
+                                                items[0].source === 'byok'
+                                                    ? t('models.byok')
+                                                    : t('models.system')
+                                            }}
+                                        </span>
                                     </DropdownMenuLabel>
                                     <DropdownMenuRadioItem
                                         v-for="m in items"

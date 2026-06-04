@@ -43,6 +43,7 @@ interface OptionGroup {
     label: string;
     mark: string;
     accent: string;
+    source?: 'byok' | 'system';
     items: ParticipantOption[];
 }
 
@@ -89,6 +90,7 @@ const optionGroups = computed<OptionGroup[]>(() => {
             label: provider,
             mark: (provider.trim()[0] ?? '·').toUpperCase(),
             accent: providerAccent(provider),
+            source: items[0]?.source,
             items: items.map((m) => ({
                 value: m.value,
                 name: m.label,
@@ -297,6 +299,26 @@ function start() {
                                         class="text-[12px] font-semibold tracking-wide text-ink-muted uppercase"
                                         >{{ g.label }}</span
                                     >
+                                    <span
+                                        v-if="g.source"
+                                        :class="[
+                                            'rounded-pill px-1.5 py-0 text-[9px] font-semibold tracking-normal normal-case',
+                                            g.source === 'byok'
+                                                ? 'bg-accent-blue/15 text-accent-blue'
+                                                : 'border border-soft text-ink-subtle',
+                                        ]"
+                                        :title="
+                                            g.source === 'byok'
+                                                ? t('models.byok_hint')
+                                                : t('models.system_hint')
+                                        "
+                                    >
+                                        {{
+                                            g.source === 'byok'
+                                                ? t('models.byok')
+                                                : t('models.system')
+                                        }}
+                                    </span>
                                 </div>
                                 <button
                                     v-for="o in g.items"
@@ -358,7 +380,12 @@ function start() {
                                 :key="m.value"
                                 :value="m.value"
                             >
-                                {{ m.label }}
+                                {{ m.label
+                                }}{{
+                                    m.source
+                                        ? ` · ${m.source === 'byok' ? t('models.byok') : t('models.system')}`
+                                        : ''
+                                }}
                             </option>
                         </select>
                         <ChevronDown

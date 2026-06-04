@@ -60,11 +60,29 @@ it('rejects more than 9 models', function () {
         ->assertSessionHasErrors('model_ids');
 });
 
-it('rejects a model the user cannot reach', function () {
+it('rejects a model that is not enabled in the catalog', function () {
     $this->actingAs($this->user)
         ->post(route('debates.store'), [
-            'topic' => 'Unreachable',
-            'model_ids' => [HAIKU, 'gpt-4o'],
+            'topic' => 'Unknown model',
+            'model_ids' => [HAIKU, 'totally-made-up-model'],
         ])
         ->assertSessionHasErrors('model_ids.1');
+});
+
+it('accepts an enabled catalog model even without a tenant key for it', function () {
+    Queue::fake();
+
+    // The tenant only has an Anthropic key, but gpt-4o is enabled in the
+    // shared catalog (served by the global system key), so it is selectable.
+    $this->actingAs($this->user)
+        ->post(route('debates.store'), [
+            'topic' => 'Cross-provider debate',
+            'model_ids' => [HAIKU, 'gpt-4o'],
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $debate = Debate::query()->where('user_id', $this->user->id)->firstOrFail();
+    expect(DebateParticipant::query()->where('debate_id', $debate->id)->pluck('model')->all())
+        ->toContain('gpt-4o');
 });

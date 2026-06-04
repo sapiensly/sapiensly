@@ -65,7 +65,7 @@ class ChatController extends Controller
             }
         }
         if ($agentId === null) {
-            $reachable = collect($this->providers->getReachableChatModels($user))->pluck('value');
+            $reachable = collect($this->providers->getEnabledChatModels())->pluck('value');
             $model = ($selection !== null && $reachable->contains($selection)) ? $selection : $reachable->first();
         }
 
@@ -158,7 +158,7 @@ class ChatController extends Controller
                 'knowledge_base_ids' => $p->knowledgeBases->pluck('id')->all(),
             ]);
 
-        $models = $this->providers->getReachableChatModels($user);
+        $models = $this->providers->getEnabledChatModels($user);
 
         $knowledgeBases = KnowledgeBase::query()
             ->visibleTo($user)

@@ -19,7 +19,7 @@ class StoreDebateRequest extends FormRequest
      */
     public function rules(): array
     {
-        $reachable = collect(app(AiProviderService::class)->getReachableChatModels($this->user()))
+        $reachable = collect(app(AiProviderService::class)->getEnabledChatModels())
             ->pluck('value')
             ->all();
 

@@ -246,33 +246,82 @@ class AiProviderService
     }
 
     /**
-     * Map a model id to the Lab enum by looking it up in the catalogs of
-     * every driver the user has an active provider for. Unlike
-     * `resolveProvider()` — which only checks models the tenant toggled
-     * on — this accepts any model from the global catalog as long as the
-     * user has credentials for the matching driver. Returns null when
-     * the model isn't reachable from any of the user's providers.
+     * Every chat model enabled in the shared catalog, independent of whether
+     * the tenant has its own key — the platform-wide (Global) keys configured
+     * by the sysadmin make them usable, and a tenant's own key transparently
+     * overrides the global one for its driver at inference time.
+     *
+     * When a $user is given, each model is tagged with `source`: `byok` when
+     * the tenant has its own active key for that driver, otherwise `system`.
+     * Deduped by model id.
+     *
+     * @return array<int, array{value: string, label: string, provider: string, source?: string}>
      */
-    public function resolveProviderForCatalogModel(string $modelId, User $user): ?Lab
+    public function getEnabledChatModels(?User $user = null): array
     {
-        $providers = $this->getProvidersForContext($user);
-        $seenDrivers = [];
-
-        foreach ($providers as $provider) {
-            $driver = $provider->driver;
-            if (isset($seenDrivers[$driver])) {
-                continue;
-            }
-            $seenDrivers[$driver] = true;
-
-            foreach ($this->getModelCatalog($driver) as $model) {
-                if ($model['id'] === $modelId) {
-                    return Lab::from($driver);
-                }
-            }
+        $byokDrivers = [];
+        if ($user !== null) {
+            $byokDrivers = $this->getProvidersForContext($user)
+                ->pluck('driver')
+                ->flip()
+                ->all();
         }
 
-        return null;
+        $seen = [];
+
+        $rows = AiCatalogModel::query()
+            ->enabled()
+            ->chat()
+            ->orderBy('driver')
+            ->orderBy('sort_order')
+            ->orderBy('label')
+            ->get();
+
+        foreach ($rows as $model) {
+            if (isset($seen[$model->model_id])) {
+                continue;
+            }
+
+            $entry = [
+                'value' => $model->model_id,
+                'label' => $model->label,
+                'provider' => self::DRIVER_LABELS[$model->driver] ?? $model->driver,
+            ];
+
+            if ($user !== null) {
+                $entry['source'] = isset($byokDrivers[$model->driver]) ? 'byok' : 'system';
+            }
+
+            $seen[$model->model_id] = $entry;
+        }
+
+        return array_values($seen);
+    }
+
+    /**
+     * Map a model id to its Lab provider using the shared catalog (the
+     * model's `driver` column), so any enabled catalog model resolves whether
+     * its key is the platform-wide global one or the tenant's own. Returns
+     * null when the model is not in the enabled catalog or its driver is not
+     * a known Lab provider.
+     */
+    public function resolveProviderForCatalogModel(string $modelId, ?User $user = null): ?Lab
+    {
+        $driver = AiCatalogModel::query()
+            ->enabled()
+            ->where('model_id', $modelId)
+            ->orderBy('driver')
+            ->value('driver');
+
+        if ($driver === null) {
+            return null;
+        }
+
+        try {
+            return Lab::from($driver);
+        } catch (\ValueError) {
+            return null;
+        }
     }
 
     /**
@@ -311,26 +360,44 @@ class AiProviderService
     }
 
     /**
-     * Inject DB-stored AI provider credentials into Laravel's runtime config.
-     * This allows the Laravel AI SDK (AiManager) to pick them up.
+     * Inject DB-stored AI provider credentials into Laravel's runtime config so
+     * the Laravel AI SDK (AiManager) can pick them up.
+     *
+     * Layered tenant→global resolution: the platform-wide (Global) keys the
+     * sysadmin configured form the base, then the tenant's own keys override
+     * them for matching drivers. So a model whose driver only has a global key
+     * still works, and a tenant that brings its own key transparently uses it.
      */
     public function applyRuntimeConfig(User $user): void
     {
+        // Base layer — global system keys.
+        $global = AiProvider::query()
+            ->where('visibility', Visibility::Global)
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($global as $provider) {
+            config(["ai.providers.{$provider->name}" => $this->buildProviderConfig($provider)]);
+        }
+
+        if ($globalDefault = $global->firstWhere('is_default', true)) {
+            config(['ai.default' => $globalDefault->name]);
+        }
+        if ($globalEmbeddings = $global->firstWhere('is_default_embeddings', true)) {
+            config(['ai.default_for_embeddings' => $globalEmbeddings->name]);
+        }
+
+        // Override layer — the tenant's own keys win for their drivers.
         $providers = $this->getProvidersForContext($user);
 
         foreach ($providers as $provider) {
-            $config = $this->buildProviderConfig($provider);
-            config(["ai.providers.{$provider->name}" => $config]);
+            config(["ai.providers.{$provider->name}" => $this->buildProviderConfig($provider)]);
         }
 
-        // Set defaults
-        $default = $providers->firstWhere('is_default', true);
-        if ($default) {
+        if ($default = $providers->firstWhere('is_default', true)) {
             config(['ai.default' => $default->name]);
         }
-
-        $defaultEmbeddings = $providers->firstWhere('is_default_embeddings', true);
-        if ($defaultEmbeddings) {
+        if ($defaultEmbeddings = $providers->firstWhere('is_default_embeddings', true)) {
             config(['ai.default_for_embeddings' => $defaultEmbeddings->name]);
         }
     }

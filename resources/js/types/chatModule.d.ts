@@ -2,6 +2,8 @@ export interface ChatModelOption {
     value: string;
     label: string;
     provider: string;
+    // 'byok' = served by the tenant's own API key; 'system' = global key.
+    source?: 'byok' | 'system';
 }
 
 export interface ChatAttachmentDto {
