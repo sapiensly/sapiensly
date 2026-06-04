@@ -107,10 +107,45 @@ class AiProviderService
         'jina' => ['api_key'],
         'mistral' => ['api_key'],
         'ollama' => ['api_key', 'url'],
-        'openrouter' => ['api_key'],
+        'openrouter' => ['api_key', 'url'],
         'voyageai' => ['api_key'],
         'xai' => ['api_key'],
     ];
+
+    /**
+     * Drivers that act as brokers/aggregators (route to many upstream models)
+     * rather than a single first-party provider. They expose a large, live
+     * model catalog fetched on demand instead of a hardcoded list.
+     */
+    public const BROKER_DRIVERS = ['openrouter'];
+
+    /**
+     * Default base URL for the OpenRouter broker (OpenAI-compatible).
+     */
+    public const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+
+    /**
+     * Direct drivers that expose a usable `/models` listing endpoint, so their
+     * catalog can be refreshed live. The rest (azure deployments, local ollama,
+     * embeddings-only voyageai/jina, eleven) stay curated/manual.
+     */
+    public const SYNCABLE_DRIVERS = ['anthropic', 'openai', 'gemini', 'mistral', 'groq', 'xai', 'deepseek', 'cohere'];
+
+    /**
+     * Whether the given driver is a broker/aggregator rather than a direct provider.
+     */
+    public function isBroker(string $driver): bool
+    {
+        return in_array($driver, self::BROKER_DRIVERS, true);
+    }
+
+    /**
+     * Whether the given driver's catalog can be refreshed live from its API.
+     */
+    public function isSyncable(string $driver): bool
+    {
+        return in_array($driver, self::SYNCABLE_DRIVERS, true);
+    }
 
     /**
      * Get all AI providers for the user's current account context.
@@ -564,6 +599,9 @@ class AiProviderService
                     ]),
                 'ollama' => Http::timeout(10)
                     ->get(rtrim($credentials['url'] ?? 'http://localhost:11434', '/').'/api/tags'),
+                'openrouter' => Http::withToken($apiKey)
+                    ->timeout(10)
+                    ->get(rtrim($credentials['url'] ?? self::OPENROUTER_BASE_URL, '/').'/models'),
                 default => null,
             };
 
@@ -611,5 +649,370 @@ class AiProviderService
         }
 
         return $masked;
+    }
+
+    /**
+     * Fetch the live model catalog from OpenRouter's OpenAI-compatible
+     * `/models` endpoint, including context window, pricing and capability
+     * metadata for the picker.
+     *
+     * @return array<int, array{id: string, label: string, contextWindow: ?int, inputPricePerMTok: ?float, outputPricePerMTok: ?float, vision: bool, tools: bool, description: string}>
+     */
+    public function fetchOpenRouterModels(string $apiKey, ?string $url = null): array
+    {
+        $base = rtrim($url ?: self::OPENROUTER_BASE_URL, '/');
+
+        $response = Http::withToken($apiKey)->timeout(15)->get($base.'/models');
+
+        if (! $response->successful()) {
+            return [];
+        }
+
+        return collect($response->json('data') ?? [])
+            ->filter(fn ($model) => ! empty($model['id']))
+            ->map(function ($model) {
+                $architecture = $model['architecture'] ?? [];
+                $inputModalities = $architecture['input_modalities'] ?? [];
+                $supportedParameters = $model['supported_parameters'] ?? [];
+
+                return [
+                    'id' => (string) $model['id'],
+                    'label' => (string) ($model['name'] ?? $model['id']),
+                    'contextWindow' => isset($model['context_length']) ? (int) $model['context_length'] : null,
+                    'inputPricePerMTok' => $this->perMillionPrice($model['pricing']['prompt'] ?? null),
+                    'outputPricePerMTok' => $this->perMillionPrice($model['pricing']['completion'] ?? null),
+                    'vision' => in_array('image', $inputModalities, true)
+                        || str_contains((string) ($architecture['modality'] ?? ''), 'image'),
+                    'tools' => in_array('tools', $supportedParameters, true),
+                    'description' => (string) ($model['description'] ?? ''),
+                    'created' => isset($model['created']) ? (int) $model['created'] : null,
+                    // Full upstream payload so the UI can show every available
+                    // detail for an informed enable/disable decision.
+                    'raw' => $model,
+                ];
+            })
+            ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Convert OpenRouter's per-token USD price string into a per-million-token
+     * price. Returns null when the price is absent (0 stays 0 for free models).
+     */
+    private function perMillionPrice(mixed $perToken): ?float
+    {
+        if ($perToken === null || $perToken === '') {
+            return null;
+        }
+
+        return (float) $perToken * 1_000_000;
+    }
+
+    /**
+     * Persist the admin's chosen OpenRouter models into the shared
+     * `ai_catalog_models` table so they surface in the catalog and model
+     * pickers. Rows for openrouter models no longer selected are removed.
+     *
+     * The label is only set when a row is first created — a manual rename in
+     * the catalog survives subsequent re-syncs. Context window and pricing are
+     * always refreshed from the latest payload.
+     *
+     * @param  array<int, array{id: string, label: string}>  $models
+     */
+    public function syncOpenRouterCatalogModels(array $models): void
+    {
+        $keepIds = [];
+
+        foreach (array_values($models) as $index => $model) {
+            $modelId = (string) ($model['id'] ?? '');
+            if ($modelId === '') {
+                continue;
+            }
+            $keepIds[] = $modelId;
+
+            $row = AiCatalogModel::firstOrNew([
+                'driver' => 'openrouter',
+                'model_id' => $modelId,
+                'capability' => 'chat',
+            ]);
+
+            // Preserve a manually-edited label on existing rows.
+            if (! $row->exists) {
+                $row->label = (string) ($model['label'] ?? $modelId);
+                $row->sort_order = $index;
+            }
+
+            $row->context_window = $model['contextWindow'] ?? null;
+            $row->input_price_per_mtok = $model['inputPricePerMTok'] ?? null;
+            $row->output_price_per_mtok = $model['outputPricePerMTok'] ?? null;
+            $row->is_enabled = true;
+            $row->save();
+        }
+
+        AiCatalogModel::query()
+            ->where('driver', 'openrouter')
+            ->whereNotIn('model_id', $keepIds)
+            ->delete();
+    }
+
+    /**
+     * Fetch the live model list for a direct provider from its `/models`
+     * endpoint, classified into chat/embeddings capabilities. Returns an empty
+     * array for providers without a usable listing endpoint or on failure.
+     *
+     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
+     */
+    public function fetchProviderModels(string $driver, array $credentials): array
+    {
+        $apiKey = (string) ($credentials['api_key'] ?? '');
+
+        if ($apiKey === '' || ! $this->isSyncable($driver)) {
+            return [];
+        }
+
+        try {
+            $response = match ($driver) {
+                'anthropic' => Http::withHeaders([
+                    'x-api-key' => $apiKey,
+                    'anthropic-version' => '2023-06-01',
+                ])->timeout(15)->get('https://api.anthropic.com/v1/models', ['limit' => 1000]),
+                'openai' => Http::withToken($apiKey)->timeout(15)->get('https://api.openai.com/v1/models'),
+                'gemini' => Http::timeout(15)->get("https://generativelanguage.googleapis.com/v1beta/models?key={$apiKey}&pageSize=1000"),
+                'mistral' => Http::withToken($apiKey)->timeout(15)->get('https://api.mistral.ai/v1/models'),
+                'groq' => Http::withToken($apiKey)->timeout(15)->get('https://api.groq.com/openai/v1/models'),
+                'xai' => Http::withToken($apiKey)->timeout(15)->get('https://api.x.ai/v1/models'),
+                'deepseek' => Http::withToken($apiKey)->timeout(15)->get('https://api.deepseek.com/models'),
+                'cohere' => Http::withToken($apiKey)->timeout(15)->get('https://api.cohere.com/v2/models', ['page_size' => 1000]),
+                default => null,
+            };
+        } catch (\Exception) {
+            return [];
+        }
+
+        if ($response === null || ! $response->successful()) {
+            return [];
+        }
+
+        return match ($driver) {
+            'anthropic' => $this->parseAnthropicModels($response->json()),
+            'gemini' => $this->parseGeminiModels($response->json()),
+            'mistral' => $this->parseMistralModels($response->json()),
+            'cohere' => $this->parseCohereModels($response->json()),
+            // OpenAI-compatible `{ data: [{ id }] }` shape.
+            default => $this->parseOpenAiStyleModels($response->json()),
+        };
+    }
+
+    /**
+     * Merge a freshly fetched direct-provider model list into the shared
+     * catalog: new models are added enabled, labels are refreshed, and existing
+     * rows keep their admin enable/disable toggle. Nothing is deleted, so
+     * defaults that reference a model id are never orphaned.
+     *
+     * @param  array<int, array{id: string, label: string, capabilities: array<int, string>}>  $models
+     * @return int Number of catalog rows created.
+     */
+    public function syncDirectCatalogModels(string $driver, array $models): int
+    {
+        $created = 0;
+
+        foreach (array_values($models) as $index => $model) {
+            $modelId = (string) ($model['id'] ?? '');
+            if ($modelId === '') {
+                continue;
+            }
+
+            foreach ($model['capabilities'] ?? ['chat'] as $capability) {
+                $row = AiCatalogModel::firstOrNew([
+                    'driver' => $driver,
+                    'model_id' => $modelId,
+                    'capability' => $capability,
+                ]);
+
+                $row->label = (string) ($model['label'] ?? $modelId);
+
+                if (! $row->exists) {
+                    $row->is_enabled = true;
+                    $row->sort_order = $index;
+                    $created++;
+                }
+
+                $row->save();
+            }
+        }
+
+        return $created;
+    }
+
+    /**
+     * Classify a bare model id (OpenAI-style listings carry no metadata) into a
+     * capability set, skipping non-text models (audio, image, moderation, …).
+     *
+     * @return array<int, string>|null
+     */
+    private function classifyModelId(string $id): ?array
+    {
+        $lower = strtolower($id);
+
+        foreach (['whisper', 'tts', 'dall', 'image', 'audio', 'moderation', 'rerank', 'stable', 'sora', 'guard', 'clip'] as $skip) {
+            if (str_contains($lower, $skip)) {
+                return null;
+            }
+        }
+
+        return str_contains($lower, 'embed') ? ['embeddings'] : ['chat'];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $json
+     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
+     */
+    private function parseOpenAiStyleModels(?array $json): array
+    {
+        return collect($json['data'] ?? [])
+            ->map(function ($model) {
+                $id = (string) ($model['id'] ?? '');
+                $capabilities = $id === '' ? null : $this->classifyModelId($id);
+
+                return $capabilities === null ? null : [
+                    'id' => $id,
+                    'label' => $id,
+                    'capabilities' => $capabilities,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $json
+     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
+     */
+    private function parseAnthropicModels(?array $json): array
+    {
+        return collect($json['data'] ?? [])
+            ->filter(fn ($model) => ! empty($model['id']))
+            ->map(fn ($model) => [
+                'id' => (string) $model['id'],
+                'label' => (string) ($model['display_name'] ?? $model['id']),
+                'capabilities' => ['chat'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $json
+     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
+     */
+    private function parseGeminiModels(?array $json): array
+    {
+        return collect($json['models'] ?? [])
+            ->map(function ($model) {
+                $name = (string) ($model['name'] ?? '');
+                $id = preg_replace('#^models/#', '', $name) ?? $name;
+                if ($id === '') {
+                    return null;
+                }
+
+                $methods = $model['supportedGenerationMethods'] ?? [];
+                $capabilities = [];
+                if (in_array('generateContent', $methods, true)) {
+                    $capabilities[] = 'chat';
+                }
+                if (in_array('embedContent', $methods, true) || in_array('embedText', $methods, true)) {
+                    $capabilities[] = 'embeddings';
+                }
+                if ($capabilities === []) {
+                    return null;
+                }
+
+                return [
+                    'id' => $id,
+                    'label' => (string) ($model['displayName'] ?? $id),
+                    'capabilities' => $capabilities,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $json
+     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
+     */
+    private function parseMistralModels(?array $json): array
+    {
+        return collect($json['data'] ?? [])
+            ->map(function ($model) {
+                $id = (string) ($model['id'] ?? '');
+                if ($id === '') {
+                    return null;
+                }
+
+                $caps = $model['capabilities'] ?? [];
+                $capabilities = [];
+                if (! empty($caps['completion_chat']) || ! empty($caps['completion_fim'])) {
+                    $capabilities[] = 'chat';
+                }
+                if (! empty($caps['embeddings']) || str_contains(strtolower($id), 'embed')) {
+                    $capabilities[] = 'embeddings';
+                }
+                // Fall back to id heuristics when the payload omits capabilities.
+                if ($capabilities === []) {
+                    $capabilities = $this->classifyModelId($id) ?? [];
+                }
+                if ($capabilities === []) {
+                    return null;
+                }
+
+                return [
+                    'id' => $id,
+                    'label' => (string) ($model['name'] ?? $id),
+                    'capabilities' => array_values(array_unique($capabilities)),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $json
+     * @return array<int, array{id: string, label: string, capabilities: array<int, string>}>
+     */
+    private function parseCohereModels(?array $json): array
+    {
+        return collect($json['models'] ?? [])
+            ->map(function ($model) {
+                $name = (string) ($model['name'] ?? '');
+                if ($name === '') {
+                    return null;
+                }
+
+                $endpoints = $model['endpoints'] ?? [];
+                $capabilities = [];
+                if (in_array('chat', $endpoints, true)) {
+                    $capabilities[] = 'chat';
+                }
+                if (in_array('embed', $endpoints, true)) {
+                    $capabilities[] = 'embeddings';
+                }
+                if ($capabilities === []) {
+                    return null;
+                }
+
+                return [
+                    'id' => $name,
+                    'label' => $name,
+                    'capabilities' => $capabilities,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 }

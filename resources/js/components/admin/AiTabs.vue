@@ -8,7 +8,7 @@ import { useI18n } from 'vue-i18n';
  * Inertia route so deep-linking works. Active state reads the current URL.
  */
 interface Props {
-    current: 'defaults' | 'catalog' | 'usage';
+    current: 'defaults' | 'providers' | 'catalog' | 'usage';
 }
 
 defineProps<Props>();
@@ -19,6 +19,11 @@ const tabs = computed(() => [
         key: 'defaults' as const,
         label: t('admin.ai.tabs.defaults'),
         href: '/admin/ai',
+    },
+    {
+        key: 'providers' as const,
+        label: t('admin.ai.tabs.providers'),
+        href: '/admin/ai/providers',
     },
     {
         key: 'catalog' as const,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AiTabs from '@/components/admin/AiTabs.vue';
 import DriverChip from '@/components/admin/DriverChip.vue';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import {
     Table,
@@ -11,27 +12,107 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { Pencil, Search } from '@/lib/admin/icons';
 import type { AiModel } from '@/lib/admin/types';
 import { Head, router } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const props = defineProps<{ models: AiModel[] }>();
 const { t } = useI18n();
 
 const filter = ref<'all' | 'chat' | 'embedding'>('all');
+const activeTab = ref<'direct' | 'broker'>('direct');
+const search = reactive<{ direct: string; broker: string }>({
+    direct: '',
+    broker: '',
+});
 
-const rows = computed(() => {
+const kindRows = computed(() => {
     if (filter.value === 'all') return props.models;
     return props.models.filter((m) => m.kind === filter.value);
 });
+
+const directRows = computed(() =>
+    kindRows.value.filter((m) => m.providerKind === 'direct'),
+);
+const brokerRows = computed(() =>
+    kindRows.value.filter((m) => m.providerKind === 'broker'),
+);
+
+function matches(model: AiModel, query: string): boolean {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return (
+        model.name.toLowerCase().includes(q) ||
+        model.label.toLowerCase().includes(q) ||
+        model.driver.toLowerCase().includes(q)
+    );
+}
+
+const visibleRows = computed(() => {
+    const base = activeTab.value === 'direct' ? directRows.value : brokerRows.value;
+    return base.filter((m) => matches(m, search[activeTab.value]));
+});
+
+function formatContext(n: number | null): string {
+    if (!n) return '—';
+    return n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);
+}
+
+function formatPrice(input: number | null, output: number | null): string {
+    if (input === null && output === null) return '—';
+    if (input === 0 && (output === 0 || output === null)) {
+        return t('admin.ai.providers.price_free');
+    }
+    const fmt = (p: number | null) => (p === null ? '—' : `$${p.toFixed(2)}`);
+    return `${fmt(input)} / ${fmt(output)}`;
+}
 
 function toggle(model: AiModel, next: boolean) {
     router.patch(
         `/admin/ai/catalog/${model.id}`,
         { enabled: next },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['models'],
+        },
+    );
+}
+
+// ── Inline label editing (brokers) ──────────────────────────────────────────
+const editingId = ref<string | null>(null);
+const editLabel = ref('');
+
+function startEdit(model: AiModel) {
+    editingId.value = model.id;
+    editLabel.value = model.label;
+}
+
+// Function ref: focus + select the input as soon as it mounts.
+function focusLabelInput(el: unknown) {
+    if (el instanceof HTMLInputElement) {
+        el.focus();
+        el.select();
+    }
+}
+
+function cancelEdit() {
+    editingId.value = null;
+}
+
+function saveEdit(model: AiModel) {
+    if (editingId.value !== model.id) return;
+    const next = editLabel.value.trim();
+    editingId.value = null;
+    if (!next || next === model.label) return;
+    router.patch(
+        `/admin/ai/catalog/${model.id}`,
+        { label: next },
         {
             preserveScroll: true,
             preserveState: true,
@@ -57,7 +138,31 @@ function toggle(model: AiModel, next: boolean) {
 
             <AiTabs current="catalog" />
 
-            <div class="flex items-center justify-end gap-4">
+            <Tabs v-model="activeTab">
+                <TabsList class="grid w-full max-w-xs grid-cols-2">
+                    <TabsTrigger value="direct" class="gap-1.5 text-xs">
+                        {{ t('admin.ai.catalog.direct_title') }}
+                        <span class="text-ink-subtle">{{ directRows.length }}</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="broker" class="gap-1.5 text-xs">
+                        {{ t('admin.ai.catalog.broker_title') }}
+                        <span class="text-ink-subtle">{{ brokerRows.length }}</span>
+                    </TabsTrigger>
+                </TabsList>
+            </Tabs>
+
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="relative w-full max-w-xs">
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-subtle"
+                    />
+                    <Input
+                        v-model="search[activeTab]"
+                        :placeholder="t('admin.ai.catalog.search')"
+                        class="h-8 border-medium bg-surface pl-8 text-xs"
+                    />
+                </div>
+
                 <ToggleGroup v-model="filter" type="single" class="gap-0.5">
                     <ToggleGroupItem value="all" class="h-8 rounded-pill px-3 text-xs">
                         {{ t('admin.ai.catalog.filter.all') }}
@@ -94,6 +199,16 @@ function toggle(model: AiModel, next: boolean) {
                                 {{ t('admin.ai.catalog.col.kind') }}
                             </TableHead>
                             <TableHead
+                                class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
+                            >
+                                {{ t('admin.ai.catalog.col.context') }}
+                            </TableHead>
+                            <TableHead
+                                class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
+                            >
+                                {{ t('admin.ai.catalog.col.price') }}
+                            </TableHead>
+                            <TableHead
                                 class="text-right text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
                             >
                                 {{ t('admin.ai.catalog.col.enabled') }}
@@ -101,11 +216,11 @@ function toggle(model: AiModel, next: boolean) {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        <TableEmpty v-if="rows.length === 0" :colspan="4">
+                        <TableEmpty v-if="visibleRows.length === 0" :colspan="6">
                             {{ t('admin.ai.catalog.empty') }}
                         </TableEmpty>
                         <TableRow
-                            v-for="m in rows"
+                            v-for="m in visibleRows"
                             :key="m.id"
                             class="border-soft transition-colors hover:bg-surface"
                         >
@@ -117,13 +232,41 @@ function toggle(model: AiModel, next: boolean) {
                                     <span class="font-mono text-xs text-ink">{{
                                         m.name
                                     }}</span>
-                                    <span class="text-xs text-ink-muted">{{
-                                        m.label
-                                    }}</span>
+                                    <input
+                                        v-if="editingId === m.id"
+                                        :ref="focusLabelInput"
+                                        v-model="editLabel"
+                                        type="text"
+                                        class="mt-0.5 w-full max-w-xs rounded-xs border border-medium bg-surface px-1.5 py-0.5 text-xs text-ink outline-none focus:border-accent-blue"
+                                        @keyup.enter="saveEdit(m)"
+                                        @keyup.esc="cancelEdit"
+                                        @blur="saveEdit(m)"
+                                    />
+                                    <span
+                                        v-else
+                                        class="group flex items-center gap-1 text-xs text-ink-muted"
+                                    >
+                                        {{ m.label }}
+                                        <button
+                                            v-if="m.providerKind === 'broker'"
+                                            type="button"
+                                            class="rounded-xs p-0.5 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent-blue"
+                                            :title="t('admin.ai.catalog.edit_name')"
+                                            @click="startEdit(m)"
+                                        >
+                                            <Pencil class="size-3" />
+                                        </button>
+                                    </span>
                                 </div>
                             </TableCell>
                             <TableCell class="text-xs text-ink-muted capitalize">
                                 {{ m.kind }}
+                            </TableCell>
+                            <TableCell class="font-mono text-xs text-ink-muted">
+                                {{ formatContext(m.contextWindow) }}
+                            </TableCell>
+                            <TableCell class="font-mono text-xs text-ink-muted">
+                                {{ formatPrice(m.inputPricePerMTok, m.outputPricePerMTok) }}
                             </TableCell>
                             <TableCell class="text-right">
                                 <Switch

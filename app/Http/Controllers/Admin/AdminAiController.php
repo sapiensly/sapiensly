@@ -8,6 +8,7 @@ use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
 use App\Models\AppSetting;
 use App\Models\KnowledgeBase;
+use App\Services\AiProviderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,13 +38,43 @@ class AdminAiController extends Controller
 
     private const KEY_MAX_TOKENS = 'admin_v2.ai.max_tokens';
 
+    public function __construct(private AiProviderService $aiProviderService) {}
+
     public function defaults(): Response
     {
         return Inertia::render('admin/Ai/Defaults', [
             'defaults' => $this->readDefaults(),
             'chatModels' => $this->serialiseEnabledModels('chat'),
             'embeddingModels' => $this->serialiseEnabledModels('embedding'),
-            'keys' => $this->readKeys(),
+        ]);
+    }
+
+    public function providers(): Response
+    {
+        $state = $this->readGlobalProviderState();
+        $counts = $this->enabledModelCountsByDriver();
+
+        $providers = collect(AiProviderService::DRIVER_LABELS)
+            ->map(function (string $label, string $driver) use ($state, $counts) {
+                $row = $state[$driver] ?? null;
+
+                return [
+                    'driver' => $driver,
+                    'label' => $label,
+                    'kind' => $this->aiProviderService->isBroker($driver) ? 'broker' : 'direct',
+                    'credentialFields' => AiProviderService::DRIVER_CREDENTIAL_FIELDS[$driver] ?? ['api_key'],
+                    'configured' => $row !== null,
+                    'masked' => $row['masked'] ?? null,
+                    'lastRotatedAt' => $row['lastRotatedAt'] ?? null,
+                    'syncable' => $this->aiProviderService->isSyncable($driver),
+                    'modelCount' => (int) ($counts[$driver] ?? 0),
+                ];
+            })
+            ->values()
+            ->all();
+
+        return Inertia::render('admin/Ai/Providers', [
+            'providers' => $providers,
         ]);
     }
 
@@ -123,63 +154,163 @@ class AdminAiController extends Controller
     public function toggleModel(Request $request, AiCatalogModel $model): RedirectResponse
     {
         $validated = $request->validate([
-            'enabled' => ['required', 'boolean'],
+            'enabled' => ['sometimes', 'boolean'],
+            'label' => ['sometimes', 'string', 'max:255'],
         ]);
 
-        $model->update(['is_enabled' => $validated['enabled']]);
+        $update = [];
+        if ($request->has('enabled')) {
+            $update['is_enabled'] = $validated['enabled'];
+        }
+        if ($request->has('label')) {
+            $update['label'] = $validated['label'];
+        }
+
+        if ($update !== []) {
+            $model->update($update);
+        }
 
         return back()->with('success', __('Catalog model updated.'));
     }
 
-    public function rotateKey(Request $request, AiProvider $provider): RedirectResponse
+    /**
+     * Register or rotate the global API key for a known driver. Handles both
+     * the first-time "dar de alta" and subsequent rotations — whatever was
+     * stored is overwritten in-place, invalidating the previous key.
+     */
+    public function setProviderKey(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            // Whichever credential field the driver uses; we just overwrite
-            // whatever's stored with the supplied value. The old value is
-            // invalidated in-place (decision #2).
-            'api_key' => ['required', 'string', 'min:16', 'max:500'],
+            'driver' => ['required', 'string', Rule::in(array_keys(AiProviderService::DRIVER_LABELS))],
+            'credentials' => ['required', 'array'],
+            'credentials.api_key' => ['required', 'string', 'min:16', 'max:500'],
+            'credentials.url' => ['nullable', 'string', 'url', 'max:255'],
         ]);
 
-        $credentials = $provider->credentials ?? [];
-        $credentials['api_key'] = $validated['api_key'];
-        $credentials['rotated_at'] = now()->toIso8601String();
+        $driver = $validated['driver'];
 
-        $provider->update(['credentials' => $credentials]);
+        $credentials = array_filter([
+            'api_key' => $validated['credentials']['api_key'],
+            'url' => $validated['credentials']['url'] ?? null,
+            'rotated_at' => now()->toIso8601String(),
+        ], fn ($value) => $value !== null && $value !== '');
 
-        Log::channel('daily')->info('admin_v2.ai.key_rotated', [
+        $provider = $this->aiProviderService->upsertGlobalProviderForDriver($driver, $credentials);
+
+        Log::channel('daily')->info('admin_v2.ai.key_set', [
             'provider_id' => $provider->id,
-            'driver' => $provider->driver,
+            'driver' => $driver,
             'by_user_id' => $request->user()?->id,
         ]);
 
-        return back()->with('success', __('API key rotated.'));
+        return back()->with('success', __('API key saved.'));
+    }
+
+    /**
+     * Fetch the live OpenRouter model catalog for the broker picker.
+     */
+    public function openRouterModels(): JsonResponse
+    {
+        $provider = AiProvider::query()
+            ->where('visibility', 'global')
+            ->where('driver', 'openrouter')
+            ->first();
+
+        $credentials = $provider?->credentials ?? [];
+        $apiKey = (string) ($credentials['api_key'] ?? '');
+
+        if ($apiKey === '') {
+            return response()->json(['models' => [], 'enabled' => [], 'error' => __('No OpenRouter API key configured.')]);
+        }
+
+        return response()->json([
+            'models' => $this->aiProviderService->fetchOpenRouterModels($apiKey, $credentials['url'] ?? null),
+            'enabled' => AiCatalogModel::query()
+                ->where('driver', 'openrouter')
+                ->pluck('model_id')
+                ->values()
+                ->all(),
+        ]);
+    }
+
+    /**
+     * Persist the admin's OpenRouter model selection into the shared catalog.
+     */
+    public function saveOpenRouterModels(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'models' => ['present', 'array'],
+            'models.*.id' => ['required', 'string', 'max:255'],
+            'models.*.label' => ['required', 'string', 'max:255'],
+            'models.*.contextWindow' => ['nullable', 'integer', 'min:0'],
+            'models.*.inputPricePerMTok' => ['nullable', 'numeric', 'min:0'],
+            'models.*.outputPricePerMTok' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $this->aiProviderService->syncOpenRouterCatalogModels($validated['models']);
+
+        return back()->with('success', __('OpenRouter models updated.'));
+    }
+
+    /**
+     * Refresh a direct provider's catalog live from its `/models` endpoint.
+     */
+    public function syncProviderModels(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'driver' => ['required', 'string', Rule::in(AiProviderService::SYNCABLE_DRIVERS)],
+        ]);
+
+        $driver = $validated['driver'];
+
+        $provider = AiProvider::query()
+            ->where('visibility', 'global')
+            ->where('driver', $driver)
+            ->first();
+
+        if (! $provider || empty(($provider->credentials ?? [])['api_key'])) {
+            return back()->with('error', __('Add an API key before syncing models.'));
+        }
+
+        $models = $this->aiProviderService->fetchProviderModels($driver, $provider->credentials ?? []);
+
+        if ($models === []) {
+            return back()->with('error', __('No models returned — check the API key and try again.'));
+        }
+
+        $created = $this->aiProviderService->syncDirectCatalogModels($driver, $models);
+
+        Log::channel('daily')->info('admin_v2.ai.models_synced', [
+            'driver' => $driver,
+            'fetched' => count($models),
+            'created' => $created,
+            'by_user_id' => $request->user()?->id,
+        ]);
+
+        return back()->with('success', __(':count new models added.', ['count' => $created]));
     }
 
     public function testConnection(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'driver' => ['required', 'string'],
-            // Either an existing provider id (we look up credentials) or a
-            // raw api_key to test without persisting.
-            'provider_id' => ['nullable', 'string'],
-            'api_key' => ['nullable', 'string'],
+            'driver' => ['required', 'string', Rule::in(array_keys(AiProviderService::DRIVER_LABELS))],
         ]);
 
-        // Actual live probe requires SDK per driver; for now return OK if we
-        // have credentials on file. Full live check is tracked as a follow-up.
-        $hasCredential = false;
-        if (! empty($validated['provider_id'])) {
-            $provider = AiProvider::find($validated['provider_id']);
-            $hasCredential = $provider && ! empty(($provider->credentials ?? [])['api_key']);
-        } elseif (! empty($validated['api_key'])) {
-            $hasCredential = true;
+        $provider = AiProvider::query()
+            ->where('visibility', 'global')
+            ->where('driver', $validated['driver'])
+            ->first();
+
+        if (! $provider) {
+            return response()->json(['ok' => false, 'message' => __('No credential supplied.')]);
         }
 
+        $result = $this->aiProviderService->testConnection($provider);
+
         return response()->json([
-            'ok' => $hasCredential,
-            'message' => $hasCredential
-                ? __('Credentials look good.')
-                : __('No credential supplied.'),
+            'ok' => $result['success'],
+            'message' => $result['message'],
+            'detail' => $result['detail'] ?? null,
         ]);
     }
 
@@ -239,38 +370,52 @@ class AdminAiController extends Controller
             'label' => $model->label,
             // Map ai_catalog_models.capability → handoff's AiModelKind.
             'kind' => $model->capability === 'embeddings' ? 'embedding' : 'chat',
+            // Group catalog rows by direct provider vs broker/aggregator.
+            'providerKind' => $this->aiProviderService->isBroker($model->driver) ? 'broker' : 'direct',
             'enabled' => (bool) $model->is_enabled,
-            'contextWindow' => null,
-            'inputPricePerMTok' => null,
-            'outputPricePerMTok' => null,
+            'contextWindow' => $model->context_window,
+            'inputPricePerMTok' => $model->input_price_per_mtok,
+            'outputPricePerMTok' => $model->output_price_per_mtok,
             'registeredAt' => $model->created_at?->toIso8601String(),
         ];
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * Global provider rows keyed by driver, with the masked key and last
+     * rotation timestamp. Used by the Providers tab to annotate which of the
+     * known drivers already have a global API key configured.
+     *
+     * @return array<string, array{masked: string, lastRotatedAt: ?string}>
      */
-    private function readKeys(): array
+    private function readGlobalProviderState(): array
     {
         return AiProvider::query()
-            ->whereIn('visibility', ['global'])
-            ->orderBy('driver')
+            ->where('visibility', 'global')
             ->get()
-            ->map(function (AiProvider $p) {
+            ->mapWithKeys(function (AiProvider $p) {
                 $creds = $p->credentials ?? [];
-                $key = (string) ($creds['api_key'] ?? '');
-                $rotatedAt = $creds['rotated_at'] ?? null;
 
-                return [
-                    'id' => $p->id,
-                    'driver' => $p->driver,
-                    'label' => $p->display_name ?: $p->name,
-                    'lastRotatedAt' => $rotatedAt,
-                    'lastUsedAt' => null, // instrumentation lands with Usage.
-                    'masked' => $this->maskKey($key),
-                ];
+                return [$p->driver => [
+                    'masked' => $this->maskKey((string) ($creds['api_key'] ?? '')),
+                    'lastRotatedAt' => $creds['rotated_at'] ?? null,
+                ]];
             })
-            ->values()
+            ->all();
+    }
+
+    /**
+     * Enabled catalog model count per driver, keyed by driver.
+     *
+     * @return array<string, int>
+     */
+    private function enabledModelCountsByDriver(): array
+    {
+        return AiCatalogModel::query()
+            ->where('is_enabled', true)
+            ->selectRaw('driver, count(*) as aggregate')
+            ->groupBy('driver')
+            ->pluck('aggregate', 'driver')
+            ->map(fn ($count) => (int) $count)
             ->all();
     }
 
