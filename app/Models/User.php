@@ -26,6 +26,7 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     protected $fillable = [
         'name',
         'email',
+        'google_id',
         'password',
         'organization_id',
         'avatar',

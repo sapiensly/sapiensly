@@ -13,6 +13,11 @@ const { t } = useI18n();
 
 const page = usePage();
 const hasOrganization = computed(() => !!page.props.auth.user.organization_id);
+const isOwner = computed(
+    () =>
+        page.props.auth.roles.includes('owner') ||
+        page.props.auth.roles.includes('sysadmin'),
+);
 
 const sidebarNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -30,6 +35,13 @@ const sidebarNavItems = computed<NavItem[]>(() => {
         items.push({
             title: t('settings.nav.organization'),
             href: '/settings/organization',
+        });
+    }
+
+    if (hasOrganization.value && isOwner.value) {
+        items.push({
+            title: t('settings.nav.sso'),
+            href: '/settings/sso',
         });
     }
 

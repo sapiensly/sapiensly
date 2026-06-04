@@ -71,6 +71,7 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/Login', [
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
             'canRegister' => Features::enabled(Features::registration()),
+            'canLoginWithGoogle' => $this->googleLoginEnabled(),
             'status' => $request->session()->get('status'),
         ]));
 
@@ -87,11 +88,23 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(fn () => Inertia::render('auth/Register'));
+        Fortify::registerView(fn () => Inertia::render('auth/Register', [
+            'canLoginWithGoogle' => $this->googleLoginEnabled(),
+        ]));
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/TwoFactorChallenge'));
 
         Fortify::confirmPasswordView(fn () => Inertia::render('auth/ConfirmPassword'));
+    }
+
+    /**
+     * Whether "Sign in with Google" should be offered — true only when the
+     * Google OAuth client credentials are configured.
+     */
+    private function googleLoginEnabled(): bool
+    {
+        return filled(config('services.google.client_id'))
+            && filled(config('services.google.client_secret'));
     }
 
     /**

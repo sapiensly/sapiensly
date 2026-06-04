@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import Link from '@tiptap/extension-link';
-import Underline from '@tiptap/extension-underline';
 import StarterKit from '@tiptap/starter-kit';
 import { Editor, EditorContent } from '@tiptap/vue-3';
 import { Bold, Heading2, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Underline as UnderlineIcon, Unlink } from 'lucide-vue-next';
@@ -29,21 +27,21 @@ const editor = new Editor({
         StarterKit.configure({
             // Disable marks/nodes the toolbar doesn't expose — keeps the
             // saved HTML small and predictable for the server sanitiser.
+            // Underline and Link ship inside StarterKit in Tiptap v3.
             heading: { levels: [2, 3] },
             blockquote: false,
             codeBlock: false,
             code: false,
             horizontalRule: false,
             strike: false,
-        }),
-        Underline,
-        Link.configure({
-            openOnClick: false,
-            autolink: true,
-            linkOnPaste: true,
-            HTMLAttributes: {
-                rel: 'noopener noreferrer',
-                target: '_blank',
+            link: {
+                openOnClick: false,
+                autolink: true,
+                linkOnPaste: true,
+                HTMLAttributes: {
+                    rel: 'noopener noreferrer',
+                    target: '_blank',
+                },
             },
         }),
     ],
@@ -65,7 +63,7 @@ watch(() => props.modelValue, (value) => {
     if (editing.value) return;
     const current = editor.getHTML();
     if (current === value) return;
-    editor.commands.setContent(value || '', false);
+    editor.commands.setContent(value || '', { emitUpdate: false });
 });
 
 onBeforeUnmount(() => {
