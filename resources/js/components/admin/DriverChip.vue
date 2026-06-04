@@ -22,6 +22,15 @@ const config = computed(() => {
         gemini: { label: 'Gemini', color: '#4285f4', bg: '#4285f433' },
         azure: { label: 'Azure', color: '#0078d4', bg: '#0078d433' },
         ollama: { label: 'Ollama', color: '#c084fc', bg: '#c084fc33' },
+        mistral: { label: 'Mistral', color: '#ff7000', bg: '#ff700033' },
+        deepseek: { label: 'DeepSeek', color: '#4d6bfe', bg: '#4d6bfe33' },
+        groq: { label: 'Groq', color: '#f55036', bg: '#f5503633' },
+        xai: { label: 'xAI', color: '#e7e7e7', bg: '#e7e7e733' },
+        cohere: { label: 'Cohere', color: '#39594d', bg: '#39594d55' },
+        voyageai: { label: 'Voyage AI', color: '#8b5cf6', bg: '#8b5cf633' },
+        jina: { label: 'Jina', color: '#ec4899', bg: '#ec489933' },
+        eleven: { label: 'ElevenLabs', color: '#22d3ee', bg: '#22d3ee33' },
+        openrouter: { label: 'OpenRouter', color: '#6467f2', bg: '#6467f233' },
         custom: { label: 'Custom', color: '#8890a6', bg: '#8890a633' },
     };
     return map[props.driver] ?? map.custom;

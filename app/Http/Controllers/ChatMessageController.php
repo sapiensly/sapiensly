@@ -116,7 +116,7 @@ class ChatMessageController extends Controller
             }
         }
 
-        $reachable = collect($this->providers->getReachableChatModels($user))->pluck('value');
+        $reachable = collect($this->providers->getEnabledChatModels())->pluck('value');
         if (is_string($selection) && $reachable->contains($selection)) {
             return [$selection, null];
         }

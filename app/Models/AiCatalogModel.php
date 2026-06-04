@@ -14,6 +14,9 @@ class AiCatalogModel extends Model
         'model_id',
         'label',
         'capability',
+        'context_window',
+        'input_price_per_mtok',
+        'output_price_per_mtok',
         'is_enabled',
         'sort_order',
     ];
@@ -23,6 +26,9 @@ class AiCatalogModel extends Model
         return [
             'is_enabled' => 'boolean',
             'sort_order' => 'integer',
+            'context_window' => 'integer',
+            'input_price_per_mtok' => 'float',
+            'output_price_per_mtok' => 'float',
         ];
     }
 

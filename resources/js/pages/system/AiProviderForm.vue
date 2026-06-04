@@ -465,16 +465,15 @@ const submitEdit = () => {
                         v-if="editCatalogModels.length > 0"
                         class="space-y-1.5"
                     >
-                        <label
+                        <div
                             v-for="model in editCatalogModels"
                             :key="model.id"
-                            :for="`model_${model.id}`"
                             class="flex cursor-pointer items-center gap-3 rounded-xs border border-soft bg-white/[0.03] px-3 py-2.5 transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
+                            @click="toggleEditModel(model)"
                         >
                             <Checkbox
-                                :id="`model_${model.id}`"
-                                :checked="isEditModelSelected(model.id)"
-                                @update:checked="toggleEditModel(model)"
+                                :model-value="isEditModelSelected(model.id)"
+                                class="pointer-events-none"
                             />
                             <div class="min-w-0 flex-1">
                                 <p class="text-sm font-medium text-ink">
@@ -485,7 +484,7 @@ const submitEdit = () => {
                                     {{ model.capabilities.join(', ') }}
                                 </p>
                             </div>
-                        </label>
+                        </div>
                     </div>
                     <p v-else class="text-xs text-ink-muted">
                         No predefined models for this provider.
@@ -510,7 +509,7 @@ const submitEdit = () => {
                                 Use this provider by default for agent chat
                             </p>
                         </div>
-                        <Switch v-model:checked="editForm.is_default" />
+                        <Switch v-model="editForm.is_default" />
                     </div>
 
                     <div
@@ -525,9 +524,7 @@ const submitEdit = () => {
                                 embeddings
                             </p>
                         </div>
-                        <Switch
-                            v-model:checked="editForm.is_default_embeddings"
-                        />
+                        <Switch v-model="editForm.is_default_embeddings" />
                     </div>
                 </SettingsCard>
 

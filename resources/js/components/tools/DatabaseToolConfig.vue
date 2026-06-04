@@ -220,7 +220,7 @@ WHERE o.id = :order_id`;
         </div>
 
         <div class="flex items-center space-x-2">
-            <Checkbox id="read-only" v-model:checked="readOnly" />
+            <Checkbox id="read-only" v-model="readOnly" />
             <Label for="read-only" class="cursor-pointer font-normal">
                 Read-only mode (recommended for safety)
             </Label>

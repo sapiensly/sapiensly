@@ -52,7 +52,7 @@ class DebateController extends Controller
         $user = $request->user();
         $data = $request->validated();
 
-        $reachable = collect($this->providers->getReachableChatModels($user))->keyBy('value');
+        $reachable = collect($this->providers->getEnabledChatModels())->keyBy('value');
         $modelIds = collect($data['model_ids'])->unique()->values();
 
         $moderator = $data['moderator_model'] ?? null;
@@ -156,7 +156,7 @@ class DebateController extends Controller
                 'last_activity_at' => ($d->last_activity_at ?? $d->created_at)?->toIso8601String(),
             ]);
 
-        $models = $this->providers->getReachableChatModels($user);
+        $models = $this->providers->getEnabledChatModels($user);
 
         $agents = Agent::query()
             ->forAccountContext($user)

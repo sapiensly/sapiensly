@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import AiTabs from '@/components/admin/AiTabs.vue';
 import DriverChip from '@/components/admin/DriverChip.vue';
-import RotateKeyDialog from '@/components/admin/RotateKeyDialog.vue';
 import SettingsCard from '@/components/admin/SettingsCard.vue';
 import ToggleRow from '@/components/admin/ToggleRow.vue';
 import {
@@ -15,7 +14,6 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -27,15 +25,8 @@ import {
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import {
-    AlertTriangle,
-    Brain,
-    Key,
-    RefreshCw,
-    Sparkles,
-    Zap,
-} from '@/lib/admin/icons';
-import type { AiDriver, AiModel, UUID } from '@/lib/admin/types';
+import { AlertTriangle, Brain, Sparkles, Zap } from '@/lib/admin/icons';
+import type { AiModel, UUID } from '@/lib/admin/types';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -51,14 +42,6 @@ interface Props {
     };
     chatModels: AiModel[];
     embeddingModels: AiModel[];
-    keys: {
-        id: string;
-        driver: AiDriver;
-        label: string;
-        lastRotatedAt: string | null;
-        lastUsedAt: string | null;
-        masked: string;
-    }[];
 }
 
 const props = defineProps<Props>();
@@ -74,7 +57,7 @@ function patch(
     router.patch('/admin/ai/defaults', payload, {
         preserveScroll: true,
         preserveState: true,
-        only: ['defaults', 'chatModels', 'embeddingModels', 'keys'],
+        only: ['defaults', 'chatModels', 'embeddingModels'],
         onSuccess: () => {
             form.value = { ...props.defaults };
             if (onSuccess) onSuccess();
@@ -180,28 +163,6 @@ function commitMaxTokens() {
         form.value.maxTokens = prev;
         maxTokensDraft.value = prev;
     });
-}
-
-// ── Key rotation ────────────────────────────────────────────────────────
-const rotateOpen = ref(false);
-const rotateTarget = ref<{
-    id: string;
-    driver: AiDriver;
-    label: string;
-} | null>(null);
-
-function openRotate(key: Props['keys'][number]) {
-    rotateTarget.value = { id: key.id, driver: key.driver, label: key.label };
-    rotateOpen.value = true;
-}
-
-function formatRelative(iso: string | null): string {
-    if (!iso) return '—';
-    const then = new Date(iso).getTime();
-    const hours = Math.round((Date.now() - then) / 1000 / 3600);
-    if (hours < 1) return t('admin.ai.time.just_now');
-    if (hours < 24) return `${hours}h`;
-    return `${Math.round(hours / 24)}d`;
 }
 </script>
 
@@ -380,47 +341,6 @@ function formatRelative(iso: string | null): string {
                     />
                 </div>
             </SettingsCard>
-
-            <!-- Keys -->
-            <SettingsCard
-                :icon="Key"
-                :title="t('admin.ai.defaults.keys_title')"
-                :description="t('admin.ai.defaults.keys_description')"
-            >
-                <div
-                    v-if="keys.length === 0"
-                    class="rounded-xs border border-soft bg-white/[0.02] p-4 text-xs text-ink-muted"
-                >
-                    {{ t('admin.ai.defaults.keys_empty') }}
-                </div>
-                <div
-                    v-for="k in keys"
-                    v-else
-                    :key="k.id"
-                    class="flex items-center gap-3 rounded-xs border border-soft bg-white/[0.02] px-3 py-2.5"
-                >
-                    <DriverChip :driver="k.driver" size="sm" />
-                    <div class="min-w-0 flex-1">
-                        <p class="text-sm text-ink">{{ k.label }}</p>
-                        <p class="font-mono text-xs text-ink-muted">{{ k.masked }}</p>
-                    </div>
-                    <div class="text-right text-[10px] text-ink-subtle">
-                        <p>
-                            {{ t('admin.ai.defaults.rotated_prefix') }}
-                            {{ formatRelative(k.lastRotatedAt) }}
-                        </p>
-                    </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        class="gap-1 border-medium bg-surface text-xs"
-                        @click="openRotate(k)"
-                    >
-                        <RefreshCw class="size-3" />
-                        {{ t('admin.ai.defaults.rotate_cta') }}
-                    </Button>
-                </div>
-            </SettingsCard>
         </div>
 
         <!-- Embedding swap warning -->
@@ -458,12 +378,5 @@ function formatRelative(iso: string | null): string {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
-
-        <RotateKeyDialog
-            v-model:open="rotateOpen"
-            :provider-id="rotateTarget?.id ?? null"
-            :driver="rotateTarget?.driver ?? null"
-            :label="rotateTarget?.label ?? null"
-        />
     </AdminLayout>
 </template>

@@ -28,9 +28,13 @@ Route::middleware(['auth', 'verified', 'role:sysadmin'])->prefix('admin')->group
     Route::get('/ai', [AdminAiController::class, 'defaults'])->name('admin.ai.defaults');
     Route::get('/ai/catalog', [AdminAiController::class, 'catalog'])->name('admin.ai.catalog');
     Route::get('/ai/usage', [AdminAiController::class, 'usage'])->name('admin.ai.usage');
+    Route::get('/ai/providers', [AdminAiController::class, 'providers'])->name('admin.ai.providers');
     Route::patch('/ai/defaults', [AdminAiController::class, 'updateDefaults'])->name('admin.ai.defaults.update');
     Route::patch('/ai/catalog/{model}', [AdminAiController::class, 'toggleModel'])->name('admin.ai.catalog.toggle');
-    Route::post('/ai/providers/{provider}/rotate-key', [AdminAiController::class, 'rotateKey'])->name('admin.ai.rotate-key');
+    Route::post('/ai/providers/key', [AdminAiController::class, 'setProviderKey'])->name('admin.ai.providers.key');
+    Route::post('/ai/providers/sync-models', [AdminAiController::class, 'syncProviderModels'])->name('admin.ai.providers.sync-models');
+    Route::get('/ai/providers/openrouter/models', [AdminAiController::class, 'openRouterModels'])->name('admin.ai.providers.openrouter.models');
+    Route::post('/ai/providers/openrouter/models', [AdminAiController::class, 'saveOpenRouterModels'])->name('admin.ai.providers.openrouter.models.save');
     Route::post('/ai/test-connection', [AdminAiController::class, 'testConnection'])->name('admin.ai.test-connection');
 
     Route::get('/cloud', [AdminCloudController::class, 'index'])->name('admin.cloud.index');

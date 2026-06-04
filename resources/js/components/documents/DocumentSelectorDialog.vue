@@ -355,8 +355,8 @@ const typeColors: Record<string, string> = {
                                 @click="toggleDocument(doc.id)"
                             >
                                 <Checkbox
-                                    :checked="isDocumentSelected(doc.id)"
-                                    @click.stop="toggleDocument(doc.id)"
+                                    :model-value="isDocumentSelected(doc.id)"
+                                    class="pointer-events-none"
                                 />
                                 <component
                                     :is="getDocumentIcon(doc.type)"

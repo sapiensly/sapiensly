@@ -133,7 +133,7 @@ const contentFilters = computed({
                         {{ t('agents.config.triage.content_filters_description') }}
                     </p>
                 </div>
-                <Switch v-model:checked="contentFilters" />
+                <Switch v-model="contentFilters" />
             </div>
         </div>
     </div>

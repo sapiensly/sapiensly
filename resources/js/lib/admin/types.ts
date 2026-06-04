@@ -149,14 +149,38 @@ export type AiDriver =
     | 'gemini'
     | 'azure'
     | 'ollama'
+    | 'mistral'
+    | 'deepseek'
+    | 'groq'
+    | 'xai'
+    | 'cohere'
+    | 'voyageai'
+    | 'jina'
+    | 'eleven'
+    | 'openrouter'
     | 'custom';
 export type AiModelKind = 'chat' | 'embedding' | 'vision' | 'reasoning';
+
+export type AiProviderKind = 'direct' | 'broker';
+
+export interface AiProviderRow {
+    driver: AiDriver;
+    label: string;
+    kind: AiProviderKind;
+    credentialFields: string[];
+    configured: boolean;
+    masked: string | null;
+    lastRotatedAt: ISODate | null;
+    syncable: boolean;
+    modelCount: number;
+}
 
 export interface AiModel {
     id: UUID;
     driver: AiDriver;
     name: string;
     kind: AiModelKind;
+    providerKind: AiProviderKind;
     enabled: boolean;
     contextWindow: number | null;
     inputPricePerMTok: number | null;
@@ -173,13 +197,6 @@ export interface AiDefaultsProps {
         temperature: number;
         maxTokens: number;
     };
-    keys: {
-        driver: AiDriver;
-        label: string;
-        lastRotatedAt: ISODate | null;
-        lastUsedAt: ISODate | null;
-        masked: string;
-    }[];
 }
 
 export interface AiCatalogProps {

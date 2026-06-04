@@ -157,7 +157,7 @@ const userRole = computed(() => {
         >
             <Link
                 href="/admin"
-                class="flex items-center gap-2 outline-none"
+                class="flex items-center gap-1 outline-none"
             >
                 <AppLogo tone="white" :collapsed="collapsed" />
             </Link>
