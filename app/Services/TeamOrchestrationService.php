@@ -324,7 +324,7 @@ PROMPT;
     }
 
     /**
-     * Extract execution plan from Prism response.
+     * Extract execution plan from the agent response.
      *
      * @return array<array{agent: string, query?: string, task?: string, response?: string, urgency?: string, context?: array}>
      */

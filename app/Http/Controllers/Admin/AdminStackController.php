@@ -161,12 +161,7 @@ class AdminStackController extends Controller
                 $this->item(
                     name: 'laravel/ai',
                     version: $this->composerVersion('laravel/ai'),
-                    description: __('Prism-powered AI abstraction — chat, streaming, tools.'),
-                ),
-                $this->item(
-                    name: 'Prism',
-                    version: $this->composerVersion('prism-php/prism'),
-                    description: __('LLM driver layer used by laravel/ai.'),
+                    description: __('Official Laravel AI SDK — chat, streaming, tools, structured output.'),
                 ),
             ],
         ];

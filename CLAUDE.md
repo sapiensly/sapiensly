@@ -26,7 +26,7 @@ Sapiensly is a B2B SaaS platform for **Autonomous Agent Orchestration**. It tran
 **Streaming Feedback**: AI inference is decoupled via queues. Each agent step streams to the frontend via WebSockets, showing users the bot "thinking" rather than just waiting.
 
 ### Key Technologies
-- **AI Integration**: Prism (PHP abstraction for LLMs with Tool Calling)
+- **AI Integration**: `laravel/ai` (the official Laravel AI SDK — agents, tool calling, streaming, structured output; it ships its own multi-provider driver layer)
 - **Hybrid Database**: PostgreSQL + pgvector for relational data and embeddings
 - **Multi-tenancy**: PostgreSQL Row-Level Security + a 3-role / 2-schema split (see "Database & Multi-Tenancy"). Auth is Fortify + spatie/laravel-permission (teams = `organization_id`)
 - **Async Processing**: Redis + Laravel Horizon for AI queues
