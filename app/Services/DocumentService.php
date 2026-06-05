@@ -12,6 +12,7 @@ use App\Models\KnowledgeBase;
 use App\Models\User;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DocumentService
 {
@@ -199,10 +200,36 @@ class DocumentService
             return null;
         }
 
+        // Local/other drivers don't support signed temporary URLs; callers fall
+        // back to streaming the file (see DocumentController::download).
+        if (! $storage->providesTemporaryUrls()) {
+            return null;
+        }
+
         return $storage->temporaryUrl(
             $document->file_path,
             now()->addMinutes($minutes)
         );
+    }
+
+    /**
+     * Stream the document file as a download. Used as the fallback when the
+     * disk driver does not support signed temporary URLs (e.g. local). Returns
+     * null when the document has no file or it is missing on disk.
+     */
+    public function streamDownload(Document $document): ?StreamedResponse
+    {
+        if (! $document->file_path) {
+            return null;
+        }
+
+        $storage = $this->disk($document->organization_id, $document->user_id);
+
+        if (! $storage->exists($document->file_path)) {
+            return null;
+        }
+
+        return $storage->download($document->file_path, $document->original_filename ?? $document->name);
     }
 
     /**

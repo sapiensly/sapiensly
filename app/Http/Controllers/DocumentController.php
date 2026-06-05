@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DocumentController extends Controller
 {
@@ -556,17 +557,24 @@ class DocumentController extends Controller
         return to_route('documents.index', $folderId ? ['folder' => $folderId] : []);
     }
 
-    public function download(Request $request, Document $document): RedirectResponse
+    public function download(Request $request, Document $document): RedirectResponse|StreamedResponse
     {
         $this->authorize('download', $document);
 
         $temporaryUrl = $this->documentService->getTemporaryUrl($document);
 
-        if (! $temporaryUrl) {
+        if ($temporaryUrl) {
+            return redirect()->away($temporaryUrl);
+        }
+
+        // Drivers without signed URLs (e.g. local): stream the file directly.
+        $stream = $this->documentService->streamDownload($document);
+
+        if ($stream === null) {
             return back()->withErrors(['document' => __('Document file not found.')]);
         }
 
-        return redirect()->away($temporaryUrl);
+        return $stream;
     }
 
     public function move(Request $request, Document $document): RedirectResponse
