@@ -210,6 +210,10 @@ return [
 
         'default' => [
             'url' => env('REDIS_URL'),
+            // `tls` enables an encrypted connection (required by managed
+            // providers like Upstash); the connector prepends `tls://` to the
+            // host. Leave as `tcp` for a plain local/self-hosted server.
+            'scheme' => env('REDIS_SCHEME', 'tcp'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
             'username' => env('REDIS_USERNAME'),
             'password' => env('REDIS_PASSWORD'),
@@ -223,10 +227,14 @@ return [
 
         'cache' => [
             'url' => env('REDIS_URL'),
+            'scheme' => env('REDIS_SCHEME', 'tcp'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
             'username' => env('REDIS_USERNAME'),
             'password' => env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),
+            // Defaults to a separate logical DB, but providers that expose only
+            // DB 0 (e.g. Upstash) need REDIS_CACHE_DB=0 — keys stay isolated by
+            // the `options.prefix` above, so sharing DB 0 is safe.
             'database' => env('REDIS_CACHE_DB', '1'),
             'max_retries' => env('REDIS_MAX_RETRIES', 3),
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
