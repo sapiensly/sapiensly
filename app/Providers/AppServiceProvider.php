@@ -11,9 +11,11 @@ use App\Services\Security\Ssrf\SystemDnsResolver;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Pgvector\Laravel\Schema;
@@ -60,6 +62,8 @@ class AppServiceProvider extends ServiceProvider
 
         OrganizationMembership::observe(OrganizationMembershipObserver::class);
 
+        $this->propagateTenantContextToQueue();
+
         // SysAdmin bypasses all authorization gates and policies
         Gate::before(function ($user, $ability) {
             if ($user->hasRole('sysadmin')) {
@@ -86,6 +90,39 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->registerRuntimeRateLimiters();
+    }
+
+    /**
+     * Carry the dispatch-time tenant scope into every queued job's payload and
+     * re-establish it in the worker, where no HTTP middleware runs. This gives
+     * jobs the same RLS GUCs as the request that dispatched them with no
+     * per-job wiring. The `before` hook ALWAYS sets the context (to null when a
+     * job carries none) so scope never leaks between jobs on a long-lived
+     * worker. Sync dispatch (tests) runs in-process with the context already
+     * set, so the absent payload there is harmless.
+     */
+    private function propagateTenantContextToQueue(): void
+    {
+        Queue::createPayloadUsing(function (): array {
+            $context = $this->app->make(TenantContext::class);
+
+            return [
+                'tenant_organization_id' => $context->organizationId(),
+                'tenant_user_id' => $context->userId(),
+            ];
+        });
+
+        Queue::before(function (JobProcessing $event): void {
+            $payload = $event->job->payload();
+
+            $organizationId = $payload['tenant_organization_id'] ?? null;
+            $userId = $payload['tenant_user_id'] ?? null;
+
+            $this->app->make(TenantContext::class)->set(
+                $organizationId,
+                $userId === null ? null : (int) $userId,
+            );
+        });
     }
 
     /**

@@ -139,6 +139,26 @@ it('blocks inserting a row for another tenant (WITH CHECK)', function () {
     ]))->toThrow(QueryException::class);
 });
 
+it('auto-fills the tenant key from the session context on insert', function () {
+    $user = makeOwner();
+    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
+    $appA = makeApp($orgA->id, $user->id);
+
+    scopeTenant($orgA->id, null);
+
+    // No organization_id passed — the BEFORE INSERT trigger fills it from the GUC,
+    // so WITH CHECK passes and the row is scoped to orgA.
+    Record::on('tenant_app_real')->create([
+        'app_id' => $appA->id,
+        'object_definition_id' => 'obj',
+        'data' => ['k' => 'v'],
+    ]);
+
+    expect(tenantRecordCount())->toBe(1)
+        ->and(DB::connection('owner_commit')->table('tenant.records')->value('organization_id'))
+        ->toBe($orgA->id);
+});
+
 it('denies tenant_app any access to the platform schema', function () {
     expect(fn () => DB::connection('tenant_app_real')->select('select 1 from platform.users limit 1'))
         ->toThrow(QueryException::class);

@@ -13,6 +13,7 @@ use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsApp\WhatsAppConversationResolver;
 use App\Services\WhatsApp\WhatsAppWebhookParser;
+use App\Support\Tenancy\TenantContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -67,6 +68,12 @@ class ProcessWhatsAppWebhookJob implements ShouldQueue
 
             return;
         }
+
+        // Webhooks arrive unauthenticated, so derive the tenant scope from the
+        // channel (platform schema) before touching tenant data (contacts,
+        // conversations, messages). Chained jobs inherit it via the queue
+        // payload hook in AppServiceProvider.
+        app(TenantContext::class)->set($channel->organization_id, $channel->user_id);
 
         $parsed = $parser->parse($this->payload);
 
