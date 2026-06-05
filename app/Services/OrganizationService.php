@@ -6,9 +6,14 @@ use App\Enums\MembershipStatus;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\User;
+use App\Support\Tenancy\TenantContext;
 
 class OrganizationService
 {
+    public function __construct(
+        private readonly TenantContext $tenantContext,
+    ) {}
+
     /**
      * Switch the user's active account context.
      *
@@ -20,6 +25,7 @@ class OrganizationService
         if ($organizationId === null) {
             $user->update(['organization_id' => null]);
             setPermissionsTeamId(null);
+            $this->tenantContext->set(null, $user->id);
 
             return;
         }
@@ -35,6 +41,7 @@ class OrganizationService
 
         $user->update(['organization_id' => $organizationId]);
         setPermissionsTeamId($organizationId);
+        $this->tenantContext->set($organizationId, $user->id);
     }
 
     /**

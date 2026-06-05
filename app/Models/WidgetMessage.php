@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MessageRole;
+use App\Models\Concerns\UsesTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class WidgetMessage extends Model
 {
     use HasFactory, HasUlids;
+    use UsesTenantConnection;
 
     protected $fillable = [
         'widget_conversation_id',

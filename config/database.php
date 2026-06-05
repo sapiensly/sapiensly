@@ -17,7 +17,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    'default' => env('DB_CONNECTION', 'platform'),
 
     /*
     |--------------------------------------------------------------------------
@@ -84,18 +84,73 @@ return [
             ]) : [],
         ],
 
+        /*
+         | Owner connection — migrations & DDL only. Runs as `postgres`, owns
+         | both schemas, and bypasses RLS. Never used for application runtime
+         | queries. `search_path` spans both schemas so migrations can create
+         | tables in either without per-statement qualification surprises.
+         */
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
-            'username' => env('DB_USERNAME', 'root'),
+            'username' => env('DB_USERNAME', 'postgres'),
             'password' => env('DB_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
-            'search_path' => 'public',
+            'search_path' => 'platform,tenant,public',
+            'sslmode' => 'prefer',
+        ],
+
+        /*
+         | Control-plane runtime — role `platform_app`. Reads/writes the
+         | `platform` schema only; structurally cannot see `tenant`. This is the
+         | application default connection, so any tenant model that forgets to
+         | opt into the `tenant` connection fails loudly (relation not found)
+         | instead of silently bypassing isolation.
+         */
+        'platform' => [
+            'driver' => 'pgsql',
+            'url' => env('PLATFORM_DB_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('PLATFORM_DB_USERNAME', 'platform_app'),
+            'password' => env('PLATFORM_DB_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            // `public` trails so shared extension types/operators resolve; no app
+            // tables live there.
+            'search_path' => 'platform,public',
+            'sslmode' => 'prefer',
+        ],
+
+        /*
+         | Tenant-data runtime — role `tenant_app`. Reads/writes the `tenant`
+         | schema only and is subject to RLS. The RLS GUCs (app.organization_id /
+         | app.user_id) are set per request/job by TenantContext. Under Supabase
+         | transaction pooling this connection should target the SESSION pooler
+         | (TENANT_DB_HOST/PORT) so `SET app.*` survives the request; otherwise
+         | TenantContext falls back to set_config(..., true) inside a transaction.
+         */
+        'tenant' => [
+            'driver' => 'pgsql',
+            'url' => env('TENANT_DB_URL'),
+            'host' => env('TENANT_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('TENANT_DB_PORT', env('DB_PORT', '5432')),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('TENANT_DB_USERNAME', 'tenant_app'),
+            'password' => env('TENANT_DB_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            // `public` trails so the pgvector `<=>` operators / `vector` type
+            // (created in public) resolve for RAG similarity queries.
+            'search_path' => 'tenant,public',
             'sslmode' => 'prefer',
         ],
 

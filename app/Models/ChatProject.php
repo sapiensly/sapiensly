@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\Visibility;
 use App\Models\Concerns\HasPrefixedUlid;
 use App\Models\Concerns\HasVisibility;
+use App\Models\Concerns\UsesTenantConnection;
 use Database\Factories\ChatProjectFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,8 @@ class ChatProject extends Model
 {
     /** @use HasFactory<ChatProjectFactory> */
     use HasFactory, HasPrefixedUlid, HasVisibility;
+
+    use UsesTenantConnection;
 
     protected $fillable = [
         'user_id',

@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\UsesTenantConnection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WorkflowStepRun extends Model
 {
     use HasPrefixedUlid;
+    use UsesTenantConnection;
 
     protected $fillable = [
         'run_id',

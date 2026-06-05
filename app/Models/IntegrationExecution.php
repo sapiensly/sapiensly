@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Casts\EncryptedRedactedJson;
 use App\Casts\EncryptedRedactedText;
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\UsesTenantConnection;
 use App\Services\Integrations\Support\CredentialRedactor;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class IntegrationExecution extends Model
 {
     use HasFactory, HasPrefixedUlid;
+    use UsesTenantConnection;
 
     public const UPDATED_AT = null;
 

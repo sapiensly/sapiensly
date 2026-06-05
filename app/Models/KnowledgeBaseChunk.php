@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesTenantConnection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,7 @@ use Pgvector\Laravel\Vector;
 class KnowledgeBaseChunk extends Model
 {
     use HasFactory;
+    use UsesTenantConnection;
 
     protected $fillable = [
         'knowledge_base_document_id',

@@ -15,7 +15,10 @@ return new class extends Migration
         $driver = DB::connection()->getDriverName();
 
         if ($driver === 'pgsql') {
-            DB::statement('CREATE EXTENSION IF NOT EXISTS vector');
+            // Pin to `public` so both runtime roles can use the vector type and
+            // operators (the schemas/roles migration already does this; kept here
+            // so the migration set stands alone on a fresh database).
+            DB::statement('CREATE EXTENSION IF NOT EXISTS vector SCHEMA public');
         }
     }
 

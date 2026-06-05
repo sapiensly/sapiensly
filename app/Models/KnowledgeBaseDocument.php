@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\DocumentType;
 use App\Enums\KnowledgeBaseStatus;
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\UsesTenantConnection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class KnowledgeBaseDocument extends Model
 {
     use HasFactory, HasPrefixedUlid;
+    use UsesTenantConnection;
 
     protected $fillable = [
         'knowledge_base_id',

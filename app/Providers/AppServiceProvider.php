@@ -8,6 +8,7 @@ use App\Services\Security\Ssrf\DnsResolver;
 use App\Services\Security\Ssrf\IpRangeMatcher;
 use App\Services\Security\Ssrf\SsrfGuard;
 use App\Services\Security\Ssrf\SystemDnsResolver;
+use App\Support\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // One tenant scope per request/worker, shared by the HTTP middleware,
+        // queue middleware and account switching.
+        $this->app->singleton(TenantContext::class);
+
         // SSRF guard: the system resolver is the production DNS backend; tests
         // bind a FakeDnsResolver instead.
         $this->app->bind(

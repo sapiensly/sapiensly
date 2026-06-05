@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\UsesTenantConnection;
 use Database\Factories\DebateRoundFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,6 +14,8 @@ class DebateRound extends Model
 {
     /** @use HasFactory<DebateRoundFactory> */
     use HasFactory, HasPrefixedUlid;
+
+    use UsesTenantConnection;
 
     protected $fillable = [
         'debate_id',

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\UsesTenantConnection;
 use Database\Factories\ChatAttachmentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +13,8 @@ class ChatAttachment extends Model
 {
     /** @use HasFactory<ChatAttachmentFactory> */
     use HasFactory, HasPrefixedUlid;
+
+    use UsesTenantConnection;
 
     protected $fillable = [
         'chat_id',

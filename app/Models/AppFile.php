@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\UsesTenantConnection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AppFile extends Model
 {
     use HasPrefixedUlid;
+    use UsesTenantConnection;
 
     protected $fillable = [
         'organization_id',

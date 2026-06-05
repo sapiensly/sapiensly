@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\UsesTenantConnection;
 use Database\Factories\RecordFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +13,8 @@ class Record extends Model
 {
     /** @use HasFactory<RecordFactory> */
     use HasFactory, HasPrefixedUlid;
+
+    use UsesTenantConnection;
 
     protected $fillable = [
         'organization_id',

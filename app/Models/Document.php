@@ -6,6 +6,7 @@ use App\Enums\DocumentType;
 use App\Enums\Visibility;
 use App\Models\Concerns\HasPrefixedUlid;
 use App\Models\Concerns\HasVisibility;
+use App\Models\Concerns\UsesTenantConnection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Document extends Model
 {
     use HasPrefixedUlid, HasVisibility, SoftDeletes;
+    use UsesTenantConnection;
 
     protected $fillable = [
         'user_id',
