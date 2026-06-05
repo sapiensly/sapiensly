@@ -11,9 +11,11 @@ use App\Services\Security\Ssrf\SystemDnsResolver;
 use App\Support\Tenancy\TenantCache;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
@@ -75,6 +77,8 @@ class AppServiceProvider extends ServiceProvider
 
         $this->propagateTenantContextToQueue();
 
+        $this->forceOwnerConnectionForMigrations();
+
         // SysAdmin bypasses all authorization gates and policies
         Gate::before(function ($user, $ability) {
             if ($user->hasRole('sysadmin')) {
@@ -101,6 +105,40 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->registerRuntimeRateLimiters();
+    }
+
+    /**
+     * Force schema DDL (migrations) and seeders onto the database OWNER — the
+     * `pgsql` connection — whenever an operator forgets the `--database=pgsql`
+     * flag.
+     *
+     * The app default connection is `platform` (least-privilege), which cannot
+     * own or relocate tables. Running `migrate` on it would create tables owned
+     * by `platform_app`, so the schema-relocate migration (which runs as the
+     * owner) then fails with `must be owner of table ...` on a real cluster —
+     * exactly the failure seen on Supabase. An explicit `--database` always
+     * wins, so deliberate overrides still work.
+     */
+    private function forceOwnerConnectionForMigrations(): void
+    {
+        $ownerCommands = [
+            'migrate', 'migrate:fresh', 'migrate:refresh', 'migrate:rollback',
+            'migrate:reset', 'migrate:install', 'db:seed', 'db:wipe', 'schema:dump',
+        ];
+
+        Event::listen(function (CommandStarting $event) use ($ownerCommands): void {
+            if (! in_array($event->command, $ownerCommands, true)) {
+                return;
+            }
+
+            if ($event->input->hasParameterOption('--database', true)) {
+                return;
+            }
+
+            if (config('database.default') === 'platform') {
+                config(['database.default' => 'pgsql']);
+            }
+        });
     }
 
     /**
