@@ -21,14 +21,14 @@ Sapiensly is a B2B SaaS platform for **Autonomous Agent Orchestration**. It tran
 
 **Tooling Layer**: Laravel packages are encapsulated as AI Tools. Agents interact with the real world through controlled internal APIs—never touching the database directly.
 
-**Tenant-Aware RAG**: Vector search (pgvector) automatically injects WorkOS Organization ID filters. Agents cannot access data from other tenants.
+**Tenant-Aware RAG**: Vector search (pgvector) runs on the RLS-protected `tenant` schema, so chunk queries are automatically scoped to the current organization/user by Postgres Row-Level Security. Agents cannot access data from other tenants. See "Database & Multi-Tenancy" below.
 
 **Streaming Feedback**: AI inference is decoupled via queues. Each agent step streams to the frontend via WebSockets, showing users the bot "thinking" rather than just waiting.
 
 ### Key Technologies
 - **AI Integration**: Prism (PHP abstraction for LLMs with Tool Calling)
 - **Hybrid Database**: PostgreSQL + pgvector for relational data and embeddings
-- **Multi-tenancy**: WorkOS for SSO and strict Organization-based data isolation
+- **Multi-tenancy**: PostgreSQL Row-Level Security + a 3-role / 2-schema split (see "Database & Multi-Tenancy"). Auth is Fortify + spatie/laravel-permission (teams = `organization_id`)
 - **Async Processing**: Redis + Laravel Horizon for AI queues
 - **Real-time**: Laravel Reverb + Echo for WebSocket token streaming
 
@@ -68,12 +68,37 @@ npm run build
 
 ## Architecture Overview
 
-This is a Laravel 12 + Inertia.js + Vue 3 application using WorkOS for authentication.
+This is a Laravel 12 + Inertia.js + Vue 3 application. Auth is Laravel Fortify (login, registration, 2FA, password reset) plus optional Google social login and per-organization OIDC SSO; authorization is spatie/laravel-permission with the teams feature keyed on `organization_id`.
 
 ### Backend Structure
 - **Routes**: Split across `routes/web.php`, `routes/auth.php`, `routes/settings.php`
-- **Authentication**: WorkOS integration via `laravel/workos` package with session validation middleware
+- **Authentication**: Laravel Fortify + spatie/laravel-permission (teams = `organization_id`); `SetPermissionsTeam` middleware sets the team per request
 - **Controllers**: Located in `app/Http/Controllers/`, with settings controllers in a `Settings/` subdirectory
+
+## Database & Multi-Tenancy
+
+Tenant isolation is enforced **at the database layer**, not just in application code. Three Postgres roles map to three Laravel connections against one database, with two schemas:
+
+| Role / connection | Schema | Purpose |
+|---|---|---|
+| `postgres` → `pgsql` | both (owner) | Migrations & DDL only. Bypasses RLS. |
+| `platform_app` → `platform` (default) | `platform` | Control-plane runtime: accounts, permissions, providers, and authored *definitions* (agents, tools, knowledge_bases, apps + manifests, chatbots, channels, integrations, flows). No RLS — isolation is structural (role has USAGE on `platform` only). |
+| `tenant_app` → `tenant` | `tenant` | Tenant *data* runtime: records, documents, chunks, conversations/chats/messages, debates, widget/whatsapp/integration-execution/workflow rows. **Protected by Row-Level Security.** |
+
+`platform_app` and `tenant_app` each have USAGE on **only their** schema, so a mis-routed query fails loudly (permission denied) rather than leaking rows. RLS then isolates rows *within* the tenant schema by `organization_id` (business mode) or `user_id` (personal mode), mirroring `HasVisibility::forAccountContext`.
+
+**Key pieces:**
+- **`app/Support/Tenancy/Schemas.php`** — single source of truth mapping every table to platform/tenant. `Schemas::tenantTables()` drives the relocate / tenant-key / RLS / auto-fill-trigger migrations (they iterate it).
+- **Tenant models** use the `UsesTenantConnection` trait (→ `tenant` connection). Platform models default to `platform`. When adding a model, decide its schema and pin accordingly.
+- **`app/Support/Tenancy/TenantContext.php`** sets the RLS GUCs (`app.organization_id` / `app.user_id`). `BindTenantContext` HTTP middleware sets them from the authenticated user; a global queue payload hook (in `AppServiceProvider`) propagates the scope to every job; the WhatsApp webhook job derives scope from its channel.
+- **Auto-fill trigger**: a `BEFORE INSERT` trigger fills `organization_id`/`user_id` from the session GUCs when unset, so tenant-row inserts satisfy RLS `WITH CHECK` without per-write code.
+- **BYODB** (a tenant's own external DB) is separate: config in `platform.cloud_providers`, built as the `byodb_runtime` connection.
+
+**Working rules:**
+- **Migrations run as the owner**: `php artisan migrate --database=pgsql` (the app default connection is `platform`, which can't create tables). `composer dev:win` / setup scripts already do this.
+- **Adding a tenant table**: add it to `Schemas::TENANT_TABLES`, then add a migration that relocates it to `tenant`, adds the tenant key + index, enables RLS + the `tenant_isolation` policy, and the `fill_tenant_key` trigger (follow the `2026_06_04_9000xx_*` migrations as templates).
+- **Local/Supabase**: roles are created idempotently (pre-exist on Supabase). On Supabase, point the `tenant` connection at the **session pooler** so `SET app.*` persists per request; otherwise wrap tenant work in `TenantContext::runScoped()`. Override role names via `PLATFORM_DB_ROLE`/`TENANT_DB_ROLE` if they differ.
+- **Tests**: the runtime connections run as the owner (RLS bypassed) and are aliased to one session in `tests/TestCase.php`; RLS itself is covered by `tests/Feature/Tenancy/RowLevelSecurityTest.php`, which connects as the real `tenant_app` role. Tests require PostgreSQL (not sqlite).
 
 ### Frontend Structure
 - **Entry point**: `resources/js/app.ts` - initializes Inertia and Vue
