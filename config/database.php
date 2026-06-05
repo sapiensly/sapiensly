@@ -115,8 +115,11 @@ return [
         'platform' => [
             'driver' => 'pgsql',
             'url' => env('PLATFORM_DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '5432'),
+            // Own host/port (falling back to DB_*) so the runtime can target the
+            // Supabase pooler while migrations (the `pgsql` owner connection)
+            // keep the direct connection. See .env.example.
+            'host' => env('PLATFORM_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('PLATFORM_DB_PORT', env('DB_PORT', '5432')),
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('PLATFORM_DB_USERNAME', 'platform_app'),
             'password' => env('PLATFORM_DB_PASSWORD', ''),
