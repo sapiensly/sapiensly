@@ -102,7 +102,7 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'platform,tenant,public',
-            'sslmode' => 'prefer',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
         /*
@@ -120,7 +120,11 @@ return [
             // keep the direct connection. See .env.example.
             'host' => env('PLATFORM_DB_HOST', env('DB_HOST', '127.0.0.1')),
             'port' => env('PLATFORM_DB_PORT', env('DB_PORT', '5432')),
-            'database' => env('DB_DATABASE', 'laravel'),
+            // Own database/sslmode (falling back to DB_*) so this connection can
+            // go through a local PgBouncer (loopback, sslmode=disable) or a
+            // pool-mode-specific virtual db name, independent of the direct
+            // owner/tenant connections.
+            'database' => env('PLATFORM_DB_DATABASE', env('DB_DATABASE', 'laravel')),
             'username' => env('PLATFORM_DB_USERNAME', 'platform_app'),
             'password' => env('PLATFORM_DB_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),
@@ -129,7 +133,13 @@ return [
             // `public` trails so shared extension types/operators resolve; no app
             // tables live there.
             'search_path' => 'platform,public',
-            'sslmode' => 'prefer',
+            'sslmode' => env('PLATFORM_DB_SSLMODE', env('DB_SSLMODE', 'prefer')),
+            // Persistent PDO connections amortize the per-request connect cost
+            // (TCP+TLS+auth round-trips) across a PHP-FPM worker's lifetime —
+            // the fix for high reconnect latency to a managed DB. Pair with the
+            // Supabase TRANSACTION pooler (it multiplexes, so a held client
+            // connection is cheap). Off by default; see DB_PERSISTENT.
+            'options' => [PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false)],
         ],
 
         /*
@@ -145,7 +155,10 @@ return [
             'url' => env('TENANT_DB_URL'),
             'host' => env('TENANT_DB_HOST', env('DB_HOST', '127.0.0.1')),
             'port' => env('TENANT_DB_PORT', env('DB_PORT', '5432')),
-            'database' => env('DB_DATABASE', 'laravel'),
+            // Own database/sslmode (falling back to DB_*); lets tenant keep a
+            // direct TLS session connection while platform goes via a local
+            // PgBouncer, or point at a session-mode virtual db name.
+            'database' => env('TENANT_DB_DATABASE', env('DB_DATABASE', 'laravel')),
             'username' => env('TENANT_DB_USERNAME', 'tenant_app'),
             'password' => env('TENANT_DB_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),
@@ -154,7 +167,11 @@ return [
             // `public` trails so the pgvector `<=>` operators / `vector` type
             // (created in public) resolve for RAG similarity queries.
             'search_path' => 'tenant,public',
-            'sslmode' => 'prefer',
+            'sslmode' => env('TENANT_DB_SSLMODE', env('DB_SSLMODE', 'prefer')),
+            // See the platform connection. On the SESSION pooler each persistent
+            // connection holds a backend for the worker's life, so size FPM
+            // workers against the pooler's capacity. Off by default.
+            'options' => [PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false)],
         ],
 
         'sqlsrv' => [

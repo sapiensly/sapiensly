@@ -11,8 +11,19 @@ function freshDatabaseConfig(): array
     return require base_path('config/database.php');
 }
 
+function setDbEnv(string $key, string $value): void
+{
+    putenv("{$key}={$value}");
+    $_ENV[$key] = $value;
+    $_SERVER[$key] = $value;
+}
+
 afterEach(function () {
-    foreach (['DB_HOST', 'DB_PORT', 'PLATFORM_DB_HOST', 'PLATFORM_DB_PORT'] as $key) {
+    foreach ([
+        'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_SSLMODE', 'DB_PERSISTENT',
+        'PLATFORM_DB_HOST', 'PLATFORM_DB_PORT', 'PLATFORM_DB_DATABASE', 'PLATFORM_DB_SSLMODE',
+        'TENANT_DB_DATABASE', 'TENANT_DB_SSLMODE',
+    ] as $key) {
         putenv($key);
         unset($_ENV[$key], $_SERVER[$key]);
     }
@@ -39,4 +50,65 @@ test('the platform host falls back to DB_HOST when PLATFORM_DB_HOST is unset', f
     $config = freshDatabaseConfig();
 
     expect($config['connections']['platform']['host'])->toBe('shared.example.com');
+});
+
+test('DB_SSLMODE drives sslmode on every postgres connection, defaulting to prefer', function () {
+    $config = freshDatabaseConfig();
+
+    foreach (['pgsql', 'platform', 'tenant'] as $connection) {
+        expect($config['connections'][$connection]['sslmode'])->toBe('prefer');
+    }
+
+    putenv('DB_SSLMODE=require');
+    $_ENV['DB_SSLMODE'] = 'require';
+    $_SERVER['DB_SSLMODE'] = 'require';
+
+    $config = freshDatabaseConfig();
+
+    foreach (['pgsql', 'platform', 'tenant'] as $connection) {
+        expect($config['connections'][$connection]['sslmode'])->toBe('require');
+    }
+});
+
+test('per-connection sslmode overrides DB_SSLMODE for the mixed PgBouncer topology', function () {
+    // require everywhere, except platform which goes through a local PgBouncer
+    // with no client TLS.
+    setDbEnv('DB_SSLMODE', 'require');
+    setDbEnv('PLATFORM_DB_SSLMODE', 'disable');
+
+    $config = freshDatabaseConfig();
+
+    expect($config['connections']['pgsql']['sslmode'])->toBe('require')
+        ->and($config['connections']['tenant']['sslmode'])->toBe('require')
+        ->and($config['connections']['platform']['sslmode'])->toBe('disable');
+});
+
+test('per-connection database overrides DB_DATABASE on the runtime connections', function () {
+    setDbEnv('DB_DATABASE', 'owner_db');
+    setDbEnv('PLATFORM_DB_DATABASE', 'platform_pool');
+    setDbEnv('TENANT_DB_DATABASE', 'tenant_pool');
+
+    $config = freshDatabaseConfig();
+
+    expect($config['connections']['pgsql']['database'])->toBe('owner_db')
+        ->and($config['connections']['platform']['database'])->toBe('platform_pool')
+        ->and($config['connections']['tenant']['database'])->toBe('tenant_pool');
+});
+
+test('DB_PERSISTENT toggles persistent PDO on the runtime connections, defaulting off', function () {
+    $config = freshDatabaseConfig();
+
+    foreach (['platform', 'tenant'] as $connection) {
+        expect($config['connections'][$connection]['options'][PDO::ATTR_PERSISTENT])->toBeFalse();
+    }
+
+    putenv('DB_PERSISTENT=true');
+    $_ENV['DB_PERSISTENT'] = 'true';
+    $_SERVER['DB_PERSISTENT'] = 'true';
+
+    $config = freshDatabaseConfig();
+
+    foreach (['platform', 'tenant'] as $connection) {
+        expect($config['connections'][$connection]['options'][PDO::ATTR_PERSISTENT])->toBeTrue();
+    }
 });
