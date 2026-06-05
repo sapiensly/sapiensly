@@ -8,6 +8,7 @@ use App\Services\Security\Ssrf\DnsResolver;
 use App\Services\Security\Ssrf\IpRangeMatcher;
 use App\Services\Security\Ssrf\SsrfGuard;
 use App\Services\Security\Ssrf\SystemDnsResolver;
+use App\Support\Tenancy\TenantCache;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -30,6 +31,16 @@ class AppServiceProvider extends ServiceProvider
         // One tenant scope per request/worker, shared by the HTTP middleware,
         // queue middleware and account switching.
         $this->app->singleton(TenantContext::class);
+
+        // Tenant-scoped cache (the Redis-layer analog to RLS): keys are
+        // transparently namespaced by the active tenant scope, so cached
+        // tenant data can never leak across organizations/users.
+        $this->app->singleton(TenantCache::class, function ($app) {
+            return new TenantCache(
+                $app->make('cache.store'),
+                $app->make(TenantContext::class),
+            );
+        });
 
         // SSRF guard: the system resolver is the production DNS backend; tests
         // bind a FakeDnsResolver instead.
