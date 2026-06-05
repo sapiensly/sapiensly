@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { LayoutTemplate, Plus, Search } from 'lucide-vue-next';
+import { LayoutTemplate, Plus, Search } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

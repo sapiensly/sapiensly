@@ -39,7 +39,7 @@ import DOMPurify from 'dompurify';
 // Tailwind v4 emits. The vanilla html2canvas chokes the moment any Tailwind
 // utility lands in the snapshot.
 import html2canvas from 'html2canvas-pro';
-import { ArrowLeft, BarChart3, Camera, Check, ChevronDown, Code, Database, Download, Eye, FileText, GripVertical, ImagePlus, LayoutDashboard, Lightbulb, Link2, ListChecks, Loader2, Maximize2, Minimize2, MoreVertical, MousePointerClick, Paperclip, Plus, RotateCcw, Send, Settings2, Sparkles, Wand2, Workflow as WorkflowIcon, X } from 'lucide-vue-next';
+import { ArrowLeft, BarChart3, Camera, Check, ChevronDown, Code, Database, Download, Eye, FileText, GripVertical, ImagePlus, LayoutDashboard, Lightbulb, Link2, ListChecks, Loader2, Maximize2, Minimize2, MoreVertical, MousePointerClick, Paperclip, Plus, RotateCcw, Send, Settings2, Sparkles, Wand2, Workflow as WorkflowIcon, X } from '@lucide/vue';
 import { marked } from 'marked';
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';

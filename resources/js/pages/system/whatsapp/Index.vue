@@ -2,7 +2,7 @@
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Link } from '@inertiajs/vue3';
-import { MessageCircle, Plus } from 'lucide-vue-next';
+import { MessageCircle, Plus } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

@@ -10,7 +10,7 @@ import {
     Sparkles,
     Zap,
 } from '@/lib/admin/icons';
-import { BatteryCharging, Wifi } from 'lucide-vue-next';
+import { BatteryCharging, Wifi } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 

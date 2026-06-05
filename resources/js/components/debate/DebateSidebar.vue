@@ -2,7 +2,7 @@
 import WorkspaceSwitcher from '@/components/app-v2/WorkspaceSwitcher.vue';
 import type { DebateListItem, DebateStatus } from '@/types/debateModule';
 import { router } from '@inertiajs/vue3';
-import { Check, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { Check, Pencil, Plus, Trash2 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

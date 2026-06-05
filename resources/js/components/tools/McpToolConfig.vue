@@ -10,7 +10,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import type { McpConfig, OAuth2IntegrationOption } from '@/types/tools';
-import { CheckCircle2, ExternalLink } from 'lucide-vue-next';
+import { CheckCircle2, ExternalLink } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

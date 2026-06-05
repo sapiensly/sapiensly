@@ -3,7 +3,7 @@ import InputError from '@/components/InputError.vue';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { ToolReference } from '@/types/tools';
-import { Code, Server, Wrench } from 'lucide-vue-next';
+import { Code, Server, Wrench } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

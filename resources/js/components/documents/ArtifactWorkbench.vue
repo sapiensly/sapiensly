@@ -24,7 +24,7 @@ import {
     Settings2,
     Sparkles,
     User,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

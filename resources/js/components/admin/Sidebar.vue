@@ -22,7 +22,7 @@ import {
     NavStack,
     NavUsers,
 } from '@/lib/admin/icons';
-import { ChevronsUpDown } from 'lucide-vue-next';
+import { ChevronsUpDown } from '@lucide/vue';
 import type { AppPageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import type { Component } from 'vue';

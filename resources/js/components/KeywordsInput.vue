@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { X } from 'lucide-vue-next';
+import { X } from '@lucide/vue';
 import { ref } from 'vue';
 
 const model = defineModel<string[]>({ default: () => [] });

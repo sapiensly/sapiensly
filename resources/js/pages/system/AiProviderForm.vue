@@ -15,7 +15,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Bot, Key, Layers, Power, Sparkles } from 'lucide-vue-next';
+import { Bot, Key, Layers, Power, Sparkles } from '@lucide/vue';
 import { computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

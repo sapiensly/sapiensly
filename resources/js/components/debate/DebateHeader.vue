@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ConsensusMeter from '@/components/debate/ConsensusMeter.vue';
 import type { DebateStatus } from '@/types/debateModule';
-import { Square } from 'lucide-vue-next';
+import { Square } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

@@ -6,7 +6,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Link } from '@inertiajs/vue3';
-import { CheckCircle2, MoreVertical, Plug, XCircle } from 'lucide-vue-next';
+import { CheckCircle2, MoreVertical, Plug, XCircle } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 interface Integration {

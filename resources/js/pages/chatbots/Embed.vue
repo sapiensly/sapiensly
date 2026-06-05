@@ -14,7 +14,7 @@ import {
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Chatbot, ChatbotApiToken } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
-import { Check, Copy, Key } from 'lucide-vue-next';
+import { Check, Copy, Key } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

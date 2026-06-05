@@ -11,7 +11,7 @@ import type {
     WidgetMessage,
 } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
-import { Bot, Clock, Mail, MessageSquare, Star, User } from 'lucide-vue-next';
+import { Bot, Clock, Mail, MessageSquare, Star, User } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

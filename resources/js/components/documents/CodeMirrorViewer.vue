@@ -4,7 +4,7 @@ import { html } from '@codemirror/lang-html';
 import { syntaxHighlighting } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView, lineNumbers } from '@codemirror/view';
-import { Check, Copy } from 'lucide-vue-next';
+import { Check, Copy } from '@lucide/vue';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

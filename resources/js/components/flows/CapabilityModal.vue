@@ -9,7 +9,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import axios from 'axios';
-import { ExternalLink, Loader2 } from 'lucide-vue-next';
+import { ExternalLink, Loader2 } from '@lucide/vue';
 import { type Component, ref, watch } from 'vue';
 
 interface Props {

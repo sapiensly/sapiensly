@@ -14,7 +14,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Code2, FileText, Type } from 'lucide-vue-next';
+import { Code2, FileText, Type } from '@lucide/vue';
 import type { Component } from 'vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Folder, VisibilityOption } from '@/types/document';
@@ -32,7 +32,7 @@ import {
     Pencil,
     Sparkles,
     Users,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

@@ -26,7 +26,7 @@ import type { BreadcrumbItem } from '@/types';
 import type { Agent } from '@/types/agents';
 import type { Flow } from '@/types/flows';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { GitBranch, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { GitBranch, Pencil, Plus, Trash2 } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

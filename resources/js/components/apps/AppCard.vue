@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import { Link } from '@inertiajs/vue3';
-import { AppWindow, Building2, Globe, History, Lock, Sparkles } from 'lucide-vue-next';
+import { AppWindow, Building2, Globe, History, Lock, Sparkles } from '@lucide/vue';
 import { computed, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
 

@@ -16,7 +16,7 @@ import type {
     AgentTypeOption,
     ModelOption,
 } from '@/types/agents';
-import { Bot, Brain, Zap } from 'lucide-vue-next';
+import { Bot, Brain, Zap } from '@lucide/vue';
 import { computed } from 'vue';
 
 const props = defineProps<{

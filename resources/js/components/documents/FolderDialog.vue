@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import type { VisibilityOption } from '@/types/document';
 import { useForm } from '@inertiajs/vue3';
-import { FolderPlus, Lock, Users } from 'lucide-vue-next';
+import { FolderPlus, Lock, Users } from '@lucide/vue';
 import { watch } from 'vue';
 
 interface Props {

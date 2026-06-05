@@ -9,7 +9,7 @@
 
 import { STEP_CATALOG_ORDERED } from '@/lib/appWorkflowStepCatalog';
 import type { StepType } from '@/types/appWorkflows';
-import * as LucideIcons from 'lucide-vue-next';
+import * as LucideIcons from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

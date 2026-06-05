@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Artifact } from '@/lib/artifacts';
-import { Code2, FileText, Image, Loader2, PanelRightOpen, Globe } from 'lucide-vue-next';
+import { Code2, FileText, Image, Loader2, PanelRightOpen, Globe } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

@@ -2,7 +2,7 @@
 import CouncilIcon from '@/components/icons/CouncilIcon.vue';
 import type { ChatModelOption, DebateAgentOption } from '@/types/debateModule';
 import { router } from '@inertiajs/vue3';
-import { Check, ChevronDown, Sparkles, X } from 'lucide-vue-next';
+import { Check, ChevronDown, Sparkles, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

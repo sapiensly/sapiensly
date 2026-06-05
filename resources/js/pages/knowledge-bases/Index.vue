@@ -4,7 +4,7 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { PaginatedKnowledgeBases } from '@/types/knowledge-base';
 import { Head, Link } from '@inertiajs/vue3';
-import { Database, FileText, Plus } from 'lucide-vue-next';
+import { Database, FileText, Plus } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

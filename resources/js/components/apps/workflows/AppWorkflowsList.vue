@@ -10,7 +10,7 @@
  */
 
 import type { ManifestWorkflow } from '@/types/appWorkflows';
-import { Hand, Pencil, Plus, Power, Trash2 } from 'lucide-vue-next';
+import { Hand, Pencil, Plus, Power, Trash2 } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 defineProps<{

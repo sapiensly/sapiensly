@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { router } from '@inertiajs/vue3';
-import { AlertCircle, CheckCircle, FileText, Upload, X } from 'lucide-vue-next';
+import { AlertCircle, CheckCircle, FileText, Upload, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
 
 interface Props {

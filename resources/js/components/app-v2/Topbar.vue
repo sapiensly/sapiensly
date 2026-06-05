@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AppPageProps } from '@/types';
 import { usePage } from '@inertiajs/vue3';
-import { Bell, Menu, Search } from 'lucide-vue-next';
+import { Bell, Menu, Search } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

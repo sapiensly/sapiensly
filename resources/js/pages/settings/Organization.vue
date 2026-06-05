@@ -8,7 +8,7 @@ import { useInitials } from '@/composables/useInitials';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import type { Organization, User } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Building2, Mail, Users } from 'lucide-vue-next';
+import { Building2, Mail, Users } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

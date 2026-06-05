@@ -8,7 +8,7 @@ import type {
     KnowledgeAgentConfig,
     KnowledgeBaseReference,
 } from '@/types/agents';
-import { Database } from 'lucide-vue-next';
+import { Database } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

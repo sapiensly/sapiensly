@@ -43,7 +43,7 @@ import {
     Target,
     TrendingUp,
     Users,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { Bar, Doughnut, Line } from 'vue-chartjs';
 import { useI18n } from 'vue-i18n';

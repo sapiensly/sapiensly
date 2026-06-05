@@ -15,7 +15,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AppWindow, Shield } from 'lucide-vue-next';
+import { AppWindow, Shield } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { type Artifact, extensionFor } from '@/lib/artifacts';
 import DOMPurify from 'dompurify';
-import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, X } from 'lucide-vue-next';
+import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, X } from '@lucide/vue';
 import { marked } from 'marked';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';

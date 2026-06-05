@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 import {
     Check, Edit2, Pencil, Plus, RefreshCw, Send, Trash2, X,
     type LucideIcon,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, inject } from 'vue';
 import type { BlockTable, FieldDef, ObjectDef, TableBlockData } from '../types/manifest';
 import { resolveField } from '../types/manifest';

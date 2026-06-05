@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue';
-import { Check } from 'lucide-vue-next';
+import { Check } from '@lucide/vue';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
 
 interface Tier {

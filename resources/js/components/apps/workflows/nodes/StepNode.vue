@@ -12,7 +12,7 @@
 import { STEP_CATALOG } from '@/lib/appWorkflowStepCatalog';
 import type { ManifestStep } from '@/types/appWorkflows';
 import { Handle, Position } from '@vue-flow/core';
-import * as LucideIcons from 'lucide-vue-next';
+import * as LucideIcons from '@lucide/vue';
 import { computed, inject, type ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 

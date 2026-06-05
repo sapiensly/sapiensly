@@ -10,7 +10,7 @@ import {
     Home,
     Lock,
     Users,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { ref } from 'vue';
 
 interface Props {

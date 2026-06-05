@@ -18,7 +18,7 @@ import {
     Sparkles,
     Trash2,
     Workflow as WorkflowIcon,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, ref, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
 

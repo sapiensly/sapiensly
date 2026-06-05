@@ -22,7 +22,7 @@ import type {
     VisibilityOption,
 } from '@/types/chatbot';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Bot, Users } from 'lucide-vue-next';
+import { Bot, Users } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

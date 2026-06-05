@@ -2,7 +2,7 @@
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import type { AgentType, AgentTypeOption } from '@/types/agents';
 import { Link } from '@inertiajs/vue3';
-import { Bot, Brain, Plus, Zap } from 'lucide-vue-next';
+import { Bot, Brain, Plus, Zap } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 

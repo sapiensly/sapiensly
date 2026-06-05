@@ -2,7 +2,7 @@
 import ToolCallIndicator from '@/components/chat/ToolCallIndicator.vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { KnowledgeBaseRef, Message, ToolCall } from '@/types/chat';
-import { Bot, User } from 'lucide-vue-next';
+import { Bot, User } from '@lucide/vue';
 import { marked } from 'marked';
 import { computed } from 'vue';
 

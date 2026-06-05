@@ -2,7 +2,7 @@
 /**
  * The "AI Council / Debate" glyph from the design mockup: two overlapping
  * speech bubbles (a front bubble with text lines + a back bubble). Lucide line
- * style; accepts the same `class` sizing (size-*) as lucide-vue-next icons.
+ * style; accepts the same `class` sizing (size-*) as @lucide/vue icons.
  */
 </script>
 

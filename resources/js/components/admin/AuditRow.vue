@@ -8,7 +8,7 @@ import {
     RefreshCw as Refresh,
     SlidersHorizontal as Sliders,
 } from '@/lib/admin/icons';
-import { User } from 'lucide-vue-next';
+import { User } from '@lucide/vue';
 import { Link } from '@inertiajs/vue3';
 import type { Component } from 'vue';
 import { computed } from 'vue';

@@ -1,5 +1,5 @@
 /**
- * Admin v2 icon set — aliases over lucide-vue-next so templates can import
+ * Admin v2 icon set — aliases over @lucide/vue so templates can import
  * short, semantic names (`<NavDashboard />`, `<AuditAction />`) without
  * leaking the specific Lucide names everywhere. Matches the prototype ↔ Lucide
  * table in `handoff/design_tokens.md` §5.
@@ -67,4 +67,4 @@ export {
     // narrative (three-layer story)
     Shield as Shield, // alias for reach-around; also as NavAccess
     Brain as Brain,
-} from 'lucide-vue-next';
+} from '@lucide/vue';

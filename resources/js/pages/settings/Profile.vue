@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Form, Head, usePage } from '@inertiajs/vue3';
-import { Globe, User } from 'lucide-vue-next';
+import { Globe, User } from '@lucide/vue';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

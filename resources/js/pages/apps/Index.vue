@@ -4,7 +4,7 @@ import AppCard from '@/components/apps/AppCard.vue';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { AppWindow, Plus } from 'lucide-vue-next';
+import { AppWindow, Plus } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 interface AppItem {

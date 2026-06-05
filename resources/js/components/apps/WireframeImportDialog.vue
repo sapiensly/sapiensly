@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import axios from 'axios';
-import { FileImage, Link2 as LinkIcon, Loader2, Upload, X } from 'lucide-vue-next';
+import { FileImage, Link2 as LinkIcon, Loader2, Upload, X } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

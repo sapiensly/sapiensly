@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { accentClasses, renderMarkdown } from '@/lib/debate';
 import type { DebateParticipantDto, DebateTurnDto } from '@/types/debateModule';
-import { Check, Copy, Sparkles } from 'lucide-vue-next';
+import { Check, Copy, Sparkles } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

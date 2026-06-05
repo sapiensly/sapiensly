@@ -2,7 +2,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import axios from 'axios';
-import { AlertTriangle, CheckCircle2, Database, Loader2, XCircle } from 'lucide-vue-next';
+import { AlertTriangle, CheckCircle2, Database, Loader2, XCircle } from '@lucide/vue';
 import { onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

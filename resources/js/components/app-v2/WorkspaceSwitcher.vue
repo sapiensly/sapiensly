@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import CouncilIcon from '@/components/icons/CouncilIcon.vue';
 import { router } from '@inertiajs/vue3';
-import { MessagesSquare } from 'lucide-vue-next';
+import { MessagesSquare } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

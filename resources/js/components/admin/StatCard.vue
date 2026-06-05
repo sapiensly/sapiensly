@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Sparkline from '@/components/admin/Sparkline.vue';
-import { TrendingUp } from 'lucide-vue-next';
+import { TrendingUp } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 

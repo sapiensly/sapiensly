@@ -3,7 +3,7 @@ import ArtifactWorkbench from '@/components/documents/ArtifactWorkbench.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { VisibilityOption } from '@/types/document';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft } from 'lucide-vue-next';
+import { ArrowLeft } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 interface EditableDocument {

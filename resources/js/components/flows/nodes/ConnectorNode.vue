@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ConnectorNodeConfig } from '@/types/flows';
 import { Handle, Position } from '@vue-flow/core';
-import { CornerDownLeft } from 'lucide-vue-next';
+import { CornerDownLeft } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

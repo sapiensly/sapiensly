@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Input } from '@/components/ui/input';
 import { Link } from '@inertiajs/vue3';
-import { ArrowLeft, Check, Cloud, CloudOff, Loader2, Power, PowerOff, Save } from 'lucide-vue-next';
+import { ArrowLeft, Check, Cloud, CloudOff, Loader2, Power, PowerOff, Save } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

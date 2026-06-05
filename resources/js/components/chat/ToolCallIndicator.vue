@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import type { KnowledgeBaseRef, ToolCall } from '@/types/chat';
-import { BookOpen, Loader2, Wrench } from 'lucide-vue-next';
+import { BookOpen, Loader2, Wrench } from '@lucide/vue';
 import { computed } from 'vue';
 
 const props = defineProps<{

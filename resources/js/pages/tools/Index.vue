@@ -4,7 +4,7 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { PaginatedTools, ToolType, ToolTypeOption } from '@/types/tools';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Code, Layers, Plus, Server, Wrench } from 'lucide-vue-next';
+import { Code, Layers, Plus, Server, Wrench } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';

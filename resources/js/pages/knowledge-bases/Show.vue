@@ -53,7 +53,7 @@ import {
     RefreshCw,
     Trash2,
     Upload,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onBeforeUnmount, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

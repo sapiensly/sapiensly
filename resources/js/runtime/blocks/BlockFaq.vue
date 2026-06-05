@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { ChevronDown } from 'lucide-vue-next';
+import { ChevronDown } from '@lucide/vue';
 
 interface FaqItem { id?: string; question: string; answer: string }
 interface FaqBlock { id: string; type: 'faq'; items: FaqItem[] }

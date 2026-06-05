@@ -17,7 +17,7 @@ import type {
     ToolCall,
 } from '@/types/chat';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Bot, Brain, Plus, Zap } from 'lucide-vue-next';
+import { ArrowLeft, Bot, Brain, Plus, Zap } from '@lucide/vue';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

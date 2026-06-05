@@ -9,7 +9,7 @@
 
 import type { WorkflowTrigger } from '@/types/appWorkflows';
 import { Handle, Position } from '@vue-flow/core';
-import { Hand, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { Hand, Pencil, Plus, Trash2 } from '@lucide/vue';
 import { computed, inject, type ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 

@@ -27,7 +27,7 @@ import type {
 } from '@/types/flows';
 import AgentCreateModal from '@/components/flows/AgentCreateModal.vue';
 import type { Node } from '@vue-flow/core';
-import { AlertTriangle, Plus, Trash2, X } from 'lucide-vue-next';
+import { AlertTriangle, Plus, Trash2, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

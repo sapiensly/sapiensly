@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ToolType, ToolTypeOption } from '@/types/tools';
-import { Braces, Code, Database, Globe, Layers, Server } from 'lucide-vue-next';
+import { Braces, Code, Database, Globe, Layers, Server } from '@lucide/vue';
 import type { Component } from 'vue';
 
 defineProps<{

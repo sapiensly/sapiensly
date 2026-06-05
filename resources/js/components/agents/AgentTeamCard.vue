@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/card';
 import type { AgentTeam } from '@/types/agents';
 import { Link } from '@inertiajs/vue3';
-import { Users } from 'lucide-vue-next';
+import { Users } from '@lucide/vue';
 
 defineProps<{
     team: AgentTeam;

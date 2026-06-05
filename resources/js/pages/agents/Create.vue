@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { AgentType, AgentTypeOption, ModelOption } from '@/types/agents';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Layers, Users } from 'lucide-vue-next';
+import { Layers, Users } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

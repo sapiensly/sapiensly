@@ -20,7 +20,7 @@ import type {
 } from '@/types/chatModule';
 import { Head, router } from '@inertiajs/vue3';
 import axios from 'axios';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-vue-next';
+import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

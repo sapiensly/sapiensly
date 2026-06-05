@@ -27,7 +27,7 @@ import {
     Trash2,
 } from '@/lib/admin/icons';
 import * as ImpersonateController from '@/actions/App/Http/Controllers/Admin/ImpersonateController';
-import { AlertCircle } from 'lucide-vue-next';
+import { AlertCircle } from '@lucide/vue';
 import type { AdminUser } from '@/lib/admin/types';
 import { router, useForm } from '@inertiajs/vue3';
 import type { Component } from 'vue';

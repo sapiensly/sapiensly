@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AgentHandoffNodeConfig } from '@/types/flows';
 import { Handle, Position } from '@vue-flow/core';
-import { AlertTriangle } from 'lucide-vue-next';
+import { AlertTriangle } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

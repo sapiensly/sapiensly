@@ -27,7 +27,7 @@ import {
     Plug,
     Trash2,
     XCircle,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

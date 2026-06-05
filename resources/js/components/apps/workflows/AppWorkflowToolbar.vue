@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Loader2, Play, Trash2, X } from 'lucide-vue-next';
+import { Check, Loader2, Play, Trash2, X } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 defineProps<{

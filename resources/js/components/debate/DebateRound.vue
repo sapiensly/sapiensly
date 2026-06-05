@@ -6,7 +6,7 @@ import type {
     DebateRoundDto,
     DebateTurnDto,
 } from '@/types/debateModule';
-import { ChevronDown } from 'lucide-vue-next';
+import { ChevronDown } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

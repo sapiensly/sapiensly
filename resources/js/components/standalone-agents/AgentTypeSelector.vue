@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentType, AgentTypeOption } from '@/types/agents';
-import { Bot, Brain, Sparkles, Zap } from 'lucide-vue-next';
+import { Bot, Brain, Sparkles, Zap } from '@lucide/vue';
 import type { Component } from 'vue';
 
 defineProps<{

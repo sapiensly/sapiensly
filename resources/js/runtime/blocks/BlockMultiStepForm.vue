@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, ChevronLeft } from 'lucide-vue-next';
+import { Check, ChevronLeft } from '@lucide/vue';
 import { computed, inject, ref, type Ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';

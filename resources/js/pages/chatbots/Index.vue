@@ -4,7 +4,7 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { PaginatedChatbots } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
-import { Bot, Code, MessageSquare, Plus, Users } from 'lucide-vue-next';
+import { Bot, Code, MessageSquare, Plus, Users } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

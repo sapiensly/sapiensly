@@ -2,7 +2,7 @@
 import * as ImpersonateController from '@/actions/App/Http/Controllers/Admin/ImpersonateController';
 import type { AppPageProps } from '@/types';
 import { router, usePage } from '@inertiajs/vue3';
-import { Eye, X } from 'lucide-vue-next';
+import { Eye, X } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

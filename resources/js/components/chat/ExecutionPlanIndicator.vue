@@ -9,7 +9,7 @@ import {
     Loader2,
     Sparkles,
     Zap,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{

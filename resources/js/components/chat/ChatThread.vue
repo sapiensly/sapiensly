@@ -3,7 +3,7 @@ import ArtifactCard from '@/components/chat/ArtifactCard.vue';
 import { type Artifact, parseArtifacts, type Segment } from '@/lib/artifacts';
 import type { ChatMessageDto } from '@/types/chatModule';
 import DOMPurify from 'dompurify';
-import { Check, Copy, FileText, RotateCw, Sparkles, Wrench } from 'lucide-vue-next';
+import { Check, Copy, FileText, RotateCw, Sparkles, Wrench } from '@lucide/vue';
 import { marked } from 'marked';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';

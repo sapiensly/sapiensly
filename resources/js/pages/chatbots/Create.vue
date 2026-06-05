@@ -21,7 +21,7 @@ import type {
     VisibilityOption,
 } from '@/types/chatbot';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Bot, MessageSquare, Palette, Users } from 'lucide-vue-next';
+import { Bot, MessageSquare, Palette, Users } from '@lucide/vue';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 

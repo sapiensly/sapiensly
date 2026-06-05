@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Bot, Key, MessageCircle } from 'lucide-vue-next';
+import { Bot, Key, MessageCircle } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

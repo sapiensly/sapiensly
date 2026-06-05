@@ -3,7 +3,7 @@ import * as ImpersonateController from '@/actions/App/Http/Controllers/Admin/Imp
 import { Button } from '@/components/ui/button';
 import type { AppPageProps } from '@/types';
 import { router, usePage } from '@inertiajs/vue3';
-import { Eye, X } from 'lucide-vue-next';
+import { Eye, X } from '@lucide/vue';
 
 const page = usePage<AppPageProps>();
 

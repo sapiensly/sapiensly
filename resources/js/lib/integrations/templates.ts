@@ -1,4 +1,5 @@
-import { Github } from 'lucide-vue-next';
+// lucide dropped brand icons (incl. Github) in v1; GitBranch is the closest generic git mark.
+import { GitBranch } from '@lucide/vue';
 import type { Component } from 'vue';
 
 /**
@@ -21,7 +22,7 @@ export const INTEGRATION_TEMPLATES: IntegrationTemplate[] = [
         slug: 'github',
         label: 'GitHub',
         descriptionKey: 'system.integrations.templates.github.description',
-        icon: Github,
+        icon: GitBranch,
         tint: 'var(--sp-text-primary)',
     },
 ];

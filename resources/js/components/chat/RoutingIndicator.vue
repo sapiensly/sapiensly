@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import type { RoutingDecision } from '@/types/chat';
-import { Bot, Brain, ChevronRight, Loader2, Zap } from 'lucide-vue-next';
+import { Bot, Brain, ChevronRight, Loader2, Zap } from '@lucide/vue';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{

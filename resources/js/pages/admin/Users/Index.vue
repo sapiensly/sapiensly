@@ -14,7 +14,7 @@ import AdminLayout from '@/layouts/AdminLayout.vue';
 import type { AdminUser, UsersIndexProps } from '@/lib/admin/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
-import { Download, Plus, Search } from 'lucide-vue-next';
+import { Download, Plus, Search } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

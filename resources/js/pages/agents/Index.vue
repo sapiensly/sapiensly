@@ -6,7 +6,7 @@ import AgentTeamCard from '@/components/agents/AgentTeamCard.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { PaginatedAgentTeams } from '@/types/agents';
 import { Head, Link } from '@inertiajs/vue3';
-import { Plus, Users } from 'lucide-vue-next';
+import { Plus, Users } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

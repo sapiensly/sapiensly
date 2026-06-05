@@ -2,7 +2,7 @@
 import * as FlowTestController from '@/actions/App/Http/Controllers/FlowTestController';
 import { Button } from '@/components/ui/button';
 import axios from 'axios';
-import { Bot, Check, MessageSquare, RefreshCw, Send, X } from 'lucide-vue-next';
+import { Bot, Check, MessageSquare, RefreshCw, Send, X } from '@lucide/vue';
 import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 

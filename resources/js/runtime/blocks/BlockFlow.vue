@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { ArrowRight, ArrowDown } from 'lucide-vue-next';
+import { ArrowRight, ArrowDown } from '@lucide/vue';
 
 interface Step { id?: string; label: string; description?: string; icon?: string }
 interface FlowBlock { id: string; type: 'flow'; label?: string; direction?: 'row' | 'column'; steps: Step[] }

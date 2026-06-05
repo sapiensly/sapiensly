@@ -2,7 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Link } from '@inertiajs/vue3';
-import { Plus } from 'lucide-vue-next';
+import { Plus } from '@lucide/vue';
 
 interface Props {
     title: string;

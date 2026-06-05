@@ -3,7 +3,7 @@ import * as FlowController from '@/actions/App/Http/Controllers/FlowController';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { Bot, GitBranch, Pencil, Plus } from 'lucide-vue-next';
+import { Bot, GitBranch, Pencil, Plus } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

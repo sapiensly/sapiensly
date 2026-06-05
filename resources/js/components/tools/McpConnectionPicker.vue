@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { McpConnectionOption } from '@/types/tools';
-import { CheckCircle2, ExternalLink, Plug, Server } from 'lucide-vue-next';
+import { CheckCircle2, ExternalLink, Plug, Server } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 

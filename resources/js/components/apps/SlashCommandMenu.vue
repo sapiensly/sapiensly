@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SlashCommand } from '@/lib/builderSlashCommands';
-import { Sparkles } from 'lucide-vue-next';
+import { Sparkles } from '@lucide/vue';
 import { computed } from 'vue';
 
 const props = defineProps<{
