@@ -7,6 +7,7 @@ use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseChunk;
 use App\Models\Organization;
 use App\Models\User;
+use App\Support\Tenancy\Schemas;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -239,9 +240,12 @@ class VectorStoreService
         $provider = $this->cloudProviderService->resolveDatabaseFor($organization, $user);
 
         if ($provider === null) {
-            return DB::connection();
+            // Default: chunks live in our own `tenant` schema (RLS-scoped via the
+            // request/job TenantContext), NOT the platform default connection.
+            return DB::connection(Schemas::TENANT_CONNECTION);
         }
 
+        // BYODB: the tenant brought an external database; chunks live there.
         return $this->cloudProviderService->buildConnection($provider);
     }
 

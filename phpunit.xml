@@ -30,7 +30,20 @@
         <env name="DB_DATABASE" value="sapiensly_test"/>
         <env name="DB_USERNAME" value="postgres"/>
         <env name="DB_PASSWORD" value=""/>
+        <!--
+          Run the platform/tenant runtime connections as the owner in tests so
+          the suite exercises app logic without RLS/role friction. Row-Level
+          Security and structural isolation are covered by dedicated tests that
+          connect as the real least-privilege roles.
+        -->
+        <env name="PLATFORM_DB_USERNAME" value="postgres"/>
+        <env name="PLATFORM_DB_PASSWORD" value=""/>
+        <env name="TENANT_DB_USERNAME" value="postgres"/>
+        <env name="TENANT_DB_PASSWORD" value=""/>
         <env name="MAIL_MAILER" value="array"/>
+        <!-- Document/app-file uploads default to S3; use local disk in tests so
+             Storage::fake('local') covers them and no AWS credentials are needed. -->
+        <env name="DOCUMENTS_DISK_DRIVER" value="local"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

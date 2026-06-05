@@ -85,7 +85,7 @@ class CloudProviderService
      * Runtime connection name used when binding a resolved database provider
      * into Laravel's connection manager.
      */
-    public const RUNTIME_DB_CONNECTION = 'tenant_custom';
+    public const RUNTIME_DB_CONNECTION = 'byodb_runtime';
 
     /**
      * Prefix for the deterministic on-demand disk name a storage provider is

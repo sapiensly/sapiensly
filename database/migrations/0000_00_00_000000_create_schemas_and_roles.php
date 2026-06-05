@@ -37,10 +37,14 @@ return new class extends Migration
 
         $owner = (string) config('database.connections.pgsql.username', 'postgres');
 
-        $platformRole = (string) config('database.connections.platform.username', 'platform_app');
+        // Role NAMES come from config/tenancy.php, not the connection usernames,
+        // so the real least-privilege roles are created/granted even when a
+        // connection authenticates as a different user (e.g. the test suite runs
+        // the runtime connections as the owner).
+        $platformRole = (string) config('tenancy.platform_role', 'platform_app');
         $platformPassword = (string) config('database.connections.platform.password', '');
 
-        $tenantRole = (string) config('database.connections.tenant.username', 'tenant_app');
+        $tenantRole = (string) config('tenancy.tenant_role', 'tenant_app');
         $tenantPassword = (string) config('database.connections.tenant.password', '');
 
         DB::statement('CREATE SCHEMA IF NOT EXISTS '.self::PLATFORM_SCHEMA);

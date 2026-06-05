@@ -18,6 +18,7 @@ class Record extends Model
 
     protected $fillable = [
         'organization_id',
+        'user_id',
         'app_id',
         'object_definition_id',
         'data',

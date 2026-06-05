@@ -42,8 +42,8 @@ return new class extends Migration
         // created in `platform`, and lack tenant_app grants. Normalize ownership
         // of the tenant schema: tenant_app holds DML, platform_app is locked out
         // (it also has no USAGE on `tenant`, so this is belt-and-braces).
-        $tenant = $this->quoteIdentifier((string) config('database.connections.tenant.username', 'tenant_app'));
-        $platform = $this->quoteIdentifier((string) config('database.connections.platform.username', 'platform_app'));
+        $tenant = $this->quoteIdentifier((string) config('tenancy.tenant_role', 'tenant_app'));
+        $platform = $this->quoteIdentifier((string) config('tenancy.platform_role', 'platform_app'));
 
         DB::statement("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA tenant TO {$tenant}");
         DB::statement("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA tenant TO {$tenant}");

@@ -7,6 +7,7 @@ use App\Models\App;
 use App\Models\Record;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
+use App\Support\Tenancy\TenantContext;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
@@ -48,10 +49,15 @@ class DemoAppSeeder extends Seeder
 
         $manifestService->createVersion($appModel, $manifest, $user, 'demo seed');
 
+        // Records live in the RLS-protected `tenant` schema: bind the demo
+        // owner's scope so the inserts satisfy the tenant_isolation policy.
+        app(TenantContext::class)->set($appModel->organization_id, $user->id);
+
         $estados = ['activo', 'prospecto', 'inactivo'];
         for ($i = 1; $i <= 20; $i++) {
             Record::create([
                 'organization_id' => $appModel->organization_id,
+                'user_id' => $user->id,
                 'app_id' => $appModel->id,
                 'object_definition_id' => $objectId,
                 'data' => [
