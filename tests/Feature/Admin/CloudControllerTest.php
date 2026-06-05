@@ -100,6 +100,21 @@ test('database card exposes the runtime role and app schemas', function () {
             ->where('database.schemas', fn ($v) => collect($v)->contains('tenant')));
 });
 
+test('redis panel reports reachability and the subsystems it backs', function () {
+    $admin = sysadminForCloud();
+
+    $this->actingAs($admin)
+        ->get('/admin/cloud')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('redis.reachable')
+            ->has('redis.client')
+            ->has('redis.roles', 3)
+            ->where('redis.roles.0.key', 'cache')
+            ->where('redis.roles.1.key', 'queue')
+            ->where('redis.roles.2.key', 'session'));
+});
+
 test('non-sysadmin is blocked from /admin/cloud', function () {
     $member = User::factory()->create();
     $this->actingAs($member)->get('/admin/cloud')->assertForbidden();

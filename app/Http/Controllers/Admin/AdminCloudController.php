@@ -9,6 +9,7 @@ use App\Services\VectorStoreSchema;
 use App\Support\Tenancy\Schemas;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redis;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -37,7 +38,122 @@ class AdminCloudController extends Controller
             'database' => $this->readDatabase(),
             'pgvector' => $this->readPgVector(),
             'tenancy' => $this->readTenancy(),
+            'redis' => $this->readRedis(),
         ]);
+    }
+
+    /**
+     * In-memory layer: a single lightweight `INFO` roll-up plus the subsystems
+     * Redis backs (cache, queue, session). Degrades gracefully — an unreachable
+     * server returns `reachable=false` and the UI shows an empty state rather
+     * than failing the whole dashboard.
+     *
+     * @return array<string, mixed>
+     */
+    private function readRedis(): array
+    {
+        $roles = $this->redisRoles();
+
+        try {
+            $info = Redis::connection()->info();
+        } catch (Throwable) {
+            return [
+                'reachable' => false,
+                'version' => null,
+                'mode' => null,
+                'client' => (string) config('database.redis.client', 'phpredis'),
+                'usedBytes' => null,
+                'peakBytes' => null,
+                'maxBytes' => null,
+                'clients' => null,
+                'uptimeSeconds' => null,
+                'keys' => null,
+                'roles' => $roles,
+            ];
+        }
+
+        // predis returns INFO grouped by section (Server/Memory/...); phpredis
+        // returns one flat map. Read from the section when present, else flat.
+        $server = $info['Server'] ?? $info;
+        $memory = $info['Memory'] ?? $info;
+        $clients = $info['Clients'] ?? $info;
+        $stats = $info['Stats'] ?? $info;
+        $keyspace = $info['Keyspace'] ?? array_filter(
+            $info,
+            static fn ($k) => is_string($k) && preg_match('/^db\d+$/', $k) === 1,
+            ARRAY_FILTER_USE_KEY,
+        );
+
+        $maxMemory = (int) ($memory['maxmemory'] ?? 0);
+
+        return [
+            'reachable' => true,
+            'version' => isset($server['redis_version']) ? (string) $server['redis_version'] : null,
+            'mode' => isset($server['redis_mode']) ? (string) $server['redis_mode'] : null,
+            'client' => (string) config('database.redis.client', 'phpredis'),
+            'usedBytes' => isset($memory['used_memory']) ? (int) $memory['used_memory'] : null,
+            'peakBytes' => isset($memory['used_memory_peak']) ? (int) $memory['used_memory_peak'] : null,
+            // maxmemory of 0 means "no limit" — surface null so the UI shows ∞.
+            'maxBytes' => $maxMemory > 0 ? $maxMemory : null,
+            'clients' => isset($clients['connected_clients']) ? (int) $clients['connected_clients'] : null,
+            'uptimeSeconds' => isset($server['uptime_in_seconds']) ? (int) $server['uptime_in_seconds'] : null,
+            'keys' => $this->redisKeyCount($keyspace),
+            'roles' => $roles,
+        ];
+    }
+
+    /**
+     * Total keys across every logical database in the Keyspace section.
+     *
+     * @param  array<string, mixed>  $keyspace
+     */
+    private function redisKeyCount(array $keyspace): int
+    {
+        $total = 0;
+
+        foreach ($keyspace as $db) {
+            if (is_array($db)) {
+                $total += (int) ($db['keys'] ?? 0);
+            } elseif (is_string($db) && preg_match('/keys=(\d+)/', $db, $m) === 1) {
+                $total += (int) $m[1];
+            }
+        }
+
+        return $total;
+    }
+
+    /**
+     * The subsystems backed by Redis, with the logical connection/DB each uses.
+     *
+     * @return array<int, array{key: string, active: bool, connection: string, database: int}>
+     */
+    private function redisRoles(): array
+    {
+        $cacheStore = (string) config('cache.default');
+        $cacheConnection = (string) config("cache.stores.{$cacheStore}.connection", 'cache');
+        $queueConnection = (string) config('queue.connections.redis.connection', 'default');
+        $sessionConnection = (string) (config('session.connection') ?? 'default');
+
+        return [
+            [
+                'key' => 'cache',
+                'active' => (string) config("cache.stores.{$cacheStore}.driver") === 'redis',
+                'connection' => $cacheConnection,
+                'database' => (int) config("database.redis.{$cacheConnection}.database", 0),
+            ],
+            [
+                'key' => 'queue',
+                'active' => (string) config('queue.default') === 'redis',
+                'connection' => $queueConnection,
+                'database' => (int) config("database.redis.{$queueConnection}.database", 0),
+            ],
+            [
+                'key' => 'session',
+                'active' => (string) config('session.driver') === 'redis',
+                'connection' => $sessionConnection,
+                'database' => (int) config("database.redis.{$sessionConnection}.database", 0),
+            ],
+        ];
     }
 
     /**

@@ -262,6 +262,24 @@ export interface CloudProps {
             expected: number;
         };
     } | null;
+    redis: {
+        reachable: boolean;
+        version: string | null;
+        mode: string | null;
+        client: string;
+        usedBytes: number | null;
+        peakBytes: number | null;
+        maxBytes: number | null;
+        clients: number | null;
+        uptimeSeconds: number | null;
+        keys: number | null;
+        roles: {
+            key: 'cache' | 'queue' | 'session';
+            active: boolean;
+            connection: string;
+            database: number;
+        }[];
+    };
 }
 
 // ─── Stack ─────────────────────────────────────────────────────────────

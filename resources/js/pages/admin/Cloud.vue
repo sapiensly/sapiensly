@@ -12,7 +12,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { Cpu, Database, HardDrive, Shield } from '@/lib/admin/icons';
+import { Cpu, Database, HardDrive, Server, Shield } from '@/lib/admin/icons';
 import type { CloudProps } from '@/lib/admin/types';
 import { Head } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -55,6 +55,16 @@ const rlsGap = computed(() => {
         props.tenancy.rls.tenantTables - props.tenancy.rls.protected,
     );
 });
+
+function uptime(seconds: number | null): string {
+    if (seconds === null) return '—';
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+}
 </script>
 
 <template>
@@ -225,6 +235,138 @@ const rlsGap = computed(() => {
                     </p>
                 </SettingsCard>
             </div>
+
+            <!-- Redis: in-memory layer behind cache / queues / sessions. -->
+            <SettingsCard
+                :icon="Server"
+                :title="t('admin.cloud.redis.title')"
+                :description="t('admin.cloud.redis.description')"
+                tint="var(--sp-danger)"
+            >
+                <template v-if="redis.reachable">
+                    <dl class="space-y-2 text-sm">
+                        <div class="flex items-center justify-between">
+                            <dt class="text-xs text-ink-muted">
+                                {{ t('admin.cloud.redis.version') }}
+                            </dt>
+                            <dd class="font-mono text-xs text-ink">
+                                {{ redis.version }}
+                                <span v-if="redis.mode" class="text-ink-subtle">
+                                    · {{ redis.mode }}
+                                </span>
+                            </dd>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <dt class="text-xs text-ink-muted">
+                                {{ t('admin.cloud.redis.client') }}
+                            </dt>
+                            <dd class="font-mono text-xs text-ink">
+                                {{ redis.client }}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <div
+                            class="rounded-xs border border-soft bg-white/[0.02] p-3"
+                        >
+                            <p
+                                class="text-[10px] tracking-wider text-ink-subtle uppercase"
+                            >
+                                {{ t('admin.cloud.redis.memory') }}
+                            </p>
+                            <p class="font-mono text-lg font-semibold text-ink">
+                                {{ bytes(redis.usedBytes) }}
+                            </p>
+                            <p class="text-[10px] text-ink-subtle">
+                                {{ t('admin.cloud.redis.peak') }}:
+                                {{ bytes(redis.peakBytes) }} /
+                                {{
+                                    redis.maxBytes === null
+                                        ? t('admin.cloud.redis.unlimited')
+                                        : bytes(redis.maxBytes)
+                                }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-xs border border-soft bg-white/[0.02] p-3"
+                        >
+                            <p
+                                class="text-[10px] tracking-wider text-ink-subtle uppercase"
+                            >
+                                {{ t('admin.cloud.redis.keys') }}
+                            </p>
+                            <p class="font-mono text-lg font-semibold text-ink">
+                                {{ (redis.keys ?? 0).toLocaleString() }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-xs border border-soft bg-white/[0.02] p-3"
+                        >
+                            <p
+                                class="text-[10px] tracking-wider text-ink-subtle uppercase"
+                            >
+                                {{ t('admin.cloud.redis.clients') }}
+                            </p>
+                            <p class="font-mono text-lg font-semibold text-ink">
+                                {{ (redis.clients ?? 0).toLocaleString() }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-xs border border-soft bg-white/[0.02] p-3"
+                        >
+                            <p
+                                class="text-[10px] tracking-wider text-ink-subtle uppercase"
+                            >
+                                {{ t('admin.cloud.redis.uptime') }}
+                            </p>
+                            <p class="font-mono text-lg font-semibold text-ink">
+                                {{ uptime(redis.uptimeSeconds) }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="pt-1">
+                        <p
+                            class="mb-1.5 text-[10px] tracking-wider text-ink-subtle uppercase"
+                        >
+                            {{ t('admin.cloud.redis.powers') }}
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            <Badge
+                                v-for="role in redis.roles"
+                                :key="role.key"
+                                variant="outline"
+                                :class="
+                                    role.active
+                                        ? 'border-sp-success/40 bg-sp-success/10 font-normal text-sp-success'
+                                        : 'border-soft font-normal text-ink-subtle'
+                                "
+                            >
+                                {{ t(`admin.cloud.redis.role.${role.key}`) }}
+                                <span class="ml-1 text-ink-subtle">
+                                    {{
+                                        role.active
+                                            ? t('admin.cloud.redis.role.db', {
+                                                  database: role.database,
+                                              })
+                                            : t(
+                                                  'admin.cloud.redis.role.inactive',
+                                              )
+                                    }}
+                                </span>
+                            </Badge>
+                        </div>
+                    </div>
+                </template>
+
+                <p
+                    v-else
+                    class="rounded-xs border border-dashed border-soft p-3 text-xs text-ink-muted"
+                >
+                    {{ t('admin.cloud.redis.empty') }}
+                </p>
+            </SettingsCard>
 
             <!-- pgvector -->
             <SettingsCard
