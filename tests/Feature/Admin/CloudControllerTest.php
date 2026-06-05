@@ -69,7 +69,35 @@ test('pgvector section reports enabled when the extension is installed', functio
         ->assertInertia(fn ($page) => $page
             ->where('pgvector.enabled', true)
             ->has('pgvector.indexCount')
-            ->has('pgvector.vectorCount'));
+            ->has('pgvector.vectorCount')
+            ->has('pgvector.indexes.0.schema'));
+});
+
+test('tenancy panel surfaces the platform/tenant schema split and RLS coverage', function () {
+    $admin = sysadminForCloud();
+
+    $this->actingAs($admin)
+        ->get('/admin/cloud')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('tenancy.schemas.0.name', 'platform')
+            ->where('tenancy.schemas.0.rls', false)
+            ->where('tenancy.schemas.1.name', 'tenant')
+            ->where('tenancy.schemas.1.rls', true)
+            ->has('tenancy.roles', 3)
+            ->where('tenancy.rls.expected', fn ($v) => $v > 0)
+            ->has('tenancy.rls.protected'));
+});
+
+test('database card exposes the runtime role and app schemas', function () {
+    $admin = sysadminForCloud();
+
+    $this->actingAs($admin)
+        ->get('/admin/cloud')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('database.role')
+            ->where('database.schemas', fn ($v) => collect($v)->contains('tenant')));
 });
 
 test('non-sysadmin is blocked from /admin/cloud', function () {

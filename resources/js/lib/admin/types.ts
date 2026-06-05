@@ -226,6 +226,8 @@ export interface CloudProps {
         host: string;
         sizeBytes: number;
         connections: { active: number; max: number };
+        role: string;
+        schemas: string[];
     };
     pgvector: {
         enabled: boolean;
@@ -235,12 +237,31 @@ export interface CloudProps {
         sizeBytes: number;
         indexes: {
             name: string;
+            schema: string;
             table: string;
             dim: number;
             metric: 'cosine' | 'l2' | 'ip';
             rows: number;
         }[];
     };
+    tenancy: {
+        schemas: {
+            name: string;
+            scope: 'control-plane' | 'tenant-data';
+            tableCount: number;
+            rls: boolean;
+        }[];
+        roles: {
+            name: string;
+            scope: 'owner' | 'platform' | 'tenant';
+            present: boolean;
+        }[];
+        rls: {
+            protected: number;
+            tenantTables: number;
+            expected: number;
+        };
+    } | null;
 }
 
 // ─── Stack ─────────────────────────────────────────────────────────────

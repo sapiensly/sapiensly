@@ -12,7 +12,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { Cpu, Database, HardDrive } from '@/lib/admin/icons';
+import { Cpu, Database, HardDrive, Shield } from '@/lib/admin/icons';
 import type { CloudProps } from '@/lib/admin/types';
 import { Head } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -47,6 +47,14 @@ const connectionClass = computed(() => {
     if (connectionPressure.value > 60) return 'text-sp-warning';
     return 'text-sp-success';
 });
+
+const rlsGap = computed(() => {
+    if (!props.tenancy) return 0;
+    return Math.max(
+        0,
+        props.tenancy.rls.tenantTables - props.tenancy.rls.protected,
+    );
+});
 </script>
 
 <template>
@@ -55,7 +63,7 @@ const connectionClass = computed(() => {
     <AdminLayout :title="t('admin.nav.cloud')">
         <div class="space-y-6">
             <header class="space-y-1">
-                <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                <h1 class="text-[22px] leading-tight font-semibold text-ink">
                     {{ t('admin.cloud.heading') }}
                 </h1>
                 <p class="text-xs text-ink-muted">
@@ -101,7 +109,9 @@ const connectionClass = computed(() => {
                         </dl>
 
                         <div class="pt-1">
-                            <p class="mb-1.5 text-[10px] tracking-wider text-ink-subtle uppercase">
+                            <p
+                                class="mb-1.5 text-[10px] tracking-wider text-ink-subtle uppercase"
+                            >
                                 {{ t('admin.cloud.storage.capacity') }}
                             </p>
                             <CapacityBar
@@ -156,16 +166,47 @@ const connectionClass = computed(() => {
                                     {{ bytes(database.sizeBytes) }}
                                 </dd>
                             </div>
+                            <div class="flex items-center justify-between">
+                                <dt class="text-xs text-ink-muted">
+                                    {{ t('admin.cloud.database.role') }}
+                                </dt>
+                                <dd class="font-mono text-xs text-ink">
+                                    {{ database.role }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="database.schemas.length"
+                                class="flex items-center justify-between"
+                            >
+                                <dt class="text-xs text-ink-muted">
+                                    {{ t('admin.cloud.database.schemas') }}
+                                </dt>
+                                <dd class="flex gap-1">
+                                    <Badge
+                                        v-for="s in database.schemas"
+                                        :key="s"
+                                        variant="outline"
+                                        class="border-soft font-mono text-[10px] font-normal text-ink-muted"
+                                    >
+                                        {{ s }}
+                                    </Badge>
+                                </dd>
+                            </div>
                         </dl>
 
                         <div class="pt-1">
-                            <div class="mb-1.5 flex items-center justify-between">
+                            <div
+                                class="mb-1.5 flex items-center justify-between"
+                            >
                                 <p
                                     class="text-[10px] tracking-wider text-ink-subtle uppercase"
                                 >
                                     {{ t('admin.cloud.database.connections') }}
                                 </p>
-                                <p class="font-mono text-xs" :class="connectionClass">
+                                <p
+                                    class="font-mono text-xs"
+                                    :class="connectionClass"
+                                >
                                     {{ database.connections.active }} /
                                     {{ database.connections.max }}
                                 </p>
@@ -248,7 +289,9 @@ const connectionClass = computed(() => {
                     >
                         <Table>
                             <TableHeader>
-                                <TableRow class="border-soft hover:bg-transparent">
+                                <TableRow
+                                    class="border-soft hover:bg-transparent"
+                                >
                                     <TableHead
                                         class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
                                     >
@@ -257,12 +300,23 @@ const connectionClass = computed(() => {
                                     <TableHead
                                         class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
                                     >
-                                        {{ t('admin.cloud.pgvector.col.table') }}
+                                        {{
+                                            t('admin.cloud.pgvector.col.schema')
+                                        }}
                                     </TableHead>
                                     <TableHead
                                         class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
                                     >
-                                        {{ t('admin.cloud.pgvector.col.metric') }}
+                                        {{
+                                            t('admin.cloud.pgvector.col.table')
+                                        }}
+                                    </TableHead>
+                                    <TableHead
+                                        class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
+                                    >
+                                        {{
+                                            t('admin.cloud.pgvector.col.metric')
+                                        }}
                                     </TableHead>
                                     <TableHead
                                         class="text-right text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
@@ -274,7 +328,7 @@ const connectionClass = computed(() => {
                             <TableBody>
                                 <TableEmpty
                                     v-if="pgvector.indexes.length === 0"
-                                    :colspan="4"
+                                    :colspan="5"
                                 >
                                     {{ t('admin.cloud.pgvector.no_indexes') }}
                                 </TableEmpty>
@@ -283,10 +337,19 @@ const connectionClass = computed(() => {
                                     :key="idx.name"
                                     class="border-soft"
                                 >
-                                    <TableCell class="font-mono text-xs text-ink">
+                                    <TableCell
+                                        class="font-mono text-xs text-ink"
+                                    >
                                         {{ idx.name }}
                                     </TableCell>
-                                    <TableCell class="font-mono text-xs text-ink-muted">
+                                    <TableCell
+                                        class="font-mono text-xs text-ink-muted"
+                                    >
+                                        {{ idx.schema }}
+                                    </TableCell>
+                                    <TableCell
+                                        class="font-mono text-xs text-ink-muted"
+                                    >
                                         {{ idx.table }}
                                     </TableCell>
                                     <TableCell class="text-xs text-ink-muted">
@@ -309,6 +372,171 @@ const connectionClass = computed(() => {
                 >
                     {{ t('admin.cloud.pgvector.disabled') }}
                 </div>
+            </SettingsCard>
+
+            <!-- Multi-tenancy: platform/tenant schema split, roles, RLS. -->
+            <SettingsCard
+                :icon="Shield"
+                :title="t('admin.cloud.tenancy.title')"
+                :description="t('admin.cloud.tenancy.description')"
+                tint="var(--sp-success)"
+            >
+                <template v-if="tenancy">
+                    <!-- Schemas -->
+                    <div>
+                        <p
+                            class="mb-1.5 text-[10px] tracking-wider text-ink-subtle uppercase"
+                        >
+                            {{ t('admin.cloud.tenancy.schemas') }}
+                        </p>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div
+                                v-for="schema in tenancy.schemas"
+                                :key="schema.name"
+                                class="rounded-xs border border-soft bg-white/[0.02] p-3"
+                            >
+                                <div class="flex items-center justify-between">
+                                    <span class="font-mono text-sm text-ink">
+                                        {{ schema.name }}
+                                    </span>
+                                    <Badge
+                                        v-if="schema.rls"
+                                        variant="outline"
+                                        class="border-sp-success/40 bg-sp-success/10 font-normal text-sp-success"
+                                    >
+                                        {{ t('admin.cloud.tenancy.rls_badge') }}
+                                    </Badge>
+                                    <Badge
+                                        v-else
+                                        variant="outline"
+                                        class="border-soft font-normal text-ink-subtle"
+                                    >
+                                        {{
+                                            t(
+                                                'admin.cloud.tenancy.no_rls_badge',
+                                            )
+                                        }}
+                                    </Badge>
+                                </div>
+                                <p class="mt-1 text-xs text-ink-muted">
+                                    {{
+                                        t(
+                                            `admin.cloud.tenancy.scope.${schema.scope}`,
+                                        )
+                                    }}
+                                </p>
+                                <p
+                                    class="mt-2 font-mono text-xs text-ink-subtle"
+                                >
+                                    {{
+                                        t('admin.cloud.tenancy.tables', {
+                                            count: schema.tableCount,
+                                        })
+                                    }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Roles -->
+                    <div class="pt-1">
+                        <p
+                            class="mb-1.5 text-[10px] tracking-wider text-ink-subtle uppercase"
+                        >
+                            {{ t('admin.cloud.tenancy.roles') }}
+                        </p>
+                        <dl class="space-y-1.5">
+                            <div
+                                v-for="role in tenancy.roles"
+                                :key="role.name"
+                                class="flex items-center justify-between gap-3"
+                            >
+                                <div class="min-w-0">
+                                    <dt
+                                        class="block truncate font-mono text-xs text-ink"
+                                    >
+                                        {{ role.name }}
+                                    </dt>
+                                    <dd
+                                        class="truncate text-[10px] text-ink-muted"
+                                    >
+                                        {{
+                                            t(
+                                                `admin.cloud.tenancy.role.${role.scope}`,
+                                            )
+                                        }}
+                                    </dd>
+                                </div>
+                                <Badge
+                                    :variant="
+                                        role.present ? 'outline' : 'destructive'
+                                    "
+                                    :class="
+                                        role.present
+                                            ? 'border-sp-success/40 bg-sp-success/10 font-normal text-sp-success'
+                                            : 'font-normal'
+                                    "
+                                >
+                                    {{
+                                        role.present
+                                            ? t(
+                                                  'admin.cloud.tenancy.role.present',
+                                              )
+                                            : t(
+                                                  'admin.cloud.tenancy.role.missing',
+                                              )
+                                    }}
+                                </Badge>
+                            </div>
+                        </dl>
+                    </div>
+
+                    <!-- RLS coverage -->
+                    <div class="pt-1">
+                        <div class="mb-1.5 flex items-center justify-between">
+                            <p
+                                class="text-[10px] tracking-wider text-ink-subtle uppercase"
+                            >
+                                {{ t('admin.cloud.tenancy.rls_coverage') }}
+                            </p>
+                            <p
+                                class="font-mono text-xs"
+                                :class="
+                                    rlsGap === 0
+                                        ? 'text-sp-success'
+                                        : 'text-sp-warning'
+                                "
+                            >
+                                {{
+                                    t('admin.cloud.tenancy.rls_protected', {
+                                        protected: tenancy.rls.protected,
+                                        total: tenancy.rls.tenantTables,
+                                    })
+                                }}
+                            </p>
+                        </div>
+                        <CapacityBar
+                            :used="tenancy.rls.protected"
+                            :total="tenancy.rls.tenantTables || null"
+                        />
+                        <p class="mt-2 text-[10px] text-ink-subtle">
+                            {{
+                                rlsGap === 0
+                                    ? t('admin.cloud.tenancy.rls_complete')
+                                    : t('admin.cloud.tenancy.rls_gap', {
+                                          gap: rlsGap,
+                                      })
+                            }}
+                        </p>
+                    </div>
+                </template>
+
+                <p
+                    v-else
+                    class="rounded-xs border border-dashed border-soft p-3 text-xs text-ink-muted"
+                >
+                    {{ t('admin.cloud.tenancy.empty') }}
+                </p>
             </SettingsCard>
         </div>
     </AdminLayout>

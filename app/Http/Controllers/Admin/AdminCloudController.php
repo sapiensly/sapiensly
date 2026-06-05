@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CloudProvider;
 use App\Services\CloudProviderService;
 use App\Services\VectorStoreSchema;
+use App\Support\Tenancy\Schemas;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -35,7 +36,117 @@ class AdminCloudController extends Controller
             'storage' => $this->readStorage(),
             'database' => $this->readDatabase(),
             'pgvector' => $this->readPgVector(),
+            'tenancy' => $this->readTenancy(),
         ]);
+    }
+
+    /**
+     * Surfaces the platform/tenant schema split for the application database:
+     * the two schemas with their table counts, the three least-privilege roles,
+     * and how many tenant tables are actually protected by Row-Level Security.
+     *
+     * Always introspects the application's own connection (the split is an
+     * app-DB concept) regardless of any global BYODB provider shown in the
+     * Database card. Returns null on non-pgsql so the panel hides itself.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function readTenancy(): ?array
+    {
+        $connection = $this->appConnection();
+        if ($connection === null || $connection->getDriverName() !== 'pgsql') {
+            return null;
+        }
+
+        $platformTables = (int) ($this->safeScalar(
+            $connection,
+            'select count(*) from pg_tables where schemaname = ?',
+            [Schemas::PLATFORM],
+        ) ?? 0);
+
+        $tenantTables = (int) ($this->safeScalar(
+            $connection,
+            'select count(*) from pg_tables where schemaname = ?',
+            [Schemas::TENANT],
+        ) ?? 0);
+
+        $protected = (int) ($this->safeScalar(
+            $connection,
+            <<<'SQL'
+                select count(*)
+                from pg_class c
+                join pg_namespace n on n.oid = c.relnamespace
+                where n.nspname = ? and c.relrowsecurity = true
+            SQL,
+            [Schemas::TENANT],
+        ) ?? 0);
+
+        $ownerRole = (string) config('database.connections.pgsql.username', 'postgres');
+        $platformRole = (string) config('tenancy.platform_role', 'platform_app');
+        $tenantRole = (string) config('tenancy.tenant_role', 'tenant_app');
+
+        $present = $this->presentRoles($connection, [$ownerRole, $platformRole, $tenantRole]);
+
+        return [
+            'schemas' => [
+                [
+                    'name' => Schemas::PLATFORM,
+                    'scope' => 'control-plane',
+                    'tableCount' => $platformTables,
+                    'rls' => false,
+                ],
+                [
+                    'name' => Schemas::TENANT,
+                    'scope' => 'tenant-data',
+                    'tableCount' => $tenantTables,
+                    'rls' => true,
+                ],
+            ],
+            'roles' => [
+                ['name' => $ownerRole, 'scope' => 'owner', 'present' => in_array($ownerRole, $present, true)],
+                ['name' => $platformRole, 'scope' => 'platform', 'present' => in_array($platformRole, $present, true)],
+                ['name' => $tenantRole, 'scope' => 'tenant', 'present' => in_array($tenantRole, $present, true)],
+            ],
+            'rls' => [
+                'protected' => $protected,
+                'tenantTables' => $tenantTables,
+                'expected' => count(Schemas::tenantTables()),
+            ],
+        ];
+    }
+
+    /**
+     * Role names present in the cluster, from the candidate list.
+     *
+     * @param  array<int, string>  $candidates
+     * @return array<int, string>
+     */
+    private function presentRoles(Connection $connection, array $candidates): array
+    {
+        try {
+            $placeholders = implode(',', array_fill(0, count($candidates), '?'));
+            $rows = $connection->select(
+                "select rolname from pg_roles where rolname in ({$placeholders})",
+                $candidates,
+            );
+
+            return array_map(static fn ($r) => (string) $r->rolname, $rows);
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * The application's own database connection (where the platform/tenant
+     * split lives), independent of any global BYODB database provider.
+     */
+    private function appConnection(): ?Connection
+    {
+        try {
+            return DB::connection();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -111,7 +222,31 @@ class AdminCloudController extends Controller
                 'active' => $active ?? 0,
                 'max' => $max ?? 0,
             ],
+            // Least-privilege role this dashboard reads as, plus the app schemas
+            // present — the visible face of the platform/tenant split on the card.
+            'role' => (string) config("database.connections.{$connection->getName()}.username", '—'),
+            'schemas' => $engine === 'postgres' ? $this->appSchemas($connection) : [],
         ];
+    }
+
+    /**
+     * The platform/tenant schemas that actually exist on the given connection
+     * (empty for a non-split BYODB database).
+     *
+     * @return array<int, string>
+     */
+    private function appSchemas(Connection $connection): array
+    {
+        try {
+            $rows = $connection->select(
+                'select schema_name from information_schema.schemata where schema_name in (?, ?) order by schema_name',
+                [Schemas::PLATFORM, Schemas::TENANT],
+            );
+
+            return array_map(static fn ($r) => (string) $r->schema_name, $rows);
+        } catch (Throwable) {
+            return [];
+        }
     }
 
     /**
@@ -188,11 +323,13 @@ class AdminCloudController extends Controller
                 select
                     i.indexrelname as name,
                     c.relname as table_name,
+                    n.nspname as schema_name,
                     pg_relation_size(i.indexrelid) as size_bytes,
                     am.amname as metric,
                     st.n_live_tup as rows
                 from pg_stat_user_indexes i
                 join pg_class c on c.oid = i.relid
+                join pg_namespace n on n.oid = c.relnamespace
                 join pg_index ix on ix.indexrelid = i.indexrelid
                 join pg_opclass oc on oc.oid = ix.indclass[0]
                 join pg_am am on am.oid = oc.opcmethod
@@ -204,6 +341,7 @@ class AdminCloudController extends Controller
             return array_map(function ($r) {
                 return [
                     'name' => (string) $r->name,
+                    'schema' => (string) $r->schema_name,
                     'table' => (string) $r->table_name,
                     'dim' => null,
                     'metric' => $this->mapOpClassToMetric((string) $r->metric),
