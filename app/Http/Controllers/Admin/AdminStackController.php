@@ -121,7 +121,9 @@ class AdminStackController extends Controller
      */
     private function dataGroup(): array
     {
-        $dbDriver = (string) config('database.default', 'pgsql');
+        // The actual driver of the default connection — NOT config('database.default'),
+        // which is the connection NAME (`platform` since the schema split), not a driver.
+        $dbDriver = DB::connection()->getDriverName();
         $dbVersion = $this->safeDbScalar('select version()') ?? 'unknown';
 
         return [

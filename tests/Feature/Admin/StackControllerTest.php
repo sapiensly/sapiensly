@@ -53,6 +53,24 @@ test('every stack item carries a status field', function () {
     }
 });
 
+test('PostgreSQL status reflects the driver, not the default connection name', function () {
+    // Production runs with DB_CONNECTION=platform. The PostgreSQL card must still
+    // be 'ok' because the platform connection IS a pgsql driver — guards the
+    // regression where the status compared config('database.default') ('platform')
+    // against 'pgsql' and rendered a spurious red 'missing' dot.
+    config(['database.default' => 'platform']);
+
+    $user = User::factory()->create();
+    $user->assignRole('sysadmin');
+
+    $this->actingAs($user)
+        ->get('/admin/stack')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('groups.2.items.0.name', 'PostgreSQL')
+            ->where('groups.2.items.0.status', 'ok'));
+});
+
 test('non-sysadmin is blocked from /admin/stack', function () {
     $member = User::factory()->create();
 
