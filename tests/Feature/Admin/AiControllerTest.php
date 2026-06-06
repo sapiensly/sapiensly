@@ -113,6 +113,98 @@ test('toggleModel renames the catalog row label without touching is_enabled', fu
         ->and($fresh->is_enabled)->toBeTrue();
 });
 
+function seedDisabledModel(string $driver = 'xai', string $modelId = 'disabled-model-1'): AiCatalogModel
+{
+    return AiCatalogModel::create([
+        'driver' => $driver,
+        'model_id' => $modelId,
+        'capability' => 'chat',
+        'label' => $modelId,
+        'is_enabled' => false,
+        'sort_order' => 0,
+    ]);
+}
+
+function globalProviderFor(string $driver): AiProvider
+{
+    return AiProvider::factory()->create([
+        'visibility' => 'global',
+        'user_id' => null,
+        'name' => $driver,
+        'driver' => $driver,
+        'credentials' => ['api_key' => 'sk-'.$driver.'-1234567890abcdef'],
+    ]);
+}
+
+test('toggleModel blocks enabling a model whose provider is not connected', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.xai.key' => '']);
+    $model = seedDisabledModel('xai');
+
+    $this->actingAs($admin)
+        ->patch("/admin/ai/catalog/{$model->id}", ['enabled' => true])
+        ->assertSessionHasErrors('enabled');
+
+    expect($model->fresh()->is_enabled)->toBeFalse();
+});
+
+test('toggleModel allows enabling when the provider has a global DB key', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.xai.key' => '']);
+    $model = seedDisabledModel('xai');
+    globalProviderFor('xai');
+
+    $this->actingAs($admin)
+        ->patch("/admin/ai/catalog/{$model->id}", ['enabled' => true])
+        ->assertSessionHasNoErrors();
+
+    expect($model->fresh()->is_enabled)->toBeTrue();
+});
+
+test('toggleModel allows enabling when the provider key lives only in env', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.xai.key' => 'sk-xai-env-1234567890abcd']);
+    $model = seedDisabledModel('xai');
+
+    $this->actingAs($admin)
+        ->patch("/admin/ai/catalog/{$model->id}", ['enabled' => true])
+        ->assertSessionHasNoErrors();
+
+    expect($model->fresh()->is_enabled)->toBeTrue();
+});
+
+test('toggleModel allows disabling an orphaned model without a connected provider', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.xai.key' => '']);
+    $model = seedChatModel('xai', 'orphan-1'); // enabled, but provider not connected
+
+    $this->actingAs($admin)
+        ->patch("/admin/ai/catalog/{$model->id}", ['enabled' => false])
+        ->assertSessionHasNoErrors();
+
+    expect($model->fresh()->is_enabled)->toBeFalse();
+});
+
+test('catalog exposes providerConfigured per model', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.xai.key' => '']);
+    seedDisabledModel('xai', 'unconnected-1');
+    seedChatModel('anthropic', 'connected-1');
+    globalProviderFor('anthropic');
+
+    $this->actingAs($admin)
+        ->get('/admin/ai/catalog')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/Ai/Catalog')
+            ->where('models', fn ($models) => collect($models)->contains(
+                fn ($m) => $m['name'] === 'unconnected-1' && $m['providerConfigured'] === false
+            ))
+            ->where('models', fn ($models) => collect($models)->contains(
+                fn ($m) => $m['name'] === 'connected-1' && $m['providerConfigured'] === true
+            )));
+});
+
 test('providers tab lists every known driver grouped direct/broker', function () {
     $admin = sysadminForAi();
 

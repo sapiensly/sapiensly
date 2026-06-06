@@ -54,7 +54,8 @@ function matches(model: AiModel, query: string): boolean {
 }
 
 const visibleRows = computed(() => {
-    const base = activeTab.value === 'direct' ? directRows.value : brokerRows.value;
+    const base =
+        activeTab.value === 'direct' ? directRows.value : brokerRows.value;
     return base.filter((m) => matches(m, search[activeTab.value]));
 });
 
@@ -128,7 +129,7 @@ function saveEdit(model: AiModel) {
     <AdminLayout :title="t('admin.nav.ai')">
         <div class="space-y-6">
             <header class="space-y-1">
-                <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                <h1 class="text-[22px] leading-tight font-semibold text-ink">
                     {{ t('admin.ai.heading') }}
                 </h1>
                 <p class="text-xs text-ink-muted">
@@ -142,11 +143,15 @@ function saveEdit(model: AiModel) {
                 <TabsList class="grid w-full max-w-xs grid-cols-2">
                     <TabsTrigger value="direct" class="gap-1.5 text-xs">
                         {{ t('admin.ai.catalog.direct_title') }}
-                        <span class="text-ink-subtle">{{ directRows.length }}</span>
+                        <span class="text-ink-subtle">{{
+                            directRows.length
+                        }}</span>
                     </TabsTrigger>
                     <TabsTrigger value="broker" class="gap-1.5 text-xs">
                         {{ t('admin.ai.catalog.broker_title') }}
-                        <span class="text-ink-subtle">{{ brokerRows.length }}</span>
+                        <span class="text-ink-subtle">{{
+                            brokerRows.length
+                        }}</span>
                     </TabsTrigger>
                 </TabsList>
             </Tabs>
@@ -164,10 +169,16 @@ function saveEdit(model: AiModel) {
                 </div>
 
                 <ToggleGroup v-model="filter" type="single" class="gap-0.5">
-                    <ToggleGroupItem value="all" class="h-8 rounded-pill px-3 text-xs">
+                    <ToggleGroupItem
+                        value="all"
+                        class="h-8 rounded-pill px-3 text-xs"
+                    >
                         {{ t('admin.ai.catalog.filter.all') }}
                     </ToggleGroupItem>
-                    <ToggleGroupItem value="chat" class="h-8 rounded-pill px-3 text-xs">
+                    <ToggleGroupItem
+                        value="chat"
+                        class="h-8 rounded-pill px-3 text-xs"
+                    >
                         {{ t('admin.ai.catalog.filter.chat') }}
                     </ToggleGroupItem>
                     <ToggleGroupItem
@@ -179,7 +190,9 @@ function saveEdit(model: AiModel) {
                 </ToggleGroup>
             </div>
 
-            <div class="overflow-hidden rounded-sp-sm border border-soft bg-navy">
+            <div
+                class="overflow-hidden rounded-sp-sm border border-soft bg-navy"
+            >
                 <Table>
                     <TableHeader>
                         <TableRow class="border-soft hover:bg-transparent">
@@ -216,7 +229,10 @@ function saveEdit(model: AiModel) {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        <TableEmpty v-if="visibleRows.length === 0" :colspan="6">
+                        <TableEmpty
+                            v-if="visibleRows.length === 0"
+                            :colspan="6"
+                        >
                             {{ t('admin.ai.catalog.empty') }}
                         </TableEmpty>
                         <TableRow
@@ -251,7 +267,9 @@ function saveEdit(model: AiModel) {
                                             v-if="m.providerKind === 'broker'"
                                             type="button"
                                             class="rounded-xs p-0.5 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent-blue"
-                                            :title="t('admin.ai.catalog.edit_name')"
+                                            :title="
+                                                t('admin.ai.catalog.edit_name')
+                                            "
                                             @click="startEdit(m)"
                                         >
                                             <Pencil class="size-3" />
@@ -259,21 +277,52 @@ function saveEdit(model: AiModel) {
                                     </span>
                                 </div>
                             </TableCell>
-                            <TableCell class="text-xs text-ink-muted capitalize">
+                            <TableCell
+                                class="text-xs text-ink-muted capitalize"
+                            >
                                 {{ m.kind }}
                             </TableCell>
                             <TableCell class="font-mono text-xs text-ink-muted">
                                 {{ formatContext(m.contextWindow) }}
                             </TableCell>
                             <TableCell class="font-mono text-xs text-ink-muted">
-                                {{ formatPrice(m.inputPricePerMTok, m.outputPricePerMTok) }}
+                                {{
+                                    formatPrice(
+                                        m.inputPricePerMTok,
+                                        m.outputPricePerMTok,
+                                    )
+                                }}
                             </TableCell>
                             <TableCell class="text-right">
-                                <Switch
-                                    :model-value="m.enabled"
-                                    class="data-[state=checked]:bg-accent-blue"
-                                    @update:model-value="(v: boolean) => toggle(m, v)"
-                                />
+                                <div
+                                    class="inline-flex items-center justify-end gap-2"
+                                >
+                                    <span
+                                        v-if="!m.providerConfigured"
+                                        class="text-[10px] whitespace-nowrap text-amber-500"
+                                        :title="
+                                            t(
+                                                'admin.ai.catalog.provider_not_connected_hint',
+                                            )
+                                        "
+                                    >
+                                        {{
+                                            t(
+                                                'admin.ai.catalog.provider_not_connected',
+                                            )
+                                        }}
+                                    </span>
+                                    <Switch
+                                        :model-value="m.enabled"
+                                        :disabled="
+                                            !m.providerConfigured && !m.enabled
+                                        "
+                                        class="data-[state=checked]:bg-accent-blue"
+                                        @update:model-value="
+                                            (v: boolean) => toggle(m, v)
+                                        "
+                                    />
+                                </div>
                             </TableCell>
                         </TableRow>
                     </TableBody>

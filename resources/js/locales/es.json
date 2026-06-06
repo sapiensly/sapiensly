@@ -1703,6 +1703,8 @@
     "admin.ai.catalog.col.context": "Contexto",
     "admin.ai.catalog.col.price": "Precio /1M",
     "admin.ai.catalog.edit_name": "Editar nombre mostrado",
+    "admin.ai.catalog.provider_not_connected": "Proveedor no conectado",
+    "admin.ai.catalog.provider_not_connected_hint": "Conecta el proveedor de este modelo con una API key en la pestaña Proveedores antes de habilitarlo.",
     "admin.ai.catalog.filter.all": "Todos",
     "admin.ai.catalog.filter.chat": "Chat",
     "admin.ai.catalog.filter.embedding": "Embedding",

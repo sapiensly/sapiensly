@@ -148,6 +148,36 @@ class AiProviderService
     }
 
     /**
+     * Whether a driver has a usable platform-wide (Global) API key — either a
+     * saved global provider row or a key in config/.env. This is the single
+     * source of truth for "is this provider connected?", shared by the
+     * Providers tab and the Catalog enable rule: a model can only be enabled
+     * when its driver is connected, otherwise it would fail at inference time.
+     */
+    public function isDriverConfigured(string $driver): bool
+    {
+        return $this->driverConfiguredSource($driver) !== null;
+    }
+
+    /**
+     * Where a driver's global key comes from: `db` (saved global provider row,
+     * which wins), `env` (config/.env only), or null when neither exists.
+     */
+    public function driverConfiguredSource(string $driver): ?string
+    {
+        $hasDbRow = AiProvider::query()
+            ->where('visibility', 'global')
+            ->where('driver', $driver)
+            ->exists();
+
+        if ($hasDbRow) {
+            return 'db';
+        }
+
+        return (string) config("ai.providers.{$driver}.key", '') !== '' ? 'env' : null;
+    }
+
+    /**
      * Get all AI providers for the user's current account context.
      */
     public function getProvidersForContext(User $user): Collection

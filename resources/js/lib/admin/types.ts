@@ -184,6 +184,7 @@ export interface AiModel {
     kind: AiModelKind;
     providerKind: AiProviderKind;
     enabled: boolean;
+    providerConfigured: boolean;
     contextWindow: number | null;
     inputPricePerMTok: number | null;
     outputPricePerMTok: number | null;

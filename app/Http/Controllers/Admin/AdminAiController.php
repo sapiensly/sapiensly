@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -50,7 +51,7 @@ class AdminAiController extends Controller
                 // works at runtime — reflect it as configured (source: env). A
                 // saved global DB row wins (source: db) since it overrides config.
                 $envKey = (string) config("ai.providers.{$driver}.key", '');
-                $source = $row !== null ? 'db' : ($envKey !== '' ? 'env' : null);
+                $source = $this->aiProviderService->driverConfiguredSource($driver);
 
                 return [
                     'driver' => $driver,
@@ -133,6 +134,17 @@ class AdminAiController extends Controller
             'enabled' => ['sometimes', 'boolean'],
             'label' => ['sometimes', 'string', 'max:255'],
         ]);
+
+        // A model may only be enabled when its provider is connected (has a
+        // global key). Disabling is always allowed so an orphaned row can be
+        // turned off after its provider key is removed.
+        if (($validated['enabled'] ?? false) === true && ! $this->aiProviderService->isDriverConfigured($model->driver)) {
+            throw ValidationException::withMessages([
+                'enabled' => __('Connect the :provider provider with an API key before enabling its models.', [
+                    'provider' => AiProviderService::DRIVER_LABELS[$model->driver] ?? $model->driver,
+                ]),
+            ]);
+        }
 
         $update = [];
         if ($request->has('enabled')) {
@@ -355,6 +367,9 @@ class AdminAiController extends Controller
             // Group catalog rows by direct provider vs broker/aggregator.
             'providerKind' => $this->aiProviderService->isBroker($model->driver) ? 'broker' : 'direct',
             'enabled' => (bool) $model->is_enabled,
+            // Whether the model's provider is connected (has a global key). The
+            // catalog UI disables the enable toggle when this is false.
+            'providerConfigured' => $this->aiProviderService->isDriverConfigured($model->driver),
             'contextWindow' => $model->context_window,
             'inputPricePerMTok' => $model->input_price_per_mtok,
             'outputPricePerMTok' => $model->output_price_per_mtok,
