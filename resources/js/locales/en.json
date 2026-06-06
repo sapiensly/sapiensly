@@ -1611,6 +1611,7 @@
     "admin.ai.providers.broker_title": "Brokers",
     "admin.ai.providers.broker_description": "Aggregators that route to many upstream models through a single key.",
     "admin.ai.providers.not_configured": "No API key configured",
+    "admin.ai.providers.from_env": "From .env",
     "admin.ai.providers.rotated_prefix": "Rotated",
     "admin.ai.providers.add_cta": "Add API key",
     "admin.ai.providers.rotate_cta": "Rotate",

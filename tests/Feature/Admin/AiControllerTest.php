@@ -187,6 +187,33 @@ test('providers tab lists every known driver grouped direct/broker', function ()
             )));
 });
 
+test('a provider keyed only in .env reflects as configured (source env); a DB row wins as db', function () {
+    $admin = sysadminForAi();
+
+    // groq: key lives only in config/.env, no DB row.
+    config(['ai.providers.groq.key' => 'sk-groq-env-1234567890abcd']);
+
+    // anthropic: a saved global DB row overrides the env key.
+    AiProvider::factory()->create([
+        'visibility' => 'global',
+        'user_id' => null,
+        'name' => 'anthropic',
+        'driver' => 'anthropic',
+        'credentials' => ['api_key' => 'sk-ant-db-1234567890', 'rotated_at' => now()->toIso8601String()],
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/ai/providers')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('providers', fn ($providers) => collect($providers)->contains(
+                fn ($p) => $p['driver'] === 'groq' && $p['configured'] === true && $p['source'] === 'env' && $p['masked'] !== null
+            ))
+            ->where('providers', fn ($providers) => collect($providers)->contains(
+                fn ($p) => $p['driver'] === 'anthropic' && $p['source'] === 'db'
+            )));
+});
+
 test('setProviderKey creates a global provider for a driver', function () {
     $admin = sysadminForAi();
 

@@ -57,14 +57,20 @@ class AdminAiController extends Controller
         $providers = collect(AiProviderService::DRIVER_LABELS)
             ->map(function (string $label, string $driver) use ($state, $counts) {
                 $row = $state[$driver] ?? null;
+                // A driver whose key only lives in .env (config/ai.php) still
+                // works at runtime — reflect it as configured (source: env). A
+                // saved global DB row wins (source: db) since it overrides config.
+                $envKey = (string) config("ai.providers.{$driver}.key", '');
+                $source = $row !== null ? 'db' : ($envKey !== '' ? 'env' : null);
 
                 return [
                     'driver' => $driver,
                     'label' => $label,
                     'kind' => $this->aiProviderService->isBroker($driver) ? 'broker' : 'direct',
                     'credentialFields' => AiProviderService::DRIVER_CREDENTIAL_FIELDS[$driver] ?? ['api_key'],
-                    'configured' => $row !== null,
-                    'masked' => $row['masked'] ?? null,
+                    'configured' => $source !== null,
+                    'source' => $source,
+                    'masked' => $row['masked'] ?? ($envKey !== '' ? $this->maskKey($envKey) : null),
                     'lastRotatedAt' => $row['lastRotatedAt'] ?? null,
                     'syncable' => $this->aiProviderService->isSyncable($driver),
                     'modelCount' => (int) ($counts[$driver] ?? 0),

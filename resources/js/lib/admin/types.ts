@@ -169,6 +169,8 @@ export interface AiProviderRow {
     kind: AiProviderKind;
     credentialFields: string[];
     configured: boolean;
+    /** Where the key comes from: a saved DB row, the .env config, or nothing. */
+    source: 'db' | 'env' | null;
     masked: string | null;
     lastRotatedAt: ISODate | null;
     syncable: boolean;

@@ -40,7 +40,9 @@ const keyTarget = ref<AiProviderRow | null>(null);
 
 function openKeyDialog(provider: AiProviderRow) {
     keyTarget.value = provider;
-    keyDialogMode.value = provider.configured ? 'rotate' : 'add';
+    // Only a saved DB key is "rotated"; an env-sourced (or unset) provider gets
+    // a new DB key that overrides the .env value.
+    keyDialogMode.value = provider.source === 'db' ? 'rotate' : 'add';
     keyDialogOpen.value = true;
 }
 
@@ -131,7 +133,10 @@ function formatRelative(iso: string | null): string {
                         v-if="p.configured"
                         class="text-right text-[10px] text-ink-subtle"
                     >
-                        <p>
+                        <p v-if="p.source === 'env'" class="text-sp-warning">
+                            {{ t('admin.ai.providers.from_env') }}
+                        </p>
+                        <p v-else>
                             {{ t('admin.ai.providers.rotated_prefix') }}
                             {{ formatRelative(p.lastRotatedAt) }}
                         </p>
@@ -207,7 +212,10 @@ function formatRelative(iso: string | null): string {
                         v-if="p.configured"
                         class="text-right text-[10px] text-ink-subtle"
                     >
-                        <p>
+                        <p v-if="p.source === 'env'" class="text-sp-warning">
+                            {{ t('admin.ai.providers.from_env') }}
+                        </p>
+                        <p v-else>
                             {{ t('admin.ai.providers.rotated_prefix') }}
                             {{ formatRelative(p.lastRotatedAt) }}
                         </p>
