@@ -3,11 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\RecomputeEmbeddingsJob;
 use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
-use App\Models\AppSetting;
-use App\Models\KnowledgeBase;
+use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -26,26 +24,17 @@ use Inertia\Response;
  */
 class AdminAiController extends Controller
 {
-    private const KEY_PRIMARY = 'admin_v2.ai.primary_chat_model_id';
-
-    private const KEY_FALLBACK = 'admin_v2.ai.fallback_chat_model_id';
-
-    private const KEY_EMBEDDING = 'admin_v2.ai.embedding_model_id';
-
-    private const KEY_STREAMING = 'admin_v2.ai.streaming';
-
-    private const KEY_TEMPERATURE = 'admin_v2.ai.temperature';
-
-    private const KEY_MAX_TOKENS = 'admin_v2.ai.max_tokens';
-
-    public function __construct(private AiProviderService $aiProviderService) {}
+    public function __construct(
+        private AiProviderService $aiProviderService,
+        private AiDefaults $aiDefaults,
+    ) {}
 
     public function defaults(): Response
     {
         return Inertia::render('admin/Ai/Defaults', [
+            'modules' => AiDefaults::MODULES,
             'defaults' => $this->readDefaults(),
             'chatModels' => $this->serialiseEnabledModels('chat'),
-            'embeddingModels' => $this->serialiseEnabledModels('embedding'),
         ]);
     }
 
@@ -111,47 +100,28 @@ class AdminAiController extends Controller
 
     public function updateDefaults(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            // ai_catalog_models.id is an auto-incrementing integer — accept
-            // either int or string and cast below.
-            'primaryChatModelId' => ['sometimes', 'nullable', Rule::exists('ai_catalog_models', 'id')->where('capability', 'chat')],
-            'fallbackChatModelId' => ['sometimes', 'nullable', Rule::exists('ai_catalog_models', 'id')->where('capability', 'chat')],
-            'embeddingModelId' => ['sometimes', 'nullable', Rule::exists('ai_catalog_models', 'id')->where('capability', 'embeddings')],
-            'streaming' => ['sometimes', 'boolean'],
-            'temperature' => ['sometimes', 'numeric', 'between:0,2'],
-            'maxTokens' => ['sometimes', 'integer', 'between:1,200000'],
-        ]);
+        // Per-module primary/fallback chat model. The value is an
+        // ai_catalog_models id (what the select submits); null/'' clears it.
+        $modelRule = ['sometimes', 'nullable', Rule::exists('ai_catalog_models', 'id')->where('capability', 'chat')];
 
-        // Detect embedding-model swaps so we can fire the reindex job.
-        $previousEmbedding = AppSetting::getValue(self::KEY_EMBEDDING);
-        $embeddingChanged = false;
-
-        if ($request->has('primaryChatModelId')) {
-            AppSetting::setValue(self::KEY_PRIMARY, (string) ($validated['primaryChatModelId'] ?? ''));
-        }
-        if ($request->has('fallbackChatModelId')) {
-            AppSetting::setValue(self::KEY_FALLBACK, (string) ($validated['fallbackChatModelId'] ?? ''));
-        }
-        if ($request->has('embeddingModelId')) {
-            $nextEmbedding = (string) ($validated['embeddingModelId'] ?? '');
-            $prev = (string) ($previousEmbedding ?? '');
-            // Only consider it a swap when there was a previous model AND it
-            // differs from the new one. First-time assignment is a fresh set.
-            $embeddingChanged = $prev !== '' && $prev !== $nextEmbedding && $nextEmbedding !== '';
-            AppSetting::setValue(self::KEY_EMBEDDING, $nextEmbedding);
-        }
-        if ($request->has('streaming')) {
-            AppSetting::setBool(self::KEY_STREAMING, (bool) $validated['streaming']);
-        }
-        if ($request->has('temperature')) {
-            AppSetting::setValue(self::KEY_TEMPERATURE, (string) $validated['temperature']);
-        }
-        if ($request->has('maxTokens')) {
-            AppSetting::setValue(self::KEY_MAX_TOKENS, (string) $validated['maxTokens']);
+        $rules = [];
+        foreach (AiDefaults::MODULES as $module) {
+            $rules["{$module}.primary"] = $modelRule;
+            $rules["{$module}.fallback"] = $modelRule;
         }
 
-        if ($embeddingChanged) {
-            $this->dispatchEmbeddingReindex((string) $validated['embeddingModelId']);
+        $validated = $request->validate($rules);
+
+        foreach (AiDefaults::MODULES as $module) {
+            foreach (['primary', 'fallback'] as $slot) {
+                if ($request->has("{$module}.{$slot}")) {
+                    $this->aiDefaults->setCatalogId(
+                        $module,
+                        $slot,
+                        $this->nullableString(data_get($validated, "{$module}.{$slot}")),
+                    );
+                }
+            }
         }
 
         return back()->with('success', __('AI defaults updated.'));
@@ -325,16 +295,22 @@ class AdminAiController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /**
+     * Per-module primary/fallback as catalog ids (what the admin selects use).
+     *
+     * @return array<string, array{primary: ?string, fallback: ?string}>
+     */
     private function readDefaults(): array
     {
-        return [
-            'primaryChatModelId' => $this->nullableString(AppSetting::getValue(self::KEY_PRIMARY)),
-            'fallbackChatModelId' => $this->nullableString(AppSetting::getValue(self::KEY_FALLBACK)),
-            'embeddingModelId' => $this->nullableString(AppSetting::getValue(self::KEY_EMBEDDING)),
-            'streaming' => AppSetting::getBool(self::KEY_STREAMING, true),
-            'temperature' => (float) AppSetting::getValue(self::KEY_TEMPERATURE, '0.7'),
-            'maxTokens' => AppSetting::getInt(self::KEY_MAX_TOKENS, 4096),
-        ];
+        $out = [];
+        foreach (AiDefaults::MODULES as $module) {
+            $out[$module] = [
+                'primary' => $this->aiDefaults->primaryId($module),
+                'fallback' => $this->aiDefaults->fallbackId($module),
+            ];
+        }
+
+        return $out;
     }
 
     private function nullableString(mixed $value): ?string
@@ -435,18 +411,5 @@ class AdminAiController extends Controller
         }
 
         return substr($key, 0, 6).'…'.substr($key, -4);
-    }
-
-    /**
-     * Dispatch the reindex job for every KB that depends on the previous
-     * embedding model so their vectors are regenerated with the new one.
-     */
-    private function dispatchEmbeddingReindex(string $newModelId): void
-    {
-        KnowledgeBase::query()->chunk(50, function ($knowledgeBases) use ($newModelId) {
-            foreach ($knowledgeBases as $kb) {
-                RecomputeEmbeddingsJob::dispatch($kb->id, $newModelId);
-            }
-        });
     }
 }

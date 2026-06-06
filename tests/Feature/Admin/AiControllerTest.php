@@ -1,13 +1,10 @@
 <?php
 
-use App\Jobs\RecomputeEmbeddingsJob;
 use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
 use App\Models\AppSetting;
-use App\Models\KnowledgeBase;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 use Spatie\Permission\Models\Role;
 
 beforeEach(function () {
@@ -38,19 +35,19 @@ function seedEmbeddingModel(string $modelId = 'test-embedding-model-1'): AiCatal
     );
 }
 
-test('defaults tab renders with current settings + enabled models', function () {
+test('defaults tab renders per-module primary/fallback with enabled chat models', function () {
     $admin = sysadminForAi();
     seedChatModel();
-    seedEmbeddingModel();
 
     $this->actingAs($admin)
         ->get('/admin/ai')
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('admin/Ai/Defaults')
-            ->has('defaults')
-            ->has('chatModels.0')
-            ->has('embeddingModels.0'));
+            ->has('modules', 4)
+            ->has('defaults.chat')
+            ->has('defaults.chatbots')
+            ->has('chatModels.0'));
 });
 
 test('catalog tab lists every catalog model', function () {
@@ -69,72 +66,26 @@ test('catalog tab lists every catalog model', function () {
             ->has('models', $initialCount));
 });
 
-test('updateDefaults saves the primary chat model', function () {
+test('updateDefaults saves a module primary and fallback chat model', function () {
     $admin = sysadminForAi();
-    $model = seedChatModel();
+    $primary = seedChatModel('anthropic', 'p-model');
+    $fallback = seedChatModel('openai', 'f-model');
 
     $this->actingAs($admin)
-        ->patch('/admin/ai/defaults', ['primaryChatModelId' => $model->id])
+        ->patch('/admin/ai/defaults', ['chat' => ['primary' => $primary->id, 'fallback' => $fallback->id]])
         ->assertRedirect();
 
-    expect((string) AppSetting::getValue('admin_v2.ai.primary_chat_model_id'))
-        ->toBe((string) $model->id);
+    expect((string) AppSetting::getValue('admin_v2.ai.chat.primary'))->toBe((string) $primary->id)
+        ->and((string) AppSetting::getValue('admin_v2.ai.chat.fallback'))->toBe((string) $fallback->id);
 });
 
-test('updateDefaults rejects a non-chat model as primary', function () {
+test('updateDefaults rejects a non-chat model as a module default', function () {
     $admin = sysadminForAi();
     $embed = seedEmbeddingModel();
 
     $this->actingAs($admin)
-        ->patch('/admin/ai/defaults', ['primaryChatModelId' => $embed->id])
-        ->assertSessionHasErrors(['primaryChatModelId']);
-});
-
-test('updateDefaults clamps temperature to 0..2', function () {
-    $admin = sysadminForAi();
-
-    $this->actingAs($admin)
-        ->patch('/admin/ai/defaults', ['temperature' => 5])
-        ->assertSessionHasErrors(['temperature']);
-
-    $this->actingAs($admin)
-        ->patch('/admin/ai/defaults', ['temperature' => 0.3])
-        ->assertRedirect();
-});
-
-test('embedding model swap dispatches RecomputeEmbeddingsJob per KB', function () {
-    Queue::fake();
-
-    $admin = sysadminForAi();
-    $initial = seedEmbeddingModel('text-embedding-3-small');
-    $replacement = seedEmbeddingModel('text-embedding-3-large');
-
-    AppSetting::setValue('admin_v2.ai.embedding_model_id', $initial->id);
-
-    KnowledgeBase::factory()->count(2)->create(['user_id' => $admin->id]);
-
-    $response = $this->actingAs($admin)
-        ->patch('/admin/ai/defaults', ['embeddingModelId' => $replacement->id]);
-
-    $response->assertSessionHasNoErrors();
-    $response->assertRedirect();
-
-    Queue::assertPushed(RecomputeEmbeddingsJob::class, 2);
-});
-
-test('first-time embedding assignment does not dispatch the reindex job', function () {
-    Queue::fake();
-
-    $admin = sysadminForAi();
-    $first = seedEmbeddingModel();
-    KnowledgeBase::factory()->create(['user_id' => $admin->id]);
-
-    // No existing embedding stored — saving for the first time is just a set.
-    $this->actingAs($admin)
-        ->patch('/admin/ai/defaults', ['embeddingModelId' => $first->id])
-        ->assertRedirect();
-
-    Queue::assertNotPushed(RecomputeEmbeddingsJob::class);
+        ->patch('/admin/ai/defaults', ['builder' => ['primary' => $embed->id]])
+        ->assertSessionHasErrors(['builder.primary']);
 });
 
 test('toggleModel flips is_enabled on the catalog row', function () {
@@ -503,6 +454,6 @@ test('non-sysadmin is blocked from /admin/ai', function () {
         ])
         ->assertForbidden();
     $this->actingAs($member)
-        ->patch('/admin/ai/defaults', ['temperature' => 0.2])
+        ->patch('/admin/ai/defaults', ['chat' => ['primary' => null]])
         ->assertForbidden();
 });
