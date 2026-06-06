@@ -55,11 +55,12 @@ class CloudProviderFactory extends Factory
             'driver' => 'postgresql',
             'display_name' => 'PostgreSQL',
             'credentials' => [
-                // Use an unreachable port by default so tests don't accidentally
-                // hit a local PostgreSQL running on 5432 when resolving this
-                // provider's connection. Override explicitly when a real DB
-                // is required by the test.
-                'host' => '127.0.0.1',
+                // A public IP with an unreachable port: tests never actually
+                // connect (the connection is built lazily), and a tenant BYODB
+                // host must be public anyway — an internal host (127.0.0.1, RFC
+                // 1918, link-local) is rejected by the SSRF guard in
+                // buildConnection. Override explicitly when a real DB is needed.
+                'host' => '8.8.8.8',
                 'port' => '5999',
                 'database' => 'tenant_db_'.fake()->unique()->bothify('???###'),
                 'username' => 'tenant',

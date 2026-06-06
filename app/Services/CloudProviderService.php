@@ -6,6 +6,8 @@ use App\Enums\Visibility;
 use App\Models\CloudProvider;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Security\Ssrf\SsrfBlockedException;
+use App\Services\Security\Ssrf\SsrfGuard;
 use Aws\S3\S3Client;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Connection;
@@ -18,9 +20,34 @@ use Throwable;
 
 class CloudProviderService
 {
+    /**
+     * Connect timeout (seconds) for tenant-supplied (BYODB) databases, so a slow
+     * or black-holed host can't hang a request/worker.
+     */
+    private const BYODB_CONNECT_TIMEOUT = 5;
+
     public function __construct(
         private VectorStoreSchema $vectorStoreSchema,
+        private SsrfGuard $ssrfGuard,
     ) {}
+
+    /**
+     * Reject a tenant-supplied DB host that resolves to an internal/private
+     * address (SSRF): without this the runtime would let a tenant make the
+     * server dial the shared cluster, the VPC, or the cloud metadata endpoint —
+     * and probe the internal network via connection timing. Reuses the central
+     * SSRF guard by synthesizing an https URL; only the host is validated.
+     *
+     * @throws SsrfBlockedException when the host resolves to a blocked range
+     */
+    private function assertDatabaseHostIsSafe(string $host): void
+    {
+        $hostForUrl = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false
+            ? '['.$host.']'
+            : $host;
+
+        $this->ssrfGuard->inspect('https://'.$hostForUrl);
+    }
 
     public const KIND_STORAGE = 'storage';
 
@@ -507,10 +534,14 @@ class CloudProviderService
         }
 
         $credentials = $provider->credentials ?? [];
+        $host = $credentials['host'] ?? '127.0.0.1';
+
+        // SSRF: a tenant controls this host — block internal/private targets.
+        $this->assertDatabaseHostIsSafe($host);
 
         Config::set('database.connections.'.self::RUNTIME_DB_CONNECTION, [
             'driver' => 'pgsql',
-            'host' => $credentials['host'] ?? '127.0.0.1',
+            'host' => $host,
             'port' => (int) ($credentials['port'] ?? 5432),
             'database' => $credentials['database'] ?? '',
             'username' => $credentials['username'] ?? '',
@@ -519,7 +550,10 @@ class CloudProviderService
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
-            'sslmode' => $credentials['sslmode'] ?? 'prefer',
+            // Secure-by-default for an external connection: force TLS unless the
+            // tenant explicitly downgrades it in their stored credentials.
+            'sslmode' => $credentials['sslmode'] ?? 'require',
+            'options' => [PDO::ATTR_TIMEOUT => self::BYODB_CONNECT_TIMEOUT],
         ]);
 
         DB::purge(self::RUNTIME_DB_CONNECTION);
@@ -597,20 +631,30 @@ class CloudProviderService
             return ['success' => false, 'message' => __('Host and database are required.')];
         }
 
+        // SSRF: the "test connection" button is itself a probe vector — block an
+        // internal/private host BEFORE any connection attempt so it can't be used
+        // to port-scan the network. Generic message, no detail (no info leak).
+        try {
+            $this->assertDatabaseHostIsSafe($host);
+        } catch (SsrfBlockedException) {
+            return ['success' => false, 'message' => __('That database host is not allowed.')];
+        }
+
         $port = (int) ($credentials['port'] ?? 5432);
-        $sslmode = $credentials['sslmode'] ?? 'prefer';
+        $sslmode = $credentials['sslmode'] ?? 'require';
 
         $dsn = sprintf(
-            'pgsql:host=%s;port=%d;dbname=%s;sslmode=%s',
+            'pgsql:host=%s;port=%d;dbname=%s;sslmode=%s;connect_timeout=%d',
             $host,
             $port,
             $database,
             $sslmode,
+            self::BYODB_CONNECT_TIMEOUT,
         );
 
         try {
             $pdo = new PDO($dsn, $credentials['username'] ?? '', $credentials['password'] ?? '', [
-                PDO::ATTR_TIMEOUT => 5,
+                PDO::ATTR_TIMEOUT => self::BYODB_CONNECT_TIMEOUT,
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             ]);
             $pdo->query('SELECT 1');
@@ -640,9 +684,10 @@ class CloudProviderService
      */
     public function inspectDatabase(CloudProvider $provider): array
     {
-        $connection = $this->buildConnection($provider);
-
         try {
+            // Inside the try: buildConnection can throw (e.g. SsrfBlockedException
+            // for an internal host) — surface it as unreachable, not a 500.
+            $connection = $this->buildConnection($provider);
             $hasSchema = $this->vectorStoreSchema->hasSchema($connection);
 
             return [
@@ -675,9 +720,10 @@ class CloudProviderService
      */
     public function installVectorExtension(CloudProvider $provider): array
     {
-        $connection = $this->buildConnection($provider);
-
         try {
+            // Inside the try: buildConnection can throw (e.g. SsrfBlockedException
+            // for an internal host) — surface it as unreachable, not a 500.
+            $connection = $this->buildConnection($provider);
             $result = $this->vectorStoreSchema->installExtension($connection);
         } catch (Throwable $e) {
             return [

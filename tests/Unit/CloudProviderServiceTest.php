@@ -5,6 +5,7 @@ use App\Models\CloudProvider;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\CloudProviderService;
+use App\Services\Security\Ssrf\SsrfBlockedException;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -115,6 +116,38 @@ test('tenantConnectionFor returns the app default when a personal user has no pr
     $user = User::factory()->create();
 
     expect($this->service->tenantConnectionFor($user)->getName())->toBe(config('database.default'));
+});
+
+test('buildConnection rejects an internal/private BYODB host (SSRF)', function (string $host) {
+    $provider = CloudProvider::factory()->postgres()->create([
+        'credentials' => [
+            'host' => $host,
+            'port' => '5432',
+            'database' => 'evil',
+            'username' => 'u',
+            'password' => 'p',
+        ],
+    ]);
+
+    expect(fn () => $this->service->buildConnection($provider))
+        ->toThrow(SsrfBlockedException::class);
+})->with([
+    'loopback' => '127.0.0.1',
+    'private' => '10.1.2.3',
+    'link-local / cloud metadata' => '169.254.169.254',
+]);
+
+test('testDatabaseForPayload refuses an internal host without probing it', function () {
+    $result = $this->service->testDatabaseForPayload('postgresql', [
+        'host' => '169.254.169.254',
+        'database' => 'x',
+        'username' => 'u',
+        'password' => 'p',
+    ]);
+
+    expect($result['success'])->toBeFalse()
+        ->and($result['message'])->toBe('That database host is not allowed.')
+        ->and($result)->not->toHaveKey('detail');
 });
 
 test('resolveStorage with null organization only returns globals', function () {
@@ -300,7 +333,7 @@ test('tenantConnectionFor with null user returns the default connection', functi
 test('tenantConnectionFor returns the tenant_custom connection when a provider is resolved', function () {
     CloudProvider::factory()->postgres()->global()->create([
         'credentials' => [
-            'host' => '127.0.0.1',
+            'host' => '8.8.8.8', // public literal: passes the SSRF guard, never connected
             'port' => '5432',
             'database' => 'probe_'.uniqid(),
             'username' => 'u',
@@ -324,7 +357,7 @@ test('tenantConnectionFor prefers the tenant provider over the global one', func
 
     CloudProvider::factory()->postgres()->global()->create([
         'credentials' => [
-            'host' => 'global-host',
+            'host' => '1.1.1.1', // public literals: pass the SSRF guard, never connected
             'port' => '5432',
             'database' => 'global_db',
             'username' => 'u',
@@ -334,7 +367,7 @@ test('tenantConnectionFor prefers the tenant provider over the global one', func
     ]);
     CloudProvider::factory()->postgres()->forOrganization($org, $user)->create([
         'credentials' => [
-            'host' => 'tenant-host',
+            'host' => '8.8.4.4',
             'port' => '5432',
             'database' => 'tenant_db',
             'username' => 'u',
@@ -345,14 +378,14 @@ test('tenantConnectionFor prefers the tenant provider over the global one', func
 
     $this->service->tenantConnectionFor($user);
 
-    expect(config('database.connections.'.CloudProviderService::RUNTIME_DB_CONNECTION.'.host'))->toBe('tenant-host')
+    expect(config('database.connections.'.CloudProviderService::RUNTIME_DB_CONNECTION.'.host'))->toBe('8.8.4.4')
         ->and(config('database.connections.'.CloudProviderService::RUNTIME_DB_CONNECTION.'.database'))->toBe('tenant_db');
 });
 
 test('buildConnection registers the runtime connection and returns it', function () {
     $provider = CloudProvider::factory()->postgres()->global()->create([
         'credentials' => [
-            'host' => '127.0.0.1',
+            'host' => '8.8.8.8', // public literal: passes the SSRF guard, never connected
             'port' => '5432',
             'database' => 'nonexistent_'.uniqid(),
             'username' => 'u',
@@ -364,7 +397,7 @@ test('buildConnection registers the runtime connection and returns it', function
     $connection = $this->service->buildConnection($provider);
 
     expect($connection)->not->toBeNull()
-        ->and(config('database.connections.'.CloudProviderService::RUNTIME_DB_CONNECTION.'.host'))->toBe('127.0.0.1')
+        ->and(config('database.connections.'.CloudProviderService::RUNTIME_DB_CONNECTION.'.host'))->toBe('8.8.8.8')
         ->and(config('database.connections.'.CloudProviderService::RUNTIME_DB_CONNECTION.'.database'))
         ->toStartWith('nonexistent_');
 });

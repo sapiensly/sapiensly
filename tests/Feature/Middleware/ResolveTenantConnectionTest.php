@@ -49,7 +49,8 @@ test('middleware leaves the default connection untouched when no provider is con
 test('middleware registers the tenant_custom connection when a global provider exists', function () {
     CloudProvider::factory()->postgres()->global()->create([
         'credentials' => [
-            'host' => 'global-host.example',
+            // public literal: passes the SSRF guard, never connected
+            'host' => '1.1.1.1',
             'port' => '5432',
             'database' => 'global_db',
             'username' => 'u',
@@ -63,7 +64,7 @@ test('middleware registers the tenant_custom connection when a global provider e
     runMiddleware($user);
 
     expect(config('database.connections.'.CloudProviderService::RUNTIME_DB_CONNECTION.'.host'))
-        ->toBe('global-host.example');
+        ->toBe('1.1.1.1');
 });
 
 test('middleware prefers the tenant provider over the global one', function () {
@@ -78,7 +79,7 @@ test('middleware prefers the tenant provider over the global one', function () {
 
     CloudProvider::factory()->postgres()->global()->create([
         'credentials' => [
-            'host' => 'global-host',
+            'host' => '1.1.1.1', // public literals: pass the SSRF guard, never connected
             'port' => '5432',
             'database' => 'global_db',
             'username' => 'u',
@@ -88,7 +89,7 @@ test('middleware prefers the tenant provider over the global one', function () {
     ]);
     CloudProvider::factory()->postgres()->forOrganization($org, $user)->create([
         'credentials' => [
-            'host' => 'tenant-host',
+            'host' => '8.8.4.4',
             'port' => '5432',
             'database' => 'tenant_db',
             'username' => 'u',
@@ -100,5 +101,5 @@ test('middleware prefers the tenant provider over the global one', function () {
     runMiddleware($user);
 
     expect(config('database.connections.'.CloudProviderService::RUNTIME_DB_CONNECTION.'.host'))
-        ->toBe('tenant-host');
+        ->toBe('8.8.4.4');
 });
