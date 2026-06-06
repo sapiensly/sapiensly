@@ -16,6 +16,7 @@ use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Models\Tool;
 use App\Models\User;
+use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\RetrievalService;
 use App\Services\ToolConfigService;
@@ -72,6 +73,7 @@ class ChatAiService
 
     public function __construct(
         private readonly AiProviderService $providers,
+        private readonly AiDefaults $aiDefaults,
     ) {}
 
     public function streamMessage(ChatMessage $placeholder, string $userText, ?string $modelOverride = null, bool $webSearch = false, array $toolIds = []): ChatMessage
@@ -131,7 +133,7 @@ class ChatAiService
             $instructions = trim((string) $agent->prompt_template) !== ''
                 ? (string) $agent->prompt_template
                 : self::SYSTEM_PROMPT;
-            $resolvedModel = $agent->model ?: ($modelOverride ?? $chat->model ?? self::DEFAULT_MODEL);
+            $resolvedModel = $this->aiDefaults->model('chat', $agent->model ?: ($modelOverride ?? $chat->model));
             $ragKbIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->all();
             $toolIds = $agent->tools()->where('status', 'active')->pluck('tools.id')->all();
         } else {
@@ -139,7 +141,7 @@ class ChatAiService
             if ($chat->project?->custom_instructions) {
                 $instructions .= "\n\n## Project instructions\n".$chat->project->custom_instructions;
             }
-            $resolvedModel = $modelOverride ?? $placeholder->model ?? $chat->model ?? self::DEFAULT_MODEL;
+            $resolvedModel = $this->aiDefaults->model('chat', $modelOverride ?? $placeholder->model ?? $chat->model);
             $ragKbIds = $chat->project
                 ? $chat->project->knowledgeBases()->pluck('knowledge_bases.id')->all()
                 : [];

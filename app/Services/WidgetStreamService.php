@@ -9,6 +9,7 @@ use App\Models\Chatbot;
 use App\Models\Conversation;
 use App\Models\WidgetConversation;
 use App\Models\WidgetMessage;
+use App\Services\Ai\AiDefaults;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -22,7 +23,8 @@ class WidgetStreamService
 {
     public function __construct(
         private LLMService $llmService,
-        private TeamOrchestrationService $orchestrationService
+        private TeamOrchestrationService $orchestrationService,
+        private AiDefaults $aiDefaults,
     ) {}
 
     /**
@@ -59,6 +61,11 @@ class WidgetStreamService
         $knowledgeBases = [];
         $toolCalls = [];
         $error = null;
+
+        // Fall back to the chatbots default model when the agent pins none.
+        if (empty($agent->model)) {
+            $agent->model = $this->aiDefaults->model('chatbots');
+        }
 
         try {
             Log::info('Widget: Starting agent stream', [

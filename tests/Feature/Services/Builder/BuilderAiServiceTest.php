@@ -13,6 +13,7 @@ use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\Record;
 use App\Models\User;
+use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Manifest\AppManifestService;
@@ -64,6 +65,7 @@ beforeEach(function () {
         app(RecordQueryService::class),
         app(RecordWriteService::class),
         app(TenantStorage::class),
+        app(AiDefaults::class),
     );
 });
 

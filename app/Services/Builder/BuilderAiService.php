@@ -23,6 +23,7 @@ use App\Models\AppVersion;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\User;
+use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
@@ -50,21 +51,6 @@ use Laravel\Ai\Streaming\Events\TextStart;
 class BuilderAiService
 {
     /**
-     * Default model id. Must match an entry in the user's AI provider catalog
-     * (AiProviderService::MODEL_CATALOGS). If the user has not enabled this
-     * model, resolveProvider() falls back to the user's default provider.
-     */
-    /**
-     * Claude Haiku 4.5 — fast and cheap, plenty smart for manifest edits.
-     * Switched away from Sonnet 4 because most tenants only enable Haiku in
-     * their /system/ai-providers config; calling Sonnet when the user's
-     * API key doesn't unlock it makes the HTTP stream hang silently instead
-     * of erroring, freezing the Builder UI on "Thinking…" until the worker
-     * timeout kills it.
-     */
-    private const MODEL = 'claude-haiku-4-5-20251001';
-
-    /**
      * Model used specifically for "Pedir revisión visual" turns. Sonnet 4.5
      * follows scope instructions much more reliably than Haiku — relevant
      * here because visual review has a hard scope limit ("don't add new
@@ -77,10 +63,10 @@ class BuilderAiService
 
     private const MAX_HISTORY_MESSAGES = 30;
 
-    /** The default chat model id, exposed so the UI can pre-select it in the model picker. */
+    /** The default builder model id, exposed so the UI can pre-select it in the model picker. */
     public static function defaultModel(): string
     {
-        return self::MODEL;
+        return app(AiDefaults::class)->model('builder');
     }
 
     public function __construct(
@@ -90,6 +76,7 @@ class BuilderAiService
         private RecordQueryService $records,
         private RecordWriteService $writer,
         private TenantStorage $tenantStorage,
+        private AiDefaults $aiDefaults,
     ) {}
 
     public function startConversation(App $app, User $user): BuilderConversation
@@ -160,22 +147,25 @@ class BuilderAiService
             $user = $conversation->user;
             if ($user !== null) {
                 $this->providers->applyRuntimeConfig($user);
-                $provider = $this->providers->resolveProvider(self::MODEL, $user);
-            } else {
-                $provider = Lab::Anthropic;
             }
 
-            Log::info('Builder AI calling provider', [
-                'conversation_id' => $conversation->id,
-                'provider' => $provider->value,
-                'model' => self::MODEL,
-            ]);
+            $promptText = $prompt instanceof UserMessage ? ($prompt->content ?? '') : $userText;
 
-            $response = $sdkAgent->prompt(
-                $prompt instanceof UserMessage ? ($prompt->content ?? '') : $userText,
-                provider: $provider,
-                model: self::MODEL,
-            );
+            // Resolve the builder's primary model; on an LLM/provider error,
+            // withFallback re-runs the prompt with the configured fallback.
+            $response = $this->aiDefaults->withFallback('builder', function (string $model) use ($sdkAgent, $promptText, $user, $conversation) {
+                $provider = $user !== null
+                    ? $this->providers->resolveProvider($model, $user)
+                    : Lab::Anthropic;
+
+                Log::info('Builder AI calling provider', [
+                    'conversation_id' => $conversation->id,
+                    'provider' => $provider->value,
+                    'model' => $model,
+                ]);
+
+                return $sdkAgent->prompt($promptText, provider: $provider, model: $model);
+            });
             $assistantText = $response->text ?? '';
 
             Log::info('Builder AI provider responded', [
@@ -301,7 +291,7 @@ class BuilderAiService
         // 4.5 because Haiku tended to ignore the "don't add new features"
         // hard scope limit when the screenshot looked incomplete). Default
         // stays at Haiku for the cheap-and-fast common chat path.
-        $resolvedModel = $modelOverride ?? self::MODEL;
+        $resolvedModel = $this->aiDefaults->model('builder', $modelOverride);
 
         try {
             $user = $conversation->user;
