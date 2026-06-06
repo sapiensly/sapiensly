@@ -7,6 +7,9 @@ import SettingsCard from '@/components/admin/SettingsCard.vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import {
+    Activity,
+    AlertTriangle,
+    Check,
     Library,
     Loader2,
     Plug,
@@ -71,6 +74,45 @@ function syncModels(provider: AiProviderRow) {
     );
 }
 
+// ── Connection test ─────────────────────────────────────────────────────────
+type TestResult = { success: boolean; message: string; detail?: string };
+const testing = reactive<Record<string, boolean>>({});
+const testResult = reactive<Record<string, TestResult | null>>({});
+
+async function testConnection(provider: AiProviderRow) {
+    testing[provider.driver] = true;
+    testResult[provider.driver] = null;
+
+    try {
+        const response = await fetch('/admin/ai/test-connection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-XSRF-TOKEN': decodeURIComponent(
+                    document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
+                ),
+            },
+            body: JSON.stringify({ driver: provider.driver }),
+        });
+        testResult[provider.driver] = await response.json();
+    } catch {
+        testResult[provider.driver] = {
+            success: false,
+            message: t('admin.ai.providers.test_failed'),
+        };
+    } finally {
+        testing[provider.driver] = false;
+    }
+
+    // Clear a success quickly; keep an error around longer so it can be read.
+    const driver = provider.driver;
+    const delay = testResult[driver]?.success ? 5000 : 15000;
+    setTimeout(() => {
+        testResult[driver] = null;
+    }, delay);
+}
+
 function formatRelative(iso: string | null): string {
     if (!iso) return '—';
     const then = new Date(iso).getTime();
@@ -119,9 +161,12 @@ function formatRelative(iso: string | null): string {
                             <span class="text-ink-subtle">
                                 ·
                                 {{
-                                    t('admin.ai.providers.models_enabled_count', {
-                                        count: p.modelCount,
-                                    })
+                                    t(
+                                        'admin.ai.providers.models_enabled_count',
+                                        {
+                                            count: p.modelCount,
+                                        },
+                                    )
                                 }}
                             </span>
                         </p>
@@ -155,6 +200,44 @@ function formatRelative(iso: string | null): string {
                             :class="syncing[p.driver] ? 'animate-spin' : ''"
                         />
                         {{ t('admin.ai.providers.sync_cta') }}
+                    </Button>
+                    <span
+                        v-if="p.configured && testResult[p.driver]"
+                        class="inline-flex items-center gap-1 text-[10px]"
+                        :class="
+                            testResult[p.driver]?.success
+                                ? 'text-emerald-500'
+                                : 'text-sp-warning'
+                        "
+                        :title="
+                            testResult[p.driver]?.detail ??
+                            testResult[p.driver]?.message
+                        "
+                    >
+                        <component
+                            :is="
+                                testResult[p.driver]?.success
+                                    ? Check
+                                    : AlertTriangle
+                            "
+                            class="size-3"
+                        />
+                        {{ testResult[p.driver]?.message }}
+                    </span>
+                    <Button
+                        v-if="p.configured"
+                        variant="outline"
+                        size="sm"
+                        class="gap-1 border-medium bg-surface text-xs"
+                        :disabled="testing[p.driver]"
+                        @click="testConnection(p)"
+                    >
+                        <component
+                            :is="testing[p.driver] ? Loader2 : Activity"
+                            class="size-3"
+                            :class="testing[p.driver] ? 'animate-spin' : ''"
+                        />
+                        {{ t('admin.ai.providers.test_cta') }}
                     </Button>
                     <Button
                         variant="outline"
@@ -198,9 +281,12 @@ function formatRelative(iso: string | null): string {
                             <span class="text-ink-subtle">
                                 ·
                                 {{
-                                    t('admin.ai.providers.models_enabled_count', {
-                                        count: p.modelCount,
-                                    })
+                                    t(
+                                        'admin.ai.providers.models_enabled_count',
+                                        {
+                                            count: p.modelCount,
+                                        },
+                                    )
                                 }}
                             </span>
                         </p>
@@ -229,6 +315,44 @@ function formatRelative(iso: string | null): string {
                     >
                         <SlidersHorizontal class="size-3" />
                         {{ t('admin.ai.providers.models_cta') }}
+                    </Button>
+                    <span
+                        v-if="p.configured && testResult[p.driver]"
+                        class="inline-flex items-center gap-1 text-[10px]"
+                        :class="
+                            testResult[p.driver]?.success
+                                ? 'text-emerald-500'
+                                : 'text-sp-warning'
+                        "
+                        :title="
+                            testResult[p.driver]?.detail ??
+                            testResult[p.driver]?.message
+                        "
+                    >
+                        <component
+                            :is="
+                                testResult[p.driver]?.success
+                                    ? Check
+                                    : AlertTriangle
+                            "
+                            class="size-3"
+                        />
+                        {{ testResult[p.driver]?.message }}
+                    </span>
+                    <Button
+                        v-if="p.configured"
+                        variant="outline"
+                        size="sm"
+                        class="gap-1 border-medium bg-surface text-xs"
+                        :disabled="testing[p.driver]"
+                        @click="testConnection(p)"
+                    >
+                        <component
+                            :is="testing[p.driver] ? Loader2 : Activity"
+                            class="size-3"
+                            :class="testing[p.driver] ? 'animate-spin' : ''"
+                        />
+                        {{ t('admin.ai.providers.test_cta') }}
                     </Button>
                     <Button
                         variant="outline"

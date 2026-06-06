@@ -278,25 +278,22 @@ class AdminAiController extends Controller
         return back()->with('success', __(':count new models added.', ['count' => $created]));
     }
 
+    /**
+     * Probe the live connection for a configured driver. Resolves credentials
+     * the same way the rest of the tab does — the saved global DB row wins,
+     * otherwise the config/.env key — so env-sourced providers (the common
+     * case) can be tested too.
+     */
     public function testConnection(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'driver' => ['required', 'string', Rule::in(array_keys(AiProviderService::DRIVER_LABELS))],
         ]);
 
-        $provider = AiProvider::query()
-            ->where('visibility', 'global')
-            ->where('driver', $validated['driver'])
-            ->first();
-
-        if (! $provider) {
-            return response()->json(['ok' => false, 'message' => __('No credential supplied.')]);
-        }
-
-        $result = $this->aiProviderService->testConnection($provider);
+        $result = $this->aiProviderService->testConfiguredDriver($validated['driver']);
 
         return response()->json([
-            'ok' => $result['success'],
+            'success' => $result['success'],
             'message' => $result['message'],
             'detail' => $result['detail'] ?? null,
         ]);

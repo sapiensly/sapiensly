@@ -1626,6 +1626,8 @@
     "admin.ai.providers.rotate_cta": "Rotate",
     "admin.ai.providers.models_cta": "Models",
     "admin.ai.providers.sync_cta": "Sync",
+    "admin.ai.providers.test_cta": "Test",
+    "admin.ai.providers.test_failed": "Test request failed.",
     "admin.ai.providers.badge_vision": "Vision",
     "admin.ai.providers.badge_tools": "Tools",
     "admin.ai.providers.price_free": "Free",

@@ -549,3 +549,54 @@ test('non-sysadmin is blocked from /admin/ai', function () {
         ->patch('/admin/ai/defaults', ['chat' => ['primary' => null]])
         ->assertForbidden();
 });
+
+test('test-connection probes a provider keyed in the DB and returns success', function () {
+    $admin = sysadminForAi();
+    globalProviderFor('anthropic');
+    Http::fake(['api.anthropic.com/*' => Http::response(['ok' => true], 200)]);
+
+    $this->actingAs($admin)
+        ->postJson('/admin/ai/test-connection', ['driver' => 'anthropic'])
+        ->assertOk()
+        ->assertJson(['success' => true]);
+});
+
+test('test-connection probes a provider keyed only in env', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.groq.key' => 'sk-groq-env-1234567890abcd']);
+    Http::fake(['api.groq.com/*' => Http::response(['data' => []], 200)]);
+
+    $this->actingAs($admin)
+        ->postJson('/admin/ai/test-connection', ['driver' => 'groq'])
+        ->assertOk()
+        ->assertJson(['success' => true]);
+});
+
+test('test-connection reports an unconfigured provider as a failure', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.xai.key' => '']);
+
+    $this->actingAs($admin)
+        ->postJson('/admin/ai/test-connection', ['driver' => 'xai'])
+        ->assertOk()
+        ->assertJson(['success' => false]);
+});
+
+test('test-connection surfaces an upstream failure', function () {
+    $admin = sysadminForAi();
+    globalProviderFor('anthropic');
+    Http::fake(['api.anthropic.com/*' => Http::response(['error' => ['message' => 'bad key']], 401)]);
+
+    $this->actingAs($admin)
+        ->postJson('/admin/ai/test-connection', ['driver' => 'anthropic'])
+        ->assertOk()
+        ->assertJson(['success' => false]);
+});
+
+test('test-connection rejects an unknown driver', function () {
+    $admin = sysadminForAi();
+
+    $this->actingAs($admin)
+        ->postJson('/admin/ai/test-connection', ['driver' => 'not-a-driver'])
+        ->assertStatus(422);
+});

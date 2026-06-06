@@ -160,6 +160,40 @@ class AiProviderService
     }
 
     /**
+     * Probe the live connection for a driver using its resolved global
+     * credentials — the saved DB row if present, otherwise the config/.env
+     * key. Mirrors the resolution order of {@see driverConfiguredSource()}.
+     *
+     * @return array{success: bool, message: string, detail?: string}
+     */
+    public function testConfiguredDriver(string $driver): array
+    {
+        $row = AiProvider::query()
+            ->where('visibility', 'global')
+            ->where('driver', $driver)
+            ->first();
+
+        if ($row !== null) {
+            return $this->testConnection($row);
+        }
+
+        $config = (array) config("ai.providers.{$driver}", []);
+        $apiKey = (string) ($config['key'] ?? '');
+
+        if ($apiKey === '') {
+            return ['success' => false, 'message' => __('No API key configured.')];
+        }
+
+        $credentials = array_filter([
+            'api_key' => $apiKey,
+            'url' => $config['url'] ?? null,
+            'api_version' => $config['api_version'] ?? null,
+        ], fn ($value) => $value !== null && $value !== '');
+
+        return $this->testConnectionForPayload($driver, $credentials);
+    }
+
+    /**
      * Where a driver's global key comes from: `db` (saved global provider row,
      * which wins), `env` (config/.env only), or null when neither exists.
      */
