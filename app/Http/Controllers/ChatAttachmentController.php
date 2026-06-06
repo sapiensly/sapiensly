@@ -6,6 +6,7 @@ use App\Http\Requests\Chat\UploadChatAttachmentRequest;
 use App\Models\Chat;
 use App\Models\ChatAttachment;
 use App\Services\Storage\TenantStorage;
+use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -48,7 +49,11 @@ class ChatAttachmentController extends Controller
         $attachment->id = ChatAttachment::generatePrefixedUlid();
 
         $ext = preg_replace('/[^a-zA-Z0-9]/', '', (string) pathinfo($uploaded->getClientOriginalName(), PATHINFO_EXTENSION));
-        $relativePath = "chat_uploads/{$chat->id}/{$attachment->id}".($ext !== '' ? '.'.strtolower($ext) : '');
+        $relativePath = TenantPath::scope(
+            $chat->organization_id,
+            $chat->user_id,
+            "chat_uploads/{$chat->id}/{$attachment->id}".($ext !== '' ? '.'.strtolower($ext) : ''),
+        );
 
         Storage::disk($diskName)->putFileAs(
             dirname($relativePath),

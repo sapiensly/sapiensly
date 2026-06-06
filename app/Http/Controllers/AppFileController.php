@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\App;
 use App\Models\AppFile;
 use App\Services\Storage\TenantStorage;
+use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -73,7 +74,11 @@ class AppFileController extends Controller
 
         $ext = pathinfo($uploaded->getClientOriginalName(), PATHINFO_EXTENSION);
         $ext = preg_replace('/[^a-zA-Z0-9]/', '', (string) $ext);
-        $relativePath = "app_uploads/{$app->id}/{$file->id}".($ext !== '' ? '.'.strtolower($ext) : '');
+        $relativePath = TenantPath::scope(
+            $app->organization_id,
+            $request->user()->id,
+            "app_uploads/{$app->id}/{$file->id}".($ext !== '' ? '.'.strtolower($ext) : ''),
+        );
 
         Storage::disk($diskName)->putFileAs(
             dirname($relativePath),

@@ -35,6 +35,18 @@ test('an uploaded .html file is classified as an Artifact document', function ()
         ->and($doc->file_path)->not->toBeNull();
 });
 
+test('uploaded files are stored under the per-tenant prefix', function () {
+    $user = User::factory()->create(['organization_id' => null]);
+    $file = UploadedFile::fake()->createWithContent('notes.txt', 'hello');
+
+    actingAs($user)
+        ->post('/documents', ['file' => $file, 'visibility' => 'private'])
+        ->assertRedirect();
+
+    $doc = Document::where('user_id', $user->id)->first();
+    expect($doc->file_path)->toStartWith("user/{$user->id}/documents/");
+});
+
 test('an uploaded .htm file is also classified as Artifact', function () {
     $user = User::factory()->create();
     $file = UploadedFile::fake()->createWithContent(

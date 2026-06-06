@@ -10,6 +10,7 @@ use App\Models\Document;
 use App\Models\Folder;
 use App\Models\KnowledgeBase;
 use App\Models\User;
+use App\Support\Storage\TenantPath;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -60,8 +61,12 @@ class DocumentService
             'visibility' => $visibility,
         ]);
 
-        // Now store the file with the document ID in the path
-        $storagePath = "{$user->id}/documents/{$document->id}/{$file->getClientOriginalName()}";
+        // Now store the file under the uniform per-tenant prefix.
+        $storagePath = TenantPath::scope(
+            $user->organization_id,
+            $user->id,
+            "documents/{$document->id}/{$file->getClientOriginalName()}",
+        );
         $this->disk($user->organization_id, $user->id)->put($storagePath, $file->get());
 
         // Update the document with the file path

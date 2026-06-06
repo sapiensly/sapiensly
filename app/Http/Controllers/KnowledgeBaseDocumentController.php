@@ -9,6 +9,7 @@ use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseDocument;
 use App\Services\CloudProviderService;
 use App\Services\VectorStoreService;
+use App\Support\Storage\TenantPath;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -53,10 +54,12 @@ class KnowledgeBaseDocumentController extends Controller
         // Generate unique filename to prevent collisions
         $filename = Str::ulid().'_'.Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)).'.'.$extension;
 
-        // Build tenant-isolated path: {user_id}/knowledge-bases/{kb_id}/{filename}
-        $userId = $request->user()->id;
-        $storagePath = "{$userId}/knowledge-bases/{$knowledgeBase->id}";
-        $fullPath = "{$storagePath}/{$filename}";
+        // Uniform per-tenant prefix: org/{id}|user/{id} + knowledge-bases/{kb}/{file}
+        $fullPath = TenantPath::scope(
+            $request->user()->organization_id,
+            $request->user()->id,
+            "knowledge-bases/{$knowledgeBase->id}/{$filename}",
+        );
 
         // Store file to the resolved tenant storage disk (org or personal)
         $disk = $this->cloudProviderService->diskForOwnerOrFallback(

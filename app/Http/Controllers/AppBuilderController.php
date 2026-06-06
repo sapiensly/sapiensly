@@ -14,6 +14,7 @@ use App\Services\Manifest\AppManifestService;
 use App\Services\Records\BlockDataResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Storage\TenantStorage;
+use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -260,7 +261,7 @@ class AppBuilderController extends Controller
             if (! in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif'], true)) {
                 $ext = 'png';
             }
-            $relative = 'builder_chat_attachments/'.$app->id.'/'.now()->format('Ymd_His').'_'.Str::random(8).'.'.$ext;
+            $relative = TenantPath::scope($app->organization_id, $app->user_id, 'builder_chat_attachments/'.$app->id.'/'.now()->format('Ymd_His').'_'.Str::random(8).'.'.$ext);
             Storage::disk($attachmentDisk)->putFileAs(
                 dirname($relative),
                 $upload,
@@ -337,7 +338,7 @@ class AppBuilderController extends Controller
         if (! in_array($ext, ['png', 'jpg', 'jpeg'], true)) {
             $ext = 'jpg';
         }
-        $filename = 'builder_screenshots/'.$app->id.'/'.now()->format('Ymd_His').'_'.Str::random(8).'.'.$ext;
+        $filename = TenantPath::scope($app->organization_id, $app->user_id, 'builder_screenshots/'.$app->id.'/'.now()->format('Ymd_His').'_'.Str::random(8).'.'.$ext);
         Storage::disk($diskName)->putFileAs(
             dirname($filename),
             $upload,
@@ -483,7 +484,7 @@ class AppBuilderController extends Controller
                 str_contains($attachmentMime ?? '', 'gif') => 'gif',
                 default => 'png',
             };
-            $attachmentPath = 'builder_wireframes/'.$app->id.'/'.now()->format('Ymd_His').'_'.Str::random(8).'.'.$ext;
+            $attachmentPath = TenantPath::scope($app->organization_id, $app->user_id, 'builder_wireframes/'.$app->id.'/'.now()->format('Ymd_His').'_'.Str::random(8).'.'.$ext);
             Storage::disk($attachmentDisk)->put($attachmentPath, $attachmentBytes);
         }
 

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\WhatsAppMessage;
 use App\Services\CloudProviderService;
 use App\Services\WhatsApp\WhatsAppProviderContract;
+use App\Support\Storage\TenantPath;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -66,7 +67,11 @@ class DownloadWhatsAppMediaJob implements ShouldQueue
         $disk = $cloud->diskForOrganizationOrFallback($organization?->id);
 
         $extension = $this->guessExtension($message->media_mime);
-        $path = sprintf('whatsapp/%s/%s%s', $connection->id, $message->id, $extension);
+        $path = TenantPath::scope(
+            $organization?->id,
+            null,
+            sprintf('whatsapp/%s/%s%s', $connection->id, $message->id, $extension),
+        );
 
         $disk->put($path, $bytes);
 
