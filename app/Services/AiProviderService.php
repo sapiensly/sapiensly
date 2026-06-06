@@ -173,24 +173,56 @@ class AiProviderService
             ->where('driver', $driver)
             ->first();
 
-        if ($row !== null) {
+        if ($row !== null && ! empty(($row->credentials ?? [])['api_key'])) {
             return $this->testConnection($row);
         }
 
-        $config = (array) config("ai.providers.{$driver}", []);
-        $apiKey = (string) ($config['key'] ?? '');
+        $credentials = $this->credentialsFromConfig($driver);
 
-        if ($apiKey === '') {
+        if (empty($credentials['api_key'] ?? null)) {
             return ['success' => false, 'message' => __('No API key configured.')];
         }
 
-        $credentials = array_filter([
-            'api_key' => $apiKey,
+        return $this->testConnectionForPayload($driver, $credentials);
+    }
+
+    /**
+     * Resolve a driver's usable global credentials — the saved DB row's
+     * credentials when it carries an api_key, otherwise the config/.env key.
+     * Returns an empty array when neither is set. Single resolution order
+     * shared by the connection test and the catalog sync.
+     *
+     * @return array<string, mixed>
+     */
+    public function resolveGlobalCredentials(string $driver): array
+    {
+        $row = AiProvider::query()
+            ->where('visibility', 'global')
+            ->where('driver', $driver)
+            ->first();
+
+        if ($row !== null && ! empty(($row->credentials ?? [])['api_key'])) {
+            return $row->credentials ?? [];
+        }
+
+        return $this->credentialsFromConfig($driver);
+    }
+
+    /**
+     * Build a credentials array from config/.env for a driver. Maps the
+     * config `key` to `api_key` and carries through `url` / `api_version`.
+     *
+     * @return array<string, mixed>
+     */
+    private function credentialsFromConfig(string $driver): array
+    {
+        $config = (array) config("ai.providers.{$driver}", []);
+
+        return array_filter([
+            'api_key' => (string) ($config['key'] ?? ''),
             'url' => $config['url'] ?? null,
             'api_version' => $config['api_version'] ?? null,
         ], fn ($value) => $value !== null && $value !== '');
-
-        return $this->testConnectionForPayload($driver, $credentials);
     }
 
     /**

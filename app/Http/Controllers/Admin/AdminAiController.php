@@ -199,12 +199,7 @@ class AdminAiController extends Controller
      */
     public function openRouterModels(): JsonResponse
     {
-        $provider = AiProvider::query()
-            ->where('visibility', 'global')
-            ->where('driver', 'openrouter')
-            ->first();
-
-        $credentials = $provider?->credentials ?? [];
+        $credentials = $this->aiProviderService->resolveGlobalCredentials('openrouter');
         $apiKey = (string) ($credentials['api_key'] ?? '');
 
         if ($apiKey === '') {
@@ -251,16 +246,13 @@ class AdminAiController extends Controller
 
         $driver = $validated['driver'];
 
-        $provider = AiProvider::query()
-            ->where('visibility', 'global')
-            ->where('driver', $driver)
-            ->first();
+        $credentials = $this->aiProviderService->resolveGlobalCredentials($driver);
 
-        if (! $provider || empty(($provider->credentials ?? [])['api_key'])) {
+        if (empty($credentials['api_key'] ?? null)) {
             return back()->with('error', __('Add an API key before syncing models.'));
         }
 
-        $models = $this->aiProviderService->fetchProviderModels($driver, $provider->credentials ?? []);
+        $models = $this->aiProviderService->fetchProviderModels($driver, $credentials);
 
         if ($models === []) {
             return back()->with('error', __('No models returned — check the API key and try again.'));

@@ -351,6 +351,45 @@ test('openRouterModels returns the live catalog and current selection', function
         ->assertJsonPath('models.0.tools', true);
 });
 
+test('openRouterModels resolves an env-only key (no DB row)', function () {
+    Http::fake([
+        'openrouter.ai/api/v1/models' => Http::response([
+            'data' => [
+                ['id' => 'openai/gpt-4o', 'name' => 'OpenAI: GPT-4o'],
+            ],
+        ]),
+    ]);
+
+    $admin = sysadminForAi();
+    config(['ai.providers.openrouter.key' => 'sk-or-env-1234567890abcd']);
+
+    $this->actingAs($admin)
+        ->getJson('/admin/ai/providers/openrouter/models')
+        ->assertOk()
+        ->assertJsonMissingPath('error')
+        ->assertJsonCount(1, 'models');
+});
+
+test('syncProviderModels syncs a provider keyed only in env (no DB row)', function () {
+    Http::fake([
+        'api.openai.com/*' => Http::response([
+            'data' => [['id' => 'gpt-4o']],
+        ]),
+    ]);
+
+    $admin = sysadminForAi();
+    config(['ai.providers.openai.key' => 'sk-openai-env-1234567890abcd']);
+
+    $this->actingAs($admin)
+        ->post('/admin/ai/providers/sync-models', ['driver' => 'openai'])
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect(
+        AiCatalogModel::where('driver', 'openai')->where('model_id', 'gpt-4o')->where('capability', 'chat')->count()
+    )->toBe(1);
+});
+
 test('saveOpenRouterModels upserts the selection and prunes deselected rows', function () {
     $admin = sysadminForAi();
 
