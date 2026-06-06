@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesPlatformConnection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ToolGroupItem extends Model
 {
+    use UsesPlatformConnection;
+
     protected $fillable = [
         'tool_group_id',
         'tool_id',

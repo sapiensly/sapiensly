@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesPlatformConnection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class AiCatalogModel extends Model
 {
+    use UsesPlatformConnection;
+
     protected $table = 'ai_catalog_models';
 
     protected $fillable = [

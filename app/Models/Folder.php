@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\Visibility;
 use App\Models\Concerns\HasPrefixedUlid;
 use App\Models\Concerns\HasVisibility;
+use App\Models\Concerns\UsesPlatformConnection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Folder extends Model
 {
     use HasPrefixedUlid, HasVisibility, SoftDeletes;
+    use UsesPlatformConnection;
 
     protected $fillable = [
         'user_id',

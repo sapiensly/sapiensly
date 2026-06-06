@@ -7,6 +7,7 @@ use App\Enums\AgentType;
 use App\Enums\Visibility;
 use App\Models\Concerns\HasPrefixedUlid;
 use App\Models\Concerns\HasVisibility;
+use App\Models\Concerns\UsesPlatformConnection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Agent extends Model
 {
     use HasFactory, HasPrefixedUlid, HasVisibility;
+    use UsesPlatformConnection;
 
     protected $fillable = [
         'user_id',

@@ -5,12 +5,14 @@ namespace App\Models;
 use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\UsesPlatformConnection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OrganizationMembership extends Model
 {
     use HasPrefixedUlid;
+    use UsesPlatformConnection;
 
     protected $fillable = [
         'organization_id',

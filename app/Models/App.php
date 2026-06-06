@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\Visibility;
 use App\Models\Concerns\HasPrefixedUlid;
 use App\Models\Concerns\HasVisibility;
+use App\Models\Concerns\UsesPlatformConnection;
 use Database\Factories\AppFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,6 +16,8 @@ class App extends Model
 {
     /** @use HasFactory<AppFactory> */
     use HasFactory, HasPrefixedUlid, HasVisibility;
+
+    use UsesPlatformConnection;
 
     protected $fillable = [
         'user_id',

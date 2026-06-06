@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPrefixedUlid;
+use App\Models\Concerns\UsesPlatformConnection;
 use Database\Factories\AppVersionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +13,8 @@ class AppVersion extends Model
 {
     /** @use HasFactory<AppVersionFactory> */
     use HasFactory, HasPrefixedUlid;
+
+    use UsesPlatformConnection;
 
     const UPDATED_AT = null;
 
