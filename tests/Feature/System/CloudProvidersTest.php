@@ -266,7 +266,7 @@ test('saving the same kind twice replaces the tenant override', function () {
         'credentials' => [
             'bucket' => 'new-bucket',
             'region' => 'auto',
-            'key' => 'k', 'secret' => 's', 'endpoint' => 'https://r2.x',
+            'key' => 'k', 'secret' => 's', 'endpoint' => 'https://1.1.1.1',
         ],
     ])->assertRedirect('/system/cloud-providers');
 

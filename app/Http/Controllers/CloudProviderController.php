@@ -10,6 +10,7 @@ use App\Models\OrganizationMembership;
 use App\Models\User;
 use App\Services\CloudProviderService;
 use App\Services\KnowledgeScopeWiper;
+use App\Services\Security\Ssrf\SsrfBlockedException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -60,13 +61,19 @@ class CloudProviderController extends Controller
 
         $validated = $this->validateProviderPayload($request, CloudProviderService::KIND_STORAGE);
 
-        $this->upsertTenantProvider(
-            $user,
-            $organization,
-            CloudProviderService::KIND_STORAGE,
-            $validated['driver'],
-            $validated['credentials'],
-        );
+        try {
+            $this->upsertTenantProvider(
+                $user,
+                $organization,
+                CloudProviderService::KIND_STORAGE,
+                $validated['driver'],
+                $validated['credentials'],
+            );
+        } catch (SsrfBlockedException) {
+            return back()->withInput()->withErrors([
+                'endpoint' => __('That storage endpoint is not allowed.'),
+            ]);
+        }
 
         return to_route('system.cloud-providers.index');
     }

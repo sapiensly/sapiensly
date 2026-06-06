@@ -32,21 +32,58 @@ class CloudProviderService
     ) {}
 
     /**
-     * Reject a tenant-supplied DB host that resolves to an internal/private
-     * address (SSRF): without this the runtime would let a tenant make the
-     * server dial the shared cluster, the VPC, or the cloud metadata endpoint —
-     * and probe the internal network via connection timing. Reuses the central
-     * SSRF guard by synthesizing an https URL; only the host is validated.
+     * Reject a tenant-supplied network target that resolves to an internal/
+     * private address (SSRF): without this the runtime would let a tenant make
+     * the server dial the shared cluster, the VPC, or the cloud metadata
+     * endpoint — and probe the internal network via connection timing. Used for
+     * the BYODB host and for custom S3 endpoints (R2/MinIO/Spaces). Reuses the
+     * central SSRF guard by synthesizing an https URL; only the host is checked.
      *
      * @throws SsrfBlockedException when the host resolves to a blocked range
      */
-    private function assertDatabaseHostIsSafe(string $host): void
+    private function assertHostIsSafe(string $host): void
     {
         $hostForUrl = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false
             ? '['.$host.']'
             : $host;
 
         $this->ssrfGuard->inspect('https://'.$hostForUrl);
+    }
+
+    /**
+     * SSRF-validate any tenant-controlled S3 endpoint/url in a storage provider's
+     * credentials. A plain AWS `s3` provider leaves these null (the SDK uses the
+     * public AWS endpoints), so the check only fires for custom-endpoint drivers.
+     * No-op for non-storage kinds.
+     *
+     * @param  array<string, mixed>  $credentials
+     *
+     * @throws SsrfBlockedException when an endpoint resolves to a blocked range
+     */
+    private function assertStorageEndpointsAreSafe(string $kind, array $credentials): void
+    {
+        if ($kind !== self::KIND_STORAGE) {
+            return;
+        }
+
+        foreach (['endpoint', 'url'] as $key) {
+            $value = $credentials[$key] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                $this->assertHostIsSafe($this->hostFromEndpoint($value));
+            }
+        }
+    }
+
+    /**
+     * Extract the host from an S3 endpoint, which may be a full URL
+     * (`https://minio.internal:9000`) or a bare host (`s3.example.com`).
+     */
+    private function hostFromEndpoint(string $endpoint): string
+    {
+        $endpoint = trim($endpoint);
+        $url = preg_match('#^[a-z][a-z0-9+.\-]*://#i', $endpoint) === 1 ? $endpoint : 'https://'.$endpoint;
+
+        return parse_url($url, PHP_URL_HOST) ?: $endpoint;
     }
 
     public const KIND_STORAGE = 'storage';
@@ -260,6 +297,7 @@ class CloudProviderService
     public function upsertGlobalProvider(string $kind, string $driver, array $credentials): CloudProvider
     {
         $this->assertDriverSupported($kind, $driver);
+        $this->assertStorageEndpointsAreSafe($kind, $credentials);
 
         $existing = CloudProvider::query()
             ->where('visibility', Visibility::Global)
@@ -299,6 +337,7 @@ class CloudProviderService
         int $userId,
     ): CloudProvider {
         $this->assertDriverSupported($kind, $driver);
+        $this->assertStorageEndpointsAreSafe($kind, $credentials);
 
         $existing = CloudProvider::query()
             ->where('organization_id', $organization->id)
@@ -339,6 +378,7 @@ class CloudProviderService
         array $credentials,
     ): CloudProvider {
         $this->assertDriverSupported($kind, $driver);
+        $this->assertStorageEndpointsAreSafe($kind, $credentials);
 
         $existing = CloudProvider::query()
             ->whereNull('organization_id')
@@ -537,7 +577,7 @@ class CloudProviderService
         $host = $credentials['host'] ?? '127.0.0.1';
 
         // SSRF: a tenant controls this host — block internal/private targets.
-        $this->assertDatabaseHostIsSafe($host);
+        $this->assertHostIsSafe($host);
 
         Config::set('database.connections.'.self::RUNTIME_DB_CONNECTION, [
             'driver' => 'pgsql',
@@ -581,6 +621,14 @@ class CloudProviderService
         $bucket = $credentials['bucket'] ?? '';
         if ($bucket === '') {
             return ['success' => false, 'message' => __('Bucket is required.')];
+        }
+
+        // SSRF: a custom endpoint is tenant-controlled — block an internal target
+        // before the S3 client (which would otherwise probe the network) runs.
+        try {
+            $this->assertStorageEndpointsAreSafe(self::KIND_STORAGE, $credentials);
+        } catch (SsrfBlockedException) {
+            return ['success' => false, 'message' => __('That storage endpoint is not allowed.')];
         }
 
         try {
@@ -635,7 +683,7 @@ class CloudProviderService
         // internal/private host BEFORE any connection attempt so it can't be used
         // to port-scan the network. Generic message, no detail (no info leak).
         try {
-            $this->assertDatabaseHostIsSafe($host);
+            $this->assertHostIsSafe($host);
         } catch (SsrfBlockedException) {
             return ['success' => false, 'message' => __('That database host is not allowed.')];
         }

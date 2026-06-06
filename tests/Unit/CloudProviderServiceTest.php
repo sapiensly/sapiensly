@@ -150,6 +150,35 @@ test('testDatabaseForPayload refuses an internal host without probing it', funct
         ->and($result)->not->toHaveKey('detail');
 });
 
+test('upsertTenantProvider rejects an internal storage endpoint (SSRF)', function (string $endpoint) {
+    $org = makeOrganization('byos-ssrf-'.uniqid());
+    $user = User::factory()->create(['organization_id' => $org->id]);
+
+    expect(fn () => $this->service->upsertTenantProvider(
+        $org,
+        CloudProviderService::KIND_STORAGE,
+        'minio',
+        ['bucket' => 'b', 'region' => 'us', 'key' => 'k', 'secret' => 's', 'endpoint' => $endpoint],
+        $user->id,
+    ))->toThrow(SsrfBlockedException::class);
+})->with([
+    'loopback url' => 'http://127.0.0.1:9000',
+    'private ip' => 'https://10.0.0.5:9000',
+    'metadata host' => 'http://169.254.169.254',
+    'bare internal host' => '192.168.1.10:9000',
+]);
+
+test('testStorageForPayload refuses an internal S3 endpoint without probing it', function () {
+    $result = $this->service->testStorageForPayload('minio', [
+        'bucket' => 'b',
+        'endpoint' => 'http://169.254.169.254:9000',
+    ]);
+
+    expect($result['success'])->toBeFalse()
+        ->and($result['message'])->toBe('That storage endpoint is not allowed.')
+        ->and($result)->not->toHaveKey('detail');
+});
+
 test('resolveStorage with null organization only returns globals', function () {
     $global = CloudProvider::factory()->storage()->global()->create();
 
@@ -209,7 +238,7 @@ test('upsertGlobalProvider creates a single global row per kind', function () {
     expect(CloudProvider::where('visibility', Visibility::Global)->where('kind', 'storage')->count())->toBe(1);
 
     $second = $this->service->upsertGlobalProvider('storage', 'r2', [
-        'bucket' => 'b', 'region' => 'auto', 'key' => 'k2', 'secret' => 'y', 'endpoint' => 'https://r2.example',
+        'bucket' => 'b', 'region' => 'auto', 'key' => 'k2', 'secret' => 'y', 'endpoint' => 'https://1.1.1.1',
     ]);
 
     expect($second->id)->toBe($first->id)
