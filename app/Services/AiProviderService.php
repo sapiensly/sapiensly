@@ -6,6 +6,7 @@ use App\Enums\Visibility;
 use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
 use App\Models\User;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Enums\Lab;
@@ -184,6 +185,121 @@ class AiProviderService
         }
 
         return $this->testConnectionForPayload($driver, $credentials);
+    }
+
+    /**
+     * Probe a single catalog model with a real, minimal invocation — a
+     * one-token chat completion or a one-input embedding using the exact
+     * model id. This catches a wrong/renamed model id that a provider-level
+     * connection test (which only lists or pings a default model) would miss.
+     *
+     * @return array{success: bool, message: string, detail?: string}
+     */
+    public function testCatalogModel(string $driver, string $modelId, string $capability): array
+    {
+        $credentials = $this->resolveGlobalCredentials($driver);
+        $apiKey = (string) ($credentials['api_key'] ?? '');
+
+        if ($apiKey === '' && $driver !== 'ollama') {
+            return ['success' => false, 'message' => __('No API key configured.')];
+        }
+
+        try {
+            $response = $this->invokeModelProbe($driver, $modelId, $capability, $apiKey, $credentials);
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'message' => __('Invocation failed: :error', ['error' => $e->getMessage()]),
+                'detail' => $e->getMessage(),
+            ];
+        }
+
+        if ($response === null) {
+            return ['success' => false, 'message' => __('Model testing is not supported for this provider.')];
+        }
+
+        if ($response->successful()) {
+            return ['success' => true, 'message' => __('Model responded successfully.')];
+        }
+
+        $body = $response->json();
+        $detail = $body['error']['message']
+            ?? $body['error']['description']
+            ?? $body['message']
+            ?? $body['detail']
+            ?? $response->body();
+
+        return [
+            'success' => false,
+            'message' => __('Invocation failed: :status', ['status' => $response->status()]),
+            'detail' => is_string($detail) ? $detail : json_encode($detail),
+        ];
+    }
+
+    /**
+     * Fire the smallest possible real request that exercises a specific model
+     * id. Returns null for drivers without a supported probe.
+     *
+     * @param  array<string, mixed>  $credentials
+     */
+    private function invokeModelProbe(string $driver, string $modelId, string $capability, string $apiKey, array $credentials): ?Response
+    {
+        // OpenAI-compatible chat-completions providers share one request shape.
+        $openAiCompatibleBases = [
+            'openai' => 'https://api.openai.com/v1',
+            'groq' => 'https://api.groq.com/openai/v1',
+            'xai' => 'https://api.x.ai/v1',
+            'deepseek' => 'https://api.deepseek.com/v1',
+            'mistral' => 'https://api.mistral.ai/v1',
+            'openrouter' => rtrim((string) ($credentials['url'] ?? self::OPENROUTER_BASE_URL), '/'),
+        ];
+
+        if ($capability === 'embeddings') {
+            return match ($driver) {
+                'voyageai' => Http::withToken($apiKey)->timeout(15)
+                    ->post('https://api.voyageai.com/v1/embeddings', ['model' => $modelId, 'input' => ['ping']]),
+                'jina' => Http::withToken($apiKey)->timeout(15)
+                    ->post('https://api.jina.ai/v1/embeddings', ['model' => $modelId, 'input' => ['ping']]),
+                'openai' => Http::withToken($apiKey)->timeout(15)
+                    ->post('https://api.openai.com/v1/embeddings', ['model' => $modelId, 'input' => 'ping']),
+                'gemini' => Http::timeout(15)
+                    ->post("https://generativelanguage.googleapis.com/v1beta/models/{$modelId}:embedContent?key={$apiKey}", [
+                        'content' => ['parts' => [['text' => 'ping']]],
+                    ]),
+                default => null,
+            };
+        }
+
+        if (isset($openAiCompatibleBases[$driver])) {
+            return Http::withToken($apiKey)->timeout(15)
+                ->post($openAiCompatibleBases[$driver].'/chat/completions', [
+                    'model' => $modelId,
+                    'max_tokens' => 1,
+                    'messages' => [['role' => 'user', 'content' => 'hi']],
+                ]);
+        }
+
+        return match ($driver) {
+            'anthropic' => Http::withHeaders([
+                'x-api-key' => $apiKey,
+                'anthropic-version' => '2023-06-01',
+            ])->timeout(15)->post('https://api.anthropic.com/v1/messages', [
+                'model' => $modelId,
+                'max_tokens' => 1,
+                'messages' => [['role' => 'user', 'content' => 'hi']],
+            ]),
+            'gemini' => Http::timeout(15)
+                ->post("https://generativelanguage.googleapis.com/v1beta/models/{$modelId}:generateContent?key={$apiKey}", [
+                    'contents' => [['parts' => [['text' => 'hi']]]],
+                    'generationConfig' => ['maxOutputTokens' => 1],
+                ]),
+            'cohere' => Http::withToken($apiKey)->timeout(15)
+                ->post('https://api.cohere.com/v2/chat', [
+                    'model' => $modelId,
+                    'messages' => [['role' => 'user', 'content' => 'hi']],
+                ]),
+            default => null,
+        };
     }
 
     /**

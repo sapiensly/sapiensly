@@ -31,6 +31,7 @@ Route::middleware(['auth', 'verified', 'role:sysadmin'])->prefix('admin')->group
     Route::get('/ai/providers', [AdminAiController::class, 'providers'])->name('admin.ai.providers');
     Route::patch('/ai/defaults', [AdminAiController::class, 'updateDefaults'])->name('admin.ai.defaults.update');
     Route::patch('/ai/catalog/{model}', [AdminAiController::class, 'toggleModel'])->name('admin.ai.catalog.toggle');
+    Route::post('/ai/catalog/{model}/test', [AdminAiController::class, 'testCatalogModel'])->name('admin.ai.catalog.test');
     Route::post('/ai/providers/key', [AdminAiController::class, 'setProviderKey'])->name('admin.ai.providers.key');
     Route::post('/ai/providers/sync-models', [AdminAiController::class, 'syncProviderModels'])->name('admin.ai.providers.sync-models');
     Route::get('/ai/providers/openrouter/models', [AdminAiController::class, 'openRouterModels'])->name('admin.ai.providers.openrouter.models');

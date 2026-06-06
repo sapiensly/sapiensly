@@ -15,7 +15,14 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { Pencil, Search } from '@/lib/admin/icons';
+import {
+    Activity,
+    AlertTriangle,
+    Check,
+    Loader2,
+    Pencil,
+    Search,
+} from '@/lib/admin/icons';
 import type { AiModel } from '@/lib/admin/types';
 import { Head, router } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
@@ -83,6 +90,43 @@ function toggle(model: AiModel, next: boolean) {
             only: ['models'],
         },
     );
+}
+
+// ── Per-model invocation test ────────────────────────────────────────────────
+type TestResult = { success: boolean; message: string; detail?: string };
+const testing = reactive<Record<string, boolean>>({});
+const testResult = reactive<Record<string, TestResult | null>>({});
+
+async function testModel(model: AiModel) {
+    testing[model.id] = true;
+    testResult[model.id] = null;
+
+    try {
+        const response = await fetch(`/admin/ai/catalog/${model.id}/test`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-XSRF-TOKEN': decodeURIComponent(
+                    document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
+                ),
+            },
+        });
+        testResult[model.id] = await response.json();
+    } catch {
+        testResult[model.id] = {
+            success: false,
+            message: t('admin.ai.catalog.test_failed'),
+        };
+    } finally {
+        testing[model.id] = false;
+    }
+
+    const id = model.id;
+    const delay = testResult[id]?.success ? 5000 : 15000;
+    setTimeout(() => {
+        testResult[id] = null;
+    }, delay);
 }
 
 // ── Inline label editing (brokers) ──────────────────────────────────────────
@@ -312,6 +356,55 @@ function saveEdit(model: AiModel) {
                                             )
                                         }}
                                     </span>
+                                    <span
+                                        v-if="
+                                            m.providerConfigured &&
+                                            testResult[m.id]
+                                        "
+                                        class="inline-flex items-center gap-1 text-[10px]"
+                                        :class="
+                                            testResult[m.id]?.success
+                                                ? 'text-emerald-500'
+                                                : 'text-amber-500'
+                                        "
+                                        :title="
+                                            testResult[m.id]?.detail ??
+                                            testResult[m.id]?.message
+                                        "
+                                    >
+                                        <component
+                                            :is="
+                                                testResult[m.id]?.success
+                                                    ? Check
+                                                    : AlertTriangle
+                                            "
+                                            class="size-3"
+                                        />
+                                        {{ testResult[m.id]?.message }}
+                                    </span>
+                                    <button
+                                        v-if="m.providerConfigured"
+                                        type="button"
+                                        class="inline-flex items-center gap-1 rounded-xs border border-medium bg-surface px-1.5 py-0.5 text-[10px] text-ink-muted transition-colors hover:text-accent-blue disabled:opacity-50"
+                                        :disabled="testing[m.id]"
+                                        :title="t('admin.ai.catalog.test_hint')"
+                                        @click="testModel(m)"
+                                    >
+                                        <component
+                                            :is="
+                                                testing[m.id]
+                                                    ? Loader2
+                                                    : Activity
+                                            "
+                                            class="size-3"
+                                            :class="
+                                                testing[m.id]
+                                                    ? 'animate-spin'
+                                                    : ''
+                                            "
+                                        />
+                                        {{ t('admin.ai.catalog.test_cta') }}
+                                    </button>
                                     <Switch
                                         :model-value="m.enabled"
                                         :disabled="

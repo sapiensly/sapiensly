@@ -162,6 +162,25 @@ class AdminAiController extends Controller
     }
 
     /**
+     * Probe a single catalog model with a real, minimal invocation so the
+     * admin can confirm the exact model id is valid and reachable. Read-only.
+     */
+    public function testCatalogModel(AiCatalogModel $model): JsonResponse
+    {
+        $result = $this->aiProviderService->testCatalogModel(
+            $model->driver,
+            $model->model_id,
+            $model->capability,
+        );
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['message'],
+            'detail' => $result['detail'] ?? null,
+        ]);
+    }
+
+    /**
      * Register or rotate the global API key for a known driver. Handles both
      * the first-time "dar de alta" and subsequent rotations — whatever was
      * stored is overwritten in-place, invalidating the previous key.

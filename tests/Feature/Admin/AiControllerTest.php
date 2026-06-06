@@ -589,6 +589,80 @@ test('non-sysadmin is blocked from /admin/ai', function () {
         ->assertForbidden();
 });
 
+test('catalog model test invokes the exact model id and returns success', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.anthropic.key' => 'sk-ant-env-1234567890abcd']);
+    $model = seedChatModel('anthropic', 'claude-haiku-4-5-20251001');
+    Http::fake(['api.anthropic.com/v1/messages' => Http::response(['content' => []], 200)]);
+
+    $this->actingAs($admin)
+        ->postJson("/admin/ai/catalog/{$model->id}/test")
+        ->assertOk()
+        ->assertJson(['success' => true]);
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://api.anthropic.com/v1/messages'
+        && $request['model'] === 'claude-haiku-4-5-20251001');
+});
+
+test('catalog model test hits chat-completions for openai-compatible drivers', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.openai.key' => 'sk-openai-env-1234567890abcd']);
+    $model = seedChatModel('openai', 'gpt-4o-mini');
+    Http::fake(['api.openai.com/v1/chat/completions' => Http::response(['choices' => []], 200)]);
+
+    $this->actingAs($admin)
+        ->postJson("/admin/ai/catalog/{$model->id}/test")
+        ->assertOk()
+        ->assertJson(['success' => true]);
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://api.openai.com/v1/chat/completions'
+        && $request['model'] === 'gpt-4o-mini');
+});
+
+test('catalog model test probes embeddings for an embedding model', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.voyageai.key' => 'pa-voyage-env-1234567890abcd']);
+    $model = AiCatalogModel::create([
+        'driver' => 'voyageai',
+        'model_id' => 'voyage-probe-test',
+        'capability' => 'embeddings',
+        'label' => 'Voyage Probe',
+        'is_enabled' => true,
+        'sort_order' => 0,
+    ]);
+    Http::fake(['api.voyageai.com/v1/embeddings' => Http::response(['data' => []], 200)]);
+
+    $this->actingAs($admin)
+        ->postJson("/admin/ai/catalog/{$model->id}/test")
+        ->assertOk()
+        ->assertJson(['success' => true]);
+
+    Http::assertSent(fn ($request) => $request['model'] === 'voyage-probe-test');
+});
+
+test('catalog model test surfaces a bad model id as a failure', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.anthropic.key' => 'sk-ant-env-1234567890abcd']);
+    $model = seedChatModel('anthropic', 'claude-typo-999');
+    Http::fake(['api.anthropic.com/*' => Http::response(['error' => ['message' => 'model not found']], 404)]);
+
+    $this->actingAs($admin)
+        ->postJson("/admin/ai/catalog/{$model->id}/test")
+        ->assertOk()
+        ->assertJson(['success' => false]);
+});
+
+test('catalog model test fails when the provider is not connected', function () {
+    $admin = sysadminForAi();
+    config(['ai.providers.xai.key' => '']);
+    $model = seedChatModel('xai', 'grok-test');
+
+    $this->actingAs($admin)
+        ->postJson("/admin/ai/catalog/{$model->id}/test")
+        ->assertOk()
+        ->assertJson(['success' => false]);
+});
+
 test('test-connection probes a provider keyed in the DB and returns success', function () {
     $admin = sysadminForAi();
     globalProviderFor('anthropic');
