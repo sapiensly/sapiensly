@@ -17,8 +17,10 @@ function sysadminForCloud(): User
     return $u;
 }
 
-test('cloud page renders empty storage when no global provider is set', function () {
+test('cloud page renders empty storage when neither a global provider nor the env disk is set', function () {
     $admin = sysadminForCloud();
+    // No DB provider and no env s3 disk → truly unconfigured.
+    config(['filesystems.disks.s3.bucket' => null, 'filesystems.disks.s3.key' => null]);
 
     $this->actingAs($admin)
         ->get('/admin/cloud')
@@ -28,6 +30,24 @@ test('cloud page renders empty storage when no global provider is set', function
             ->where('storage', null)
             ->has('database')
             ->has('pgvector'));
+});
+
+test('cloud page reflects the env-based s3 disk as configured storage (source env)', function () {
+    $admin = sysadminForCloud();
+    config([
+        'filesystems.disks.s3.bucket' => 'env-bucket',
+        'filesystems.disks.s3.key' => 'AKIAENV',
+        'filesystems.disks.s3.region' => 'auto',
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/cloud')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('storage.source', 'env')
+            ->where('storage.driver', 's3')
+            ->where('storage.bucket', 'env-bucket')
+            ->where('storage.region', 'auto'));
 });
 
 test('cloud page surfaces storage driver, bucket, region when configured', function () {

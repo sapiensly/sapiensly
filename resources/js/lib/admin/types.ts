@@ -218,10 +218,11 @@ export interface CloudProps {
         driver: 's3' | 'r2' | 'gcs' | 'local';
         bucket: string;
         region: string;
+        source: 'db' | 'env';
         usedBytes: number;
         totalBytes: number;
         lastBackupAt: ISODate | null;
-    };
+    } | null;
     database: {
         engine: 'postgres' | 'mysql';
         version: string;

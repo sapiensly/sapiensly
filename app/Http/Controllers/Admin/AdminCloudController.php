@@ -270,24 +270,37 @@ class AdminCloudController extends Controller
      */
     private function readStorage(): ?array
     {
+        // Capacity requires a ListObjects call per bucket — intentionally not
+        // performed on every page load. Surface null; a follow-up can wire a
+        // nightly job that caches the roll-up.
+        $capacity = ['usedBytes' => null, 'totalBytes' => null, 'lastBackupAt' => null];
+
         $provider = $this->cloud->getGlobalStorage();
-        if ($provider === null) {
-            return null;
+        if ($provider !== null) {
+            $credentials = $provider->credentials ?? [];
+
+            return [
+                'driver' => $provider->driver,
+                'bucket' => $credentials['bucket'] ?? '—',
+                'region' => $credentials['region'] ?? '—',
+                'source' => 'db',
+            ] + $capacity;
         }
 
-        $credentials = $provider->credentials ?? [];
+        // No global DB provider — fall back to the env-based global `s3` disk
+        // (AWS_*/R2 in .env), which is the storage everyone without their own
+        // provider actually uses. Reflect it as configured (source: env).
+        $s3 = config('filesystems.disks.s3');
+        if (is_array($s3) && ! empty($s3['bucket']) && ! empty($s3['key'])) {
+            return [
+                'driver' => 's3',
+                'bucket' => (string) $s3['bucket'],
+                'region' => (string) ($s3['region'] ?? '—'),
+                'source' => 'env',
+            ] + $capacity;
+        }
 
-        return [
-            'driver' => $provider->driver,
-            'bucket' => $credentials['bucket'] ?? '—',
-            'region' => $credentials['region'] ?? '—',
-            // Capacity requires a ListObjects call per bucket — intentionally
-            // not performed on every page load. Surface null; a follow-up can
-            // wire a nightly job that caches the roll-up.
-            'usedBytes' => null,
-            'totalBytes' => null,
-            'lastBackupAt' => null,
-        ];
+        return null;
     }
 
     /**

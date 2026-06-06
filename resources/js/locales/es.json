@@ -1710,6 +1710,7 @@
     "admin.cloud.storage.title": "Almacenamiento de objetos",
     "admin.cloud.storage.description": "Dónde viven documentos y backups.",
     "admin.cloud.storage.driver": "Driver",
+    "admin.cloud.storage.from_env": "Desde .env",
     "admin.cloud.storage.bucket": "Bucket",
     "admin.cloud.storage.region": "Región",
     "admin.cloud.storage.capacity": "Capacidad",
