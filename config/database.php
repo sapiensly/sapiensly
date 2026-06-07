@@ -21,6 +21,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tenant connection persistence
+    |--------------------------------------------------------------------------
+    |
+    | Mirrors the `tenant` connection's PDO::ATTR_PERSISTENT option (both read
+    | DB_PERSISTENT). Exposed flat so request-scoped RLS hygiene can cheaply
+    | decide whether it must reset the tenant scope on unauthenticated requests:
+    | a persistent connection survives across requests on a worker, so a guest
+    | request would otherwise inherit the previous request's tenant scope.
+    |
+    */
+
+    'tenant_persistent' => env('DB_PERSISTENT', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Database Connections
     |--------------------------------------------------------------------------
     |
