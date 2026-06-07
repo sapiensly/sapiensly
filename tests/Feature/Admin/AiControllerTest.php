@@ -460,7 +460,7 @@ test('saveOpenRouterModels keeps a manually edited label but refreshes pricing',
         ->and((float) $row->input_price_per_mtok)->toBe(3.0);
 });
 
-test('syncProviderModels pulls a direct provider catalog and enables new models', function () {
+test('syncProviderModels pulls a direct provider catalog and registers new models disabled', function () {
     Http::fake([
         'api.anthropic.com/*' => Http::response([
             'data' => [
@@ -486,7 +486,45 @@ test('syncProviderModels pulls a direct provider catalog and enables new models'
     $rows = AiCatalogModel::where('driver', 'anthropic')->where('capability', 'chat')->get();
     expect($rows->pluck('model_id')->all())->toContain('claude-sonnet-4-5', 'claude-opus-4-5')
         ->and($rows->firstWhere('model_id', 'claude-sonnet-4-5')->label)->toBe('Claude Sonnet 4.5')
-        ->and($rows->firstWhere('model_id', 'claude-sonnet-4-5')->is_enabled)->toBeTrue();
+        // New models land disabled — the admin opts each into the catalog.
+        ->and($rows->firstWhere('model_id', 'claude-sonnet-4-5')->is_enabled)->toBeFalse();
+});
+
+test('syncProviderModels keeps an existing enabled model enabled', function () {
+    Http::fake([
+        'api.anthropic.com/*' => Http::response([
+            'data' => [
+                ['id' => 'claude-sonnet-4-5', 'display_name' => 'Claude Sonnet 4.5'],
+                ['id' => 'claude-brand-new', 'display_name' => 'Claude Brand New'],
+            ],
+        ]),
+    ]);
+
+    $admin = sysadminForAi();
+    AiProvider::factory()->create([
+        'visibility' => 'global',
+        'user_id' => null,
+        'name' => 'anthropic',
+        'driver' => 'anthropic',
+        'credentials' => ['api_key' => 'sk-ant-1234567890abcdef'],
+    ]);
+    AiCatalogModel::create([
+        'driver' => 'anthropic',
+        'model_id' => 'claude-sonnet-4-5',
+        'capability' => 'chat',
+        'label' => 'Claude Sonnet 4.5',
+        'is_enabled' => true,
+        'sort_order' => 0,
+    ]);
+
+    $this->actingAs($admin)
+        ->post('/admin/ai/providers/sync-models', ['driver' => 'anthropic'])
+        ->assertRedirect();
+
+    $rows = AiCatalogModel::where('driver', 'anthropic')->where('capability', 'chat')->get();
+    // Existing row keeps its enabled status; the brand-new one lands disabled.
+    expect($rows->firstWhere('model_id', 'claude-sonnet-4-5')->is_enabled)->toBeTrue()
+        ->and($rows->firstWhere('model_id', 'claude-brand-new')->is_enabled)->toBeFalse();
 });
 
 test('syncProviderModels classifies openai models and skips non-text ones', function () {

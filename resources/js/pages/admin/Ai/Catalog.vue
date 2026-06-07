@@ -2,6 +2,13 @@
 import AiTabs from '@/components/admin/AiTabs.vue';
 import DriverChip from '@/components/admin/DriverChip.vue';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import {
     Table,
@@ -25,7 +32,7 @@ import {
 } from '@/lib/admin/icons';
 import type { AiModel } from '@/lib/admin/types';
 import { Head, router } from '@inertiajs/vue3';
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const props = defineProps<{ models: AiModel[] }>();
@@ -36,6 +43,16 @@ const activeTab = ref<'direct' | 'broker'>('direct');
 const search = reactive<{ direct: string; broker: string }>({
     direct: '',
     broker: '',
+});
+
+// Extra filters. Connected defaults to hiding models whose provider has no key.
+const providerFilter = ref<string>('all');
+const enabledFilter = ref<'all' | 'enabled' | 'disabled'>('all');
+const connectedFilter = ref<'all' | 'connected' | 'disconnected'>('connected');
+
+// Reset the provider picker when switching tabs — its options are tab-scoped.
+watch(activeTab, () => {
+    providerFilter.value = 'all';
 });
 
 const kindRows = computed(() => {
@@ -50,6 +67,16 @@ const brokerRows = computed(() =>
     kindRows.value.filter((m) => m.providerKind === 'broker'),
 );
 
+// Drivers present in the active tab (ignores the other filters so the
+// dropdown stays stable).
+const availableDrivers = computed(() => [
+    ...new Set(
+        props.models
+            .filter((m) => m.providerKind === activeTab.value)
+            .map((m) => m.driver),
+    ),
+]);
+
 function matches(model: AiModel, query: string): boolean {
     const q = query.trim().toLowerCase();
     if (!q) return true;
@@ -63,7 +90,18 @@ function matches(model: AiModel, query: string): boolean {
 const visibleRows = computed(() => {
     const base =
         activeTab.value === 'direct' ? directRows.value : brokerRows.value;
-    return base.filter((m) => matches(m, search[activeTab.value]));
+    return base.filter((m) => {
+        if (!matches(m, search[activeTab.value])) return false;
+        if (providerFilter.value !== 'all' && m.driver !== providerFilter.value)
+            return false;
+        if (enabledFilter.value === 'enabled' && !m.enabled) return false;
+        if (enabledFilter.value === 'disabled' && m.enabled) return false;
+        if (connectedFilter.value === 'connected' && !m.providerConfigured)
+            return false;
+        if (connectedFilter.value === 'disconnected' && m.providerConfigured)
+            return false;
+        return true;
+    });
 });
 
 function formatContext(n: number | null): string {
@@ -232,6 +270,72 @@ function saveEdit(model: AiModel) {
                         {{ t('admin.ai.catalog.filter.embedding') }}
                     </ToggleGroupItem>
                 </ToggleGroup>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Provider -->
+                <Select v-model="providerFilter">
+                    <SelectTrigger
+                        class="h-8 w-auto min-w-[140px] border-medium bg-surface text-xs"
+                    >
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">
+                            {{ t('admin.ai.catalog.filter.all_providers') }}
+                        </SelectItem>
+                        <SelectItem
+                            v-for="d in availableDrivers"
+                            :key="d"
+                            :value="d"
+                        >
+                            <span class="inline-flex items-center gap-2">
+                                <DriverChip :driver="d" size="sm" />
+                                {{ d }}
+                            </span>
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <!-- Enabled -->
+                <Select v-model="enabledFilter">
+                    <SelectTrigger
+                        class="h-8 w-auto min-w-[120px] border-medium bg-surface text-xs"
+                    >
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">
+                            {{ t('admin.ai.catalog.filter.enabled_any') }}
+                        </SelectItem>
+                        <SelectItem value="enabled">
+                            {{ t('admin.ai.catalog.filter.enabled_only') }}
+                        </SelectItem>
+                        <SelectItem value="disabled">
+                            {{ t('admin.ai.catalog.filter.disabled_only') }}
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <!-- Connected -->
+                <Select v-model="connectedFilter">
+                    <SelectTrigger
+                        class="h-8 w-auto min-w-[150px] border-medium bg-surface text-xs"
+                    >
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">
+                            {{ t('admin.ai.catalog.filter.connected_any') }}
+                        </SelectItem>
+                        <SelectItem value="connected">
+                            {{ t('admin.ai.catalog.filter.connected_only') }}
+                        </SelectItem>
+                        <SelectItem value="disconnected">
+                            {{ t('admin.ai.catalog.filter.disconnected_only') }}
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
             <div

@@ -1090,9 +1090,10 @@ class AiProviderService
 
     /**
      * Merge a freshly fetched direct-provider model list into the shared
-     * catalog: new models are added enabled, labels are refreshed, and existing
-     * rows keep their admin enable/disable toggle. Nothing is deleted, so
-     * defaults that reference a model id are never orphaned.
+     * catalog: new models are added DISABLED (the admin opts each in), labels
+     * are refreshed, and existing rows keep their admin enable/disable toggle.
+     * Nothing is deleted, so defaults that reference a model id are never
+     * orphaned.
      *
      * @param  array<int, array{id: string, label: string, capabilities: array<int, string>}>  $models
      * @return int Number of catalog rows created.
@@ -1117,7 +1118,7 @@ class AiProviderService
                 $row->label = (string) ($model['label'] ?? $modelId);
 
                 if (! $row->exists) {
-                    $row->is_enabled = true;
+                    $row->is_enabled = false;
                     $row->sort_order = $index;
                     $created++;
                 }
