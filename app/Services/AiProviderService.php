@@ -62,8 +62,13 @@ class AiProviderService
             ['id' => 'embed-english-v3.0', 'label' => 'Embed English v3', 'capabilities' => ['embeddings']],
         ],
         'voyageai' => [
-            ['id' => 'voyage-3', 'label' => 'Voyage 3', 'capabilities' => ['embeddings']],
-            ['id' => 'voyage-3-lite', 'label' => 'Voyage 3 Lite', 'capabilities' => ['embeddings']],
+            ['id' => 'voyage-4-large', 'label' => 'Voyage 4 Large', 'capabilities' => ['embeddings']],
+            ['id' => 'voyage-4', 'label' => 'Voyage 4', 'capabilities' => ['embeddings']],
+            ['id' => 'voyage-4-lite', 'label' => 'Voyage 4 Lite', 'capabilities' => ['embeddings']],
+            ['id' => 'voyage-4-nano', 'label' => 'Voyage 4 Nano', 'capabilities' => ['embeddings']],
+            ['id' => 'voyage-code-3', 'label' => 'Voyage Code 3', 'capabilities' => ['embeddings']],
+            ['id' => 'voyage-finance-2', 'label' => 'Voyage Finance 2', 'capabilities' => ['embeddings']],
+            ['id' => 'voyage-law-2', 'label' => 'Voyage Law 2', 'capabilities' => ['embeddings']],
         ],
         'jina' => [
             ['id' => 'jina-embeddings-v3', 'label' => 'Jina Embeddings v3', 'capabilities' => ['embeddings']],
@@ -867,7 +872,7 @@ class AiProviderService
                 'voyageai' => Http::withToken($apiKey)
                     ->timeout(10)
                     ->post('https://api.voyageai.com/v1/embeddings', [
-                        'model' => collect($provider->getEmbeddingModels())->first()['id'] ?? 'voyage-3-lite',
+                        'model' => collect($provider->getEmbeddingModels())->first()['id'] ?? 'voyage-4-lite',
                         'input' => ['ping'],
                     ]),
                 'jina' => Http::withToken($apiKey)
