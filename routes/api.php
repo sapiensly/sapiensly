@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Widget\ConfigController;
 use App\Http\Controllers\Api\Widget\ErrorController;
 use App\Http\Controllers\Api\Widget\FeedbackController;
 use App\Http\Controllers\Api\Widget\SessionController;
+use App\Http\Middleware\BindWidgetTenantContext;
 use App\Http\Middleware\ThrottleWidgetRequests;
 use App\Http\Middleware\ValidateWidgetApiToken;
 use App\Http\Middleware\ValidateWidgetOrigin;
@@ -35,6 +36,7 @@ Route::prefix('widget/v1')->group(function () {
     // Authenticated endpoints - require Bearer token
     Route::middleware([
         ValidateWidgetApiToken::class,
+        BindWidgetTenantContext::class,
         ValidateWidgetOrigin::class,
         ThrottleWidgetRequests::class,
     ])->group(function () {
