@@ -11,6 +11,7 @@ use App\Events\Chat\ChatStreamChunk;
 use App\Events\Chat\ChatStreamComplete;
 use App\Events\Chat\ChatStreamError;
 use App\Events\Chat\ChatToolCall;
+use App\Jobs\SummarizeChatHistoryJob;
 use App\Models\Agent;
 use App\Models\Chat;
 use App\Models\ChatMessage;
@@ -52,6 +53,28 @@ class ChatAiService
 
     private const MAX_HISTORY_MESSAGES = 30;
 
+    /**
+     * Long-conversation summarization (the `summary_large` AI default). The most
+     * recent SUMMARY_KEEP_RECENT messages always stay verbatim; once at least
+     * SUMMARY_BATCH_MIN older-than-that messages have accrued past the summary
+     * watermark, they are folded into the rolling summary.
+     */
+    private const SUMMARY_KEEP_RECENT = 10;
+
+    private const SUMMARY_BATCH_MIN = 8;
+
+    /** A first message at or under this length becomes the title verbatim — no model call. */
+    private const TITLE_DIRECT_MAX_CHARS = 60;
+
+    /** Regenerate the title once the conversation reaches this many messages (4 user + 4 assistant). */
+    private const TITLE_REFINE_AT_MESSAGES = 8;
+
+    private const SUMMARY_INSTRUCTIONS = <<<'PROMPT'
+        You compress a chat conversation into a dense running summary that another AI assistant will rely on as its memory of earlier turns.
+
+        Produce ONE summary that merges the existing summary (if provided) with the new messages. Preserve the user's goal, decisions made, concrete facts, names, numbers, identifiers (files, code, orders, IDs), stated preferences, and any open questions or pending tasks. Drop greetings, filler and redundancy. Do NOT answer, continue, or comment on the conversation — only summarize it. Write in the conversation's own language, as compact paragraphs or bullet points, under ~400 words.
+        PROMPT;
+
     private const SYSTEM_PROMPT = <<<'PROMPT'
         You are a helpful, knowledgeable AI assistant in a chat application. Answer clearly and concisely, and use Markdown (headings, lists, tables, fenced code blocks) when it improves readability. Match the language of the user.
 
@@ -81,6 +104,13 @@ class ChatAiService
         $chat = $placeholder->chat;
         $user = $chat->user;
 
+        // When the conversation has been summarized, the summary stands in for
+        // every message up to and including the watermark; only the verbatim
+        // tail after it is sent. (Prefixed-ULID ids sort chronologically, so the
+        // id is a safe ordering watermark.)
+        $summary = trim((string) ($chat->summary ?? ''));
+        $summaryWatermark = $summary !== '' ? $chat->summary_through_message_id : null;
+
         // History excludes the placeholder we're about to fill and any other
         // non-complete rows. We want the most recent N turns in chronological
         // order: reorder() clears the relation's default created_at ASC sort
@@ -90,6 +120,7 @@ class ChatAiService
         $history = $chat->messages()
             ->where('id', '!=', $placeholder->id)
             ->where('status', 'complete')
+            ->when($summaryWatermark, fn ($q, $id) => $q->where('id', '>', $id))
             ->reorder()
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -145,6 +176,12 @@ class ChatAiService
                 : [];
         }
 
+        if ($summary !== '') {
+            $instructions .= "\n\n## Summary of earlier conversation\n"
+                ."Earlier turns have been condensed into the summary below. Treat it as established context you already know — do not mention that a summary was provided.\n\n"
+                .$summary;
+        }
+
         $instructions .= "\n\n".self::ARTIFACTS_INSTRUCTIONS;
 
         $startedAt = microtime(true);
@@ -157,10 +194,12 @@ class ChatAiService
                 $provider = $this->providers->resolveProviderForCatalogModel($resolvedModel, $user) ?? Lab::Anthropic;
             }
 
-            // Knowledge (RAG): retrieve relevant chunks (from the agent's or the
-            // project's knowledge bases) and fold them into the instructions.
-            // Best-effort — never let a retrieval hiccup break the chat.
-            $instructions .= $this->retrieveContext($ragKbIds, $promptText, $chat->id);
+            // Knowledge (RAG): retrieved chunks change per query, so they must NOT
+            // sit in the (cacheable) system prefix — that would invalidate the
+            // cache every turn. Append them to the user turn instead, keeping the
+            // system prefix byte-stable. Best-effort — a retrieval hiccup never
+            // breaks the chat (retrieveContext swallows and returns '').
+            $ragContext = $this->retrieveContext($ragKbIds, $promptText, $chat->id);
 
             $tools = $this->buildChatTools($toolIds, $user, $webSearch);
 
@@ -169,6 +208,14 @@ class ChatAiService
                 messages: $sdkHistory,
                 tools: $tools,
             );
+
+            // Mark the frozen prefix (system + agent/project instructions +
+            // summary + artifacts guidance) as cacheable. RAG was deliberately
+            // kept out of $instructions above, so this prefix is stable across
+            // turns until the rolling summary recompresses.
+            if (config('ai.prompt_caching.enabled')) {
+                $sdkAgent->withCacheableSystem($instructions);
+            }
 
             $attachments = $this->buildAttachments($placeholder);
 
@@ -182,7 +229,7 @@ class ChatAiService
             ]);
 
             $stream = $sdkAgent->stream(
-                $promptText,
+                $promptText.$ragContext,
                 attachments: $attachments,
                 provider: $provider,
                 model: $resolvedModel,
@@ -236,18 +283,23 @@ class ChatAiService
                 'last_message_at' => now(),
                 'model' => $resolvedModel,
             ]);
-            if ($chat->title === null) {
-                $chat->title = $this->generateTitle($promptText, $provider);
-            }
+            $this->maybeUpdateTitle($chat, $promptText, $provider);
             $chat->save();
 
             $this->safeBroadcast(fn () => ChatStreamComplete::dispatch($placeholder->refresh()));
+
+            $this->maybeQueueSummary($chat);
 
             Log::info('Chat AI stream finished', [
                 'chat_id' => $chat->id,
                 'message_id' => $placeholder->id,
                 'duration_seconds' => round(microtime(true) - $startedAt, 2),
                 'response_length' => strlen($buffer),
+                'provider' => $provider->value,
+                'prompt_tokens' => $stream->usage?->promptTokens ?? 0,
+                'completion_tokens' => $stream->usage?->completionTokens ?? 0,
+                'cache_read_input_tokens' => $stream->usage?->cacheReadInputTokens ?? 0,
+                'cache_write_input_tokens' => $stream->usage?->cacheWriteInputTokens ?? 0,
             ]);
 
             return $placeholder;
@@ -429,36 +481,205 @@ class ChatAiService
      * back to a truncation of the first message if the call fails or the model
      * isn't reachable.
      */
-    private function generateTitle(string $firstMessage, Lab $provider): string
+    /**
+     * Queue a history summary when enough un-summarized older messages have
+     * accrued past the watermark. Best-effort — a queue hiccup must never fail a
+     * turn that already completed and broadcast.
+     */
+    private function maybeQueueSummary(Chat $chat): void
     {
-        $fallback = $this->titleFrom($firstMessage);
-        $clean = trim(preg_replace('/\s+/', ' ', strip_tags($firstMessage)) ?? '');
-        if ($clean === '') {
-            return $fallback;
+        try {
+            $pending = $chat->messages()
+                ->where('status', 'complete')
+                ->when($chat->summary_through_message_id, fn ($q, $id) => $q->where('id', '>', $id))
+                ->count();
+
+            if ($pending >= self::SUMMARY_KEEP_RECENT + self::SUMMARY_BATCH_MIN) {
+                SummarizeChatHistoryJob::dispatch($chat->id);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Chat AI: could not queue history summary', [
+                'chat_id' => $chat->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Fold the older messages of a long conversation into the chat's rolling
+     * summary (the `summary_large` default), keeping the most recent turns
+     * verbatim. Idempotent: each run merges the prior summary with the new batch
+     * and advances the watermark, so it only ever processes fresh older messages.
+     */
+    public function summarizeHistory(Chat $chat): void
+    {
+        $existing = trim((string) ($chat->summary ?? ''));
+        $watermark = $existing !== '' ? $chat->summary_through_message_id : null;
+
+        $pending = $chat->messages()
+            ->where('status', 'complete')
+            ->when($watermark, fn ($q, $id) => $q->where('id', '>', $id))
+            ->reorder()
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        // Keep the most recent turns verbatim; only fold what is older than them.
+        $foldCount = $pending->count() - self::SUMMARY_KEEP_RECENT;
+        if ($foldCount < self::SUMMARY_BATCH_MIN) {
+            return;
         }
 
+        $toFold = $pending->slice(0, $foldCount)->values();
+
+        $transcript = $toFold
+            ->map(fn (ChatMessage $m) => mb_strtoupper((string) $m->role).': '.trim((string) $m->content))
+            ->implode("\n\n");
+
+        $model = $this->aiDefaults->model('summary_large');
+
+        $provider = Lab::Anthropic;
+        $user = $chat->user;
+        if ($user !== null) {
+            $this->providers->applyRuntimeConfig($user);
+            $provider = $this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic;
+        }
+
+        $prompt = ($existing !== '' ? "Existing summary:\n".$existing."\n\n" : '')
+            ."Conversation messages to fold into the summary:\n\n".$transcript;
+
+        try {
+            $agent = new ChatAgent(instructions: self::SUMMARY_INSTRUCTIONS, messages: [], tools: []);
+            $response = $agent->prompt(Str::limit($prompt, 24000), provider: $provider, model: $model);
+
+            $summary = trim(strip_tags((string) ($response->text ?? '')));
+            if ($summary === '') {
+                return;
+            }
+
+            $chat->forceFill([
+                'summary' => $summary,
+                'summary_through_message_id' => $toFold->last()->id,
+            ])->save();
+
+            Log::info('Chat AI: history summarized', [
+                'chat_id' => $chat->id,
+                'folded' => $toFold->count(),
+                'through' => $toFold->last()->id,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Chat AI: history summarization failed', [
+                'chat_id' => $chat->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Title lifecycle: derive an initial title on the first turn, then regenerate
+     * a sharper one once the conversation matures to {@see self::TITLE_REFINE_AT_MESSAGES}
+     * messages (4 user + 4 assistant). A short opener is used verbatim — no model call.
+     */
+    private function maybeUpdateTitle(Chat $chat, string $promptText, Lab $provider): void
+    {
+        if ($chat->title === null) {
+            $chat->title = $this->initialTitle($promptText, $provider);
+
+            return;
+        }
+
+        $completeCount = $chat->messages()->where('status', 'complete')->count();
+        if ($completeCount === self::TITLE_REFINE_AT_MESSAGES) {
+            $chat->title = $this->refineTitle($chat, $provider);
+        }
+    }
+
+    /**
+     * First-turn title: a short opener already reads as a title, so use it verbatim
+     * and skip the model; a long opener is condensed via the short-summary model.
+     */
+    private function initialTitle(string $firstMessage, Lab $provider): string
+    {
+        $clean = trim(preg_replace('/\s+/', ' ', strip_tags($firstMessage)) ?? '');
+        if ($clean === '') {
+            return $this->titleFrom($firstMessage);
+        }
+
+        if (mb_strlen($clean) <= self::TITLE_DIRECT_MAX_CHARS) {
+            return $this->normalizeTitle($clean);
+        }
+
+        return $this->titleFromModel(
+            'Title for this conversation starter:'."\n\n".Str::limit($clean, 1000),
+            $provider,
+            $this->titleFrom($firstMessage),
+        );
+    }
+
+    /**
+     * Regenerate the title from the opening exchange (the first
+     * {@see self::TITLE_REFINE_AT_MESSAGES} messages), keeping the current title on failure.
+     */
+    private function refineTitle(Chat $chat, Lab $provider): string
+    {
+        $current = (string) $chat->title;
+
+        $transcript = $chat->messages()
+            ->where('status', 'complete')
+            ->reorder()
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->limit(self::TITLE_REFINE_AT_MESSAGES)
+            ->get()
+            ->map(fn (ChatMessage $m) => mb_strtoupper((string) $m->role).': '.trim((string) $m->content))
+            ->implode("\n\n");
+
+        if (trim($transcript) === '') {
+            return $current;
+        }
+
+        return $this->titleFromModel(
+            'Generate a concise title for this conversation:'."\n\n".Str::limit($transcript, 4000),
+            $provider,
+            $current,
+        );
+    }
+
+    /**
+     * Prompt the short-summary model for a title, falling back to $fallback on any error.
+     */
+    private function titleFromModel(string $prompt, Lab $provider, string $fallback): string
+    {
         try {
             $titleAgent = new ChatAgent(
-                instructions: 'You generate very short chat titles. Reply with ONLY a 3-6 word title in the same language as the message. No quotes, no punctuation at the end, no prefixes.',
+                instructions: 'You generate very short chat titles. Reply with ONLY a 3-6 word title in the same language as the conversation. No quotes, no punctuation at the end, no prefixes.',
                 messages: [],
                 tools: [],
             );
 
             $response = $titleAgent->prompt(
-                'Title for this conversation starter:'."\n\n".Str::limit($clean, 1000),
+                $prompt,
                 provider: $provider,
                 model: $this->aiDefaults->model('summary_short'),
             );
 
-            $title = trim(strip_tags((string) ($response->text ?? '')));
-            $title = trim($title, " \t\n\r\0\x0B\"'`.");
+            $title = $this->normalizeTitle((string) ($response->text ?? ''));
 
-            return $title !== '' ? Str::limit($title, 60, '') : $fallback;
+            return $title !== '' ? $title : $fallback;
         } catch (\Throwable $e) {
             Log::warning('Chat AI: title generation failed (using fallback)', ['error' => $e->getMessage()]);
 
             return $fallback;
         }
+    }
+
+    /** Strip tags, wrapping quotes/trailing punctuation, and cap a title at 60 characters. */
+    private function normalizeTitle(string $text): string
+    {
+        $title = trim(strip_tags($text));
+        $title = trim($title, " \t\n\r\0\x0B\"'`.");
+
+        return Str::limit($title, 60, '');
     }
 
     /**

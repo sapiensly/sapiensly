@@ -79,14 +79,44 @@ it('defaults web_search to false', function () {
 
 // ----- AI-generated titles -----
 
-it('generates a concise AI title on the first turn', function () {
-    // First fake response feeds the streamed reply, the second the title call.
-    Ai::fakeAgent(ChatAgent::class, ['Here is the answer.', 'Great Conversation Title']);
+it('uses a short first message as the title verbatim, without calling the model', function () {
+    Ai::fakeAgent(ChatAgent::class, ['Here is the answer.']);
     $chat = Chat::factory()->forUser($this->user)->create(['title' => null]);
-    ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'user', 'content' => 'hi', 'status' => 'complete']);
+    ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'user', 'content' => 'Reset my password', 'status' => 'complete']);
     $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'pending']);
 
-    app(ChatAiService::class)->streamMessage($placeholder, 'hi', null);
+    app(ChatAiService::class)->streamMessage($placeholder, 'Reset my password', null);
+
+    expect($chat->refresh()->title)->toBe('Reset my password');
+    Ai::assertAgentNotPrompted(ChatAgent::class, fn ($p) => str_contains($p->prompt, 'Title for this conversation'));
+});
+
+it('generates a title via the model for a long first message', function () {
+    // First fake response feeds the streamed reply, the second the title call.
+    Ai::fakeAgent(ChatAgent::class, ['Here is the answer.', 'Great Conversation Title']);
+    $long = 'Please help me understand exactly how the multi-tenant row level security works in this project.';
+    $chat = Chat::factory()->forUser($this->user)->create(['title' => null]);
+    ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'user', 'content' => $long, 'status' => 'complete']);
+    $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'pending']);
+
+    app(ChatAiService::class)->streamMessage($placeholder, $long, null);
 
     expect($chat->refresh()->title)->toBe('Great Conversation Title');
+});
+
+it('regenerates the title from context once the conversation reaches 8 messages', function () {
+    $chat = Chat::factory()->forUser($this->user)->create(['title' => 'Old title']);
+    // 3 prior complete turns (6 messages), then a 4th user message — the placeholder makes 8.
+    foreach (range(1, 3) as $i) {
+        ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'user', 'content' => "u{$i}", 'status' => 'complete', 'created_at' => now()->addSeconds($i * 2)]);
+        ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'assistant', 'content' => "a{$i}", 'status' => 'complete', 'created_at' => now()->addSeconds($i * 2 + 1)]);
+    }
+    ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'user', 'content' => 'u4', 'status' => 'complete', 'created_at' => now()->addSeconds(100)]);
+    $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'pending', 'created_at' => now()->addSeconds(101)]);
+
+    Ai::fakeAgent(ChatAgent::class, ['Reply.', 'Refined Title']);
+    app(ChatAiService::class)->streamMessage($placeholder, 'u4', null);
+
+    expect($chat->refresh()->title)->toBe('Refined Title');
+    Ai::assertAgentWasPrompted(ChatAgent::class, fn ($p) => str_contains($p->prompt, 'Generate a concise title for this conversation'));
 });

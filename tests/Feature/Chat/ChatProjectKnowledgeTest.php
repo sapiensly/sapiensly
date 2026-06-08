@@ -87,6 +87,37 @@ it('retrieves project knowledge and injects it for chats in that project', funct
     expect($placeholder->refresh()->status)->toBe('complete');
 });
 
+it('appends retrieved knowledge to the user turn, keeping the system prefix cacheable', function () {
+    $kb = KnowledgeBase::factory()->forUser($this->user)->ready()->create();
+    $project = ChatProject::factory()->create(['user_id' => $this->user->id]);
+    $project->knowledgeBases()->attach($kb->id);
+    $chat = Chat::factory()->forUser($this->user)->create(['chat_project_id' => $project->id]);
+    $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'pending']);
+
+    $mock = Mockery::mock(RetrievalService::class);
+    $mock->shouldReceive('retrieve')->once()->andReturn([
+        'context' => 'Refunds are processed within 14 days.',
+        'chunk_count' => 1,
+        'knowledge_bases' => [],
+        'chunks' => new Collection,
+    ]);
+    $this->instance(RetrievalService::class, $mock);
+
+    // The fake's closure receives the content of the last user message — i.e. the
+    // prompt passed to stream(), which now carries the relocated RAG block.
+    $capturedPrompt = null;
+    Ai::fakeAgent(ChatAgent::class, function ($prompt) use (&$capturedPrompt) {
+        $capturedPrompt = $prompt;
+
+        return 'ok';
+    });
+
+    app(ChatAiService::class)->streamMessage($placeholder, 'what is our refund policy', null);
+
+    expect($capturedPrompt)->toContain('what is our refund policy')
+        ->and($capturedPrompt)->toContain('Refunds are processed within 14 days.');
+});
+
 it('does not retrieve when the chat has no project', function () {
     $chat = Chat::factory()->forUser($this->user)->create(['chat_project_id' => null]);
     $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'pending']);

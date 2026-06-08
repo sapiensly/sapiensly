@@ -40,6 +40,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Prompt Caching
+    |--------------------------------------------------------------------------
+    |
+    | Gates the explicit Anthropic `cache_control` markers on the chat's frozen
+    | system prefix (system + instructions + rolling summary). When off, the
+    | prefix is still kept stable (so OpenAI / OpenRouter-to-OpenAI auto-cache),
+    | but no Anthropic cache breakpoint is emitted.
+    |
+    */
+    'prompt_caching' => [
+        'enabled' => env('AI_PROMPT_CACHING', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | AI Providers
     |--------------------------------------------------------------------------
     |

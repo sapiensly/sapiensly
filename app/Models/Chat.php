@@ -25,6 +25,8 @@ class Chat extends Model
         'chat_project_id',
         'title',
         'model',
+        'summary',
+        'summary_through_message_id',
         'agent_id',
         'tool_ids',
         'visibility',
