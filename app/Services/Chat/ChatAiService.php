@@ -66,8 +66,8 @@ class ChatAiService
     /** A first message at or under this length becomes the title verbatim — no model call. */
     private const TITLE_DIRECT_MAX_CHARS = 60;
 
-    /** Regenerate the title once the conversation reaches this many messages (4 user + 4 assistant). */
-    private const TITLE_REFINE_AT_MESSAGES = 8;
+    /** Regenerate the title once the conversation reaches this many messages (3 user + 3 assistant). */
+    private const TITLE_REFINE_AT_MESSAGES = 6;
 
     private const SUMMARY_INSTRUCTIONS = <<<'PROMPT'
         You compress a chat conversation into a dense running summary that another AI assistant will rely on as its memory of earlier turns.
@@ -578,7 +578,7 @@ class ChatAiService
     /**
      * Title lifecycle: derive an initial title on the first turn, then regenerate
      * a sharper one once the conversation matures to {@see self::TITLE_REFINE_AT_MESSAGES}
-     * messages (4 user + 4 assistant). A short opener is used verbatim — no model call.
+     * messages (3 user + 3 assistant). A short opener is used verbatim — no model call.
      */
     private function maybeUpdateTitle(Chat $chat, string $promptText, Lab $provider): void
     {

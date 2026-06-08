@@ -104,18 +104,18 @@ it('generates a title via the model for a long first message', function () {
     expect($chat->refresh()->title)->toBe('Great Conversation Title');
 });
 
-it('regenerates the title from context once the conversation reaches 8 messages', function () {
+it('regenerates the title from context once the conversation reaches 6 messages', function () {
     $chat = Chat::factory()->forUser($this->user)->create(['title' => 'Old title']);
-    // 3 prior complete turns (6 messages), then a 4th user message — the placeholder makes 8.
-    foreach (range(1, 3) as $i) {
+    // 2 prior complete turns (4 messages), then a 3rd user message — the placeholder makes 6.
+    foreach (range(1, 2) as $i) {
         ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'user', 'content' => "u{$i}", 'status' => 'complete', 'created_at' => now()->addSeconds($i * 2)]);
         ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'assistant', 'content' => "a{$i}", 'status' => 'complete', 'created_at' => now()->addSeconds($i * 2 + 1)]);
     }
-    ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'user', 'content' => 'u4', 'status' => 'complete', 'created_at' => now()->addSeconds(100)]);
+    ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'user', 'content' => 'u3', 'status' => 'complete', 'created_at' => now()->addSeconds(100)]);
     $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'pending', 'created_at' => now()->addSeconds(101)]);
 
     Ai::fakeAgent(ChatAgent::class, ['Reply.', 'Refined Title']);
-    app(ChatAiService::class)->streamMessage($placeholder, 'u4', null);
+    app(ChatAiService::class)->streamMessage($placeholder, 'u3', null);
 
     expect($chat->refresh()->title)->toBe('Refined Title');
     Ai::assertAgentWasPrompted(ChatAgent::class, fn ($p) => str_contains($p->prompt, 'Generate a concise title for this conversation'));
