@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
 import { type Artifact, parseArtifacts, type Segment } from '@/lib/artifacts';
-import { normalizeListMarkers } from '@/lib/markdown';
+import { normalizeChatMarkdown } from '@/lib/markdown';
 import type { ChatMessageDto } from '@/types/chatModule';
 import DOMPurify from 'dompurify';
 import { Check, Copy, FileText, RotateCw, Sparkles, Wrench } from '@lucide/vue';
@@ -35,7 +35,7 @@ const copiedId = ref<string | null>(null);
 
 function renderMarkdown(content: string | null): string {
     if (!content) return '';
-    const raw = marked.parse(normalizeListMarkers(content), { async: false, breaks: true, gfm: true }) as string;
+    const raw = marked.parse(normalizeChatMarkdown(content), { async: false, breaks: true, gfm: true }) as string;
     return DOMPurify.sanitize(raw);
 }
 

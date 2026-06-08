@@ -2,7 +2,7 @@
 import ToolCallIndicator from '@/components/chat/ToolCallIndicator.vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { KnowledgeBaseRef, Message, ToolCall } from '@/types/chat';
-import { normalizeListMarkers } from '@/lib/markdown';
+import { normalizeChatMarkdown } from '@/lib/markdown';
 import { Bot, User } from '@lucide/vue';
 import { marked } from 'marked';
 import { computed } from 'vue';
@@ -69,7 +69,7 @@ const renderedContent = computed(() => {
         return props.message.content;
     }
     try {
-        return marked.parse(normalizeListMarkers(props.message.content || ''));
+        return marked.parse(normalizeChatMarkdown(props.message.content || ''));
     } catch {
         return props.message.content;
     }
