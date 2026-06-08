@@ -17,7 +17,7 @@ class ChatStreamComplete implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public function __construct(public ChatMessage $message) {}
+    public function __construct(public ChatMessage $message, public ?string $chatTitle = null) {}
 
     public function broadcastAs(): string
     {
@@ -38,6 +38,8 @@ class ChatStreamComplete implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return [
+            'chat_id' => $this->message->chat_id,
+            'title' => $this->chatTitle,
             'message' => [
                 'id' => $this->message->id,
                 'role' => $this->message->role,

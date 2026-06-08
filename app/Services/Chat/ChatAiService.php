@@ -286,7 +286,7 @@ class ChatAiService
             $this->maybeUpdateTitle($chat, $promptText, $provider);
             $chat->save();
 
-            $this->safeBroadcast(fn () => ChatStreamComplete::dispatch($placeholder->refresh()));
+            $this->safeBroadcast(fn () => ChatStreamComplete::dispatch($placeholder->refresh(), $chat->title));
 
             $this->maybeQueueSummary($chat);
 
@@ -588,9 +588,19 @@ class ChatAiService
             return;
         }
 
+        // Regenerate the title exactly once, as soon as the conversation has
+        // matured to at least TITLE_REFINE_AT_MESSAGES (3 user + 3 assistant).
+        // The watermark makes it fire a single time and survive chats that were
+        // already past the threshold and errored/retried turns that skew the
+        // count (a plain `=== N` could miss the exact tick).
+        if ($chat->title_refined_at !== null) {
+            return;
+        }
+
         $completeCount = $chat->messages()->where('status', 'complete')->count();
-        if ($completeCount === self::TITLE_REFINE_AT_MESSAGES) {
+        if ($completeCount >= self::TITLE_REFINE_AT_MESSAGES) {
             $chat->title = $this->refineTitle($chat, $provider);
+            $chat->title_refined_at = now();
         }
     }
 

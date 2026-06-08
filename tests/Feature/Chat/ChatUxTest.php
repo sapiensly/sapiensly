@@ -117,6 +117,36 @@ it('regenerates the title from context once the conversation reaches 6 messages'
     Ai::fakeAgent(ChatAgent::class, ['Reply.', 'Refined Title']);
     app(ChatAiService::class)->streamMessage($placeholder, 'u3', null);
 
-    expect($chat->refresh()->title)->toBe('Refined Title');
+    expect($chat->refresh()->title)->toBe('Refined Title')
+        ->and($chat->title_refined_at)->not->toBeNull();
     Ai::assertAgentWasPrompted(ChatAgent::class, fn ($p) => str_contains($p->prompt, 'Generate a concise title for this conversation'));
+});
+
+it('regenerates the title for a chat that was already past the threshold', function () {
+    // 8 complete messages, not yet refined — the next turn should still fire once.
+    $chat = Chat::factory()->forUser($this->user)->create(['title' => 'Old title', 'title_refined_at' => null]);
+    foreach (range(1, 8) as $i) {
+        ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => $i % 2 === 1 ? 'user' : 'assistant', 'content' => "m{$i}", 'status' => 'complete', 'created_at' => now()->addSeconds($i)]);
+    }
+    $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'pending', 'created_at' => now()->addSeconds(100)]);
+
+    Ai::fakeAgent(ChatAgent::class, ['Reply.', 'Refined Title']);
+    app(ChatAiService::class)->streamMessage($placeholder, 'next', null);
+
+    expect($chat->refresh()->title)->toBe('Refined Title')
+        ->and($chat->title_refined_at)->not->toBeNull();
+});
+
+it('does not regenerate the title again once it has been refined', function () {
+    $chat = Chat::factory()->forUser($this->user)->create(['title' => 'Kept title', 'title_refined_at' => now()]);
+    foreach (range(1, 8) as $i) {
+        ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => $i % 2 === 1 ? 'user' : 'assistant', 'content' => "m{$i}", 'status' => 'complete', 'created_at' => now()->addSeconds($i)]);
+    }
+    $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'pending', 'created_at' => now()->addSeconds(100)]);
+
+    Ai::fakeAgent(ChatAgent::class, ['Reply.']);
+    app(ChatAiService::class)->streamMessage($placeholder, 'next', null);
+
+    expect($chat->refresh()->title)->toBe('Kept title');
+    Ai::assertAgentNotPrompted(ChatAgent::class, fn ($p) => str_contains($p->prompt, 'Generate a concise title for this conversation'));
 });

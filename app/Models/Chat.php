@@ -27,6 +27,7 @@ class Chat extends Model
         'model',
         'summary',
         'summary_through_message_id',
+        'title_refined_at',
         'agent_id',
         'tool_ids',
         'visibility',
@@ -40,6 +41,7 @@ class Chat extends Model
             'visibility' => Visibility::class,
             'tool_ids' => 'array',
             'last_message_at' => 'datetime',
+            'title_refined_at' => 'datetime',
             'archived_at' => 'datetime',
         ];
     }

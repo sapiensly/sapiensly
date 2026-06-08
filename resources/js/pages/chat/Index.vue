@@ -45,6 +45,10 @@ function selectionFor(chat: ActiveChatDto | null): string | null {
 }
 
 const messages = ref<ChatMessageDto[]>(props.activeChat?.messages ?? []);
+// Local copy of the active chat title so backend title updates (the first-turn
+// title and the 6-message regeneration), broadcast on ChatStreamComplete,
+// reflect in the header without a full activeChat reload.
+const activeTitle = ref<string | null>(props.activeChat?.title ?? null);
 const currentModel = ref<string | null>(
     selectionFor(props.activeChat) ??
         props.defaultModel ??
@@ -178,10 +182,17 @@ function subscribe(id: string) {
 
     channel.listen(
         '.ChatStreamComplete',
-        (payload: { message: ChatMessageDto }) => {
+        (payload: {
+            message: ChatMessageDto;
+            chat_id?: string;
+            title?: string | null;
+        }) => {
             upsert({ ...payload.message, attachments: [] });
             delete toolActivity.value[payload.message.id];
             toolActivity.value = { ...toolActivity.value };
+            if (payload.title && payload.chat_id === activeId.value) {
+                activeTitle.value = payload.title;
+            }
             router.reload({ only: ['chats'] });
         },
     );
@@ -216,6 +227,7 @@ watch(
     () => props.activeChat?.id,
     (id) => {
         messages.value = props.activeChat?.messages ?? [];
+        activeTitle.value = props.activeChat?.title ?? null;
         currentModel.value =
             selectionFor(props.activeChat) ?? currentModel.value;
         selectedToolIds.value = props.activeChat?.tool_ids ?? [];
@@ -332,11 +344,11 @@ function retry() {
 </script>
 
 <template>
-    <Head :title="activeChat?.title || t('app_v2.nav.chat')" />
+    <Head :title="activeTitle || t('app_v2.nav.chat')" />
 
     <AppLayoutV2
         v-slot="{ openPalette, toggleSidebar, sidebarCollapsed }"
-        :title="activeChat?.title || t('app_v2.nav.chat')"
+        :title="activeTitle || t('app_v2.nav.chat')"
         bg="flat"
         :full-bleed="true"
         hide-topbar
@@ -358,7 +370,7 @@ function retry() {
 
             <div class="flex min-h-0 flex-1 flex-col">
                 <Topbar
-                    :title="activeChat?.title || t('app_v2.nav.chat')"
+                    :title="activeTitle || t('app_v2.nav.chat')"
                     :sidebar-collapsed="sidebarCollapsed"
                     @toggle-sidebar="toggleSidebar"
                     @open-palette="openPalette"
@@ -382,7 +394,7 @@ function retry() {
                 <template v-if="activeChat">
                     <ChatThread
                         :messages="messages"
-                        :title="activeChat.title"
+                        :title="activeTitle"
                         :active-artifact-id="activeArtifactId"
                         :tool-activity="toolActivity"
                         @retry="retry"
