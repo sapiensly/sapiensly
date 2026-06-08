@@ -9,12 +9,22 @@ use App\Http\Middleware\ResolveTenantConnection;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\SetPermissionsTeam;
 use App\Http\Middleware\VerifyWhatsAppSignature;
+use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Middleware\HandleCors;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Routing\Middleware\ThrottleRequestsWithRedis;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
@@ -46,6 +56,27 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
             InjectAiProviderConfig::class,
             ResolveTenantConnection::class,
+        ]);
+
+        // SubstituteBindings is the last middleware in the default `web` group,
+        // so appended middleware run AFTER it. Route model binding for an
+        // RLS-protected tenant model (e.g. `{chat}`) would then query before
+        // BindTenantContext set the scope — fail-closed, yielding a spurious
+        // 404 in production. Pin the tenant scope + permission team ahead of
+        // SubstituteBindings via the middleware priority list.
+        $middleware->priority([
+            HandlePrecognitiveRequests::class,
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+            AuthenticatesRequests::class,
+            ThrottleRequests::class,
+            ThrottleRequestsWithRedis::class,
+            SetPermissionsTeam::class,
+            BindTenantContext::class,
+            SubstituteBindings::class,
+            Authorize::class,
         ]);
 
         $middleware->alias([
