@@ -1,14 +1,26 @@
 <script setup lang="ts">
+import OrganizationController from '@/actions/App/Http/Controllers/Settings/OrganizationController';
 import SettingsCard from '@/components/admin/SettingsCard.vue';
 import InputError from '@/components/InputError.vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useInitials } from '@/composables/useInitials';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import type { Organization, User } from '@/types';
-import { Head, useForm } from '@inertiajs/vue3';
-import { Building2, Mail, Users } from '@lucide/vue';
+import { Form, Head, useForm } from '@inertiajs/vue3';
+import { AlertTriangle, Building2, Mail, Trash2, Users } from '@lucide/vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -24,15 +36,19 @@ interface Props {
     organization: Organization;
     members: Member[];
     isAdmin: boolean;
+    isOwner: boolean;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const inviteForm = useForm({
     email: '',
 });
 
 const { getInitials } = useInitials();
+
+const deleteConfirmation = ref('');
+const canDelete = computed(() => deleteConfirmation.value === props.organization.name);
 
 const submitInvite = () => {
     inviteForm.post('/settings/organization/invite', {
@@ -136,6 +152,96 @@ const submitInvite = () => {
                         {{ t('settings.organization.send_invitation') }}
                     </button>
                 </form>
+            </SettingsCard>
+
+            <!-- Danger zone — delete organization (owner only). -->
+            <SettingsCard
+                v-if="isOwner"
+                :icon="AlertTriangle"
+                :title="t('settings.organization.delete.title')"
+                :description="t('settings.organization.delete.description')"
+                tint="var(--sp-danger)"
+            >
+                <div
+                    class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-3"
+                >
+                    <AlertTriangle class="mt-0.5 size-4 shrink-0 text-sp-danger" />
+                    <div class="space-y-0.5">
+                        <p class="text-sm font-medium text-sp-danger">
+                            {{ t('settings.organization.delete.warning') }}
+                        </p>
+                        <p class="text-[11px] text-sp-danger/80">
+                            {{ t('settings.organization.delete.warning_text') }}
+                        </p>
+                    </div>
+                </div>
+
+                <Dialog>
+                    <DialogTrigger as-child>
+                        <button
+                            type="button"
+                            data-test="delete-organization-button"
+                            class="inline-flex items-center gap-1.5 self-start rounded-pill border border-sp-danger/40 bg-sp-danger/10 px-3.5 py-1.5 text-xs text-sp-danger transition-colors hover:bg-sp-danger/20"
+                        >
+                            <Trash2 class="size-3.5" />
+                            {{ t('settings.organization.delete.button') }}
+                        </button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <Form
+                            v-bind="OrganizationController.destroy.form()"
+                            :options="{ preserveScroll: true }"
+                            class="space-y-6"
+                            @success="deleteConfirmation = ''"
+                            v-slot="{ errors, processing }"
+                        >
+                            <DialogHeader class="space-y-3">
+                                <DialogTitle>
+                                    {{ t('settings.organization.delete.confirm_title') }}
+                                </DialogTitle>
+                                <DialogDescription>
+                                    {{ t('settings.organization.delete.confirm_description') }}
+                                </DialogDescription>
+                            </DialogHeader>
+
+                            <div class="space-y-1.5">
+                                <Label for="delete-organization-name">
+                                    {{ t('settings.organization.delete.confirm_label', { name: organization.name }) }}
+                                </Label>
+                                <Input
+                                    id="delete-organization-name"
+                                    v-model="deleteConfirmation"
+                                    name="name"
+                                    autocomplete="off"
+                                    :placeholder="t('settings.organization.delete.confirm_placeholder')"
+                                    class="h-9"
+                                />
+                                <InputError :message="errors.name" />
+                            </div>
+
+                            <DialogFooter class="gap-2">
+                                <DialogClose as-child>
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
+                                        @click="deleteConfirmation = ''"
+                                    >
+                                        {{ t('common.cancel') }}
+                                    </button>
+                                </DialogClose>
+                                <button
+                                    type="submit"
+                                    :disabled="processing || !canDelete"
+                                    data-test="confirm-delete-organization-button"
+                                    class="inline-flex items-center gap-1.5 rounded-pill border border-sp-danger/40 bg-sp-danger/10 px-3.5 py-1.5 text-xs text-sp-danger transition-colors hover:bg-sp-danger/20 disabled:opacity-50"
+                                >
+                                    <Trash2 class="size-3.5" />
+                                    {{ t('settings.organization.delete.button') }}
+                                </button>
+                            </DialogFooter>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
             </SettingsCard>
         </div>
     </SettingsLayout>
