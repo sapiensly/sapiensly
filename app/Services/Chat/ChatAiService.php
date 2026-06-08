@@ -601,6 +601,12 @@ class ChatAiService
         if ($completeCount >= self::TITLE_REFINE_AT_MESSAGES) {
             $chat->title = $this->refineTitle($chat, $provider);
             $chat->title_refined_at = now();
+
+            Log::info('Chat AI: title regenerated', [
+                'chat_id' => $chat->id,
+                'messages' => $completeCount,
+                'title' => $chat->title,
+            ]);
         }
     }
 
