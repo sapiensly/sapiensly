@@ -7,10 +7,12 @@ use App\Models\Concerns\UsesPlatformConnection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
 {
     use HasPrefixedUlid;
+    use SoftDeletes;
     use UsesPlatformConnection;
 
     protected $fillable = [

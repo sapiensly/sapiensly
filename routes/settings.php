@@ -23,6 +23,7 @@ Route::middleware([
     Route::get('settings/organization', [OrganizationController::class, 'show'])->name('organization.show');
     Route::get('settings/organization/create', [OrganizationController::class, 'create'])->name('organization.create');
     Route::post('settings/organization', [OrganizationController::class, 'store'])->name('organization.store');
+    Route::delete('settings/organization', [OrganizationController::class, 'destroy'])->name('organization.destroy');
     Route::post('settings/organization/invite', [OrganizationController::class, 'invite'])->name('organization.invite');
 
     Route::get('settings/sso', [SsoConnectionController::class, 'show'])->name('sso.show');
