@@ -283,7 +283,7 @@ class ChatAiService
                 'last_message_at' => now(),
                 'model' => $resolvedModel,
             ]);
-            $this->maybeUpdateTitle($chat, $promptText, $provider);
+            $this->maybeUpdateTitle($chat, $promptText);
             $chat->save();
 
             $this->safeBroadcast(fn () => ChatStreamComplete::dispatch($placeholder->refresh(), $chat->title));
@@ -537,13 +537,7 @@ class ChatAiService
             ->implode("\n\n");
 
         $model = $this->aiDefaults->model('summary_large');
-
-        $provider = Lab::Anthropic;
-        $user = $chat->user;
-        if ($user !== null) {
-            $this->providers->applyRuntimeConfig($user);
-            $provider = $this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic;
-        }
+        $provider = $this->resolveModelProvider($model, $chat->user);
 
         $prompt = ($existing !== '' ? "Existing summary:\n".$existing."\n\n" : '')
             ."Conversation messages to fold into the summary:\n\n".$transcript;
@@ -580,41 +574,69 @@ class ChatAiService
      * a sharper one once the conversation matures to {@see self::TITLE_REFINE_AT_MESSAGES}
      * messages (3 user + 3 assistant). A short opener is used verbatim — no model call.
      */
-    private function maybeUpdateTitle(Chat $chat, string $promptText, Lab $provider): void
+    private function maybeUpdateTitle(Chat $chat, string $promptText): void
     {
+        $user = $chat->user;
+
         if ($chat->title === null) {
-            $chat->title = $this->initialTitle($promptText, $provider);
+            $chat->title = $this->initialTitle($promptText, $user);
 
             return;
         }
 
-        // Regenerate the title exactly once, as soon as the conversation has
-        // matured to at least TITLE_REFINE_AT_MESSAGES (3 user + 3 assistant).
-        // The watermark makes it fire a single time and survive chats that were
-        // already past the threshold and errored/retried turns that skew the
-        // count (a plain `=== N` could miss the exact tick).
+        // Regenerate the title once, as soon as the conversation has matured to at
+        // least TITLE_REFINE_AT_MESSAGES (3 user + 3 assistant). The watermark
+        // makes it fire a single time and survive chats already past the threshold
+        // and errored/retried turns that skew the count (a plain `=== N` could miss
+        // the exact tick). Stamp the watermark only on a successful regeneration so
+        // a transient model failure retries on a later turn instead of giving up.
         if ($chat->title_refined_at !== null) {
             return;
         }
 
         $completeCount = $chat->messages()->where('status', 'complete')->count();
-        if ($completeCount >= self::TITLE_REFINE_AT_MESSAGES) {
-            $chat->title = $this->refineTitle($chat, $provider);
-            $chat->title_refined_at = now();
-
-            Log::info('Chat AI: title regenerated', [
-                'chat_id' => $chat->id,
-                'messages' => $completeCount,
-                'title' => $chat->title,
-            ]);
+        if ($completeCount < self::TITLE_REFINE_AT_MESSAGES) {
+            return;
         }
+
+        $refined = $this->refineTitle($chat, $user);
+        if ($refined === null) {
+            return;
+        }
+
+        $chat->title = $refined;
+        $chat->title_refined_at = now();
+
+        Log::info('Chat AI: title regenerated', [
+            'chat_id' => $chat->id,
+            'messages' => $completeCount,
+            'title' => $refined,
+        ]);
+    }
+
+    /**
+     * Resolve the provider for a title/summary model. These run on the
+     * `summary_short` / `summary_large` defaults, which may live on a different
+     * provider than the chat model — so route by the model's own catalog driver,
+     * never the chat's provider (else e.g. an OpenRouter model id gets sent to
+     * Anthropic and 404s).
+     */
+    private function resolveModelProvider(string $model, ?User $user): Lab
+    {
+        if ($user === null) {
+            return Lab::Anthropic;
+        }
+
+        $this->providers->applyRuntimeConfig($user);
+
+        return $this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic;
     }
 
     /**
      * First-turn title: a short opener already reads as a title, so use it verbatim
      * and skip the model; a long opener is condensed via the short-summary model.
      */
-    private function initialTitle(string $firstMessage, Lab $provider): string
+    private function initialTitle(string $firstMessage, ?User $user): string
     {
         $clean = trim(preg_replace('/\s+/', ' ', strip_tags($firstMessage)) ?? '');
         if ($clean === '') {
@@ -627,19 +649,17 @@ class ChatAiService
 
         return $this->titleFromModel(
             'Title for this conversation starter:'."\n\n".Str::limit($clean, 1000),
-            $provider,
-            $this->titleFrom($firstMessage),
-        );
+            $user,
+        ) ?? $this->titleFrom($firstMessage);
     }
 
     /**
      * Regenerate the title from the opening exchange (the first
-     * {@see self::TITLE_REFINE_AT_MESSAGES} messages), keeping the current title on failure.
+     * {@see self::TITLE_REFINE_AT_MESSAGES} messages). Returns null on an empty
+     * transcript or a model failure so the caller can leave the current title.
      */
-    private function refineTitle(Chat $chat, Lab $provider): string
+    private function refineTitle(Chat $chat, ?User $user): ?string
     {
-        $current = (string) $chat->title;
-
         $transcript = $chat->messages()
             ->where('status', 'complete')
             ->reorder()
@@ -651,21 +671,23 @@ class ChatAiService
             ->implode("\n\n");
 
         if (trim($transcript) === '') {
-            return $current;
+            return null;
         }
 
         return $this->titleFromModel(
             'Generate a concise title for this conversation:'."\n\n".Str::limit($transcript, 4000),
-            $provider,
-            $current,
+            $user,
         );
     }
 
     /**
-     * Prompt the short-summary model for a title, falling back to $fallback on any error.
+     * Prompt the short-summary model (on its own provider) for a title. Returns
+     * null on an empty response or any error.
      */
-    private function titleFromModel(string $prompt, Lab $provider, string $fallback): string
+    private function titleFromModel(string $prompt, ?User $user): ?string
     {
+        $model = $this->aiDefaults->model('summary_short');
+
         try {
             $titleAgent = new ChatAgent(
                 instructions: 'You generate very short chat titles. Reply with ONLY a 3-6 word title in the same language as the conversation. No quotes, no punctuation at the end, no prefixes.',
@@ -675,17 +697,17 @@ class ChatAiService
 
             $response = $titleAgent->prompt(
                 $prompt,
-                provider: $provider,
-                model: $this->aiDefaults->model('summary_short'),
+                provider: $this->resolveModelProvider($model, $user),
+                model: $model,
             );
 
             $title = $this->normalizeTitle((string) ($response->text ?? ''));
 
-            return $title !== '' ? $title : $fallback;
+            return $title !== '' ? $title : null;
         } catch (\Throwable $e) {
-            Log::warning('Chat AI: title generation failed (using fallback)', ['error' => $e->getMessage()]);
+            Log::warning('Chat AI: title generation failed', ['error' => $e->getMessage(), 'model' => $model]);
 
-            return $fallback;
+            return null;
         }
     }
 
