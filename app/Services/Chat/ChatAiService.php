@@ -52,8 +52,6 @@ class ChatAiService
 
     private const MAX_HISTORY_MESSAGES = 30;
 
-    private const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
-
     private const SYSTEM_PROMPT = <<<'PROMPT'
         You are a helpful, knowledgeable AI assistant in a chat application. Answer clearly and concisely, and use Markdown (headings, lists, tables, fenced code blocks) when it improves readability. Match the language of the user.
 
@@ -449,7 +447,7 @@ class ChatAiService
             $response = $titleAgent->prompt(
                 'Title for this conversation starter:'."\n\n".Str::limit($clean, 1000),
                 provider: $provider,
-                model: self::DEFAULT_MODEL,
+                model: $this->aiDefaults->model('summary_short'),
             );
 
             $title = trim(strip_tags((string) ($response->text ?? '')));

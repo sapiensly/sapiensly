@@ -8,10 +8,10 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Per-module default AI models. Each product module (chat, app builder, flows,
- * chatbots) has a configurable PRIMARY model and a FALLBACK, set on the admin
- * AI > Defaults screen and stored in `app_settings` under
- * `admin_v2.ai.{module}.{primary|fallback}`.
+ * Per-module default AI models. Each product module (chat, the automatic
+ * short/large summary helpers, app builder, flows, chatbots) has a configurable
+ * PRIMARY model and a FALLBACK, set on the admin AI > Defaults screen and stored
+ * in `app_settings` under `admin_v2.ai.{module}.{primary|fallback}`.
  *
  * The stored value is an `ai_catalog_models` id (what the admin select submits);
  * the runtime needs the model string. So this service speaks two shapes:
@@ -27,7 +27,7 @@ use Throwable;
 class AiDefaults
 {
     /** @var list<string> */
-    public const MODULES = ['chat', 'builder', 'flows', 'chatbots'];
+    public const MODULES = ['chat', 'summary_short', 'summary_large', 'builder', 'flows', 'chatbots'];
 
     /**
      * Last-resort model when nothing is configured for a module. Mirrors the

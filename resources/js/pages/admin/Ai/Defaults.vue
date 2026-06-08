@@ -11,7 +11,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { Bot, Cpu, Sparkles, Zap } from '@/lib/admin/icons';
+import { Bot, Cpu, FileText, ScrollText, Sparkles, Zap } from '@/lib/admin/icons';
 import type { AiModel, UUID } from '@/lib/admin/types';
 import { Head, router } from '@inertiajs/vue3';
 import type { Component } from 'vue';
@@ -33,6 +33,8 @@ const { t } = useI18n();
 // Per-module presentation. Icon + tint only; copy comes from i18n keyed by module.
 const moduleMeta: Record<string, { icon: Component; tint?: string }> = {
     chat: { icon: Sparkles },
+    summary_short: { icon: FileText, tint: 'var(--sp-spectrum-cyan)' },
+    summary_large: { icon: ScrollText, tint: 'var(--sp-spectrum-indigo)' },
     builder: { icon: Cpu, tint: 'var(--sp-accent-cyan)' },
     flows: { icon: Zap, tint: 'var(--sp-spectrum-indigo)' },
     chatbots: { icon: Bot, tint: 'var(--sp-spectrum-magenta)' },

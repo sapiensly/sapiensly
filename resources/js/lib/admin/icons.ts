@@ -28,6 +28,8 @@ export {
     Radio,
     Plug,
     Library,
+    FileText,
+    ScrollText,
 
     // actions / affordances
     SlidersHorizontal,

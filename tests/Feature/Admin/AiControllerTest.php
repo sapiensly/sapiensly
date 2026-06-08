@@ -44,8 +44,10 @@ test('defaults tab renders per-module primary/fallback with enabled chat models'
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('admin/Ai/Defaults')
-            ->has('modules', 4)
+            ->has('modules', 6)
             ->has('defaults.chat')
+            ->has('defaults.summary_short')
+            ->has('defaults.summary_large')
             ->has('defaults.chatbots')
             ->has('chatModels.0'));
 });
