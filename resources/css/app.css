@@ -457,17 +457,19 @@
     font-size: 0.875em;
     border-radius: 0.375rem;
     padding: 0.12em 0.4em;
-    background: color-mix(in srgb, currentColor 9%, transparent);
+    color: var(--sp-text-primary);
+    background: var(--sp-tint-strong);
 }
 .sp-chat-prose pre {
     margin: 0.9em 0;
     padding: 0.9rem 1rem;
     border-radius: 0.75rem;
     overflow-x: auto;
-    background: color-mix(in srgb, currentColor 7%, transparent);
-    border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+    color: var(--sp-text-primary);
+    background: var(--sp-bg-elevated);
+    border: 1px solid var(--sp-border-medium);
 }
-.sp-chat-prose pre code { background: transparent; padding: 0; font-size: 0.85em; line-height: 1.6; }
+.sp-chat-prose pre code { background: transparent; padding: 0; color: inherit; font-size: 0.85em; line-height: 1.6; }
 .sp-chat-prose blockquote {
     margin: 0.9em 0;
     padding-left: 0.9rem;

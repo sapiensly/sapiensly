@@ -226,6 +226,8 @@ class ChatAiService
             }
             Cache::forget($stopKey);
 
+            $buffer = self::closeDanglingArtifacts($buffer);
+
             $placeholder->update([
                 'content' => $buffer,
                 'model' => $resolvedModel,
@@ -486,6 +488,27 @@ class ChatAiService
         }
 
         return '';
+    }
+
+    /**
+     * Balance the `<artifact>` tags in a finished reply. When the model ends the
+     * turn without emitting a closing `</artifact>`, the frontend card would spin
+     * on "Writing…" forever; appending the missing tag(s) finalizes the persisted
+     * content so it renders closed on stream-complete and on reload. Only fully
+     * formed `<artifact …>` openers count, mirroring the frontend parser, so a
+     * reply truncated mid-tag isn't given a stray close.
+     */
+    public static function closeDanglingArtifacts(string $buffer): string
+    {
+        $opens = preg_match_all('/<artifact\b[^>]*>/i', $buffer);
+        $closes = preg_match_all('/<\/artifact>/i', $buffer);
+        $dangling = $opens - $closes;
+
+        if ($dangling > 0) {
+            $buffer .= str_repeat('</artifact>', $dangling);
+        }
+
+        return $buffer;
     }
 
     /**

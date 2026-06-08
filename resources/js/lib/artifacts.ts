@@ -47,7 +47,12 @@ function normalizeType(raw: string | null): ArtifactType {
     return 'code';
 }
 
-export function parseArtifacts(content: string | null, messageId: string): ParsedContent {
+/**
+ * @param streamDone When the owning message has settled (status `complete` or
+ * `error`), a trailing artifact whose `</artifact>` tag never arrived is treated
+ * as closed — otherwise its card would spin on "Writing…" forever.
+ */
+export function parseArtifacts(content: string | null, messageId: string, streamDone = false): ParsedContent {
     const segments: Segment[] = [];
     const artifacts: Artifact[] = [];
 
@@ -80,7 +85,7 @@ export function parseArtifacts(content: string | null, messageId: string): Parse
 
         if (!close || close.index === undefined) {
             body = afterOpen;
-            closed = false;
+            closed = streamDone;
             consumedToEnd = true;
         } else {
             body = afterOpen.slice(0, close.index);

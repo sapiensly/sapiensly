@@ -20,7 +20,8 @@ const props = defineProps<{
 const emit = defineEmits<{ retry: []; openArtifact: [artifact: Artifact] }>();
 
 function segmentsFor(m: ChatMessageDto): Segment[] {
-    return parseArtifacts(m.content, m.id).segments;
+    const settled = m.status === 'complete' || m.status === 'error';
+    return parseArtifacts(m.content, m.id, settled).segments;
 }
 
 function prettyToolName(name: string): string {
