@@ -122,13 +122,11 @@ class KnowledgeScopeWiper
                 KnowledgeBaseDocument::query()
                     ->whereIn('knowledge_base_id', $kbIds)
                     ->delete();
-
-                // Detach Document <-> KnowledgeBase pivot rows.
-                DB::table('document_knowledge_base')
-                    ->whereIn('knowledge_base_id', $kbIds)
-                    ->delete();
             }
 
+            // The document_knowledge_base pivot is cleaned up by the
+            // `knowledge_base_id` ON DELETE CASCADE when the KBs below are
+            // force-deleted (both now live in the tenant schema).
             KnowledgeBase::query()
                 ->whereIn('organization_id', $organizationIds)
                 ->forceDelete();

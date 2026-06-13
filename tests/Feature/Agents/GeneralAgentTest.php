@@ -38,9 +38,10 @@ it('creates a general agent connected to both knowledge bases and tools', functi
         ->assertRedirect();
 
     $agent = Agent::where('name', 'My General Agent')->firstOrFail();
+    $knowledgeBases = $agent->loadKnowledgeBases();
     expect($agent->type)->toBe(AgentType::General)
-        ->and($agent->knowledgeBases)->toHaveCount(1)
-        ->and($agent->knowledgeBases->first()->id)->toBe($kb->id)
+        ->and($knowledgeBases)->toHaveCount(1)
+        ->and($knowledgeBases->first()->id)->toBe($kb->id)
         ->and($agent->tools)->toHaveCount(1)
         ->and($agent->tools->first()->id)->toBe($tool->id);
 });

@@ -2,6 +2,7 @@
 
 use App\Enums\Visibility;
 use App\Models\App;
+use App\Models\KnowledgeBase;
 use App\Models\Organization;
 use App\Models\Record;
 use App\Models\User;
@@ -40,7 +41,7 @@ afterEach(function () {
 function truncateTenantFixtures(): void
 {
     DB::connection('owner_commit')->statement(
-        'truncate tenant.records, platform.apps, platform.organizations, platform.users restart identity cascade'
+        'truncate tenant.records, tenant.knowledge_bases, platform.apps, platform.organizations, platform.users restart identity cascade'
     );
 }
 
@@ -84,6 +85,22 @@ function seedRecord(?string $orgId, ?int $userId, string $appId): Record
 function tenantRecordCount(): int
 {
     return DB::connection('tenant_app_real')->table('tenant.records')->count();
+}
+
+function seedKnowledgeBase(?string $orgId, int $userId): KnowledgeBase
+{
+    return KnowledgeBase::on('owner_commit')->create([
+        'organization_id' => $orgId,
+        'user_id' => $userId,
+        'name' => 'KB '.uniqid(),
+        'status' => 'ready',
+        'visibility' => $orgId ? Visibility::Organization : Visibility::Private,
+    ]);
+}
+
+function tenantKnowledgeBaseCount(): int
+{
+    return DB::connection('tenant_app_real')->table('tenant.knowledge_bases')->count();
 }
 
 it('only returns rows for the scoped organization', function () {
@@ -157,6 +174,28 @@ it('auto-fills the tenant key from the session context on insert', function () {
     expect(tenantRecordCount())->toBe(1)
         ->and(DB::connection('owner_commit')->table('tenant.records')->value('organization_id'))
         ->toBe($orgA->id);
+});
+
+it('isolates knowledge_bases by organization under the real tenant role', function () {
+    // Proves knowledge_bases was promoted from platform to the tenant schema:
+    // reading it through the real tenant_app role only works if it now lives in
+    // `tenant`, and the row-level isolation matches the rest of the tenant data.
+    $user = makeOwner();
+    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
+    $orgB = Organization::on('owner_commit')->create(['name' => 'B', 'slug' => 'b-'.uniqid()]);
+
+    seedKnowledgeBase($orgA->id, $user->id);
+    seedKnowledgeBase($orgA->id, $user->id);
+    seedKnowledgeBase($orgB->id, $user->id);
+
+    scopeTenant($orgA->id, null);
+    expect(tenantKnowledgeBaseCount())->toBe(2);
+
+    scopeTenant($orgB->id, null);
+    expect(tenantKnowledgeBaseCount())->toBe(1);
+
+    scopeTenant(null, null);
+    expect(tenantKnowledgeBaseCount())->toBe(0);
 });
 
 it('denies tenant_app any access to the platform schema', function () {

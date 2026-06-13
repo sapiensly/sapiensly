@@ -169,7 +169,7 @@ class FlowController extends Controller
         ]);
 
         if (! empty($validated['knowledge_base_ids'])) {
-            $agent->knowledgeBases()->sync($validated['knowledge_base_ids']);
+            $agent->syncKnowledgeBases($validated['knowledge_base_ids']);
         }
 
         if (! empty($validated['tool_ids'])) {

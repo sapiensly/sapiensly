@@ -135,7 +135,7 @@ class LLMService
      */
     public function streamChatWithRAGInfo(Agent $agent, array $messages, ?string $userQuery = null): array
     {
-        $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
+        $knowledgeBaseIds = $agent->knowledgeBaseIds();
 
         if (empty($knowledgeBaseIds)) {
             return [
@@ -266,7 +266,7 @@ class LLMService
         $chunkCount = 0;
         $systemPrompt = $agent->prompt_template ?? '';
 
-        $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
+        $knowledgeBaseIds = $agent->knowledgeBaseIds();
         $userQuery = $this->lastUserMessageContent($messages);
 
         if (! empty($knowledgeBaseIds) && trim($userQuery) !== '') {

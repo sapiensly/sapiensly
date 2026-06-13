@@ -91,7 +91,7 @@ class WidgetStreamService
                 }
             } else {
                 // Use synchronous chat (streaming generators don't work inside response()->stream())
-                $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
+                $knowledgeBaseIds = $agent->knowledgeBaseIds();
 
                 if (! empty($knowledgeBaseIds)) {
                     $lastUserMessage = $messages->last()?->content ?? '';

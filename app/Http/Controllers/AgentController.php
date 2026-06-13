@@ -32,7 +32,7 @@ class AgentController extends Controller
         $query = Agent::query()
             ->forAccountContext($request->user())
             ->with('team:id,name')
-            ->withCount(['knowledgeBases', 'tools'])
+            ->withCount(['knowledgeBaseLinks as knowledge_bases_count', 'tools'])
             ->latest();
 
         if ($typeFilter && in_array($typeFilter, array_column(AgentType::cases(), 'value'))) {
@@ -98,7 +98,7 @@ class AgentController extends Controller
         ]);
 
         if ($request->has('knowledge_base_ids')) {
-            $agent->knowledgeBases()->sync($request->knowledge_base_ids);
+            $agent->syncKnowledgeBases($request->knowledge_base_ids);
         }
 
         if ($request->has('tool_ids')) {
@@ -112,8 +112,11 @@ class AgentController extends Controller
     {
         $this->authorize('view', $agent);
 
+        $agent->load('tools');
+        $agent->loadKnowledgeBases();
+
         return Inertia::render('standalone-agents/Show', [
-            'agent' => $agent->load(['knowledgeBases', 'tools']),
+            'agent' => $agent,
         ]);
     }
 
@@ -123,8 +126,11 @@ class AgentController extends Controller
 
         $activeFlow = $agent->activeFlow();
 
+        $agent->load('tools');
+        $agent->loadKnowledgeBases();
+
         return Inertia::render('standalone-agents/Edit', [
-            'agent' => $agent->load(['knowledgeBases', 'tools']),
+            'agent' => $agent,
             'agentTypes' => collect(AgentType::cases())->map(fn ($type) => [
                 'value' => $type->value,
                 'label' => $type->label(),
@@ -151,7 +157,7 @@ class AgentController extends Controller
         ]);
 
         if ($request->has('knowledge_base_ids')) {
-            $agent->knowledgeBases()->sync($request->knowledge_base_ids ?? []);
+            $agent->syncKnowledgeBases($request->knowledge_base_ids ?? []);
         }
 
         if ($request->has('tool_ids')) {
@@ -179,7 +185,7 @@ class AgentController extends Controller
         $newAgent->status = AgentStatus::Draft;
         $newAgent->save();
 
-        $newAgent->knowledgeBases()->sync($agent->knowledgeBases->pluck('id'));
+        $newAgent->syncKnowledgeBases($agent->knowledgeBaseIds());
         $newAgent->tools()->sync($agent->tools->pluck('id'));
 
         return to_route('agents.show', $newAgent);

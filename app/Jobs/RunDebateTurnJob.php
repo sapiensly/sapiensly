@@ -78,7 +78,7 @@ class RunDebateTurnJob implements ShouldQueue
      */
     private function agentKnowledgeContext(Agent $agent, string $topic): string
     {
-        $kbIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->all();
+        $kbIds = $agent->knowledgeBaseIds();
         if (empty($kbIds) || trim($topic) === '') {
             return '';
         }

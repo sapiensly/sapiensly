@@ -131,8 +131,9 @@ describe('store', function () {
             ->assertRedirect();
 
         $agent = Agent::where('name', 'My Knowledge Agent')->first();
-        expect($agent->knowledgeBases)->toHaveCount(1);
-        expect($agent->knowledgeBases->first()->id)->toBe($kb->id);
+        $knowledgeBases = $agent->loadKnowledgeBases();
+        expect($knowledgeBases)->toHaveCount(1);
+        expect($knowledgeBases->first()->id)->toBe($kb->id);
     });
 
     it('creates an action agent with tools', function () {
@@ -171,7 +172,7 @@ describe('show', function () {
     it('displays a standalone agent with its relationships', function () {
         $agent = Agent::factory()->standalone()->knowledge()->create(['user_id' => $this->user->id]);
         $kb = KnowledgeBase::factory()->ready()->create(['user_id' => $this->user->id]);
-        $agent->knowledgeBases()->attach($kb);
+        $agent->syncKnowledgeBases([$kb->id]);
 
         $this->actingAs($this->user)
             ->get(route('agents.show', $agent))
@@ -242,7 +243,7 @@ describe('update', function () {
         $agent = Agent::factory()->standalone()->knowledge()->create(['user_id' => $this->user->id]);
         $kb1 = KnowledgeBase::factory()->ready()->create(['user_id' => $this->user->id]);
         $kb2 = KnowledgeBase::factory()->ready()->create(['user_id' => $this->user->id]);
-        $agent->knowledgeBases()->attach($kb1);
+        $agent->syncKnowledgeBases([$kb1->id]);
 
         $data = [
             'name' => $agent->name,
@@ -255,8 +256,9 @@ describe('update', function () {
             ->assertRedirect();
 
         $agent->refresh();
-        expect($agent->knowledgeBases)->toHaveCount(1);
-        expect($agent->knowledgeBases->first()->id)->toBe($kb2->id);
+        $knowledgeBases = $agent->loadKnowledgeBases();
+        expect($knowledgeBases)->toHaveCount(1);
+        expect($knowledgeBases->first()->id)->toBe($kb2->id);
     });
 
     it('returns 403 when updating agents belonging to other users', function () {
@@ -312,14 +314,14 @@ describe('duplicate', function () {
     it('duplicates agent with its relationships', function () {
         $agent = Agent::factory()->standalone()->knowledge()->create(['user_id' => $this->user->id]);
         $kb = KnowledgeBase::factory()->ready()->create(['user_id' => $this->user->id]);
-        $agent->knowledgeBases()->attach($kb);
+        $agent->syncKnowledgeBases([$kb->id]);
 
         $this->actingAs($this->user)
             ->post(route('agents.duplicate', $agent))
             ->assertRedirect();
 
         $copy = Agent::where('name', $agent->name.' (Copy)')->first();
-        expect($copy->knowledgeBases)->toHaveCount(1);
+        expect($copy->loadKnowledgeBases())->toHaveCount(1);
     });
 
     it('returns 403 when duplicating agents belonging to other users', function () {

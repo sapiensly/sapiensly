@@ -36,6 +36,7 @@ final class Schemas
         // Documents & RAG content
         'documents',
         'app_files',
+        'knowledge_bases',
         'knowledge_base_documents',
         'document_knowledge_base',
         'knowledge_base_chunks',

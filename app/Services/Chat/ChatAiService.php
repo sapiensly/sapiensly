@@ -163,7 +163,7 @@ class ChatAiService
                 ? (string) $agent->prompt_template
                 : self::SYSTEM_PROMPT;
             $resolvedModel = $this->aiDefaults->model('chat', $agent->model ?: ($modelOverride ?? $chat->model));
-            $ragKbIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->all();
+            $ragKbIds = $agent->knowledgeBaseIds();
             $toolIds = $agent->tools()->where('status', 'active')->pluck('tools.id')->all();
         } else {
             $instructions = self::SYSTEM_PROMPT;

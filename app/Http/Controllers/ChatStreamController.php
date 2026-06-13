@@ -241,7 +241,7 @@ class ChatStreamController extends Controller
         $error = null;
 
         try {
-            $knowledgeBaseIds = $agent->knowledgeBases()->pluck('knowledge_bases.id')->toArray();
+            $knowledgeBaseIds = $agent->knowledgeBaseIds();
 
             if (! empty($knowledgeBaseIds)) {
                 $lastUserMessage = $messages->last()?->content ?? '';
