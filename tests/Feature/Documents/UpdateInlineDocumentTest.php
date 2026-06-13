@@ -34,6 +34,30 @@ test('owner can update an inline artifact body, name, and keywords', function ()
     expect($doc->keywords)->toBe(['fresh', 'artifact']);
 });
 
+test('owner can update a markdown document body inline', function () {
+    $user = User::factory()->create();
+    $doc = Document::create([
+        'user_id' => $user->id,
+        'name' => 'Notes',
+        'original_filename' => 'notes.md',
+        'type' => DocumentType::Md,
+        'file_size' => 0,
+        'visibility' => Visibility::Private,
+        'body' => "# Old heading\n\nOld paragraph.",
+    ]);
+
+    actingAs($user)
+        ->patch("/documents/{$doc->id}/inline", [
+            'name' => 'Notes',
+            'body' => "# New heading\n\n- bullet one\n- bullet two",
+            'keywords' => [],
+        ])
+        ->assertRedirect("/documents/{$doc->id}");
+
+    $doc->refresh();
+    expect($doc->body)->toBe("# New heading\n\n- bullet one\n- bullet two");
+});
+
 test('non-owner cannot update an inline document', function () {
     $owner = User::factory()->create();
     $intruder = User::factory()->create();

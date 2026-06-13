@@ -3,9 +3,9 @@ import * as DocumentController from '@/actions/App/Http/Controllers/DocumentCont
 import ArtifactEditor from '@/components/documents/ArtifactEditor.vue';
 import ArtifactRenderer from '@/components/documents/ArtifactRenderer.vue';
 import CodeMirrorViewer from '@/components/documents/CodeMirrorViewer.vue';
+import MarkdownEditor from '@/components/documents/MarkdownEditor.vue';
 import MarkdownRenderer from '@/components/documents/MarkdownRenderer.vue';
 import RawViewer from '@/components/documents/RawViewer.vue';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     Dialog,
     DialogContent,
@@ -23,10 +23,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Document, VisibilityOption } from '@/types/document';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { useFullscreen } from '@vueuse/core';
 import {
     AlertTriangle,
     Check,
@@ -42,11 +42,14 @@ import {
     Lock,
     Maximize2,
     Pencil,
+    Save,
     Share2,
     Sparkles,
     Trash2,
     Users,
+    X,
 } from '@lucide/vue';
+import { useFullscreen } from '@vueuse/core';
 import type { Component } from 'vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -70,9 +73,8 @@ const showDeleteDialog = ref(false);
 const showShareDialog = ref(false);
 const copiedShareLink = ref(false);
 const fullscreenTarget = ref<HTMLElement | null>(null);
-const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(
-    fullscreenTarget,
-);
+const { isFullscreen, toggle: toggleFullscreen } =
+    useFullscreen(fullscreenTarget);
 
 // Public visibility is only offered when the document is an Artifact; filter
 // the option out for other types so it doesn't appear in the Edit dialog.
@@ -105,6 +107,58 @@ const editForm = ref({
     visibility: props.document.visibility,
 });
 const isSubmitting = ref(false);
+
+// Inline Markdown editing — the detail page opens read-only (MarkdownRenderer);
+// "Edit" swaps in the WYSIWYG MarkdownEditor with its own working copy so a
+// cancel discards changes without touching the rendered view.
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
+const isEditingMarkdown = ref(false);
+const isSavingMarkdown = ref(false);
+const markdownError = ref<string | null>(null);
+const markdownBody = ref('');
+
+function startEditMarkdown() {
+    markdownBody.value = props.document.body ?? '';
+    markdownError.value = null;
+    isEditingMarkdown.value = true;
+}
+
+function cancelEditMarkdown() {
+    isEditingMarkdown.value = false;
+    markdownError.value = null;
+}
+
+function saveMarkdown() {
+    if (isSavingMarkdown.value) return;
+    markdownError.value = null;
+
+    if (new Blob([markdownBody.value]).size > MAX_BODY_BYTES) {
+        markdownError.value = t('documents.show.body_too_large');
+        return;
+    }
+
+    isSavingMarkdown.value = true;
+    router.patch(
+        DocumentController.updateInline({ document: props.document.id }).url,
+        {
+            name: props.document.name,
+            body: markdownBody.value,
+            keywords: props.document.keywords ?? [],
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                isEditingMarkdown.value = false;
+            },
+            onError: () => {
+                markdownError.value = t('documents.show.save_error');
+            },
+            onFinish: () => {
+                isSavingMarkdown.value = false;
+            },
+        },
+    );
+}
 
 function getDocumentIcon(type: string): Component {
     switch (type) {
@@ -179,10 +233,15 @@ function handleDelete() {
                             color: tintForType(document.type),
                         }"
                     >
-                        <component :is="getDocumentIcon(document.type)" class="size-5" />
+                        <component
+                            :is="getDocumentIcon(document.type)"
+                            class="size-5"
+                        />
                     </div>
                     <div class="min-w-0 space-y-1">
-                        <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                        <h1
+                            class="text-[22px] leading-tight font-semibold text-ink"
+                        >
                             {{ document.name }}
                         </h1>
                         <p
@@ -214,7 +273,11 @@ function handleDelete() {
                         {{ t('documents.show.share') }}
                     </button>
                     <Link
-                        v-if="canEdit && document.type === 'artifact' && document.body !== null"
+                        v-if="
+                            canEdit &&
+                            document.type === 'artifact' &&
+                            document.body !== null
+                        "
                         :href="`/documents/${document.id}/edit`"
                         class="inline-flex items-center gap-1.5 rounded-pill border border-accent-cyan/40 bg-accent-cyan/10 px-3.5 py-1.5 text-xs font-medium text-accent-cyan transition-colors hover:bg-accent-cyan/20"
                     >
@@ -272,7 +335,9 @@ function handleDelete() {
                             :is="visibilityIcon(document.visibility)"
                             class="size-3 text-ink-subtle"
                         />
-                        <span class="capitalize">{{ document.visibility }}</span>
+                        <span class="capitalize">{{
+                            document.visibility
+                        }}</span>
                     </span>
                 </div>
                 <div v-if="document.folder" class="flex items-center gap-1.5">
@@ -307,9 +372,73 @@ function handleDelete() {
                 </div>
             </section>
 
-            <!-- Inline Content (Raw / Rendered tabs). -->
+            <!-- Markdown: read-only render by default; "Edit" swaps in the
+                 WYSIWYG editor, Save persists via updateInline. -->
             <section
-                v-if="document.body !== null"
+                v-if="document.body !== null && document.type === 'md'"
+                class="rounded-sp-sm border border-soft bg-navy p-5"
+            >
+                <div class="mb-4 flex items-center justify-between gap-3">
+                    <h2
+                        class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
+                    >
+                        {{ t('documents.show.content') }}
+                    </h2>
+                    <div class="flex items-center gap-2">
+                        <button
+                            v-if="canEdit && !isEditingMarkdown"
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                            @click="startEditMarkdown"
+                        >
+                            <Pencil class="size-3.5" />
+                            {{ t('documents.show.edit_markdown') }}
+                        </button>
+                        <template v-if="isEditingMarkdown">
+                            <button
+                                type="button"
+                                :disabled="isSavingMarkdown"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
+                                @click="cancelEditMarkdown"
+                            >
+                                <X class="size-3.5" />
+                                {{ t('common.cancel') }}
+                            </button>
+                            <button
+                                type="button"
+                                :disabled="isSavingMarkdown"
+                                class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                                @click="saveMarkdown"
+                            >
+                                <Loader2
+                                    v-if="isSavingMarkdown"
+                                    class="size-3.5 animate-spin"
+                                />
+                                <Save v-else class="size-3.5" />
+                                {{
+                                    isSavingMarkdown
+                                        ? t('documents.show.saving')
+                                        : t('common.save')
+                                }}
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
+                <p v-if="markdownError" class="mb-3 text-xs text-sp-danger">
+                    {{ markdownError }}
+                </p>
+
+                <MarkdownEditor
+                    v-if="isEditingMarkdown"
+                    v-model="markdownBody"
+                />
+                <MarkdownRenderer v-else :source="document.body" />
+            </section>
+
+            <!-- Inline Content (Raw / Rendered tabs) for other inline types. -->
+            <section
+                v-else-if="document.body !== null"
                 class="rounded-sp-sm border border-soft bg-navy p-5"
             >
                 <h2
@@ -327,7 +456,9 @@ function handleDelete() {
                 >
                     <Tabs
                         default-value="rendered"
-                        :class="isFullscreen ? 'flex min-h-0 flex-1 flex-col' : ''"
+                        :class="
+                            isFullscreen ? 'flex min-h-0 flex-1 flex-col' : ''
+                        "
                     >
                         <div
                             v-if="!isFullscreen"
@@ -358,17 +489,13 @@ function handleDelete() {
                                     : 'mt-3'
                             "
                         >
-                            <MarkdownRenderer
-                                v-if="document.type === 'md'"
-                                :source="document.body"
-                            />
                             <ArtifactRenderer
-                                v-else-if="document.type === 'artifact'"
+                                v-if="document.type === 'artifact'"
                                 :source="document.body"
                             />
                             <pre
                                 v-else
-                                class="whitespace-pre-wrap rounded-xs border border-soft bg-white/[0.03] p-4 text-sm text-ink"
+                                class="rounded-xs border border-soft bg-white/[0.03] p-4 text-sm whitespace-pre-wrap text-ink"
                                 >{{ document.body }}</pre
                             >
                         </TabsContent>
@@ -397,7 +524,10 @@ function handleDelete() {
 
             <!-- Knowledge Bases. -->
             <section
-                v-if="document.knowledge_bases && document.knowledge_bases.length > 0"
+                v-if="
+                    document.knowledge_bases &&
+                    document.knowledge_bases.length > 0
+                "
                 class="rounded-sp-sm border border-soft bg-navy p-5"
             >
                 <div class="mb-4">
@@ -407,7 +537,8 @@ function handleDelete() {
                         Used in Knowledge Bases
                     </h2>
                     <p class="mt-0.5 text-xs text-ink-muted">
-                        This document is attached to the following knowledge bases
+                        This document is attached to the following knowledge
+                        bases
                     </p>
                 </div>
                 <ul class="space-y-1.5">
@@ -434,10 +565,14 @@ function handleDelete() {
                             <Pencil class="size-4" />
                         </div>
                         <div class="min-w-0">
-                            <DialogTitle class="text-base font-semibold text-ink">
+                            <DialogTitle
+                                class="text-base font-semibold text-ink"
+                            >
                                 {{ t('documents.edit_dialog.title') }}
                             </DialogTitle>
-                            <DialogDescription class="mt-1 text-xs text-ink-muted">
+                            <DialogDescription
+                                class="mt-1 text-xs text-ink-muted"
+                            >
                                 {{ t('documents.edit_dialog.description') }}
                             </DialogDescription>
                         </div>
@@ -452,7 +587,9 @@ function handleDelete() {
                         <Input
                             id="edit-name"
                             v-model="editForm.name"
-                            :placeholder="t('documents.edit_dialog.name_placeholder')"
+                            :placeholder="
+                                t('documents.edit_dialog.name_placeholder')
+                            "
                             class="h-9"
                         />
                     </div>
@@ -495,7 +632,10 @@ function handleDelete() {
                     </div>
 
                     <div
-                        v-if="editForm.visibility === 'public' && effectiveShareUrl"
+                        v-if="
+                            editForm.visibility === 'public' &&
+                            effectiveShareUrl
+                        "
                         class="space-y-2 rounded-xs border border-soft bg-white/[0.03] p-3"
                     >
                         <Label>{{ t('documents.show.share_title') }}</Label>
@@ -504,14 +644,20 @@ function handleDelete() {
                                 :model-value="effectiveShareUrl"
                                 readonly
                                 class="h-9 flex-1"
-                                @focus="(e: FocusEvent) => (e.target as HTMLInputElement)?.select()"
+                                @focus="
+                                    (e: FocusEvent) =>
+                                        (e.target as HTMLInputElement)?.select()
+                                "
                             />
                             <button
                                 type="button"
                                 class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
                                 @click="copyShareLink(effectiveShareUrl)"
                             >
-                                <Check v-if="copiedShareLink" class="size-3.5" />
+                                <Check
+                                    v-if="copiedShareLink"
+                                    class="size-3.5"
+                                />
                                 <LinkIcon v-else class="size-3.5" />
                                 {{
                                     copiedShareLink
@@ -543,7 +689,10 @@ function handleDelete() {
                         class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                         @click="handleEdit"
                     >
-                        <Loader2 v-if="isSubmitting" class="size-3.5 animate-spin" />
+                        <Loader2
+                            v-if="isSubmitting"
+                            class="size-3.5 animate-spin"
+                        />
                         <Check v-else class="size-3.5" />
                         {{
                             isSubmitting
@@ -566,10 +715,14 @@ function handleDelete() {
                             <Share2 class="size-4" />
                         </div>
                         <div class="min-w-0">
-                            <DialogTitle class="text-base font-semibold text-ink">
+                            <DialogTitle
+                                class="text-base font-semibold text-ink"
+                            >
                                 {{ t('documents.show.share_title') }}
                             </DialogTitle>
-                            <DialogDescription class="mt-1 text-xs text-ink-muted">
+                            <DialogDescription
+                                class="mt-1 text-xs text-ink-muted"
+                            >
                                 {{ t('documents.show.share_description') }}
                             </DialogDescription>
                         </div>
@@ -580,7 +733,10 @@ function handleDelete() {
                         :model-value="publicUrl"
                         readonly
                         class="h-9 flex-1"
-                        @focus="(e: FocusEvent) => (e.target as HTMLInputElement)?.select()"
+                        @focus="
+                            (e: FocusEvent) =>
+                                (e.target as HTMLInputElement)?.select()
+                        "
                     />
                     <button
                         type="button"
@@ -628,10 +784,14 @@ function handleDelete() {
                             <AlertTriangle class="size-4" />
                         </div>
                         <div class="min-w-0">
-                            <DialogTitle class="text-base font-semibold text-ink">
+                            <DialogTitle
+                                class="text-base font-semibold text-ink"
+                            >
                                 {{ t('documents.delete_dialog.title') }}
                             </DialogTitle>
-                            <DialogDescription class="mt-1 text-xs text-ink-muted">
+                            <DialogDescription
+                                class="mt-1 text-xs text-ink-muted"
+                            >
                                 {{
                                     t('documents.delete_dialog.description', {
                                         name: document.name,
@@ -656,7 +816,10 @@ function handleDelete() {
                         class="inline-flex items-center gap-1.5 rounded-pill border border-sp-danger/40 bg-sp-danger/10 px-3.5 py-1.5 text-xs font-medium text-sp-danger transition-colors hover:border-sp-danger hover:bg-sp-danger/20 disabled:opacity-50"
                         @click="handleDelete"
                     >
-                        <Loader2 v-if="isSubmitting" class="size-3.5 animate-spin" />
+                        <Loader2
+                            v-if="isSubmitting"
+                            class="size-3.5 animate-spin"
+                        />
                         <Trash2 v-else class="size-3.5" />
                         {{
                             isSubmitting
