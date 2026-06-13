@@ -582,7 +582,7 @@ class DocumentController extends Controller
         $this->authorize('move', $document);
 
         $request->validate([
-            'folder_id' => ['nullable', 'string', 'exists:folders,id'],
+            'folder_id' => ['nullable', 'string', 'exists:tenant.folders,id'],
         ]);
 
         $folder = $request->folder_id ? Folder::find($request->folder_id) : null;

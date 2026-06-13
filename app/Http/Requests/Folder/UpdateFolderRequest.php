@@ -18,7 +18,7 @@ class UpdateFolderRequest extends FormRequest
         return [
             'name' => ['sometimes', 'string', 'max:255'],
             'visibility' => ['sometimes', new Enum(Visibility::class)],
-            'parent_id' => ['nullable', 'string', 'exists:folders,id'],
+            'parent_id' => ['nullable', 'string', 'exists:tenant.folders,id'],
         ];
     }
 }

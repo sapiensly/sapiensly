@@ -22,7 +22,7 @@ class StoreInlineDocumentRequest extends FormRequest
             'keywords' => ['nullable', 'array', 'max:20'],
             'keywords.*' => ['string', 'max:50'],
             'visibility' => ['nullable', new Enum(Visibility::class)],
-            'folder_id' => ['nullable', 'string', 'exists:folders,id'],
+            'folder_id' => ['nullable', 'string', 'exists:tenant.folders,id'],
             'knowledge_base_id' => ['nullable', 'string', 'exists:tenant.knowledge_bases,id'],
         ];
     }

@@ -18,7 +18,7 @@ class UpdateDocumentRequest extends FormRequest
         return [
             'name' => ['sometimes', 'string', 'max:255'],
             'visibility' => ['sometimes', new Enum(Visibility::class)],
-            'folder_id' => ['nullable', 'string', 'exists:folders,id'],
+            'folder_id' => ['nullable', 'string', 'exists:tenant.folders,id'],
             // Body updates are only accepted for inline documents; the controller
             // enforces that rule against the bound model.
             'body' => ['sometimes', 'string', 'max:10485760'],

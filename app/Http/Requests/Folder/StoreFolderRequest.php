@@ -18,7 +18,7 @@ class StoreFolderRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'visibility' => ['nullable', new Enum(Visibility::class)],
-            'parent_id' => ['nullable', 'string', 'exists:folders,id'],
+            'parent_id' => ['nullable', 'string', 'exists:tenant.folders,id'],
         ];
     }
 }

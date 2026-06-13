@@ -34,6 +34,7 @@ final class Schemas
         'records',
         'record_relations',
         // Documents & RAG content
+        'folders',
         'documents',
         'app_files',
         'knowledge_bases',
