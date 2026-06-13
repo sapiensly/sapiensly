@@ -140,7 +140,7 @@ class KnowledgeBaseController extends Controller
 
         $request->validate([
             'document_ids' => ['required', 'array'],
-            'document_ids.*' => ['string', 'exists:documents,id'],
+            'document_ids.*' => ['string', 'exists:tenant.documents,id'],
         ]);
 
         $user = $request->user();

@@ -27,7 +27,7 @@ class UpdateChatRequest extends FormRequest
                 'sometimes',
                 'nullable',
                 'string',
-                Rule::exists('chat_projects', 'id')->where('user_id', $this->user()?->id),
+                Rule::exists('tenant.chat_projects', 'id')->where('user_id', $this->user()?->id),
             ],
         ];
     }

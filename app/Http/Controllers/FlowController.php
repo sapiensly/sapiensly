@@ -146,7 +146,7 @@ class FlowController extends Controller
             'keywords.*' => ['string', 'max:50'],
             'config' => ['nullable', 'array'],
             'knowledge_base_ids' => ['nullable', 'array'],
-            'knowledge_base_ids.*' => ['string', 'exists:knowledge_bases,id'],
+            'knowledge_base_ids.*' => ['string', 'exists:tenant.knowledge_bases,id'],
             'tool_ids' => ['nullable', 'array'],
             'tool_ids.*' => ['string', 'exists:tools,id'],
         ]);

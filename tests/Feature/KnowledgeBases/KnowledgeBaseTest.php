@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\KnowledgeBaseStatus;
+use App\Enums\Visibility;
+use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseDocument;
 use App\Models\User;
@@ -191,6 +193,42 @@ describe('update', function () {
                 'name' => 'Hacked',
             ])
             ->assertForbidden();
+    });
+});
+
+describe('attachDocuments', function () {
+    it('attaches an existing document to a knowledge base', function () {
+        $kb = KnowledgeBase::factory()->create(['user_id' => $this->user->id]);
+        $document = Document::create([
+            'user_id' => $this->user->id,
+            'name' => 'Manual',
+            'original_filename' => 'manual.md',
+            'type' => 'md',
+            'file_size' => 1,
+            'visibility' => Visibility::Private,
+            'body' => '# Manual',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('knowledge-bases.attach-documents', $kb), [
+                'document_ids' => [$document->id],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('document_knowledge_base', [
+            'knowledge_base_id' => $kb->id,
+            'document_id' => $document->id,
+        ]);
+    });
+
+    it('rejects a document id that does not exist', function () {
+        $kb = KnowledgeBase::factory()->create(['user_id' => $this->user->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('knowledge-bases.attach-documents', $kb), [
+                'document_ids' => ['doc_does_not_exist'],
+            ])
+            ->assertSessionHasErrors('document_ids.0');
     });
 });
 

@@ -37,7 +37,7 @@ class StoreAgentRequest extends FormRequest
             'config.tool_execution.retry_count' => ['nullable', 'integer', 'min:0', 'max:5'],
 
             'knowledge_base_ids' => ['nullable', 'array'],
-            'knowledge_base_ids.*' => ['string', 'exists:knowledge_bases,id'],
+            'knowledge_base_ids.*' => ['string', 'exists:tenant.knowledge_bases,id'],
 
             'tool_ids' => ['nullable', 'array'],
             'tool_ids.*' => ['string', 'exists:tools,id'],
