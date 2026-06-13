@@ -391,12 +391,14 @@ class DocumentController extends Controller
         // Get temporary URL for download
         $temporaryUrl = $this->documentService->getTemporaryUrl($document);
 
-        // For Artifacts uploaded as a file (file_path set, body null), hydrate
-        // `body` on the fly so the frontend's artifact viewer/editor work the
-        // same way they do for inline-authored artifacts. This is a view-only
-        // hydration — we never persist the file contents to the DB column.
+        // Inline-authorable documents uploaded as a file (file_path set, body
+        // null) keep their content on disk, so hydrate `body` on the fly so the
+        // frontend's viewer/editor render it the same way they do for
+        // inline-authored documents. View-only hydration — we never persist the
+        // file contents to the DB column; edits go back to the file via
+        // DocumentService::updateInline.
         if (
-            $document->type === DocumentType::Artifact
+            $document->type->isInlineAuthorable()
             && $document->body === null
             && $document->file_path !== null
         ) {
