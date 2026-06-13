@@ -90,7 +90,7 @@ describe('store', function () {
             'type' => AgentType::Triage->value,
             'name' => 'My Triage Agent',
             'description' => 'Handles routing',
-            'model' => 'claude-3-5-haiku-20241022',
+            'model' => 'claude-haiku-4-5-20251001',
             'prompt_template' => 'You are a triage agent.',
             'config' => [
                 'temperature' => 0.3,

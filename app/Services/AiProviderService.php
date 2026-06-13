@@ -425,44 +425,6 @@ class AiProviderService
     }
 
     /**
-     * Reachable chat models — every chat model the driver supports in the
-     * global catalog for each provider the user has an API key configured
-     * for, not just the ones the tenant explicitly toggled into the
-     * provider's stored `models` array. This is what users expect when
-     * picking a model: "I have an Anthropic key, so I should see all
-     * Anthropic chat models." Returns [{value, label, provider}].
-     *
-     * @return array<int, array{value: string, label: string, provider: string}>
-     */
-    public function getReachableChatModels(User $user): array
-    {
-        $providers = $this->getProvidersForContext($user);
-        $catalogsByDriver = [];
-
-        foreach ($providers as $provider) {
-            $driver = $provider->driver;
-            if (! isset($catalogsByDriver[$driver])) {
-                $catalogsByDriver[$driver] = $this->getModelCatalog($driver);
-            }
-
-            foreach ($catalogsByDriver[$driver] as $model) {
-                if (! in_array('chat', $model['capabilities'] ?? [], true)) {
-                    continue;
-                }
-                // Keep the first occurrence per model id so we don't emit
-                // duplicates when two providers share a driver.
-                $seen[$model['id']] ??= [
-                    'value' => $model['id'],
-                    'label' => $model['label'],
-                    'provider' => $provider->display_name ?? $provider->name,
-                ];
-            }
-        }
-
-        return array_values($seen ?? []);
-    }
-
-    /**
      * Every chat model enabled in the shared catalog, independent of whether
      * the tenant has its own key — the platform-wide (Global) keys configured
      * by the sysadmin make them usable, and a tenant's own key transparently

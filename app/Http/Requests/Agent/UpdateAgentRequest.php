@@ -48,14 +48,16 @@ class UpdateAgentRequest extends FormRequest
     }
 
     /**
-     * Validate the model against the user's reachable chat models. Falls back
-     * to a plain string when the user has no providers configured.
+     * Validate the model against the enabled chat catalog (same source as the
+     * edit form's picker — models usable via the tenant's own key or the
+     * platform-wide global key). Falls back to a plain string when the catalog
+     * is empty.
      *
      * @return array<int, mixed>
      */
     protected function modelRule(): array
     {
-        $reachable = collect(app(AiProviderService::class)->getReachableChatModels($this->user()))
+        $reachable = collect(app(AiProviderService::class)->getEnabledChatModels($this->user()))
             ->pluck('value')
             ->all();
 

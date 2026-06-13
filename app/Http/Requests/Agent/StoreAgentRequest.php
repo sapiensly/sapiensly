@@ -45,16 +45,16 @@ class StoreAgentRequest extends FormRequest
     }
 
     /**
-     * Validate the model against the user's reachable chat models (same source
-     * as the create form's picker). When the user has no providers configured
-     * the reachable list is empty, so we only require a string rather than
-     * rejecting everything.
+     * Validate the model against the enabled chat catalog (same source as the
+     * create form's picker — models usable via the tenant's own key or the
+     * platform-wide global key). When the catalog is empty we only require a
+     * string rather than rejecting everything.
      *
      * @return array<int, mixed>
      */
     protected function modelRule(): array
     {
-        $reachable = collect(app(AiProviderService::class)->getReachableChatModels($this->user()))
+        $reachable = collect(app(AiProviderService::class)->getEnabledChatModels($this->user()))
             ->pluck('value')
             ->all();
 

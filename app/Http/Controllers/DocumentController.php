@@ -134,7 +134,7 @@ class DocumentController extends Controller
                 ->values()
                 ->all(),
             'canShareWithOrg' => $user->hasOrganization(),
-            'availableChatModels' => $this->aiProviderService->getReachableChatModels($user),
+            'availableChatModels' => $this->aiProviderService->getEnabledChatModels($user),
             'defaultChatModelId' => $this->resolveDefaultChatModelId($user),
         ]);
     }
@@ -251,7 +251,7 @@ class DocumentController extends Controller
             return $this->resolveDefaultChatModelId($user);
         }
 
-        $available = collect($this->aiProviderService->getReachableChatModels($user))
+        $available = collect($this->aiProviderService->getEnabledChatModels($user))
             ->pluck('value')
             ->all();
 
@@ -361,7 +361,7 @@ class DocumentController extends Controller
                 ->values()
                 ->all(),
             'canShareWithOrg' => $request->user()->hasOrganization(),
-            'availableChatModels' => $this->aiProviderService->getReachableChatModels($request->user()),
+            'availableChatModels' => $this->aiProviderService->getEnabledChatModels($request->user()),
             'defaultChatModelId' => $this->resolveDefaultChatModelId($request->user()),
         ]);
     }
