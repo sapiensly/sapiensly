@@ -12,6 +12,9 @@ use App\Models\ChatProject;
 use App\Models\KnowledgeBase;
 use App\Models\Tool;
 use App\Services\AiProviderService;
+use App\Services\Chat\MentionParser;
+use App\Services\Chat\MultiAgentDispatcher;
+use App\Support\Chat\ChatMessagePresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,7 +23,11 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ChatController extends Controller
 {
-    public function __construct(private readonly AiProviderService $providers) {}
+    public function __construct(
+        private readonly AiProviderService $providers,
+        private readonly MentionParser $mentions,
+        private readonly MultiAgentDispatcher $multiAgent,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -36,7 +43,7 @@ class ChatController extends Controller
 
         return Inertia::render('chat/Index', [
             ...$this->sharedProps($request),
-            'activeChat' => $this->presentChat($chat->load('messages.attachments')),
+            'activeChat' => $this->presentChat($chat->load('messages.attachments', 'participants')),
         ]);
     }
 
@@ -51,6 +58,8 @@ class ChatController extends Controller
             'web_search' => ['nullable', 'boolean'],
             'tool_ids' => ['nullable', 'array', 'max:50'],
             'tool_ids.*' => ['string'],
+            'mentioned_agent_ids' => ['nullable', 'array', 'max:20'],
+            'mentioned_agent_ids.*' => ['string'],
         ]);
 
         // The picker sends either a model id or `agent:{id}`.
@@ -97,6 +106,15 @@ class ChatController extends Controller
                 'model' => $model,
                 'status' => 'complete',
             ]);
+
+            // First message may already @mention agents — run the multi-agent flow.
+            $mentioned = $this->mentions->resolve($user, (array) $request->input('mentioned_agent_ids', []), $content);
+            if ($mentioned['agents']->isNotEmpty()) {
+                $this->multiAgent->dispatch($chat, $content, $mentioned['agents'], $mentioned['capped']);
+
+                return to_route('chat.show', $chat);
+            }
+
             $placeholder = ChatMessage::create([
                 'chat_id' => $chat->id,
                 'role' => 'assistant',
@@ -211,6 +229,8 @@ class ChatController extends Controller
      */
     private function presentChat(Chat $chat): array
     {
+        $agentMeta = ChatMessagePresenter::agentMetaFor($chat->messages);
+
         return [
             'id' => $chat->id,
             'title' => $chat->title,
@@ -218,23 +238,34 @@ class ChatController extends Controller
             'agent_id' => $chat->agent_id,
             'tool_ids' => $chat->tool_ids ?? [],
             'chat_project_id' => $chat->chat_project_id,
-            'messages' => $chat->messages->map(fn ($m) => [
-                'id' => $m->id,
-                'role' => $m->role,
-                'content' => $m->content,
-                'model' => $m->model,
-                'status' => $m->status,
-                'error' => $m->error,
-                'created_at' => $m->created_at?->toIso8601String(),
-                'attachments' => $m->attachments->map(fn ($a) => [
-                    'id' => $a->id,
-                    'original_name' => $a->original_name,
-                    'mime' => $a->mime,
-                    'size_bytes' => $a->size_bytes,
-                    'url' => route('chat.attachments.show', ['chat' => $chat->id, 'attachment' => $a->id]),
-                ])->values(),
-            ])->values(),
+            'mode' => $chat->mode ?? 'single',
+            'synthesis_status' => $chat->synthesis_status,
+            'agents' => $this->presentRoster($chat),
+            'messages' => $chat->messages
+                ->map(fn ($m) => ChatMessagePresenter::present($m, $agentMeta))
+                ->values(),
         ];
+    }
+
+    /**
+     * The agents participating in a multi-agent thread (roster), for rendering
+     * the @mention bubbles and the ActionCard's agreed-by avatars.
+     *
+     * @return array<int, array{id: string, name: string}>
+     */
+    private function presentRoster(Chat $chat): array
+    {
+        $agentIds = $chat->participants->pluck('agent_id')->all();
+        if (empty($agentIds)) {
+            return [];
+        }
+
+        return Agent::query()
+            ->whereIn('id', $agentIds)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Agent $a) => ['id' => $a->id, 'name' => $a->name])
+            ->all();
     }
 
     private function authorizeChat(Request $request, Chat $chat): void

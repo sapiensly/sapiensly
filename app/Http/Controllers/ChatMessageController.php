@@ -12,14 +12,26 @@ use App\Models\Tool;
 use App\Models\User;
 use App\Services\AiProviderService;
 use App\Services\Chat\ChatAiService;
+use App\Services\Chat\MentionParser;
+use App\Services\Chat\MultiAgentDispatcher;
+use App\Support\Chat\ChatMessagePresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\RateLimiter;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ChatMessageController extends Controller
 {
-    public function __construct(private readonly AiProviderService $providers) {}
+    /** Max agent invocations per conversation per minute (per org via the chat). */
+    private const AGENT_RATE_MAX = 10;
+
+    public function __construct(
+        private readonly AiProviderService $providers,
+        private readonly MentionParser $mentions,
+        private readonly MultiAgentDispatcher $multiAgent,
+    ) {}
 
     /**
      * Cooperatively cancel an in-flight assistant turn. Sets a cache flag the
@@ -74,6 +86,17 @@ class ChatMessageController extends Controller
                 ->update(['chat_message_id' => $userMessage->id]);
         }
 
+        // Multi-agent (@mention) path: each resolved agent answers in turn, then
+        // the thread is synthesized into an action proposal. Takes precedence over
+        // the single-agent / plain-model path.
+        $mentioned = $this->mentions->resolve($user, $data['mentioned_agent_ids'] ?? [], $content);
+        /** @var Collection<int, Agent> $agents */
+        $agents = $mentioned['agents'];
+
+        if ($agents->isNotEmpty()) {
+            return $this->dispatchMultiAgent($chat, $user, $userMessage, $content, $agents, $mentioned['capped']);
+        }
+
         $placeholder = ChatMessage::create([
             'chat_id' => $chat->id,
             'role' => 'assistant',
@@ -84,7 +107,7 @@ class ChatMessageController extends Controller
 
         // Remember the chosen model/agent + enabled tools on the chat for next time.
         $toolIds = $this->accessibleToolIds($data['tool_ids'] ?? [], $user);
-        $chat->update(['model' => $model, 'agent_id' => $agentId, 'tool_ids' => $toolIds ?: null]);
+        $chat->update(['model' => $model, 'agent_id' => $agentId, 'tool_ids' => $toolIds ?: null, 'mode' => 'single']);
 
         RunChatAiJob::dispatch(
             $placeholder->id,
@@ -95,9 +118,41 @@ class ChatMessageController extends Controller
         );
 
         return new JsonResponse([
-            'user_message' => $this->present($userMessage->load('attachments'), $chat),
-            'placeholder' => $this->present($placeholder, $chat),
+            'user_message' => ChatMessagePresenter::present($userMessage->load('attachments')),
+            'placeholder' => ChatMessagePresenter::present($placeholder),
         ], 201);
+    }
+
+    /**
+     * Roster the mentioned agents, chain one streaming turn per agent (in mention
+     * order so each sees the prior responses) and synthesize at the end.
+     *
+     * @param  Collection<int, Agent>  $agents
+     */
+    private function dispatchMultiAgent(Chat $chat, User $user, ChatMessage $userMessage, string $content, Collection $agents, bool $capped): JsonResponse
+    {
+        $rateKey = 'chat-agents:'.($user->organization_id ?? 'u'.$user->id).':'.$chat->id;
+        if (RateLimiter::tooManyAttempts($rateKey, self::AGENT_RATE_MAX)) {
+            return new JsonResponse([
+                'message' => 'Too many agent requests in this conversation. Please wait a moment.',
+            ], 429);
+        }
+        foreach ($agents as $ignored) {
+            RateLimiter::hit($rateKey, 60);
+        }
+
+        $systemNotice = $this->multiAgent->dispatch($chat, $content, $agents, $capped);
+
+        $payload = [
+            'user_message' => ChatMessagePresenter::present($userMessage->load('attachments')),
+            'mode' => 'multi_agent',
+            'agent_ids' => $agents->pluck('id')->all(),
+        ];
+        if ($systemNotice !== null) {
+            $payload['system_notice'] = ChatMessagePresenter::present($systemNotice);
+        }
+
+        return new JsonResponse($payload, 201);
     }
 
     /**
@@ -146,28 +201,5 @@ class ChatMessageController extends Controller
             ->where('status', 'active')
             ->pluck('id')
             ->all();
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function present(ChatMessage $message, Chat $chat): array
-    {
-        return [
-            'id' => $message->id,
-            'role' => $message->role,
-            'content' => $message->content,
-            'model' => $message->model,
-            'status' => $message->status,
-            'error' => $message->error,
-            'created_at' => $message->created_at?->toIso8601String(),
-            'attachments' => $message->attachments->map(fn ($a) => [
-                'id' => $a->id,
-                'original_name' => $a->original_name,
-                'mime' => $a->mime,
-                'size_bytes' => $a->size_bytes,
-                'url' => route('chat.attachments.show', ['chat' => $chat->id, 'attachment' => $a->id]),
-            ])->values(),
-        ];
     }
 }

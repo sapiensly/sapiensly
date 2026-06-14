@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MentionAutocomplete from '@/components/chat/MentionAutocomplete.vue';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -15,7 +16,6 @@ import type {
     ChatModelOption,
     ChatToolOption,
 } from '@/types/chatModule';
-import axios from 'axios';
 import {
     ArrowUp,
     Bot,
@@ -29,6 +29,7 @@ import {
     Wrench,
     X,
 } from '@lucide/vue';
+import axios from 'axios';
 import { computed, nextTick, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -55,6 +56,7 @@ const emit = defineEmits<{
             attachmentIds: string[];
             webSearch: boolean;
             toolIds: string[];
+            mentionedAgentIds: string[];
         },
     ];
     'update:model': [value: string];
@@ -122,7 +124,111 @@ function autoGrow() {
     el.style.height = Math.min(el.scrollHeight, 320) + 'px';
 }
 
+// ----- @mention autocomplete -----
+// Agents the user @mentioned for a multi-agent turn. Tracked by id (names have
+// spaces / no slug); shown as removable chips and sent explicitly on submit.
+const mentionedAgentIds = ref<string[]>([]);
+const mentionQuery = ref<string | null>(null);
+const mentionStart = ref(-1);
+const mentionHighlight = ref(0);
+
+const mentionMatches = computed(() => {
+    if (mentionQuery.value === null) return [];
+    const q = mentionQuery.value.toLowerCase();
+    return props.agents
+        .filter((a) => a.name.toLowerCase().includes(q))
+        .slice(0, 8);
+});
+// Show the dropdown while an @token is active, either with matches or — when no
+// agents exist at all — the empty-state prompt to create one.
+const showMention = computed(
+    () =>
+        mentionQuery.value !== null &&
+        (props.agents.length === 0 || mentionMatches.value.length > 0),
+);
+const mentionedAgents = computed(() =>
+    mentionedAgentIds.value
+        .map((id) => props.agents.find((a) => a.id === id))
+        .filter((a): a is ChatAgentOption => !!a),
+);
+
+function detectMention() {
+    const el = textarea.value;
+    if (!el) {
+        mentionQuery.value = null;
+        return;
+    }
+    const caret = el.selectionStart ?? text.value.length;
+    const match = text.value.slice(0, caret).match(/(?:^|\s)@([\w-]*)$/);
+    if (match) {
+        mentionQuery.value = match[1];
+        mentionStart.value = caret - match[1].length - 1;
+        mentionHighlight.value = 0;
+    } else {
+        mentionQuery.value = null;
+    }
+}
+
+function onInput() {
+    autoGrow();
+    detectMention();
+}
+
+function moveMentionHighlight(delta: number) {
+    const n = mentionMatches.value.length;
+    if (n === 0) return;
+    mentionHighlight.value = (mentionHighlight.value + delta + n) % n;
+}
+
+function selectMention(agent: ChatAgentOption) {
+    const el = textarea.value;
+    const caret = el?.selectionStart ?? text.value.length;
+    const before = text.value.slice(0, mentionStart.value);
+    const after = text.value.slice(caret);
+    const insert = `@${agent.name} `;
+    text.value = before + insert + after;
+    if (!mentionedAgentIds.value.includes(agent.id)) {
+        mentionedAgentIds.value.push(agent.id);
+    }
+    mentionQuery.value = null;
+    nextTick(() => {
+        autoGrow();
+        const pos = before.length + insert.length;
+        el?.focus();
+        el?.setSelectionRange(pos, pos);
+    });
+}
+
+function removeMention(id: string) {
+    mentionedAgentIds.value = mentionedAgentIds.value.filter((m) => m !== id);
+}
+
 function onKeydown(e: KeyboardEvent) {
+    if (mentionQuery.value !== null && mentionMatches.value.length) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            moveMentionHighlight(1);
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            moveMentionHighlight(-1);
+            return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+            const agent = mentionMatches.value[mentionHighlight.value];
+            if (agent) {
+                e.preventDefault();
+                selectMention(agent);
+                return;
+            }
+        }
+    }
+    if (e.key === 'Escape' && mentionQuery.value !== null) {
+        e.preventDefault();
+        mentionQuery.value = null;
+        return;
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         submit();
@@ -138,9 +244,12 @@ function submit() {
         attachmentIds: attachments.value.map((a) => a.id),
         webSearch: selectedAgent.value ? false : webSearch.value,
         toolIds: selectedAgent.value ? [] : [...props.toolIds],
+        mentionedAgentIds: [...mentionedAgentIds.value],
     });
     text.value = '';
     attachments.value = [];
+    mentionedAgentIds.value = [];
+    mentionQuery.value = null;
     nextTick(autoGrow);
 }
 
@@ -194,8 +303,38 @@ defineExpose({ focus });
 <template>
     <div>
         <div
-            class="rounded-[1.625rem] border border-medium bg-surface px-2 py-2 shadow-md transition-all focus-within:border-strong focus-within:shadow-lg"
+            class="relative rounded-[1.625rem] border border-medium bg-surface px-2 py-2 shadow-md transition-all focus-within:border-strong focus-within:shadow-lg"
         >
+            <MentionAutocomplete
+                v-if="showMention"
+                :agents="mentionMatches"
+                :highlight="mentionHighlight"
+                @select="selectMention"
+                @hover="(i) => (mentionHighlight = i)"
+            />
+
+            <!-- Mentioned-agent chips. -->
+            <div
+                v-if="mentionedAgents.length"
+                class="flex flex-wrap gap-2 px-2 pt-1.5 pb-1"
+            >
+                <span
+                    v-for="a in mentionedAgents"
+                    :key="a.id"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-accent-blue/30 bg-accent-blue/10 py-1 pr-1 pl-2 text-xs font-medium text-accent-blue"
+                >
+                    <Bot class="size-3.5" />
+                    <span class="max-w-[160px] truncate">@{{ a.name }}</span>
+                    <button
+                        type="button"
+                        class="rounded p-0.5 text-accent-blue/70 hover:bg-accent-blue/15 hover:text-accent-blue"
+                        @click="removeMention(a.id)"
+                    >
+                        <X class="size-3" />
+                    </button>
+                </span>
+            </div>
+
             <!-- Attachment chips. -->
             <div
                 v-if="attachments.length"
@@ -227,8 +366,10 @@ defineExpose({ focus });
                 rows="1"
                 class="block max-h-80 w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-[15px] leading-6 text-ink placeholder:text-ink-subtle focus:outline-none"
                 :autofocus="autofocus"
-                @input="autoGrow"
+                @input="onInput"
                 @keydown="onKeydown"
+                @keyup="detectMention"
+                @click="detectMention"
             />
 
             <p v-if="uploadError" class="px-3 pb-1 text-[11px] text-sp-danger">
@@ -354,7 +495,11 @@ defineExpose({ focus });
                     <button
                         type="button"
                         :disabled="!!selectedAgent"
-                        :title="selectedAgent ? t('chat.agent_manages') : t('chat.web_search')"
+                        :title="
+                            selectedAgent
+                                ? t('chat.agent_manages')
+                                : t('chat.web_search')
+                        "
                         :aria-pressed="searchActive"
                         :class="[
                             'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent',
@@ -373,11 +518,18 @@ defineExpose({ focus });
 
                     <!-- Tools / connectors picker. -->
                     <DropdownMenu v-if="tools.length">
-                        <DropdownMenuTrigger as-child :disabled="!!selectedAgent">
+                        <DropdownMenuTrigger
+                            as-child
+                            :disabled="!!selectedAgent"
+                        >
                             <button
                                 type="button"
                                 :disabled="!!selectedAgent"
-                                :title="selectedAgent ? t('chat.agent_manages') : t('chat.tools.label')"
+                                :title="
+                                    selectedAgent
+                                        ? t('chat.agent_manages')
+                                        : t('chat.tools.label')
+                                "
                                 :class="[
                                     'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
                                     toolIds.length && !selectedAgent

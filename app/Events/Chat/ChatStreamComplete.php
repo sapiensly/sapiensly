@@ -47,6 +47,9 @@ class ChatStreamComplete implements ShouldBroadcastNow
                 'model' => $this->message->model,
                 'status' => $this->message->status,
                 'created_at' => $this->message->created_at?->toIso8601String(),
+                'agent_id' => $this->message->agent_id,
+                'message_type' => $this->message->message_type,
+                'agent_data_context' => $this->message->agent_data_context,
             ],
         ];
     }

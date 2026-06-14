@@ -30,6 +30,8 @@ class Chat extends Model
         'title_refined_at',
         'agent_id',
         'tool_ids',
+        'mode',
+        'synthesis_status',
         'visibility',
         'last_message_at',
         'archived_at',
@@ -69,6 +71,11 @@ class Chat extends Model
     public function messages(): HasMany
     {
         return $this->hasMany(ChatMessage::class, 'chat_id')->orderBy('created_at');
+    }
+
+    public function participants(): HasMany
+    {
+        return $this->hasMany(ChatParticipant::class, 'chat_id')->orderBy('joined_at');
     }
 
     public function attachments(): HasMany

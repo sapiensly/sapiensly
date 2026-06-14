@@ -41,8 +41,25 @@ afterEach(function () {
 function truncateTenantFixtures(): void
 {
     DB::connection('owner_commit')->statement(
-        'truncate tenant.records, tenant.knowledge_bases, platform.apps, platform.organizations, platform.users restart identity cascade'
+        'truncate tenant.records, tenant.knowledge_bases, tenant.chat_agents, platform.apps, platform.organizations, platform.users restart identity cascade'
     );
+}
+
+function seedChatAgent(?string $orgId, int $userId): void
+{
+    DB::connection('owner_commit')->table('tenant.chat_agents')->insert([
+        'id' => 'cpar_'.uniqid(),
+        'chat_id' => 'chat_'.uniqid(),
+        'agent_id' => 'agent_'.uniqid(),
+        'organization_id' => $orgId,
+        'user_id' => $userId,
+        'joined_at' => now(),
+    ]);
+}
+
+function tenantChatAgentCount(): int
+{
+    return DB::connection('tenant_app_real')->table('tenant.chat_agents')->count();
 }
 
 function scopeTenant(?string $orgId, ?int $userId): void
@@ -196,6 +213,25 @@ it('isolates knowledge_bases by organization under the real tenant role', functi
 
     scopeTenant(null, null);
     expect(tenantKnowledgeBaseCount())->toBe(0);
+});
+
+it('isolates chat_agents by tenant under the real tenant role', function () {
+    $userA = makeOwner();
+    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
+    $orgB = Organization::on('owner_commit')->create(['name' => 'B', 'slug' => 'b-'.uniqid()]);
+
+    seedChatAgent($orgA->id, $userA->id);
+    seedChatAgent($orgA->id, $userA->id);
+    seedChatAgent($orgB->id, $userA->id);
+
+    scopeTenant($orgA->id, null);
+    expect(tenantChatAgentCount())->toBe(2);
+
+    scopeTenant($orgB->id, null);
+    expect(tenantChatAgentCount())->toBe(1);
+
+    scopeTenant(null, null);
+    expect(tenantChatAgentCount())->toBe(0);
 });
 
 it('denies tenant_app any access to the platform schema', function () {

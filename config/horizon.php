@@ -236,6 +236,19 @@ return [
             'timeout' => 300, // 5 minutes — debate turns stream a full argument
             'nice' => 0,
         ],
+        'supervisor-agent-responses' => [
+            'connection' => 'redis',
+            'queue' => ['agent-responses'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 300, // 5 minutes — each agent turn streams a full reply
+            'nice' => 0,
+        ],
         'supervisor-whatsapp-webhooks' => [
             'connection' => 'redis',
             'queue' => ['whatsapp-webhooks'],
@@ -275,6 +288,11 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-agent-responses' => [
+                'maxProcesses' => 5,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
             'supervisor-whatsapp-webhooks' => [
                 'maxProcesses' => 5,
                 'balanceMaxShift' => 1,
@@ -296,6 +314,9 @@ return [
             ],
             'supervisor-debate' => [
                 'maxProcesses' => 9,
+            ],
+            'supervisor-agent-responses' => [
+                'maxProcesses' => 3,
             ],
             'supervisor-whatsapp-webhooks' => [
                 'maxProcesses' => 2,

@@ -97,7 +97,32 @@ class ChatAiService
         private readonly AiDefaults $aiDefaults,
     ) {}
 
+    /**
+     * Stream an ordinary chat turn. A selected agent (chat.agent_id) runs the
+     * turn as that agent; otherwise it is a plain model chat.
+     */
     public function streamMessage(ChatMessage $placeholder, string $userText, ?string $modelOverride = null, bool $webSearch = false, array $toolIds = []): ChatMessage
+    {
+        return $this->performStream($placeholder, $userText, null, $modelOverride, $webSearch, $toolIds);
+    }
+
+    /**
+     * Stream one mentioned agent's turn in a multi-agent thread. Forces the given
+     * agent's prompt/model/KBs/tools/web-search regardless of chat.agent_id, tags
+     * the message with the agent, and snapshots the data sources it used into
+     * agent_data_context (the data pills).
+     */
+    public function streamAgentTurn(ChatMessage $placeholder, Agent $agent, string $userText): ChatMessage
+    {
+        $placeholder->forceFill([
+            'agent_id' => $agent->id,
+            'message_type' => 'text',
+        ])->save();
+
+        return $this->performStream($placeholder, $userText, $agent, null, (bool) $agent->web_search, []);
+    }
+
+    private function performStream(ChatMessage $placeholder, string $userText, ?Agent $explicitAgent, ?string $modelOverride = null, bool $webSearch = false, array $toolIds = []): ChatMessage
     {
         set_time_limit(0);
 
@@ -129,15 +154,28 @@ class ChatAiService
             ->reverse()
             ->values();
 
+        // Label agent-authored turns with the agent's name so a later agent in a
+        // multi-agent thread can see who said what and address them by name.
+        $agentIds = $history->pluck('agent_id')->filter()->unique()->values()->all();
+        $agentNames = empty($agentIds)
+            ? []
+            : Agent::query()->whereIn('id', $agentIds)->pluck('name', 'id')->all();
+
         $sdkHistory = [];
         foreach ($history as $m) {
             $content = (string) ($m->content ?? '');
             if ($content === '') {
                 continue;
             }
-            $sdkHistory[] = $m->role === 'user'
-                ? new UserMessage($content)
-                : new AssistantMessage($content);
+            if ($m->role === 'user') {
+                $sdkHistory[] = new UserMessage($content);
+
+                continue;
+            }
+            if ($m->agent_id !== null && isset($agentNames[$m->agent_id])) {
+                $content = '[@'.$agentNames[$m->agent_id].'] '.$content;
+            }
+            $sdkHistory[] = new AssistantMessage($content);
         }
 
         // Drop the last user turn — stream() takes it as a separate argument.
@@ -150,10 +188,12 @@ class ChatAiService
             }
         }
 
-        // A selected agent (chat.agent_id) runs the turn as that agent: its
-        // model, prompt, knowledge bases and tools. Otherwise it's a plain model
-        // chat using the project's instructions/KBs and the composer's tools.
-        $agent = $chat->agent_id !== null ? Agent::find($chat->agent_id) : null;
+        // An explicit agent (a mentioned agent in a multi-agent thread) always
+        // runs the turn as itself. Otherwise a selected agent (chat.agent_id) runs
+        // the turn as that agent; failing that it's a plain model chat using the
+        // project's instructions/KBs and the composer's tools.
+        $agent = $explicitAgent
+            ?? ($chat->agent_id !== null ? Agent::find($chat->agent_id) : null);
         if ($agent !== null && ($user === null || ! $agent->isVisibleTo($user))) {
             $agent = null;
         }
@@ -167,7 +207,7 @@ class ChatAiService
             $toolIds = $agent->tools()->where('status', 'active')->pluck('tools.id')->all();
             // The agent governs web search via its own setting, mirroring how it
             // overrides the tool selection; the composer's value is ignored.
-            $webSearch = $agent->web_search;
+            $webSearch = (bool) $agent->web_search;
         } else {
             $instructions = self::SYSTEM_PROMPT;
             if ($chat->project?->custom_instructions) {
@@ -190,6 +230,10 @@ class ChatAiService
         $startedAt = microtime(true);
         $buffer = '';
 
+        // Snapshot of the data sources this agent actually used this turn, rendered
+        // as data pills. Only persisted for explicit agent turns (multi-agent).
+        $usedSources = [];
+
         try {
             $provider = Lab::Anthropic;
             if ($user !== null) {
@@ -202,7 +246,10 @@ class ChatAiService
             // cache every turn. Append them to the user turn instead, keeping the
             // system prefix byte-stable. Best-effort — a retrieval hiccup never
             // breaks the chat (retrieveContext swallows and returns '').
-            $ragContext = $this->retrieveContext($ragKbIds, $promptText, $chat->id);
+            [$ragContext, $ragChunks] = $this->retrieveContext($ragKbIds, $promptText, $chat->id);
+            if ($ragChunks > 0) {
+                $usedSources['Knowledge base'] = $ragChunks.' passage'.($ragChunks === 1 ? '' : 's');
+            }
 
             $tools = $this->buildChatTools($toolIds, $user, $webSearch);
 
@@ -250,6 +297,7 @@ class ChatAiService
                 }
 
                 if ($event instanceof ToolCall) {
+                    $usedSources[$this->prettySource($event->toolCall->name)] = 'used';
                     $this->safeBroadcast(fn () => ChatToolCall::dispatch($chat->id, $placeholder->id, $event->toolCall->name));
 
                     continue;
@@ -276,11 +324,15 @@ class ChatAiService
 
             $buffer = self::closeDanglingArtifacts($buffer);
 
-            $placeholder->update([
+            $finalAttributes = [
                 'content' => $buffer,
                 'model' => $resolvedModel,
                 'status' => 'complete',
-            ]);
+            ];
+            if ($explicitAgent !== null) {
+                $finalAttributes['agent_data_context'] = $usedSources ?: null;
+            }
+            $placeholder->update($finalAttributes);
 
             $chat->forceFill([
                 'last_message_at' => now(),
@@ -408,35 +460,48 @@ class ChatAiService
     /**
      * Retrieve relevant context from the given knowledge bases (the agent's or
      * the project's) and format it as an appendable instructions block. Returns
-     * '' when there are no KBs, nothing matches, or retrieval fails.
+     * ['', 0] when there are no KBs, nothing matches, or retrieval fails.
      *
      * @param  array<int, string>  $kbIds
+     * @return array{0: string, 1: int}
      */
-    private function retrieveContext(array $kbIds, string $query, string $chatId): string
+    private function retrieveContext(array $kbIds, string $query, string $chatId): array
     {
         if (empty($kbIds) || trim($query) === '') {
-            return '';
+            return ['', 0];
         }
 
         try {
             $result = app(RetrievalService::class)->retrieve($query, $kbIds, topK: 6, threshold: 0.5);
 
-            if (($result['chunk_count'] ?? 0) === 0 || trim($result['context'] ?? '') === '') {
-                return '';
+            $chunks = (int) ($result['chunk_count'] ?? 0);
+            if ($chunks === 0 || trim($result['context'] ?? '') === '') {
+                return ['', 0];
             }
 
-            return "\n\n## Relevant context from the knowledge base\n"
+            return ["\n\n## Relevant context from the knowledge base\n"
                 .'Use the following retrieved information when it helps answer the user. '
                 ."If it doesn't contain the answer, rely on your own knowledge.\n\n"
-                .$result['context'];
+                .$result['context'], $chunks];
         } catch (\Throwable $e) {
             Log::warning('Chat AI: RAG retrieval failed (continuing without context)', [
                 'chat_id' => $chatId,
                 'error' => $e->getMessage(),
             ]);
 
-            return '';
+            return ['', 0];
         }
+    }
+
+    /**
+     * Human-readable label for a data source / tool name used in data pills
+     * (e.g. `web_search` → "Web search", `check-orders` → "Check orders").
+     */
+    private function prettySource(string $name): string
+    {
+        $label = trim((string) preg_replace('/[_-]+/', ' ', $name));
+
+        return $label === '' ? $name : Str::ucfirst($label);
     }
 
     /**

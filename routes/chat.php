@@ -1,9 +1,11 @@
 <?php
 
+use App\Http\Controllers\ChatActionController;
 use App\Http\Controllers\ChatAttachmentController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\ChatProjectController;
+use App\Http\Controllers\ChatSynthesisController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -15,6 +17,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('chat/{chat}/messages', [ChatMessageController::class, 'store'])->name('chat.messages.store');
     Route::post('chat/{chat}/stop', [ChatMessageController::class, 'stop'])->name('chat.stop');
+
+    // Multi-agent (@mention) thread synthesis + action close.
+    Route::middleware('throttle:60,1')->group(function () {
+        Route::post('chat/{chat}/synthesize', [ChatSynthesisController::class, 'store'])->name('chat.synthesize');
+        Route::post('chat/{chat}/actions/{message}/execute', [ChatActionController::class, 'execute'])->name('chat.actions.execute');
+        Route::delete('chat/{chat}/actions/{message}', [ChatActionController::class, 'dismiss'])->name('chat.actions.dismiss');
+    });
 
     Route::post('chat/{chat}/attachments', [ChatAttachmentController::class, 'upload'])->name('chat.attachments.upload');
     Route::get('chat/{chat}/attachments/{attachment}', [ChatAttachmentController::class, 'show'])->name('chat.attachments.show');

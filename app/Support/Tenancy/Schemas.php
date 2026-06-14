@@ -50,6 +50,7 @@ final class Schemas
         'chat_messages',
         'chat_attachments',
         'chat_project_knowledge_bases',
+        'chat_agents',
         // Widget / chatbot runtime
         'widget_sessions',
         'widget_conversations',

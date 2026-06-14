@@ -16,6 +16,23 @@ export interface ChatAttachmentDto {
 
 export type ChatMessageStatus = 'pending' | 'streaming' | 'complete' | 'error';
 
+export type ChatMessageType = 'text' | 'action_proposal' | 'action_result';
+
+export interface ChatAgentRef {
+    id: string;
+    name: string;
+}
+
+// The synthesized, executable close of a multi-agent thread (ActionCard).
+export interface ActionPayloadDto {
+    action_type: string;
+    action_label: string;
+    agreed_by: string[];
+    parameters: Record<string, unknown>;
+    rationale: string;
+    executable?: boolean;
+}
+
 export interface ChatMessageDto {
     id: string;
     role: 'user' | 'assistant' | 'system';
@@ -25,7 +42,20 @@ export interface ChatMessageDto {
     error: string | null;
     created_at: string | null;
     attachments: ChatAttachmentDto[];
+    // Multi-agent (@mention) fields. agent set => agent-authored bubble.
+    agent_id?: string | null;
+    agent?: ChatAgentRef | null;
+    message_type?: ChatMessageType;
+    agent_data_context?: Record<string, string> | null;
+    action_payload?: ActionPayloadDto | null;
 }
+
+export type ChatSynthesisStatus =
+    | null
+    | 'pending'
+    | 'ready'
+    | 'executed'
+    | 'dismissed';
 
 export interface ChatListItem {
     id: string;
@@ -69,5 +99,8 @@ export interface ActiveChatDto {
     agent_id: string | null;
     tool_ids: string[];
     chat_project_id: string | null;
+    mode?: 'single' | 'multi_agent';
+    synthesis_status?: ChatSynthesisStatus;
+    agents?: ChatAgentRef[];
     messages: ChatMessageDto[];
 }

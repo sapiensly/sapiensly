@@ -19,8 +19,8 @@ import type {
     KnowledgeBaseOption,
 } from '@/types/chatModule';
 import { Head, router } from '@inertiajs/vue3';
+import { PanelLeftClose, PanelLeftOpen, Sparkles } from '@lucide/vue';
 import axios from 'axios';
-import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -60,6 +60,12 @@ const toolActivity = ref<Record<string, string>>({});
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null);
 const stopped = ref<Set<string>>(new Set());
 
+// Multi-agent (@mention) synthesis state.
+const synthesisStatus = ref<ActiveChatDto['synthesis_status']>(
+    props.activeChat?.synthesis_status ?? null,
+);
+const actionBusy = ref(false);
+
 // ----- Inner chat sidebar (collapsible) -----
 const SIDEBAR_KEY = 'chat:sidebar-open';
 // Default closed for a focused landing; only an explicit stored `true`
@@ -75,6 +81,14 @@ watch(chatSidebarOpen, (open) => {
 });
 
 const activeId = computed(() => props.activeChat?.id ?? null);
+const isMultiAgent = computed(() => props.activeChat?.mode === 'multi_agent');
+// Offer a manual re-synthesis once agents have spoken but no proposal stands.
+const canSynthesize = computed(
+    () =>
+        isMultiAgent.value &&
+        (synthesisStatus.value === null ||
+            synthesisStatus.value === 'dismissed'),
+);
 const isStreaming = computed(() =>
     messages.value.some(
         (m) => m.status === 'pending' || m.status === 'streaming',
@@ -211,6 +225,41 @@ function subscribe(id: string) {
             toolActivity.value = { ...toolActivity.value };
         },
     );
+
+    // ----- Multi-agent (@mention) events -----
+    channel.listen(
+        '.ChatAgentStarted',
+        (payload: { message: ChatMessageDto }) => {
+            upsert(payload.message);
+        },
+    );
+
+    channel.listen(
+        '.ChatActionProposalReady',
+        (payload: {
+            message: ChatMessageDto;
+            synthesis_status: ActiveChatDto['synthesis_status'];
+        }) => {
+            upsert({ ...payload.message, attachments: [] });
+            synthesisStatus.value = payload.synthesis_status;
+            router.reload({ only: ['chats'] });
+        },
+    );
+
+    channel.listen(
+        '.ChatActionExecuted',
+        (payload: {
+            message: ChatMessageDto;
+            synthesis_status: ActiveChatDto['synthesis_status'];
+        }) => {
+            actionBusy.value = false;
+            synthesisStatus.value = payload.synthesis_status;
+            // An execution appends a result message; a dismissal just flips status.
+            if (payload.message.message_type === 'action_result') {
+                upsert({ ...payload.message, attachments: [] });
+            }
+        },
+    );
 }
 
 function unsubscribe() {
@@ -218,6 +267,9 @@ function unsubscribe() {
         channel.stopListening('.ChatStreamChunk');
         channel.stopListening('.ChatStreamComplete');
         channel.stopListening('.ChatStreamError');
+        channel.stopListening('.ChatAgentStarted');
+        channel.stopListening('.ChatActionProposalReady');
+        channel.stopListening('.ChatActionExecuted');
         echo.leave(`chat.conversation.${subscribedId}`);
         channel = null;
         subscribedId = null;
@@ -233,6 +285,8 @@ watch(
         currentModel.value =
             selectionFor(props.activeChat) ?? currentModel.value;
         selectedToolIds.value = props.activeChat?.tool_ids ?? [];
+        synthesisStatus.value = props.activeChat?.synthesis_status ?? null;
+        actionBusy.value = false;
         toolActivity.value = {};
         stopped.value = new Set();
         // Treat artifacts already in the loaded conversation as "seen" so we
@@ -253,12 +307,14 @@ async function send(payload: {
     attachmentIds: string[];
     webSearch?: boolean;
     toolIds?: string[];
+    mentionedAgentIds?: string[];
 }) {
     const {
         content,
         attachmentIds,
         webSearch = false,
         toolIds = selectedToolIds.value,
+        mentionedAgentIds = [],
     } = payload;
 
     if (!activeId.value) {
@@ -268,6 +324,7 @@ async function send(payload: {
             model: currentModel.value,
             web_search: webSearch,
             tool_ids: toolIds,
+            mentioned_agent_ids: mentionedAgentIds,
         });
         return;
     }
@@ -292,12 +349,19 @@ async function send(payload: {
             attachment_ids: attachmentIds,
             web_search: webSearch,
             tool_ids: toolIds,
+            mentioned_agent_ids: mentionedAgentIds,
         });
-        // Replace optimistic user msg with the real one + add the placeholder.
+        // Replace optimistic user msg with the real one.
         messages.value = messages.value.map((m) =>
             m.id === userMsg.id ? data.user_message : m,
         );
-        upsert(data.placeholder);
+        if (data.mode === 'multi_agent') {
+            // Agent bubbles + the action proposal arrive over Reverb.
+            synthesisStatus.value = 'pending';
+            if (data.system_notice) upsert(data.system_notice);
+        } else {
+            upsert(data.placeholder);
+        }
     } catch {
         messages.value = messages.value.map((m) =>
             m.id === userMsg.id
@@ -305,6 +369,38 @@ async function send(payload: {
                 : m,
         );
     }
+}
+
+async function executeAction(message: ChatMessageDto) {
+    if (!activeId.value) return;
+    actionBusy.value = true;
+    try {
+        const { data } = await axios.post(
+            `/chat/${activeId.value}/actions/${message.id}/execute`,
+        );
+        synthesisStatus.value = data.synthesis_status;
+        if (data.message) upsert({ ...data.message, attachments: [] });
+    } catch {
+        // leave the card actionable on failure
+    } finally {
+        actionBusy.value = false;
+    }
+}
+
+async function dismissAction(message: ChatMessageDto) {
+    if (!activeId.value) return;
+    try {
+        await axios.delete(`/chat/${activeId.value}/actions/${message.id}`);
+        synthesisStatus.value = 'dismissed';
+    } catch {
+        // no-op
+    }
+}
+
+function synthesize() {
+    if (!activeId.value) return;
+    synthesisStatus.value = 'pending';
+    axios.post(`/chat/${activeId.value}/synthesize`).catch(() => {});
 }
 
 function onRequiresChat() {
@@ -388,7 +484,10 @@ function retry() {
                             "
                             @click="chatSidebarOpen = !chatSidebarOpen"
                         >
-                            <PanelLeftClose v-if="chatSidebarOpen" class="size-4" />
+                            <PanelLeftClose
+                                v-if="chatSidebarOpen"
+                                class="size-4"
+                            />
                             <PanelLeftOpen v-else class="size-4" />
                         </button>
                     </template>
@@ -399,11 +498,30 @@ function retry() {
                         :title="activeTitle"
                         :active-artifact-id="activeArtifactId"
                         :tool-activity="toolActivity"
+                        :synthesis-status="synthesisStatus"
+                        :action-busy="actionBusy"
                         @retry="retry"
                         @open-artifact="openArtifact"
+                        @execute="executeAction"
+                        @dismiss="dismissAction"
                     />
                     <div class="px-7 pb-4">
                         <div class="mx-auto w-full max-w-[820px]">
+                            <div
+                                v-if="canSynthesize"
+                                class="mb-2 flex justify-center"
+                            >
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1.5 rounded-full border border-medium bg-surface px-3 py-1.5 text-[13px] font-medium text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                                    @click="synthesize"
+                                >
+                                    <Sparkles
+                                        class="size-3.5 text-accent-blue"
+                                    />
+                                    {{ t('chat.action.synthesize') }}
+                                </button>
+                            </div>
                             <ChatComposer
                                 ref="composer"
                                 :models="models"
