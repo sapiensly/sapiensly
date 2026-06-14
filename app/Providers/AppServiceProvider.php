@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Models\OrganizationMembership;
 use App\Observers\OrganizationMembershipObserver;
+use App\Services\Capabilities\PostCall\Connectors\FakeHubSpotConnector;
+use App\Services\Capabilities\PostCall\Contracts\CrmConnector;
 use App\Services\Security\Ssrf\DnsResolver;
 use App\Services\Security\Ssrf\IpRangeMatcher;
 use App\Services\Security\Ssrf\SsrfGuard;
@@ -60,6 +62,12 @@ class AppServiceProvider extends ServiceProvider
                 array_values((array) config('security.ssrf.host_allowlist', [])),
             );
         });
+
+        // Capability #0001 (HubSpot post-call agent) talks to the CRM through this
+        // boundary. Read-first / dry-run for now: the in-memory fake is the only
+        // implementation until real HubSpot OAuth is wired. Singleton so a seeded
+        // call/object is visible to every service in one request (and one test).
+        $this->app->singleton(CrmConnector::class, FakeHubSpotConnector::class);
     }
 
     /**
