@@ -246,7 +246,7 @@ const workspaceLabel = computed(() =>
                 collapsed ? 'justify-center px-3' : 'gap-2 px-5',
             ]"
         >
-            <Link :href="dashboard()" class="flex items-center gap-1 outline-none">
+            <Link :href="ChatController.index().url" class="flex items-center gap-1 outline-none">
                 <AppLogo tone="white" :collapsed="collapsed" />
             </Link>
         </div>

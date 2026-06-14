@@ -13,7 +13,7 @@ beforeEach(function () {
     $this->seed(RolesAndPermissionsSeeder::class);
 });
 
-test('switching to an organization redirects to the dashboard', function () {
+test('switching to an organization redirects to chat', function () {
     $org = Organization::create(['name' => 'Acme', 'slug' => 'acme-'.uniqid()]);
     $user = User::factory()->create(['organization_id' => null]);
     OrganizationMembership::create([
@@ -26,12 +26,12 @@ test('switching to an organization redirects to the dashboard', function () {
     actingAs($user)
         ->from('/system/integrations')
         ->post('/account/switch', ['organization_id' => $org->id])
-        ->assertRedirect('/dashboard');
+        ->assertRedirect('/chat');
 
     expect($user->fresh()->organization_id)->toBe($org->id);
 });
 
-test('switching back to personal also redirects to the dashboard', function () {
+test('switching back to personal also redirects to chat', function () {
     $org = Organization::create(['name' => 'Acme', 'slug' => 'acme-'.uniqid()]);
     $user = User::factory()->create(['organization_id' => $org->id]);
     OrganizationMembership::create([
@@ -44,7 +44,7 @@ test('switching back to personal also redirects to the dashboard', function () {
     actingAs($user)
         ->from('/documents')
         ->post('/account/switch', ['organization_id' => null])
-        ->assertRedirect('/dashboard');
+        ->assertRedirect('/chat');
 
     expect($user->fresh()->organization_id)->toBeNull();
 });

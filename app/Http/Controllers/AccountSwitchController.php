@@ -23,11 +23,11 @@ class AccountSwitchController extends Controller
             return back()->withErrors(['organization_id' => $e->getMessage()]);
         }
 
-        // After a successful switch, land on the dashboard. Staying on the
-        // current page after switching tenant would leave the user inside a
-        // resource (e.g. `/system/integrations/{id}`) that the new tenant
-        // can't see, producing a 403 or stale context. Dashboard is the
-        // neutral entry point that re-hydrates with the new org's props.
-        return to_route('dashboard');
+        // After a successful switch, land on chat. Staying on the current page
+        // after switching tenant would leave the user inside a resource (e.g.
+        // `/system/integrations/{id}`) that the new tenant can't see, producing
+        // a 403 or stale context. Chat is the neutral entry point that
+        // re-hydrates with the new org's props.
+        return to_route('chat.index');
     }
 }
