@@ -41,25 +41,8 @@ afterEach(function () {
 function truncateTenantFixtures(): void
 {
     DB::connection('owner_commit')->statement(
-        'truncate tenant.records, tenant.knowledge_bases, tenant.chat_agents, tenant.crm_update_proposals, platform.apps, platform.organizations, platform.users restart identity cascade'
+        'truncate tenant.records, tenant.knowledge_bases, tenant.chat_agents, platform.apps, platform.organizations, platform.users restart identity cascade'
     );
-}
-
-function seedCrmProposal(?string $orgId, int $userId): void
-{
-    DB::connection('owner_commit')->table('tenant.crm_update_proposals')->insert([
-        'id' => 'cpro_'.uniqid(),
-        'capability_id' => 'cap_0001_hubspot_post_call_agent',
-        'call_id' => 'call_'.uniqid(),
-        'status' => 'pending',
-        'organization_id' => $orgId,
-        'user_id' => $userId,
-    ]);
-}
-
-function tenantCrmProposalCount(): int
-{
-    return DB::connection('tenant_app_real')->table('tenant.crm_update_proposals')->count();
 }
 
 function seedChatAgent(?string $orgId, int $userId): void
@@ -249,25 +232,6 @@ it('isolates chat_agents by tenant under the real tenant role', function () {
 
     scopeTenant(null, null);
     expect(tenantChatAgentCount())->toBe(0);
-});
-
-it('isolates crm_update_proposals by tenant under the real tenant role', function () {
-    $userA = makeOwner();
-    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
-    $orgB = Organization::on('owner_commit')->create(['name' => 'B', 'slug' => 'b-'.uniqid()]);
-
-    seedCrmProposal($orgA->id, $userA->id);
-    seedCrmProposal($orgA->id, $userA->id);
-    seedCrmProposal($orgB->id, $userA->id);
-
-    scopeTenant($orgA->id, null);
-    expect(tenantCrmProposalCount())->toBe(2);
-
-    scopeTenant($orgB->id, null);
-    expect(tenantCrmProposalCount())->toBe(1);
-
-    scopeTenant(null, null);
-    expect(tenantCrmProposalCount())->toBe(0);
 });
 
 it('denies tenant_app any access to the platform schema', function () {

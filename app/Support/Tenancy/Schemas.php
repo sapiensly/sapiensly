@@ -51,8 +51,6 @@ final class Schemas
         'chat_attachments',
         'chat_project_knowledge_bases',
         'chat_agents',
-        // Capabilities runtime
-        'crm_update_proposals',
         // Widget / chatbot runtime
         'widget_sessions',
         'widget_conversations',
