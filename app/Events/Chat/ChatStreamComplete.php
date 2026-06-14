@@ -3,6 +3,7 @@
 namespace App\Events\Chat;
 
 use App\Models\ChatMessage;
+use App\Support\Chat\ChatMessagePresenter;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -40,17 +41,7 @@ class ChatStreamComplete implements ShouldBroadcastNow
         return [
             'chat_id' => $this->message->chat_id,
             'title' => $this->chatTitle,
-            'message' => [
-                'id' => $this->message->id,
-                'role' => $this->message->role,
-                'content' => $this->message->content,
-                'model' => $this->message->model,
-                'status' => $this->message->status,
-                'created_at' => $this->message->created_at?->toIso8601String(),
-                'agent_id' => $this->message->agent_id,
-                'message_type' => $this->message->message_type,
-                'agent_data_context' => $this->message->agent_data_context,
-            ],
+            'message' => ChatMessagePresenter::present($this->message),
         ];
     }
 }

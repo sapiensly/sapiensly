@@ -500,6 +500,7 @@ function retry() {
                         :tool-activity="toolActivity"
                         :synthesis-status="synthesisStatus"
                         :action-busy="actionBusy"
+                        :agents="agents"
                         @retry="retry"
                         @open-artifact="openArtifact"
                         @execute="executeAction"
