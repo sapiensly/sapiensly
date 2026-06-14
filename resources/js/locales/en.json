@@ -1932,6 +1932,8 @@
         "Summarize a document",
         "Write some code"
     ],
+    "debate.hide_sidebar": "Hide debate list",
+    "debate.show_sidebar": "Show debate list",
     "debate.new_debate": "New debate",
     "debate.untitled": "Untitled debate",
     "debate.no_history": "No debates yet.",

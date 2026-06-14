@@ -16,6 +16,7 @@ import type {
     DebateTurnDto,
 } from '@/types/debateModule';
 import { Head, router } from '@inertiajs/vue3';
+import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
 import axios from 'axios';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -40,6 +41,20 @@ const stuckToBottom = ref(true);
 function structuredCloneSafe<T>(value: T): T {
     return value ? JSON.parse(JSON.stringify(value)) : value;
 }
+
+// ----- Inner debate sidebar (collapsible) -----
+const SIDEBAR_KEY = 'debate:sidebar-open';
+// Default closed for a focused landing; only an explicit stored `true`
+// (the user opened it before) keeps it open. Their choice persists.
+const debateSidebarOpen = ref(
+    typeof window !== 'undefined' &&
+        window.localStorage.getItem(SIDEBAR_KEY) === 'true',
+);
+watch(debateSidebarOpen, (open) => {
+    if (typeof window !== 'undefined') {
+        window.localStorage.setItem(SIDEBAR_KEY, String(open));
+    }
+});
 
 const activeId = computed(() => debate.value?.id ?? null);
 
@@ -246,11 +261,14 @@ function stop() {
         hide-topbar
     >
         <div class="flex min-h-0 flex-1">
-            <DebateSidebar
-                class="hidden md:flex"
-                :debates="debates"
-                :active-id="activeId"
-            />
+            <div
+                :class="[
+                    'hidden shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out md:block',
+                    debateSidebarOpen ? 'w-72' : 'w-0',
+                ]"
+            >
+                <DebateSidebar :debates="debates" :active-id="activeId" />
+            </div>
 
             <div class="flex min-h-0 flex-1 flex-col">
                 <Topbar
@@ -258,7 +276,26 @@ function stop() {
                     :sidebar-collapsed="sidebarCollapsed"
                     @toggle-sidebar="toggleSidebar"
                     @open-palette="openPalette"
-                />
+                >
+                    <template #leading>
+                        <button
+                            type="button"
+                            class="hidden size-9 shrink-0 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink md:flex"
+                            :aria-label="
+                                debateSidebarOpen
+                                    ? t('debate.hide_sidebar')
+                                    : t('debate.show_sidebar')
+                            "
+                            @click="debateSidebarOpen = !debateSidebarOpen"
+                        >
+                            <PanelLeftClose
+                                v-if="debateSidebarOpen"
+                                class="size-4"
+                            />
+                            <PanelLeftOpen v-else class="size-4" />
+                        </button>
+                    </template>
+                </Topbar>
 
                 <template v-if="debate">
                     <DebateHeader

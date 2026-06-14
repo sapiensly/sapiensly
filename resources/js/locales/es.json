@@ -1932,6 +1932,8 @@
         "Resume un documento",
         "Escribe algo de código"
     ],
+    "debate.hide_sidebar": "Ocultar lista de debates",
+    "debate.show_sidebar": "Mostrar lista de debates",
     "debate.new_debate": "Nuevo debate",
     "debate.untitled": "Debate sin título",
     "debate.no_history": "Aún no hay debates.",
