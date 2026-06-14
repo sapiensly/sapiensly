@@ -79,6 +79,11 @@ const selectedAgent = computed(() =>
 const selectedModel = computed(() =>
     props.models.find((m) => m.value === props.model),
 );
+// With an agent selected, its own web-search setting governs (and shows on the
+// button, read-only); otherwise the composer's own toggle drives it.
+const searchActive = computed(() =>
+    selectedAgent.value ? selectedAgent.value.web_search : webSearch.value,
+);
 const pickerLabel = computed(
     () =>
         selectedAgent.value?.name ??
@@ -350,10 +355,11 @@ defineExpose({ focus });
                         type="button"
                         :disabled="!!selectedAgent"
                         :title="selectedAgent ? t('chat.agent_manages') : t('chat.web_search')"
-                        :aria-pressed="webSearch && !selectedAgent"
+                        :aria-pressed="searchActive"
                         :class="[
-                            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
-                            webSearch && !selectedAgent
+                            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent',
+                            selectedAgent ? 'disabled:opacity-100' : '',
+                            searchActive
                                 ? 'bg-accent-blue/15 text-accent-blue'
                                 : 'text-ink-muted hover:bg-white/10 hover:text-ink',
                         ]"

@@ -95,6 +95,7 @@ class AgentController extends Controller
             'prompt_template' => $request->prompt_template,
             'model' => $request->model,
             'config' => $request->config ?? [],
+            'web_search' => $request->boolean('web_search'),
         ]);
 
         if ($request->has('knowledge_base_ids')) {
@@ -154,6 +155,7 @@ class AgentController extends Controller
             'prompt_template' => $request->prompt_template,
             'model' => $request->model,
             'config' => $request->config ?? $agent->config,
+            'web_search' => $request->boolean('web_search'),
         ]);
 
         if ($request->has('knowledge_base_ids')) {

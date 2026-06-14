@@ -59,6 +59,7 @@ export interface ChatAgentOption {
     id: string;
     name: string;
     type: string;
+    web_search: boolean;
 }
 
 export interface ActiveChatDto {

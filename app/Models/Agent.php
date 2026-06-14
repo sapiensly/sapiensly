@@ -34,6 +34,7 @@ class Agent extends Model
         'prompt_template',
         'model',
         'config',
+        'web_search',
     ];
 
     protected function casts(): array
@@ -44,6 +45,7 @@ class Agent extends Model
             'visibility' => Visibility::class,
             'keywords' => 'array',
             'config' => 'array',
+            'web_search' => 'boolean',
         ];
     }
 

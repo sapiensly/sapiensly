@@ -10,6 +10,7 @@ import KnowledgeAgentConfig from '@/components/standalone-agents/KnowledgeAgentC
 import TriageAgentConfig from '@/components/standalone-agents/TriageAgentConfig.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
     Select,
     SelectContent,
@@ -59,6 +60,7 @@ const form = useForm({
     status: props.agent.status,
     prompt_template: props.agent.prompt_template ?? '',
     model: props.agent.model,
+    web_search: props.agent.web_search ?? false,
     config: props.agent.config ?? {},
     knowledge_base_ids:
         props.agent.knowledge_bases?.map((kb) => kb.id) ?? ([] as string[]),
@@ -240,6 +242,23 @@ const typeIcon = computed<Component>(
                             class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.prompt_template" />
+                    </div>
+
+                    <div
+                        class="flex items-center justify-between gap-4 rounded-xs border border-soft bg-surface px-3 py-2.5"
+                    >
+                        <div class="space-y-0.5">
+                            <Label
+                                for="web_search"
+                                class="text-xs font-medium text-ink"
+                            >
+                                {{ t('agents.edit.web_search_label') }}
+                            </Label>
+                            <p class="text-[11px] text-ink-subtle">
+                                {{ t('agents.edit.web_search_description') }}
+                            </p>
+                        </div>
+                        <Switch id="web_search" v-model="form.web_search" />
                     </div>
                 </SettingsCard>
 

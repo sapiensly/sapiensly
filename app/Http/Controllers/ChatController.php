@@ -187,11 +187,12 @@ class ChatController extends Controller
             ->forAccountContext($user)
             ->standalone()
             ->orderBy('name')
-            ->get(['id', 'name', 'type'])
+            ->get(['id', 'name', 'type', 'web_search'])
             ->map(fn (Agent $agent) => [
                 'id' => $agent->id,
                 'name' => $agent->name,
                 'type' => $agent->type instanceof \BackedEnum ? $agent->type->value : $agent->type,
+                'web_search' => (bool) $agent->web_search,
             ]);
 
         return [

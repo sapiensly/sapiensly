@@ -24,6 +24,7 @@ class StoreAgentRequest extends FormRequest
             'keywords.*' => ['string', 'max:50'],
             'prompt_template' => ['nullable', 'string'],
             'model' => $this->modelRule(),
+            'web_search' => ['nullable', 'boolean'],
             'config' => ['nullable', 'array'],
 
             'config.temperature' => ['nullable', 'numeric', 'min:0', 'max:1'],

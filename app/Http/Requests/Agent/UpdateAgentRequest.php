@@ -27,6 +27,7 @@ class UpdateAgentRequest extends FormRequest
             'status' => ['nullable', Rule::enum(AgentStatus::class)],
             'prompt_template' => ['nullable', 'string'],
             'model' => $this->modelRule(),
+            'web_search' => ['nullable', 'boolean'],
             'config' => ['nullable', 'array'],
 
             'config.temperature' => ['nullable', 'numeric', 'min:0', 'max:1'],

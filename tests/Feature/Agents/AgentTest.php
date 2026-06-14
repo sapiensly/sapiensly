@@ -110,6 +110,19 @@ describe('store', function () {
         ]);
     });
 
+    it('persists the internet search capability', function () {
+        $this->actingAs($this->user)
+            ->post(route('agents.store'), [
+                'type' => AgentType::General->value,
+                'name' => 'Researcher',
+                'model' => 'claude-sonnet-4-20250514',
+                'web_search' => true,
+            ])
+            ->assertRedirect();
+
+        expect(Agent::where('name', 'Researcher')->value('web_search'))->toBeTrue();
+    });
+
     it('creates a knowledge agent with knowledge bases', function () {
         $kb = KnowledgeBase::factory()->ready()->create(['user_id' => $this->user->id]);
 
@@ -259,6 +272,23 @@ describe('update', function () {
         $knowledgeBases = $agent->loadKnowledgeBases();
         expect($knowledgeBases)->toHaveCount(1);
         expect($knowledgeBases->first()->id)->toBe($kb2->id);
+    });
+
+    it('toggles the internet search capability', function () {
+        $agent = Agent::factory()->standalone()->create([
+            'user_id' => $this->user->id,
+            'web_search' => false,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('agents.update', $agent), [
+                'name' => $agent->name,
+                'model' => $agent->model,
+                'web_search' => true,
+            ])
+            ->assertRedirect();
+
+        expect($agent->refresh()->web_search)->toBeTrue();
     });
 
     it('returns 403 when updating agents belonging to other users', function () {

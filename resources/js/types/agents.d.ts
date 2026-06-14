@@ -83,6 +83,7 @@ export interface Agent {
     prompt_template: string | null;
     model: string;
     config: AgentConfig | null;
+    web_search: boolean;
     knowledge_bases?: KnowledgeBaseReference[];
     tools?: ToolReference[];
     knowledge_bases_count?: number;

@@ -165,6 +165,9 @@ class ChatAiService
             $resolvedModel = $this->aiDefaults->model('chat', $agent->model ?: ($modelOverride ?? $chat->model));
             $ragKbIds = $agent->knowledgeBaseIds();
             $toolIds = $agent->tools()->where('status', 'active')->pluck('tools.id')->all();
+            // The agent governs web search via its own setting, mirroring how it
+            // overrides the tool selection; the composer's value is ignored.
+            $webSearch = $agent->web_search;
         } else {
             $instructions = self::SYSTEM_PROMPT;
             if ($chat->project?->custom_instructions) {
