@@ -53,6 +53,22 @@ A Claude‑style general assistant for everyday questions and work.
 - Conversation **history** grouped by date (Today / Yesterday / …), with rename, delete, and a
   Stop button to halt a response.
 
+### Agent @mention (multi-agent deliberation)
+
+Bring several agents into one thread and have them deliberate, then close on a concrete action.
+
+- Type `@` in the composer to pick one or more **agents** (autocomplete by name; up to 5 per
+  message). Each appears as a removable chip.
+- The mentioned agents respond **one at a time, in order**, each answering from its own
+  knowledge bases, tools, and web search — and **seeing the previous agents' replies**, so it can
+  build on or push back against them. Each reply streams live with a colored agent avatar and
+  **data pills** showing the sources it drew on.
+- After the last agent answers, the thread is **synthesized into a single action proposal** — a
+  named, parametrized recommendation rendered as an **Action Card** (who agreed, the parameters,
+  and a short rationale) instead of another wall of text. You can also re‑run synthesis manually.
+- **Execute** the card in one click to close the thread (recorded inline), or **dismiss** it. If
+  the agents don't reach a clear recommendation, the thread says so instead of forcing an action.
+
 ## IA Debate
 
 Convene a council of AI models to deliberate a decision and converge on an answer.

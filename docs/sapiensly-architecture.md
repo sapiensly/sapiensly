@@ -71,8 +71,11 @@ Grouped by area (`app/Models/`):
   `IntegrationVariable`, `IntegrationRequest`, `IntegrationExecution`, `IntegrationUserToken`).
 - **Agents:** `Agent` (type via `AgentType` enum: `general|triage|knowledge|action`; `HasVisibility`),
   `AgentTeam`, `Flow`. Pivots link agents to knowledge bases and tools.
-- **Chat:** `Chat` (model, optional `agent_id`, tool ids, project), `ChatMessage`,
-  `ChatAttachment`, `ChatProject` (custom instructions + KB pivot).
+- **Chat:** `Chat` (model, optional `agent_id`, tool ids, project; `mode` `single|multi_agent`
+  and `synthesis_status` for @mention threads), `ChatMessage` (`agent_id`, `message_type`
+  `text|action_proposal|action_result`, `agent_data_context`, `action_payload`), `ChatAttachment`,
+  `ChatProject` (custom instructions + KB pivot), `ChatParticipant` (tenant table `chat_agents` —
+  the @mention roster).
 - **Debate:** `Debate`, `DebateParticipant` (model or `agent_id`), `DebateRound`, `DebateTurn`.
 - **Knowledge/docs:** `KnowledgeBase`, `KnowledgeBaseDocument`, `KnowledgeBaseChunk` (pgvector),
   `Document`, `Folder`.
@@ -131,8 +134,9 @@ Grouped by area (`app/Models/`):
 ## Real-time & queues
 
 - **Horizon supervisors** (`config/horizon.php`, Redis): `supervisor-default`, `supervisor-ai`
-  (LLM/embeddings, 300s timeout), **`supervisor-debate`** (parallel debate turns), and the
-  WhatsApp queues. Jobs declare their queue via `viaQueue()` (`ai`, `debate`, …). Restart Horizon
+  (LLM/embeddings, 300s timeout), **`supervisor-debate`** (parallel debate turns),
+  **`supervisor-agent-responses`** (sequential @mention agent turns), and the WhatsApp queues. Jobs
+  declare their queue via `viaQueue()` (`ai`, `debate`, `agent-responses`, …). Restart Horizon
   after changing supervisors.
 - **Streaming pattern:** a controller persists a placeholder + dispatches a job; the job streams
   from the SDK and broadcasts incremental events implementing **`ShouldBroadcastNow`** on a
@@ -144,6 +148,16 @@ Grouped by area (`app/Models/`):
   `finally` dispatches `AssessDebateRoundJob` (moderator consensus, tolerant JSON parse); on
   consensus or round limit it dispatches `SynthesizeDebateJob`. `DebateTurnStreamer` streams a
   single turn; agent participants get their prompt + RAG + tools injected.
+- **Chat @mention orchestration** (`app/Services/Chat/`): when a message resolves agents
+  (`MentionParser`), `MultiAgentDispatcher` rosters them (`chat_agents`) and dispatches a
+  **`Bus::chain`** of `InvokeAgentResponse` (one per agent, **sequential** so each sees the prior
+  replies) followed by `SynthesizeThread`, on the `agent-responses` queue. Each turn reuses
+  `ChatAiService::streamAgentTurn` (the agent's prompt/model/RAG/tools/web-search), tagging the
+  message with `agent_id` and snapshotting used sources into `agent_data_context`. `ThreadSynthesizer`
+  produces a structured action proposal (`message_type=action_proposal`, normalized through
+  `ActionRegistry` — v1 closes `manual`); `ActionExecutor` runs/dismisses it. New
+  `ShouldBroadcastNow` events (`ChatAgentStarted`, `ChatActionProposalReady`, `ChatActionExecuted`)
+  reuse the `chat.conversation.{id}` channel.
 
 ## No-code Apps (Builder + runtime)
 
@@ -221,8 +235,8 @@ flowchart TB
 
     subgraph async["Async + real-time"]
         redis[("Redis")]
-        horizon["Horizon queues<br/>(default · ai · debate · whatsapp)"]
-        jobs["Jobs: ProcessAgentChat,<br/>RunChatAiJob, RunDebateTurnJob…"]
+        horizon["Horizon queues<br/>(default · ai · debate · agent-responses · whatsapp)"]
+        jobs["Jobs: ProcessAgentChat, RunChatAiJob,<br/>RunDebateTurnJob, InvokeAgentResponse…"]
         reverb["Reverb (WebSockets)<br/>ShouldBroadcastNow events"]
     end
 
