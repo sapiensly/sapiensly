@@ -29,7 +29,7 @@ test('the redirect route sends the user to the provider', function () {
 test('callback provisions a new personal account and signs in', function () {
     fakeGoogleUser();
 
-    $this->get('/auth/google/callback')->assertRedirect('/dashboard');
+    $this->get('/auth/google/callback')->assertRedirect('/chat');
 
     $user = User::where('email', 'jane@example.com')->first();
     expect($user)->not->toBeNull()
@@ -43,7 +43,7 @@ test('callback links an existing account by email', function () {
     $existing = User::factory()->create(['email' => 'jane@example.com', 'google_id' => null]);
     fakeGoogleUser();
 
-    $this->get('/auth/google/callback')->assertRedirect('/dashboard');
+    $this->get('/auth/google/callback')->assertRedirect('/chat');
 
     expect($existing->fresh()->google_id)->toBe('google-123');
     assertAuthenticated();

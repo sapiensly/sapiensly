@@ -62,9 +62,11 @@ const stopped = ref<Set<string>>(new Set());
 
 // ----- Inner chat sidebar (collapsible) -----
 const SIDEBAR_KEY = 'chat:sidebar-open';
+// Default closed for a focused landing; only an explicit stored `true`
+// (the user opened it before) keeps it open. Their choice persists.
 const chatSidebarOpen = ref(
-    typeof window === 'undefined' ||
-        window.localStorage.getItem(SIDEBAR_KEY) !== 'false',
+    typeof window !== 'undefined' &&
+        window.localStorage.getItem(SIDEBAR_KEY) === 'true',
 );
 watch(chatSidebarOpen, (open) => {
     if (typeof window !== 'undefined') {

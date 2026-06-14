@@ -86,14 +86,6 @@ function onNavScroll(event: Event): void {
 
 const dashboardHref = computed(() => dashboard().url);
 
-const dashboardItem = computed<NavItem>(() => ({
-    key: 'dashboard',
-    label: t('app_v2.nav.dashboard'),
-    href: dashboardHref.value,
-    icon: LayoutGrid,
-    match: (u) => u === dashboardHref.value || u.startsWith(`${dashboardHref.value}?`),
-}));
-
 const sections = computed<NavSection[]>(() => [
     {
         key: 'main',
@@ -167,6 +159,13 @@ const sections = computed<NavSection[]>(() => [
         key: 'system',
         label: t('app_v2.sidebar.section_system'),
         items: [
+            {
+                key: 'dashboard',
+                label: t('app_v2.nav.dashboard'),
+                href: dashboardHref.value,
+                icon: LayoutGrid,
+                match: (u) => u === dashboardHref.value || u.startsWith(`${dashboardHref.value}?`),
+            },
             {
                 key: 'ai-providers',
                 label: t('app_v2.nav.ai_providers'),
@@ -253,7 +252,7 @@ const workspaceLabel = computed(() =>
         </div>
 
         <!--
-          Nav — Dashboard row first, then grouped sections.
+          Nav — grouped sections (Dashboard now lives under System).
         -->
         <nav
             :class="[
@@ -263,46 +262,11 @@ const workspaceLabel = computed(() =>
             @scroll.passive="onNavScroll"
         >
             <TooltipProvider :delay-duration="120" disable-closing-trigger>
-                <!-- Standalone Dashboard row. -->
-                <ul class="space-y-1">
-                    <li>
-                        <Tooltip :disabled="!collapsed">
-                            <TooltipTrigger as-child>
-                                <Link
-                                    :href="dashboardItem.href"
-                                    :class="[
-                                        'relative flex items-center rounded-xs text-[13px] font-medium transition-colors',
-                                        collapsed
-                                            ? 'mx-auto size-9 justify-center'
-                                            : 'h-9 gap-3 px-3',
-                                        isActive(dashboardItem) && !collapsed
-                                            ? 'bg-accent-blue/10 text-ink before:absolute before:top-2 before:bottom-2 before:left-0 before:w-0.5 before:bg-accent-blue before:content-[\'\']'
-                                            : isActive(dashboardItem) && collapsed
-                                              ? 'bg-accent-blue/10 text-accent-blue'
-                                              : 'text-ink-muted hover:bg-surface hover:text-ink',
-                                    ]"
-                                >
-                                    <component
-                                        :is="dashboardItem.icon"
-                                        class="size-4 shrink-0"
-                                    />
-                                    <span v-if="!collapsed" class="truncate">
-                                        {{ dashboardItem.label }}
-                                    </span>
-                                </Link>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" :side-offset="8">
-                                {{ dashboardItem.label }}
-                            </TooltipContent>
-                        </Tooltip>
-                    </li>
-                </ul>
-
                 <!-- Grouped sections. -->
                 <div
-                    v-for="section in sections"
+                    v-for="(section, sectionIndex) in sections"
                     :key="section.key"
-                    class="mt-6"
+                    :class="sectionIndex === 0 ? '' : 'mt-6'"
                 >
                     <p
                         v-if="!collapsed"

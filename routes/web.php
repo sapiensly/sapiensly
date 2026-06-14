@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', fn () => Auth::check()
-    ? redirect()->route('dashboard')
+    ? redirect()->route('chat.index')
     : redirect()->route('login'));
 
 // Widget asset route (public, no auth)

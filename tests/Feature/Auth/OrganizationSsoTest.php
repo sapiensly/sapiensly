@@ -92,7 +92,7 @@ test('the callback provisions a new member and signs them in', function () {
 
     $this->withSession(ssoSession($connection))
         ->get('/sso/callback?code=auth-code&state=state-token')
-        ->assertRedirect('/dashboard');
+        ->assertRedirect('/chat');
 
     $user = User::where('email', 'worker@acme.test')->first();
     expect($user)->not->toBeNull()
@@ -144,7 +144,7 @@ test('an existing owner keeps their role after SSO sign-in', function () {
 
     $this->withSession(ssoSession($connection))
         ->get('/sso/callback?code=auth-code&state=state-token')
-        ->assertRedirect('/dashboard');
+        ->assertRedirect('/chat');
 
     $membership = OrganizationMembership::where('organization_id', $connection->organization_id)
         ->where('user_id', $owner->id)

@@ -8,8 +8,8 @@ it('redirects guests to the login page', function () {
     $this->get('/')->assertRedirect(route('login'));
 });
 
-it('redirects authenticated users to the dashboard', function () {
+it('redirects authenticated users to chat', function () {
     actingAs(User::factory()->create())
         ->get('/')
-        ->assertRedirect(route('dashboard'));
+        ->assertRedirect(route('chat.index'));
 });

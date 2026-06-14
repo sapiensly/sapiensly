@@ -63,7 +63,9 @@ class HandleInertiaRequests extends Middleware
                     : [],
             ],
             'impersonating' => $request->session()->has('impersonating_from'),
-            'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            // Main nav defaults to collapsed; only an explicit `true` cookie
+            // (the user opened it) keeps it expanded. Their toggle persists.
+            'sidebarOpen' => $request->cookie('sidebar_state') === 'true',
             'locale' => app()->getLocale(),
             'availableLocales' => ['en', 'es'],
             'flash' => [

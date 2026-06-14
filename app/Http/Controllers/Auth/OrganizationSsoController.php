@@ -115,7 +115,7 @@ class OrganizationSsoController extends Controller
         Auth::login($user, remember: true);
         $this->organizations->switchAccount($user, $connection->organization_id);
 
-        return redirect()->intended(route('dashboard'));
+        return redirect()->intended(route('chat.index'));
     }
 
     /**
