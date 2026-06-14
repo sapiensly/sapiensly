@@ -1,209 +1,268 @@
 # App Builder — Vision: Agentic Power with the UI as a Legibility Surface
 
-> **Status:** North‑star / design philosophy (forward‑looking, not a description of the
-> current implementation). It sets the direction the App Builder is moving toward and the
-> principles that should guide every decision along the way.
+> **Status:** North‑star / design philosophy (forward‑looking). **Wedge‑first.** The capability
+> graph is the direction we validate *toward*, not a rewrite we do *before* validating. This doc
+> leads with the discipline that protects everything else, then the model the wedge grows into.
+>
+> **Context:** solo founder, real constraints, a ~90‑day validation window (HubSpot, post‑call
+> agent), PLG / self‑serve motion, anti‑enterprise ICP. Runway — not the elegance of the model —
+> is the binding constraint. Reorganizing the build around the full graph before the wedge is
+> validated is building the cathedral while the window closes.
 
 ---
 
-## 1. The thesis
+## 0. The two rules (read this first)
 
-We are not building an *app builder*. We are building a **capability compiler**.
+Everything below is downstream of these. They cost a single afternoon at N=1 and are what keep
+"a capability with a real contract" from silently degrading into "a feature."
 
-The output of a conversation is not "an app" — it is a **typed graph of capabilities** over the
-business's real system of record. The UI is one *rendering* of that graph; the agent is another.
-This single reframe reorders almost everything below.
+### Rule 1 — Contract before code
 
-The product bet that follows: **agents that execute, not chatbots.** An app is *a capability
-graph with a default agent and an optional UI* — and that is a different category than the
-canvas-first low‑code tools (Retool, Bubble) we are measured against.
+**Write the capability's contract before its implementation, even when there is exactly one
+capability.** This is the discipline, not a formality.
+
+The real risk of wedge‑first is **not** retrofit cost — it is *inverse drift*: under 90‑day
+pressure, capability #1 ships as a bespoke HubSpot script with the contract bolted on as
+decoration, and "capability with a real contract" degrades into "a feature" without anyone
+noticing. Writing the contract first is the cheap insurance that prevents it. If this rule slips,
+nothing else in this doc holds.
+
+### Rule 2 — Propose‑don't‑mutate (the one non‑negotiable)
+
+**A capability *describes* its effect; a gate *executes* it.** It never writes to the system of
+record inside itself.
+
+Of every contract invariant, this is the only one that **composes** — every later capability
+inherits the shape — and the only one that carries **blast radius**. It is also the exact safety
+property the self‑serve ICP requires, and it is free: the `action‑proposal` pattern already shipped
+in chat. **If 90‑day pressure forces honoring exactly one invariant, it is this one.**
 
 ---
 
-## 2. The core primitive: the capability graph
+## 1. Where this sits: a design contract, not a rebuild
 
-A capability is a typed, contract‑bearing unit of work. The manifest evolves from
-`objects / pages / workflows` into a **graph of capabilities**, where each node carries its full
-contract:
+We are *moving toward* a **capability compiler** — a world where the output of a conversation is a
+typed graph of capabilities over the business's real system of record, and the UI is one rendering
+of it. That is the north star and the product category (agents that execute, not chatbots).
 
-- **Shape:** input/output types (tolerant of partial/uncertain typing — see connected objects).
-- **Direction:** read, write, or both. Read/write must be *symmetric* through the same contract.
-- **Effects & preconditions:** what it changes, what must be true first.
-- **Policy:** permissions / RLS, who may invoke it, autonomy level (safe vs approval‑gated).
-- **Cost & latency:** first‑class, because every consumer (UI, agent, verifier) pays for it.
+But the full graph — opinionated default renderer, read/write contracts with a cost model, a
+parity lint, a general connected‑objects framework, an autonomy engine — is a 12–18‑month core
+rewrite. **We do not reorganize the build around it before the wedge is validated.**
 
-Three consumers read from the same contract:
+The commitment is narrower and cheaper: **commit to the graph as a *design contract*, not as a
+rebuild.** Every new thing is born as a typed capability (Rules 0). **The graph grows from the
+wedge**, one real capability at a time. The general infrastructure emerges when N justifies it —
+not before.
+
+The verdict that sets this order: nothing in the graph model becomes *impossible* to retrofit by
+starting wedge‑first, **provided capability #1 carries the right contract** (§2). The "rebuild" is
+deferrable; only the contract shape of the first capability is load‑bearing.
+
+---
+
+## 2. The capability contract
+
+A capability is a typed, contract‑bearing unit of work. Each carries:
+
+- **Direction:** read, write, or both — declared separately.
+- **Shape:** input/output types, tolerant of partial/uncertain typing (adapters, not perfect FKs).
+- **Reach:** reads that hit an external system are typed **`remote / async / may-fail`**. The *mark*
+  is contract shape and lives in the type from day one; the *cost model* is deferred. By the
+  O(N)‑retrofit logic, omitting the mark later is exactly the expensive change — so keep the mark,
+  skip the model.
+- **Effect:** what it changes, executed only through the gate (Rule 2), never inline.
+- **Policy:** who may invoke it; permissions / RLS; autonomy level (safe vs approval‑gated).
+
+### These invariants are not four equals
+
+Honor all of them, but the hierarchy is explicit:
+
+1. **Propose‑don't‑mutate (Rule 2) — the one that composes and carries blast radius.** Non‑negotiable.
+2. **Read/write declared separately** — retrofittable hygiene.
+3. **Headless, typed boundary** — the capability is callable by a job, a test, and (later) an
+   agent; it does **not** live inside a screen/controller mixed with view concerns. Retrofittable
+   hygiene; cheap because we already build behind services.
+4. **Policy as a property of the capability**, not only route middleware — retrofittable hygiene.
+
+If pressure forces a cut, cut from the bottom, never #1.
+
+---
+
+## 3. Motion & ICP — the hard rule
+
+The motion is PLG / self‑serve; the ICP explicitly rejects the enterprise‑with‑CISO profile.
+That makes the most "powerful" feature — an autonomous agent with write access to a production
+system of record, wired self‑serve with no onboarding — an **anti‑ICP** risk, not a flagship.
+
+**Hard rule for self‑serve:** connected objects start **read‑first / dry‑run**. Writes to the
+system of record happen **only** on capabilities marked `safe` or behind an **explicit gate**. The
+blast radius over the customer's own database is not absorbed in PLG.
+
+The **trust ramp** is tied to the motion: start with the agent *proposing* and the human
+*approving* (low autonomy, maximum legibility); graduate to autonomous only on capabilities marked
+safe. Trust is earned, never assumed — and earning it is also the safest *and* least work at the
+wedge, because everything is propose‑and‑approve by default.
+
+---
+
+## 4. Capability #1: the HubSpot post‑call agent (the seeding contract)
+
+Validate the thesis and seed the graph in **one move**. Capability #1:
+
+- **Read** the call — typed `remote / async / may-fail`.
+- **Write‑proposal** to the CRM — propose‑don't‑mutate (Rule 2); the human approves.
+- **Behavioral verification** — seed a demo call, run it, assert the proposed CRM update is
+  correct, show it working, self‑repair if not.
+
+It is a *fixed pipeline* (read → draft → propose), not an agent composing over a partial schema —
+which is deliberate (§7). It proves "agents that execute" with the safety the ICP needs, and it is
+literally capability #1 of the graph with a real contract. The runtime agent falls on top **when
+there are real capabilities underneath** — which is exactly the right order.
+
+---
+
+## 5. The capability graph (the destination the wedge grows into)
+
+As capabilities accumulate, the manifest evolves from `objects / pages / workflows` into a **graph
+of capabilities**, with three consumers reading the same contracts:
 
 | Consumer | Role |
 |---|---|
 | **Generated UI** | A projection of capabilities — the *legibility* surface. |
 | **Embedded agent** | A consumer of the same capabilities — the *power* surface. |
-| **Verifier** | Proves each capability behaves (see §6). |
+| **Verifier** | Proves each capability behaves (§9). |
 
-**Why graph‑first, UI second:** the hard problem stops being "generate pretty screens" and
-becomes "model the capability correctly." Once the graph exists, the UI derives from it and the
-agent gets its tools for free.
-
----
-
-## 3. Connected objects — the read path is the unlock
-
-The biggest leap is not the write path (charge, notify, query an ERP). It is the **read path**:
-external systems as the *backing store of the manifest's own objects* ("connected objects").
-
-Without it you build a CRUD island — an Airtable with buttons. With it, the app stops being yet
-another silo and becomes a **control surface over the system of record the business already has.**
-A page lists and edits directly against the customer's database or API — no ETL, no copy.
-
-The substrate already exists in the platform and should be unified under one notion of a
-connected object:
-
-- **BYODB** (`byodb_runtime` connection, `cloud_providers`) — the tenant's own database.
-- **Integrations** (REST / GraphQL / MCP) — external services.
-
-What makes this *platform* work, not a demo:
-
-- **Read/write symmetry.** A connected object must be readable *and* writable through one
-  contract, which drags in transaction semantics, conflicts, and external‑rejection handling.
-- **Permission mapping.** The external system's auth vs our RLS/roles. We become responsible for
-  not corrupting the system of record — the blast radius is real.
-- **Partial, drifting schemas.** Rarely will the schema be complete or stable; capabilities must
-  tolerate partial typing via adapters, not assume perfect FKs.
+Graph‑first (as a *design contract*) means the hard problem stops being "generate pretty screens"
+and becomes "model the capability correctly." Once the graph exists, the UI derives from it and the
+agent gets its toolset from it.
 
 ---
 
-## 4. The agent as a runtime primitive (not a bolted‑on chatbot)
+## 6. Connected objects — the read path is the unlock
 
-The agent is what separates us from low‑code. But it only delivers if it is a **consumer of the
-capability graph**, not a fourth pillar built on the side:
+The biggest leap is not the write path (charge, notify, query an ERP) — it is the **read path**:
+external systems as the *backing store of the manifest's own objects* ("connected objects"). Without
+it you build a CRUD island (an Airtable with buttons); with it, the app becomes a **control surface
+over the system of record the business already has.**
 
-- **It gets its tools for free.** Every capability is automatically an affordance for the agent.
-  You don't wire agent tools separately — *the graph is the toolset.* This dissolves the usual
-  "make the agent a primitive" project into a consequence of the graph existing.
-- **It is dependent, not parallel.** An embedded agent is only "power" if it has real capabilities
-  with real consequences. Without connected objects (read+write) and verification underneath, the
-  in‑app agent *is* the chatbot the thesis rejects. **Order matters: connected objects +
-  verification first; the agent on top.**
-- **The safety gate already exists.** An agent that writes to the system of record is powerful and
-  dangerous in equal measure. The correct safety primitive is the **action‑proposal** pattern we
-  shipped in chat: the agent *proposes* a mutation with a preview of its effect, and it executes
-  after approval (or autonomously only on capabilities marked safe). That turns "an agent that
-  executes" into something deployable, not a roulette.
-
-There is an elegant recursion that validates the model: *the builder is an agent that grows the
-graph by conversation; the apps contain agents that operate on the graph.* Same primitive at
-build‑time and run‑time — which is what "simple conversations" means, made coherent end to end.
+The substrate already exists and should unify under one notion: **BYODB** (`byodb_runtime`,
+`cloud_providers`) and **integrations** (REST / GraphQL / MCP). For self‑serve, it arrives
+**read‑first / dry‑run** (§3). The platform‑grade hard parts: read/write symmetry (one contract),
+permission mapping (external auth vs our RLS — the blast radius is real), and partial/drifting
+schemas (the `remote/async/may-fail` mark and adapters, §2).
 
 ---
 
-## 5. The UI as a legibility surface (power vs confusion)
+## 7. The agent as a runtime primitive
 
-An agent‑first surface is, by default, **both more powerful and more confusing.** Here confusion
-is a *design failure*, not an inherent property — and the enumerable graph is exactly what lets us
-kill it without giving up the power.
+The agent is what separates us from low‑code — but only as a **consumer of the capability graph**,
+not a fourth pillar:
 
-The two real failure modes are legibility problems, both solved by the graph (not by prettier UI):
+- **Free at the toolset level — not at the composition level.** Every capability is automatically
+  an affordance, so wiring the agent's tools *is* free. But an agent **composing** capabilities over
+  a partial schema with variable latency and cost is precisely where agents blow up in prod (wrong
+  tool selection, bad plans, cost blowups). *Toolset free ≠ reliable agent.* The expensive part is
+  keeping it from going off the rails while it composes — and wedge‑first **defers that cost**,
+  because capability #1 is a fixed pipeline, not a composing agent.
+- **Dependent, not parallel.** Without connected objects (read+write) and verification underneath,
+  the in‑app agent *is* the chatbot the thesis rejects. Order: capabilities + verification first;
+  the composing agent on top.
+- **The safety gate is Rule 2.** A propose‑with‑preview mutation, approved by a human (or autonomous
+  only on `safe` capabilities), is what turns "an agent that executes" into something deployable.
 
-1. **"What can I ask it?"** — the blank box. Because the graph is *enumerable*, we never need to
-   present an empty prompt: the agent always surfaces what it can do, suggests the next step, and
-   constrains to the possible. (This is *proposal‑first* again.)
-2. **"What just happened?"** — the invisible effect. Because every mutation goes through the
-   action‑proposal preview, the user sees the effect before it happens and can revert it.
+The recursion that validates the model: *the builder is an agent that grows the graph by
+conversation; the apps contain agents that operate on the graph.* Same primitive at build‑time and
+run‑time.
+
+---
+
+## 8. The UI as a legibility surface (power vs confusion)
+
+An agent‑first surface is, by default, **both more powerful and more confusing.** Confusion here is
+a *design failure*, not an inherent property, and the enumerable graph is what kills it. The two
+failure modes are legibility problems:
+
+1. **"What can I ask it?"** — the blank box. Because the graph is enumerable, never present an empty
+   prompt: surface what it can do, suggest the next step, constrain to the possible (proposal‑first).
+2. **"What just happened?"** — the invisible effect. Every mutation goes through the
+   action‑proposal preview, so the effect is seen before it happens and is reversible.
 
 **The UI is not the agent's rival — it is its legibility layer.** The agent *acts*; the UI
-*reflects* state, history, and data. They stay in sync because both read the same graph. The user
-points‑and‑clicks for precise/bulk/spatial work (edit 200 rows, scan a dashboard) and talks to
-the agent for ambiguous/cross‑object/novel work ("reconcile the late orders and notify the
-customers"). Confusion comes from forcing the wrong surface for the task; the graph lets us offer
-both and let the task choose.
+*reflects* state, history, and data; both read the same graph. Users point‑and‑click for
+precise/bulk/spatial work and talk to the agent for ambiguous/cross‑object/novel work. Confusion
+comes from forcing the wrong surface for the task.
 
-**Match the surface to the user, too:** build‑time users are covered by proposal‑first; run‑time
-users need affordances + visible state; power users want the agent immediately while casual users
-need the UI as a safety net while trust builds. Hence a **trust ramp**: start with the agent
-proposing and the human approving (low autonomy, maximum legibility), and graduate to autonomous
-only on capabilities marked safe.
+**Time‑to‑wow favors wedge‑first.** For PLG the conversion metric is time‑to‑wow, not power, and an
+agent‑first surface over an *empty* graph has a slow cold‑start. Wedge‑first sidesteps it: you
+hand‑build a polished, single‑purpose UI for the post‑call flow — no empty graph, no generic
+renderer. The "secondary UI" concern only bites later, and even then: **secondary = non‑bespoke,
+never unfinished** — especially not in the first 90 seconds.
 
 > **Principle:** *an agent is only as trustworthy as what it can do — and what it already did — is
 > legible.* The enumerable graph gives us that legibility for free.
 
 ---
 
-## 6. Verification: behavioral, not schema‑deep
+## 9. Verification: behavioral, not schema‑deep
 
-Validating the manifest against a schema proves it is *well‑formed*; it does not prove the app
-*works*. The loop must verify **behavior**:
+Validating the manifest against a schema proves it is well‑formed; it does not prove the app
+*works*. The loop verifies **behavior**: generate → seed demo data → run the capability → assert
+real outcomes ("create an order → a notification fires") → show it working → self‑repair before
+handing over. Tests attach to **capabilities**, not screens.
 
-1. **Generate** the capability (or change).
-2. **Seed** demo data.
-3. **Run** the workflows / capabilities.
-4. **Assert** real outcomes ("create an order → a notification fires").
-5. **Show** the app working with those outcomes.
-6. **Self‑repair** when an assertion fails, before handing anything over.
-
-This is the line between a flashy demo and a trustworthy app. Behavioral tests attach to
-**capabilities**, not screens — which is clean precisely because the graph is the single target.
-
-**Connected objects raise the stakes.** You cannot seed test orders into a production ERP. So
-behavioral verification *forces* a sandbox / dry‑run / read‑only‑first posture for capabilities
-that touch the system of record. Verification and connected objects are two ends of the same hinge.
+Connected objects raise the stakes: you cannot seed test data into a production ERP, so behavioral
+verification *forces* the read‑first / dry‑run / sandbox posture of §3. Verification and connected
+objects are two ends of the same hinge.
 
 ---
 
-## 7. Proposal‑first as an invariant
+## 10. What this commits us to
 
-Never a blank prompt. The system always advances with a concrete bet the user edits: *"I'm going
-to do X — correct me."* Applied across the whole lifecycle, not just discovery: every ambiguous
-step is a recommended default plus a one‑tap override. This is the same shape as the
-action‑proposal gate, which makes the builder and the running app *feel the same*.
-
----
-
-## 8. What this commits us to
-
-- **The contract is the product.** Capability contracts (types, read/write, effects, policy, cost)
+- **The contract is the product.** Capability contracts (direction, shape, reach, effect, policy)
   stop being metadata and become where the value lives — three consumers depend on them.
 - **The parity invariant.** Anything the UI can do, the agent can do, and vice versa, because both
-  are pure consumers. Hard rule: **the UI layer consumes capabilities, it never defines them.** The
-  moment logic lives only in a screen, the graph stops being the source of truth and the agent
-  silently loses parity. This needs a lint/guardrail, not good intentions.
-- **The default‑renderer paradox.** "UI is secondary" does **not** mean low‑effort. Buyers judge
-  with their eyes; a generic auto‑render reads as "unfinished." Because it is secondary, the
-  *default* renderer must be opinionated and polished. Secondary = non‑bespoke, not neglected.
-- **Capability granularity is the central design problem.** Too coarse → the agent can't compose;
-  too fine → the graph explodes and both surfaces get noisy. External systems make this harder by
-  exposing awkward "verb sizes."
+  are pure consumers. Hard rule: **the UI layer consumes capabilities, it never defines them.**
+  Enforced by discipline at small N; a lint when N justifies it.
+- **The default‑renderer paradox.** "UI secondary" does **not** mean low‑effort; the *default*
+  renderer must be opinionated and polished. Secondary = non‑bespoke, not neglected.
+- **Granularity is the central design problem.** Too coarse → the agent can't compose; too fine →
+  the graph explodes and both surfaces get noisy. External systems expose awkward "verb sizes."
 
 ---
 
-## 9. Build sequencing
+## 11. Build sequencing — wedge‑first
 
-The order of construction inverts relative to a UI‑first builder:
+Not "rebuild in inverted order." Grow from the wedge; honor the graph as a design contract,
+capability by capability:
 
-1. **Capability graph model + contracts.**
-2. **Connected objects** (read + write through one contract) over BYODB + integrations.
-3. **A strong default renderer** (the legibility surface).
-4. **The behavioral verification harness** (targets capabilities; sandbox/dry‑run for external).
-5. **The embedded agent** — falls out almost for free as a consumer of the graph.
-6. **Bespoke UI editing — last, and optional.**
+1. **Contract for capability #1, before its code** (Rule 1).
+2. **Capability #1 — the HubSpot post‑call agent** (§4): read (`remote/async/may-fail`) →
+   write‑proposal (Rule 2) → behavioral verification. Hand‑built, polished, single‑purpose UI.
+3. **More capabilities**, each born typed and propose‑don't‑mutate, growing the graph from the wedge.
+4. **General infrastructure emerges when N justifies it** — default renderer, parity lint,
+   capability registry, connected‑objects framework, autonomy engine, verification harness. None of
+   it is load‑bearing for the wedge; all of it retrofits cleanly because the contracts were right
+   from #1.
+5. **The composing runtime agent** falls out once there are real capabilities underneath.
 
 ---
 
-## 10. Why this is defensible
+## 12. Why this is defensible
 
 Canvas‑first tools (Retool, Bubble) give you a canvas. We give a **capability graph over the
-customer's real system of record**, with two surfaces (human and agentic) and a verification loop
-that backs them. They were born UI‑first and cannot retrofit this without rewriting their core.
-The moat is the contract + the connected‑object integration + the verification + the dual surface
-— not any single screen.
+customer's real system of record**, with two surfaces (human and agentic) and a behavioral
+verification loop that backs them. They were born UI‑first and cannot retrofit this without
+rewriting their core. The moat is the contract + the connected‑object integration + the
+verification + the dual surface — not any single screen.
 
 ---
 
-## 11. Open questions
+## 13. Open questions
 
-- **Granularity:** what is the right "verb size" for a capability, and how do we keep it stable as
-  connected objects expose messy external APIs?
-- **Write‑back semantics:** transactions/conflicts when a capability spans internal records *and*
-  an external system of record.
-- **Autonomy policy:** how does a capability earn the "safe / autonomous" mark, and who decides?
-- **Primary surface drift:** for which app classes does the agent become the primary surface and
-  the UI the fallback — and how do we let an app evolve along that axis without a rebuild?
+- **Granularity:** the right "verb size" for a capability, kept stable as connected objects expose
+  messy external APIs.
+- **Write‑back semantics:** transactions/conflicts when a capability spans internal records *and* an
+  external system of record.
+- **Autonomy policy:** how a capability earns the `safe` / autonomous mark, and who decides.
+- **Primary surface drift:** for which app classes the agent becomes the primary surface and the UI
+  the fallback — and how an app evolves along that axis without a rebuild.
