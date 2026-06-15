@@ -81,7 +81,57 @@
                 "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
                 "description": { "type": "string", "maxLength": 500 },
                 "primary_display_field_id": { "$ref": "#/$defs/id" },
-                "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/field_definition" } }
+                "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/field_definition" } },
+                "source": { "$ref": "#/$defs/source_definition" }
+            }
+        },
+
+        "source_definition": {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "description": "Backing store for an object. Absent or {type:internal} = the records store (default). {type:connected} = an external system reached through an integration (connected object).",
+            "properties": {
+                "type": { "enum": ["internal", "connected"] },
+                "integration_id": { "type": "string", "description": "The authorized integration this object reads/writes through." },
+                "id_path": { "type": "string", "description": "Dot path to the external record id within a row." },
+                "operations": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Maps each CRUD operation to an external request. Omit create/update for a read-only connected object.",
+                    "properties": {
+                        "list": { "$ref": "#/$defs/source_operation" },
+                        "read": { "$ref": "#/$defs/source_operation" },
+                        "create": { "$ref": "#/$defs/source_operation" },
+                        "update": { "$ref": "#/$defs/source_operation" }
+                    }
+                },
+                "field_map": {
+                    "type": "array",
+                    "description": "Ties manifest fields to external response paths. Partial-tolerant: unmapped fields render null.",
+                    "items": {
+                        "type": "object",
+                        "required": ["field_id", "external_path"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "field_id": { "$ref": "#/$defs/id" },
+                            "external_path": { "type": "string" },
+                            "readonly": { "type": "boolean", "default": false }
+                        }
+                    }
+                }
+            }
+        },
+
+        "source_operation": {
+            "type": "object",
+            "required": ["method", "path"],
+            "additionalProperties": false,
+            "properties": {
+                "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+                "path": { "type": "string", "description": "Path appended to the integration base URL; may template {id}." },
+                "collection_path": { "type": "string", "description": "Dot path to the row array in a list response (e.g. \"results\")." },
+                "page_param": { "type": "string", "description": "Query param name for pagination, when supported." }
             }
         },
 

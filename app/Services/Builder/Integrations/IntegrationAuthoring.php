@@ -7,12 +7,9 @@ use App\Enums\Visibility;
 use App\Facades\TenantCache;
 use App\Models\Integration;
 use App\Models\User;
-use App\Services\Integrations\Auth\AuthStrategyFactory;
+use App\Services\Integrations\IntegrationCaller;
 use App\Services\Integrations\IntegrationService;
 use App\Services\Integrations\OAuth2\OAuth2DiscoveryService;
-use App\Services\Integrations\OAuth2\OAuth2TokenRefresher;
-use App\Services\Integrations\Support\SsrfGuard;
-use Illuminate\Support\Facades\Http;
 
 /**
  * Builder power #1 — the engine behind the builder's "create an integration in
@@ -30,9 +27,7 @@ class IntegrationAuthoring
     public function __construct(
         private readonly OAuth2DiscoveryService $discovery,
         private readonly IntegrationService $integrations,
-        private readonly AuthStrategyFactory $authFactory,
-        private readonly OAuth2TokenRefresher $refresher,
-        private readonly SsrfGuard $ssrf,
+        private readonly IntegrationCaller $caller,
     ) {}
 
     /**
@@ -112,19 +107,8 @@ class IntegrationAuthoring
      */
     public function test(Integration $integration, ?string $path = null): array
     {
-        $authType = $integration->auth_type;
-        if ($authType instanceof IntegrationAuthType && $authType->isOAuth2()) {
-            $integration = $this->refresher->refreshIfNeeded($integration);
-        }
-
-        $applied = $this->authFactory->make($integration->auth_type)->apply($integration->auth_config ?? []);
-        $url = rtrim((string) $integration->base_url, '/').'/'.ltrim((string) $path, '/');
-
         try {
-            $this->ssrf->assertHostAllowed($url);
-            $response = Http::withHeaders($applied['headers'] ?? [])
-                ->timeout(10)
-                ->get($url, $applied['query'] ?? []);
+            $response = $this->caller->send($integration, 'GET', (string) $path);
 
             return [
                 'ok' => $response->successful(),

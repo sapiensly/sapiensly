@@ -14,6 +14,7 @@ use App\Ai\Tools\Builder\ListAvailableStepsTool;
 use App\Ai\Tools\Builder\ListAvailableTriggersTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
+use App\Ai\Tools\Builder\SampleEndpointTool;
 use App\Ai\Tools\Builder\SeedRecordsTool;
 use App\Ai\Tools\Builder\SimulateQueryTool;
 use App\Ai\Tools\Builder\TestIntegrationConnectionTool;
@@ -29,6 +30,7 @@ use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
+use App\Services\Integrations\IntegrationCaller;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
@@ -138,6 +140,7 @@ class BuilderAiService
             new DiscoverIntegrationTool($this->integrationAuthoring),
             new CreateIntegrationTool($this->integrationAuthoring, $conversation->user),
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
+            new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
         ];
 
         $history = $this->buildHistory($conversation);
@@ -249,6 +252,7 @@ class BuilderAiService
             new DiscoverIntegrationTool($this->integrationAuthoring),
             new CreateIntegrationTool($this->integrationAuthoring, $conversation->user),
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
+            new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
         ];
 
         // History excludes the placeholder we're about to fill. reorder()
@@ -724,7 +728,11 @@ Connecting external systems (integrations):
   - `create_integration` makes a DRAFT connection — it is NOT usable until the user authorizes it (OAuth consent, or entering a secret in a secure field). Tell the user, in their language, that they need to authorize it.
   - NEVER ask the user to paste a secret/token/password into the chat, and NEVER put secrets in tool arguments. Secrets are captured through a secure field, never through you.
   - After authorization, call `test_connection` (with a lightweight test_path when you know one) and only then report the connection as working. If the test fails, say so plainly — do not claim it works.
-29b. Creating a connection does NOT yet make the app use it; that is a separate capability. Set up and verify the connection first.
+29b. Once a connection exists, you can make an object read LIVE from that external system (a "connected object") instead of the internal records store:
+  - Call `sample_endpoint` with the integration_id and a list/read path (e.g. "/crm/v3/objects/deals?limit=3", collection_path "results") to fetch a REAL sample and see its shape.
+  - From the sample's row_keys, propose (via propose_change) an object whose `source` is {type:"connected", integration_id, operations:{list:{method,path,collection_path}}, id_path, field_map:[{field_id, external_path}]}. Map each field to a real key from the sample; leave unmapped fields out (they render null). For now connected objects are READ-ONLY — include only list/read operations.
+  - The sample call IS the verification that the mapping is real; confirm the mapping with the user before proposing if unsure.
+  - The data stays in the external system (passthrough) — you are NOT copying it into the app.
 
 Completion & honesty (read before ending any turn):
 30. You build apps ONLY from the catalogs: the block types, field types, actions, triggers, workflow steps and expression functions exposed by the list_available_* tools. If the user asks for something NONE of these can express, you CANNOT build it — do not fake it with decorative UI.
