@@ -1393,12 +1393,30 @@ function statusTone(status: Message['status']): string {
                         ref="transcript"
                         class="flex-1 space-y-4 overflow-y-auto px-4 py-4"
                     >
-                        <p
+                        <div
                             v-if="messages.length === 0"
-                            class="rounded-sp-sm border border-dashed border-soft bg-surface p-4 text-xs text-ink-muted"
+                            class="rounded-sp-sm border border-dashed border-soft bg-surface p-5"
                         >
-                            {{ t('apps.builder.empty_prompt') }}
-                        </p>
+                            <div class="flex items-center gap-2 text-sm font-medium text-ink">
+                                <Sparkles class="size-4 text-accent-blue" />
+                                {{ t('apps.builder.title') }}
+                            </div>
+                            <p class="mt-2 text-xs text-ink-muted">{{ t('apps.builder.empty_prompt') }}</p>
+                            <!-- Quick-start prompts: never a blank box — show what
+                                 you can ask, one click pre-fills the composer. -->
+                            <div v-if="chipSuggestions.length" class="mt-3 flex flex-wrap gap-2">
+                                <button
+                                    v-for="s in chipSuggestions.slice(0, 5)"
+                                    :key="s.id"
+                                    type="button"
+                                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-navy px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                                    @click="applyChip(s)"
+                                >
+                                    <component :is="s.icon" class="size-3.5" />
+                                    {{ s.label }}
+                                </button>
+                            </div>
+                        </div>
 
                         <article v-for="m in messages" :key="m.id" class="space-y-2">
                             <div
