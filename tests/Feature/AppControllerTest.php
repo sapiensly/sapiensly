@@ -74,6 +74,25 @@ it('scopes organization_id from the current user when visibility is organization
     expect($app->organization_id)->toBe($org->id);
 });
 
+it('lets an organization member view their own private app after creating it', function () {
+    $org = Organization::create(['name' => 'Acme']);
+    $this->user->update(['organization_id' => $org->id]);
+
+    $this->actingAs($this->user)->post('/apps', [
+        'name' => 'Priv', 'slug' => 'priv_app', 'visibility' => 'private',
+    ])->assertRedirect();
+
+    $app = App::query()->where('slug', 'priv_app')->firstOrFail();
+
+    // A private app must still carry the owner's org (tenant scope); visibility
+    // alone gates sharing. Nulling it hid the app from its own org-context owner.
+    expect($app->organization_id)->toBe($org->id)
+        ->and($app->visibility->value)->toBe('private');
+
+    // The creator can view it — previously a 403 on the post-create redirect.
+    $this->actingAs($this->user)->get("/apps/{$app->id}")->assertOk();
+});
+
 it('shows an app with manifest and versions', function () {
     $this->actingAs($this->user)->post('/apps', ['name' => 'X', 'slug' => 'x_app']);
     $app = App::query()->where('slug', 'x_app')->firstOrFail();

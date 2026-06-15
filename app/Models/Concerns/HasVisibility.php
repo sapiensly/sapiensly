@@ -133,18 +133,18 @@ trait HasVisibility
      */
     public function updateVisibility(Visibility $visibility, User $user): static
     {
-        $organizationId = null;
-
-        if ($visibility === Visibility::Organization) {
-            if (! $user->organization_id) {
-                throw new \RuntimeException('User must belong to an organization to share resources.');
-            }
-            $organizationId = $user->organization_id;
+        if ($visibility === Visibility::Organization && ! $user->organization_id) {
+            throw new \RuntimeException('User must belong to an organization to share resources.');
         }
 
+        // Keep the resource scoped to the owner's tenant (their org, or null in
+        // personal context); `visibility` alone decides private-vs-shared WITHIN
+        // that tenant. Nulling organization_id for a private resource would hide
+        // it from its own org-context owner (forAccountContext / isVisibleTo
+        // filter by organization_id).
         $this->update([
             'visibility' => $visibility,
-            'organization_id' => $organizationId,
+            'organization_id' => $user->organization_id,
         ]);
 
         return $this->fresh();

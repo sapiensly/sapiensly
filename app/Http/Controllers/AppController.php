@@ -45,7 +45,13 @@ class AppController extends Controller
 
         $app = App::create([
             'user_id' => $user->id,
-            'organization_id' => $visibility === Visibility::Organization ? $user->organization_id : null,
+            // Scope the app to the owner's tenant (their org, or null in personal
+            // context) REGARDLESS of visibility — `visibility` alone decides
+            // private-vs-organization sharing WITHIN that tenant. Nulling the org
+            // for a private app hid it from its own org-context owner, because
+            // isVisibleTo / forAccountContext filter by organization_id (a 403 on
+            // the post-create redirect to show).
+            'organization_id' => $user->organization_id,
             'slug' => $request->string('slug')->toString(),
             'name' => $request->string('name')->toString(),
             'description' => $request->input('description'),
