@@ -119,6 +119,22 @@ Build internal applications by describing them in plain language.
 - **Run** the finished app at a shareable URL with working pages, actions, file uploads, and
   workflows — no code required.
 
+### Connect external systems in the conversation
+
+The builder can wire an app to the systems the business already runs on — by talking, not by
+hand-configuring connectors.
+
+- **Create a connection (integration) conversationally.** Say "connect to HubSpot / Stripe / our
+  API"; the builder auto-discovers OAuth2 where the API supports it (or asks for the base URL +
+  auth kind), creates the connection, and **verifies it with a real test call** before relying on
+  it. Works for any API — nothing is hard-coded per provider. Secrets are entered in a secure
+  field, never in the chat.
+- **Connected objects** — the builder can make an object read **live** from that external system
+  instead of the app's own database. It samples the real API once to learn the shape, then a table
+  or list over that object shows the customer's live data (e.g. their CRM deals) — **no copy, no
+  sync**; the data stays in the source system. This turns an app from a standalone database into a
+  live control surface over the system of record.
+
 ## Flows
 
 Design guided conversation flows for agents.

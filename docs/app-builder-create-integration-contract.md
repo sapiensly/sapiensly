@@ -1,6 +1,11 @@
 # Builder Power Contract — Create an Integration in Conversation
 
-> **Status:** Contract (pre-implementation). Written before code (Rule 1).
+> **Status: IMPLEMENTED (core).** `IntegrationAuthoring` + the `discover_integration` /
+> `create_integration` / `test_connection` builder tools ship, wired into `BuilderAiService`,
+> with behavioral tests (`tests/Feature/Builder/CreateIntegrationInConversationTest.php`).
+> **Deferred:** the in-chat OAuth consent hand-off and the secure secret-entry field (UI/flow).
+>
+> Written before code (Rule 1).
 > **Altitude:** this is a *power of the App Builder*, not an app. We are giving the
 > builder's LLM the ability to author and verify an integration during a
 > conversation. The integration is a **user output**, produced by talking to the

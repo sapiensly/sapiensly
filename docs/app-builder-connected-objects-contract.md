@@ -1,6 +1,14 @@
 # Builder Power Contract — Connected Objects
 
-> **Status:** Contract (pre-implementation). Written before code (Rule 1).
+> **Status: READ PATH IMPLEMENTED.** The manifest `source` discriminator, the
+> `sample_endpoint` tool, `ConnectedObjectReader`, and the source-aware runtime branch in
+> `BlockDataResolver` ship — a table/list/chart over a connected object renders live external
+> rows (passthrough), with behavioral tests
+> (`tests/Feature/Builder/ConnectedObjectsReadPathTest.php`, `ConnectedObjectsRuntimeTest.php`).
+> **Deferred:** the **write path** (§8.2), mapping data-source filter/sort/pagination to external
+> query params, and the agent over connected objects.
+>
+> Written before code (Rule 1).
 > **Altitude:** a *power of the App Builder* + a manifest capability + runtime
 > support — never an app, never provider-specific. A connected object is just a
 > **custom object whose backing store is an external system**. The "HubSpot deals

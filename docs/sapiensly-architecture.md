@@ -167,7 +167,26 @@ Grouped by area (`app/Models/`):
   validates/applies the manifest; `app/Services/Records/` manages app data (`Record`);
   `app/Services/Workflows/` runs app workflows (`WorkflowRun`/`WorkflowStepRun`).
 - The **runtime** serves a published app at public `/r/{slug}` URLs (pages, actions, uploads,
-  file serving) — see the `runtime` page group.
+  file serving) — see the `runtime` page group. `BlockDataResolver` pre-resolves each block's
+  data server-side via `RecordQueryService`.
+- **Builder powers — conversational integrations & connected objects** (the platform leverage:
+  users *author* connections by talking; nothing provider-specific is hand-coded). Builder LLM
+  tools in `app/Ai/Tools/Builder/` extend the manifest-editing agent:
+  - `discover_integration` / `create_integration` / `test_connection` (power #1) author + verify a
+    per-tenant `Integration` in the conversation, backed by `App\Services\Builder\Integrations\IntegrationAuthoring`
+    (composing `OAuth2DiscoveryService` + `IntegrationService` + `IntegrationCaller`). OAuth2
+    discovery or api-key/bearer; the gate is authorization; secrets never reach the LLM.
+  - `sample_endpoint` (power #2) fetches a real sample so the builder can infer a **connected
+    object** — a manifest object with `source: connected` (integration_id + operation mapping +
+    field_map). Authored through the normal `propose_change` loop.
+  - **`App\Services\Integrations\IntegrationCaller`** is the shared authed + SSRF-guarded +
+    token-refreshing call through an integration (used by both powers).
+  - **Runtime read path:** `BlockDataResolver` branches per object source — a connected object's
+    rows come from `App\Services\Connected\ConnectedObjectReader` (live external read via the
+    integration), normalized to the same `{id, data}` shape as internal records, so tables/lists/
+    charts render source-agnostically. **Passthrough**: external data is never stored; any future
+    materialization is a tenant custom object under RLS, never a bespoke table.
+  - See `docs/app-builder-connected-objects-design.md` and the power contracts in `docs/`.
 
 ## Storage & external infra
 
