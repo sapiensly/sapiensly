@@ -22,6 +22,7 @@ const props = defineProps<{
 interface ActionPayload {
     status: 'pending' | 'executed' | 'dismissed';
     previews?: string[];
+    auto_previews?: string[];
     actions?: unknown[];
 }
 
@@ -244,34 +245,47 @@ onUnmounted(unsubscribe);
                             v-html="renderMarkdown(m.content)"
                         />
 
-                        <!-- Proposed action card (the gate): approve to apply, dismiss to discard. -->
-                        <div v-if="m.message_type === 'action_proposal'" class="ra-card">
-                            <div class="ra-card-title">Proposed change</div>
-                            <ul class="ra-card-previews">
-                                <li v-for="(p, i) in m.action_payload?.previews ?? []" :key="i">{{ p }}</li>
-                            </ul>
+                        <!-- Action card: what applied automatically (autonomy engine)
+                             and/or what's awaiting the user's approval (the gate). -->
+                        <div
+                            v-if="m.message_type === 'action_proposal' || m.message_type === 'action_result'"
+                            class="ra-card"
+                        >
+                            <template v-if="(m.action_payload?.auto_previews?.length ?? 0) > 0">
+                                <div class="ra-card-title">✓ Done automatically</div>
+                                <ul class="ra-card-previews">
+                                    <li v-for="(p, i) in m.action_payload?.auto_previews ?? []" :key="'a' + i">{{ p }}</li>
+                                </ul>
+                            </template>
 
-                            <div v-if="isPendingProposal(m)" class="ra-card-actions">
-                                <button
-                                    type="button"
-                                    class="ra-approve"
-                                    :disabled="actingId === m.id"
-                                    @click="resolveProposal(m, 'approve')"
-                                >
-                                    {{ actingId === m.id ? 'Applying…' : 'Approve' }}
-                                </button>
-                                <button
-                                    type="button"
-                                    class="ra-dismiss"
-                                    :disabled="actingId === m.id"
-                                    @click="resolveProposal(m, 'dismiss')"
-                                >
-                                    Dismiss
-                                </button>
-                            </div>
-                            <div v-else class="ra-card-status">
-                                {{ m.action_payload?.status === 'executed' ? '✓ Applied' : 'Dismissed' }}
-                            </div>
+                            <template v-if="(m.action_payload?.previews?.length ?? 0) > 0">
+                                <div class="ra-card-title">Proposed change</div>
+                                <ul class="ra-card-previews">
+                                    <li v-for="(p, i) in m.action_payload?.previews ?? []" :key="i">{{ p }}</li>
+                                </ul>
+
+                                <div v-if="isPendingProposal(m)" class="ra-card-actions">
+                                    <button
+                                        type="button"
+                                        class="ra-approve"
+                                        :disabled="actingId === m.id"
+                                        @click="resolveProposal(m, 'approve')"
+                                    >
+                                        {{ actingId === m.id ? 'Applying…' : 'Approve' }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="ra-dismiss"
+                                        :disabled="actingId === m.id"
+                                        @click="resolveProposal(m, 'dismiss')"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                                <div v-else class="ra-card-status">
+                                    {{ m.action_payload?.status === 'executed' ? '✓ Applied' : 'Dismissed' }}
+                                </div>
+                            </template>
                         </div>
                     </div>
                     <div v-else class="ra-bubble ra-bubble--user">{{ m.content }}</div>

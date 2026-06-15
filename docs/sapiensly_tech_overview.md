@@ -19,8 +19,8 @@ The immediate goal is to deploy a "digital squad" that integrates into a company
 ## 2. The Tech Stack (The "How")
 We have defined a **"Modern Monolith"** architecture that prioritizes development speed, enterprise robustness, and interface reactivity.
 
-* **Core Backend:** **Laravel 12**. Leverages the framework's maturity for routing, validation, and data management.
-* **Artificial Intelligence:** **Prism**. A PHP abstraction layer to connect with LLMs (Anthropic/OpenAI) and manage "Tool Calling."
+* **Core Backend:** **Laravel 13**. Leverages the framework's maturity for routing, validation, and data management.
+* **Artificial Intelligence:** **laravel/ai**. 
 * **Hybrid Database:** **PostgreSQL**.
     * *Relational:* User data, chats, and logs.
     * *Vector:* **pgvector** to store knowledge embeddings (long-term memory) within the same infrastructure.

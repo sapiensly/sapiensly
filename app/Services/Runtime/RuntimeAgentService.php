@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\AppActionExecutor;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Messages\AssistantMessage;
@@ -39,6 +40,8 @@ class RuntimeAgentService
         private RuntimeAgentToolset $toolset,
         private AiProviderService $providers,
         private AiDefaults $aiDefaults,
+        private AutonomyPolicy $autonomy,
+        private AppActionExecutor $executor,
     ) {}
 
     public function startConversation(App $app, User $user): RuntimeAgentConversation
@@ -114,17 +117,10 @@ class RuntimeAgentService
                 }
             }
 
-            $update = ['content' => $buffer, 'status' => 'none'];
-            if (! $proposals->isEmpty()) {
-                // Propose-don't-mutate (Rule 2): the write tools recorded actions
-                // but executed nothing. Surface them as a proposal for the user to
-                // approve — the write only happens on approval, via the gate.
-                $update['message_type'] = 'action_proposal';
-                $update['action_payload'] = [
-                    'status' => 'pending',
-                    'actions' => array_column($proposals->all(), 'action'),
-                    'previews' => array_column($proposals->all(), 'preview'),
-                ];
+            $outcome = $this->finalizeProposals($app, $manifest, $proposals, $conversation->user);
+            $update = ['content' => $buffer, 'status' => 'none', 'message_type' => $outcome['message_type']];
+            if ($outcome['action_payload'] !== null) {
+                $update['action_payload'] = $outcome['action_payload'];
             }
             $placeholder->update($update);
             $this->safeBroadcast(fn () => RuntimeAgentStreamComplete::dispatch($placeholder->refresh()));
@@ -140,6 +136,80 @@ class RuntimeAgentService
 
             return $this->fail($placeholder, 'Sorry — the request failed: '.mb_substr($e->getMessage(), 0, 1500));
         }
+    }
+
+    /**
+     * Decide what happens to the turn's proposed writes (the autonomy engine):
+     * auto-execute the ones AutonomyPolicy clears (safe-marked, internal,
+     * create/update), and leave everything else gated. The four safeguards live
+     * here: delete/run_workflow and connected writes never auto-execute (enforced
+     * by the policy); an auto-execution that fails falls BACK to gated rather
+     * than erroring silently; and every auto-run is recorded on the message
+     * (auto_previews) so the effect stays legible — never an invisible mutation.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{message_type: string, action_payload: array<string, mixed>|null}
+     */
+    public function finalizeProposals(App $app, array $manifest, ProposedActions $proposals, ?User $user): array
+    {
+        if ($proposals->isEmpty()) {
+            return ['message_type' => 'text', 'action_payload' => null];
+        }
+
+        $context = [
+            'current_user' => $user !== null ? ['id' => $user->id, 'email' => $user->email] : [],
+            'params' => [],
+            'form' => [],
+            'row' => [],
+        ];
+
+        $autoPreviews = [];
+        $autoResults = [];
+        $gated = [];
+        $gatedPreviews = [];
+
+        foreach ($proposals->all() as $item) {
+            $action = $item['action'];
+            $preview = $item['preview'];
+
+            if ($this->autonomy->isAutoExecutable($manifest, $action)) {
+                try {
+                    $autoResults[] = $this->executor->execute($app, $manifest, $action, $context, $user);
+                    $autoPreviews[] = $preview;
+
+                    continue;
+                } catch (\Throwable $e) {
+                    // Safeguard: a failed auto-run is NOT retried silently — it
+                    // falls back to a gated proposal for the human to decide.
+                    Log::warning('Runtime agent auto-execution failed; falling back to gated', [
+                        'app_id' => $app->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            $gated[] = $action;
+            $gatedPreviews[] = $preview;
+        }
+
+        $payload = [];
+        if ($autoPreviews !== []) {
+            $payload['auto_previews'] = $autoPreviews;
+            $payload['auto_results'] = $autoResults;
+        }
+
+        if ($gated !== []) {
+            // Mixed turns keep the auto part visible AND surface the rest for approval.
+            $payload['status'] = 'pending';
+            $payload['actions'] = $gated;
+            $payload['previews'] = $gatedPreviews;
+
+            return ['message_type' => 'action_proposal', 'action_payload' => $payload];
+        }
+
+        $payload['status'] = 'executed';
+
+        return ['message_type' => 'action_result', 'action_payload' => $payload];
     }
 
     private function fail(RuntimeAgentMessage $placeholder, string $message): RuntimeAgentMessage
@@ -219,7 +289,7 @@ How you work:
 - Call `describe_capabilities` first to see what data you can read.
 - Use `query_object` and `aggregate_object` to answer with REAL data from this app — never invent records or numbers.
 - Some objects are connected to external systems; you read them the same way. A read may fail (the external system is down) — if a tool returns an error, say so plainly, don't fabricate.
-- To change data you use the `propose_*` tools (when available). These do NOT make the change — they prepare it for the user to approve. After proposing, tell the user you've prepared it for their approval; NEVER claim it's done. If you have no propose_* tool for what the user wants, say you can't do that.
+- To change data you use the `propose_*` tools (when available). They do NOT execute the change themselves — the system decides: a few low-risk changes apply automatically, the rest wait for the user's approval. After calling a propose_* tool, describe what you set up in plain terms and let the action card show whether it applied or is awaiting approval — do NOT assert it's already done. If you have no propose_* tool for what the user wants, say you can't do that.
 - Only act within your tools. If the user asks for something none of your tools cover, say so plainly.
 - Reply in the same language as the user. Keep answers short and concrete.
 PROMPT;

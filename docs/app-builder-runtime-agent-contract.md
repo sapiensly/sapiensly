@@ -9,8 +9,12 @@
 > `AppActionExecutor` (the same write path the UI uses). Behavioral tests cover toolset
 > derivation/scoping, reads (internal + connected), the load-bearing propose-doesn't-mutate,
 > approve-executes, and dismiss.
-> **Deferred (non-goals, §10):** the autonomy engine that honors the `safe` mark (every
-> write stays gated until then), a finer per-workflow grant, and the general capability
+> **Plus the autonomy engine (§5):** `manifest.agent.safe` per-capability marks +
+> `autonomy: "safe"` let a safe-marked **internal create/update** auto-execute without
+> approval (`AutonomyPolicy` + `RuntimeAgentService::finalizeProposals`), with four
+> baked-in safeguards — delete/run_workflow never auto, connected always gated, a failed
+> auto-run falls back to gated, every auto-run recorded (`auto_previews`). Default-deny.
+> **Deferred (non-goals, §10):** a finer per-workflow grant and the general capability
 > registry/compiler.
 >
 > Written before code (Rule 1). This contract defined Power #3.
@@ -109,7 +113,8 @@ builder's existing `propose_change → approve` loop. In conversation with the b
          "read":  ["obj_…", "obj_…"] | "all",
          "write": ["obj_…"] | []             // empty ⇒ read-only agent (safest default)
        },
-       "autonomy": "propose" }               // "propose" (default) | "safe" (deferred, §9)
+       "autonomy": "propose",                // "propose" (default, all gated) | "safe" (honor marks)
+       "safe": [ { "object_id": "obj_…", "actions": ["create","update"] } ] }  // per-capability auto-execute (§5)
    ```
 2. **Default safest shape** — `write: []` (a read-only data copilot) is the common
    first agent. Granting a write capability is an explicit manifest edit the user
@@ -159,15 +164,31 @@ error message, never a crash.
 ## 5. Trust ramp & autonomy (the motion's hard rule)
 
 Tied to the PLG / self-serve motion (vision §3): **start propose-and-approve for every
-write** — low autonomy, maximum legibility, and also the least work (it is the gate we
-already have). Autonomous (ungated) execution is allowed **only** on capabilities
-explicitly marked `safe`. The `autonomy` mark exists in the contract from day one
-(cheap — it is one manifest field); the **autonomy engine that honors `safe` is
-deferred** (§9). Until then, `autonomy: "safe"` is accepted by the schema but the
-runtime still gates — fail-closed.
+write** — low autonomy, maximum legibility. Autonomous (ungated) execution is allowed
+**only** on capabilities explicitly marked `safe` — granularity is per-capability, not
+agent-wide (a blanket "autonomous agent" is the anti-ICP blast radius, vision §3).
+
+**The autonomy engine (`AutonomyPolicy` + `RuntimeAgentService::finalizeProposals`):**
+
+- **Master switch.** `manifest.agent.autonomy` is `"propose"` (default — everything
+  gated) or `"safe"` (honor the marks below). In `"propose"` the engine is fully off.
+- **Per-capability marks.** `manifest.agent.safe = [{ object_id, actions: ["create"|"update"] }]`.
+  A proposed write auto-executes iff its `(object_id, action)` is listed. **Default-deny:**
+  anything unlisted stays gated.
+- **Four non-negotiable safeguards, baked in (no manifest can override):**
+  1. **delete / run_workflow never auto-execute** — enforced by the policy *and* the
+     schema (the `actions` enum is `create`/`update` only).
+  2. **Connected (external system) writes are always gated** — only internal records,
+     which live under RLS and are reversible, can auto-run.
+  3. **A failed auto-run falls back to gated** — it is never retried silently; it
+     becomes a pending proposal for the human to decide.
+  4. **Every auto-run is recorded and visible** (`auto_previews` on the message, shown
+     as "✓ Done automatically") — never an invisible mutation (vision §8).
+- **Mixed turns** keep the auto part visible *and* surface the rest for approval.
 
 Trust is earned, never assumed: an app ships with a read-only agent or a
-propose-only writer, and graduates only by explicit, approved manifest edits.
+propose-only writer, and graduates only by explicit, approved manifest edits that add
+`safe` marks — each one visibly widening blast radius.
 
 ---
 
@@ -239,8 +260,8 @@ Tested with `Http::fake` for connected sources and seeded internal records:
 
 ## 10. Non-goals (this power)
 
-- **Autonomous (ungated) writes** — deferred to the autonomy engine; `safe` is a mark
-  now, an executor later (§5).
+- **A finer per-workflow autonomy grant** — the autonomy engine (§5) covers internal
+  create/update; run_workflow stays gated by design until a per-workflow safe mark exists.
 - **A general capability registry / compiler / parity lint** — emerges when N justifies
   it (vision §11.4); discipline enforces parity at small N.
 - **Cross-object transactional write-back** — when one proposal spans internal records
