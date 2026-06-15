@@ -19,12 +19,19 @@ const props = defineProps<{
     theme?: RuntimeTheme;
 }>();
 
+interface ActionPayload {
+    status: 'pending' | 'executed' | 'dismissed';
+    previews?: string[];
+    actions?: unknown[];
+}
+
 interface ChatMessage {
     id: string;
     role: 'user' | 'assistant';
     content: string | null;
     status: string;
     message_type?: string | null;
+    action_payload?: ActionPayload | null;
     created_at?: string | null;
 }
 
@@ -134,6 +141,37 @@ async function send(): Promise<void> {
     }
 }
 
+const actingId = ref<string | null>(null);
+
+function replaceMessage(updated: ChatMessage): void {
+    messages.value = messages.value.map((m) => (m.id === updated.id ? updated : m));
+}
+
+async function resolveProposal(message: ChatMessage, verb: 'approve' | 'dismiss'): Promise<void> {
+    if (actingId.value) {
+        return;
+    }
+    actingId.value = message.id;
+    errorText.value = '';
+    try {
+        const { data } = await axios.post(
+            `/r/${props.appSlug}/agent/messages/${message.id}/${verb}`,
+            {},
+            { timeout: 30_000 },
+        );
+        replaceMessage(data.message);
+    } catch (e: unknown) {
+        const err = e as { response?: { data?: { message?: string } } };
+        errorText.value = err.response?.data?.message ?? `Could not ${verb} the change.`;
+    } finally {
+        actingId.value = null;
+    }
+}
+
+function isPendingProposal(m: ChatMessage): boolean {
+    return m.message_type === 'action_proposal' && m.action_payload?.status === 'pending';
+}
+
 function onComposerKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
@@ -198,12 +236,44 @@ onUnmounted(unsubscribe);
                     class="ra-msg"
                     :class="m.role === 'user' ? 'ra-msg--user' : 'ra-msg--assistant'"
                 >
-                    <div
-                        v-if="m.role === 'assistant'"
-                        class="ra-bubble ra-md"
-                        :class="{ 'ra-bubble--error': m.status === 'error' }"
-                        v-html="renderMarkdown(m.content)"
-                    />
+                    <div v-if="m.role === 'assistant'" class="ra-assistant">
+                        <div
+                            v-if="m.content"
+                            class="ra-bubble ra-md"
+                            :class="{ 'ra-bubble--error': m.status === 'error' }"
+                            v-html="renderMarkdown(m.content)"
+                        />
+
+                        <!-- Proposed action card (the gate): approve to apply, dismiss to discard. -->
+                        <div v-if="m.message_type === 'action_proposal'" class="ra-card">
+                            <div class="ra-card-title">Proposed change</div>
+                            <ul class="ra-card-previews">
+                                <li v-for="(p, i) in m.action_payload?.previews ?? []" :key="i">{{ p }}</li>
+                            </ul>
+
+                            <div v-if="isPendingProposal(m)" class="ra-card-actions">
+                                <button
+                                    type="button"
+                                    class="ra-approve"
+                                    :disabled="actingId === m.id"
+                                    @click="resolveProposal(m, 'approve')"
+                                >
+                                    {{ actingId === m.id ? 'Applying…' : 'Approve' }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="ra-dismiss"
+                                    :disabled="actingId === m.id"
+                                    @click="resolveProposal(m, 'dismiss')"
+                                >
+                                    Dismiss
+                                </button>
+                            </div>
+                            <div v-else class="ra-card-status">
+                                {{ m.action_payload?.status === 'executed' ? '✓ Applied' : 'Dismissed' }}
+                            </div>
+                        </div>
+                    </div>
                     <div v-else class="ra-bubble ra-bubble--user">{{ m.content }}</div>
                 </div>
 
@@ -364,6 +434,67 @@ onUnmounted(unsubscribe);
 .ra-bubble--error {
     background: #fee2e2 !important;
     color: #991b1b !important;
+}
+
+.ra-assistant {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 85%;
+}
+.ra-card {
+    border-radius: 0.75rem;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.8rem;
+    border: 1px solid var(--sp-accent, #4f46e5);
+}
+.ra-panel--light .ra-card {
+    background: #f8fafc;
+}
+.ra-panel--dark .ra-card {
+    background: #1e293b;
+}
+.ra-card-title {
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+.ra-card-previews {
+    list-style: disc;
+    margin: 0 0 0.5rem;
+    padding-left: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.ra-card-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+.ra-approve,
+.ra-dismiss {
+    border: none;
+    border-radius: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.ra-approve {
+    background: var(--sp-accent, #4f46e5);
+    color: #fff;
+}
+.ra-approve:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.ra-dismiss {
+    background: transparent;
+    color: inherit;
+    border: 1px solid rgba(148, 163, 184, 0.5);
+}
+.ra-card-status {
+    font-weight: 600;
+    opacity: 0.7;
 }
 
 .ra-error {
