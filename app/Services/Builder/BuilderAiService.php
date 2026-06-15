@@ -19,6 +19,7 @@ use App\Ai\Tools\Builder\SeedRecordsTool;
 use App\Ai\Tools\Builder\SimulateQueryTool;
 use App\Ai\Tools\Builder\TestIntegrationConnectionTool;
 use App\Ai\Tools\Builder\ValidateManifestTool;
+use App\Events\Builder\BuilderActivity;
 use App\Events\Builder\BuilderStreamChunk;
 use App\Events\Builder\BuilderStreamComplete;
 use App\Events\Builder\BuilderStreamError;
@@ -46,6 +47,7 @@ use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\TextStart;
+use Laravel\Ai\Streaming\Events\ToolCall;
 
 /**
  * Orchestrates a Claude conversation that edits an App manifest via tool use.
@@ -353,8 +355,32 @@ class BuilderAiService
                 model: $resolvedModel,
             );
 
+            // Live feedback: announce which model is now working before the first
+            // token, so the UI shows "thinking with <model>" immediately.
+            $this->safeBroadcast(fn () => BuilderActivity::dispatch(
+                $conversation->id,
+                $placeholder->id,
+                'thinking',
+                $resolvedModel,
+            ));
+
             $sawText = false;
             foreach ($stream as $event) {
+                // Surface each tool the model invokes so the user sees what it is
+                // doing (reading the manifest, simulating a query, proposing a
+                // change…) instead of an opaque pause before a patch appears.
+                if ($event instanceof ToolCall) {
+                    $this->safeBroadcast(fn () => BuilderActivity::dispatch(
+                        $conversation->id,
+                        $placeholder->id,
+                        'tool',
+                        $resolvedModel,
+                        $event->toolCall->name,
+                    ));
+
+                    continue;
+                }
+
                 // When Claude uses tools it emits several separate text blocks
                 // across the turn (one before each tool call, one after). Each
                 // is bounded by TextStart/TextEnd, and the SDK puts NOTHING
@@ -378,6 +404,16 @@ class BuilderAiService
                 }
 
                 if ($event instanceof TextDelta && $event->delta !== '') {
+                    if (! $sawText) {
+                        // First token of the reply — flip the live status from
+                        // "thinking / using a tool" to "writing".
+                        $this->safeBroadcast(fn () => BuilderActivity::dispatch(
+                            $conversation->id,
+                            $placeholder->id,
+                            'writing',
+                            $resolvedModel,
+                        ));
+                    }
                     $sawText = true;
                     $buffer .= $event->delta;
                     $this->safeBroadcast(fn () => BuilderStreamChunk::dispatch(
