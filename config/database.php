@@ -126,6 +126,17 @@ return [
          | application default connection, so any tenant model that forgets to
          | opt into the `tenant` connection fails loudly (relation not found)
          | instead of silently bypassing isolation.
+         |
+         | MUST be a SESSION-pooled (or direct) connection — NOT a PgBouncer
+         | TRANSACTION-pooling port. Laravel sets `search_path` ("platform,public")
+         | once per session; transaction pooling multiplexes a fresh server backend
+         | per transaction so the search_path is lost, a table reference inside a
+         | transaction fails ("relation does not exist"), and the next statement
+         | aborts with "SQLSTATE[25P02]: current transaction is aborted" — the
+         | failure seen when creating an app (the app_versions query in
+         | AppManifestService::createVersion). Fix: point this at a session pool /
+         | direct connection, or set the default at the role level
+         | (ALTER ROLE platform_app SET search_path = "platform","public").
          */
         'platform' => [
             'driver' => 'pgsql',
@@ -150,20 +161,26 @@ return [
             'search_path' => 'platform,public',
             'sslmode' => env('PLATFORM_DB_SSLMODE', env('DB_SSLMODE', 'prefer')),
             // Persistent PDO connections amortize the per-request connect cost
-            // (TCP+TLS+auth round-trips) across a PHP-FPM worker's lifetime —
-            // the fix for high reconnect latency to a managed DB. Pair with the
-            // Supabase TRANSACTION pooler (it multiplexes, so a held client
-            // connection is cheap). Off by default; see DB_PERSISTENT.
+            // across a PHP-FPM worker's lifetime. Only enable DB_PERSISTENT
+            // against a SESSION-pooled (or direct) connection, never a transaction
+            // pooler — and note a persistent connection is not reset between
+            // requests, so a stray open/aborted transaction would poison the next
+            // request. Off by default.
             'options' => [PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false)],
         ],
 
         /*
          | Tenant-data runtime — role `tenant_app`. Reads/writes the `tenant`
          | schema only and is subject to RLS. The RLS GUCs (app.organization_id /
-         | app.user_id) are set per request/job by TenantContext. Under Supabase
-         | transaction pooling this connection should target the SESSION pooler
-         | (TENANT_DB_HOST/PORT) so `SET app.*` survives the request; otherwise
-         | TenantContext falls back to set_config(..., true) inside a transaction.
+         | app.user_id) are set per request/job by TenantContext::apply() at the
+         | SESSION level. So this connection MUST target a SESSION pooler (or a
+         | direct connection), NOT a PgBouncer TRANSACTION-pooling port: under
+         | transaction pooling each statement may land on a different server
+         | backend, so the session GUC set by apply() is gone by the next query and
+         | RLS fails closed (zero rows) for the rest of the request. Only code that
+         | explicitly wraps its work in TenantContext::runScoped() (set_config
+         | local=true, same transaction) is safe under a transaction pooler — the
+         | normal HTTP/queue path is not.
          */
         'tenant' => [
             'driver' => 'pgsql',
