@@ -10,7 +10,13 @@ use Illuminate\Support\Collection;
 
 class RetrievalService
 {
-    private EmbeddingService $embeddingService;
+    /**
+     * An explicit embedding service overrides per-KB resolution (used by
+     * searchForKnowledgeBase and tests). When null — the default for every app
+     * caller — the query is embedded with each KB's OWN embedding configuration
+     * at query time (see search()).
+     */
+    private ?EmbeddingService $embeddingService;
 
     private VectorStoreService $vectorStoreService;
 
@@ -18,15 +24,22 @@ class RetrievalService
         ?EmbeddingService $embeddingService = null,
         ?VectorStoreService $vectorStoreService = null,
     ) {
-        $this->embeddingService = $embeddingService ?? new EmbeddingService;
+        $this->embeddingService = $embeddingService;
         $this->vectorStoreService = $vectorStoreService ?? app(VectorStoreService::class);
     }
 
     /**
      * Search for relevant chunks across knowledge bases. Routing to the
-     * correct database connection per KB is handled by VectorStoreService;
-     * this method only concerns itself with generating the query embedding
-     * and returning the ordered chunk collection.
+     * correct database connection per KB is handled by VectorStoreService.
+     *
+     * The query MUST be embedded with the same embedding configuration its
+     * chunks were embedded with (ingestion uses EmbeddingService::forKnowledgeBase):
+     * a query embedded with a different provider/model/dimensions lands in a
+     * different vector space and matches nothing. This is why documents added to
+     * a KB after its embedding provider was configured/changed could become
+     * invisible — the query kept using the global-default model. So, absent an
+     * explicit override, we group the KBs by embedding config and embed the query
+     * once per group with that group's configuration.
      *
      * @param  array<int, string>  $knowledgeBaseIds
      * @return Collection<int, KnowledgeBaseChunk>
@@ -41,14 +54,44 @@ class RetrievalService
             return collect();
         }
 
-        $queryEmbedding = $this->embeddingService->embed($query);
+        // Explicit override: one embedding config for the whole query.
+        if ($this->embeddingService !== null) {
+            return $this->vectorStoreService->searchSimilar(
+                $knowledgeBaseIds,
+                $this->embeddingService->embed($query),
+                $topK,
+                $threshold,
+            );
+        }
 
-        return $this->vectorStoreService->searchSimilar(
-            $knowledgeBaseIds,
-            $queryEmbedding,
-            $topK,
-            $threshold,
-        );
+        $kbs = KnowledgeBase::query()->whereIn('id', $knowledgeBaseIds)->get();
+        if ($kbs->isEmpty()) {
+            return collect();
+        }
+
+        // Group KBs sharing an embedding configuration so we embed the query
+        // once per distinct config and search each group with the matching vector.
+        $groups = [];
+        foreach ($kbs as $kb) {
+            $service = EmbeddingService::forKnowledgeBase($kb);
+            $signature = $service->getProvider().'|'.$service->getModel().'|'.$service->getDimensions();
+            $groups[$signature] ??= ['service' => $service, 'ids' => []];
+            $groups[$signature]['ids'][] = $kb->id;
+        }
+
+        $results = collect();
+        foreach ($groups as $group) {
+            $results = $results->concat($this->vectorStoreService->searchSimilar(
+                $group['ids'],
+                $group['service']->embed($query),
+                $topK,
+                $threshold,
+            ));
+        }
+
+        return count($groups) > 1
+            ? $results->sortBy('distance')->take($topK)->values()
+            : $results;
     }
 
     /**
