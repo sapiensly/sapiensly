@@ -18,6 +18,7 @@ use App\Models\ChatMessage;
 use App\Models\Tool;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
+use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\RetrievalService;
 use App\Services\ToolConfigService;
@@ -356,6 +357,10 @@ class ChatAiService
                 'cache_read_input_tokens' => $stream->usage?->cacheReadInputTokens ?? 0,
                 'cache_write_input_tokens' => $stream->usage?->cacheWriteInputTokens ?? 0,
             ]);
+
+            app(AiUsageRecorder::class)->record(
+                'chat', $resolvedModel, $chat->user, $chat->user?->organization_id, $stream->usage ?? null,
+            );
 
             return $placeholder;
         } catch (\Throwable $e) {

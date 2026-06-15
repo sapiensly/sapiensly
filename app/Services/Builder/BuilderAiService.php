@@ -29,6 +29,7 @@ use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
+use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
 use App\Services\Integrations\IntegrationCaller;
@@ -431,6 +432,10 @@ class BuilderAiService
                 'response_length' => strlen($buffer),
                 'has_proposal' => $proposeTool->lastProposal() !== null,
             ]);
+
+            app(AiUsageRecorder::class)->record(
+                'builder', $resolvedModel, $conversation->user, $app->organization_id, $stream->usage ?? null,
+            );
 
             $proposal = $proposeTool->lastProposal();
             $appliedVersionId = null;

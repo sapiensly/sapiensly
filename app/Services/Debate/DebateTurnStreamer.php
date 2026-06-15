@@ -7,6 +7,7 @@ use App\Events\Debate\DebateTurnChunk;
 use App\Events\Debate\DebateTurnComplete;
 use App\Events\Debate\DebateTurnError;
 use App\Models\DebateTurn;
+use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
@@ -95,6 +96,10 @@ class DebateTurnStreamer
                     $this->safeBroadcast(fn () => DebateTurnChunk::dispatch($debate->id, $turn->id, $event->delta));
                 }
             }
+
+            app(AiUsageRecorder::class)->record(
+                'debate', $model, $user, $user?->organization_id, $stream->usage ?? null,
+            );
 
             $turn->update([
                 'content' => $buffer,

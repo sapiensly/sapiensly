@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Models\KnowledgeBase;
 use App\Models\User;
+use App\Services\Ai\AiUsageRecorder;
 use Laravel\Ai\Embeddings;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Responses\Data\Usage;
 
 class EmbeddingService
 {
@@ -15,8 +17,13 @@ class EmbeddingService
 
     private int $dimensions;
 
+    /** The owner this embedding service acts for, for spend attribution (may be null). */
+    private ?User $owner;
+
     public function __construct(?string $provider = null, ?string $model = null, ?User $user = null)
     {
+        $this->owner = $user;
+
         // If a user is provided, try to resolve defaults from their configured AI providers
         if ($user && ($provider === null || $model === null)) {
             $aiProviderService = app(AiProviderService::class);
@@ -81,6 +88,18 @@ class EmbeddingService
         $response = Embeddings::for($texts)
             ->dimensions($this->dimensions)
             ->generate(provider: $lab, model: $this->model);
+
+        // Embeddings responses don't expose token counts, so estimate input
+        // tokens (~4 chars/token) and flag the usage as estimated.
+        $estimatedTokens = (int) ceil(array_sum(array_map('mb_strlen', $texts)) / 4);
+        app(AiUsageRecorder::class)->record(
+            'embeddings',
+            $this->model,
+            $this->owner,
+            $this->owner?->organization_id,
+            new Usage(promptTokens: $estimatedTokens),
+            estimated: true,
+        );
 
         return $response->embeddings;
     }

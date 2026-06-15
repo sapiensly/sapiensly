@@ -6,6 +6,7 @@ use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\Message;
 use App\Models\User;
+use App\Services\Ai\AiUsageRecorder;
 use Generator;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\AnonymousAgent;
@@ -14,6 +15,7 @@ use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Streaming\Events\TextDelta;
 
 class LLMService
@@ -38,6 +40,22 @@ class LLMService
         }
 
         return $this;
+    }
+
+    /**
+     * Record this agent call's token usage + cost for org-level spend tracking.
+     * Best-effort (the recorder swallows its own errors).
+     */
+    private function recordUsage(Agent $agent, string $module, ?Usage $usage): void
+    {
+        $user = $this->contextUser ?? $agent->user;
+        app(AiUsageRecorder::class)->record(
+            $module,
+            $agent->model,
+            $user,
+            $user?->organization_id ?? $agent->organization_id,
+            $usage,
+        );
     }
 
     /**
@@ -86,6 +104,8 @@ class LLMService
             model: $agent->model,
         );
 
+        $this->recordUsage($agent, 'agent', $response->usage ?? null);
+
         return $response->text;
     }
 
@@ -111,6 +131,8 @@ class LLMService
                 yield $event->delta;
             }
         }
+
+        $this->recordUsage($agent, 'agent', $response->usage ?? null);
     }
 
     /**
@@ -203,6 +225,8 @@ class LLMService
                     yield $event->delta;
                 }
             }
+
+            $this->recordUsage($agent, 'agent', $response->usage ?? null);
         })();
 
         return [
@@ -246,6 +270,8 @@ class LLMService
             'steps' => $response->steps->count(),
             'finish_reason' => $lastStep?->finishReason?->name ?? 'unknown',
         ]);
+
+        $this->recordUsage($agent, 'agent', $response->usage ?? null);
 
         return $response;
     }
@@ -304,6 +330,8 @@ class LLMService
             model: $agent->model,
         );
 
+        $this->recordUsage($agent, 'agent', $response->usage ?? null);
+
         return [
             'response' => $response,
             'knowledge_bases' => $knowledgeBases,
@@ -341,6 +369,8 @@ class LLMService
             'steps' => $response->steps->count(),
             'finish_reason' => $lastStep?->finishReason?->name ?? 'unknown',
         ]);
+
+        $this->recordUsage($agent, 'agent', $response->usage ?? null);
 
         return $response;
     }

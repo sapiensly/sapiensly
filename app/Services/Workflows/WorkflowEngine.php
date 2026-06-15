@@ -7,6 +7,7 @@ use App\Models\Record;
 use App\Models\User;
 use App\Models\WorkflowRun;
 use App\Models\WorkflowStepRun;
+use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordQueryService;
@@ -206,6 +207,10 @@ class WorkflowEngine
 
         $sdkAgent = new AnonymousAgent($systemPrompt, [], []);
         $response = $sdkAgent->prompt($userPrompt, provider: $provider, model: $model);
+
+        app(AiUsageRecorder::class)->record(
+            'workflow', $model, $user, $user?->organization_id, $response->usage ?? null,
+        );
 
         return [
             'text' => $response->text ?? '',

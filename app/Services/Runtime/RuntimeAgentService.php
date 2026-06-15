@@ -11,6 +11,7 @@ use App\Models\RuntimeAgentConversation;
 use App\Models\RuntimeAgentMessage;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
+use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\AppActionExecutor;
@@ -116,6 +117,10 @@ class RuntimeAgentService
                     $this->safeBroadcast(fn () => RuntimeAgentStreamChunk::dispatch($conversation->id, $placeholder->id, $event->delta));
                 }
             }
+
+            app(AiUsageRecorder::class)->record(
+                'runtime_agent', $resolvedModel, $conversation->user, $app->organization_id, $stream->usage ?? null,
+            );
 
             $outcome = $this->finalizeProposals($app, $manifest, $proposals, $conversation->user);
             $update = ['content' => $buffer, 'status' => 'none', 'message_type' => $outcome['message_type']];
