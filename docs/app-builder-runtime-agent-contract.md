@@ -1,9 +1,19 @@
 # Builder Power Contract — The Runtime Agent over the Capability Graph
 
-> **Status: CONTRACT ONLY — written before code (Rule 1).** No runtime agent exists
-> inside built apps yet (the existing agents are the *builder* agent that edits the
-> manifest, and the *chat* agent; neither runs inside a built app for its end-users).
-> This contract defines Power #3.
+> **Status: READ + WRITE SLICES IMPLEMENTED.** The runtime agent ships: a `manifest.agent`
+> block + auto-derived toolset (`RuntimeAgentToolset`), source-agnostic read tools
+> (`describe_capabilities`/`query_object`/`aggregate_object`), tenant-scoped conversation
+> storage, a streaming service/job over Reverb, the end-user chat panel, the gated
+> `propose_*` write tools recording proposals (executing nothing), and the
+> approve/dismiss gate that runs an approved proposal through the shared
+> `AppActionExecutor` (the same write path the UI uses). Behavioral tests cover toolset
+> derivation/scoping, reads (internal + connected), the load-bearing propose-doesn't-mutate,
+> approve-executes, and dismiss.
+> **Deferred (non-goals, §10):** the autonomy engine that honors the `safe` mark (every
+> write stays gated until then), a finer per-workflow grant, and the general capability
+> registry/compiler.
+>
+> Written before code (Rule 1). This contract defined Power #3.
 >
 > **Altitude:** a *power of the App Builder* — the **power surface** over the same
 > capability graph the generated UI projects (vision §5, §7). The runtime agent is a
@@ -215,15 +225,15 @@ Tested with `Http::fake` for connected sources and seeded internal records:
 
 ## 9. Build order within power #3 (each shippable, contract-before-code)
 
-1. **Read slice** — runtime agent endpoint + conversation/message storage + the read
+1. **Read slice** ✅ — runtime agent endpoint + conversation/message storage + the read
    tools (`query_object`, `aggregate_object`, `describe_capabilities`, source-agnostic
    over internal + connected) + Reverb streaming + the `manifest.agent` block
-   (read-only). *The app gains a copilot over its own system of record — valuable alone,
-   zero write-blast-radius.*
-2. **Propose-write slice** — `propose_*` write tools → action proposal with preview;
-   approve/dismiss endpoints; approval executes through `AppActionController` (internal,
-   connected, and workflow writes, all gated). *The app gains an agent that takes
-   actions, safely.*
+   (read-only) + the end-user chat panel. *The app gains a copilot over its own system of
+   record — valuable alone, zero write-blast-radius.*
+2. **Propose-write slice** ✅ — `propose_*` write tools → action proposal with preview;
+   approve/dismiss endpoints; approval executes through the shared `AppActionExecutor`
+   (internal, connected, and workflow writes, all gated) + the approval ActionCard.
+   *The app gains an agent that takes actions, safely.*
 
 ---
 
