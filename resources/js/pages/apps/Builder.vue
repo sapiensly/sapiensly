@@ -107,6 +107,65 @@ const previewPane = ref<HTMLElement | null>(null);
 const requestingReview = ref(false);
 const wireframeOpen = ref(false);
 
+// ---------- Live activity feedback (what the model is doing right now) ----------
+interface Activity {
+    phase: string;
+    model: string | null;
+    tool: string | null;
+}
+const liveActivity = ref<Activity | null>(null);
+const liveSteps = ref<Array<{ tool: string; label: string }>>([]);
+
+// Friendly labels for the builder tools, so the status reads as plain language
+// ("Testing a query") rather than the raw tool name ("simulate_query").
+const TOOL_LABELS: Record<string, string> = {
+    read_manifest: 'Reading the app',
+    list_available_components: 'Checking the catalog',
+    list_available_field_types: 'Checking the catalog',
+    list_available_actions: 'Checking the catalog',
+    list_available_triggers: 'Checking the catalog',
+    list_available_steps: 'Checking the catalog',
+    inspect_records: 'Inspecting records',
+    simulate_query: 'Testing a query',
+    validate_manifest: 'Validating',
+    propose_change: 'Proposing a change',
+    delete_block_by_id: 'Removing a block',
+    seed_records: 'Adding sample data',
+    discover_integration: 'Finding the connection',
+    create_integration: 'Setting up the connection',
+    test_connection: 'Testing the connection',
+    sample_endpoint: 'Sampling the endpoint',
+};
+function toolLabel(name: string): string {
+    return TOOL_LABELS[name] ?? name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function modelLabel(id: string | null | undefined): string {
+    if (! id) {
+        return '';
+    }
+    return props.models?.find((m) => m.id === id)?.label ?? id;
+}
+
+// The model shown in the live status — the one actually running this turn when
+// known, else the user's selection.
+const activityModelLabel = computed(() => modelLabel(liveActivity.value?.model) || selectedModelLabel.value);
+
+// One-line description of the current phase for the status bar.
+const activityStatus = computed(() => {
+    const a = liveActivity.value;
+    if (a === null) {
+        return sending.value ? 'Working…' : 'Ready';
+    }
+    if (a.phase === 'tool') {
+        return toolLabel(a.tool ?? '') + '…';
+    }
+    if (a.phase === 'writing') {
+        return 'Writing the reply…';
+    }
+    return 'Thinking…';
+});
+const isBusy = computed(() => sending.value || liveActivity.value !== null);
+
 // ---------- Real fullscreen for left/right panes ----------
 // When toggled, the chosen pane becomes a fixed-position overlay covering
 // the whole viewport (hiding the layout's sidebar/topbar). We also try the
@@ -789,6 +848,8 @@ async function send() {
 
     sending.value = true;
     errorText.value = null;
+    liveActivity.value = null;
+    liveSteps.value = [];
 
     // Capture the attachment locally so we can clear the staging area
     // immediately for snappy UX; if the request fails we restore it.
@@ -966,6 +1027,21 @@ function subscribe() {
     channel = echo.private(`builder.conversation.${conversationId.value}`);
 
     channel.listen(
+        '.BuilderActivity',
+        (data: { message_id: string; phase: string; model: string | null; tool: string | null }) => {
+            liveActivity.value = { phase: data.phase, model: data.model, tool: data.tool };
+            if (data.phase === 'tool' && data.tool) {
+                // Accumulate the turn's tool steps (collapsing consecutive repeats)
+                // so the chat shows a legible trail of what the model did.
+                const last = liveSteps.value[liveSteps.value.length - 1];
+                if (! last || last.tool !== data.tool) {
+                    liveSteps.value.push({ tool: data.tool, label: toolLabel(data.tool) });
+                }
+            }
+        },
+    );
+
+    channel.listen(
         '.BuilderStreamChunk',
         (data: { message_id: string; delta: string }) => {
             messages.value = messages.value.map((m) =>
@@ -979,6 +1055,8 @@ function subscribe() {
     channel.listen(
         '.BuilderStreamComplete',
         (payload: { message: Message }) => {
+            liveActivity.value = null;
+            liveSteps.value = [];
             messages.value = messages.value.map((m) =>
                 m.id === payload.message.id ? payload.message : m,
             );
@@ -991,6 +1069,8 @@ function subscribe() {
     channel.listen(
         '.BuilderStreamError',
         (data: { message_id: string; error: string }) => {
+            liveActivity.value = null;
+            liveSteps.value = [];
             messages.value = messages.value.map((m) =>
                 m.id === data.message_id
                     ? { ...m, content: 'Sorry — the AI request failed: ' + data.error, status: 'none' }
@@ -1333,6 +1413,29 @@ function statusTone(status: Message['status']): string {
                                 v-else
                                 class="builder-md mr-8 rounded-sp-sm border border-soft bg-surface px-3 py-2 text-sm text-ink"
                             >
+                                <!-- Live activity trail: what the model did this
+                                     turn (each tool it called) + what it's doing
+                                     now, so the wait is never an opaque pause. -->
+                                <div
+                                    v-if="m.status === 'streaming' && (liveSteps.length > 0 || liveActivity)"
+                                    class="mb-2 space-y-1 border-l-2 border-accent-blue/40 pl-2.5"
+                                >
+                                    <div
+                                        v-for="(step, i) in liveSteps"
+                                        :key="i"
+                                        class="flex items-center gap-1.5 text-xs text-ink-muted"
+                                    >
+                                        <Check class="size-3 text-sp-success" />
+                                        <span>{{ step.label }}</span>
+                                    </div>
+                                    <div
+                                        v-if="liveActivity"
+                                        class="flex items-center gap-1.5 text-xs text-ink"
+                                    >
+                                        <Loader2 class="size-3 animate-spin text-accent-blue" />
+                                        <span>{{ activityStatus }}</span>
+                                    </div>
+                                </div>
                                 <div
                                     v-if="m.content"
                                     v-html="renderAssistantContent(m.content)"
@@ -1443,6 +1546,19 @@ function statusTone(status: Message['status']): string {
                             >
                                 <X class="size-3.5" />
                             </button>
+                        </div>
+
+                        <!-- Always-on status bar: which model is in play and what
+                             it's doing. Idle shows the model + "Ready"; mid-turn it
+                             pulses with the live phase. -->
+                        <div
+                            class="mb-2 flex items-center gap-2 rounded-pill border border-soft bg-navy/60 px-3 py-1.5 text-xs"
+                        >
+                            <Loader2 v-if="isBusy" class="size-3.5 shrink-0 animate-spin text-accent-blue" />
+                            <Sparkles v-else class="size-3.5 shrink-0 text-accent-blue" />
+                            <span class="font-medium text-ink">{{ activityModelLabel }}</span>
+                            <span class="text-ink-subtle">·</span>
+                            <span class="truncate text-ink-muted">{{ activityStatus }}</span>
                         </div>
 
                         <form class="relative" @submit.prevent="send">
