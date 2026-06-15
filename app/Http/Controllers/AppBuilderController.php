@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
+use App\Models\AppVersion;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\Record;
@@ -96,11 +97,35 @@ class AppBuilderController extends Controller
             'manifest' => $manifest,
             'preview' => $preview,
             'schema' => $schema,
+            'versions' => $this->buildVersions($app),
             'conversation' => [
                 'id' => $conversation->id,
                 'messages' => $conversation->messages->map(fn (BuilderMessage $m) => $this->messageDto($m)),
             ],
         ]);
+    }
+
+    /**
+     * The recent version history for the Layers explorer — a compact timeline of
+     * what changed, newest first, with the current version flagged.
+     *
+     * @return list<array{id: string, version: int, summary: string|null, created_at: string|null, current: bool}>
+     */
+    private function buildVersions(App $app): array
+    {
+        return AppVersion::query()
+            ->where('app_id', $app->id)
+            ->orderByDesc('version_number')
+            ->limit(30)
+            ->get(['id', 'version_number', 'change_summary', 'created_at'])
+            ->map(fn (AppVersion $v) => [
+                'id' => $v->id,
+                'version' => $v->version_number,
+                'summary' => $v->change_summary,
+                'created_at' => $v->created_at?->toIso8601String(),
+                'current' => $v->id === $app->current_version_id,
+            ])
+            ->all();
     }
 
     /**

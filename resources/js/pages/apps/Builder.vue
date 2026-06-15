@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import AppWorkflowsTab from '@/components/apps/workflows/AppWorkflowsTab.vue';
+import LayersExplorer from '@/components/apps/LayersExplorer.vue';
 import SchemaView from '@/components/apps/SchemaView.vue';
 import SlashCommandMenu from '@/components/apps/SlashCommandMenu.vue';
 import WireframeImportDialog from '@/components/apps/WireframeImportDialog.vue';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
     expandSlashCommand,
     matchingCommands,
@@ -39,7 +41,7 @@ import DOMPurify from 'dompurify';
 // Tailwind v4 emits. The vanilla html2canvas chokes the moment any Tailwind
 // utility lands in the snapshot.
 import html2canvas from 'html2canvas-pro';
-import { ArrowLeft, BarChart3, Camera, Check, ChevronDown, Code, Database, Download, Eye, FileText, GripVertical, ImagePlus, LayoutDashboard, Lightbulb, Link2, ListChecks, Loader2, Maximize2, Minimize2, MoreVertical, MousePointerClick, Paperclip, Plus, RotateCcw, Send, Settings2, Sparkles, Wand2, Workflow as WorkflowIcon, X } from '@lucide/vue';
+import { ArrowLeft, BarChart3, Camera, Check, ChevronDown, Code, Database, Download, Eye, FileText, GripVertical, ImagePlus, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Loader2, Maximize2, Minimize2, MoreVertical, MousePointerClick, Paperclip, Plus, RotateCcw, Send, Settings2, Sparkles, Wand2, Workflow as WorkflowIcon, X } from '@lucide/vue';
 import { marked } from 'marked';
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -79,6 +81,7 @@ interface Props {
     conversation: { id: string; messages: Message[] };
     models?: Array<{ id: string; label: string }>;
     defaultModel?: string;
+    versions?: Array<{ id: string; version: number; summary: string | null; created_at: string | null; current: boolean }>;
 }
 
 const props = defineProps<Props>();
@@ -106,6 +109,7 @@ const transcript = ref<HTMLElement | null>(null);
 const previewPane = ref<HTMLElement | null>(null);
 const requestingReview = ref(false);
 const wireframeOpen = ref(false);
+const layersOpen = ref(false);
 
 // ---------- Live activity feedback (what the model is doing right now) ----------
 interface Activity {
@@ -1297,6 +1301,17 @@ function statusTone(status: Message['status']): string {
                     </div>
                 </div>
 
+                <div class="flex items-center gap-2">
+                    <!-- Layers: every part of the app, one click away for consultation. -->
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                        @click="layersOpen = true"
+                    >
+                        <Layers class="size-3.5" />
+                        Layers
+                    </button>
+
                 <div class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5">
                     <button
                         v-for="m in ([
@@ -1318,6 +1333,7 @@ function statusTone(status: Message['status']): string {
                         <component :is="m.icon" class="size-3.5" />
                         {{ m.label }}
                     </button>
+                </div>
                 </div>
             </header>
 
@@ -1873,6 +1889,19 @@ function statusTone(status: Message['status']): string {
             :conversation-id="conversationId"
             @imported="onWireframeImported"
         />
+
+        <!-- Layers explorer — every part of the app at hand for consultation. -->
+        <Sheet v-model:open="layersOpen">
+            <SheetContent side="left" class="w-[22rem] overflow-y-auto p-0">
+                <SheetHeader class="border-b border-soft px-4 py-3">
+                    <SheetTitle class="flex items-center gap-2 text-sm">
+                        <Layers class="size-4 text-accent-blue" />
+                        App layers
+                    </SheetTitle>
+                </SheetHeader>
+                <LayersExplorer :manifest="manifest" :schema="schema" :versions="versions" />
+            </SheetContent>
+        </Sheet>
     </AppLayoutV2>
 </template>
 
