@@ -4,6 +4,10 @@ namespace App\Services\Runtime;
 
 use App\Ai\Tools\Runtime\Agent\AggregateObjectTool;
 use App\Ai\Tools\Runtime\Agent\DescribeCapabilitiesTool;
+use App\Ai\Tools\Runtime\Agent\ProposeCreateRecordTool;
+use App\Ai\Tools\Runtime\Agent\ProposeDeleteRecordTool;
+use App\Ai\Tools\Runtime\Agent\ProposeRunWorkflowTool;
+use App\Ai\Tools\Runtime\Agent\ProposeUpdateRecordTool;
 use App\Ai\Tools\Runtime\Agent\QueryObjectTool;
 use App\Ai\Tools\RuntimeToolFactory;
 use App\Models\App;
@@ -30,6 +34,19 @@ class RuntimeAgentToolset
     ) {}
 
     /**
+     * The full toolset for a turn: read tools plus the gated propose_* write
+     * tools. The write tools never execute — they record into $proposals, which
+     * the service turns into an action_proposal awaiting approval (Rule 2).
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<Tool>
+     */
+    public function tools(App $app, array $manifest, ProposedActions $proposals): array
+    {
+        return [...$this->readTools($app, $manifest), ...$this->writeTools($manifest, $proposals)];
+    }
+
+    /**
      * @param  array<string, mixed>  $manifest
      * @return list<Tool>
      */
@@ -51,6 +68,43 @@ class RuntimeAgentToolset
         if ($readableObjectIds !== []) {
             $tools[] = RuntimeToolFactory::named('query_object', new QueryObjectTool($app, $manifest, $readableObjectIds, $this->blockData));
             $tools[] = RuntimeToolFactory::named('aggregate_object', new AggregateObjectTool($app, $manifest, $readableObjectIds, $this->records, $this->blockData));
+        }
+
+        return $tools;
+    }
+
+    /**
+     * The gated write tools, scoped to the objects the agent may write. Each one
+     * records a proposal into $proposals — none of them mutate. propose_run_workflow
+     * is offered whenever the agent has any write grant and the app has workflows.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<Tool>
+     */
+    public function writeTools(array $manifest, ProposedActions $proposals): array
+    {
+        $agent = $manifest['agent'] ?? null;
+        if (! is_array($agent) || ($agent['enabled'] ?? false) !== true) {
+            return [];
+        }
+
+        $writableObjectIds = $this->resolveObjectIds($manifest, $agent['capabilities']['write'] ?? []);
+        if ($writableObjectIds === []) {
+            return [];
+        }
+
+        $tools = [
+            RuntimeToolFactory::named('propose_create_record', new ProposeCreateRecordTool($manifest, $writableObjectIds, $proposals)),
+            RuntimeToolFactory::named('propose_update_record', new ProposeUpdateRecordTool($manifest, $writableObjectIds, $proposals)),
+            RuntimeToolFactory::named('propose_delete_record', new ProposeDeleteRecordTool($manifest, $writableObjectIds, $proposals)),
+        ];
+
+        $workflowIds = array_values(array_filter(array_map(
+            fn ($w) => $w['id'] ?? null,
+            $manifest['workflows'] ?? [],
+        )));
+        if ($workflowIds !== []) {
+            $tools[] = RuntimeToolFactory::named('propose_run_workflow', new ProposeRunWorkflowTool($manifest, $workflowIds, $proposals));
         }
 
         return $tools;

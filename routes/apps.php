@@ -72,6 +72,19 @@ Route::middleware([
         ->middleware('throttle:runtime-actions')
         ->name('apps.runtime.agent.messages');
 
+    // The propose-don't-mutate gate (power #3): approve runs the proposed
+    // actions through the runtime write path; dismiss discards them.
+    Route::post('/r/{app_slug}/agent/messages/{message}/approve', [AppRuntimeAgentController::class, 'approveAction'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->where('message', 'rmsg_[a-z0-9]+')
+        ->middleware('throttle:runtime-actions')
+        ->name('apps.runtime.agent.approve');
+
+    Route::post('/r/{app_slug}/agent/messages/{message}/dismiss', [AppRuntimeAgentController::class, 'dismissAction'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->where('message', 'rmsg_[a-z0-9]+')
+        ->name('apps.runtime.agent.dismiss');
+
     // File upload + serve for file fields in BlockForm. Uploads go via POST
     // and return a {file_id, url, ...} JSON; the GET endpoint streams the
     // bytes back after re-checking that the user can still see the App.

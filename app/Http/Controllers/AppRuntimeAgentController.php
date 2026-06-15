@@ -7,6 +7,8 @@ use App\Models\App;
 use App\Models\RuntimeAgentConversation;
 use App\Models\RuntimeAgentMessage;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\AppActionExecutor;
+use App\Services\Records\RecordValidationException;
 use App\Services\Runtime\RuntimeAgentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,6 +26,7 @@ class AppRuntimeAgentController extends Controller
     public function __construct(
         private AppManifestService $manifestService,
         private RuntimeAgentService $agent,
+        private AppActionExecutor $executor,
     ) {}
 
     public function startConversation(Request $request, string $appSlug): JsonResponse
@@ -78,6 +81,80 @@ class AppRuntimeAgentController extends Controller
             'latest_message_id' => $placeholder->id,
             'streaming' => true,
         ]);
+    }
+
+    /**
+     * Approve a pending action proposal (builder power #3 gate): execute its
+     * actions through the SAME write path the runtime UI uses, as the approving
+     * user. This is the only place an agent-proposed write actually mutates —
+     * Rule 2. Failures leave the proposal pending so the user can retry.
+     */
+    public function approveAction(Request $request, string $appSlug, string $messageId): JsonResponse
+    {
+        $app = $this->resolveAppWithAgent($request, $appSlug);
+        $message = $this->loadPendingProposal($app, $request->user()->id, $messageId);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        $context = [
+            'current_user' => ['id' => $request->user()->id, 'email' => $request->user()->email],
+            'params' => [],
+            'form' => [],
+            'row' => [],
+        ];
+
+        $payload = (array) $message->action_payload;
+        $results = [];
+
+        try {
+            foreach ($payload['actions'] ?? [] as $action) {
+                $results[] = $this->executor->execute($app, $manifest, $action, $context, $request->user());
+            }
+        } catch (RecordValidationException $e) {
+            return response()->json(['message' => 'The change was rejected: invalid data.', 'fields' => $e->errors], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $message->update(['action_payload' => [...$payload, 'status' => 'executed', 'results' => $results]]);
+
+        return response()->json(['message' => $this->messageDto($message->refresh())]);
+    }
+
+    /**
+     * Dismiss a pending proposal without executing it — nothing mutates.
+     */
+    public function dismissAction(Request $request, string $appSlug, string $messageId): JsonResponse
+    {
+        $app = $this->resolveAppWithAgent($request, $appSlug);
+        $message = $this->loadPendingProposal($app, $request->user()->id, $messageId);
+
+        $message->update(['action_payload' => [...(array) $message->action_payload, 'status' => 'dismissed']]);
+
+        return response()->json(['message' => $this->messageDto($message->refresh())]);
+    }
+
+    /**
+     * Load a message that is a still-pending action proposal owned by the
+     * requesting user in this app — 404 otherwise (also covers already-executed
+     * or dismissed proposals, so approval/dismissal is single-shot).
+     */
+    private function loadPendingProposal(App $app, int $userId, string $messageId): RuntimeAgentMessage
+    {
+        $message = RuntimeAgentMessage::query()
+            ->where('id', $messageId)
+            ->where('message_type', 'action_proposal')
+            ->first();
+
+        $conversation = $message?->conversation;
+        if ($message === null
+            || $conversation === null
+            || $conversation->app_id !== $app->id
+            || $conversation->user_id !== $userId
+            || (($message->action_payload['status'] ?? null) !== 'pending')) {
+            throw new NotFoundHttpException('Pending proposal not found.');
+        }
+
+        return $message;
     }
 
     /**

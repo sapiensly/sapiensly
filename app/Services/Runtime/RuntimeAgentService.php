@@ -68,7 +68,8 @@ class RuntimeAgentService
             return $this->fail($placeholder, 'This app has no active agent.');
         }
 
-        $tools = $this->toolset->readTools($app, $manifest);
+        $proposals = new ProposedActions;
+        $tools = $this->toolset->tools($app, $manifest, $proposals);
 
         $history = $this->buildHistory($conversation, $placeholder->id);
         $promptText = $this->popLastUserPrompt($history, $userText);
@@ -113,7 +114,19 @@ class RuntimeAgentService
                 }
             }
 
-            $placeholder->update(['content' => $buffer, 'status' => 'none']);
+            $update = ['content' => $buffer, 'status' => 'none'];
+            if (! $proposals->isEmpty()) {
+                // Propose-don't-mutate (Rule 2): the write tools recorded actions
+                // but executed nothing. Surface them as a proposal for the user to
+                // approve — the write only happens on approval, via the gate.
+                $update['message_type'] = 'action_proposal';
+                $update['action_payload'] = [
+                    'status' => 'pending',
+                    'actions' => array_column($proposals->all(), 'action'),
+                    'previews' => array_column($proposals->all(), 'preview'),
+                ];
+            }
+            $placeholder->update($update);
             $this->safeBroadcast(fn () => RuntimeAgentStreamComplete::dispatch($placeholder->refresh()));
 
             return $placeholder;
@@ -206,7 +219,8 @@ How you work:
 - Call `describe_capabilities` first to see what data you can read.
 - Use `query_object` and `aggregate_object` to answer with REAL data from this app — never invent records or numbers.
 - Some objects are connected to external systems; you read them the same way. A read may fail (the external system is down) — if a tool returns an error, say so plainly, don't fabricate.
-- You can only READ in this version. If the user asks you to create, change, or delete something, say you can't do that yet.
+- To change data you use the `propose_*` tools (when available). These do NOT make the change — they prepare it for the user to approve. After proposing, tell the user you've prepared it for their approval; NEVER claim it's done. If you have no propose_* tool for what the user wants, say you can't do that.
+- Only act within your tools. If the user asks for something none of your tools cover, say so plainly.
 - Reply in the same language as the user. Keep answers short and concrete.
 PROMPT;
     }
