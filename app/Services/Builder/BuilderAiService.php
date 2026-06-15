@@ -3,7 +3,9 @@
 namespace App\Services\Builder;
 
 use App\Ai\BuilderAgent;
+use App\Ai\Tools\Builder\CreateIntegrationTool;
 use App\Ai\Tools\Builder\DeleteBlockByIdTool;
+use App\Ai\Tools\Builder\DiscoverIntegrationTool;
 use App\Ai\Tools\Builder\InspectRecordsTool;
 use App\Ai\Tools\Builder\ListAvailableActionsTool;
 use App\Ai\Tools\Builder\ListAvailableComponentsTool;
@@ -14,6 +16,7 @@ use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
 use App\Ai\Tools\Builder\SeedRecordsTool;
 use App\Ai\Tools\Builder\SimulateQueryTool;
+use App\Ai\Tools\Builder\TestIntegrationConnectionTool;
 use App\Ai\Tools\Builder\ValidateManifestTool;
 use App\Events\Builder\BuilderStreamChunk;
 use App\Events\Builder\BuilderStreamComplete;
@@ -25,6 +28,7 @@ use App\Models\BuilderMessage;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
+use App\Services\Builder\Integrations\IntegrationAuthoring;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
@@ -77,6 +81,7 @@ class BuilderAiService
         private RecordWriteService $writer,
         private TenantStorage $tenantStorage,
         private AiDefaults $aiDefaults,
+        private IntegrationAuthoring $integrationAuthoring,
     ) {}
 
     public function startConversation(App $app, User $user): BuilderConversation
@@ -130,6 +135,9 @@ class BuilderAiService
             $proposeTool,
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
+            new DiscoverIntegrationTool($this->integrationAuthoring),
+            new CreateIntegrationTool($this->integrationAuthoring, $conversation->user),
+            new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
         ];
 
         $history = $this->buildHistory($conversation);
@@ -238,6 +246,9 @@ class BuilderAiService
             $proposeTool,
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
+            new DiscoverIntegrationTool($this->integrationAuthoring),
+            new CreateIntegrationTool($this->integrationAuthoring, $conversation->user),
+            new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
         ];
 
         // History excludes the placeholder we're about to fill. reorder()
@@ -706,6 +717,14 @@ Visual review (when the user attached a screenshot):
 28b. When applying a visual fix, prefer the smallest patch that addresses the symptom. Don't pile on cosmetic tweaks the user didn't ask about — a screenshot of "buttons look wrong" gets a button fix, not a wholesale layout rewrite.
 28c. **HARD SCOPE LIMIT for visual review**: only modify what's ALREADY in the manifest. NEVER add new objects, new fields, new pages, new modals, new workflows or new features that the user didn't already ask for in a prior turn. If the screenshot shows a "thin" or "incomplete" page (e.g. only a heading, or a page with no form yet), that's NOT a bug — it just means the user hasn't asked for those parts yet. Ask the user what they want next; do not assume. The 'describe = fix' rule (28a) applies to BUGS in existing structure, not to features you imagine should be there. If in doubt, treat visual review as read-only and ASK before proposing additions.
 29. Lean on the catalog tools (read_manifest, simulate_query, inspect_records) BEFORE proposing visual fixes — a broken-looking chart might be because the underlying data is wrong, not the block config.
+
+Connecting external systems (integrations):
+29a. When the user needs the app to talk to an external system ("conéctate a HubSpot", "necesito datos de Stripe", "usa nuestra API de X"), you can set up the connection in this conversation:
+  - Call `discover_integration` with the API's URL to auto-detect OAuth2. If it returns discoverable:true, pass its `cache_key` to `create_integration`. If discoverable:false, ask the user for the base URL and the auth kind (api_key / bearer) and call `create_integration` directly.
+  - `create_integration` makes a DRAFT connection — it is NOT usable until the user authorizes it (OAuth consent, or entering a secret in a secure field). Tell the user, in their language, that they need to authorize it.
+  - NEVER ask the user to paste a secret/token/password into the chat, and NEVER put secrets in tool arguments. Secrets are captured through a secure field, never through you.
+  - After authorization, call `test_connection` (with a lightweight test_path when you know one) and only then report the connection as working. If the test fails, say so plainly — do not claim it works.
+29b. Creating a connection does NOT yet make the app use it; that is a separate capability. Set up and verify the connection first.
 
 Completion & honesty (read before ending any turn):
 30. You build apps ONLY from the catalogs: the block types, field types, actions, triggers, workflow steps and expression functions exposed by the list_available_* tools. If the user asks for something NONE of these can express, you CANNOT build it — do not fake it with decorative UI.

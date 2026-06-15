@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Builder\BuilderAiService;
+use App\Services\Builder\Integrations\IntegrationAuthoring;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
@@ -66,6 +67,7 @@ beforeEach(function () {
         app(RecordWriteService::class),
         app(TenantStorage::class),
         app(AiDefaults::class),
+        app(IntegrationAuthoring::class),
     );
 });
 
