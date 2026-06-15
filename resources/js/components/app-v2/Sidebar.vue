@@ -43,6 +43,7 @@ import {
     MessagesSquare,
     Plug,
     Shield,
+    Wallet,
     Wrench,
 } from '@lucide/vue';
 import type { Component } from 'vue';
@@ -172,6 +173,13 @@ const sections = computed<NavSection[]>(() => [
                 href: AiProviderController.index().url,
                 icon: BrainCircuit,
                 match: (u) => u.startsWith('/system/ai-providers'),
+            },
+            {
+                key: 'ai-spend',
+                label: t('app_v2.nav.ai_spend'),
+                href: '/system/ai-spend',
+                icon: Wallet,
+                match: (u) => u.startsWith('/system/ai-spend'),
             },
             {
                 key: 'cloud-providers',

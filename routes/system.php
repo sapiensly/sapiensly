@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AiProviderController;
+use App\Http\Controllers\AiSpendController;
 use App\Http\Controllers\CloudProviderController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\IntegrationEnvironmentController;
@@ -13,6 +14,8 @@ Route::middleware([
     'auth',
     'verified',
 ])->prefix('system')->group(function () {
+    Route::get('ai-spend', [AiSpendController::class, 'index'])->name('system.ai-spend');
+
     Route::resource('ai-providers', AiProviderController::class)
         ->except(['show'])
         ->names([

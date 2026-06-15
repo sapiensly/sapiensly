@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
 use App\Services\Ai\AiDefaults;
+use App\Services\Ai\AiUsageReport;
 use App\Services\AiProviderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -87,15 +88,16 @@ class AdminAiController extends Controller
         ]);
     }
 
-    public function usage(): Response
+    public function usage(Request $request, AiUsageReport $report): Response
     {
-        // Real usage aggregation lands once an `ai_usage` table exists;
-        // for now the page renders an empty-state note.
+        $days = (int) ($request->integer('days') ?: 30);
+        if (! in_array($days, [7, 30, 90], true)) {
+            $days = 30;
+        }
+
         return Inertia::render('admin/Ai/Usage', [
-            'range' => null,
-            'totals' => null,
-            'series' => null,
-            'byDriver' => null,
+            'days' => $days,
+            'report' => $report->platformWide($days),
         ]);
     }
 
