@@ -25,6 +25,15 @@ return new class extends Migration
 
         foreach (Schemas::tenantTables() as $table) {
             $qualified = Schemas::qualify($table);
+
+            // Tolerate tenant tables introduced AFTER this foundation migration
+            // (created + keyed + protected by their own later migration, e.g.
+            // move_runtime_agent_to_tenant): skip any that don't exist yet so a
+            // fresh `migrate` doesn't fail on a not-yet-created table.
+            if (DB::connection($this->connection)->scalar('select to_regclass(?)', [$qualified]) === null) {
+                continue;
+            }
+
             $index = $table.'_tenant_key_idx';
 
             DB::statement("ALTER TABLE {$qualified} ADD COLUMN IF NOT EXISTS organization_id varchar(255)");

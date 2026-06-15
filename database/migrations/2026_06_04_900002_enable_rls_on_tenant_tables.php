@@ -40,6 +40,13 @@ return new class extends Migration
         foreach (Schemas::tenantTables() as $table) {
             $qualified = Schemas::qualify($table);
 
+            // Skip tenant tables introduced after this foundation migration —
+            // their own later migration enables RLS for them (see
+            // add_tenant_keys for the rationale).
+            if (DB::connection($this->connection)->scalar('select to_regclass(?)', [$qualified]) === null) {
+                continue;
+            }
+
             DB::statement("ALTER TABLE {$qualified} ENABLE ROW LEVEL SECURITY");
             DB::statement('DROP POLICY IF EXISTS '.self::POLICY." ON {$qualified}");
             DB::statement(

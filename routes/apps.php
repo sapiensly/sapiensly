@@ -4,6 +4,7 @@ use App\Http\Controllers\AppActionController;
 use App\Http\Controllers\AppBuilderController;
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\AppFileController;
+use App\Http\Controllers\AppRuntimeAgentController;
 use App\Http\Controllers\AppRuntimeController;
 use App\Http\Controllers\AppWorkflowController;
 use Illuminate\Support\Facades\Route;
@@ -57,6 +58,19 @@ Route::middleware([
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->middleware('throttle:runtime-actions')
         ->name('apps.runtime.actions');
+
+    // Runtime agent (power #3): end-users converse with the app's embedded
+    // agent, which reads the app's data through the auto-derived toolset and
+    // streams its reply over Reverb. Each message enqueues a paid Claude job,
+    // so it shares the runtime-actions throttle.
+    Route::post('/r/{app_slug}/agent/conversations', [AppRuntimeAgentController::class, 'startConversation'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->name('apps.runtime.agent.conversations');
+
+    Route::post('/r/{app_slug}/agent/messages', [AppRuntimeAgentController::class, 'sendMessage'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:runtime-actions')
+        ->name('apps.runtime.agent.messages');
 
     // File upload + serve for file fields in BlockForm. Uploads go via POST
     // and return a {file_id, url, ...} JSON; the GET endpoint streams the

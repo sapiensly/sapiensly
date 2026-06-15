@@ -40,6 +40,13 @@ return new class extends Migration
 
         foreach (Schemas::tenantTables() as $table) {
             $qualified = Schemas::qualify($table);
+
+            // Skip tenant tables introduced after this foundation migration —
+            // their own later migration installs the trigger for them.
+            if (DB::connection($this->connection)->scalar('select to_regclass(?)', [$qualified]) === null) {
+                continue;
+            }
+
             DB::statement("DROP TRIGGER IF EXISTS fill_tenant_key ON {$qualified}");
             DB::statement("CREATE TRIGGER fill_tenant_key BEFORE INSERT ON {$qualified} FOR EACH ROW EXECUTE FUNCTION tenant.fill_tenant_key()");
         }

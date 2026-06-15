@@ -5,6 +5,7 @@ use App\Models\Chat;
 use App\Models\Conversation;
 use App\Models\Debate;
 use App\Models\KnowledgeBase;
+use App\Models\RuntimeAgentConversation;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Cache;
 
@@ -27,6 +28,14 @@ Broadcast::channel('chat.conversation.{chatId}', function ($user, string $chatId
     $chat = Chat::find($chatId);
 
     return $chat && $chat->user_id === $user->id;
+});
+
+// Runtime agent stream (power #3). Each built-app agent conversation is private
+// to the end-user who opened it.
+Broadcast::channel('runtime.agent.conversation.{conversationId}', function ($user, string $conversationId) {
+    $conv = RuntimeAgentConversation::find($conversationId);
+
+    return $conv && $conv->user_id === $user->id;
 });
 
 // IA Debate stream. Each debate is private to the user who started it.

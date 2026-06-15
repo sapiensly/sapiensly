@@ -67,6 +67,9 @@ final class Schemas
         'builder_messages',
         'workflow_runs',
         'workflow_step_runs',
+        // Runtime agent (power #3)
+        'runtime_agent_conversations',
+        'runtime_agent_messages',
         // Debates
         'debates',
         'debate_participants',
