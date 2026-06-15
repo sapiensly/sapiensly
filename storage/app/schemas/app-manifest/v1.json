@@ -22,9 +22,42 @@
         "navigation": { "$ref": "#/$defs/navigation" },
         "workflows": { "type": "array", "items": { "$ref": "#/$defs/workflow" } },
         "permissions": { "$ref": "#/$defs/permissions" },
-        "settings": { "$ref": "#/$defs/settings" }
+        "settings": { "$ref": "#/$defs/settings" },
+        "agent": { "$ref": "#/$defs/agent" }
     },
     "$defs": {
+        "agent": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Optional embedded runtime agent (builder power #3). End-users of the app instruct it; its toolset is auto-derived from the capabilities granted here. Reads run live; every write is propose-don't-mutate (gated, slice 2). Absent ⇒ no agent.",
+            "properties": {
+                "enabled": { "type": "boolean", "description": "Whether the runtime agent is served for this app." },
+                "name": { "type": "string", "maxLength": 100, "description": "Display name of the assistant." },
+                "instructions": { "type": "string", "maxLength": 5000, "description": "Runtime system prompt — how the assistant should behave." },
+                "capabilities": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Which manifest capabilities the agent may use. Absent grant ⇒ none (fail-closed). The agent can never exceed what is granted here.",
+                    "properties": {
+                        "read": {
+                            "description": "Objects the agent may read: \"all\" or an explicit list of object ids.",
+                            "oneOf": [
+                                { "const": "all" },
+                                { "type": "array", "items": { "$ref": "#/$defs/id" } }
+                            ]
+                        },
+                        "write": {
+                            "description": "Objects the agent may PROPOSE writes against (executed only via the gate, slice 2): \"all\" or an explicit list. Empty ⇒ read-only agent (safest default).",
+                            "oneOf": [
+                                { "const": "all" },
+                                { "type": "array", "items": { "$ref": "#/$defs/id" } }
+                            ]
+                        }
+                    }
+                },
+                "autonomy": { "enum": ["propose", "safe"], "description": "Trust level. \"propose\" (default): every write is human-approved. \"safe\": accepted now but still gated until the autonomy engine ships." }
+            }
+        },
         "id": {
             "type": "string",
             "pattern": "^([a-z]{2,5}_[a-z0-9_]{8,60}|sys_[a-z_]{1,40})$",

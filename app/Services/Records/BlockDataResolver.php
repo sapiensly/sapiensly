@@ -304,6 +304,22 @@ class BlockDataResolver
     }
 
     /**
+     * Source-agnostic row fetch for a data-source query — the same routing the
+     * renderer uses, exposed for callers that need rows directly (e.g. the
+     * runtime agent's read tools). Returns the unified {id, data} shape for both
+     * internal records and connected objects.
+     *
+     * @param  array<string, mixed>  $dataSource
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return list<array{id: mixed, data: array<string, mixed>}>
+     */
+    public function queryObject(App $app, array $dataSource, array $manifest, array $context = []): array
+    {
+        return $this->queryRows($app, $dataSource, $manifest, $context);
+    }
+
+    /**
      * Fetch a data-source's rows, routing to the external system for a connected
      * object (source.type === 'connected') or the internal records store
      * otherwise. Both paths return the same {id, data} row shape, so the renderer
