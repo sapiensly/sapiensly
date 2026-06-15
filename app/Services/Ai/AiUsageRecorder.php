@@ -1,0 +1,97 @@
+<?php
+
+namespace App\Services\Ai;
+
+use App\Models\AiCatalogModel;
+use App\Models\AiUsageEvent;
+use App\Models\User;
+use App\Services\AiProviderService;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Laravel\Ai\Responses\Data\Usage;
+
+/**
+ * Records one AI model call into ai_usage_events: tokens + computed cost, the
+ * module that made the call, and whether it ran on the org's OWN provider key
+ * (`own`) or a platform/system key (`system`). The single seam every AI call
+ * site funnels usage through. Best-effort: it must NEVER break the user-facing
+ * call, so all failures are swallowed + logged.
+ */
+class AiUsageRecorder
+{
+    private const DRIVER_MAP_TTL = 300;
+
+    public function __construct(
+        private readonly AiPricing $pricing,
+        private readonly AiProviderService $providers,
+    ) {}
+
+    public function record(
+        string $module,
+        string $model,
+        ?User $user,
+        ?string $organizationId,
+        ?Usage $usage,
+        string $status = 'success',
+        bool $estimated = false,
+    ): void {
+        try {
+            $usage ??= new Usage;
+            $driver = $this->driverFor($model);
+
+            AiUsageEvent::create([
+                'organization_id' => $organizationId ?? $user?->organization_id,
+                'user_id' => $user?->id,
+                'module' => $module,
+                'driver' => $driver,
+                'model' => $model,
+                'source' => $this->sourceFor($driver, $user),
+                'input_tokens' => $usage->promptTokens,
+                'output_tokens' => $usage->completionTokens,
+                'cache_read_tokens' => $usage->cacheReadInputTokens,
+                'cache_write_tokens' => $usage->cacheWriteInputTokens,
+                'reasoning_tokens' => $usage->reasoningTokens,
+                'cost' => $this->pricing->costFor($model, $usage),
+                'estimated' => $estimated,
+                'status' => $status,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('AI usage recording failed (continuing)', [
+                'module' => $module,
+                'model' => $model,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * "own" when the acting user's context has its own active provider for the
+     * model's driver (BYOK — they pay the provider), else "system" (platform key).
+     * Mirrors the source tag in AiProviderService::getEnabledChatModels.
+     */
+    private function sourceFor(string $driver, ?User $user): string
+    {
+        if ($user === null) {
+            return 'system';
+        }
+
+        try {
+            $ownDrivers = $this->providers->getProvidersForContext($user)->pluck('driver')->all();
+
+            return in_array($driver, $ownDrivers, true) ? 'own' : 'system';
+        } catch (\Throwable) {
+            return 'system';
+        }
+    }
+
+    private function driverFor(string $model): string
+    {
+        $map = Cache::remember('ai_model_driver_map', self::DRIVER_MAP_TTL, fn (): array => AiCatalogModel::query()
+            ->get(['model_id', 'driver'])
+            ->keyBy('model_id')
+            ->map(fn (AiCatalogModel $m) => $m->driver)
+            ->all());
+
+        return $map[$model] ?? 'unknown';
+    }
+}

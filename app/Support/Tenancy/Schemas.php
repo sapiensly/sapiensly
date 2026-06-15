@@ -70,6 +70,9 @@ final class Schemas
         // Runtime agent (power #3)
         'runtime_agent_conversations',
         'runtime_agent_messages',
+        // AI spend tracking (org-level usage + cost)
+        'ai_usage_events',
+        'ai_usage_daily',
         // Debates
         'debates',
         'debate_participants',
