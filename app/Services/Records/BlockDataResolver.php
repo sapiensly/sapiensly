@@ -3,8 +3,8 @@
 namespace App\Services\Records;
 
 use App\Models\App;
-use App\Models\Integration;
 use App\Models\Record;
+use App\Services\Connected\ConnectedIntegrationResolver;
 use App\Services\Connected\ConnectedObjectReader;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -27,6 +27,7 @@ class BlockDataResolver
         private RecordQueryService $records,
         private ExpressionResolver $expressions,
         private ConnectedObjectReader $connected,
+        private ConnectedIntegrationResolver $integrations,
     ) {}
 
     /**
@@ -319,7 +320,7 @@ class BlockDataResolver
         $object = $this->findObject($manifest, $dataSource['object_id'] ?? null);
 
         if ($object !== null && (($object['source']['type'] ?? 'internal') === 'connected')) {
-            return $this->connectedRows($app, $object);
+            return $this->connectedRows($app, $object, $dataSource);
         }
 
         return $this->mapRows($this->records->query($app, $dataSource, $manifest, $context));
@@ -328,19 +329,21 @@ class BlockDataResolver
     /**
      * Read a connected object's rows live from its external system (passthrough)
      * and normalize them to the {id, data} shape, using the external id as the
-     * row identity.
+     * row identity. The block's data-source query (filter/sort/pagination) is
+     * pushed down to the external API where the source declares the mapping.
      *
      * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $dataSource
      * @return list<array{id: mixed, data: array<string, mixed>}>
      */
-    private function connectedRows(App $app, array $object): array
+    private function connectedRows(App $app, array $object, array $dataSource): array
     {
-        $integration = $this->resolveIntegration($app, $object['source']['integration_id'] ?? null);
+        $integration = $this->integrations->resolve($app, $object['source']['integration_id'] ?? null);
         if ($integration === null) {
             throw new RuntimeException('This connected object needs an authorized connection.');
         }
 
-        $result = $this->connected->list($object, $integration);
+        $result = $this->connected->list($object, $integration, $dataSource);
         if (! ($result['ok'] ?? false)) {
             throw new RuntimeException($result['error'] ?? 'Could not read from the connected system.');
         }
@@ -351,27 +354,6 @@ class BlockDataResolver
 
             return ['id' => $id, 'data' => $row];
         }, $result['rows']);
-    }
-
-    /**
-     * Resolve the integration backing a connected object, scoped to the app's
-     * tenant (mirrors HasVisibility::forAccountContext without needing the User).
-     */
-    private function resolveIntegration(App $app, ?string $integrationId): ?Integration
-    {
-        if ($integrationId === null) {
-            return null;
-        }
-
-        $query = Integration::query()->where('id', $integrationId);
-
-        if ($app->organization_id !== null) {
-            $query->where('organization_id', $app->organization_id);
-        } else {
-            $query->whereNull('organization_id')->where('user_id', $app->user_id);
-        }
-
-        return $query->first();
     }
 
     /**

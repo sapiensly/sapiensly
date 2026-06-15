@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\App;
 use App\Models\Record;
+use App\Services\Connected\ConnectedIntegrationResolver;
+use App\Services\Connected\ConnectedObjectWriter;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordValidationException;
@@ -35,6 +37,8 @@ class AppActionController extends Controller
         private RecordWriteService $writes,
         private WorkflowEngine $workflows,
         private ExpressionResolver $expressions,
+        private ConnectedObjectWriter $connectedWrites,
+        private ConnectedIntegrationResolver $integrations,
     ) {}
 
     public function __invoke(Request $request, string $appSlug): JsonResponse
@@ -128,6 +132,13 @@ class AppActionController extends Controller
     {
         $resolvedValues = $this->resolveValues($action['values'] ?? [], $context);
 
+        if (in_array($action['type'], ['create_record', 'update_record', 'delete_record'], true)) {
+            $object = $this->findObject($manifest, $action['object_id']);
+            if (($object['source']['type'] ?? 'internal') === 'connected') {
+                return $this->executeConnectedAction($app, $object, $action, $context, $resolvedValues);
+            }
+        }
+
         if ($action['type'] === 'create_record') {
             $record = $this->writes->create($app, $manifest, $action['object_id'], $resolvedValues, $user);
 
@@ -180,6 +191,56 @@ class AppActionController extends Controller
         }
 
         throw new \LogicException("executeServerAction called with non-server type '{$action['type']}'.");
+    }
+
+    /**
+     * Run a record CRUD action against a connected object's external system
+     * (builder power #2 write path). The logged-in user is the actor, so this is
+     * a direct write. Create/update map to the source's operations; delete is not
+     * supported for connected objects (the source schema has no delete operation).
+     * A failure is raised so it lands in the response `errors`, never a false success.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $action
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $resolvedValues
+     * @return array<string, mixed>
+     */
+    private function executeConnectedAction(App $app, array $object, array $action, array $context, array $resolvedValues): array
+    {
+        $integration = $this->integrations->resolve($app, $object['source']['integration_id'] ?? null);
+        if ($integration === null) {
+            throw new \RuntimeException('This connected object needs an authorized connection.');
+        }
+
+        if ($action['type'] === 'create_record') {
+            $result = $this->connectedWrites->create($object, $integration, $resolvedValues);
+        } elseif ($action['type'] === 'update_record') {
+            $externalId = (string) $this->expressions->resolve($action['record_id_expression'], $context);
+            $result = $this->connectedWrites->update($object, $integration, $externalId, $resolvedValues);
+        } else {
+            throw new \RuntimeException('Deleting connected records is not supported.');
+        }
+
+        if (! ($result['ok'] ?? false)) {
+            throw new \RuntimeException($result['error'] ?? 'The connected system rejected the write.');
+        }
+
+        return ['record_id' => $result['id'] ?? null];
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>
+     */
+    private function findObject(array $manifest, string $objectId): array
+    {
+        foreach ($manifest['objects'] ?? [] as $object) {
+            if (($object['id'] ?? null) === $objectId) {
+                return $object;
+            }
+        }
+        throw new \RuntimeException("Object '{$objectId}' not found in manifest.");
     }
 
     /**

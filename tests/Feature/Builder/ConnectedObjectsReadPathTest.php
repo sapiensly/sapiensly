@@ -123,6 +123,52 @@ it('sample_endpoint returns the response shape for mapping', function () {
         ->and($out['row_keys'])->toContain('id', 'properties');
 });
 
+it('pushes filter/sort/pagination down to the declared external query params', function () {
+    Http::fake(['api.example.com/*' => Http::response(['results' => []], 200)]);
+
+    $object = connectedDealObject($this->integration->id);
+    $object['source']['operations']['list'] += [
+        'page_param' => 'after',
+        'page_size_param' => 'limit',
+        'sort_param' => 'sort',
+        'order_param' => 'order',
+        'filter_params' => [['field_id' => 'fld_namefield', 'param' => 'name']],
+    ];
+
+    app(ConnectedObjectReader::class)->list($object, $this->integration, [
+        'object_id' => 'obj_dealobject',
+        'limit' => 25,
+        'offset' => 50,
+        'sort' => [['field_id' => 'fld_amountfield', 'direction' => 'desc']],
+        'filter' => ['op' => 'eq', 'field_id' => 'fld_namefield', 'value' => 'Acme'],
+    ]);
+
+    Http::assertSent(function ($req) {
+        $q = [];
+        parse_str(parse_url($req->url(), PHP_URL_QUERY) ?? '', $q);
+
+        return ($q['limit'] ?? null) === '25'
+            && ($q['after'] ?? null) === '50'
+            && ($q['sort'] ?? null) === 'properties.amount'
+            && ($q['order'] ?? null) === 'desc'
+            && ($q['name'] ?? null) === 'Acme';
+    });
+});
+
+it('degrades gracefully when a query capability has no declared mapping', function () {
+    Http::fake(['api.example.com/*' => Http::response(['results' => []], 200)]);
+
+    // No page/sort/filter params declared on the list op → nothing is pushed down.
+    app(ConnectedObjectReader::class)->list(connectedDealObject($this->integration->id), $this->integration, [
+        'object_id' => 'obj_dealobject',
+        'limit' => 25,
+        'sort' => [['field_id' => 'fld_amountfield', 'direction' => 'asc']],
+        'filter' => ['op' => 'gt', 'field_id' => 'fld_amountfield', 'value' => 100],
+    ]);
+
+    Http::assertSent(fn ($req) => parse_url($req->url(), PHP_URL_QUERY) === null);
+});
+
 it('accepts a connected object in the manifest schema', function () {
     $manifest = [
         'schema_version' => '1.0.0',

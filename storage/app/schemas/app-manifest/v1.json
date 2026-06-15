@@ -131,7 +131,24 @@
                 "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
                 "path": { "type": "string", "description": "Path appended to the integration base URL; may template {id}." },
                 "collection_path": { "type": "string", "description": "Dot path to the row array in a list response (e.g. \"results\")." },
-                "page_param": { "type": "string", "description": "Query param name for pagination, when supported." }
+                "page_param": { "type": "string", "description": "Query param name for pagination, when supported." },
+                "page_mode": { "enum": ["offset", "page"], "description": "How page_param is expressed: a raw offset (default) or a 1-based page number derived from offset/limit." },
+                "page_size_param": { "type": "string", "description": "Query param name for the page size (the query's limit), when supported." },
+                "sort_param": { "type": "string", "description": "Query param name to sort by; its value is the sort field's external_path." },
+                "order_param": { "type": "string", "description": "Optional query param name for the sort direction (asc/desc)." },
+                "filter_params": {
+                    "type": "array",
+                    "description": "Pushes simple equality filters down to external query params. Non-equality conditions degrade gracefully (not pushed down).",
+                    "items": {
+                        "type": "object",
+                        "required": ["field_id", "param"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "field_id": { "$ref": "#/$defs/id" },
+                            "param": { "type": "string" }
+                        }
+                    }
+                }
             }
         },
 

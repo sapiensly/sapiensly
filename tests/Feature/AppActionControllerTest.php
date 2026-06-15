@@ -1,11 +1,13 @@
 <?php
 
 use App\Models\App;
+use App\Models\Integration;
 use App\Models\Record;
 use App\Models\User;
 use App\Models\WorkflowRun;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\InvalidManifestException;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 function ac_id(string $prefix): string
@@ -234,6 +236,64 @@ it('surfaces a failed workflow run as a server error', function () {
 
     expect($response->json('errors.0.message'))->not->toBeEmpty();
     expect(WorkflowRun::query()->where('app_id', $this->testApp->id)->where('status', 'failed')->count())->toBe(1);
+});
+
+it('routes a create_record action for a connected object to the external system', function () {
+    Http::fake(['api.example.com/*' => Http::response(['id' => 'd99'], 201)]);
+
+    $integration = Integration::factory()->forUser($this->user)->create([
+        'base_url' => 'https://api.example.com',
+        'auth_type' => 'bearer',
+        'auth_config' => ['token' => 'TKN'],
+    ]);
+
+    $objId = ac_id('obj');
+    $nameId = ac_id('fld');
+    $app = App::factory()->create(['user_id' => $this->user->id, 'slug' => 'connected_app', 'visibility' => 'private']);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id,
+        'slug' => 'connected_app',
+        'name' => 'Connected',
+        'version' => 1,
+        'objects' => [[
+            'id' => $objId,
+            'slug' => 'deals',
+            'name' => 'Deal',
+            'fields' => [['id' => $nameId, 'slug' => 'name', 'name' => 'Name', 'type' => 'string']],
+            'source' => [
+                'type' => 'connected',
+                'integration_id' => $integration->id,
+                'id_path' => 'id',
+                'operations' => [
+                    'list' => ['method' => 'GET', 'path' => '/deals'],
+                    'create' => ['method' => 'POST', 'path' => '/deals'],
+                ],
+                'field_map' => [['field_id' => $nameId, 'external_path' => 'properties.dealname']],
+            ],
+        ]],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => ac_id('rol'), 'slug' => 'admin', 'name' => 'Admin']]],
+    ], $this->user);
+
+    $response = $this->actingAs($this->user)->postJson('/r/connected_app/actions', [
+        'actions' => [[
+            'type' => 'create_record',
+            'object_id' => $objId,
+            'values' => ['name' => '{{form.name}}'],
+        ]],
+        'form' => ['name' => 'Acme'],
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('ok', true)
+        ->assertJsonPath('results.0.record_id', 'd99');
+
+    // Passthrough: the write hit the external system, not the internal store.
+    expect(Record::query()->where('app_id', $app->id)->count())->toBe(0);
+    Http::assertSent(fn ($req) => $req->method() === 'POST'
+        && str_contains($req->url(), 'api.example.com/deals')
+        && $req->data()['properties']['dealname'] === 'Acme');
 });
 
 it('hides apps the user cannot see', function () {

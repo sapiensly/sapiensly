@@ -1,12 +1,16 @@
 # Builder Power Contract — Connected Objects
 
-> **Status: READ PATH IMPLEMENTED.** The manifest `source` discriminator, the
-> `sample_endpoint` tool, `ConnectedObjectReader`, and the source-aware runtime branch in
-> `BlockDataResolver` ship — a table/list/chart over a connected object renders live external
-> rows (passthrough), with behavioral tests
-> (`tests/Feature/Builder/ConnectedObjectsReadPathTest.php`, `ConnectedObjectsRuntimeTest.php`).
-> **Deferred:** the **write path** (§8.2), mapping data-source filter/sort/pagination to external
-> query params, and the agent over connected objects.
+> **Status: READ + WRITE PATH IMPLEMENTED.** The manifest `source` discriminator, the
+> `sample_endpoint` tool, `ConnectedObjectReader`, the source-aware read branch in
+> `BlockDataResolver`, **`ConnectedObjectWriter` + the source-aware write branch in
+> `AppActionController` (§8.2)**, and **filter/sort/pagination pushdown to external query
+> params (§4)** all ship — a table/list/chart over a connected object renders live external
+> rows (passthrough) and a create/update from the app UI writes live to the external system,
+> with behavioral tests (`tests/Feature/Builder/ConnectedObjectsReadPathTest.php`,
+> `ConnectedObjectsRuntimeTest.php`, `ConnectedObjectsWritePathTest.php`, and the connected
+> branch in `tests/Feature/AppActionControllerTest.php`).
+> **Deferred:** the agent composing reads/writes over connected objects (a later capability on
+> top of the graph).
 >
 > Written before code (Rule 1).
 > **Altitude:** a *power of the App Builder* + a manifest capability + runtime
@@ -102,14 +106,24 @@ The sample call is the behavioral proof that the mapping is real before it ships
 The app runtime's record data layer becomes **source-aware**:
 
 - **Read path (first slice):** a table/detail over a connected object resolves rows
-  through `IntegrationRequestExecutor` (live external data), maps them via
-  `field_map`, and renders them like any object. Search / filter / sort / paginate
-  map to the external API's params where supported, and degrade gracefully where
-  not.
+  through the integration caller (live external data), maps them via
+  `field_map`, and renders them like any object. Filter / sort / paginate are
+  **pushed down** to the external API's query params **where the list operation
+  declares the param name** (`page_param`/`page_mode`, `page_size_param`,
+  `sort_param`/`order_param`, `filter_params`) — all manifest data, never per-provider
+  code. The sort field's external name reuses its `field_map` `external_path`; only
+  literal equality filters (incl. flat `and`) push down. A capability with no declared
+  mapping (a non-equality filter, an unmapped sort field) simply isn't pushed down —
+  it **degrades gracefully** (no-op), never an error.
 - **Write path (second slice):** create/update from the app UI go through the
-  integration. **The logged-in user is the actor** (they clicked save) → direct
-  write. An **agent** writing to a connected object goes through the
-  propose-don't-mutate gate (the capability-graph rule), not direct.
+  integration via `ConnectedObjectWriter` (the source-aware branch in
+  `AppActionController`). Values map back to the external body through `field_map`
+  (reverse of the read mapping); `readonly` entries are never written; `update`
+  templates `{id}` into the path. **The logged-in user is the actor** (they clicked
+  save) → direct write. **Delete is not supported** for connected objects (the source
+  schema has no delete operation). An **agent** writing to a connected object goes
+  through the propose-don't-mutate gate (the capability-graph rule), not direct — and
+  is deferred (§9).
 
 Reads carry the `remote / async / may-fail` mark: an external outage yields an
 error state in the UI, never a crash.
@@ -165,11 +179,11 @@ Tested with `Http::fake` over a fake integration:
 
 ## 8. Build order within power #2 (each shippable, contract-before-code)
 
-1. **Read path** — `sample_endpoint` tool + `source: connected` (read-only:
-   `list`/`read` only) + source-aware read runtime. *The app becomes a live view of
-   the system of record — huge value alone.*
-2. **Write path** — `create`/`update` operations + source-aware write runtime (UI =
-   user is actor; agent = gated).
+1. **Read path** ✅ — `sample_endpoint` tool + `source: connected` (read-only:
+   `list`/`read` only) + source-aware read runtime, plus filter/sort/pagination
+   pushdown. *The app becomes a live view of the system of record — huge value alone.*
+2. **Write path** ✅ — `create`/`update` operations + source-aware write runtime (UI =
+   user is actor; agent = gated). Delete is intentionally unsupported.
 
 ---
 
