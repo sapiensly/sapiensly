@@ -82,6 +82,12 @@ class AppRuntimeController extends Controller
                 // Objects ship to the client so block components can resolve
                 // field_id → name/type for header labels and value formatting.
                 'objects' => $manifest['objects'] ?? [],
+                // Only the surface the runtime chat panel needs: whether to show
+                // it and the assistant's display name. Instructions/capabilities
+                // stay server-side (the toolset is derived there).
+                'agent' => ($manifest['agent']['enabled'] ?? false) === true
+                    ? ['enabled' => true, 'name' => $manifest['agent']['name'] ?? 'Assistant']
+                    : null,
             ],
             'page' => $page,
             'blockData' => $blockData,

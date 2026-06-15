@@ -4,6 +4,7 @@ import { Head } from '@inertiajs/vue3';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteFooter from '@/runtime/SiteFooter.vue';
+import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import { useScrollReveal } from '@/runtime/useReveal';
 import type { RuntimePageProps } from '@/runtime/types/manifest';
@@ -66,5 +67,12 @@ useScrollReveal(sectionsEl);
                 <SiteFooter :footer="footer" :brand-name="brand.name" />
             </div>
         </div>
+
+        <RuntimeChatPanel
+            v-if="manifest.agent?.enabled"
+            :app-slug="app.slug"
+            :agent-name="manifest.agent.name"
+            :theme="theme"
+        />
     </AppLayoutV2>
 </template>

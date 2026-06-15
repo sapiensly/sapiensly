@@ -172,6 +172,7 @@ export interface RuntimePageProps {
         pages: PageSummary[];
         settings: { default_currency?: string; default_locale?: string; theme?: RuntimeTheme };
         objects: ObjectDef[];
+        agent?: { enabled: boolean; name?: string } | null;
     };
     page: PageDef;
     blockData: BlockData;
