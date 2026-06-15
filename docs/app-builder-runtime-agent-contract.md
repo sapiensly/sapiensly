@@ -10,12 +10,13 @@
 > derivation/scoping, reads (internal + connected), the load-bearing propose-doesn't-mutate,
 > approve-executes, and dismiss.
 > **Plus the autonomy engine (§5):** `manifest.agent.safe` per-capability marks +
-> `autonomy: "safe"` let a safe-marked **internal create/update** auto-execute without
-> approval (`AutonomyPolicy` + `RuntimeAgentService::finalizeProposals`), with four
-> baked-in safeguards — delete/run_workflow never auto, connected always gated, a failed
-> auto-run falls back to gated, every auto-run recorded (`auto_previews`). Default-deny.
-> **Deferred (non-goals, §10):** a finer per-workflow grant and the general capability
-> registry/compiler.
+> `autonomy: "safe"` let a safe-marked **internal create/update** — or an explicitly
+> safe-marked **workflow** — auto-execute without approval (`AutonomyPolicy` +
+> `RuntimeAgentService::finalizeProposals`), with baked-in safeguards — delete never
+> auto, connected always gated, a failed auto-run falls back to gated, every auto-run
+> recorded (`auto_previews`). Default-deny.
+> **Deferred (non-goals, §10):** the general capability registry/compiler/parity-lint
+> (wedge-first, until N justifies it) and cross-object transactional write-back.
 >
 > Written before code (Rule 1). This contract defined Power #3.
 >
@@ -172,12 +173,15 @@ agent-wide (a blanket "autonomous agent" is the anti-ICP blast radius, vision §
 
 - **Master switch.** `manifest.agent.autonomy` is `"propose"` (default — everything
   gated) or `"safe"` (honor the marks below). In `"propose"` the engine is fully off.
-- **Per-capability marks.** `manifest.agent.safe = [{ object_id, actions: ["create"|"update"] }]`.
-  A proposed write auto-executes iff its `(object_id, action)` is listed. **Default-deny:**
-  anything unlisted stays gated.
-- **Four non-negotiable safeguards, baked in (no manifest can override):**
-  1. **delete / run_workflow never auto-execute** — enforced by the policy *and* the
-     schema (the `actions` enum is `create`/`update` only).
+- **Per-capability marks.** `manifest.agent.safe` holds two entry shapes: an object mark
+  `{ object_id, actions: ["create"|"update"] }` (a record create/update auto-executes iff
+  its `(object_id, action)` is listed) and a workflow mark `{ workflow_id }` (a
+  `run_workflow` auto-executes iff that workflow is listed). **Default-deny:** anything
+  unlisted stays gated.
+- **Non-negotiable safeguards, baked in (no manifest can override):**
+  1. **delete never auto-executes** — enforced by the policy *and* the schema (the object
+     `actions` enum is `create`/`update` only). A workflow auto-runs only when its
+     `workflow_id` is explicitly listed.
   2. **Connected (external system) writes are always gated** — only internal records,
      which live under RLS and are reversible, can auto-run.
   3. **A failed auto-run falls back to gated** — it is never retried silently; it
@@ -260,8 +264,6 @@ Tested with `Http::fake` for connected sources and seeded internal records:
 
 ## 10. Non-goals (this power)
 
-- **A finer per-workflow autonomy grant** — the autonomy engine (§5) covers internal
-  create/update; run_workflow stays gated by design until a per-workflow safe mark exists.
 - **A general capability registry / compiler / parity lint** — emerges when N justifies
   it (vision §11.4); discipline enforces parity at small N.
 - **Cross-object transactional write-back** — when one proposal spans internal records

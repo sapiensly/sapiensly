@@ -10,12 +10,14 @@ namespace App\Services\Runtime;
  * that no manifest can override:
  *
  *   - the agent's master switch must be autonomy="safe";
- *   - only create/update auto-execute — delete and run_workflow NEVER do;
- *   - only INTERNAL objects auto-execute — connected (external system) writes
- *     are always gated;
- *   - the (object, action) pair must be listed in manifest.agent.safe.
+ *   - delete is NEVER auto-executable;
+ *   - record create/update auto-execute only on an INTERNAL object explicitly
+ *     listed in manifest.agent.safe with that action — connected (external
+ *     system) writes are always gated;
+ *   - run_workflow auto-executes only when that workflow_id is explicitly listed
+ *     in manifest.agent.safe.
  *
- * Anything not matching all of the above stays gated (propose-don't-mutate).
+ * Anything not matching stays gated (propose-don't-mutate).
  */
 class AutonomyPolicy
 {
@@ -30,8 +32,17 @@ class AutonomyPolicy
             return false;
         }
 
-        // delete and run_workflow are never auto-executable (hard rule).
-        $short = match ($action['type'] ?? '') {
+        $safe = $agent['safe'] ?? [];
+        $type = $action['type'] ?? '';
+
+        if ($type === 'run_workflow') {
+            $workflowId = $action['workflow_id'] ?? null;
+
+            return $workflowId !== null && $this->workflowIsSafe($safe, $workflowId);
+        }
+
+        // delete is never auto-executable (hard rule); only create/update qualify.
+        $short = match ($type) {
             'create_record' => 'create',
             'update_record' => 'update',
             default => null,
@@ -51,10 +62,24 @@ class AutonomyPolicy
             return false;
         }
 
-        foreach ($agent['safe'] ?? [] as $entry) {
+        foreach ($safe as $entry) {
             if (is_array($entry)
                 && ($entry['object_id'] ?? null) === $objectId
                 && in_array($short, $entry['actions'] ?? [], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, mixed>  $safe
+     */
+    private function workflowIsSafe(array $safe, string $workflowId): bool
+    {
+        foreach ($safe as $entry) {
+            if (is_array($entry) && ($entry['workflow_id'] ?? null) === $workflowId) {
                 return true;
             }
         }

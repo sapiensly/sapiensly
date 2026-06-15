@@ -3,6 +3,8 @@
 use App\Models\App;
 use App\Models\Record;
 use App\Models\User;
+use App\Models\WorkflowRun;
+use App\Services\Manifest\ManifestValidator;
 use App\Services\Runtime\AutonomyPolicy;
 use App\Services\Runtime\ProposedActions;
 use App\Services\Runtime\RuntimeAgentService;
@@ -10,10 +12,10 @@ use Illuminate\Support\Facades\Http;
 
 /**
  * Builder power #3 — the autonomy engine for the `safe` mark. A safe-marked
- * internal create/update auto-executes; everything else stays gated. The four
- * safeguards: delete/run_workflow never auto, connected always gated, a failed
- * auto-run falls back to gated, and every auto-run is recorded (auto_previews).
- * See docs/app-builder-runtime-agent-contract.md §5.
+ * internal create/update — or an explicitly safe-marked workflow — auto-executes;
+ * everything else stays gated. Safeguards: delete never auto, connected always
+ * gated, a failed auto-run falls back to gated, every auto-run recorded
+ * (auto_previews). See docs/app-builder-runtime-agent-contract.md §5.
  */
 function au_object(string $id, array $extra = [], bool $required = false): array
 {
@@ -80,6 +82,43 @@ it('never auto-executes a connected object (always gated)', function () {
     expect(app(AutonomyPolicy::class)->isAutoExecutable($manifest, au_create('obj_task')))->toBeFalse();
 });
 
+it('auto-executes run_workflow only when that workflow is explicitly safe', function () {
+    $policy = app(AutonomyPolicy::class);
+    $manifest = au_manifest('safe', [['workflow_id' => 'wkf_auto']], [au_object('obj_task')]);
+
+    expect($policy->isAutoExecutable($manifest, ['type' => 'run_workflow', 'workflow_id' => 'wkf_auto']))->toBeTrue()
+        // a different workflow is not granted → gated
+        ->and($policy->isAutoExecutable($manifest, ['type' => 'run_workflow', 'workflow_id' => 'wkf_other']))->toBeFalse();
+
+    // propose mode → never, even if listed
+    $proposeManifest = au_manifest('propose', [['workflow_id' => 'wkf_auto']], [au_object('obj_task')]);
+    expect($policy->isAutoExecutable($proposeManifest, ['type' => 'run_workflow', 'workflow_id' => 'wkf_auto']))->toBeFalse();
+});
+
+it('accepts object and workflow safe entries in the manifest schema', function () {
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_autonomyschema',
+        'slug' => 'a',
+        'name' => 'A',
+        'version' => 1,
+        'objects' => [au_object('obj_taskobject')],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_adminrole', 'slug' => 'admin', 'name' => 'Admin']]],
+        'agent' => [
+            'enabled' => true,
+            'capabilities' => ['read' => 'all', 'write' => 'all'],
+            'autonomy' => 'safe',
+            'safe' => [
+                ['object_id' => 'obj_taskobject', 'actions' => ['create', 'update']],
+                ['workflow_id' => 'wkf_autoflow'],
+            ],
+        ],
+    ];
+
+    expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+});
+
 // --- finalizeProposals (the engine) ---
 
 it('auto-executes a safe internal create and records it visibly', function () {
@@ -139,6 +178,27 @@ it('leaves everything gated in propose mode', function () {
     expect($outcome['message_type'])->toBe('action_proposal')
         ->and($outcome['action_payload']['status'])->toBe('pending');
     expect(Record::query()->where('app_id', $this->autoApp->id)->count())->toBe(0);
+});
+
+it('auto-runs a safe-marked workflow', function () {
+    $workflow = [
+        'id' => 'wkf_auto',
+        'slug' => 'auto_wf',
+        'name' => 'Auto WF',
+        'trigger' => ['type' => 'manual'],
+        'steps' => [['id' => 'stp_create', 'type' => 'record.create', 'object_id' => 'obj_task', 'values' => ['title' => 'from-wf']]],
+    ];
+    $manifest = au_manifest('safe', [['workflow_id' => 'wkf_auto']], [au_object('obj_task')]);
+    $manifest['workflows'] = [$workflow];
+
+    $proposals = new ProposedActions;
+    $proposals->add(['type' => 'run_workflow', 'workflow_id' => 'wkf_auto', 'input' => []], 'Run workflow Auto WF');
+
+    $outcome = app(RuntimeAgentService::class)->finalizeProposals($this->autoApp, $manifest, $proposals, $this->user);
+
+    expect($outcome['message_type'])->toBe('action_result')
+        ->and($outcome['action_payload']['status'])->toBe('executed');
+    expect(WorkflowRun::query()->where('app_id', $this->autoApp->id)->where('status', '!=', 'failed')->count())->toBe(1);
 });
 
 it('does not auto-execute a connected write even when safe', function () {

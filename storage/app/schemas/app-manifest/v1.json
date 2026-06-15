@@ -58,19 +58,31 @@
                 "autonomy": { "enum": ["propose", "safe"], "description": "Master switch. \"propose\" (default): every write is human-approved. \"safe\": the autonomy engine honors the per-capability `safe` marks below — only those actions auto-execute; everything else stays gated (fail-closed)." },
                 "safe": {
                     "type": "array",
-                    "description": "Per-capability auto-execute marks (honored only when autonomy=\"safe\"). Each entry lets the agent run create/update on one object WITHOUT approval. Hard limits: only internal objects auto-execute (connected writes are always gated), and only create/update (delete and run_workflow are never auto-executable — note the actions enum).",
+                    "description": "Per-capability auto-execute marks (honored only when autonomy=\"safe\"). An object entry lets the agent run create/update on that object WITHOUT approval; a workflow entry lets it run that workflow without approval. Hard limits: only internal objects auto-execute (connected writes are always gated), only create/update for objects (delete is never auto-executable — note the actions enum), and a workflow auto-runs only when explicitly listed.",
                     "items": {
-                        "type": "object",
-                        "required": ["object_id", "actions"],
-                        "additionalProperties": false,
-                        "properties": {
-                            "object_id": { "$ref": "#/$defs/id" },
-                            "actions": {
-                                "type": "array",
-                                "minItems": 1,
-                                "items": { "enum": ["create", "update"] }
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "required": ["object_id", "actions"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "object_id": { "$ref": "#/$defs/id" },
+                                    "actions": {
+                                        "type": "array",
+                                        "minItems": 1,
+                                        "items": { "enum": ["create", "update"] }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "object",
+                                "required": ["workflow_id"],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "workflow_id": { "$ref": "#/$defs/id" }
+                                }
                             }
-                        }
+                        ]
                     }
                 }
             }
