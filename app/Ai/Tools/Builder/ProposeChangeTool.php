@@ -88,6 +88,12 @@ change_summary strings of every successful call with " · ".
   - {"op":"move"|"copy","from":"/x","path":"/y"}
   - {"op":"test","path":"/version","value":1}
 
+For arrays, `/-` APPENDS to the end and a numeric index INSERTS before that
+position (both keep the inserted value intact): `add /pages/0/blocks/0` puts a
+block first, `add /pages/0/blocks/2` puts it before the current third block.
+Use `move` to reorder, e.g. `{"op":"move","from":"/pages/0/blocks/3","path":"/pages/0/blocks/0"}`.
+There is no need to fall back to append-only — pick the index you want.
+
 `change_summary` is one short sentence explaining the change in plain language.
 
 Returns either `{ok: true, ...}` with the running op count, or

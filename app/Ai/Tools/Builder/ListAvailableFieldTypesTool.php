@@ -48,7 +48,7 @@ class ListAvailableFieldTypesTool implements Tool
 
         return json_encode([
             'field_types' => $catalog,
-            'common_props' => 'All fields must have: id (prefix `fld_` + 26 lowercase ULID chars), slug (^[a-z][a-z0-9_]*$), name, type. Optional: description, required, unique, indexed, readonly, hidden, help_text.',
+            'common_props' => 'All fields must have: id (prefix `fld_` then 8-60 chars of [a-z0-9_] — a lowercased ULID works but is not required), slug (^[a-z][a-z0-9_]*$), name, type. Optional: description, required, unique, indexed, readonly, hidden, help_text.',
             'system_fields' => [
                 'note' => 'Every object also has TWO virtual datetime fields you can reference without declaring them. Always prefer these over inventing a manual datetime field for "when was the record created/updated".',
                 'available' => [

@@ -122,7 +122,7 @@ CONNECTING EXTERNAL SYSTEMS (integrations):
 TXT,
 
         'example' => <<<'TXT'
-WORKED EXAMPLE — a COMPLETE valid "Mini CRM" manifest (this exact thing passes validation). The placeholder ids are valid; generate your own `<prefix>_<26-lowercase-ulid>` ids (prefix 2-5 lowercase letters, then ≥8 chars of [a-z0-9_]). Pattern-match this SHAPE instead of reasoning the schema from scratch. Note the EXACT keys that trip people up: `schema_version` is a string "1.0.0" (not a number); top level REQUIRES id, version and permissions; single_select options use `value`+`label` (NOT slug); a `heading` block uses `content` (not text); a `page` requires `path` (starts with "/"). There is no `email` or `text` field type — use `string`.
+WORKED EXAMPLE — a COMPLETE valid "Mini CRM" manifest (this exact thing passes validation). The placeholder ids are valid; generate your own `<prefix>_<token>` ids — a 2-5 lowercase-letter prefix, an underscore, then 8-60 chars of [a-z0-9_] (a lowercased ULID is one easy choice, but ANY opaque lowercase token in that range is accepted; it does NOT need to be exactly 26 chars or valid base32). Pattern-match this SHAPE instead of reasoning the schema from scratch. Note the EXACT keys that trip people up: `schema_version` is a string "1.0.0" (not a number); top level REQUIRES id, version and permissions; single_select options use `value`+`label` (NOT slug); a `heading` block uses `content` (not text); a `page` requires `path` (starts with "/"). There is no `email` or `text` field type — use `string`.
 
 {
   "schema_version": "1.0.0",
