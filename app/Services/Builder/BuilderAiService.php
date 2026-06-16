@@ -474,43 +474,30 @@ class BuilderAiService
                 'builder', $resolvedModel, $conversation->user, $app->organization_id, $stream->usage ?? null,
             );
 
-            $proposal = $proposeTool->lastProposal();
-            $appliedVersionId = null;
-            $finalStatus = 'none';
-
-            if ($proposal !== null) {
-                try {
-                    $newVersion = $this->manifestService->applyPatch(
-                        $app,
-                        $proposal['patch'],
-                        $conversation->user,
-                        $proposal['summary'] ?? 'Builder AI change',
-                    );
-                    $appliedVersionId = $newVersion->id;
-                    $finalStatus = 'applied';
-                } catch (\Throwable $e) {
-                    // The proposal validated inside the tool but failed when
-                    // re-applied at the end — likely a race against a parallel
-                    // edit. Record the patch so the user sees what was tried
-                    // and can re-prompt.
-                    Log::warning('Builder AI auto-apply failed (proposal kept on message)', [
-                        'conversation_id' => $conversation->id,
-                        'message_id' => $placeholder->id,
-                        'error' => $e->getMessage(),
-                    ]);
-                    $finalStatus = 'none';
-                }
-            }
+            $commit = $this->commitTurn($app, $proposeTool->lastProposal(), $conversation->user, $buffer);
 
             $placeholder->update([
-                'content' => $buffer,
-                'proposed_patch' => $proposal['patch'] ?? null,
-                'change_summary' => $proposal['summary'] ?? null,
-                'status' => $finalStatus,
-                'applied_version_id' => $appliedVersionId,
+                'content' => $commit['content'],
+                'proposed_patch' => $commit['proposed_patch'],
+                'change_summary' => $commit['change_summary'],
+                'status' => $commit['status'],
+                'applied_version_id' => $commit['applied_version_id'],
             ]);
 
-            $this->safeBroadcast(fn () => BuilderStreamComplete::dispatch($placeholder->refresh()));
+            if ($commit['error'] !== null) {
+                // The model already streamed its summary as if the change
+                // landed, but the end-of-turn apply failed. Surface the real
+                // reason over the error channel (and it is also baked into the
+                // message content) instead of a silent status='none' that
+                // reads like success.
+                $this->safeBroadcast(fn () => BuilderStreamError::dispatch(
+                    $conversation->id,
+                    $placeholder->id,
+                    $commit['error'],
+                ));
+            } else {
+                $this->safeBroadcast(fn () => BuilderStreamComplete::dispatch($placeholder->refresh()));
+            }
 
             return $placeholder;
         } catch (\Throwable $e) {
@@ -631,6 +618,83 @@ class BuilderAiService
 
             return $version;
         });
+    }
+
+    /**
+     * Commit a finished turn: apply the accumulated proposal as a new manifest
+     * version and return the message fields to persist. A turn with no proposal
+     * is a no-op (status 'none').
+     *
+     * Crucially, when the apply FAILS — the model validated the draft inside
+     * the tool loop, but persisting it threw (e.g. a permission/role error
+     * reaching the platform schema, an invalid result, or a race against a
+     * parallel edit) — this does NOT swallow it. The model has usually already
+     * streamed a summary that reads like success; we bake the real failure
+     * reason into the message content (so it survives a page reload, not just a
+     * log line) and return it as `error` so the caller broadcasts it. Public so
+     * it reads as the commit twin of applyCheckpoint().
+     *
+     * @param  array{patch: list<array<string, mixed>>, summary?: string|null}|null  $proposal
+     * @return array{content: string, proposed_patch: ?list<array<string, mixed>>, change_summary: ?string, status: string, applied_version_id: ?string, error: ?string}
+     */
+    public function commitTurn(App $app, ?array $proposal, ?User $user, string $buffer): array
+    {
+        if ($proposal === null) {
+            return [
+                'content' => $buffer,
+                'proposed_patch' => null,
+                'change_summary' => null,
+                'status' => 'none',
+                'applied_version_id' => null,
+                'error' => null,
+            ];
+        }
+
+        try {
+            $version = $this->manifestService->applyPatch(
+                $app,
+                $proposal['patch'],
+                $user,
+                $proposal['summary'] ?? 'Builder AI change',
+            );
+
+            return [
+                'content' => $buffer,
+                'proposed_patch' => $proposal['patch'],
+                'change_summary' => $proposal['summary'] ?? null,
+                'status' => 'applied',
+                'applied_version_id' => $version->id,
+                'error' => null,
+            ];
+        } catch (\Throwable $e) {
+            $reason = mb_substr($e->getMessage(), 0, 1500);
+
+            Log::error('Builder AI auto-apply failed — changes NOT saved', [
+                'app_id' => $app->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'content' => $buffer.self::saveFailureNotice($reason),
+                'proposed_patch' => $proposal['patch'],
+                'change_summary' => $proposal['summary'] ?? null,
+                'status' => 'none',
+                'applied_version_id' => null,
+                'error' => $reason,
+            ];
+        }
+    }
+
+    /**
+     * Notice appended to an assistant message when the end-of-turn apply failed,
+     * so the user sees nothing was saved even though the streamed summary may
+     * have claimed otherwise.
+     */
+    public static function saveFailureNotice(string $reason): string
+    {
+        return "\n\n---\n\n⚠️ **Changes were not saved.** The server rejected the proposal while applying it: "
+            .$reason
+            ."\n\nThe proposal is kept on this message — adjust and resend, or retry.";
     }
 
     /**

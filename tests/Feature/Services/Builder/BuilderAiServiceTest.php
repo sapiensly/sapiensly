@@ -264,6 +264,57 @@ it('applyCheckpoint returns null when there is no checkpointed work', function (
     expect($this->service->applyCheckpoint($message))->toBeNull();
 });
 
+it('commitTurn applies a valid proposal as a new version', function () {
+    $commit = $this->service->commitTurn(
+        $this->testApp->fresh(),
+        ['patch' => [['op' => 'replace', 'path' => '/name', 'value' => 'Committed CRM']], 'summary' => 'rename'],
+        $this->user,
+        'Listo, renombré la app.',
+    );
+
+    expect($commit['status'])->toBe('applied')
+        ->and($commit['applied_version_id'])->not->toBeNull()
+        ->and($commit['error'])->toBeNull()
+        ->and($commit['content'])->toBe('Listo, renombré la app.')
+        ->and($this->manifestService->getActiveManifest($this->testApp->fresh())['name'])->toBe('Committed CRM');
+});
+
+it('commitTurn surfaces a failed apply instead of silently reporting success', function () {
+    // A patch whose RESULT is invalid (schema_version must be \d+\.\d+\.\d+):
+    // the model validated its draft inside the tool loop, but persisting the
+    // accumulated patch throws — this must not be swallowed.
+    $buffer = 'Listo. Creé el mini CRM con todo lo que pediste.';
+    $nameBefore = $this->manifestService->getActiveManifest($this->testApp->fresh())['name'];
+    $commit = $this->service->commitTurn(
+        $this->testApp->fresh(),
+        ['patch' => [['op' => 'replace', 'path' => '/schema_version', 'value' => 'not-a-version']], 'summary' => 'broken'],
+        $this->user,
+        $buffer,
+    );
+
+    expect($commit['status'])->toBe('none')
+        ->and($commit['applied_version_id'])->toBeNull()
+        ->and($commit['error'])->not->toBeNull()
+        ->and($commit['proposed_patch'])->not->toBeNull()
+        ->and($commit['content'])->toStartWith($buffer)
+        ->and($commit['content'])->toContain('Changes were not saved')
+        ->and($this->manifestService->getActiveManifest($this->testApp->fresh())['name'])->toBe($nameBefore);
+});
+
+it('commitTurn is a quiet no-op when the turn produced no proposal', function () {
+    $commit = $this->service->commitTurn(
+        $this->testApp->fresh(),
+        null,
+        $this->user,
+        'Sure, here is how qualification works…',
+    );
+
+    expect($commit['status'])->toBe('none')
+        ->and($commit['error'])->toBeNull()
+        ->and($commit['proposed_patch'])->toBeNull()
+        ->and($commit['content'])->toBe('Sure, here is how qualification works…');
+});
+
 it('ReadManifestTool returns one element in full when expanded', function () {
     $tool = new ReadManifestTool($this->testApp->fresh(), $this->manifestService);
 

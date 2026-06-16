@@ -109,6 +109,7 @@ class RunBuilderAiJob implements ShouldQueue
         // accumulated work onto the message, bank it as a new version so the
         // progress survives and the next turn resumes from the real manifest
         // instead of restarting from an empty app.
+        $checkpointError = null;
         if (! empty($message->proposed_patch)) {
             try {
                 $version = app(BuilderAiService::class)->applyCheckpoint($message);
@@ -125,15 +126,22 @@ class RunBuilderAiJob implements ShouldQueue
                     return;
                 }
             } catch (Throwable $applyError) {
-                Log::warning('RunBuilderAiJob: checkpoint recovery failed', [
+                // The turn checkpointed valid work, but banking it failed —
+                // this is exactly where a permission/role error reaching the
+                // platform schema surfaces. Carry the real reason into the
+                // message so the user (and us, without the worker logs) can see
+                // WHY the progress was lost, instead of a generic timeout note.
+                $checkpointError = mb_substr($applyError->getMessage(), 0, 1500);
+                Log::error('RunBuilderAiJob: checkpoint recovery failed — progress NOT saved', [
                     'message_id' => $message->id,
                     'error' => $applyError->getMessage(),
                 ]);
-                // fall through to the plain error path
             }
         }
 
-        $reason = $e?->getMessage() ?? 'The Builder AI job did not finish in time.';
+        $reason = $checkpointError !== null
+            ? 'The turn was interrupted and the saved progress could not be applied: '.$checkpointError
+            : ($e?->getMessage() ?? 'The Builder AI job did not finish in time.');
         $message->status = 'error';
         $message->content = $reason;
         $message->save();

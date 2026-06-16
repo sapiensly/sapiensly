@@ -59,6 +59,29 @@ it('failed() banks a checkpointed patch instead of discarding the timed-out turn
         ->and(app(AppManifestService::class)->getActiveManifest($this->testApp->fresh())['name'])->toBe('Outbound Calls');
 });
 
+it('failed() surfaces the real reason when banking the checkpoint fails', function () {
+    // proposed_patch whose RESULT is invalid: applyCheckpoint throws while
+    // banking it. The job must carry that real reason onto the message (this
+    // is where a permission/role error reaching the platform schema would
+    // show up) instead of a generic timeout note.
+    $message = BuilderMessage::create([
+        'conversation_id' => $this->conversation->id,
+        'role' => 'assistant',
+        'status' => 'streaming',
+        'content' => 'Listo, guardé los cambios.',
+        'proposed_patch' => [['op' => 'replace', 'path' => '/schema_version', 'value' => 'not-a-version']],
+        'change_summary' => 'broken patch',
+    ]);
+
+    (new RunBuilderAiJob($message->id, 'crea una app'))->failed(new RuntimeException('timed out'));
+
+    $fresh = $message->fresh();
+    expect($fresh->status)->toBe('error')
+        ->and($fresh->applied_version_id)->toBeNull()
+        ->and($fresh->content)->toContain('could not be applied')
+        ->and($fresh->content)->toContain('Manifest validation failed');
+});
+
 it('failed() marks the message error when there is no checkpointed work', function () {
     $message = BuilderMessage::create([
         'conversation_id' => $this->conversation->id,
