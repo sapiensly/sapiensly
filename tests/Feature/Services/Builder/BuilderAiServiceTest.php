@@ -131,6 +131,64 @@ it('ReadManifestTool surfaces the running draft after a successful propose_chang
     expect($persisted['name'])->not->toBe('Mini CRM Updated');
 });
 
+it('ProposeChangeTool fires the onProgress checkpoint only on a successful proposal', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+
+    $checkpoints = [];
+    $propose->onProgress(function (array $proposal) use (&$checkpoints): void {
+        $checkpoints[] = $proposal;
+    });
+
+    // A failing op must NOT checkpoint.
+    $propose->recordProposal([['op' => 'replace', 'path' => '/schema_version', 'value' => 999]], 'bad');
+    expect($checkpoints)->toBeEmpty();
+
+    // A valid op checkpoints the accumulated patch + summary.
+    $propose->recordProposal([['op' => 'replace', 'path' => '/name', 'value' => 'Renamed']], 'rename');
+    expect($checkpoints)->toHaveCount(1)
+        ->and($checkpoints[0]['patch'])->toHaveCount(1)
+        ->and($checkpoints[0]['summary'])->toBe('rename');
+
+    // A second valid op checkpoints the STACKED patch.
+    $propose->recordProposal([['op' => 'replace', 'path' => '/version', 'value' => 2]], 'bump');
+    expect($checkpoints)->toHaveCount(2)
+        ->and($checkpoints[1]['patch'])->toHaveCount(2);
+});
+
+it('applyCheckpoint banks a checkpointed patch from an interrupted turn as a new version', function () {
+    $conversation = $this->service->startConversation($this->testApp->fresh(), $this->user);
+    $message = BuilderMessage::create([
+        'conversation_id' => $conversation->id,
+        'role' => 'assistant',
+        'status' => 'streaming',
+        'content' => '',
+        'proposed_patch' => [['op' => 'replace', 'path' => '/name', 'value' => 'Recovered CRM']],
+        'change_summary' => 'rename app',
+    ]);
+
+    $version = $this->service->applyCheckpoint($message);
+
+    expect($version)->not->toBeNull()
+        ->and($message->fresh()->status)->toBe('applied')
+        ->and($message->fresh()->applied_version_id)->toBe($version->id)
+        ->and($this->manifestService->getActiveManifest($this->testApp->fresh())['name'])->toBe('Recovered CRM');
+
+    // Idempotent: re-running on an applied message banks nothing more.
+    expect($this->service->applyCheckpoint($message->fresh()))->toBeNull();
+});
+
+it('applyCheckpoint returns null when there is no checkpointed work', function () {
+    $conversation = $this->service->startConversation($this->testApp->fresh(), $this->user);
+    $message = BuilderMessage::create([
+        'conversation_id' => $conversation->id,
+        'role' => 'assistant',
+        'status' => 'streaming',
+        'content' => '',
+    ]);
+
+    expect($this->service->applyCheckpoint($message))->toBeNull();
+});
+
 it('ReadManifestTool returns one element in full when expanded', function () {
     $tool = new ReadManifestTool($this->testApp->fresh(), $this->manifestService);
 

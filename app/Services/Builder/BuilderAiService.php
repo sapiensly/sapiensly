@@ -249,6 +249,19 @@ class BuilderAiService
 
         $proposeTool = new ProposeChangeTool($app, $this->manifestService, $this->validator);
 
+        // Checkpoint accumulated valid work onto the placeholder after each
+        // successful propose_change. The turn runs in a queue worker with a hard
+        // 300s wall-clock; if it times out mid-loop the end-of-turn apply never
+        // runs, so without this a long turn's valid progress would be discarded
+        // and the next "continue" would restart from an empty app.
+        // RunBuilderAiJob::failed() applies this checkpoint so the work is banked.
+        $proposeTool->onProgress(function (array $proposal) use ($placeholder): void {
+            $placeholder->forceFill([
+                'proposed_patch' => $proposal['patch'],
+                'change_summary' => $proposal['summary'] ?? null,
+            ])->save();
+        });
+
         $tools = [
             new ReadManifestTool($app, $this->manifestService, $proposeTool),
             new FrameworkReferenceTool,
@@ -618,6 +631,43 @@ class BuilderAiService
     }
 
     /**
+     * Recover a turn that died (timeout/crash) mid-loop: apply the accumulated
+     * valid patch checkpointed onto the placeholder during the turn, so the
+     * work isn't lost and the next turn resumes from the real manifest instead
+     * of restarting from an empty app. Called from RunBuilderAiJob::failed().
+     * Returns the new version, or null if there was nothing valid to bank.
+     */
+    public function applyCheckpoint(BuilderMessage $message): ?AppVersion
+    {
+        if ($message->status === 'applied' || empty($message->proposed_patch)) {
+            return null;
+        }
+
+        $app = $message->conversation->app;
+        $user = $message->conversation->user;
+
+        $version = $this->manifestService->applyPatch(
+            $app,
+            $message->proposed_patch,
+            $user,
+            $message->change_summary ?? 'Builder AI change (recovered after timeout)',
+        );
+
+        $message->update([
+            'status' => 'applied',
+            'applied_version_id' => $version->id,
+        ]);
+
+        Log::info('Builder AI checkpoint recovered after interrupted turn', [
+            'message_id' => $message->id,
+            'conversation_id' => $message->conversation_id,
+            'version_id' => $version->id,
+        ]);
+
+        return $version;
+    }
+
+    /**
      * Idempotent: rejecting an already-rejected message is a no-op.
      */
     public function rejectProposal(BuilderMessage $message): void
@@ -715,6 +765,9 @@ Language:
 
 Rules of engagement:
 1. ALWAYS call `read_manifest` first to see the current structure before proposing edits. By default it returns `{state, op_count, note, summary}` — a COMPACT structural map (objects→fields with id/slug/type, pages→blocks with id/type, workflows, settings keys, agent on/off), NOT full property values. That summary is enough to locate what you need. To edit a specific object/page/workflow, call `read_manifest` again with `expand: "<id>"` to get that ONE element's full definition (returned as `element`); only expand what you're about to change, never the whole manifest element-by-element. After you've made one or more successful `propose_change` calls, `state` flips to "draft" and the summary/element reflect the in-progress draft (with your ops already applied) — DO NOT re-propose what's already there. If `propose_change` returned ok:true, the change is in the draft, even if your previous read showed it absent. Re-reading is only useful between calls that depend on the new structure (e.g. you added a field and now need the field id to reference from a form).
+1a. BUILD ON WHAT EXISTS — NEVER restart from scratch. If `read_manifest` shows objects/pages already there (e.g. on a "continúa" turn, or after an earlier turn), ADD to them with small incremental patches. Do NOT delete-and-recreate objects/pages you already built, and do NOT re-create an object that already exists — your earlier work is saved (progress is checkpointed even if a previous turn was cut off). Empty or partial is fine; pick up exactly where the manifest left off.
+1b. CONSULT BEFORE YOU BUILD, not after. Before composing ANY block/field/action/workflow you are not 100% sure of, call the relevant catalog FIRST (list_available_components / list_available_field_types / list_available_actions / list_available_triggers / list_available_steps) and, for an area you're unsure of, `framework_reference(topic)`. Guessing a shape and learning it from a validation error wastes a whole round-trip — and there is a hard time budget per turn. Read once, then build it right.
+1c. KEEP PATCHES SMALL. Add a few blocks/fields per `propose_change` call (they accumulate across calls in the turn). Do NOT try to submit an entire page of many blocks + modals in one giant op — very large tool arguments can be truncated in transit and arrive malformed (you'll see "ops must be a non-empty array" or apply errors even though your patch looked complete). Several small valid calls beat one huge fragile one.
 2. ALWAYS call `list_available_components` and `list_available_field_types` if you need to recall what types are supported.
 3. NEVER invent block types or field types not in the catalogs — the runtime will refuse to render them.
 4. ALL changes go through `propose_change` as an RFC 6902 JSON Patch. After your turn ends the platform applies the ACCUMULATED proposal of the turn automatically — the user does NOT have to approve. So phrase confirmations like "I added X" / "I renamed Y to Z" / "I created the workflow" — past tense, as if already done. The user can undo from the chat if they don't like it. The `change_summary` you pass MUST be just as short and concrete as your chat reply: one plain past-tense clause naming what changed ("Agregué el campo «Notas» a Clientes"), no preamble, no explanation of why, no restating the manifest.

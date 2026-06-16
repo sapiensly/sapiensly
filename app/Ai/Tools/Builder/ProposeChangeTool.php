@@ -38,6 +38,25 @@ class ProposeChangeTool implements Tool
     /** Running draft after every successful propose_change in this turn. */
     private ?array $runningDraft = null;
 
+    /**
+     * Invoked after every SUCCESSFUL proposal with the accumulated
+     * {patch, summary, draft_manifest}. The orchestrator uses it to checkpoint
+     * valid progress mid-turn, so a hard worker timeout doesn't discard it.
+     *
+     * @var (callable(array{patch: list<array<string, mixed>>, summary: string, draft_manifest: array<string, mixed>}): void)|null
+     */
+    private $onProgress = null;
+
+    /**
+     * Register a checkpoint callback fired after each successful propose_change.
+     *
+     * @param  callable(array{patch: list<array<string, mixed>>, summary: string, draft_manifest: array<string, mixed>}): void  $callback
+     */
+    public function onProgress(callable $callback): void
+    {
+        $this->onProgress = $callback;
+    }
+
     public function __construct(
         private App $appModel,
         private AppManifestService $manifestService,
@@ -161,6 +180,13 @@ DESC;
             'summary' => $this->joinedSummary(),
             'draft_manifest' => $draft,
         ];
+
+        // Checkpoint the accumulated valid work so a mid-turn timeout/crash
+        // (the loop runs in a queue worker with a hard wall-clock limit) leaves
+        // something to recover from instead of discarding the whole turn.
+        if ($this->onProgress !== null) {
+            ($this->onProgress)($this->lastProposal);
+        }
 
         $response = [
             'ok' => true,

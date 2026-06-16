@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\Builder\BuilderStreamComplete;
 use App\Events\Builder\BuilderStreamError;
 use App\Models\BuilderMessage;
 use App\Services\Builder\BuilderAiService;
@@ -101,6 +102,35 @@ class RunBuilderAiJob implements ShouldQueue
         // a completed turn (status=applied/none/error) should be left alone.
         if (! in_array($message->status, ['streaming', 'pending'], true)) {
             return;
+        }
+
+        // The turn died mid-loop (typically the 300s timeout) before the
+        // end-of-turn apply ran. If propose_change checkpointed valid
+        // accumulated work onto the message, bank it as a new version so the
+        // progress survives and the next turn resumes from the real manifest
+        // instead of restarting from an empty app.
+        if (! empty($message->proposed_patch)) {
+            try {
+                $version = app(BuilderAiService::class)->applyCheckpoint($message);
+                if ($version !== null) {
+                    $note = "I ran out of time, but I saved the progress so far ({$message->change_summary}). Send \"continúa\" to keep going.";
+                    $message->content = $message->content ?: $note;
+                    $message->save();
+                    try {
+                        BuilderStreamComplete::dispatch($message->refresh());
+                    } catch (Throwable) {
+                        // swallow — UI catches up via DB status on next load
+                    }
+
+                    return;
+                }
+            } catch (Throwable $applyError) {
+                Log::warning('RunBuilderAiJob: checkpoint recovery failed', [
+                    'message_id' => $message->id,
+                    'error' => $applyError->getMessage(),
+                ]);
+                // fall through to the plain error path
+            }
         }
 
         $reason = $e?->getMessage() ?? 'The Builder AI job did not finish in time.';
