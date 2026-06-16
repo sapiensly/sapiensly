@@ -476,6 +476,39 @@ class BuilderAiService
 
             $commit = $this->commitTurn($app, $proposeTool->lastProposal(), $conversation->user, $buffer);
 
+            if ($commit['error'] !== null) {
+                // The model already streamed a summary as if the change landed,
+                // but persisting it failed. Feed the real outcome back to the
+                // model and let it write an honest correction in the user's
+                // language; fall back to the deterministic notice baked into
+                // commitTurn() if that follow-up turn itself fails. We finish
+                // with StreamComplete (not StreamError) so the streamed
+                // correction stands instead of being clobbered by the generic
+                // error text.
+                $content = $this->reconcileSaveFailure(
+                    $conversation,
+                    $placeholder,
+                    $sdkHistory,
+                    $promptText,
+                    $buffer,
+                    $commit['error'],
+                    $resolvedModel,
+                    $provider,
+                ) ?? $commit['content'];
+
+                $placeholder->update([
+                    'content' => $content,
+                    'proposed_patch' => $commit['proposed_patch'],
+                    'change_summary' => $commit['change_summary'],
+                    'status' => 'none',
+                    'applied_version_id' => null,
+                ]);
+
+                $this->safeBroadcast(fn () => BuilderStreamComplete::dispatch($placeholder->refresh()));
+
+                return $placeholder;
+            }
+
             $placeholder->update([
                 'content' => $commit['content'],
                 'proposed_patch' => $commit['proposed_patch'],
@@ -484,20 +517,7 @@ class BuilderAiService
                 'applied_version_id' => $commit['applied_version_id'],
             ]);
 
-            if ($commit['error'] !== null) {
-                // The model already streamed its summary as if the change
-                // landed, but the end-of-turn apply failed. Surface the real
-                // reason over the error channel (and it is also baked into the
-                // message content) instead of a silent status='none' that
-                // reads like success.
-                $this->safeBroadcast(fn () => BuilderStreamError::dispatch(
-                    $conversation->id,
-                    $placeholder->id,
-                    $commit['error'],
-                ));
-            } else {
-                $this->safeBroadcast(fn () => BuilderStreamComplete::dispatch($placeholder->refresh()));
-            }
+            $this->safeBroadcast(fn () => BuilderStreamComplete::dispatch($placeholder->refresh()));
 
             return $placeholder;
         } catch (\Throwable $e) {
@@ -695,6 +715,105 @@ class BuilderAiService
         return "\n\n---\n\n⚠️ **Changes were not saved.** The server rejected the proposal while applying it: "
             .$reason
             ."\n\nThe proposal is kept on this message — adjust and resend, or retry.";
+    }
+
+    /**
+     * After an end-of-turn save failed, run one short, tool-less follow-up turn
+     * that is told the real outcome, so the closing message the user sees is the
+     * model's own honest correction rather than the optimistic summary it
+     * streamed before the apply ran. Streams the correction as chunks (appended
+     * after the original text) and returns the full content to persist, or null
+     * if the follow-up produced nothing usable / threw — in which case the
+     * caller falls back to the deterministic notice from commitTurn().
+     *
+     * @param  list<UserMessage|AssistantMessage>  $sdkHistory
+     */
+    private function reconcileSaveFailure(
+        BuilderConversation $conversation,
+        BuilderMessage $placeholder,
+        array $sdkHistory,
+        string $promptText,
+        string $buffer,
+        string $error,
+        string $model,
+        Lab $provider,
+    ): ?string {
+        try {
+            $history = $sdkHistory;
+            $history[] = new UserMessage($promptText);
+            $history[] = new AssistantMessage($buffer !== '' ? $buffer : '(no closing summary)');
+
+            $agent = new BuilderAgent(
+                instructions: self::saveFailureReconcileInstructions(),
+                messages: $history,
+                tools: [],
+            );
+
+            $stream = $agent->stream(
+                self::saveFailureReconcilePrompt($error),
+                provider: $provider,
+                model: $model,
+            );
+
+            $separator = "\n\n---\n\n";
+            $this->safeBroadcast(fn () => BuilderStreamChunk::dispatch(
+                $conversation->id, $placeholder->id, $separator,
+            ));
+
+            $correction = '';
+            foreach ($stream as $event) {
+                if ($event instanceof TextDelta && $event->delta !== '') {
+                    $correction .= $event->delta;
+                    $this->safeBroadcast(fn () => BuilderStreamChunk::dispatch(
+                        $conversation->id, $placeholder->id, $event->delta,
+                    ));
+                }
+            }
+
+            app(AiUsageRecorder::class)->record(
+                'builder', $model, $conversation->user, $conversation->organization_id, $stream->usage ?? null,
+            );
+
+            if (trim($correction) === '') {
+                return null;
+            }
+
+            return $buffer.$separator.$correction;
+        } catch (\Throwable $e) {
+            Log::warning('Builder AI save-failure reconcile turn failed; using deterministic notice', [
+                'message_id' => $placeholder->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * System prompt for the save-failure reconcile turn: a tiny, single-purpose
+     * agent that owns up to a change that did not persist.
+     */
+    public static function saveFailureReconcileInstructions(): string
+    {
+        return <<<'TXT'
+        You are the Sapiensly app builder. The change you just described to the user was NOT saved — applying it
+        failed on the server, so the app's manifest is UNCHANGED. Write a brief, honest closing message to the user.
+
+        Rules:
+        - Reply in the SAME language the user has been using.
+        - Do NOT claim the change was made — it was not.
+        - State plainly that it could not be saved, give the reason in plain words, and say they can retry or rephrase.
+        - Be concise (2-4 sentences). No tool calls, no JSON, no patches — just the message.
+        TXT;
+    }
+
+    /**
+     * The reconcile turn's user message: the raw apply error the model must own.
+     */
+    public static function saveFailureReconcilePrompt(string $error): string
+    {
+        return "SYSTEM NOTICE (not from the user): applying your proposed changes failed with this error: «{$error}». "
+            .'The manifest was not changed. Now write your honest correction to the user.';
     }
 
     /**

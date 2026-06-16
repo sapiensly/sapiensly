@@ -315,6 +315,22 @@ it('commitTurn is a quiet no-op when the turn produced no proposal', function ()
         ->and($commit['content'])->toBe('Sure, here is how qualification works…');
 });
 
+it('save-failure reconcile prompt carries the raw apply error for the model to own', function () {
+    $prompt = BuilderAiService::saveFailureReconcilePrompt('permission denied for schema platform');
+
+    expect($prompt)->toContain('permission denied for schema platform')
+        ->and($prompt)->toContain('not from the user')
+        ->and($prompt)->toContain('not changed');
+});
+
+it('save-failure reconcile instructions forbid claiming success and pin the language', function () {
+    $instructions = BuilderAiService::saveFailureReconcileInstructions();
+
+    expect($instructions)->toContain('NOT saved')
+        ->and($instructions)->toContain('Do NOT claim')
+        ->and($instructions)->toContain('SAME language');
+});
+
 it('ReadManifestTool returns one element in full when expanded', function () {
     $tool = new ReadManifestTool($this->testApp->fresh(), $this->manifestService);
 
