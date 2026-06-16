@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
+use App\Models\OrganizationAiBudget;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiUsageReport;
 use App\Services\AiProviderService;
@@ -98,7 +99,28 @@ class AdminAiController extends Controller
         return Inertia::render('admin/Ai/Usage', [
             'days' => $days,
             'report' => $report->platformWide($days),
+            'caps' => OrganizationAiBudget::query()
+                ->whereNotNull('platform_system_cap')
+                ->pluck('platform_system_cap', 'organization_id'),
         ]);
+    }
+
+    /**
+     * Sysadmin sets the platform's hard ceiling on an org's system spend.
+     */
+    public function updateBudgetCap(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'organization_id' => ['required', 'string', 'exists:platform.organizations,id'],
+            'platform_system_cap' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        OrganizationAiBudget::updateOrCreate(
+            ['organization_id' => $data['organization_id']],
+            ['platform_system_cap' => $data['platform_system_cap']],
+        );
+
+        return back()->with('success', 'Platform spend cap updated.');
     }
 
     public function updateDefaults(Request $request): RedirectResponse

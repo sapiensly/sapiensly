@@ -19,3 +19,9 @@ Schedule::command('integrations:prune-executions')
     ->dailyAt('02:30')
     ->withoutOverlapping()
     ->runInBackground();
+
+// Emit AI spend budget threshold alerts.
+Schedule::command('ai-spend:check-budgets')
+    ->dailyAt('03:00')
+    ->withoutOverlapping()
+    ->runInBackground();

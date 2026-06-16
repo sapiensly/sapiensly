@@ -48,6 +48,32 @@ it('forbids a non-owner member', function () {
     $this->actingAs($member)->get('/system/ai-spend')->assertForbidden();
 });
 
+it('lets an owner set their org budget', function () {
+    [$org, $owner] = orgMember(MembershipRole::Owner->value);
+
+    $this->actingAs($owner)->post('/system/ai-spend/budget', [
+        'system_monthly_budget' => 50,
+        'own_monthly_budget' => null,
+        'alert_threshold_pct' => 75,
+        'enforcement_enabled' => true,
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('organization_ai_budgets', [
+        'organization_id' => $org->id,
+        'system_monthly_budget' => 50,
+        'alert_threshold_pct' => 75,
+    ]);
+});
+
+it('forbids a member from setting the org budget', function () {
+    [, $member] = orgMember(MembershipRole::Member->value);
+
+    $this->actingAs($member)->post('/system/ai-spend/budget', [
+        'alert_threshold_pct' => 80,
+        'enforcement_enabled' => true,
+    ])->assertForbidden();
+});
+
 it('shows a personal user their own spend', function () {
     $user = User::factory()->create(['email_verified_at' => now()]);
 

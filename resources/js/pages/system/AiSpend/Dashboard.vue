@@ -3,9 +3,17 @@ import BigChart from '@/components/admin/BigChart.vue';
 import StatCard from '@/components/admin/StatCard.vue';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Coins, Cpu, Layers, Sparkles } from '@lucide/vue';
 import { computed } from 'vue';
+
+interface Budget {
+    system_monthly_budget: number | null;
+    own_monthly_budget: number | null;
+    platform_system_cap: number | null;
+    alert_threshold_pct: number;
+    enforcement_enabled: boolean;
+}
 
 interface ModelRow {
     model: string;
@@ -27,9 +35,32 @@ const props = defineProps<{
     scope: { type: string; name: string };
     days: number;
     report: Report;
+    budget: Budget | null;
 }>();
 
 const ranges = [7, 30, 90];
+
+const budgetForm = useForm({
+    system_monthly_budget: props.budget?.system_monthly_budget ?? null,
+    own_monthly_budget: props.budget?.own_monthly_budget ?? null,
+    alert_threshold_pct: props.budget?.alert_threshold_pct ?? 80,
+    enforcement_enabled: props.budget?.enforcement_enabled ?? true,
+});
+
+// Effective system cap = the lower of the org's budget and any platform ceiling.
+const systemLimit = computed<number | null>(() => {
+    const candidates = [props.budget?.system_monthly_budget, props.budget?.platform_system_cap].filter(
+        (v): v is number => v !== null && v !== undefined,
+    );
+    return candidates.length ? Math.min(...candidates) : null;
+});
+const systemUsagePct = computed(() =>
+    systemLimit.value ? Math.min(100, Math.round((props.report.by_source.system / systemLimit.value) * 100)) : null,
+);
+
+function saveBudget(): void {
+    budgetForm.post('/system/ai-spend/budget', { preserveScroll: true });
+}
 
 function money(n: number): string {
     if (n === 0) return '$0';
@@ -126,6 +157,80 @@ const scopeLabel = computed(() =>
                     </div>
                 </header>
                 <BigChart :series="chartSeries" :height="220" />
+            </section>
+
+            <!-- Budget (organization scope only) -->
+            <section v-if="scope.type === 'organization'" class="rounded-sp-sm border border-soft bg-navy p-5">
+                <h2 class="mb-1 text-sm font-medium text-ink">Monthly budget</h2>
+                <p class="mb-4 text-xs text-ink-muted">
+                    Cap your AI spend. System models (paid by the platform) are also bound by any platform ceiling; own
+                    (BYOK) models are capped only if you set a limit.
+                </p>
+
+                <div v-if="systemLimit !== null" class="mb-4">
+                    <div class="mb-1 flex justify-between text-xs text-ink-muted">
+                        <span>System spend this period</span>
+                        <span>{{ money(report.by_source.system) }} / {{ money(systemLimit) }} ({{ systemUsagePct }}%)</span>
+                    </div>
+                    <div class="h-2 overflow-hidden rounded-full bg-surface">
+                        <div
+                            class="h-full rounded-full transition-all"
+                            :class="(systemUsagePct ?? 0) >= 100 ? 'bg-sp-danger' : (systemUsagePct ?? 0) >= budgetForm.alert_threshold_pct ? 'bg-sp-warning' : 'bg-accent-blue'"
+                            :style="{ width: `${systemUsagePct}%` }"
+                        />
+                    </div>
+                    <p v-if="budget?.platform_system_cap != null" class="mt-1 text-[10px] text-ink-subtle">
+                        Platform ceiling: {{ money(budget.platform_system_cap) }}
+                    </p>
+                </div>
+
+                <form class="grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="saveBudget">
+                    <label class="text-xs text-ink-muted">
+                        System monthly budget (USD)
+                        <input
+                            v-model.number="budgetForm.system_monthly_budget"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="No limit"
+                            class="mt-1 w-full rounded-md border border-medium bg-surface px-3 py-2 text-sm text-ink"
+                        />
+                    </label>
+                    <label class="text-xs text-ink-muted">
+                        Own (BYOK) monthly budget (USD)
+                        <input
+                            v-model.number="budgetForm.own_monthly_budget"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="No limit"
+                            class="mt-1 w-full rounded-md border border-medium bg-surface px-3 py-2 text-sm text-ink"
+                        />
+                    </label>
+                    <label class="text-xs text-ink-muted">
+                        Alert at (% of budget)
+                        <input
+                            v-model.number="budgetForm.alert_threshold_pct"
+                            type="number"
+                            min="1"
+                            max="100"
+                            class="mt-1 w-full rounded-md border border-medium bg-surface px-3 py-2 text-sm text-ink"
+                        />
+                    </label>
+                    <label class="flex items-center gap-2 self-end text-xs text-ink">
+                        <input v-model="budgetForm.enforcement_enabled" type="checkbox" class="rounded border-medium" />
+                        Block calls when over budget
+                    </label>
+                    <div class="sm:col-span-2">
+                        <button
+                            type="submit"
+                            :disabled="budgetForm.processing"
+                            class="rounded-pill bg-accent-blue px-4 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                        >
+                            {{ budgetForm.processing ? 'Saving…' : 'Save budget' }}
+                        </button>
+                    </div>
+                </form>
             </section>
 
             <!-- Top models -->

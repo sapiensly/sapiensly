@@ -28,6 +28,7 @@ Route::middleware(['auth', 'verified', 'role:sysadmin'])->prefix('admin')->group
     Route::get('/ai', [AdminAiController::class, 'defaults'])->name('admin.ai.defaults');
     Route::get('/ai/catalog', [AdminAiController::class, 'catalog'])->name('admin.ai.catalog');
     Route::get('/ai/usage', [AdminAiController::class, 'usage'])->name('admin.ai.usage');
+    Route::patch('/ai/budget-cap', [AdminAiController::class, 'updateBudgetCap'])->name('admin.ai.budget-cap');
     Route::get('/ai/providers', [AdminAiController::class, 'providers'])->name('admin.ai.providers');
     Route::patch('/ai/defaults', [AdminAiController::class, 'updateDefaults'])->name('admin.ai.defaults.update');
     Route::patch('/ai/catalog/{model}', [AdminAiController::class, 'toggleModel'])->name('admin.ai.catalog.toggle');

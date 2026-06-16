@@ -15,6 +15,7 @@ Route::middleware([
     'verified',
 ])->prefix('system')->group(function () {
     Route::get('ai-spend', [AiSpendController::class, 'index'])->name('system.ai-spend');
+    Route::post('ai-spend/budget', [AiSpendController::class, 'updateBudget'])->name('system.ai-spend.budget');
 
     Route::resource('ai-providers', AiProviderController::class)
         ->except(['show'])

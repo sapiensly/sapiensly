@@ -3,9 +3,9 @@ import AiTabs from '@/components/admin/AiTabs.vue';
 import BigChart from '@/components/admin/BigChart.vue';
 import StatCard from '@/components/admin/StatCard.vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { Coins, Cpu, Layers, Sparkles } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface OrgRow {
@@ -30,10 +30,24 @@ interface Report {
     series: { labels: string[]; own: number[]; system: number[] };
 }
 
-const props = defineProps<{ days: number; report: Report }>();
+const props = defineProps<{ days: number; report: Report; caps: Record<string, number> }>();
 
 const { t } = useI18n();
 const ranges = [7, 30, 90];
+
+// Editable platform system caps, seeded from existing values.
+const capEdits = reactive<Record<string, number | null>>({});
+props.report.by_org.forEach((o) => {
+    if (o.organization_id) capEdits[o.organization_id] = props.caps[o.organization_id] ?? null;
+});
+
+function saveCap(orgId: string): void {
+    router.patch(
+        '/admin/ai/budget-cap',
+        { organization_id: orgId, platform_system_cap: capEdits[orgId] },
+        { preserveScroll: true },
+    );
+}
 
 function money(n: number): string {
     if (n === 0) return '$0';
@@ -126,6 +140,7 @@ const chartSeries = computed(() => [
                                 <th class="py-2 font-medium">Organization</th>
                                 <th class="py-2 text-right font-medium">System</th>
                                 <th class="py-2 text-right font-medium">Total</th>
+                                <th class="py-2 text-right font-medium">System cap</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -133,6 +148,25 @@ const chartSeries = computed(() => [
                                 <td class="py-2 font-mono text-xs text-ink">{{ o.organization_id ?? '— (personal)' }}</td>
                                 <td class="py-2 text-right text-ink-muted">{{ money(o.system_cost) }}</td>
                                 <td class="py-2 text-right font-medium text-ink">{{ money(o.cost) }}</td>
+                                <td class="py-2 text-right">
+                                    <div v-if="o.organization_id" class="flex items-center justify-end gap-1">
+                                        <input
+                                            v-model.number="capEdits[o.organization_id]"
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            placeholder="—"
+                                            class="w-20 rounded border border-medium bg-surface px-2 py-1 text-right text-xs text-ink"
+                                        />
+                                        <button
+                                            type="button"
+                                            class="rounded border border-medium px-2 py-1 text-[10px] text-ink-muted hover:text-ink"
+                                            @click="saveCap(o.organization_id)"
+                                        >
+                                            Set
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
