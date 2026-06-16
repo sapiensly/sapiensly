@@ -82,6 +82,25 @@ it('rejects additional properties on a field', function () {
         ->and($result->errors[0]->code)->toBe('schema');
 });
 
+it('enriches an unknown block type error with the schema description hint', function () {
+    $manifest = baseManifest();
+    $manifest['pages'][] = [
+        'id' => id('pag'),
+        'slug' => 'home',
+        'name' => 'Home',
+        'path' => '/home',
+        'blocks' => [
+            ['id' => id('blk'), 'type' => 'nonexistent_block'],
+        ],
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('message')->implode("\n"))
+        ->toContain('list_available_components'); // the schema hint reached the error message
+});
+
 it('rejects duplicate object slugs', function () {
     $manifest = baseManifest();
     $manifest['objects'][] = [

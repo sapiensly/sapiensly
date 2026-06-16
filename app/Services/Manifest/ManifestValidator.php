@@ -5,6 +5,7 @@ namespace App\Services\Manifest;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\SafeExpressionEvaluator;
 use Opis\JsonSchema\Errors\ErrorFormatter;
+use Opis\JsonSchema\Errors\ValidationError;
 use Opis\JsonSchema\Validator as OpisValidator;
 use Symfony\Component\ExpressionLanguage\Lexer;
 
@@ -158,9 +159,24 @@ class ManifestValidator
             return [];
         }
 
-        $formatted = (new ErrorFormatter)->format($result->error(), multiple: true);
+        $rootError = $result->error();
+
+        $formatter = new ErrorFormatter;
+        $formatted = $formatter->format(
+            $rootError,
+            multiple: true,
+            formatter: fn (ValidationError $error): string => $this->describeSchemaError($formatter, $error),
+        );
 
         $errors = [];
+
+        // A described oneOf/anyOf node (block / field_definition / action) is the
+        // signal a model needs when it invents an unknown type — but Opis reports
+        // it as the per-branch leaf noise ("required properties missing"). Surface
+        // that node's own description as a dedicated, leading hint so the model
+        // self-corrects from one error instead of wading through every branch.
+        $this->collectCompositeHints($rootError, $errors);
+
         foreach ($formatted as $path => $messages) {
             foreach ((array) $messages as $message) {
                 $errors[] = new ManifestValidationError(
@@ -172,6 +188,60 @@ class ManifestValidator
         }
 
         return $errors;
+    }
+
+    /**
+     * Append the failing schema node's own `description` to the default Opis
+     * message, so a validation error doubles as authoring guidance the model
+     * can act on without a second round-trip (e.g. an invalid enum/pattern/
+     * additionalProperties returns the field's hint from the schema). Falls
+     * back to the plain message when the node has no description.
+     */
+    private function describeSchemaError(ErrorFormatter $formatter, ValidationError $error): string
+    {
+        $message = $formatter->formatErrorMessage($error);
+        $description = $this->schemaDescription($error);
+
+        return $description !== null
+            ? "{$message} — hint: {$description}"
+            : $message;
+    }
+
+    /**
+     * Walk the error tree and, for each described `oneOf`/`anyOf` node, emit a
+     * single concise hint error at that data path. Recurses into sub-errors so
+     * nested composites (a bad action inside a block inside a page) are covered.
+     *
+     * @param  list<ManifestValidationError>  $errors
+     */
+    private function collectCompositeHints(ValidationError $error, array &$errors): void
+    {
+        if (in_array($error->keyword(), ['oneOf', 'anyOf'], true)) {
+            $description = $this->schemaDescription($error);
+            if ($description !== null) {
+                $path = '/'.implode('/', $error->data()->fullPath());
+                $errors[] = new ManifestValidationError(
+                    path: $path === '/' ? '/' : rtrim($path, '/'),
+                    message: $description,
+                    code: 'schema',
+                );
+            }
+        }
+
+        foreach ($error->subErrors() as $subError) {
+            $this->collectCompositeHints($subError, $errors);
+        }
+    }
+
+    /**
+     * The failing schema node's own `description`, if any.
+     */
+    private function schemaDescription(ValidationError $error): ?string
+    {
+        $node = $error->schema()->info()->data();
+        $description = is_object($node) ? ($node->description ?? null) : null;
+
+        return is_string($description) && $description !== '' ? $description : null;
     }
 
     /**

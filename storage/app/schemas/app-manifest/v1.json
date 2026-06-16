@@ -616,6 +616,7 @@
             ]
         },
         "field_definition": {
+            "description": "An object field. Its `type` must be one of the catalog types (string, long_text, number, currency, boolean, date, datetime, single_select, multi_select, relation, formula, lookup, rollup, rating, slider, rich_text, file, date_range). If this failed, the `type` is unknown or required props for that type are missing — call list_available_field_types. Derived types (formula/lookup/rollup) require readonly:true.",
             "oneOf": [
                 { "$ref": "#/$defs/field_string" },
                 { "$ref": "#/$defs/field_long_text" },
@@ -1700,6 +1701,7 @@
             ]
         },
         "block": {
+            "description": "A page block. Its `type` must be one of the catalog types (container, text, heading, divider, spacer, table, stat, form, button, modal, chart, kanban, calendar, markdown, image, hero, feature_grid, cta, stat_band, insight, testimonials, faq, pricing, word_cloud, flow, metric_grid, sparkline, gauge, heatmap, timeline, funnel, map, tabs, accordion, split_view, card_grid, multi_step_form). If this failed, the `type` is unknown or the block is missing a required prop for that type — call list_available_components for the catalog and each type's required props.",
             "oneOf": [
                 { "$ref": "#/$defs/block_container" },
                 { "$ref": "#/$defs/block_text" },
@@ -1745,6 +1747,7 @@
             "items": { "$ref": "#/$defs/action" }
         },
         "action": {
+            "description": "A single step inside an action_sequence (button.on_click, form.on_submit/on_cancel, table action column). Its `type` must be one of: navigate, open_modal, close_modal, create_record, update_record, delete_record, show_toast, refresh, run_workflow. If this failed, the action `type` is unknown or it is missing a required arg for that type — call list_available_actions for each action's required props and the canonical patterns.",
             "oneOf": [
                 {
                     "type": "object",
