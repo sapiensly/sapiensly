@@ -2,11 +2,8 @@
 
 namespace App\Services\Ai;
 
-use App\Models\AiCatalogModel;
 use App\Models\AiUsageEvent;
 use App\Models\User;
-use App\Services\AiProviderService;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Responses\Data\Usage;
 
@@ -19,11 +16,9 @@ use Laravel\Ai\Responses\Data\Usage;
  */
 class AiUsageRecorder
 {
-    private const DRIVER_MAP_TTL = 300;
-
     public function __construct(
         private readonly AiPricing $pricing,
-        private readonly AiProviderService $providers,
+        private readonly AiSourceResolver $sources,
     ) {}
 
     public function record(
@@ -37,15 +32,14 @@ class AiUsageRecorder
     ): void {
         try {
             $usage ??= new Usage;
-            $driver = $this->driverFor($model);
 
             AiUsageEvent::create([
                 'organization_id' => $organizationId ?? $user?->organization_id,
                 'user_id' => $user?->id,
                 'module' => $module,
-                'driver' => $driver,
+                'driver' => $this->sources->driver($model),
                 'model' => $model,
-                'source' => $this->sourceFor($driver, $user),
+                'source' => $this->sources->source($model, $user),
                 'input_tokens' => $usage->promptTokens,
                 'output_tokens' => $usage->completionTokens,
                 'cache_read_tokens' => $usage->cacheReadInputTokens,
@@ -62,36 +56,5 @@ class AiUsageRecorder
                 'error' => $e->getMessage(),
             ]);
         }
-    }
-
-    /**
-     * "own" when the acting user's context has its own active provider for the
-     * model's driver (BYOK — they pay the provider), else "system" (platform key).
-     * Mirrors the source tag in AiProviderService::getEnabledChatModels.
-     */
-    private function sourceFor(string $driver, ?User $user): string
-    {
-        if ($user === null) {
-            return 'system';
-        }
-
-        try {
-            $ownDrivers = $this->providers->getProvidersForContext($user)->pluck('driver')->all();
-
-            return in_array($driver, $ownDrivers, true) ? 'own' : 'system';
-        } catch (\Throwable) {
-            return 'system';
-        }
-    }
-
-    private function driverFor(string $model): string
-    {
-        $map = Cache::remember('ai_model_driver_map', self::DRIVER_MAP_TTL, fn (): array => AiCatalogModel::query()
-            ->get(['model_id', 'driver'])
-            ->keyBy('model_id')
-            ->map(fn (AiCatalogModel $m) => $m->driver)
-            ->all());
-
-        return $map[$model] ?? 'unknown';
     }
 }

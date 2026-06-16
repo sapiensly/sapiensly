@@ -43,6 +43,11 @@ class Organization extends Model
         return $this->hasOne(OrganizationSsoConnection::class);
     }
 
+    public function aiBudget(): HasOne
+    {
+        return $this->hasOne(OrganizationAiBudget::class);
+    }
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
