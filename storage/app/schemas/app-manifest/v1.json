@@ -378,6 +378,7 @@
                                 "type": "object",
                                 "required": ["id", "value", "label"],
                                 "additionalProperties": false,
+                                "description": "A select option. Required keys: `id` (id-pattern), `value` (the stored slug-like string you pass to actions/seed_records — NOT `slug`), and `label` (the human display text). Optional `color` (#RRGGBB chip).",
                                 "properties": {
                                     "id": { "$ref": "#/$defs/id" },
                                     "value": { "type": "string", "maxLength": 50 },
@@ -410,6 +411,7 @@
                                 "type": "object",
                                 "required": ["id", "value", "label"],
                                 "additionalProperties": false,
+                                "description": "A select option. Required keys: `id` (id-pattern), `value` (the stored slug-like string you pass to actions/seed_records — NOT `slug`), and `label` (the human display text). Optional `color` (#RRGGBB chip).",
                                 "properties": {
                                     "id": { "$ref": "#/$defs/id" },
                                     "value": { "type": "string", "maxLength": 50 },

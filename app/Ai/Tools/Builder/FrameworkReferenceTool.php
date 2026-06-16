@@ -122,12 +122,14 @@ CONNECTING EXTERNAL SYSTEMS (integrations):
 TXT,
 
         'example' => <<<'TXT'
-WORKED EXAMPLE — a minimal valid "Mini CRM" manifest (one object + one page with a table). IDs shown are placeholders; generate your own `<prefix>_<26-lowercase-ulid>` ids. This shows the SHAPE; pattern-match it rather than reasoning the schema from scratch.
+WORKED EXAMPLE — a COMPLETE valid "Mini CRM" manifest (this exact thing passes validation). The placeholder ids are valid; generate your own `<prefix>_<26-lowercase-ulid>` ids (prefix 2-5 lowercase letters, then ≥8 chars of [a-z0-9_]). Pattern-match this SHAPE instead of reasoning the schema from scratch. Note the EXACT keys that trip people up: `schema_version` is a string "1.0.0" (not a number); top level REQUIRES id, version and permissions; single_select options use `value`+`label` (NOT slug); a `heading` block uses `content` (not text); a `page` requires `path` (starts with "/"). There is no `email` or `text` field type — use `string`.
 
 {
-  "schema_version": 1,
-  "name": "Mini CRM",
+  "schema_version": "1.0.0",
+  "id": "app_00000000000000000000000001",
   "slug": "mini_crm",
+  "name": "Mini CRM",
+  "version": 1,
   "settings": { "theme": "light" },
   "objects": [
     {
@@ -135,12 +137,12 @@ WORKED EXAMPLE — a minimal valid "Mini CRM" manifest (one object + one page wi
       "slug": "clientes",
       "name": "Clientes",
       "fields": [
-        { "id": "fld_00000000000000000000000001", "slug": "nombre", "name": "Nombre", "type": "text" },
-        { "id": "fld_00000000000000000000000002", "slug": "email", "name": "Email", "type": "email" },
+        { "id": "fld_00000000000000000000000001", "slug": "nombre", "name": "Nombre", "type": "string" },
+        { "id": "fld_00000000000000000000000002", "slug": "email", "name": "Email", "type": "string" },
         { "id": "fld_00000000000000000000000003", "slug": "estado", "name": "Estado", "type": "single_select",
           "options": [
-            { "id": "opt_00000000000000000000000001", "slug": "activo", "label": "Activo", "color": "#16a34a" },
-            { "id": "opt_00000000000000000000000002", "slug": "inactivo", "label": "Inactivo", "color": "#dc2626" }
+            { "id": "opt_00000000000000000000000001", "value": "activo", "label": "Activo", "color": "#16a34a" },
+            { "id": "opt_00000000000000000000000002", "value": "inactivo", "label": "Inactivo", "color": "#dc2626" }
           ] }
       ]
     }
@@ -150,8 +152,9 @@ WORKED EXAMPLE — a minimal valid "Mini CRM" manifest (one object + one page wi
       "id": "pag_00000000000000000000000001",
       "slug": "clientes",
       "name": "Clientes",
+      "path": "/clientes",
       "blocks": [
-        { "id": "blk_00000000000000000000000001", "type": "heading", "text": "Clientes" },
+        { "id": "blk_00000000000000000000000001", "type": "heading", "content": "Clientes" },
         { "id": "blk_00000000000000000000000002", "type": "table",
           "data_source": { "object_id": "obj_00000000000000000000000001" },
           "columns": [
@@ -162,10 +165,15 @@ WORKED EXAMPLE — a minimal valid "Mini CRM" manifest (one object + one page wi
       ]
     }
   ],
+  "permissions": {
+    "roles": [
+      { "id": "rol_00000000000000000000000001", "slug": "admin", "name": "Admin", "is_default": true }
+    ]
+  },
   "workflows": []
 }
 
-To add create-from-page: a `button` (on_click=[open_modal]) + a `modal` containing a `form` (mode=create, on_submit=[create_record, close_modal, show_toast, refresh]). See the `forms` topic.
+To add create-from-page: a `button` (on_click=[open_modal]) + a `modal` containing a `form` (mode=create, on_submit=[create_record, close_modal, show_toast, refresh]). The modal block must exist in the SAME page BEFORE the button references it. See the `forms` topic.
 TXT,
     ];
 

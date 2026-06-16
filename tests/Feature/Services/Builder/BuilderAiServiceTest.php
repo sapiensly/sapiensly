@@ -177,6 +177,20 @@ it('FrameworkReferenceTool returns the requested topic section', function () {
         ->and($result['reference'])->toContain('CONTEXT BOUNDARY');
 });
 
+it('FrameworkReferenceTool example manifest actually validates', function () {
+    $reference = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'example'])), true)['reference'];
+
+    $start = strpos($reference, '{');
+    $end = strrpos($reference, '}');
+    $manifest = json_decode(substr($reference, $start, $end - $start + 1), true);
+
+    expect($manifest)->not->toBeNull('the embedded example must be parseable JSON');
+
+    $result = app(ManifestValidator::class)->validate($manifest);
+
+    expect($result->valid)->toBeTrue(collect($result->errors)->pluck('message')->implode("\n"));
+});
+
 it('FrameworkReferenceTool rejects an unknown topic and lists valid ones', function () {
     $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'nonsense'])), true);
 
