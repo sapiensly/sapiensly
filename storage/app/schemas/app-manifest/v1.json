@@ -642,6 +642,7 @@
         },
 
         "filter_expression": {
+            "description": "A filter is a single OBJECT (not an array). Either a leaf condition {op, field_id, value|value_expression} where op is eq|neq|gt|gte|lt|lte|in|not_in|contains|starts_with|ends_with|is_null|is_not_null|between — e.g. {\"op\":\"eq\",\"field_id\":\"fld_…\",\"value\":\"activo\"}; OR a group {op:\"and\"|\"or\", conditions:[…nested filters…]}; OR {op:\"not\", condition:{…}}. To combine several conditions wrap them in one and/or group, never pass a bare array.",
             "oneOf": [
                 {
                     "type": "object",
@@ -726,11 +727,12 @@
             "type": "object",
             "required": ["id", "slug", "name", "path", "blocks"],
             "additionalProperties": false,
+            "description": "A page. Required keys: id, slug, name, `path` (the URL, e.g. \"/clientes\" — easy to forget) and `blocks` (an array, may be empty).",
             "properties": {
                 "id": { "$ref": "#/$defs/id" },
                 "slug": { "$ref": "#/$defs/slug" },
                 "name": { "type": "string", "maxLength": 100 },
-                "path": { "type": "string", "pattern": "^/[a-z0-9/_:-]*$", "maxLength": 200 },
+                "path": { "type": "string", "pattern": "^/[a-z0-9/_:-]*$", "maxLength": 200, "description": "Required URL path for the page, e.g. \"/clientes\". Must start with \"/\" and contain only lowercase letters, digits, /, _, - or : (no spaces or uppercase). Typically \"/\" + the page slug." },
                 "icon": { "type": "string" },
                 "layout": { "enum": ["default", "full_width", "centered", "two_column"] },
                 "visibility": { "$ref": "#/$defs/visibility_rule" },
@@ -1833,6 +1835,7 @@
                     "type": "object",
                     "required": ["type", "message"],
                     "additionalProperties": false,
+                    "description": "Show a toast notification. Required keys: `type`:\"show_toast\" and `message` (the text to show — NOT `text`). Optional `level` (info|success|warning|error).",
                     "properties": {
                         "type": { "const": "show_toast" },
                         "level": { "enum": ["info", "success", "warning", "error"], "default": "info" },

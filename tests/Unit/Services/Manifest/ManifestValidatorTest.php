@@ -101,6 +101,53 @@ it('enriches an unknown block type error with the schema description hint', func
         ->toContain('list_available_components'); // the schema hint reached the error message
 });
 
+it('surfaces the schema hint for a page missing its path', function () {
+    $manifest = baseManifest();
+    $manifest['pages'][] = [
+        'id' => id('pag'),
+        'slug' => 'home',
+        'name' => 'Home',
+        'blocks' => [],
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('message')->implode("\n"))
+        ->toContain('path');
+});
+
+it('surfaces the show_toast message hint when an action uses the wrong key', function () {
+    $fldNombre = id('fld');
+    $manifest = baseManifest([
+        'objects' => [[
+            'id' => id('obj'),
+            'slug' => 'tareas',
+            'name' => 'Tareas',
+            'primary_display_field_id' => $fldNombre,
+            'fields' => [['id' => $fldNombre, 'slug' => 'nombre', 'name' => 'Nombre', 'type' => 'string']],
+        ]],
+    ]);
+    $manifest['pages'][] = [
+        'id' => id('pag'),
+        'slug' => 'home',
+        'name' => 'Home',
+        'path' => '/home',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'button',
+            'label' => 'Avisar',
+            'on_click' => [['type' => 'show_toast', 'text' => 'hecho']], // wrong key: should be `message`
+        ]],
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('message')->implode("\n"))
+        ->toContain('message');
+});
+
 it('rejects duplicate object slugs', function () {
     $manifest = baseManifest();
     $manifest['objects'][] = [
