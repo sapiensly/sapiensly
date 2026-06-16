@@ -6,6 +6,7 @@ use App\Ai\Tools\Builder\ListAvailableComponentsTool;
 use App\Ai\Tools\Builder\ListAvailableFieldTypesTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
+use App\Ai\Tools\Builder\ScaffoldAppTool;
 use App\Ai\Tools\Builder\SimulateQueryTool;
 use App\Ai\Tools\Builder\ValidateManifestTool;
 use App\Models\App;
@@ -129,6 +130,80 @@ it('ReadManifestTool surfaces the running draft after a successful propose_chang
     // And the persisted manifest hasn't moved — we haven't auto-applied yet.
     $persisted = $this->manifestService->getActiveManifest($this->testApp->fresh());
     expect($persisted['name'])->not->toBe('Mini CRM Updated');
+});
+
+it('ScaffoldAppTool builds a valid object + list page from a high-level spec', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose);
+
+    $result = json_decode($tool->handle(new ToolRequest([
+        'objects' => [
+            [
+                'name' => 'Leads',
+                'fields' => [
+                    ['name' => 'Nombre', 'type' => 'string'],
+                    ['name' => 'Teléfono', 'type' => 'phone'],
+                    ['name' => 'Estado', 'type' => 'single_select', 'options' => ['Nuevo', 'Contactado', 'Ganado']],
+                ],
+            ],
+        ],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['created'])->toHaveCount(1)
+        ->and($result['created'][0]['slug'])->toBe('leads')
+        ->and($result['created'][0])->toHaveKey('page_id');
+
+    // The running draft holds a fully valid manifest with the new object + page.
+    $draft = $propose->runningDraft();
+    $newObject = collect($draft['objects'])->firstWhere('slug', 'leads');
+    expect($newObject)->not->toBeNull()
+        ->and($newObject['fields'])->toHaveCount(3);
+
+    // The select field used value+label (the shape models keep getting wrong).
+    $estado = collect($newObject['fields'])->firstWhere('slug', 'estado');
+    expect($estado['type'])->toBe('single_select')
+        ->and($estado['options'][0])->toHaveKeys(['id', 'value', 'label'])
+        ->and($estado['options'][0]['value'])->toBe('nuevo')
+        ->and($estado['options'][0]['label'])->toBe('Nuevo');
+
+    // And the whole assembled manifest passes validation.
+    expect($this->validator->validate($draft)->valid)->toBeTrue();
+});
+
+it('ScaffoldAppTool gives an object with no fields a default field, and coerces unsupported types', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose);
+
+    $result = json_decode($tool->handle(new ToolRequest([
+        'objects' => [
+            ['name' => 'Notas'],
+            ['name' => 'Pedidos', 'fields' => [['name' => 'Cliente', 'type' => 'relation']]],
+        ],
+        'include_pages' => false,
+    ])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['created'])->toHaveCount(2)
+        ->and($result['created'][0])->not->toHaveKey('page_id') // include_pages=false
+        ->and($result['notes'])->not->toBeEmpty();
+
+    $draft = $propose->runningDraft();
+    $notas = collect($draft['objects'])->firstWhere('slug', 'notas');
+    $pedidos = collect($draft['objects'])->firstWhere('slug', 'pedidos');
+    expect($notas['fields'])->toHaveCount(1) // default field added
+        ->and(collect($pedidos['fields'])->firstWhere('name', 'Cliente')['type'])->toBe('string'); // relation coerced
+
+    expect($this->validator->validate($draft)->valid)->toBeTrue();
+});
+
+it('ScaffoldAppTool rejects an empty objects list', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose);
+
+    $result = json_decode($tool->handle(new ToolRequest(['objects' => []])), true);
+
+    expect($result['ok'])->toBeFalse();
 });
 
 it('ProposeChangeTool fires the onProgress checkpoint only on a successful proposal', function () {

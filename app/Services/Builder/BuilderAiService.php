@@ -16,6 +16,7 @@ use App\Ai\Tools\Builder\ListAvailableTriggersTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
 use App\Ai\Tools\Builder\SampleEndpointTool;
+use App\Ai\Tools\Builder\ScaffoldAppTool;
 use App\Ai\Tools\Builder\SeedRecordsTool;
 use App\Ai\Tools\Builder\SimulateQueryTool;
 use App\Ai\Tools\Builder\TestIntegrationConnectionTool;
@@ -141,6 +142,7 @@ class BuilderAiService
             new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
             new ValidateManifestTool($this->validator),
             $proposeTool,
+            new ScaffoldAppTool($app, $this->manifestService, $proposeTool),
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
             new DiscoverIntegrationTool($this->integrationAuthoring),
@@ -274,6 +276,7 @@ class BuilderAiService
             new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
             new ValidateManifestTool($this->validator),
             $proposeTool,
+            new ScaffoldAppTool($app, $this->manifestService, $proposeTool),
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
             new DiscoverIntegrationTool($this->integrationAuthoring),
@@ -768,6 +771,7 @@ Rules of engagement:
 1a. BUILD ON WHAT EXISTS — NEVER restart from scratch. If `read_manifest` shows objects/pages already there (e.g. on a "continúa" turn, or after an earlier turn), ADD to them with small incremental patches. Do NOT delete-and-recreate objects/pages you already built, and do NOT re-create an object that already exists — your earlier work is saved (progress is checkpointed even if a previous turn was cut off). Empty or partial is fine; pick up exactly where the manifest left off.
 1b. CONSULT BEFORE YOU BUILD, not after. Before composing ANY block/field/action/workflow you are not 100% sure of, call the relevant catalog FIRST (list_available_components / list_available_field_types / list_available_actions / list_available_triggers / list_available_steps) and, for an area you're unsure of, `framework_reference(topic)`. Guessing a shape and learning it from a validation error wastes a whole round-trip — and there is a hard time budget per turn. Read once, then build it right.
 1c. KEEP PATCHES SMALL. Add a few blocks/fields per `propose_change` call (they accumulate across calls in the turn). Do NOT try to submit an entire page of many blocks + modals in one giant op — very large tool arguments can be truncated in transit and arrive malformed (you'll see "ops must be a non-empty array" or apply errors even though your patch looked complete). Several small valid calls beat one huge fragile one.
+1d. COLD START — use `scaffold_app`. For a "create an app for X" / "build me an app that …" request on an app with no (or few) objects yet, call `scaffold_app` FIRST with the objects + simple fields you need. It generates correct ids/slugs/required-props and a list page per object in one validated step — far more reliable than hand-building objects and pages op-by-op. Then layer on the rest (forms, modals, action columns, relations, derived fields, workflows) with normal `propose_change` calls using the ids it returns.
 2. ALWAYS call `list_available_components` and `list_available_field_types` if you need to recall what types are supported.
 3. NEVER invent block types or field types not in the catalogs — the runtime will refuse to render them.
 4. ALL changes go through `propose_change` as an RFC 6902 JSON Patch. After your turn ends the platform applies the ACCUMULATED proposal of the turn automatically — the user does NOT have to approve. So phrase confirmations like "I added X" / "I renamed Y to Z" / "I created the workflow" — past tense, as if already done. The user can undo from the chat if they don't like it. The `change_summary` you pass MUST be just as short and concrete as your chat reply: one plain past-tense clause naming what changed ("Agregué el campo «Notas» a Clientes"), no preamble, no explanation of why, no restating the manifest.
