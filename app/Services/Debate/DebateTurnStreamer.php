@@ -7,6 +7,7 @@ use App\Events\Debate\DebateTurnChunk;
 use App\Events\Debate\DebateTurnComplete;
 use App\Events\Debate\DebateTurnError;
 use App\Models\DebateTurn;
+use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use Illuminate\Http\Client\RequestException;
@@ -69,6 +70,10 @@ class DebateTurnStreamer
                 'role' => $turn->role,
                 'model' => $model,
             ]);
+
+            app(AiSpendGuard::class)->assertWithinBudget(
+                $user, $user?->organization_id, $model,
+            );
 
             $stream = $agent->stream($prompt, provider: $provider, model: $model);
 

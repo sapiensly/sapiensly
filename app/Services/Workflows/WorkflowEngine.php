@@ -7,6 +7,7 @@ use App\Models\Record;
 use App\Models\User;
 use App\Models\WorkflowRun;
 use App\Models\WorkflowStepRun;
+use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Records\ExpressionResolver;
@@ -204,6 +205,10 @@ class WorkflowEngine
         } else {
             $provider = Lab::Anthropic;
         }
+
+        app(AiSpendGuard::class)->assertWithinBudget(
+            $user, $user?->organization_id, $model,
+        );
 
         $sdkAgent = new AnonymousAgent($systemPrompt, [], []);
         $response = $sdkAgent->prompt($userPrompt, provider: $provider, model: $model);

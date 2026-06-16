@@ -6,6 +6,7 @@ use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\Message;
 use App\Models\User;
+use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use Generator;
 use Illuminate\Support\Facades\Log;
@@ -64,6 +65,10 @@ class LLMService
     public function getProvider(string $model, ?Agent $agent = null): Lab
     {
         $user = $this->resolveUser($agent);
+
+        // Budget gate: every LLMService call routes through here right before the
+        // SDK call, so this single check hard-blocks an over-budget org.
+        app(AiSpendGuard::class)->assertWithinBudget($user, $user?->organization_id ?? $agent?->organization_id, $model);
 
         if ($user) {
             return $this->getAiProviderService()->resolveProvider($model, $user);

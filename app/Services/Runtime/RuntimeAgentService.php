@@ -11,6 +11,7 @@ use App\Models\RuntimeAgentConversation;
 use App\Models\RuntimeAgentMessage;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
+use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Manifest\AppManifestService;
@@ -96,6 +97,10 @@ class RuntimeAgentService
                 $provider = Lab::Anthropic;
             }
             $resolvedModel = $this->aiDefaults->model('chat');
+
+            app(AiSpendGuard::class)->assertWithinBudget(
+                $conversation->user, $app->organization_id, $resolvedModel,
+            );
 
             $stream = $sdkAgent->stream($promptText, provider: $provider, model: $resolvedModel);
 

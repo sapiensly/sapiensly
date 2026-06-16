@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\OrganizationAiBudget;
 use App\Models\User;
 use App\Services\Ai\AiSpendGuard;
+use App\Services\LLMService;
 use App\Support\Tenancy\TenantContext;
 
 /**
@@ -75,6 +76,16 @@ it('does not enforce when enforcement is disabled', function () {
 
     app(AiSpendGuard::class)->assertWithinBudget($this->user, $this->org->id, 'claude-x');
 })->throwsNoExceptions();
+
+it('blocks a real call site (LLMService) once over budget', function () {
+    OrganizationAiBudget::create(['organization_id' => $this->org->id, 'system_monthly_budget' => 1]);
+    guardEvent($this->org->id, 'system', 5);
+
+    $llm = app(LLMService::class)->setContext($this->user);
+
+    expect(fn () => $llm->getProvider('claude-x'))
+        ->toThrow(AiBudgetExceededException::class);
+});
 
 it('does not cap own (BYOK) spend unless the org opts in', function () {
     // Make the model resolve to an OWN source: the org owns the anthropic driver.

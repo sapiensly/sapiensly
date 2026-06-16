@@ -29,6 +29,7 @@ use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
+use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
@@ -348,6 +349,10 @@ class BuilderAiService
                 'model' => $resolvedModel,
                 'is_override' => $modelOverride !== null,
             ]);
+
+            app(AiSpendGuard::class)->assertWithinBudget(
+                $conversation->user, $app->organization_id, $resolvedModel,
+            );
 
             $stream = $sdkAgent->stream(
                 $promptText,

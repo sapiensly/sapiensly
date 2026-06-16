@@ -18,6 +18,7 @@ use App\Models\ChatMessage;
 use App\Models\Tool;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
+use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\RetrievalService;
@@ -278,6 +279,10 @@ class ChatAiService
                 'model' => $resolvedModel,
                 'attachments' => count($attachments),
             ]);
+
+            app(AiSpendGuard::class)->assertWithinBudget(
+                $user, $user?->organization_id, $resolvedModel,
+            );
 
             $stream = $sdkAgent->stream(
                 $promptText.$ragContext,
