@@ -9,30 +9,22 @@ use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 /**
- * Returns the App's manifest as JSON so Claude can reason about the existing
- * structure before proposing edits.
+ * Reads the App's manifest for the builder. By DEFAULT it returns a compact
+ * STRUCTURAL SUMMARY (ids/slugs/types only — no property values), because the
+ * full manifest can be tens of thousands of tokens and the model rarely needs
+ * all of it. Pass `expand` with an object/page/workflow id to get that one
+ * element's full subtree. This is the single biggest builder token saver.
  *
- * State-aware: if ProposeChangeTool has already recorded successful patches
- * in this turn, we return the IN-PROGRESS DRAFT (i.e. what Claude *thinks*
- * the manifest currently looks like). Otherwise we return the persisted
- * "active" manifest.
- *
- * Why this matters: without this, Claude would propose an op, then call
- * read_manifest, see the unchanged persisted manifest, conclude "my
- * propose_change failed silently", and try to add the same thing again
- * — which then DOES fail because the running draft validation refuses the
- * duplicate. We were watching the model fight itself in a loop.
+ * State-aware: if ProposeChangeTool has recorded successful patches THIS TURN,
+ * it reads the in-progress DRAFT (what the model thinks the manifest looks like
+ * now); otherwise the persisted "active" manifest — so the model doesn't fight
+ * itself re-proposing changes it already made.
  */
 class ReadManifestTool implements Tool
 {
     public function __construct(
         private App $appModel,
         private AppManifestService $manifestService,
-        /**
-         * Optional companion that holds the running draft for the current
-         * turn. Nullable so the tool still works in tests and contexts
-         * (e.g. background analysis jobs) where no propose tool is wired.
-         */
         private ?ProposeChangeTool $proposeTool = null,
     ) {}
 
@@ -44,42 +36,118 @@ class ReadManifestTool implements Tool
     public function description(): string
     {
         return <<<'DESC'
-Read the App's manifest as a JSON envelope `{state, note, op_count, manifest}`.
+Read the App's manifest. Returns `{state, op_count, note, summary}` by default —
+a COMPACT structure (objects→fields with id/slug/type, pages→blocks with id/type,
+workflows, settings keys, agent on/off). Use this first to see the shape.
 
-- `state` is "draft" if you have already made successful `propose_change` calls THIS TURN, in which case `manifest` is the in-progress draft your subsequent propose_change will validate against.
-- `state` is "active" if no proposals have been recorded yet — `manifest` is the persisted, currently-published version.
-- `op_count` is the number of ops your turn has stacked so far (0 when state="active").
+To edit a specific object/page/workflow, call again with `expand: "<id>"` to get
+that ONE element's FULL definition (returned as `element`). Do NOT expand the
+whole manifest element-by-element; only expand what you're about to change.
 
-Every object also has two implicit system fields you can reference without declaring them: sys_created_at and sys_updated_at (both datetime). See list_available_field_types for details.
-
-IMPORTANT: when state="draft", do NOT re-propose changes you already made — they are present in the manifest you're reading, just not yet persisted. They WILL persist automatically when your turn ends.
+- `state` is "draft" if you've made successful `propose_change` calls THIS TURN
+  (the summary/element reflect your in-progress draft) — do NOT re-propose what's
+  already there; it persists automatically at turn end. Else "active" (published).
+- Every object has implicit system fields sys_created_at / sys_updated_at (datetime).
 DESC;
     }
 
     public function schema(JsonSchema $schema): array
     {
-        return [];
+        return [
+            'expand' => $schema->string()
+                ->description('Optional id of an object/page/workflow to return in full instead of the summary.'),
+        ];
     }
 
     public function handle(Request $request): string
     {
         $draft = $this->proposeTool?->runningDraft();
-        if ($draft !== null) {
-            return json_encode([
-                'state' => 'draft',
-                'op_count' => $this->proposeTool?->opCount() ?? 0,
-                'note' => 'This is your in-progress draft, with every successful propose_change op from THIS turn already applied. Any further propose_change call will validate against this state. The draft will be persisted automatically when your turn ends — do not re-propose what you already added.',
-                'manifest' => $draft,
-            ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
+        $isDraft = $draft !== null;
+        $manifest = $draft ?? $this->manifestService->getActiveManifest($this->appModel) ?? [];
+
+        $envelope = [
+            'state' => $isDraft ? 'draft' : 'active',
+            'op_count' => $isDraft ? ($this->proposeTool?->opCount() ?? 0) : 0,
+            'note' => $isDraft
+                ? 'In-progress draft (your successful propose_change ops this turn are already applied; do not re-propose them).'
+                : 'Currently-published manifest.',
+        ];
+
+        $expand = (string) ($request->all()['expand'] ?? '');
+        if ($expand !== '') {
+            $element = $this->findElement($manifest, $expand);
+            $envelope['expanded'] = $expand;
+            $envelope['element'] = $element ?? new \stdClass;
+            if ($element === null) {
+                $envelope['note'] = "No object/page/workflow with id '{$expand}' was found. Check the summary for valid ids.";
+            }
+
+            return json_encode($envelope, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
         }
 
-        $manifest = $this->manifestService->getActiveManifest($this->appModel);
+        $envelope['summary'] = $this->summarize($manifest);
 
-        return json_encode([
-            'state' => 'active',
-            'op_count' => 0,
-            'note' => 'No proposals recorded yet in this turn. This is the currently-published manifest.',
-            'manifest' => $manifest ?? new \stdClass,
-        ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
+        return json_encode($envelope, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Compact structural view: ids/slugs/types only, no property values.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>
+     */
+    private function summarize(array $manifest): array
+    {
+        return [
+            'name' => $manifest['name'] ?? null,
+            'slug' => $manifest['slug'] ?? null,
+            'objects' => array_map(fn (array $o) => [
+                'id' => $o['id'] ?? null,
+                'slug' => $o['slug'] ?? null,
+                'name' => $o['name'] ?? null,
+                'source' => $o['source']['type'] ?? 'internal',
+                'fields' => array_map(fn (array $f) => [
+                    'id' => $f['id'] ?? null,
+                    'slug' => $f['slug'] ?? null,
+                    'type' => $f['type'] ?? null,
+                ], $o['fields'] ?? []),
+            ], $manifest['objects'] ?? []),
+            'pages' => array_map(fn (array $p) => [
+                'id' => $p['id'] ?? null,
+                'slug' => $p['slug'] ?? null,
+                'name' => $p['name'] ?? null,
+                'blocks' => array_map(fn (array $b) => [
+                    'id' => $b['id'] ?? null,
+                    'type' => $b['type'] ?? null,
+                ], $p['blocks'] ?? []),
+            ], $manifest['pages'] ?? []),
+            'workflows' => array_map(fn (array $w) => [
+                'id' => $w['id'] ?? null,
+                'slug' => $w['slug'] ?? null,
+                'name' => $w['name'] ?? null,
+                'trigger' => $w['trigger']['type'] ?? null,
+            ], $manifest['workflows'] ?? []),
+            'settings_keys' => array_keys($manifest['settings'] ?? []),
+            'agent_enabled' => (bool) ($manifest['agent']['enabled'] ?? false),
+        ];
+    }
+
+    /**
+     * Find an object/page/workflow by id for full expansion.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>|null
+     */
+    private function findElement(array $manifest, string $id): ?array
+    {
+        foreach (['objects', 'pages', 'workflows'] as $collection) {
+            foreach ($manifest[$collection] ?? [] as $element) {
+                if (($element['id'] ?? null) === $id) {
+                    return $element;
+                }
+            }
+        }
+
+        return null;
     }
 }

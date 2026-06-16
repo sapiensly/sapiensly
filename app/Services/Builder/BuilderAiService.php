@@ -150,11 +150,18 @@ class BuilderAiService
         $history = $this->buildHistory($conversation);
         $prompt = array_pop($history); // the user turn just stored
 
+        $systemPrompt = $this->systemPrompt($app);
         $sdkAgent = new BuilderAgent(
-            instructions: $this->systemPrompt($app),
+            instructions: $systemPrompt,
             messages: $history,
             tools: $tools,
         );
+        // Cache the static system + tool-definition prefix (re-sent every turn)
+        // as an Anthropic prompt-cache breakpoint, so it bills at ~0.1x after
+        // the first turn of a conversation.
+        if (config('ai.prompt_caching.enabled')) {
+            $sdkAgent->withCacheableSystem($systemPrompt);
+        }
 
         $startedAt = microtime(true);
 
@@ -297,11 +304,17 @@ class BuilderAiService
         }
         $promptText = $lastUser?->content ?? $userText;
 
+        $systemPrompt = $this->systemPrompt($app);
         $sdkAgent = new BuilderAgent(
-            instructions: $this->systemPrompt($app),
+            instructions: $systemPrompt,
             messages: $sdkHistory,
             tools: $tools,
         );
+        // Cache the static system + tool-definition prefix (re-sent every turn)
+        // as an Anthropic prompt-cache breakpoint (~0.1x after the first turn).
+        if (config('ai.prompt_caching.enabled')) {
+            $sdkAgent->withCacheableSystem($systemPrompt);
+        }
 
         $startedAt = microtime(true);
         $buffer = '';
@@ -698,13 +711,13 @@ Language:
 0. ALWAYS reply in the same language as the most recent user message. If the user writes in Spanish, your assistant turn (including confirmations, error messages, clarifications and the `change_summary` you pass to propose_change) is in Spanish. If they switch to English mid-conversation, switch with them. Don't mix languages within a single reply. Default to the user's language even if your internal reasoning was in English.
 
 Rules of engagement:
-1. ALWAYS call `read_manifest` first to see the current structure before proposing edits. `read_manifest` returns `{state, op_count, note, manifest}`. After you've made one or more successful `propose_change` calls, `state` flips to "draft" and `manifest` IS the in-progress draft (with your ops already applied) — DO NOT re-propose what's already there. If `propose_change` returned ok:true, the change is in the draft, even if your previous read showed it absent. Re-reading is only useful between calls that depend on the new structure (e.g. you added a field and now need the field id to reference from a form).
+1. ALWAYS call `read_manifest` first to see the current structure before proposing edits. By default it returns `{state, op_count, note, summary}` — a COMPACT structural map (objects→fields with id/slug/type, pages→blocks with id/type, workflows, settings keys, agent on/off), NOT full property values. That summary is enough to locate what you need. To edit a specific object/page/workflow, call `read_manifest` again with `expand: "<id>"` to get that ONE element's full definition (returned as `element`); only expand what you're about to change, never the whole manifest element-by-element. After you've made one or more successful `propose_change` calls, `state` flips to "draft" and the summary/element reflect the in-progress draft (with your ops already applied) — DO NOT re-propose what's already there. If `propose_change` returned ok:true, the change is in the draft, even if your previous read showed it absent. Re-reading is only useful between calls that depend on the new structure (e.g. you added a field and now need the field id to reference from a form).
 2. ALWAYS call `list_available_components` and `list_available_field_types` if you need to recall what types are supported.
 3. NEVER invent block types or field types not in the catalogs — the runtime will refuse to render them.
 4. ALL changes go through `propose_change` as an RFC 6902 JSON Patch. After your turn ends the platform applies the ACCUMULATED proposal of the turn automatically — the user does NOT have to approve. So phrase confirmations like "I added X" / "I renamed Y to Z" / "I created the workflow" — past tense, as if already done. The user can undo from the chat if they don't like it. The `change_summary` you pass MUST be just as short and concrete as your chat reply: one plain past-tense clause naming what changed ("Agregué el campo «Notas» a Clientes"), no preamble, no explanation of why, no restating the manifest.
 5. `propose_change` is now CUMULATIVE within a turn — calling it twice stacks the ops, and the second call validates as if the first call's ops were already applied. So the natural pattern of "first add field, then reference it from a form" works: call propose_change once with the field, then again with the form change. Each call's `change_summary` is concatenated into the final audit message. Calls that return ok:false do NOT pollute the running draft. If a call returns ok:true, TRUST the response — the change IS in the draft. You will see it on the next `read_manifest`, which will report `state: "draft"`. Never propose the same change twice "to make sure".
 5a. If `propose_change` returns errors, fix that specific call's ops and try again — earlier successful calls are still preserved.
-5b. **NEVER** craft a `{op: "remove", path: "/pages/N/blocks/M"}` patch by counting array indices yourself. Array indices can drift between when you read the manifest and when the patch is applied (e.g. a sibling proposal landed first, you misread the order, or you cached a stale view). Use `delete_block_by_id` instead — pass the block's `id` and the tool resolves the live path before submitting. Same applies for removing fields/pages/workflows — for now block deletion is the only one that has a safe wrapper; for fields/pages/workflows still use propose_change but ALWAYS call `read_manifest` IMMEDIATELY before crafting the remove path and double-check the index points at the entity you mean.
+5b. **NEVER** craft a `{op: "remove", path: "/pages/N/blocks/M"}` patch by counting array indices yourself. Array indices can drift between when you read the manifest and when the patch is applied (e.g. a sibling proposal landed first, you misread the order, or you cached a stale view). Use `delete_block_by_id` instead — pass the block's `id` and the tool resolves the live path before submitting. Same applies for removing fields/pages/workflows — for now block deletion is the only one that has a safe wrapper; for fields/pages/workflows still use propose_change but ALWAYS call `read_manifest` with `expand` on the parent element IMMEDIATELY before crafting the remove path and double-check the index points at the entity you mean.
 6. IDs in the manifest follow `<prefix>_<26-lowercase-ulid>`. When you create new objects/fields/blocks/pages/roles, generate IDs of this exact shape — use prefixes obj_, fld_, pag_, blk_, col_, opt_, rol_. The slug is a separate human-readable identifier (^[a-z][a-z0-9_]*$).
 
 Verification (on demand — use judgment, do not call for trivial edits):

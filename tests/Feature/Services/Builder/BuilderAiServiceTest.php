@@ -96,8 +96,8 @@ it('ReadManifestTool returns the active manifest as JSON envelope', function () 
 
     expect($result['state'])->toBe('active')
         ->and($result['op_count'])->toBe(0)
-        ->and($result['manifest']['slug'])->toBe('mini_crm')
-        ->and($result['manifest']['objects'])->toHaveCount(1);
+        ->and($result['summary']['slug'])->toBe('mini_crm')
+        ->and($result['summary']['objects'])->toHaveCount(1);
 });
 
 it('ReadManifestTool surfaces the running draft after a successful propose_change', function () {
@@ -123,11 +123,23 @@ it('ReadManifestTool surfaces the running draft after a successful propose_chang
     $after = json_decode($read->handle(new ToolRequest([])), true);
     expect($after['state'])->toBe('draft')
         ->and($after['op_count'])->toBe(1)
-        ->and($after['manifest']['name'])->toBe('Mini CRM Updated');
+        ->and($after['summary']['name'])->toBe('Mini CRM Updated');
 
     // And the persisted manifest hasn't moved — we haven't auto-applied yet.
     $persisted = $this->manifestService->getActiveManifest($this->testApp->fresh());
     expect($persisted['name'])->not->toBe('Mini CRM Updated');
+});
+
+it('ReadManifestTool returns one element in full when expanded', function () {
+    $tool = new ReadManifestTool($this->testApp->fresh(), $this->manifestService);
+
+    $summary = json_decode($tool->handle(new ToolRequest([])), true);
+    $objectId = $summary['summary']['objects'][0]['id'];
+
+    $expanded = json_decode($tool->handle(new ToolRequest(['expand' => $objectId])), true);
+    expect($expanded['expanded'])->toBe($objectId)
+        ->and($expanded['element']['id'])->toBe($objectId)
+        ->and($expanded['element'])->toHaveKey('fields'); // full subtree, not just the summary
 });
 
 it('ReadManifestTool stays on the active manifest after a failed propose_change', function () {
