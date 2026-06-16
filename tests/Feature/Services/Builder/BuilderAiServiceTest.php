@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\Tools\Builder\FrameworkReferenceTool;
 use App\Ai\Tools\Builder\InspectRecordsTool;
 use App\Ai\Tools\Builder\ListAvailableComponentsTool;
 use App\Ai\Tools\Builder\ListAvailableFieldTypesTool;
@@ -160,6 +161,27 @@ it('ReadManifestTool stays on the active manifest after a failed propose_change'
     $after = json_decode($read->handle(new ToolRequest([])), true);
     expect($after['state'])->toBe('active')
         ->and($after['op_count'])->toBe(0);
+});
+
+it('FrameworkReferenceTool lists its topics when called with no topic', function () {
+    $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest([])), true);
+
+    expect($result['topics'])->toContain('forms', 'workflows', 'derived_fields', 'expressions', 'design', 'verification', 'visual_review', 'connected_objects', 'example');
+});
+
+it('FrameworkReferenceTool returns the requested topic section', function () {
+    $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'workflows'])), true);
+
+    expect($result['topic'])->toBe('workflows')
+        ->and($result['reference'])->toContain('script.run')
+        ->and($result['reference'])->toContain('CONTEXT BOUNDARY');
+});
+
+it('FrameworkReferenceTool rejects an unknown topic and lists valid ones', function () {
+    $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'nonsense'])), true);
+
+    expect($result['error'])->toContain('nonsense')
+        ->and($result['topics'])->toContain('forms');
 });
 
 it('ListAvailableComponentsTool returns the closed component catalog', function () {

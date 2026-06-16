@@ -1,0 +1,215 @@
+<?php
+
+namespace App\Ai\Tools\Builder;
+
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+
+/**
+ * On-demand authoring reference for the Builder agent. The detailed,
+ * situational rules (forms, workflows, derived fields, visual design,
+ * connected objects, visual review, verification, a worked example) used to
+ * live in the always-on system prompt — ~5k tokens re-billed every turn even
+ * when the turn only renamed a field. They now live here and the model pulls
+ * ONLY the section it needs for the current task, by topic.
+ *
+ * Keep each section self-contained and concrete; the model treats whatever
+ * this returns as the authoritative rules for that area.
+ */
+class FrameworkReferenceTool implements Tool
+{
+    /**
+     * @var array<string, string>
+     */
+    private const TOPICS = [
+        'forms' => <<<'TXT'
+DATA ENTRY (forms, buttons, modals):
+- To capture new records, the canonical pattern is: a button on the page with on_click=[open_modal], then a modal whose blocks array contains a form (mode=create) whose on_submit=[create_record, close_modal, show_toast, refresh]. Inline forms (directly on the page) are valid too but less common.
+- For per-row actions inside a table ("Marcar completada", "Editar", "Borrar"), use ACTION COLUMNS, not workarounds. Add an entry to table.columns with `{id, type:"action", label, icon?, variant?, on_click:[...]}`. Inside on_click, address the clicked row with {{row.id}} (record id) and {{row.data.<slug>}} (any field of that record). Example mark-done: `[{type:"update_record", object_id:"obj_...", record_id_expression:"{{row.id}}", values:{completada:true}}, {type:"refresh"}]`. NEVER fake action buttons with formula fields expression:"true" or buttons placed outside the table — they don't work.
+- The canonical EDIT-from-table pattern: action column → open_modal {modal_block_id, params:{record_id:"{{row.id}}"}} → modal contains a form mode=edit with record_id_expression="{{params.record_id}}".
+- ALWAYS call `list_available_actions` before composing on_click or on_submit if unsure which actions exist or how to write their values. Inventing actions fails validation.
+- In action.values, reference form inputs with {{form.<slug>}}, page params with {{params.<X>}}, and the current user with {{current_user.id}}. Resolved server-side by ExpressionResolver — see the patterns from list_available_actions.
+TXT,
+
+        'workflows' => <<<'TXT'
+WORKFLOWS (automation):
+- The user wants a workflow when they say "when X happens, do Y", "automatically …", "every time a … is created/updated, …", or want a button that runs a multi-step routine. Compose them as workflows[] at the manifest root.
+- ALWAYS call `list_available_triggers` and `list_available_steps` before proposing a workflow. The engine refuses unknown trigger or step types.
+- CONTEXT BOUNDARY: a workflow only sees `{{trigger.…}}`, `{{vars.…}}`, `{{steps.<id>.output.…}}` and `{{current_user.…}}`. It does NOT see `{{form.…}}`, `{{params.…}}` or `{{row.…}}` — those are UI-runtime roots and resolve to null inside a workflow (rejected at save). To use a form's values in a workflow, the `run_workflow` action MUST forward them via its `input` map, and the workflow reads them from the trigger. Example: a "Buscar" form → `on_submit: [{run_workflow, workflow_id, input: {min: "{{form.rango_min}}", max: "{{form.rango_max}}"}}, refresh]`; inside the workflow a step reads `{{trigger.min}}` / `{{trigger.max}}`. Forgetting the `input` map (or using `{{form.…}}` in the steps) makes the workflow run on empty data — the classic "toast says done but nothing happened" bug.
+- Typical patterns:
+  - Audit log: trigger=record.created on object X → step record.create on audit_log object with the original record's fields via {{trigger.record.data.<slug>}}.
+  - Manual button: trigger=manual + button on a page with on_click=[run_workflow, show_toast, refresh].
+  - AI enrichment: trigger=record.created → ai.complete with prompt referencing {{trigger.record.data.<slug>}}, output_variable=summary → record.update setting the summary back via {{vars.summary}}.
+- `script.run` runs sandboxed JavaScript (isolated QuickJS — no network, filesystem or host access). It is THE escape hatch when the expression catalog can't express what's needed: looping, parsing/reshaping arrays or objects, multi-step or multi-branch computation, anything you'd otherwise be tempted to write as a non-existent function. Its `input` map is resolved against the workflow context and passed as the `input` argument; the script uses a top-level `return` for its output (a scalar is wrapped as `{value}`, reachable via {{steps.<id>.output.value}}). Do NOT use it for simple math/comparisons (use formula/branch expressions) or for DB access (use record.* steps) — the sandbox cannot reach the database.
+- JS runs ONLY inside `script.run` — it cannot be inlined into a `formula` field, a `value_expression`, or an action value (expression-only). So when a computed value that needs JS must be DISPLAYED like a formula: workflow (trigger record.created/record.updated) → `script.run` computes it → `record.update` writes the result into a normal (non-formula) field → that field is shown like any other.
+- Use `branch` for conditional steps. A condition is a full boolean expression: "{{trigger.record.data.estado}} == \"activo\"", "{{vars.total}} > 1000". Operators: `== != < <= > >=`, `and or not` (or `&& || !`), ternary. Use `~`/concat for string building, not `+`.
+TXT,
+
+        'derived_fields' => <<<'TXT'
+DERIVED FIELDS (formula / lookup / rollup):
+- They are READ-ONLY (`readonly: true` is mandatory) — value is computed at query time, never stored. They show in tables, stats and charts like any other field.
+- Pick formula when the value comes from THIS row only. Pick lookup when the value lives on the OTHER side of a many_to_one relation (e.g. show client.company_name on every order). Pick rollup to count/sum/avg the CHILDREN of a one_to_many relation (e.g. orders_count or revenue_sum on a customer).
+- A rollup requires the parent's one_to_many relation field to have `inverse_field_id` set — the many_to_one field on the child that points back. Without it the engine can't find the children and the rollup is null.
+- See the `expressions` topic for the formula syntax and function catalog.
+
+SYSTEM FIELDS (every object has them automatically):
+- Every object exposes two implicit datetime fields you can reference without declaring them: `sys_created_at` (insert time) and `sys_updated_at` (last modification). Backfilled, work on all existing records, zero setup.
+- ALWAYS prefer these over inventing a manual datetime field for "X created in the last N days", "newest records", "activity over time", heatmaps, timelines, sparklines of growth. Good: `x_field_id: "sys_created_at"` or a filter `{op:"gte", field_id:"sys_created_at", value_expression:"..."}`.
+- READ-ONLY — do NOT use them in form blocks or set them via action.values. Valid in: table.columns, table sort, filter conditions, sparkline.x_field_id, heatmap.date_field_id, calendar.date_field_id, timeline.date_field_id, gauge/stat (with count aggregation only — they're datetime, so sum/avg make no sense).
+TXT,
+
+        'expressions' => <<<'TXT'
+EXPRESSIONS (formula fields, value_expression, branch/filter conditions):
+- Formula expressions are REAL expressions inside `{{ … }}`, evaluated by a sandboxed engine. Reference this row's fields by their bare slug (no prefix): `{{monto * 1.16}}`, `{{cantidad * precio_unitario}}`, `{{activo ? "Sí" : "No"}}`, `{{total > 1000}}`.
+- Operators: arithmetic `+ - * / %`, comparison `== != < <= > >=`, logic `and or not` (or `&& || !`), ternary `cond ? a : b`. IMPORTANT: `+` is NUMERIC addition — for STRING concatenation use `~` or `concat(...)`, e.g. `{{nombre ~ " " ~ apellido}}`.
+- Functions available (EXHAUSTIVE): now, today, upper, lower, concat, round, abs, floor, ceil, count, length, default, random. `random()` → float in [0,1); `random(min,max)` → integer in [min,max]; `random(array)` → random element. For a random whole number prefer `{{random(form.min, form.max)}}`.
+- Calling ANY other function — or JS-style `Math.random()`, `Date.now()`, method calls like `x.toFixed()` — is rejected at save. No string methods, regex helpers or date math beyond now/today; compose from these. If a value genuinely needs logic these can't express (loops, parsing, multi-step transforms), do NOT invent a function — compute it with a `script.run` workflow step (see `workflows`) that writes the result into a normal field, then reference that field.
+- Template interpolation mixes literal text with values: `{{nombre}} {{upper(apellido)}}` → "Ana LOPEZ". Set `return_type` to match (number for arithmetic, string for text, boolean for comparisons).
+TXT,
+
+        'design' => <<<'TXT'
+VISUAL / THEME:
+- GLOBAL theme: set `settings.theme` to "light" or "dark" via propose_change (path "/settings/theme"). Default "light" (clean white page), right for most sites; only "dark" if asked.
+- PER-BLOCK style: every block accepts an optional `style` object `{padding: none|sm|md|lg, margin: none|sm|md|lg, background:"#RRGGBB", color:"#RRGGBB", max_width: sm|md|lg|full}`. Use `style.background` + `style.padding="lg"` to make a `container` a coloured section. CONTRAST IS AUTOMATIC: when you set `background`, the runtime auto-picks readable text colour — do NOT set `color` yourself and do NOT put a `background` on the inner heading/markdown. Set `max_width:"md"` on text sections so lines stay readable and centre on wide screens.
+- To recolor a `single_select` field's options, replace each `options[i].color` hex (the chip shown in tables/badges).
+
+CONTENT & WEBSITES (landing/marketing pages, "make it nice"):
+- A CONTENT site (website, landing page, portfolio, "página bonita") is visual composition, not CRUD. Do NOT settle for heading + text + spacer — that reads as a plain document. Build rich, generous pages.
+- FIRST set site identity in settings: an `accent` brand colour, a `font`, a `brand` {name, cta?} (renders the site header) + a `footer`. Then the home page: `hero` (title + subtitle + stock background_image + cta) → optionally a `stat_band` of headline numbers → a `feature_grid` (3-4 benefit cards with emoji icons) → alternating SECTIONS, each a `container` with `style.padding="lg"`, `style.full_bleed=true`, a `style.background` or `style.gradient`, `style.max_width="md"`, holding a `heading` + `markdown`/`text` and often a `split_view` (image one side, copy the other) → a `testimonials` and/or `pricing` and/or `faq` section where relevant → finish with a `cta` block (bold gradient/background, full_bleed). Vary section backgrounds for rhythm. Use the dedicated blocks (`feature_grid`, `stat_band`, `testimonials`, `pricing`, `faq`) instead of faking them. Buttons/accents auto-use the `accent` colour.
+- ALWAYS include imagery — pages without images don't look "bonito". Put stock URLs in `image.src` / `hero.background_image` using `https://picsum.photos/seed/<word>/<w>/<h>` with a DIFFERENT `<word>` per image (e.g. .../seed/solar/1200/800) so each photo is distinct and stable. Do NOT use `source.unsplash.com` (retired, broken images). Always write a descriptive `alt`.
+- Be generous, finish in one turn: a real landing page is ~8-20 blocks across hero, 3-5 sections, and a CTA — not 4 blocks. Call `list_available_components` to recall the catalog.
+- Rich visual builds come out far better on a stronger model. If a big creative/website request looks shallow, you MAY tell the user (in their language) "esto queda mucho mejor con un modelo más potente — puedes cambiarlo en el selector de modelo del builder", then proceed with your best effort.
+
+DASHBOARDS & REPORTS:
+- Shape: a top KPI row (`metric_grid`, ideally with `compare` + `delta_good` so each card shows its trend) → a grid of `chart`s (varied types: bar/line for trends, pie/donut for share, radar for multi-metric profiles, scatter for correlations, plus funnel/heatmap/timeline where they fit) → and crucially `insight` cards where YOU state conclusions, recommendations and risks read from the data (variant=conclusion/recommendation/risk/positive). A report is not just charts — pair numbers with written insight cards. Put charts side by side with `container` direction=row or `split_view`.
+
+VISUALISATION BLOCKS:
+- Use `chart` for trends/distributions, `kanban` for status-driven workflows (group_by must be a single_select), `calendar` for date-keyed records. All three need a working query data_source — call `simulate_query` first if unsure data exists.
+TXT,
+
+        'verification' => <<<'TXT'
+VERIFICATION (on demand — use judgment, skip for trivial edits):
+- Before proposing a TABLE block over an existing object, call `simulate_query` with the block's data_source. If count is 0 when the user expected results, or it errors, fix the filter before propose_change.
+- Before a STAT block with sum/avg/min/max, call `simulate_query` with the same aggregation and field_id. Verify aggregation_value is sensible (not null, right magnitude).
+- When the user references existing data ("filter active clients", "sum last month's revenue") and you're unsure which field captures it, call `inspect_records` first to see what keys + value shapes exist before guessing field slugs.
+- DEMO / SEED DATA ("agrega N registros", "llena con datos de prueba", "/seed …"): use the `seed_records` tool to actually create rows — do NOT say "I can't insert records" or offer manual JSON. Before calling, read the object's field slugs + single_select option slugs (you pass option SLUGS, not display names). For relation fields, call `inspect_records` on the target object for real record ids. Cap 100 records/call — chain for more. Report the `created` count and any per-record errors.
+- SKIP verification for rename-only changes, layout tweaks, or pure structural patches that don't query data.
+TXT,
+
+        'visual_review' => <<<'TXT'
+VISUAL REVIEW (the user attached a screenshot of the rendered runtime):
+- Look carefully and report what you SEE — empty tables, overflow, clashing colours, broken layout, missing labels, charts with no data, awkward spacing, blocks rendering "—" everywhere. Be specific ("the chart on the right has no bars because field_id points at a non-numeric field"), not vague. Keep it SHORT: one concrete clause per issue, no narration of how you inspected it.
+- If everything is genuinely fine, say so in one short sentence and STOP. Do not invent improvements. When you DO fix something, confirm in one concrete clause per fix.
+- If you see fixable issues, propose the change with propose_change IN THE SAME TURN. Don't ask "should I fix it?" — just fix it (auto-applied, user can undo).
+- CRITICAL anti-pattern: describing a defect then declaring "todo se ve bien" without emitting a patch. If your description names a concrete issue, you MUST follow with propose_change for it. The only excuse is if the issue is OUT of the manifest's reach (a hard-coded styling decision in the runtime renderer) — then say so explicitly.
+- Prefer the smallest patch that addresses the symptom. A "buttons look wrong" screenshot gets a button fix, not a layout rewrite.
+- HARD SCOPE LIMIT: only modify what's ALREADY in the manifest. NEVER add new objects/fields/pages/modals/workflows/features the user didn't already ask for. A "thin" page (only a heading, no form yet) is NOT a bug — the user just hasn't asked for those parts. The describe=fix rule applies to BUGS in existing structure, not features you imagine. If in doubt, treat visual review as read-only and ASK before adding.
+- Lean on the catalog tools (read_manifest, simulate_query, inspect_records) BEFORE proposing fixes — a broken-looking chart might be bad data, not block config.
+TXT,
+
+        'connected_objects' => <<<'TXT'
+CONNECTING EXTERNAL SYSTEMS (integrations):
+- When the user needs the app to talk to an external system ("conéctate a HubSpot", "datos de Stripe", "usa nuestra API de X"), set up the connection in this conversation:
+  - Call `discover_integration` with the API's URL to auto-detect OAuth2. If discoverable:true, pass its `cache_key` to `create_integration`. If discoverable:false, ask the user for the base URL and the auth kind (api_key / bearer) and call `create_integration` directly.
+  - `create_integration` makes a DRAFT connection — NOT usable until the user authorizes it (OAuth consent, or entering a secret in a secure field). Tell the user (in their language) they need to authorize it.
+  - NEVER ask the user to paste a secret/token/password into the chat, and NEVER put secrets in tool arguments. Secrets are captured through a secure field.
+  - After authorization, call `test_connection` (with a lightweight test_path when you know one) and only then report it working. If the test fails, say so plainly.
+- A "connected object" reads LIVE from an existing connection instead of the internal records store:
+  - Call `sample_endpoint` with the integration_id and a list/read path (e.g. "/crm/v3/objects/deals?limit=3", collection_path "results") to fetch a REAL sample and see its shape.
+  - From the sample's row_keys, propose (via propose_change) an object whose `source` is {type:"connected", integration_id, operations:{list:{method,path,collection_path}}, id_path, field_map:[{field_id, external_path}]}. Map each field to a real key from the sample; leave unmapped fields out (render null). Connected objects are READ-ONLY for now — include only list/read operations.
+  - The sample call IS the verification that the mapping is real; confirm the mapping with the user before proposing if unsure. Data stays in the external system (passthrough) — you are NOT copying it in.
+TXT,
+
+        'example' => <<<'TXT'
+WORKED EXAMPLE — a minimal valid "Mini CRM" manifest (one object + one page with a table). IDs shown are placeholders; generate your own `<prefix>_<26-lowercase-ulid>` ids. This shows the SHAPE; pattern-match it rather than reasoning the schema from scratch.
+
+{
+  "schema_version": 1,
+  "name": "Mini CRM",
+  "slug": "mini_crm",
+  "settings": { "theme": "light" },
+  "objects": [
+    {
+      "id": "obj_00000000000000000000000001",
+      "slug": "clientes",
+      "name": "Clientes",
+      "fields": [
+        { "id": "fld_00000000000000000000000001", "slug": "nombre", "name": "Nombre", "type": "text" },
+        { "id": "fld_00000000000000000000000002", "slug": "email", "name": "Email", "type": "email" },
+        { "id": "fld_00000000000000000000000003", "slug": "estado", "name": "Estado", "type": "single_select",
+          "options": [
+            { "id": "opt_00000000000000000000000001", "slug": "activo", "label": "Activo", "color": "#16a34a" },
+            { "id": "opt_00000000000000000000000002", "slug": "inactivo", "label": "Inactivo", "color": "#dc2626" }
+          ] }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "pag_00000000000000000000000001",
+      "slug": "clientes",
+      "name": "Clientes",
+      "blocks": [
+        { "id": "blk_00000000000000000000000001", "type": "heading", "text": "Clientes" },
+        { "id": "blk_00000000000000000000000002", "type": "table",
+          "data_source": { "object_id": "obj_00000000000000000000000001" },
+          "columns": [
+            { "id": "col_00000000000000000000000001", "field_id": "fld_00000000000000000000000001" },
+            { "id": "col_00000000000000000000000002", "field_id": "fld_00000000000000000000000002" },
+            { "id": "col_00000000000000000000000003", "field_id": "fld_00000000000000000000000003" }
+          ] }
+      ]
+    }
+  ],
+  "workflows": []
+}
+
+To add create-from-page: a `button` (on_click=[open_modal]) + a `modal` containing a `form` (mode=create, on_submit=[create_record, close_modal, show_toast, refresh]). See the `forms` topic.
+TXT,
+    ];
+
+    public function name(): string
+    {
+        return 'framework_reference';
+    }
+
+    public function description(): string
+    {
+        $topics = implode(', ', array_keys(self::TOPICS));
+
+        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'topic' => $schema->string()
+                ->description('Which reference section to fetch: '.implode(', ', array_keys(self::TOPICS)).'. Omit to list topics.'),
+        ];
+    }
+
+    public function handle(Request $request): string
+    {
+        $topic = strtolower(trim((string) ($request->all()['topic'] ?? '')));
+
+        if ($topic === '') {
+            return json_encode([
+                'topics' => array_keys(self::TOPICS),
+                'note' => 'Pass one of these as `topic` to get its guidance.',
+            ], JSON_THROW_ON_ERROR);
+        }
+
+        if (! isset(self::TOPICS[$topic])) {
+            return json_encode([
+                'error' => "Unknown topic '{$topic}'.",
+                'topics' => array_keys(self::TOPICS),
+            ], JSON_THROW_ON_ERROR);
+        }
+
+        return json_encode([
+            'topic' => $topic,
+            'reference' => self::TOPICS[$topic],
+        ], JSON_THROW_ON_ERROR);
+    }
+}
