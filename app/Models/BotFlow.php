@@ -21,6 +21,7 @@ class BotFlow extends Model
         'user_id',
         'organization_id',
         'agent_id',
+        'chatbot_id',
         'name',
         'description',
         'status',
@@ -52,6 +53,11 @@ class BotFlow extends Model
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class);
+    }
+
+    public function chatbot(): BelongsTo
+    {
+        return $this->belongsTo(Chatbot::class);
     }
 
     public function scopeActive(Builder $query): Builder

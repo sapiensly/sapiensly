@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Chatbot extends Model
@@ -61,6 +62,11 @@ class Chatbot extends Model
     public function agentTeam(): BelongsTo
     {
         return $this->belongsTo(AgentTeam::class);
+    }
+
+    public function botFlow(): HasOne
+    {
+        return $this->hasOne(BotFlow::class);
     }
 
     public function apiTokens(): HasMany
