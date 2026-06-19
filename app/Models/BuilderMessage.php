@@ -18,6 +18,8 @@ class BuilderMessage extends Model
         'content',
         'proposed_patch',
         'change_summary',
+        'plan',
+        'integration_proposal',
         'status',
         'applied_version_id',
         'attachment_path',
@@ -29,6 +31,8 @@ class BuilderMessage extends Model
     {
         return [
             'proposed_patch' => 'array',
+            'plan' => 'array',
+            'integration_proposal' => 'array',
         ];
     }
 

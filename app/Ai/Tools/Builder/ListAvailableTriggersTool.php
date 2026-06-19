@@ -35,6 +35,8 @@ class ListAvailableTriggersTool implements Tool
             ['type' => 'record.created', 'props' => 'object_id (required), filter? — fires after a record of that object is created. Trigger payload: {record: {id, data, object_definition_id, ...}}'],
             ['type' => 'record.updated', 'props' => 'object_id (required), filter? — fires after a record is updated. Payload also includes `before` snapshot and `changed` array of field slugs.'],
             ['type' => 'record.deleted', 'props' => 'object_id (required), filter? — fires after a record is deleted. Payload carries the final record snapshot.'],
+            ['type' => 'schedule', 'props' => 'cron (required, 5-field e.g. "0 9 * * 1-5"), timezone? (IANA, default UTC) — fires on a recurring schedule. Trigger payload: {scheduled_at: ISO8601}'],
+            ['type' => 'webhook.inbound', 'props' => 'dedupe_path? (JSON path to the provider delivery id, e.g. "id"), signature_header? (default X-Sapiensly-Signature) — fires when an external system POSTs to the workflow\'s signed webhook URL. Trigger payload: {webhook: {body, headers}}'],
         ];
 
         return json_encode([

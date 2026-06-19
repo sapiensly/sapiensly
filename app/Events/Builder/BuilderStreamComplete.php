@@ -44,6 +44,8 @@ class BuilderStreamComplete implements ShouldBroadcastNow
                 'content' => $this->message->content,
                 'proposed_patch' => $this->message->proposed_patch,
                 'change_summary' => $this->message->change_summary,
+                'plan' => $this->message->plan,
+                'integration_proposal' => $this->message->integration_proposal,
                 'status' => $this->message->status,
                 'applied_version_id' => $this->message->applied_version_id,
                 'created_at' => $this->message->created_at?->toIso8601String(),

@@ -1150,6 +1150,47 @@ it('accepts a rollup count without target_field_id', function () {
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
 
+it('accepts a schedule trigger with a valid cron expression', function () {
+    $manifest = baseManifest();
+    $manifest['workflows'] = [[
+        'id' => id('wkf'),
+        'slug' => 'cron',
+        'name' => 'Cron',
+        'trigger' => ['type' => 'schedule', 'cron' => '0 9 * * 1-5', 'timezone' => 'UTC'],
+        'steps' => [['id' => id('stp'), 'type' => 'log', 'message' => 'tick']],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a schedule trigger with an invalid cron expression', function () {
+    $manifest = baseManifest();
+    $manifest['workflows'] = [[
+        'id' => id('wkf'),
+        'slug' => 'cron',
+        'name' => 'Cron',
+        'trigger' => ['type' => 'schedule', 'cron' => 'not-a-cron'],
+        'steps' => [['id' => id('stp'), 'type' => 'log', 'message' => 'tick']],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errorsArray())->pluck('code'))->toContain('invalid_cron');
+});
+
+it('accepts a webhook.inbound trigger', function () {
+    $manifest = baseManifest();
+    $manifest['workflows'] = [[
+        'id' => id('wkf'),
+        'slug' => 'hook',
+        'name' => 'Hook',
+        'trigger' => ['type' => 'webhook.inbound', 'dedupe_path' => 'id'],
+        'steps' => [['id' => id('stp'), 'type' => 'log', 'message' => 'got it']],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
 it('accepts a manual workflow with valid steps', function () {
     $manifest = baseManifest();
     $objectId = $manifest['objects'][0]['id'];

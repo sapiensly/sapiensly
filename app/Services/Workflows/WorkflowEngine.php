@@ -3,18 +3,23 @@
 namespace App\Services\Workflows;
 
 use App\Models\App;
+use App\Models\IntegrationUserToken;
 use App\Models\Record;
+use App\Models\Tool;
 use App\Models\User;
+use App\Models\WorkflowProposal;
 use App\Models\WorkflowRun;
 use App\Models\WorkflowStepRun;
 use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
+use App\Services\Connectors\ConnectorActionResolver;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
 use App\Services\Records\SafeExpressionEvaluator;
 use App\Services\Security\Ssrf\SafeHttpClient;
+use App\Services\ToolExecutionService;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Enums\Lab;
@@ -37,6 +42,16 @@ class WorkflowEngine
     /** Safety cap so a runaway `items` array can't create unbounded records. */
     private const MAX_FOREACH_ITERATIONS = 1000;
 
+    /** When true, writes are simulated rather than applied (verification pass). */
+    private bool $dryRun = false;
+
+    /**
+     * When true (the default for real runs), a non-`safe` connector write halts
+     * the run and emits a proposal instead of mutating (propose-don't-mutate).
+     * Disabled only when executing an already-approved proposal.
+     */
+    private bool $gateApprovals = true;
+
     public function __construct(
         private RecordWriteService $writes,
         private RecordQueryService $queries,
@@ -45,6 +60,8 @@ class WorkflowEngine
         private SafeExpressionEvaluator $safe,
         private ScriptRunner $scripts,
         private SafeHttpClient $safeHttp,
+        private ToolExecutionService $toolExecution,
+        private ConnectorActionResolver $connectorActions,
     ) {}
 
     /**
@@ -59,7 +76,14 @@ class WorkflowEngine
         string $triggerType,
         array $triggerPayload = [],
         ?User $user = null,
+        bool $dryRun = false,
     ): WorkflowRun {
+        // Verification pass: simulate every write (internal records + external
+        // connector/http calls), never apply them, and run only side-effect-free
+        // steps for real. Reset per run so a reused engine can't leak the flag.
+        $this->dryRun = $dryRun;
+        $this->gateApprovals = true;
+
         $run = WorkflowRun::create([
             'organization_id' => $app->organization_id,
             'app_id' => $app->id,
@@ -67,6 +91,7 @@ class WorkflowEngine
             'trigger_type' => $triggerType,
             'trigger_payload' => $triggerPayload,
             'status' => 'running',
+            'dry_run' => $dryRun,
             'variables' => [],
             'triggered_by_user_id' => $user?->id,
             'started_at' => now(),
@@ -89,6 +114,25 @@ class WorkflowEngine
                 'variables' => $context['vars'],
                 'finished_at' => now(),
             ]);
+        } catch (WorkflowAwaitingApprovalException $e) {
+            // A gated write halted the run. Record the proposal and stop —
+            // emit-then-stop: an approver executes it later (FR-5.3/9.3).
+            WorkflowProposal::create([
+                'organization_id' => $app->organization_id,
+                'app_id' => $app->id,
+                'workflow_id' => $workflow['id'],
+                'run_id' => $run->id,
+                'step_id' => $e->proposal['step_id'],
+                'effect' => $e->proposal['effect'],
+                'action' => $e->proposal['action'],
+                'preview' => $e->proposal['preview'],
+                'status' => 'pending',
+            ]);
+            $run->update([
+                'status' => 'awaiting_approval',
+                'variables' => $context['vars'] ?? [],
+                'finished_at' => now(),
+            ]);
         } catch (\Throwable $e) {
             Log::warning('Workflow run failed', [
                 'workflow_id' => $workflow['id'],
@@ -104,6 +148,31 @@ class WorkflowEngine
         }
 
         return $run->refresh();
+    }
+
+    /**
+     * Execute a single previously-approved action for real, bypassing the gate.
+     * The action's inputs were already resolved to literals at proposal time, so
+     * re-resolving them here is a no-op. Used by the approval flow — never runs a
+     * whole workflow (emit-then-stop has no resume).
+     *
+     * @param  array{type: string, tool_id?: string, inputs?: array<string, mixed>}  $action
+     * @return array<string, mixed>
+     */
+    public function executeApprovedAction(App $app, array $action, ?User $user = null): array
+    {
+        $this->dryRun = false;
+        $this->gateApprovals = false;
+
+        return match ($action['type'] ?? null) {
+            'connector.call' => $this->handleConnectorCall([
+                'id' => 'approved_action',
+                'type' => 'connector.call',
+                'tool_id' => $action['tool_id'] ?? '',
+                'inputs' => $action['inputs'] ?? [],
+            ], ['trigger' => [], 'vars' => [], 'steps' => []], $app, $user),
+            default => throw new StepFailedException("Cannot execute approved action of type '".($action['type'] ?? 'null')."'"),
+        };
     }
 
     /**
@@ -148,6 +217,17 @@ class WorkflowEngine
                 if (isset($step['output_variable'])) {
                     $context['vars'][$step['output_variable']] = $output;
                 }
+            } catch (WorkflowAwaitingApprovalException $e) {
+                // The gated step (or a container around it) pauses, never fails.
+                // Only the leaf carries the proposal preview in its output.
+                $stepRun->update([
+                    'status' => 'awaiting_approval',
+                    'output' => ($e->proposal['step_id'] ?? null) === $step['id']
+                        ? ['proposal' => $e->proposal]
+                        : null,
+                    'finished_at' => now(),
+                ]);
+                throw $e;
             } catch (\Throwable $e) {
                 $stepRun->update([
                     'status' => 'failed',
@@ -182,6 +262,7 @@ class WorkflowEngine
             'foreach' => $this->handleForeach($step, $context, $app, $manifest, $user, $run),
             'ai.complete' => $this->handleAiComplete($step, $context, $user),
             'http.request' => $this->handleHttpRequest($step, $context),
+            'connector.call' => $this->handleConnectorCall($step, $context, $app, $user),
             'script.run' => $this->handleScriptRun($step, $context),
             default => throw new StepFailedException("Unknown step type '{$step['type']}'"),
         };
@@ -198,6 +279,11 @@ class WorkflowEngine
             : '';
         $userPrompt = (string) $this->expressions->resolve((string) $step['user_prompt'], $context);
         $model = $step['model'] ?? self::DEFAULT_AI_MODEL;
+
+        // Don't spend tokens during verification — return a placeholder.
+        if ($this->dryRun) {
+            return ['text' => '[simulated AI output]', 'model' => $model, 'simulated' => true];
+        }
 
         if ($user !== null) {
             $this->aiProviders->applyRuntimeConfig($user);
@@ -232,6 +318,11 @@ class WorkflowEngine
         $url = (string) $this->expressions->resolve((string) $step['url'], $context);
         $method = strtoupper((string) $step['method']);
         $timeout = (int) ($step['timeout_seconds'] ?? 30);
+
+        // Don't make the external call during verification — simulate it.
+        if ($this->dryRun) {
+            return ['status' => 0, 'body' => null, 'headers' => [], 'simulated' => true, 'effect' => 'write'];
+        }
 
         $headers = [];
         foreach ($step['headers'] ?? [] as $k => $v) {
@@ -280,6 +371,142 @@ class WorkflowEngine
     }
 
     /**
+     * Invoke a typed connector action — a configured REST/GraphQL/database Tool
+     * — by id. Inputs are resolved against the workflow context and the call
+     * runs through the shared ToolExecutionService, which decrypts the tool
+     * config, validates it and routes outbound calls through the SSRF guard.
+     *
+     * Phase 1 supports tools whose auth is self-contained (none / bearer /
+     * api_key / basic). A per-user OAuth2 connector that the acting user has
+     * not authorized fails with an explicit "authorize this integration" error
+     * (FR-5.1) rather than a silent skip; wiring the per-user token into the
+     * execution path is part of the provisioning/authorization phase.
+     *
+     * @param  array<string, mixed>  $step
+     * @param  array<string, mixed>  $context
+     * @return array{data: mixed, effect: string, status: string}
+     */
+    private function handleConnectorCall(array $step, array $context, App $app, ?User $user): array
+    {
+        $toolId = (string) ($step['tool_id'] ?? '');
+
+        $tool = $this->resolveConnectorTool($toolId, $app, $user);
+
+        if ($tool === null) {
+            throw new StepFailedException(
+                "connector.call references unknown or inaccessible tool '{$toolId}'",
+            );
+        }
+
+        $inputs = [];
+        foreach ($step['inputs'] ?? [] as $name => $expression) {
+            $inputs[$name] = is_string($expression)
+                ? $this->expressions->resolve($expression, $context)
+                : $expression;
+        }
+
+        $contract = $this->connectorActions->resolve($tool);
+
+        // Verification pass: never call the external system. Emit a Proposal
+        // preview (what WOULD happen) instead — for writes and reads alike, so
+        // the dry-run is hermetic (no live calls, no provider-side effects).
+        if ($this->dryRun) {
+            return [
+                'data' => null,
+                'effect' => $contract->effect->value,
+                'status' => 'simulated',
+                'simulated' => true,
+                'proposal' => [
+                    'action' => $contract->name,
+                    'integration_id' => $contract->integrationId,
+                    'inputs' => $inputs,
+                    'preview' => $contract->blastRadius,
+                ],
+            ];
+        }
+
+        // Propose-don't-mutate: a non-`safe` write to an external system of
+        // record halts the run and emits a proposal instead of executing
+        // (FR-5.3/9.3). `safe`-marked writes and all reads run straight through.
+        if ($this->gateApprovals && $contract->effect->isWrite() && ! $contract->safe) {
+            throw new WorkflowAwaitingApprovalException([
+                'step_id' => (string) ($step['id'] ?? 'connector.call'),
+                'effect' => $contract->effect->value,
+                'action' => [
+                    'type' => 'connector.call',
+                    'tool_id' => $tool->id,
+                    'inputs' => $inputs,
+                ],
+                'preview' => $contract->blastRadius,
+            ]);
+        }
+
+        $this->assertConnectorAuthorized($tool, $user);
+
+        $result = $this->toolExecution->execute($tool, $inputs);
+
+        if (! $result->success) {
+            throw new StepFailedException(
+                "connector.call to '{$tool->name}' failed: {$result->error}",
+            );
+        }
+
+        return [
+            'data' => $result->data,
+            'effect' => $contract->effect->value,
+            'status' => 'ok',
+        ];
+    }
+
+    /**
+     * Resolve a connector Tool scoped to the run's tenant: by the acting user's
+     * account context when present, otherwise restricted to the app's
+     * organization. Prevents a manifest from reaching another tenant's tools.
+     */
+    private function resolveConnectorTool(string $toolId, App $app, ?User $user): ?Tool
+    {
+        if ($toolId === '') {
+            return null;
+        }
+
+        $query = Tool::query();
+
+        if ($user !== null) {
+            $query->forAccountContext($user);
+        } else {
+            $query->where('organization_id', $app->organization_id);
+        }
+
+        return $query->whereKey($toolId)->first();
+    }
+
+    /**
+     * Fail closed for per-user OAuth2 connectors the acting user has not
+     * authorized — an explicit, legible error, never a silent skip (FR-5.1).
+     */
+    private function assertConnectorAuthorized(Tool $tool, ?User $user): void
+    {
+        $config = $tool->config ?? [];
+        $integrationId = $config['integration_id'] ?? null;
+
+        if (($config['auth_type'] ?? null) !== 'oauth2' || $integrationId === null) {
+            return;
+        }
+
+        $authorized = $user !== null && IntegrationUserToken::query()
+            ->where('user_id', $user->id)
+            ->where('integration_id', $integrationId)
+            ->get()
+            ->contains(fn (IntegrationUserToken $token): bool => $token->isAuthorized());
+
+        if (! $authorized) {
+            throw new StepFailedException(
+                "connector.call to '{$tool->name}' needs authorization — authorize the integration before running this flow.",
+            );
+        }
+    }
+
+    /**
      * Run a user-authored JavaScript snippet in the QuickJS sandbox. The step's
      * `input` map is resolved against the workflow context (so the script sees
      * concrete values, never raw tokens) and passed as the `input` argument;
@@ -325,6 +552,11 @@ class WorkflowEngine
     private function handleRecordCreate(array $step, array $context, App $app, array $manifest, ?User $user): array
     {
         $values = $this->resolveValuesMap($step['values'] ?? [], $context);
+
+        if ($this->dryRun) {
+            return ['record_id' => 'dry_run', 'data' => $values, 'simulated' => true, 'effect' => 'write'];
+        }
+
         $record = $this->writes->create($app, $manifest, $step['object_id'], $values, $user);
 
         return ['record_id' => $record->id, 'data' => $record->data];
@@ -337,6 +569,16 @@ class WorkflowEngine
     private function handleRecordUpdate(array $step, array $context, App $app, array $manifest, ?User $user): array
     {
         $recordId = (string) $this->expressions->resolve((string) $step['record_id_expression'], $context);
+
+        if ($this->dryRun) {
+            return [
+                'record_id' => $recordId,
+                'data' => $this->resolveValuesMap($step['values'] ?? [], $context),
+                'simulated' => true,
+                'effect' => 'write',
+            ];
+        }
+
         $record = Record::query()
             ->where('app_id', $app->id)
             ->where('object_definition_id', $step['object_id'])
@@ -356,6 +598,11 @@ class WorkflowEngine
     private function handleRecordDelete(array $step, array $context, App $app): array
     {
         $recordId = (string) $this->expressions->resolve((string) $step['record_id_expression'], $context);
+
+        if ($this->dryRun) {
+            return ['record_id' => $recordId, 'simulated' => true, 'effect' => 'write'];
+        }
+
         $record = Record::query()
             ->where('app_id', $app->id)
             ->where('object_definition_id', $step['object_id'])

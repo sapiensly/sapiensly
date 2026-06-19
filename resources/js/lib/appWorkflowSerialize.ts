@@ -118,7 +118,8 @@ export function graphToManifest(graph: AppWorkflowGraph): ManifestWorkflow {
     // Pick up the trigger payload from the trigger node — the panel may
     // have edited it.
     const triggerNode = byId.get(TRIGGER_NODE_ID);
-    const trigger = (triggerNode?.data ?? graph.meta.trigger) as WorkflowTrigger;
+    const trigger = (triggerNode?.data ??
+        graph.meta.trigger) as WorkflowTrigger;
 
     return {
         ...graph.meta,
@@ -145,6 +146,7 @@ const STEP_STRING_FIELDS: Record<string, string[]> = {
     'record.query': ['object_id'],
     'ai.complete': ['prompt'],
     'http.request': ['method', 'url'],
+    'connector.call': ['tool_id'],
 };
 
 function sanitizeStep(step: ManifestStep): ManifestStep {
@@ -167,12 +169,15 @@ function sanitizeStep(step: ManifestStep): ManifestStep {
 export function autoLayout(graph: AppWorkflowGraph): AppWorkflowGraph {
     const ordered = graphToManifest(graph).steps;
     const triggerNode = graph.nodes.find((n) => n.id === TRIGGER_NODE_ID);
-    const stepNodes = ordered.map((step, idx) => ({
-        id: step.id,
-        kind: step.type as StepType,
-        position: { x: 0, y: (idx + 1) * VERTICAL_GAP },
-        data: step,
-    }) as AppWorkflowNode);
+    const stepNodes = ordered.map(
+        (step, idx) =>
+            ({
+                id: step.id,
+                kind: step.type as StepType,
+                position: { x: 0, y: (idx + 1) * VERTICAL_GAP },
+                data: step,
+            }) as AppWorkflowNode,
+    );
     return {
         meta: graph.meta,
         nodes: [
@@ -184,7 +189,10 @@ export function autoLayout(graph: AppWorkflowGraph): AppWorkflowGraph {
             },
             ...stepNodes,
         ],
-        edges: rebuildLinearEdges([TRIGGER_NODE_ID, ...ordered.map((s) => s.id)]),
+        edges: rebuildLinearEdges([
+            TRIGGER_NODE_ID,
+            ...ordered.map((s) => s.id),
+        ]),
     };
 }
 

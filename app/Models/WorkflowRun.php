@@ -20,6 +20,7 @@ class WorkflowRun extends Model
         'trigger_type',
         'trigger_payload',
         'status',
+        'dry_run',
         'variables',
         'error',
         'triggered_by_user_id',
@@ -31,6 +32,7 @@ class WorkflowRun extends Model
     {
         return [
             'trigger_payload' => 'array',
+            'dry_run' => 'boolean',
             'variables' => 'array',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',

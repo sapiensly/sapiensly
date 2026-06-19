@@ -5,10 +5,10 @@ namespace App\Services\Tools;
 use App\Contracts\ToolExecutor;
 use App\DTOs\ToolExecutionResult;
 use App\Models\Tool;
+use App\Services\Security\Ssrf\SafeHttpClient;
+use App\Services\Security\Ssrf\SsrfBlockedException;
 use App\Services\Tools\Concerns\SubstitutesParameters;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\RequestException;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class RestApiExecutor implements ToolExecutor
@@ -16,6 +16,8 @@ class RestApiExecutor implements ToolExecutor
     use SubstitutesParameters;
 
     private const TIMEOUT_SECONDS = 30;
+
+    public function __construct(private SafeHttpClient $safeHttp) {}
 
     public function execute(Tool $tool, array $parameters, array $config): ToolExecutionResult
     {
@@ -25,23 +27,28 @@ class RestApiExecutor implements ToolExecutor
             $url = $this->buildUrl($config, $parameters);
             $method = strtoupper($config['method'] ?? 'GET');
             $headers = $this->buildHeaders($config, $parameters);
-            $body = $this->buildBody($config, $parameters, $method);
+            $payload = $this->buildBody($config, $parameters, $method);
 
-            $request = Http::timeout(self::TIMEOUT_SECONDS)
-                ->withHeaders($headers);
+            [$authHeaders, $authQuery] = $this->authHeadersAndQuery($config);
+            $headers = array_merge($headers, $authHeaders);
 
-            // Add authentication
-            $request = $this->applyAuthentication($request, $config);
+            // Route through the SSRF guard: a connector call carries a
+            // user-controlled URL, so it gets the same DNS validation, IP
+            // pinning (anti-rebinding) and redirect re-validation as http.request.
+            $options = ['headers' => $headers, 'timeout' => self::TIMEOUT_SECONDS];
+            if (in_array($method, ['GET', 'HEAD', 'DELETE'], true)) {
+                $query = array_merge($authQuery, $payload);
+                if ($query !== []) {
+                    $options['query'] = $query;
+                }
+            } else {
+                if ($authQuery !== []) {
+                    $options['query'] = $authQuery;
+                }
+                $options['json'] = $payload;
+            }
 
-            // Execute request
-            $response = match ($method) {
-                'GET' => $request->get($url, $body),
-                'POST' => $request->post($url, $body),
-                'PUT' => $request->put($url, $body),
-                'PATCH' => $request->patch($url, $body),
-                'DELETE' => $request->delete($url, $body),
-                default => throw new \InvalidArgumentException("Unsupported HTTP method: {$method}"),
-            };
+            $response = $this->safeHttp->request($method, $url, $options);
 
             $executionTimeMs = (microtime(true) - $startTime) * 1000;
 
@@ -69,6 +76,16 @@ class RestApiExecutor implements ToolExecutor
                 ],
                 executionTimeMs: $executionTimeMs,
             );
+        } catch (SsrfBlockedException $e) {
+            Log::warning('REST API tool blocked by SSRF guard', [
+                'tool_id' => $tool->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ToolExecutionResult::failure(
+                error: 'Blocked destination: '.$e->getMessage(),
+                executionTimeMs: (microtime(true) - $startTime) * 1000,
+            );
         } catch (ConnectionException $e) {
             Log::warning('REST API tool connection failed', [
                 'tool_id' => $tool->id,
@@ -77,17 +94,6 @@ class RestApiExecutor implements ToolExecutor
 
             return ToolExecutionResult::failure(
                 error: 'Connection failed: '.$e->getMessage(),
-                executionTimeMs: (microtime(true) - $startTime) * 1000,
-            );
-        } catch (RequestException $e) {
-            Log::warning('REST API tool request failed', [
-                'tool_id' => $tool->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return ToolExecutionResult::failure(
-                error: 'Request failed: '.$e->getMessage(),
-                statusCode: $e->response?->status(),
                 executionTimeMs: (microtime(true) - $startTime) * 1000,
             );
         } catch (\Exception $e) {
@@ -177,36 +183,49 @@ class RestApiExecutor implements ToolExecutor
         return $parameters;
     }
 
-    private function applyAuthentication($request, array $config)
+    /**
+     * Translate the tool's auth config into header and query maps the
+     * SafeHttpClient can carry (it sends, so auth can't ride on a PendingRequest).
+     *
+     * @return array{0: array<string, string>, 1: array<string, string>}
+     */
+    private function authHeadersAndQuery(array $config): array
     {
         $authType = $config['auth_type'] ?? 'none';
         $authConfig = $config['auth_config'] ?? [];
+        $headers = [];
+        $query = [];
 
-        return match ($authType) {
-            'bearer' => $request->withToken($authConfig['token'] ?? ''),
-            'api_key' => $this->applyApiKeyAuth($request, $authConfig),
-            'basic' => $request->withBasicAuth(
-                $authConfig['username'] ?? '',
-                $authConfig['password'] ?? ''
-            ),
-            'oauth2' => $request->withToken($authConfig['access_token'] ?? ''),
-            default => $request,
-        };
-    }
-
-    private function applyApiKeyAuth($request, array $authConfig)
-    {
-        $key = $authConfig['key'] ?? '';
-        $value = $authConfig['value'] ?? '';
-        $location = $authConfig['location'] ?? 'header';
-        $name = $authConfig['name'] ?? 'X-API-Key';
-
-        if ($location === 'header') {
-            return $request->withHeaders([$name => $value]);
+        switch ($authType) {
+            case 'bearer':
+                $token = (string) ($authConfig['token'] ?? '');
+                if ($token !== '') {
+                    $headers['Authorization'] = 'Bearer '.$token;
+                }
+                break;
+            case 'api_key':
+                $name = $authConfig['name'] ?? 'X-API-Key';
+                $value = (string) ($authConfig['value'] ?? '');
+                if (($authConfig['location'] ?? 'header') === 'query') {
+                    $query[$name] = $value;
+                } else {
+                    $headers[$name] = $value;
+                }
+                break;
+            case 'basic':
+                $headers['Authorization'] = 'Basic '.base64_encode(
+                    ($authConfig['username'] ?? '').':'.($authConfig['password'] ?? '')
+                );
+                break;
+            case 'oauth2':
+                $accessToken = (string) ($authConfig['access_token'] ?? '');
+                if ($accessToken !== '') {
+                    $headers['Authorization'] = 'Bearer '.$accessToken;
+                }
+                break;
         }
 
-        // Query parameter - handled differently
-        return $request;
+        return [$headers, $query];
     }
 
     private function mapResponse(mixed $data, array $config): mixed

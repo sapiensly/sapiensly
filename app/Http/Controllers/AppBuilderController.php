@@ -890,6 +890,8 @@ class AppBuilderController extends Controller
             'content' => $m->content,
             'proposed_patch' => $m->proposed_patch,
             'change_summary' => $m->change_summary,
+            'plan' => $m->plan,
+            'integration_proposal' => $m->integration_proposal,
             'status' => $m->status,
             'applied_version_id' => $m->applied_version_id,
             'attachment_url' => $attachmentUrl,

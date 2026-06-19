@@ -25,3 +25,9 @@ Schedule::command('ai-spend:check-budgets')
     ->dailyAt('03:00')
     ->withoutOverlapping()
     ->runInBackground();
+
+// Fire schedule-triggered workflows whose cron is due this minute.
+Schedule::command('flows:dispatch-scheduled')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();

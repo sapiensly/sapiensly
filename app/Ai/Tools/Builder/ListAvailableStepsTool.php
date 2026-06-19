@@ -81,6 +81,13 @@ class ListAvailableStepsTool implements Tool
                 'type' => 'http.request',
                 'props' => 'method (GET|POST|PUT|PATCH|DELETE), url, headers?, query?, body?, timeout_seconds?',
                 'output' => '{status, body, headers}',
+                'note' => 'The escape hatch for one-off, unconfigured endpoints. PREFER connector.call against a configured integration when one exists or can be provisioned.',
+            ],
+            [
+                'type' => 'connector.call',
+                'props' => 'tool_id (a connector action id from list_connector_actions), inputs? ({input_name: expression})',
+                'output' => '{data, effect, status} — typed outputs live under data, addressable via {{steps.<id>.output.data.…}}',
+                'note' => 'Invoke a typed, authenticated connector action on a configured integration (REST/GraphQL/database). Call list_available_integrations then list_connector_actions first to get real ids, typed inputs and the read/write effect. This is the first-class way to touch an external system — prefer it over a hand-rolled http.request.',
             ],
             [
                 'type' => 'script.run',

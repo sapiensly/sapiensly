@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Webhooks\FlowWebhookController;
 use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
@@ -22,4 +23,11 @@ Route::prefix('webhooks/whatsapp')->middleware(SubstituteBindings::class)->group
     Route::post('{connection}', [WhatsAppWebhookController::class, 'receive'])
         ->middleware(['verify.whatsapp.signature', 'throttle:whatsapp-webhook'])
         ->name('webhooks.whatsapp.receive');
+});
+
+Route::prefix('webhooks/flows')->middleware(SubstituteBindings::class)->group(function () {
+    Route::post('{app}/{workflow}', [FlowWebhookController::class, 'receive'])
+        ->where('workflow', 'wkf_[a-z0-9_]+')
+        ->middleware('throttle:flows-webhook')
+        ->name('webhooks.flows.receive');
 });

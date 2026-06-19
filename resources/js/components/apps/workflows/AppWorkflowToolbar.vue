@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Loader2, Play, Trash2, X } from '@lucide/vue';
+import { Check, Loader2, Play, ShieldCheck, Trash2, X } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 defineProps<{
@@ -7,6 +7,7 @@ defineProps<{
     isDirty: boolean;
     saving: boolean;
     running: boolean;
+    verifying: boolean;
     canRun: boolean;
     /** True when the user is in the editor view (vs. the list view). */
     isEditing: boolean;
@@ -15,6 +16,7 @@ defineProps<{
 const emit = defineEmits<{
     (e: 'save'): void;
     (e: 'run'): void;
+    (e: 'verify'): void;
     (e: 'discard'): void;
     (e: 'back'): void;
     (e: 'delete'): void;
@@ -24,20 +26,24 @@ const { t } = useI18n();
 </script>
 
 <template>
-    <header class="flex items-center justify-between gap-2 border-b border-soft px-4 py-2">
+    <header
+        class="flex items-center justify-between gap-2 border-b border-soft px-4 py-2"
+    >
         <div class="flex min-w-0 items-center gap-2">
             <button
                 v-if="isEditing"
                 type="button"
                 @click="emit('back')"
-                class="rounded-pill px-2 py-1 text-xs uppercase tracking-wider text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                class="rounded-pill px-2 py-1 text-xs tracking-wider text-ink-muted uppercase transition-colors hover:bg-surface hover:text-ink"
             >
                 ← {{ t('apps.builder.workflows.back_to_list') }}
             </button>
-            <span class="truncate text-xs font-medium text-ink">{{ workflowName }}</span>
+            <span class="truncate text-xs font-medium text-ink">{{
+                workflowName
+            }}</span>
             <span
                 v-if="isDirty"
-                class="rounded-pill border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-xs uppercase tracking-wider text-amber-300"
+                class="rounded-pill border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-xs tracking-wider text-amber-300 uppercase"
             >
                 {{ t('apps.builder.workflows.dirty') }}
             </span>
@@ -51,14 +57,37 @@ const { t } = useI18n();
                     isDirty
                         ? t('apps.builder.workflows.save_first')
                         : !canRun
-                            ? t('apps.builder.workflows.run_only_manual')
-                            : t('apps.builder.workflows.run_tooltip')
+                          ? t('apps.builder.workflows.run_only_manual')
+                          : t('apps.builder.workflows.run_tooltip')
                 "
                 class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-sm text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-40"
             >
                 <Loader2 v-if="running" class="size-3 animate-spin" />
                 <Play v-else class="size-3" />
-                {{ running ? t('apps.builder.workflows.running') : t('apps.builder.workflows.run') }}
+                {{
+                    running
+                        ? t('apps.builder.workflows.running')
+                        : t('apps.builder.workflows.run')
+                }}
+            </button>
+            <button
+                type="button"
+                @click="emit('verify')"
+                :disabled="verifying || isDirty"
+                :title="
+                    isDirty
+                        ? t('apps.builder.workflows.save_first')
+                        : t('apps.builder.workflows.verify_tooltip')
+                "
+                class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-sm text-ink-muted transition-colors hover:border-strong hover:text-ink disabled:opacity-40"
+            >
+                <Loader2 v-if="verifying" class="size-3 animate-spin" />
+                <ShieldCheck v-else class="size-3" />
+                {{
+                    verifying
+                        ? t('apps.builder.workflows.verifying')
+                        : t('apps.builder.workflows.verify')
+                }}
             </button>
             <button
                 v-if="isDirty"
@@ -77,7 +106,11 @@ const { t } = useI18n();
             >
                 <Loader2 v-if="saving" class="size-3 animate-spin" />
                 <Check v-else class="size-3" />
-                {{ saving ? t('apps.builder.workflows.saving') : t('apps.builder.workflows.save') }}
+                {{
+                    saving
+                        ? t('apps.builder.workflows.saving')
+                        : t('apps.builder.workflows.save')
+                }}
             </button>
             <button
                 v-if="isEditing"

@@ -1904,6 +1904,26 @@
                         "object_id": { "$ref": "#/$defs/id" },
                         "filter": { "$ref": "#/$defs/filter_expression" }
                     }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "cron"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "schedule" },
+                        "cron": { "type": "string", "maxLength": 120 },
+                        "timezone": { "type": "string", "maxLength": 60 }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "const": "webhook.inbound" },
+                        "dedupe_path": { "type": "string", "maxLength": 120 },
+                        "signature_header": { "type": "string", "maxLength": 80 }
+                    }
                 }
             ]
         },
@@ -2130,6 +2150,22 @@
                                 "timeout_ms": { "type": "integer", "minimum": 50, "maximum": 10000, "default": 2000 }
                             },
                             "required": ["type", "code"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "connector.call" },
+                                "tool_id": { "type": "string", "minLength": 1, "description": "Id of the configured connector action (a REST/GraphQL/database Tool). Use list_connector_actions to get a real id and its typed inputs — never invent one." },
+                                "inputs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Map of the action's input name → expression resolved against the workflow context. Outputs are addressable via {{steps.<id>.output.data.…}}." }
+                            },
+                            "required": ["type", "tool_id"]
                         }
                     ]
                 }

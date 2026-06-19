@@ -4,6 +4,7 @@ namespace App\Services\Manifest;
 
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\SafeExpressionEvaluator;
+use Cron\CronExpression;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Errors\ValidationError;
 use Opis\JsonSchema\Validator as OpisValidator;
@@ -673,6 +674,14 @@ class ManifestValidator
                         $errors,
                     );
                 }
+            }
+
+            if ($triggerType === 'schedule' && ! CronExpression::isValidExpression((string) ($trigger['cron'] ?? ''))) {
+                $errors[] = new ManifestValidationError(
+                    "/workflows/{$i}/trigger/cron",
+                    "trigger.cron '".($trigger['cron'] ?? '')."' is not a valid 5-field cron expression",
+                    'invalid_cron',
+                );
             }
 
             $this->validateWorkflowSteps(

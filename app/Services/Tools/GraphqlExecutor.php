@@ -5,9 +5,10 @@ namespace App\Services\Tools;
 use App\Contracts\ToolExecutor;
 use App\DTOs\ToolExecutionResult;
 use App\Models\Tool;
+use App\Services\Security\Ssrf\SafeHttpClient;
+use App\Services\Security\Ssrf\SsrfBlockedException;
 use App\Services\Tools\Concerns\SubstitutesParameters;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class GraphqlExecutor implements ToolExecutor
@@ -15,6 +16,8 @@ class GraphqlExecutor implements ToolExecutor
     use SubstitutesParameters;
 
     private const TIMEOUT_SECONDS = 30;
+
+    public function __construct(private SafeHttpClient $safeHttp) {}
 
     public function execute(Tool $tool, array $parameters, array $config): ToolExecutionResult
     {
@@ -25,19 +28,19 @@ class GraphqlExecutor implements ToolExecutor
             $operation = $config['operation'] ?? '';
             $variables = $this->buildVariables($config, $parameters);
 
-            $request = Http::timeout(self::TIMEOUT_SECONDS)
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ]);
+            $headers = array_merge([
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ], $this->authHeaders($config));
 
-            // Add authentication
-            $request = $this->applyAuthentication($request, $config);
-
-            // Execute GraphQL request
-            $response = $request->post($endpoint, [
-                'query' => $operation,
-                'variables' => $variables,
+            // Route through the SSRF guard, same as every user-controlled call.
+            $response = $this->safeHttp->request('POST', $endpoint, [
+                'headers' => $headers,
+                'json' => [
+                    'query' => $operation,
+                    'variables' => $variables,
+                ],
+                'timeout' => self::TIMEOUT_SECONDS,
             ]);
 
             $executionTimeMs = (microtime(true) - $startTime) * 1000;
@@ -80,6 +83,16 @@ class GraphqlExecutor implements ToolExecutor
                     'operation_type' => $config['operation_type'] ?? 'query',
                 ],
                 executionTimeMs: $executionTimeMs,
+            );
+        } catch (SsrfBlockedException $e) {
+            Log::warning('GraphQL tool blocked by SSRF guard', [
+                'tool_id' => $tool->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ToolExecutionResult::failure(
+                error: 'Blocked destination: '.$e->getMessage(),
+                executionTimeMs: (microtime(true) - $startTime) * 1000,
             );
         } catch (ConnectionException $e) {
             Log::warning('GraphQL tool connection failed', [
@@ -137,17 +150,21 @@ class GraphqlExecutor implements ToolExecutor
         return $parameters;
     }
 
-    private function applyAuthentication($request, array $config)
+    /**
+     * @return array<string, string>
+     */
+    private function authHeaders(array $config): array
     {
-        $authType = $config['auth_type'] ?? 'none';
         $authConfig = $config['auth_config'] ?? [];
 
-        return match ($authType) {
-            'bearer' => $request->withToken($authConfig['token'] ?? ''),
-            'api_key' => $request->withHeaders([
-                $authConfig['header_name'] ?? 'X-API-Key' => $authConfig['key'] ?? '',
-            ]),
-            default => $request,
+        return match ($config['auth_type'] ?? 'none') {
+            'bearer' => ($token = (string) ($authConfig['token'] ?? '')) !== ''
+                ? ['Authorization' => 'Bearer '.$token]
+                : [],
+            'api_key' => [
+                ($authConfig['header_name'] ?? 'X-API-Key') => (string) ($authConfig['key'] ?? ''),
+            ],
+            default => [],
         };
     }
 

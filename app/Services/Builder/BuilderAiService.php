@@ -11,9 +11,12 @@ use App\Ai\Tools\Builder\InspectRecordsTool;
 use App\Ai\Tools\Builder\ListAvailableActionsTool;
 use App\Ai\Tools\Builder\ListAvailableComponentsTool;
 use App\Ai\Tools\Builder\ListAvailableFieldTypesTool;
+use App\Ai\Tools\Builder\ListAvailableIntegrationsTool;
 use App\Ai\Tools\Builder\ListAvailableStepsTool;
 use App\Ai\Tools\Builder\ListAvailableTriggersTool;
+use App\Ai\Tools\Builder\ListConnectorActionsTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
+use App\Ai\Tools\Builder\ProposePlanTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
 use App\Ai\Tools\Builder\SampleEndpointTool;
 use App\Ai\Tools\Builder\ScaffoldAppTool;
@@ -21,6 +24,7 @@ use App\Ai\Tools\Builder\SeedRecordsTool;
 use App\Ai\Tools\Builder\SimulateQueryTool;
 use App\Ai\Tools\Builder\TestIntegrationConnectionTool;
 use App\Ai\Tools\Builder\ValidateManifestTool;
+use App\Ai\Tools\Builder\VerifyWorkflowTool;
 use App\Events\Builder\BuilderActivity;
 use App\Events\Builder\BuilderStreamChunk;
 use App\Events\Builder\BuilderStreamComplete;
@@ -35,12 +39,15 @@ use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
+use App\Services\Connectors\ConnectorActionResolver;
 use App\Services\Integrations\IntegrationCaller;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
 use App\Services\Storage\TenantStorage;
+use App\Services\Workflows\WorkflowAssertionEvaluator;
+use App\Services\Workflows\WorkflowEngine;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -129,6 +136,8 @@ class BuilderAiService
         ]);
 
         $proposeTool = new ProposeChangeTool($app, $this->manifestService, $this->validator);
+        $planTool = new ProposePlanTool;
+        $createIntegrationTool = new CreateIntegrationTool($this->integrationAuthoring, $conversation->user);
 
         $tools = [
             new ReadManifestTool($app, $this->manifestService, $proposeTool),
@@ -142,11 +151,15 @@ class BuilderAiService
             new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
             new ValidateManifestTool($this->validator),
             $proposeTool,
+            $planTool,
             new ScaffoldAppTool($app, $this->manifestService, $proposeTool),
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
+            new ListAvailableIntegrationsTool($conversation->user),
+            new ListConnectorActionsTool(app(ConnectorActionResolver::class), $conversation->user),
+            new VerifyWorkflowTool($app, app(WorkflowEngine::class), app(WorkflowAssertionEvaluator::class), $proposeTool, $conversation->user),
             new DiscoverIntegrationTool($this->integrationAuthoring),
-            new CreateIntegrationTool($this->integrationAuthoring, $conversation->user),
+            $createIntegrationTool,
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
             new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
         ];
@@ -225,6 +238,8 @@ class BuilderAiService
             'content' => $assistantText,
             'proposed_patch' => $proposal['patch'] ?? null,
             'change_summary' => $proposal['summary'] ?? null,
+            'plan' => $planTool->plan(),
+            'integration_proposal' => $createIntegrationTool->proposal(),
             'status' => $proposal !== null ? 'pending' : 'none',
         ]);
     }
@@ -250,6 +265,8 @@ class BuilderAiService
         ]);
 
         $proposeTool = new ProposeChangeTool($app, $this->manifestService, $this->validator);
+        $planTool = new ProposePlanTool;
+        $createIntegrationTool = new CreateIntegrationTool($this->integrationAuthoring, $conversation->user);
 
         // Checkpoint accumulated valid work onto the placeholder after each
         // successful propose_change. The turn runs in a queue worker with a hard
@@ -276,11 +293,15 @@ class BuilderAiService
             new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
             new ValidateManifestTool($this->validator),
             $proposeTool,
+            $planTool,
             new ScaffoldAppTool($app, $this->manifestService, $proposeTool),
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
+            new ListAvailableIntegrationsTool($conversation->user),
+            new ListConnectorActionsTool(app(ConnectorActionResolver::class), $conversation->user),
+            new VerifyWorkflowTool($app, app(WorkflowEngine::class), app(WorkflowAssertionEvaluator::class), $proposeTool, $conversation->user),
             new DiscoverIntegrationTool($this->integrationAuthoring),
-            new CreateIntegrationTool($this->integrationAuthoring, $conversation->user),
+            $createIntegrationTool,
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
             new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
         ];
@@ -513,6 +534,8 @@ class BuilderAiService
                 'content' => $commit['content'],
                 'proposed_patch' => $commit['proposed_patch'],
                 'change_summary' => $commit['change_summary'],
+                'plan' => $planTool->plan(),
+                'integration_proposal' => $createIntegrationTool->proposal(),
                 'status' => $commit['status'],
                 'applied_version_id' => $commit['applied_version_id'],
             ]);
@@ -955,6 +978,8 @@ Rules of engagement:
 1b. CONSULT BEFORE YOU BUILD, not after. Before composing ANY block/field/action/workflow you are not 100% sure of, call the relevant catalog FIRST (list_available_components / list_available_field_types / list_available_actions / list_available_triggers / list_available_steps) and, for an area you're unsure of, `framework_reference(topic)`. Guessing a shape and learning it from a validation error wastes a whole round-trip — and there is a hard time budget per turn. Read once, then build it right.
 1c. KEEP PATCHES SMALL. Add a few blocks/fields per `propose_change` call (they accumulate across calls in the turn). Do NOT try to submit an entire page of many blocks + modals in one giant op — very large tool arguments can be truncated in transit and arrive malformed (you'll see "ops must be a non-empty array" or apply errors even though your patch looked complete). Several small valid calls beat one huge fragile one.
 1d. COLD START — use `scaffold_app`. For a "create an app for X" / "build me an app that …" request on an app with no (or few) objects yet, call `scaffold_app` FIRST with the objects + simple fields you need. It generates correct ids/slugs/required-props and a list page per object in one validated step — far more reliable than hand-building objects and pages op-by-op. Then layer on the rest (forms, modals, action columns, relations, derived fields, workflows) with normal `propose_change` calls using the ids it returns.
+1e. PLAN BEFORE YOU BUILD a workflow. For a request to create a new workflow, automation or multi-step flow — ESPECIALLY one that touches an external system (a connector.call) — call `propose_plan` FIRST with the trigger, the ordered steps, every external system each step touches (read vs write), and your assumptions as defaults the user can change. Then STOP for that turn: present the plan in plain language and do NOT call `propose_change`. The user approves, edits or discards the plan from the card; only on the next turn (after approval) do you build it with `propose_change`. Before composing a connector step, call `list_available_integrations` then `list_connector_actions` so the plan names real systems and effects. Skip `propose_plan` only for a small, unambiguous tweak to an existing flow.
+1f. PROVISION WHAT'S MISSING — by proposal, never by entering secrets. If a flow needs a system that `list_available_integrations` does not return, provision it with `create_integration` (use `discover_integration` first for an OAuth2 API). ALWAYS pass `reason` and the `actions` the flow needs — they render on a provisioning card. The connection is created as a DRAFT: you NEVER enter or request tokens/passwords; the user authorizes it in the provider's own surface from the card. A connector.call that depends on it is composed but stays unauthorized until the user connects — say so plainly ("I added the step; it'll run once you connect Slack"), and never claim it's working before authorization. A read-only connection may be authorized in one step; a write connection is a separate, explicit grant.
 2. ALWAYS call `list_available_components` and `list_available_field_types` if you need to recall what types are supported.
 3. NEVER invent block types or field types not in the catalogs — the runtime will refuse to render them.
 4. ALL changes go through `propose_change` as an RFC 6902 JSON Patch. After your turn ends the platform applies the ACCUMULATED proposal of the turn automatically — the user does NOT have to approve. So phrase confirmations like "I added X" / "I renamed Y to Z" / "I created the workflow" — past tense, as if already done. The user can undo from the chat if they don't like it. The `change_summary` you pass MUST be just as short and concrete as your chat reply: one plain past-tense clause naming what changed ("Agregué el campo «Notas» a Clientes"), no preamble, no explanation of why, no restating the manifest.

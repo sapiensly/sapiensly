@@ -13,7 +13,21 @@ export type RecordTrigger = {
     object_id: string;
     filter?: unknown;
 };
-export type WorkflowTrigger = ManualTrigger | RecordTrigger;
+export type ScheduleTrigger = {
+    type: 'schedule';
+    cron: string;
+    timezone?: string;
+};
+export type WebhookTrigger = {
+    type: 'webhook.inbound';
+    dedupe_path?: string;
+    signature_header?: string;
+};
+export type WorkflowTrigger =
+    | ManualTrigger
+    | RecordTrigger
+    | ScheduleTrigger
+    | WebhookTrigger;
 
 export type StepType =
     | 'log'
@@ -24,7 +38,40 @@ export type StepType =
     | 'record.query'
     | 'branch'
     | 'ai.complete'
-    | 'http.request';
+    | 'http.request'
+    | 'connector.call';
+
+// ---------- Connector action contracts (from GET .../builder/connector-actions) ----------
+
+export type ConnectorEffect = 'read' | 'write';
+
+export interface ConnectorActionInput {
+    name: string;
+    type: string;
+    required: boolean;
+}
+
+/** Mirror of App\DTOs\ConnectorActionContract::jsonSerialize(). */
+export interface ConnectorActionContract {
+    id: string;
+    name: string;
+    integration_id: string | null;
+    tool_type: string;
+    inputs: ConnectorActionInput[];
+    outputs: string[];
+    effect: ConnectorEffect;
+    effect_inferred: boolean;
+    blast_radius: string;
+    safe: boolean;
+    typed: boolean;
+}
+
+export interface ConnectorIntegration {
+    id: string;
+    name: string;
+    authorized: boolean;
+    actions: ConnectorActionContract[];
+}
 
 /** Catalog metadata used by the palette + panel — title/icon/description. */
 export interface StepTypeMeta {

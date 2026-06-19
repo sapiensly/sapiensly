@@ -5,12 +5,25 @@ use App\Enums\AgentStatus;
 use App\Enums\ToolType;
 use App\Models\Tool;
 use App\Models\User;
+use App\Services\Security\Ssrf\DnsResolver;
 use App\Services\ToolConfigService;
 use App\Services\ToolExecutionService;
 use App\Services\Tools\DatabaseExecutor;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
+    // REST/GraphQL tools now flow through the SSRF guard, which resolves DNS
+    // for real. Fake the resolver to a public IP so faked endpoints (whose
+    // subdomains don't resolve) pass the guard; bind before the executors
+    // are built so their guard uses the fake.
+    app()->bind(DnsResolver::class, fn () => new class implements DnsResolver
+    {
+        public function resolve(string $host): array
+        {
+            return ['93.184.216.34'];
+        }
+    });
+
     $this->user = User::factory()->create();
     $this->configService = app(ToolConfigService::class);
     $this->executionService = app(ToolExecutionService::class);

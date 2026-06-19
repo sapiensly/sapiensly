@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AgentStatus;
+use App\Enums\ConnectorEffect;
 use App\Enums\ToolType;
 use App\Enums\Visibility;
 use App\Models\Concerns\HasPrefixedUlid;
@@ -28,6 +29,8 @@ class Tool extends Model
         'name',
         'description',
         'config',
+        'effect',
+        'safe',
         'status',
         'visibility',
         'is_validated',
@@ -38,6 +41,8 @@ class Tool extends Model
     {
         return [
             'type' => ToolType::class,
+            'effect' => ConnectorEffect::class,
+            'safe' => 'boolean',
             'status' => AgentStatus::class,
             'visibility' => Visibility::class,
             'config' => 'array',

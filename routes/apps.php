@@ -38,6 +38,24 @@ Route::middleware([
         ->where('workflow', 'wkf_[a-z0-9_]+')
         ->middleware('throttle:builder-workflow-run')
         ->name('apps.builder.workflows.run');
+    Route::post('/apps/{app}/builder/workflows/{workflow}/verify', [AppWorkflowController::class, 'verify'])
+        ->where('workflow', 'wkf_[a-z0-9_]+')
+        ->middleware('throttle:builder-workflow-run')
+        ->name('apps.builder.workflows.verify');
+    Route::get('/apps/{app}/builder/workflows/{workflow}/webhook-info', [AppWorkflowController::class, 'webhookInfo'])
+        ->where('workflow', 'wkf_[a-z0-9_]+')
+        ->name('apps.builder.workflows.webhook-info');
+    Route::get('/apps/{app}/builder/connector-actions', [AppWorkflowController::class, 'connectorActions'])
+        ->name('apps.builder.connector-actions');
+    // Gated-write proposals (propose-don't-mutate approval gate).
+    Route::get('/apps/{app}/builder/workflow-proposals', [AppWorkflowController::class, 'pendingProposals'])
+        ->name('apps.builder.workflow-proposals.index');
+    Route::post('/apps/{app}/builder/workflow-proposals/{proposal}/approve', [AppWorkflowController::class, 'approveProposal'])
+        ->where('proposal', 'whp_[a-z0-9_]+')
+        ->name('apps.builder.workflow-proposals.approve');
+    Route::post('/apps/{app}/builder/workflow-proposals/{proposal}/dismiss', [AppWorkflowController::class, 'dismissProposal'])
+        ->where('proposal', 'whp_[a-z0-9_]+')
+        ->name('apps.builder.workflow-proposals.dismiss');
     Route::get('/apps/{app}/builder/objects/{objectId}/records', [AppBuilderController::class, 'objectRecords'])
         ->name('apps.builder.object-records');
 

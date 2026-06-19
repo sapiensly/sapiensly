@@ -2,11 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\IntegrationAuthType;
 use App\Models\App;
+use App\Models\Integration;
+use App\Models\IntegrationUserToken;
+use App\Models\Tool;
+use App\Models\WorkflowProposal;
 use App\Models\WorkflowRun;
+use App\Services\Connectors\ConnectorActionResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\InvalidManifestException;
+use App\Services\Workflows\WorkflowAssertionEvaluator;
 use App\Services\Workflows\WorkflowEngine;
+use App\Services\Workflows\WorkflowProposalService;
+use App\Services\Workflows\WorkflowWebhookSignature;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -34,7 +43,145 @@ class AppWorkflowController extends Controller
     public function __construct(
         private AppManifestService $manifestService,
         private WorkflowEngine $engine,
+        private ConnectorActionResolver $connectorActions,
+        private WorkflowAssertionEvaluator $assertions,
+        private WorkflowWebhookSignature $webhookSignatures,
+        private WorkflowProposalService $proposals,
     ) {}
+
+    /**
+     * Pending gated-write proposals for this app — the writes a real run halted
+     * on (propose-don't-mutate). The approval gate the runtime UI renders.
+     */
+    public function pendingProposals(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $proposals = WorkflowProposal::query()
+            ->where('app_id', $app->id)
+            ->where('status', 'pending')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (WorkflowProposal $p): array => [
+                'id' => $p->id,
+                'workflow_id' => $p->workflow_id,
+                'run_id' => $p->run_id,
+                'step_id' => $p->step_id,
+                'effect' => $p->effect,
+                'preview' => $p->preview,
+            ]);
+
+        return response()->json(['proposals' => $proposals]);
+    }
+
+    public function approveProposal(Request $request, App $app, string $proposalId): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+        $proposal = $this->findProposal($app, $proposalId);
+
+        $outcome = $this->proposals->approve($proposal, $request->user());
+
+        return response()->json($outcome, $outcome['ok'] ? 200 : 422);
+    }
+
+    public function dismissProposal(Request $request, App $app, string $proposalId): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+        $proposal = $this->findProposal($app, $proposalId);
+
+        return response()->json(['ok' => $this->proposals->dismiss($proposal, $request->user())]);
+    }
+
+    private function findProposal(App $app, string $proposalId): WorkflowProposal
+    {
+        $proposal = WorkflowProposal::query()
+            ->where('app_id', $app->id)
+            ->whereKey($proposalId)
+            ->first();
+
+        if ($proposal === null) {
+            throw new NotFoundHttpException("Proposal '{$proposalId}' not found.");
+        }
+
+        return $proposal;
+    }
+
+    /**
+     * The signed ingress URL and HMAC secret for a webhook.inbound workflow, so
+     * the editor can show the user what to paste into the external provider. The
+     * secret is derived (not stored) — stable and safe to reveal to the owner.
+     */
+    public function webhookInfo(Request $request, App $app, string $workflowId): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        return response()->json([
+            'url' => route('webhooks.flows.receive', ['app' => $app->id, 'workflow' => $workflowId]),
+            'secret' => $this->webhookSignatures->secretFor($app->id, $workflowId),
+            'signature_header' => 'X-Sapiensly-Signature',
+        ]);
+    }
+
+    /**
+     * Feed the visual editor the tenant's integrations and, per integration,
+     * the typed connector actions a connector.call step can compose against.
+     * Fetched lazily by the canvas (not threaded through the manifest) because
+     * integrations change out-of-band — a flow can provision one mid-build.
+     */
+    public function connectorActions(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $user = $request->user();
+
+        $integrations = Integration::query()
+            ->forAccountContext($user)
+            ->orderBy('name')
+            ->get();
+
+        $authorizedIds = IntegrationUserToken::query()
+            ->where('user_id', $user->id)
+            ->whereIn('integration_id', $integrations->pluck('id'))
+            ->get()
+            ->filter(fn (IntegrationUserToken $token): bool => $token->isAuthorized())
+            ->pluck('integration_id')
+            ->all();
+
+        $actionsByIntegration = Tool::query()
+            ->forAccountContext($user)
+            ->whereNotNull('config->integration_id')
+            ->orderBy('name')
+            ->get()
+            ->groupBy(fn (Tool $tool): string => (string) ($tool->config['integration_id'] ?? ''))
+            ->map(fn ($tools) => $tools->map(fn (Tool $tool): array => $this->connectorActions->resolve($tool)->jsonSerialize())->values());
+
+        $payload = $integrations->map(fn (Integration $integration): array => [
+            'id' => $integration->id,
+            'name' => $integration->name,
+            'authorized' => $this->integrationAuthorized($integration, $authorizedIds),
+            'actions' => $actionsByIntegration->get($integration->id, collect())->all(),
+        ]);
+
+        return response()->json(['integrations' => $payload]);
+    }
+
+    /**
+     * @param  list<string>  $authorizedIds
+     */
+    private function integrationAuthorized(Integration $integration, array $authorizedIds): bool
+    {
+        $authType = $integration->auth_type;
+
+        if ($authType === IntegrationAuthType::None) {
+            return true;
+        }
+
+        if ($authType === IntegrationAuthType::OAuth2AuthorizationCode) {
+            return in_array($integration->id, $authorizedIds, true);
+        }
+
+        return $integration->status !== 'draft';
+    }
 
     /**
      * Replace a single workflow in the manifest with the payload the editor
@@ -185,6 +332,76 @@ class AppWorkflowController extends Controller
                     ])
                     ->all(),
             ],
+        ]);
+    }
+
+    /**
+     * Verify a workflow by dry-run: seed the trigger inputs, execute with every
+     * write SIMULATED (never applied), then evaluate declarative assertions and
+     * return a legible pass/fail report (FR-2). External writes are shown as
+     * Proposal previews; internal record writes never touch real records.
+     */
+    public function verify(Request $request, App $app, string $workflowId): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $request->validate([
+            'trigger_payload' => ['nullable', 'array'],
+            'assertions' => ['nullable', 'array'],
+        ]);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            throw new NotFoundHttpException('App has no active manifest yet.');
+        }
+
+        $workflow = collect($manifest['workflows'] ?? [])
+            ->first(fn (array $w) => ($w['id'] ?? null) === $workflowId);
+
+        if ($workflow === null) {
+            throw new NotFoundHttpException("Workflow '{$workflowId}' not found in the active manifest.");
+        }
+
+        $triggerType = $workflow['trigger']['type'] ?? 'manual';
+        $payload = (array) $request->input('trigger_payload', []);
+
+        $run = $this->engine->run($app, $manifest, $workflow, $triggerType, $payload, $request->user(), dryRun: true);
+        $run->load(['steps' => fn ($q) => $q->orderBy('sequence_index')]);
+
+        $assertions = $request->input('assertions');
+        if (! is_array($assertions) || $assertions === []) {
+            $assertions = $this->assertions->defaultAssertions($workflow);
+        }
+
+        $results = $this->assertions->evaluate($run, $assertions);
+
+        $simulatedWrites = $run->steps
+            ->filter(fn ($s) => ($s->output['simulated'] ?? false) === true)
+            ->map(fn ($s) => [
+                'step_id' => $s->step_id,
+                'step_type' => $s->step_type,
+                'effect' => $s->output['effect'] ?? 'write',
+                'preview' => $s->output['proposal']['preview'] ?? null,
+            ])
+            ->values()
+            ->all();
+
+        return response()->json([
+            'passed' => $run->status === 'completed' && collect($results)->every(fn ($r) => $r['passed']),
+            'run' => [
+                'id' => $run->id,
+                'status' => $run->status,
+                'error' => $run->error,
+                'steps' => $run->steps->map(fn ($s) => [
+                    'step_id' => $s->step_id,
+                    'step_type' => $s->step_type,
+                    'status' => $s->status,
+                    'output' => $s->output,
+                    'error' => $s->error,
+                ])->all(),
+            ],
+            'assertions' => $results,
+            'simulated_writes' => $simulatedWrites,
         ]);
     }
 

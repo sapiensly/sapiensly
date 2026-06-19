@@ -1,7 +1,11 @@
 <?php
 
+use App\Enums\AgentStatus;
+use App\Enums\ToolType;
 use App\Models\App;
 use App\Models\AppVersion;
+use App\Models\Integration;
+use App\Models\Tool;
 use App\Models\User;
 use App\Models\WorkflowRun;
 use App\Services\Manifest\AppManifestService;
@@ -64,6 +68,98 @@ function simpleManualWorkflow(string $id, string $name = 'Saludar'): array
 beforeEach(function () {
     $this->user = User::factory()->create(['email_verified_at' => now()]);
     $this->testApp = App::factory()->create(['user_id' => $this->user->id, 'visibility' => 'private']);
+});
+
+it('GET /connector-actions returns tenant integrations with their typed actions', function () {
+    $integration = Integration::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'auth_type' => 'none',
+        'status' => 'active',
+        'name' => 'Acme API',
+    ]);
+
+    Tool::factory()->create([
+        'type' => ToolType::RestApi,
+        'status' => AgentStatus::Active,
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'name' => 'Get deal',
+        'config' => [
+            'base_url' => 'https://api.acme.test',
+            'method' => 'GET',
+            'path' => '/deals/{{deal_id}}',
+            'integration_id' => $integration->id,
+        ],
+    ]);
+
+    $payload = $this->actingAs($this->user)
+        ->getJson("/apps/{$this->testApp->id}/builder/connector-actions")
+        ->assertOk()
+        ->json('integrations');
+
+    expect($payload)->toHaveCount(1);
+    expect($payload[0])->toMatchArray(['id' => $integration->id, 'name' => 'Acme API', 'authorized' => true]);
+    expect($payload[0]['actions'])->toHaveCount(1);
+    expect($payload[0]['actions'][0])->toMatchArray(['name' => 'Get deal', 'effect' => 'read']);
+});
+
+it('POST /verify dry-runs a workflow and returns a passing report', function () {
+    $wfId = wfid('wkf');
+    $workflow = [
+        'id' => $wfId, 'slug' => 'log_flow', 'name' => 'Log',
+        'trigger' => ['type' => 'manual'],
+        'steps' => [
+            ['id' => wfid('stp'), 'type' => 'log', 'message' => 'hello', 'level' => 'info'],
+        ],
+    ];
+    app(AppManifestService::class)->createVersion(
+        $this->testApp,
+        wfManifest($this->testApp->id, [$workflow]),
+        $this->user,
+    );
+
+    $report = $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/workflows/{$wfId}/verify")
+        ->assertOk()
+        ->json();
+
+    expect($report['passed'])->toBeTrue();
+    expect($report['run']['status'])->toBe('completed');
+    expect($report['assertions'])->not->toBeEmpty();
+    expect(collect($report['assertions'])->every(fn ($a) => $a['passed']))->toBeTrue();
+});
+
+it('POST /verify reports a failing assertion when a step is missing', function () {
+    $wfId = wfid('wkf');
+    $workflow = [
+        'id' => $wfId, 'slug' => 'log_flow', 'name' => 'Log',
+        'trigger' => ['type' => 'manual'],
+        'steps' => [['id' => wfid('stp'), 'type' => 'log', 'message' => 'hi', 'level' => 'info']],
+    ];
+    app(AppManifestService::class)->createVersion(
+        $this->testApp,
+        wfManifest($this->testApp->id, [$workflow]),
+        $this->user,
+    );
+
+    $report = $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/workflows/{$wfId}/verify", [
+            'assertions' => [['type' => 'step_status', 'step' => 'stp_missing', 'status' => 'completed']],
+        ])
+        ->assertOk()
+        ->json();
+
+    expect($report['passed'])->toBeFalse();
+    expect($report['assertions'][0]['passed'])->toBeFalse();
+});
+
+it('GET /connector-actions is forbidden for a stranger', function () {
+    $stranger = User::factory()->create(['email_verified_at' => now()]);
+
+    $this->actingAs($stranger)
+        ->getJson("/apps/{$this->testApp->id}/builder/connector-actions")
+        ->assertForbidden();
 });
 
 it('PUT /workflows/{wfId} replaces the matching workflow and creates a new AppVersion', function () {

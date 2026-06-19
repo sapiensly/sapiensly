@@ -7,11 +7,25 @@
  * lookup away.
  */
 
-import type { ManifestStep, StepType } from '@/types/appWorkflows';
+import type {
+    ConnectorEffect,
+    ManifestStep,
+    StepType,
+} from '@/types/appWorkflows';
+
+/** Minimal connector-action shape the node card needs to label itself. */
+export interface ConnectorActionSummary {
+    name: string;
+    integrationName: string;
+    effect: ConnectorEffect;
+    safe: boolean;
+}
 
 export interface SummaryContext {
     /** Lookup table from object_id → object metadata, used by record.* summaries. */
     objectsById?: Map<string, { id: string; slug: string; name: string }>;
+    /** Lookup from a connector.call's tool_id → its action contract, for the node label. */
+    connectorActionsById?: Map<string, ConnectorActionSummary>;
 }
 
 export interface StepCatalogEntry {
@@ -56,7 +70,8 @@ export const STEP_CATALOG: Record<StepType, StepCatalogEntry> = {
         icon: 'FileText',
         color: '#94a3b8', // slate-400
         defaults: () => ({ message: '' }),
-        summary: (s) => (typeof s.message === 'string' && s.message !== '' ? s.message : '—'),
+        summary: (s) =>
+            typeof s.message === 'string' && s.message !== '' ? s.message : '—',
     },
     set_variable: {
         type: 'set_variable',
@@ -67,14 +82,18 @@ export const STEP_CATALOG: Record<StepType, StepCatalogEntry> = {
         defaults: () => ({ variable: '', value: '' }),
         summary: (s) => {
             const v = typeof s.variable === 'string' ? s.variable : '';
-            const val = typeof s.value === 'string' ? s.value : JSON.stringify(s.value ?? null);
+            const val =
+                typeof s.value === 'string'
+                    ? s.value
+                    : JSON.stringify(s.value ?? null);
             return v ? `${v} = ${val}` : '—';
         },
     },
     'record.create': {
         type: 'record.create',
         labelKey: 'apps.builder.workflows.steps.record_create.label',
-        descriptionKey: 'apps.builder.workflows.steps.record_create.description',
+        descriptionKey:
+            'apps.builder.workflows.steps.record_create.description',
         icon: 'Plus',
         color: '#34d399', // emerald-400
         defaults: () => ({ object_id: '', values: {} }),
@@ -83,7 +102,8 @@ export const STEP_CATALOG: Record<StepType, StepCatalogEntry> = {
     'record.update': {
         type: 'record.update',
         labelKey: 'apps.builder.workflows.steps.record_update.label',
-        descriptionKey: 'apps.builder.workflows.steps.record_update.description',
+        descriptionKey:
+            'apps.builder.workflows.steps.record_update.description',
         icon: 'Pencil',
         color: '#fbbf24', // amber-400
         defaults: () => ({ object_id: '', record_id: '', values: {} }),
@@ -92,7 +112,8 @@ export const STEP_CATALOG: Record<StepType, StepCatalogEntry> = {
     'record.delete': {
         type: 'record.delete',
         labelKey: 'apps.builder.workflows.steps.record_delete.label',
-        descriptionKey: 'apps.builder.workflows.steps.record_delete.description',
+        descriptionKey:
+            'apps.builder.workflows.steps.record_delete.description',
         icon: 'Trash2',
         color: '#f87171', // red-400
         defaults: () => ({ object_id: '', record_id: '' }),
@@ -130,7 +151,10 @@ export const STEP_CATALOG: Record<StepType, StepCatalogEntry> = {
         icon: 'Sparkles',
         color: '#22d3ee', // cyan-400
         defaults: () => ({ prompt: '' }),
-        summary: (s) => (typeof s.prompt === 'string' && s.prompt !== '' ? truncate(s.prompt, 30) : '—'),
+        summary: (s) =>
+            typeof s.prompt === 'string' && s.prompt !== ''
+                ? truncate(s.prompt, 30)
+                : '—',
     },
     'http.request': {
         type: 'http.request',
@@ -143,6 +167,25 @@ export const STEP_CATALOG: Record<StepType, StepCatalogEntry> = {
             const method = typeof s.method === 'string' ? s.method : 'GET';
             const url = typeof s.url === 'string' ? s.url : '?';
             return `${method} ${truncate(url, 24)}`;
+        },
+    },
+    'connector.call': {
+        type: 'connector.call',
+        labelKey: 'apps.builder.workflows.steps.connector_call.label',
+        descriptionKey:
+            'apps.builder.workflows.steps.connector_call.description',
+        icon: 'Plug',
+        color: '#2dd4bf', // teal-400 — the effect ribbon carries read/write, so the stripe stays neutral
+        defaults: () => ({ tool_id: '', inputs: {} }),
+        summary: (s, ctx) => {
+            const toolId = typeof s.tool_id === 'string' ? s.tool_id : '';
+            const action = toolId
+                ? ctx?.connectorActionsById?.get(toolId)
+                : undefined;
+            if (action) {
+                return `${action.integrationName} · ${action.name}`;
+            }
+            return toolId ? truncate(toolId, 28) : '—';
         },
     },
 };
@@ -162,4 +205,5 @@ export const STEP_CATALOG_ORDERED: StepCatalogEntry[] = [
     STEP_CATALOG.branch,
     STEP_CATALOG['ai.complete'],
     STEP_CATALOG['http.request'],
+    STEP_CATALOG['connector.call'],
 ];
