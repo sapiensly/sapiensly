@@ -3,6 +3,7 @@
 use App\Models\McpAccessToken;
 use App\Models\User;
 use App\Support\Tenancy\TenantContext;
+use Laravel\Passport\Passport;
 
 /**
  * The MCP endpoint is bearer-token protected: no token (or a bad/expired one) is
@@ -41,6 +42,19 @@ it('authenticates a valid token and binds the tenant scope', function () {
     McpAccessToken::create(['user_id' => $user->id, 'name' => 'cc', 'token' => $plain]);
 
     $this->withToken($plain)
+        ->postJson('/mcp/v1', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])
+        ->assertOk();
+
+    expect(app(TenantContext::class)->userId())->toBe($user->id);
+});
+
+it('authenticates via an OAuth (Passport) token and binds the tenant scope', function () {
+    $user = User::factory()->create();
+    Passport::actingAs($user, ['mcp:use']);
+
+    // A bearer must be present; the personal-token lookup misses, so the
+    // middleware falls through to the Passport (api) guard.
+    $this->withToken('oauth-issued-token')
         ->postJson('/mcp/v1', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])
         ->assertOk();
 

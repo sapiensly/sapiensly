@@ -4,18 +4,23 @@ namespace App\Http\Middleware;
 
 use App\Mcp\McpContext;
 use App\Models\McpAccessToken;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Authenticates an MCP request by its Bearer token (laravel/mcp "custom
- * authentication"). Mirrors ValidateWidgetApiToken, but resolves to a USER and
- * logs them in for the request so MCP tools can use `$request->user()` and the
- * existing policies. The resolved token is bound into the container as an
- * McpContext so tools can gate on its abilities. Must run before
- * BindMcpTenantContext.
+ * Authenticates an MCP request by its Bearer token, accepting two credentials
+ * on the same endpoint:
+ *   1. a personal McpAccessToken (Claude Code) — resolved here, with the token's
+ *      abilities exposed via McpContext;
+ *   2. an OAuth 2.1 access token issued by Passport (the claude.ai connector) —
+ *      validated by the `api` guard; OAuth is a translation layer to the user,
+ *      so such a session is granted all abilities (a null McpContext).
+ *
+ * Either way the user is logged in for the request (so tools can call
+ * $request->user() and policies resolve) before BindMcpTenantContext runs.
  */
 class AuthenticateMcpToken
 {
@@ -27,29 +32,33 @@ class AuthenticateMcpToken
             return $this->unauthorized('Authorization header with a Bearer token is required.');
         }
 
+        // 1) Personal MCP token (Claude Code).
         $token = McpAccessToken::where('token', $bearerToken)->first();
+        if ($token && ! $token->isExpired() && $token->user) {
+            $token->touchLastUsed();
+            $this->login($request, $token->user, new McpContext($token));
 
-        if (! $token || $token->isExpired()) {
-            return $this->unauthorized('The provided MCP token is invalid or has expired.');
+            return $next($request);
         }
 
-        $user = $token->user;
+        // 2) OAuth 2.1 access token (Claude web). The passport guard parses the
+        //    bearer; a personal token that didn't match above just fails to parse
+        //    as a JWT and yields null here.
+        $oauthUser = $request->user('api');
+        if ($oauthUser instanceof User) {
+            $this->login($request, $oauthUser, new McpContext(null));
 
-        if (! $user) {
-            return $this->unauthorized('The user associated with this token no longer exists.');
+            return $next($request);
         }
 
-        $token->touchLastUsed();
+        return $this->unauthorized('The provided MCP credentials are invalid or have expired.');
+    }
 
-        // Authenticate the user for this request so tools can call
-        // $request->user() and Gate/policy checks resolve correctly.
+    private function login(Request $request, User $user, McpContext $context): void
+    {
         Auth::setUser($user);
         $request->setUserResolver(fn () => $user);
-
-        // Expose the token's abilities to the tools for this request.
-        app()->instance(McpContext::class, new McpContext($token));
-
-        return $next($request);
+        app()->instance(McpContext::class, $context);
     }
 
     private function unauthorized(string $message): Response

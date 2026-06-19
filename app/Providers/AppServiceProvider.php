@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Passport\Passport;
 use Pgvector\Laravel\Schema;
 
 class AppServiceProvider extends ServiceProvider
@@ -79,6 +80,10 @@ class AppServiceProvider extends ServiceProvider
         $this->propagateTenantContextToQueue();
 
         $this->forceOwnerConnectionForMigrations();
+
+        // Consent screen shown to a user when an MCP client (e.g. claude.ai)
+        // requests OAuth access via the MCP server's Passport flow.
+        Passport::authorizationView(fn ($parameters) => view('mcp.authorize', $parameters));
 
         // SysAdmin bypasses all authorization gates and policies
         Gate::before(function ($user, $ability) {
