@@ -82,14 +82,14 @@ test('accepts agent node with agent_id and valid role', function () {
     ]))->toBeTrue();
 });
 
-test('rejects agent node without agent_id', function () {
+test('accepts an unassigned agent node (draft, no agent_id yet)', function () {
     expect(validateDefinition([
         'nodes' => [
             ['id' => 'node_start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => []],
             ['id' => 'node_agent', 'type' => 'agent', 'position' => ['x' => 0, 'y' => 100], 'data' => ['role' => 'triage']],
         ],
         'edges' => [],
-    ]))->toBeFalse();
+    ]))->toBeTrue();
 });
 
 test('rejects agent node with invalid role', function () {

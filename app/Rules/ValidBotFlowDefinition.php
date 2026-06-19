@@ -81,16 +81,12 @@ class ValidBotFlowDefinition implements ValidationRule
             }
         }
 
-        // Validate agent nodes declare the roster: each binds a real agent and
-        // a role the orchestrator resolves handoffs against.
+        // Validate agent nodes declare a roster role. The agent itself may be
+        // unassigned in a draft (the canvas warns, and the roster skips it) — so
+        // agent_id is optional; only the role must be present and valid.
         $validRoles = ['triage', 'knowledge', 'action'];
         foreach ($nodes as $node) {
             if (($node['type'] ?? null) === 'agent') {
-                if (empty($node['data']['agent_id'])) {
-                    $fail("Agent node {$node['id']} must reference an agent_id.");
-
-                    return;
-                }
                 if (! in_array($node['data']['role'] ?? null, $validRoles, true)) {
                     $fail("Agent node {$node['id']} must have a role of triage, knowledge, or action.");
 

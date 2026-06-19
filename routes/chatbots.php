@@ -15,6 +15,8 @@ Route::middleware([
     // The AI Bot's conversational design lives in its Bot Flow.
     Route::get('chatbots/{chatbot}/flow/edit', [BotFlowController::class, 'editForChatbot'])
         ->name('chatbots.flow.edit');
+    Route::post('chatbots/{chatbot}/flow/scaffold', [BotFlowController::class, 'scaffold'])
+        ->name('chatbots.flow.scaffold');
 
     Route::get('chatbots/{chatbot}/embed', [ChatbotController::class, 'embed'])
         ->name('chatbots.embed');

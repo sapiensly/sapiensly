@@ -4,6 +4,7 @@ import FlowNodePalette from '@/components/bot-flows/FlowNodePalette.vue';
 import FlowNodePanel from '@/components/bot-flows/FlowNodePanel.vue';
 import FlowTestWidget from '@/components/bot-flows/FlowTestWidget.vue';
 import FlowToolbar from '@/components/bot-flows/FlowToolbar.vue';
+import BotFlowAssistant from '@/components/bot-flows/BotFlowAssistant.vue';
 import AgentHandoffNode from '@/components/bot-flows/nodes/AgentHandoffNode.vue';
 import AgentNode from '@/components/bot-flows/nodes/AgentNode.vue';
 import ConditionNode from '@/components/bot-flows/nodes/ConditionNode.vue';
@@ -88,6 +89,7 @@ interface ToolRef {
 interface Props {
     agent: Agent | null;
     flow: BotFlow | null;
+    chatbot?: { id: string; name: string } | null;
     availableModels?: AvailableModel[];
     availableAgents?: AvailableAgents;
     knowledgeBases?: KBRef[];
@@ -95,6 +97,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+    chatbot: null,
     availableModels: () => [],
     availableAgents: () => ({ triage: [], knowledge: [], action: [] }),
     knowledgeBases: () => [],
@@ -125,9 +128,15 @@ const {
     removeNode,
     updateNodeData,
     selectNode,
+    loadDefinition,
     toDefinition,
     onConnect,
 } = useBotFlowEditor(initialDefinition);
+
+const onAssistantGenerated = (definition: BotFlowDefinition) => {
+    selectNode(null);
+    loadDefinition(definition);
+};
 
 const flowName = ref(props.flow?.name ?? t('flows.editor.new_flow'));
 const flowStatus = ref<'draft' | 'active' | 'inactive'>(
@@ -393,6 +402,12 @@ const backUrl = props.agent
                         zoomable
                     />
                 </VueFlow>
+
+                <BotFlowAssistant
+                    v-if="chatbot"
+                    :chatbot-id="chatbot.id"
+                    @generated="onAssistantGenerated"
+                />
 
                 <FlowTestWidget v-if="flow" :flow-id="flow.id" />
             </div>

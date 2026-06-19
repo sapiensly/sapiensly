@@ -15,6 +15,7 @@ use App\Models\KnowledgeBase;
 use App\Models\Tool;
 use App\Models\User;
 use App\Services\AiProviderService;
+use App\Services\BotFlows\BotFlowScaffolder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -90,6 +91,27 @@ class BotFlowController extends Controller
             'chatbot' => $chatbot->only(['id', 'name']),
             ...$this->getEditorProps($request->user()),
         ]);
+    }
+
+    /**
+     * Generate a starter Bot Flow definition from a natural-language description.
+     * Returns the definition for the canvas to load; the author saves explicitly.
+     */
+    public function scaffold(Request $request, Chatbot $chatbot, BotFlowScaffolder $scaffolder): JsonResponse
+    {
+        $this->authorize('update', $chatbot);
+
+        $validated = $request->validate([
+            'description' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $definition = $scaffolder->scaffold(
+            $validated['description'],
+            $this->getAvailableAgents($request->user()),
+            $request->user(),
+        );
+
+        return response()->json(['definition' => $definition]);
     }
 
     public function globalUpdate(UpdateBotFlowRequest $request, BotFlow $flow): RedirectResponse
