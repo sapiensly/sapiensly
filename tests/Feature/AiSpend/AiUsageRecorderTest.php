@@ -4,6 +4,7 @@ use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
 use App\Models\AiUsageEvent;
 use App\Models\Organization;
+use App\Models\SystemAiUsageEvent;
 use App\Models\User;
 use App\Services\Ai\AiPricing;
 use App\Services\Ai\AiUsageRecorder;
@@ -25,6 +26,20 @@ beforeEach(function () {
         'sort_order' => 0,
     ]);
 });
+
+function seedOwnProvider(User $user, Organization $org): void
+{
+    AiProvider::create([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        'visibility' => 'organization',
+        'name' => 'anthropic',
+        'driver' => 'anthropic',
+        'display_name' => 'Anthropic',
+        'credentials' => ['api_key' => 'sk-test'],
+        'status' => 'active',
+    ]);
+}
 
 it('prices usage from the catalog (input + output + cache)', function () {
     $cost = app(AiPricing::class)->costFor('claude-test', new Usage(
@@ -58,22 +73,47 @@ it('records an own-source event when the org owns a provider for the driver', fu
     $org = Organization::create(['name' => 'Acme']);
     $user = User::factory()->create(['organization_id' => $org->id]);
 
-    AiProvider::create([
-        'user_id' => $user->id,
-        'organization_id' => $org->id,
-        'visibility' => 'organization',
-        'name' => 'anthropic',
-        'driver' => 'anthropic',
-        'display_name' => 'Anthropic',
-        'credentials' => ['api_key' => 'sk-test'],
-        'status' => 'active',
-    ]);
+    seedOwnProvider($user, $org);
 
     app(AiUsageRecorder::class)->record('builder', 'claude-test', $user, null, new Usage(promptTokens: 1000));
 
     $event = AiUsageEvent::query()->firstOrFail();
     expect($event->source)->toBe('own')
         ->and($event->organization_id)->toBe($org->id);
+});
+
+it('also writes a system call to the platform ledger', function () {
+    $user = User::factory()->create();
+
+    app(AiUsageRecorder::class)->record('chat', 'claude-test', $user, null, new Usage(promptTokens: 1000, completionTokens: 500));
+
+    $ledger = SystemAiUsageEvent::query()->firstOrFail();
+    expect($ledger->module)->toBe('chat')
+        ->and($ledger->driver)->toBe('anthropic')
+        ->and($ledger->input_tokens)->toBe(1000)
+        ->and($ledger->output_tokens)->toBe(500)
+        ->and($ledger->cost)->toBeGreaterThan(0);
+});
+
+it('does not write an own-source call to the platform ledger', function () {
+    $org = Organization::create(['name' => 'Acme']);
+    $user = User::factory()->create(['organization_id' => $org->id]);
+    seedOwnProvider($user, $org);
+
+    app(AiUsageRecorder::class)->record('builder', 'claude-test', $user, null, new Usage(promptTokens: 1000));
+
+    expect(SystemAiUsageEvent::query()->count())->toBe(0);
+});
+
+it('records a context-less system call in the platform ledger', function () {
+    // No user, no org — the per-org meter has nothing to attribute, but the
+    // platform still paid, so the call must land in the platform ledger.
+    app(AiUsageRecorder::class)->record('embeddings', 'claude-test', null, null, new Usage(promptTokens: 1000));
+
+    $ledger = SystemAiUsageEvent::query()->firstOrFail();
+    expect($ledger->organization_id)->toBeNull()
+        ->and($ledger->user_id)->toBeNull()
+        ->and($ledger->module)->toBe('embeddings');
 });
 
 it('never throws when recording fails', function () {

@@ -41,7 +41,7 @@ afterEach(function () {
 function truncateTenantFixtures(): void
 {
     DB::connection('owner_commit')->statement(
-        'truncate tenant.records, tenant.knowledge_bases, tenant.chat_agents, platform.apps, platform.organizations, platform.users restart identity cascade'
+        'truncate tenant.records, tenant.knowledge_bases, tenant.chat_agents, tenant.ai_usage_events, platform.apps, platform.organizations, platform.users restart identity cascade'
     );
 }
 
@@ -232,6 +232,36 @@ it('isolates chat_agents by tenant under the real tenant role', function () {
 
     scopeTenant(null, null);
     expect(tenantChatAgentCount())->toBe(0);
+});
+
+it('lets the tenant role insert AI usage events (sequence grant)', function () {
+    // ai_usage_events uses a bigIncrements id, so the tenant role needs USAGE on
+    // its sequence. The table was relocated to `tenant` after the schema-wide
+    // sequence grant ran, so without an explicit grant every recorder INSERT
+    // fails with "permission denied for sequence" — silently, since the recorder
+    // swallows its errors, leaving both spend dashboards empty.
+    $user = makeOwner();
+    $org = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
+
+    scopeTenant($org->id, $user->id);
+
+    DB::connection('tenant_app_real')->table('tenant.ai_usage_events')->insert([
+        'organization_id' => $org->id,
+        'user_id' => $user->id,
+        'module' => 'chat',
+        'driver' => 'openai',
+        'model' => 'gpt-x',
+        'source' => 'own',
+        'input_tokens' => 10,
+        'output_tokens' => 5,
+        'cost' => 0.01,
+        'estimated' => false,
+        'status' => 'success',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    expect(DB::connection('tenant_app_real')->table('tenant.ai_usage_events')->count())->toBe(1);
 });
 
 it('denies tenant_app any access to the platform schema', function () {

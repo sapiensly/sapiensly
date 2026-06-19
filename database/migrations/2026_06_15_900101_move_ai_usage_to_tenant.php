@@ -51,6 +51,11 @@ return new class extends Migration
             DB::statement("GRANT SELECT, INSERT, UPDATE, DELETE ON {$qualified} TO {$tenant}");
             DB::statement("REVOKE ALL ON {$qualified} FROM {$platform}");
 
+            // The owned id sequence moves with the table on SET SCHEMA but keeps
+            // its old grants; without this the tenant role can't INSERT.
+            DB::statement("GRANT USAGE, SELECT ON SEQUENCE tenant.{$table}_id_seq TO {$tenant}");
+            DB::statement("REVOKE ALL ON SEQUENCE tenant.{$table}_id_seq FROM {$platform}");
+
             DB::statement("ALTER TABLE {$qualified} ADD COLUMN IF NOT EXISTS organization_id varchar(255)");
             DB::statement("ALTER TABLE {$qualified} ADD COLUMN IF NOT EXISTS user_id bigint");
             DB::statement("CREATE INDEX IF NOT EXISTS {$table}_tenant_key_idx ON {$qualified} (organization_id, user_id)");

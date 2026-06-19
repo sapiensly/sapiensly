@@ -34,20 +34,32 @@ class AiUsageReport
     }
 
     /**
-     * Platform-wide spend across every org (owner connection, RLS bypassed),
-     * plus a per-organization breakdown — for the sysadmin view.
+     * Platform-wide spend across every org for the sysadmin view, plus a
+     * per-organization breakdown. The two sources are read separately and merged
+     * so each meter is authoritative:
+     *   - `system` spend (what the platform pays) from platform.system_ai_usage_events,
+     *     which includes calls with no tenant attribution;
+     *   - `own` (BYOK) spend from tenant.ai_usage_events via the owner connection
+     *     (RLS bypassed) so every org's own-key usage is visible too.
      *
      * @return array<string, mixed>
      */
     public function platformWide(int $days = 30): array
     {
         $since = Carbon::today()->subDays($days - 1);
-        $table = Schemas::qualify('ai_usage_events'); // tenant.ai_usage_events
 
-        $rows = DB::connection('pgsql')->table($table)
+        $ownRows = DB::connection('pgsql')->table(Schemas::qualify('ai_usage_events'))
+            ->where('source', 'own')
             ->where('created_at', '>=', $since)
-            ->selectRaw('date(created_at) as d, source, model, organization_id, cost, input_tokens, output_tokens')
+            ->selectRaw("date(created_at) as d, 'own' as source, model, organization_id, cost, input_tokens, output_tokens")
             ->get();
+
+        $systemRows = DB::connection('pgsql')->table('platform.system_ai_usage_events')
+            ->where('created_at', '>=', $since)
+            ->selectRaw("date(created_at) as d, 'system' as source, model, organization_id, cost, input_tokens, output_tokens")
+            ->get();
+
+        $rows = $ownRows->concat($systemRows);
 
         $report = $this->shape($rows, $since, $days);
 
