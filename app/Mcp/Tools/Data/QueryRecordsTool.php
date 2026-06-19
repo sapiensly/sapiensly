@@ -1,0 +1,73 @@
+<?php
+
+namespace App\Mcp\Tools\Data;
+
+use App\Mcp\Tools\SapiensTool;
+use App\Models\User;
+use App\Services\Manifest\AppManifestService;
+use App\Services\Records\RecordQueryService;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Laravel\Mcp\Request;
+use Laravel\Mcp\Response;
+use Laravel\Mcp\Server\Attributes\Description;
+
+#[Description('Query records of an object in an app. Returns matching records (tenant-scoped). Use read_manifest first to learn the object and field ids.')]
+class QueryRecordsTool extends SapiensTool
+{
+    protected const ABILITY = 'data:read';
+
+    public function handle(Request $request): Response
+    {
+        $validated = $request->validate([
+            'app_slug' => ['required', 'string'],
+            'object_id' => ['required', 'string'],
+            'filter' => ['sometimes', 'array'],
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:200'],
+        ]);
+
+        /** @var User $user */
+        $user = $request->user();
+
+        try {
+            $app = $this->resolveApp($validated['app_slug'], $user);
+        } catch (ModelNotFoundException) {
+            return Response::error("No app named '{$validated['app_slug']}' is visible to you.");
+        }
+
+        $manifest = app(AppManifestService::class)->getActiveManifest($app);
+
+        $query = ['object_id' => $validated['object_id'], 'limit' => $validated['limit'] ?? 50];
+        if (isset($validated['filter'])) {
+            $query['filter'] = $validated['filter'];
+        }
+
+        try {
+            $records = app(RecordQueryService::class)->query($app, $query, $manifest ?? []);
+        } catch (\Throwable $e) {
+            return Response::error('Query failed: '.$e->getMessage());
+        }
+
+        return Response::json([
+            'count' => $records->count(),
+            'records' => $records->map(fn ($r) => [
+                'id' => $r->id,
+                'data' => $r->data,
+                'created_at' => $r->created_at?->toIso8601String(),
+            ])->values(),
+        ]);
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'app_slug' => $schema->string()->description('The slug of the app.')->required(),
+            'object_id' => $schema->string()->description('The object id to query records of.')->required(),
+            'filter' => $schema->object()->description('Optional manifest-style filter block.'),
+            'limit' => $schema->integer()->description('Max records to return (default 50).'),
+        ];
+    }
+}

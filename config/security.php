@@ -116,6 +116,13 @@ return [
             // could spend on Claude all day unbounded.
             'per_user_daily' => (int) env('RL_BUILDER_AI_USER_DAILY', 200),
         ],
+        // MCP endpoint: one HTTP request per tool call. Generous per-minute caps
+        // (tool listing + chained calls are normal); paid agent/builder calls are
+        // additionally capped by the AI spend guard + budgets, not here.
+        'mcp' => [
+            'per_user' => (int) env('RL_MCP_USER', 120),
+            'per_org' => (int) env('RL_MCP_ORG', 600),
+        ],
     ],
 
 ];

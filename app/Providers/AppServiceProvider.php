@@ -218,6 +218,15 @@ class AppServiceProvider extends ServiceProvider
                 ],
             ]);
         });
+
+        // MCP endpoint. Per-user + per-org per-minute caps; the user is set by
+        // AuthenticateMcpToken before this runs.
+        RateLimiter::for('mcp', function (Request $request) {
+            return $this->tenantLimits($request, 'mcp', [
+                ['kind' => 'user', 'max' => (int) config('security.rate_limits.mcp.per_user')],
+                ['kind' => 'org', 'max' => (int) config('security.rate_limits.mcp.per_org')],
+            ]);
+        });
     }
 
     /**
