@@ -13,7 +13,6 @@ import {
     Bot,
     Brain,
     Database,
-    MessageSquare,
     Plus,
     Users,
     Wrench,
@@ -246,13 +245,6 @@ const totalAgents = computed(() =>
                                 {{ agent.tools_count }}
                             </span>
                         </div>
-                        <Link
-                            :href="AgentController.chat({ agent: agent.id }).url"
-                            class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
-                        >
-                            <MessageSquare class="size-3" />
-                            {{ t('common.test') }}
-                        </Link>
                     </div>
                 </div>
             </div>

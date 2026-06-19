@@ -30,7 +30,6 @@ import {
     Brain,
     Copy,
     Database,
-    MessageSquare,
     Pencil,
     Trash2,
     Wrench,
@@ -144,17 +143,6 @@ const configDisplay = computed(() => {
                         </p>
                     </div>
                     <div class="flex gap-2">
-                        <Button as-child>
-                            <Link
-                                :href="
-                                    AgentController.chat({ agent: agent.id })
-                                        .url
-                                "
-                            >
-                                <MessageSquare class="mr-2 h-4 w-4" />
-                                {{ t('agents.show.test_agent') }}
-                            </Link>
-                        </Button>
                         <Button variant="outline" @click="duplicateAgent">
                             <Copy class="mr-2 h-4 w-4" />
                             {{ t('common.duplicate') }}

@@ -4,13 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Enums\AgentStatus;
 use App\Enums\AgentType;
-use App\Enums\MessageRole;
 use App\Enums\Visibility;
 use App\Http\Requests\Agent\StoreAgentRequest;
 use App\Http\Requests\Agent\UpdateAgentRequest;
-use App\Jobs\ProcessAgentChat;
 use App\Models\Agent;
-use App\Models\Conversation;
 use App\Models\KnowledgeBase;
 use App\Models\Tool;
 use App\Services\AiProviderService;
@@ -189,69 +186,5 @@ class AgentController extends Controller
         $newAgent->tools()->sync($agent->tools->pluck('id'));
 
         return to_route('agents.show', $newAgent);
-    }
-
-    public function chat(Request $request, Agent $agent): Response
-    {
-        $this->authorize('view', $agent);
-
-        // Get or create a conversation for this agent
-        $conversation = Conversation::firstOrCreate(
-            [
-                'user_id' => $request->user()->id,
-                'agent_id' => $agent->id,
-            ],
-            [
-                'title' => "Chat with {$agent->name}",
-            ]
-        );
-
-        return Inertia::render('standalone-agents/Chat', [
-            'agent' => $agent,
-            'conversation' => $conversation->load('messages'),
-        ]);
-    }
-
-    public function sendMessage(Request $request, Agent $agent): RedirectResponse
-    {
-        $this->authorize('view', $agent);
-
-        $request->validate([
-            'message' => 'required|string|max:10000',
-        ]);
-
-        // Get or create conversation
-        $conversation = Conversation::firstOrCreate(
-            [
-                'user_id' => $request->user()->id,
-                'agent_id' => $agent->id,
-            ],
-            [
-                'title' => "Chat with {$agent->name}",
-            ]
-        );
-
-        // Save user message
-        $conversation->messages()->create([
-            'role' => MessageRole::User,
-            'content' => $request->message,
-        ]);
-
-        // Dispatch job to process response via WebSocket streaming
-        ProcessAgentChat::dispatch($agent, $conversation);
-
-        return back();
-    }
-
-    public function newConversation(Request $request, Agent $agent): RedirectResponse
-    {
-        $this->authorize('view', $agent);
-
-        // Delete existing conversation for this agent
-        Conversation::where('user_id', $request->user()->id)
-            ->where('agent_id', $agent->id)
-            ->delete();
-
-        return to_route('agents.chat', $agent);
     }
 }

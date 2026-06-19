@@ -2,14 +2,11 @@
 
 use App\Enums\AgentType;
 use App\Enums\MessageRole;
-use App\Jobs\ProcessAgentChat;
 use App\Models\Agent;
-use App\Models\Conversation;
 use App\Models\KnowledgeBase;
 use App\Models\Message;
 use App\Models\Tool;
 use App\Models\User;
-use App\Services\AiProviderService;
 use App\Services\LLMService;
 use Laravel\Ai\Ai;
 use Laravel\Ai\AnonymousAgent;
@@ -53,34 +50,6 @@ it('offers the general type on the create form', function () {
         ->assertInertia(fn ($page) => $page
             ->where('agentTypes.0.value', 'general')
             ->has('recommendedModels.general'));
-});
-
-it('runs a general agent through the unified knowledge + tools path', function () {
-    Ai::fakeAgent(AnonymousAgent::class, ['Answer from the general agent.']);
-
-    $agent = Agent::factory()->standalone()->general()->create([
-        'user_id' => $this->user->id,
-        'model' => 'claude-sonnet-4-20250514',
-        'prompt_template' => 'You do everything.',
-    ]);
-
-    $conversation = Conversation::factory()->create([
-        'user_id' => $this->user->id,
-        'agent_id' => $agent->id,
-    ]);
-    $conversation->messages()->create([
-        'role' => MessageRole::User,
-        'content' => 'What is the refund policy?',
-    ]);
-
-    (new ProcessAgentChat($agent, $conversation))->handle(
-        app(LLMService::class),
-        app(AiProviderService::class),
-    );
-
-    $assistant = $conversation->messages()->where('role', MessageRole::Assistant)->first();
-    expect($assistant)->not->toBeNull()
-        ->and($assistant->content)->toBe('Answer from the general agent.');
 });
 
 it('returns response and knowledge-base metadata from chatWithKnowledgeAndTools', function () {
