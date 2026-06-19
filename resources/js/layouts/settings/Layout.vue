@@ -29,6 +29,10 @@ const sidebarNavItems = computed<NavItem[]>(() => {
             title: t('settings.nav.appearance'),
             href: editAppearance(),
         },
+        {
+            title: t('settings.nav.mcp'),
+            href: '/settings/mcp',
+        },
     ];
 
     if (hasOrganization.value) {
