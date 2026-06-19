@@ -100,6 +100,28 @@ class BotFlow extends Model
         return array_values(array_filter($this->roster()));
     }
 
+    /**
+     * Create the blank Bot Flow an AI Bot owns from creation: a lone start node,
+     * ready for the author to drop agent and dialog nodes onto.
+     */
+    public static function blankForChatbot(Chatbot $chatbot): self
+    {
+        return self::create([
+            'user_id' => $chatbot->user_id,
+            'organization_id' => $chatbot->organization_id,
+            'visibility' => $chatbot->visibility,
+            'chatbot_id' => $chatbot->id,
+            'name' => $chatbot->name,
+            'status' => BotFlowStatus::Draft,
+            'definition' => [
+                'nodes' => [
+                    ['id' => 'start', 'type' => 'start', 'position' => ['x' => 250, 'y' => 0], 'data' => ['trigger' => 'conversation_start']],
+                ],
+                'edges' => [],
+            ],
+        ]);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', BotFlowStatus::Active);

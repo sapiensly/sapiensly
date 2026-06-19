@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BotFlowController;
 use App\Http\Controllers\ChatbotAnalyticsController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ChatbotPreviewController;
@@ -10,6 +11,10 @@ Route::middleware([
     'verified',
 ])->group(function () {
     Route::resource('chatbots', ChatbotController::class);
+
+    // The AI Bot's conversational design lives in its Bot Flow.
+    Route::get('chatbots/{chatbot}/flow/edit', [BotFlowController::class, 'editForChatbot'])
+        ->name('chatbots.flow.edit');
 
     Route::get('chatbots/{chatbot}/embed', [ChatbotController::class, 'embed'])
         ->name('chatbots.embed');

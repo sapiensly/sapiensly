@@ -10,6 +10,7 @@ use App\Http\Requests\BotFlow\StoreBotFlowRequest;
 use App\Http\Requests\BotFlow\UpdateBotFlowRequest;
 use App\Models\Agent;
 use App\Models\BotFlow;
+use App\Models\Chatbot;
 use App\Models\KnowledgeBase;
 use App\Models\Tool;
 use App\Models\User;
@@ -70,6 +71,23 @@ class BotFlowController extends Controller
         return Inertia::render('bot-flows/Edit', [
             'agent' => null,
             'flow' => $flow,
+            ...$this->getEditorProps($request->user()),
+        ]);
+    }
+
+    /**
+     * Edit the Bot Flow owned by an AI Bot, creating a blank one on first open.
+     */
+    public function editForChatbot(Request $request, Chatbot $chatbot): Response
+    {
+        $this->authorize('update', $chatbot);
+
+        $flow = $chatbot->botFlow ?? BotFlow::blankForChatbot($chatbot);
+
+        return Inertia::render('bot-flows/Edit', [
+            'agent' => null,
+            'flow' => $flow,
+            'chatbot' => $chatbot->only(['id', 'name']),
             ...$this->getEditorProps($request->user()),
         ]);
     }

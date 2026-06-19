@@ -10,6 +10,7 @@ use App\Http\Requests\Chatbot\StoreChatbotRequest;
 use App\Http\Requests\Chatbot\UpdateChatbotRequest;
 use App\Models\Agent;
 use App\Models\AgentTeam;
+use App\Models\BotFlow;
 use App\Models\Channel;
 use App\Models\Chatbot;
 use App\Models\ChatbotApiToken;
@@ -95,6 +96,9 @@ class ChatbotController extends Controller
             'token' => ChatbotApiToken::generateToken(),
             'abilities' => ['chat', 'feedback'],
         ]);
+
+        // An AI Bot owns its Bot Flow from creation; agents live as nodes in it.
+        BotFlow::blankForChatbot($chatbot);
 
         return to_route('chatbots.show', $chatbot);
     }

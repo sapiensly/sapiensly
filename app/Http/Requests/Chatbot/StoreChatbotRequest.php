@@ -17,9 +17,10 @@ class StoreChatbotRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
 
-            // Target: either agent_id OR agent_team_id (not both)
-            'agent_id' => ['nullable', 'string', 'exists:agents,id', 'required_without:agent_team_id'],
-            'agent_team_id' => ['nullable', 'string', 'exists:agent_teams,id', 'required_without:agent_id'],
+            // Optional legacy target. An AI Bot's agents live in its Bot Flow;
+            // a freshly created bot has a blank flow and no direct agent.
+            'agent_id' => ['nullable', 'string', 'exists:agents,id'],
+            'agent_team_id' => ['nullable', 'string', 'exists:agent_teams,id'],
 
             // Config
             'config' => ['nullable', 'array'],
