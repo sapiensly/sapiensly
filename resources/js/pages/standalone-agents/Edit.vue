@@ -36,11 +36,6 @@ import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-interface ActiveFlow {
-    id: string;
-    name: string;
-}
-
 interface Props {
     agent: Agent;
     agentTypes: AgentTypeOption[];
@@ -48,7 +43,6 @@ interface Props {
     recommendedModels: RecommendedModels;
     knowledgeBases: KnowledgeBaseReference[];
     tools: ToolReference[];
-    activeFlow?: ActiveFlow | null;
 }
 
 const props = defineProps<Props>();
@@ -284,12 +278,6 @@ const typeIcon = computed<Component>(
                         v-model:config="form.config"
                         :errors="form.errors"
                         :agent-id="agent.id"
-                        :has-flow="!!activeFlow"
-                        :flow-url="
-                            activeFlow
-                                ? `/agents/${agent.id}/flows/${activeFlow.id}/edit`
-                                : null
-                        "
                     />
 
                     <KnowledgeAgentConfig

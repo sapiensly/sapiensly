@@ -5,7 +5,6 @@ import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
-import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
 import * as IntegrationController from '@/actions/App/Http/Controllers/IntegrationController';
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
@@ -81,13 +80,6 @@ const navCommands = computed<PaletteCommand[]>(() => [
         label: t('app_v2.nav.apps'),
         icon: AppWindow,
         perform: () => router.visit(AppController.index()),
-    },
-    {
-        id: 'nav-flows',
-        group: t('app_v2.palette.navigation'),
-        label: t('app_v2.nav.flows'),
-        icon: GitBranch,
-        perform: () => router.visit(BotFlowController.globalIndex()),
     },
     {
         id: 'nav-chatbots',

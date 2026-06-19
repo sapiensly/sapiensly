@@ -20,7 +20,6 @@ class BotFlow extends Model
     protected $fillable = [
         'user_id',
         'organization_id',
-        'agent_id',
         'chatbot_id',
         'whatsapp_connection_id',
         'name',
@@ -49,11 +48,6 @@ class BotFlow extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    public function agent(): BelongsTo
-    {
-        return $this->belongsTo(Agent::class);
     }
 
     public function chatbot(): BelongsTo

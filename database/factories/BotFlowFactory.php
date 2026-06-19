@@ -3,7 +3,6 @@
 namespace Database\Factories;
 
 use App\Enums\BotFlowStatus;
-use App\Models\Agent;
 use App\Models\BotFlow;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -41,15 +40,6 @@ class BotFlowFactory extends Factory
     {
         return $this->state(fn () => [
             'status' => BotFlowStatus::Active,
-        ]);
-    }
-
-    public function forAgent(Agent $agent): static
-    {
-        return $this->state(fn () => [
-            'agent_id' => $agent->id,
-            'user_id' => $agent->user_id,
-            'organization_id' => $agent->organization_id,
         ]);
     }
 

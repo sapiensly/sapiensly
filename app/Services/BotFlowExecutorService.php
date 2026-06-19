@@ -3,33 +3,12 @@
 namespace App\Services;
 
 use App\Enums\BotFlowActionType;
-use App\Models\Agent;
 use App\Models\BotFlow;
 
 class BotFlowExecutorService
 {
     /**
-     * Determine if a flow should be activated for a conversation.
-     */
-    public function shouldActivateFlow(Agent $agent, string $userMessage, ?array $flowState): bool
-    {
-        // If already in a flow, continue it
-        if ($flowState && ! ($flowState['completed'] ?? false)) {
-            return true;
-        }
-
-        // Check if agent has an active flow
-        $flow = $agent->activeFlow();
-        if (! $flow) {
-            return false;
-        }
-
-        return $this->shouldActivateBotFlow($flow, $userMessage, $flowState);
-    }
-
-    /**
-     * Determine if a given Bot Flow should activate for a conversation.
-     * Used when the flow is resolved from the AI Bot rather than the agent.
+     * Determine whether a Bot Flow should activate for a conversation.
      */
     public function shouldActivateBotFlow(BotFlow $flow, string $userMessage, ?array $flowState): bool
     {

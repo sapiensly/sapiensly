@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
+import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import FlowNodePalette from '@/components/bot-flows/FlowNodePalette.vue';
 import FlowNodePanel from '@/components/bot-flows/FlowNodePanel.vue';
 import FlowTestWidget from '@/components/bot-flows/FlowTestWidget.vue';
@@ -90,6 +91,7 @@ interface Props {
     agent: Agent | null;
     flow: BotFlow | null;
     chatbot?: { id: string; name: string } | null;
+    backUrl?: string | null;
     availableModels?: AvailableModel[];
     availableAgents?: AvailableAgents;
     knowledgeBases?: KBRef[];
@@ -98,6 +100,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
     chatbot: null,
+    backUrl: null,
     availableModels: () => [],
     availableAgents: () => ({ triage: [], knowledge: [], action: [] }),
     knowledgeBases: () => [],
@@ -214,7 +217,7 @@ function getPayload() {
 }
 
 async function autoSave() {
-    if (isCreating || !props.flow) return;
+    if (!props.flow) return;
 
     const payload = getPayload();
     const json = JSON.stringify(payload);
@@ -223,11 +226,10 @@ async function autoSave() {
     autoSaveStatus.value = 'saving';
 
     try {
-        const url = props.agent
-            ? BotFlowController.update({ agent: props.agent.id, flow: props.flow.id }).url
-            : BotFlowController.globalUpdate({ flow: props.flow.id }).url;
-
-        await axios.put(url, payload);
+        await axios.put(
+            BotFlowController.globalUpdate({ flow: props.flow.id }).url,
+            payload,
+        );
         lastSavedJson = json;
         autoSaveStatus.value = 'saved';
     } catch {
@@ -253,25 +255,9 @@ onUnmounted(() => {
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
 });
 
-// Manual save (for create mode, or force save)
+// Force an immediate save.
 const save = () => {
-    const definition = toDefinition();
-
-    form.name = flowName.value;
-    form.description = '';
-    form.definition = definition;
-    form.status = flowStatus.value;
-
-    if (isCreating) {
-        if (props.agent) {
-            form.post(BotFlowController.store({ agent: props.agent.id }).url);
-        } else {
-            form.post(BotFlowController.globalStore().url);
-        }
-    } else {
-        // Force save immediately
-        autoSave();
-    }
+    autoSave();
 };
 
 const toggleStatus = () => {
@@ -279,26 +265,8 @@ const toggleStatus = () => {
         return;
     }
 
-    if (flowStatus.value === 'active') {
-        flowStatus.value = 'inactive';
-        save();
-    } else if (props.agent) {
-        router.post(
-            BotFlowController.activate({
-                agent: props.agent.id,
-                flow: props.flow.id,
-            }).url,
-            {},
-            {
-                onSuccess: () => {
-                    flowStatus.value = 'active';
-                },
-            },
-        );
-    } else {
-        flowStatus.value = 'active';
-        save();
-    }
+    flowStatus.value = flowStatus.value === 'active' ? 'inactive' : 'active';
+    save();
 };
 
 const handleUpdateData = (id: string, data: Record<string, unknown>) => {
@@ -309,9 +277,7 @@ const handleRemoveNode = (id: string) => {
     removeNode(id);
 };
 
-const backUrl = props.agent
-    ? BotFlowController.index({ agent: props.agent.id }).url
-    : BotFlowController.globalIndex().url;
+const backUrl = props.backUrl ?? ChatbotController.index().url;
 
 </script>
 

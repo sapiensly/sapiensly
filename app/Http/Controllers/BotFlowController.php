@@ -4,9 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AgentStatus;
 use App\Enums\AgentType;
-use App\Enums\BotFlowStatus;
 use App\Enums\Visibility;
-use App\Http\Requests\BotFlow\StoreBotFlowRequest;
 use App\Http\Requests\BotFlow\UpdateBotFlowRequest;
 use App\Models\Agent;
 use App\Models\BotFlow;
@@ -30,53 +28,6 @@ class BotFlowController extends Controller
         private readonly AiProviderService $aiProviderService,
     ) {}
 
-    public function globalIndex(Request $request): Response
-    {
-        $flows = BotFlow::query()
-            ->forAccountContext($request->user())
-            ->with('agent:id,name,type')
-            ->orderByDesc('updated_at')
-            ->paginate(20);
-
-        return Inertia::render('bot-flows/GlobalIndex', [
-            'flows' => $flows,
-        ]);
-    }
-
-    public function globalCreate(Request $request): Response
-    {
-        return Inertia::render('bot-flows/Edit', [
-            'agent' => null,
-            'flow' => null,
-            ...$this->getEditorProps($request->user()),
-        ]);
-    }
-
-    public function globalStore(StoreBotFlowRequest $request): RedirectResponse
-    {
-        $flow = BotFlow::create([
-            'user_id' => $request->user()->id,
-            'organization_id' => $request->user()->organization_id,
-            'visibility' => $request->user()->organization_id
-                ? Visibility::Organization
-                : Visibility::Private,
-            'name' => $request->validated('name'),
-            'description' => $request->validated('description'),
-            'definition' => $request->validated('definition'),
-        ]);
-
-        return to_route('flows.edit', $flow);
-    }
-
-    public function globalEdit(Request $request, BotFlow $flow): Response
-    {
-        return Inertia::render('bot-flows/Edit', [
-            'agent' => null,
-            'flow' => $flow,
-            ...$this->getEditorProps($request->user()),
-        ]);
-    }
-
     /**
      * Edit the Bot Flow owned by an AI Bot, creating a blank one on first open.
      */
@@ -90,6 +41,7 @@ class BotFlowController extends Controller
             'agent' => null,
             'flow' => $flow,
             'chatbot' => $chatbot->only(['id', 'name']),
+            'backUrl' => route('chatbots.show', $chatbot),
             ...$this->getEditorProps($request->user()),
         ]);
     }
@@ -106,6 +58,7 @@ class BotFlowController extends Controller
         return Inertia::render('bot-flows/Edit', [
             'agent' => null,
             'flow' => $flow,
+            'backUrl' => route('whatsapp.connections.show', $whatsappConnection),
             ...$this->getEditorProps($request->user()),
         ]);
     }
@@ -161,56 +114,6 @@ class BotFlowController extends Controller
         $flow->update($request->validated());
 
         return back();
-    }
-
-    public function globalDestroy(BotFlow $flow): RedirectResponse
-    {
-        $flow->delete();
-
-        return to_route('flows.index');
-    }
-
-    public function index(Agent $agent): Response
-    {
-        $flows = $agent->flows()
-            ->orderByDesc('updated_at')
-            ->get();
-
-        return Inertia::render('bot-flows/Index', [
-            'agent' => $agent,
-            'flows' => $flows,
-        ]);
-    }
-
-    public function create(Request $request, Agent $agent): Response
-    {
-        return Inertia::render('bot-flows/Edit', [
-            'agent' => $agent,
-            'flow' => null,
-            ...$this->getEditorProps($request->user()),
-        ]);
-    }
-
-    public function store(StoreBotFlowRequest $request, Agent $agent): RedirectResponse
-    {
-        $flow = $agent->flows()->create([
-            'user_id' => $request->user()->id,
-            'organization_id' => $request->user()->organization_id,
-            'name' => $request->validated('name'),
-            'description' => $request->validated('description'),
-            'definition' => $request->validated('definition'),
-        ]);
-
-        return to_route('agents.flows.edit', [$agent, $flow]);
-    }
-
-    public function edit(Request $request, Agent $agent, BotFlow $flow): Response
-    {
-        return Inertia::render('bot-flows/Edit', [
-            'agent' => $agent,
-            'flow' => $flow,
-            ...$this->getEditorProps($request->user()),
-        ]);
     }
 
     /**
@@ -305,32 +208,5 @@ class BotFlowController extends Controller
             'knowledgeBases' => KnowledgeBase::forAccountContext($user)->where('status', 'ready')->get(['id', 'name']),
             'tools' => Tool::forAccountContext($user)->where('status', 'active')->get(['id', 'name', 'type']),
         ];
-    }
-
-    public function update(UpdateBotFlowRequest $request, Agent $agent, BotFlow $flow): RedirectResponse
-    {
-        $flow->update($request->validated());
-
-        return back();
-    }
-
-    public function destroy(Agent $agent, BotFlow $flow): RedirectResponse
-    {
-        $flow->delete();
-
-        return to_route('agents.flows.index', $agent);
-    }
-
-    public function activate(Agent $agent, BotFlow $flow): RedirectResponse
-    {
-        // Deactivate other active flows for this agent
-        $agent->flows()
-            ->where('id', '!=', $flow->id)
-            ->where('status', BotFlowStatus::Active)
-            ->update(['status' => BotFlowStatus::Inactive]);
-
-        $flow->update(['status' => BotFlowStatus::Active]);
-
-        return back();
     }
 }

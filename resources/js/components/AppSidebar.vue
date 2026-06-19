@@ -7,7 +7,6 @@ import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotContro
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
 import * as IntegrationController from '@/actions/App/Http/Controllers/IntegrationController';
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
-import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import NavFooter from '@/components/NavFooter.vue';
@@ -57,11 +56,6 @@ const mainNavItems = computed<NavItem[]>(() => [
         title: t('nav.apps'),
         href: AppController.index(),
         icon: AppWindow,
-    },
-    {
-        title: t('nav.flows'),
-        href: BotFlowController.globalIndex(),
-        icon: GitBranch,
     },
     {
         title: t('nav.chatbots'),

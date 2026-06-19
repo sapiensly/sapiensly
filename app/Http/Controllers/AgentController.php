@@ -120,8 +120,6 @@ class AgentController extends Controller
     {
         $this->authorize('update', $agent);
 
-        $activeFlow = $agent->activeFlow();
-
         $agent->load('tools');
         $agent->loadKnowledgeBases();
 
@@ -136,7 +134,6 @@ class AgentController extends Controller
             'recommendedModels' => $this->aiProviderService->getRecommendedModels(),
             'knowledgeBases' => KnowledgeBase::forAccountContext($request->user())->where('status', 'ready')->get(['id', 'name']),
             'tools' => Tool::forAccountContext($request->user())->where('status', 'active')->get(['id', 'name', 'type']),
-            'activeFlow' => $activeFlow,
         ]);
     }
 

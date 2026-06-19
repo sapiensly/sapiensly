@@ -135,16 +135,6 @@ class Agent extends Model
         return $this->hasMany(Conversation::class);
     }
 
-    public function flows(): HasMany
-    {
-        return $this->hasMany(BotFlow::class);
-    }
-
-    public function activeFlow(): ?BotFlow
-    {
-        return $this->flows()->active()->latest()->first();
-    }
-
     public function scopeOfType(Builder $query, AgentType $type): Builder
     {
         return $query->where('type', $type);

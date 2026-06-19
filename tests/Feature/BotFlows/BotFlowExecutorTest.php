@@ -13,7 +13,7 @@ beforeEach(function () {
 });
 
 test('initializes flow state at start node', function () {
-    $flow = BotFlow::factory()->forAgent($this->agent)->withSimpleMenuFlow()->create();
+    $flow = BotFlow::factory()->withSimpleMenuFlow()->create();
 
     $state = $this->executor->initializeFlow($flow);
 
@@ -24,7 +24,7 @@ test('initializes flow state at start node', function () {
 });
 
 test('processes start node and advances to next node', function () {
-    $flow = BotFlow::factory()->forAgent($this->agent)->withSimpleMenuFlow()->create();
+    $flow = BotFlow::factory()->withSimpleMenuFlow()->create();
 
     $state = $this->executor->initializeFlow($flow);
     $action = $this->executor->processInput($flow, $state, '');
@@ -35,7 +35,7 @@ test('processes start node and advances to next node', function () {
 });
 
 test('processes menu selection by index', function () {
-    $flow = BotFlow::factory()->forAgent($this->agent)->withSimpleMenuFlow()->create();
+    $flow = BotFlow::factory()->withSimpleMenuFlow()->create();
 
     // Advance to menu node first
     $state = $this->executor->initializeFlow($flow);
@@ -50,7 +50,7 @@ test('processes menu selection by index', function () {
 });
 
 test('processes menu selection by label', function () {
-    $flow = BotFlow::factory()->forAgent($this->agent)->withSimpleMenuFlow()->create();
+    $flow = BotFlow::factory()->withSimpleMenuFlow()->create();
 
     $state = $this->executor->initializeFlow($flow);
     $menuAction = $this->executor->processInput($flow, $state, '');
@@ -62,7 +62,7 @@ test('processes menu selection by label', function () {
 });
 
 test('re-shows menu for unmatched input', function () {
-    $flow = BotFlow::factory()->forAgent($this->agent)->withSimpleMenuFlow()->create();
+    $flow = BotFlow::factory()->withSimpleMenuFlow()->create();
 
     $state = $this->executor->initializeFlow($flow);
     $menuAction = $this->executor->processInput($flow, $state, '');
@@ -73,7 +73,7 @@ test('re-shows menu for unmatched input', function () {
 });
 
 test('processes message node and follows edge', function () {
-    $flow = BotFlow::factory()->forAgent($this->agent)->withSimpleMenuFlow()->create();
+    $flow = BotFlow::factory()->withSimpleMenuFlow()->create();
 
     $state = $this->executor->initializeFlow($flow);
     $menuAction = $this->executor->processInput($flow, $state, '');
@@ -85,34 +85,8 @@ test('processes message node and follows edge', function () {
     expect($action->data['message'])->toBe('Let me help you with your return.');
 });
 
-test('should activate flow for new conversation', function () {
-    BotFlow::factory()->forAgent($this->agent)->withSimpleMenuFlow()->active()->create();
-
-    $shouldActivate = $this->executor->shouldActivateFlow($this->agent, 'hello', null);
-
-    expect($shouldActivate)->toBeTrue();
-});
-
-test('should not activate flow when no active flow exists', function () {
-    BotFlow::factory()->forAgent($this->agent)->withSimpleMenuFlow()->create(); // draft, not active
-
-    $shouldActivate = $this->executor->shouldActivateFlow($this->agent, 'hello', null);
-
-    expect($shouldActivate)->toBeFalse();
-});
-
-test('should continue existing flow', function () {
-    BotFlow::factory()->forAgent($this->agent)->withSimpleMenuFlow()->active()->create();
-
-    $flowState = ['flow_id' => 'test', 'current_node_id' => 'node_menu', 'completed' => false, 'history' => ['node_start', 'node_menu']];
-
-    $shouldActivate = $this->executor->shouldActivateFlow($this->agent, 'hello', $flowState);
-
-    expect($shouldActivate)->toBeTrue();
-});
-
 test('condition node with exact match', function () {
-    $flow = BotFlow::factory()->forAgent($this->agent)->create([
+    $flow = BotFlow::factory()->create([
         'definition' => [
             'nodes' => [
                 ['id' => 'start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => ['trigger' => 'conversation_start']],
