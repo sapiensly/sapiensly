@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import type { BotFlowDefinition } from '@/types/botFlows';
@@ -11,7 +10,8 @@ import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
 
 const props = defineProps<{
-    chatbotId: string;
+    /** Endpoint that takes { messages, spec } and returns { reply, spec, definition }. */
+    converseUrl: string;
 }>();
 
 const emit = defineEmits<{
@@ -51,10 +51,10 @@ const send = async () => {
     await scrollToBottom();
 
     try {
-        const { data } = await axios.post(
-            BotFlowController.converse({ chatbot: props.chatbotId }).url,
-            { messages: messages.value, spec: spec.value },
-        );
+        const { data } = await axios.post(props.converseUrl, {
+            messages: messages.value,
+            spec: spec.value,
+        });
         spec.value = data.spec ?? spec.value;
         messages.value.push({ role: 'assistant', content: data.reply });
         emit('generated', data.definition as BotFlowDefinition);

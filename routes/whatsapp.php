@@ -15,6 +15,8 @@ Route::middleware(['auth', 'verified'])->prefix('system/whatsapp')->name('whatsa
     Route::get('/{whatsapp_connection}', [WhatsAppConnectionController::class, 'show'])->name('connections.show');
     Route::get('/{whatsapp_connection}/edit', [WhatsAppConnectionController::class, 'edit'])->name('connections.edit');
     Route::get('/{whatsapp_connection}/flow/edit', [BotFlowController::class, 'editForWhatsApp'])->name('connections.flow.edit');
+    Route::post('/{whatsapp_connection}/flow/scaffold', [BotFlowController::class, 'scaffoldForWhatsApp'])->name('connections.flow.scaffold');
+    Route::post('/{whatsapp_connection}/flow/assistant', [BotFlowController::class, 'converseForWhatsApp'])->name('connections.flow.assistant');
     Route::put('/{whatsapp_connection}', [WhatsAppConnectionController::class, 'update'])->name('connections.update');
     Route::delete('/{whatsapp_connection}', [WhatsAppConnectionController::class, 'destroy'])->name('connections.destroy');
 

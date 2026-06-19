@@ -92,6 +92,7 @@ interface Props {
     flow: BotFlow | null;
     chatbot?: { id: string; name: string } | null;
     backUrl?: string | null;
+    assistantUrl?: string | null;
     availableModels?: AvailableModel[];
     availableAgents?: AvailableAgents;
     knowledgeBases?: KBRef[];
@@ -101,6 +102,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
     chatbot: null,
     backUrl: null,
+    assistantUrl: null,
     availableModels: () => [],
     availableAgents: () => ({ triage: [], knowledge: [], action: [] }),
     knowledgeBases: () => [],
@@ -370,8 +372,8 @@ const backUrl = props.backUrl ?? ChatbotController.index().url;
                 </VueFlow>
 
                 <BotFlowAssistant
-                    v-if="chatbot"
-                    :chatbot-id="chatbot.id"
+                    v-if="assistantUrl"
+                    :converse-url="assistantUrl"
                     @generated="onAssistantGenerated"
                 />
 

@@ -42,6 +42,7 @@ class BotFlowController extends Controller
             'flow' => $flow,
             'chatbot' => $chatbot->only(['id', 'name']),
             'backUrl' => route('chatbots.show', $chatbot),
+            'assistantUrl' => route('chatbots.flow.assistant', $chatbot),
             ...$this->getEditorProps($request->user()),
         ]);
     }
@@ -59,18 +60,57 @@ class BotFlowController extends Controller
             'agent' => null,
             'flow' => $flow,
             'backUrl' => route('whatsapp.connections.show', $whatsappConnection),
+            'assistantUrl' => route('whatsapp.connections.flow.assistant', $whatsappConnection),
             ...$this->getEditorProps($request->user()),
         ]);
     }
 
     /**
-     * Generate a starter Bot Flow definition from a natural-language description.
-     * Returns the definition for the canvas to load; the author saves explicitly.
+     * Generate a starter Bot Flow definition from a description (AI Bot context).
      */
     public function scaffold(Request $request, Chatbot $chatbot, BotFlowScaffolder $scaffolder): JsonResponse
     {
         $this->authorize('update', $chatbot);
 
+        return $this->generateScaffold($request, $scaffolder);
+    }
+
+    /**
+     * One conversational turn editing the Bot Flow (AI Bot context).
+     */
+    public function converse(Request $request, Chatbot $chatbot, BotFlowScaffolder $scaffolder): JsonResponse
+    {
+        $this->authorize('update', $chatbot);
+
+        return $this->runConverse($request, $scaffolder);
+    }
+
+    /**
+     * Generate a starter Bot Flow definition from a description (WhatsApp context).
+     */
+    public function scaffoldForWhatsApp(Request $request, WhatsAppConnection $whatsappConnection, BotFlowScaffolder $scaffolder): JsonResponse
+    {
+        $this->authorize('update', $whatsappConnection);
+
+        return $this->generateScaffold($request, $scaffolder);
+    }
+
+    /**
+     * One conversational turn editing the Bot Flow (WhatsApp context).
+     */
+    public function converseForWhatsApp(Request $request, WhatsAppConnection $whatsappConnection, BotFlowScaffolder $scaffolder): JsonResponse
+    {
+        $this->authorize('update', $whatsappConnection);
+
+        return $this->runConverse($request, $scaffolder);
+    }
+
+    /**
+     * Scaffold a definition from a description. Returns it for the canvas to load;
+     * the author saves explicitly.
+     */
+    private function generateScaffold(Request $request, BotFlowScaffolder $scaffolder): JsonResponse
+    {
         $validated = $request->validate([
             'description' => ['required', 'string', 'max:2000'],
         ]);
@@ -85,13 +125,11 @@ class BotFlowController extends Controller
     }
 
     /**
-     * One conversational turn editing the Bot Flow: refine the running spec from
-     * the chat and return the reply, the updated spec, and the new definition.
+     * Run one conversational turn: refine the running spec from the chat and
+     * return the reply, the updated spec, and the new definition.
      */
-    public function converse(Request $request, Chatbot $chatbot, BotFlowScaffolder $scaffolder): JsonResponse
+    private function runConverse(Request $request, BotFlowScaffolder $scaffolder): JsonResponse
     {
-        $this->authorize('update', $chatbot);
-
         $validated = $request->validate([
             'messages' => ['required', 'array', 'min:1', 'max:40'],
             'messages.*.role' => ['required', 'string', 'in:user,assistant'],

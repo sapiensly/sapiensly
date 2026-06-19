@@ -6,6 +6,7 @@ use App\Models\Agent;
 use App\Models\Channel;
 use App\Models\User;
 use App\Models\WhatsAppConnection;
+use App\Services\BotFlows\BotFlowScaffolder;
 use Spatie\Permission\Models\Permission;
 
 function actingWhatsAppUser(): User
@@ -117,6 +118,45 @@ test('the WhatsApp flow editor renders and creates a flow on first open', functi
         ->assertOk();
 
     expect($connection->fresh()->botFlow)->not->toBeNull();
+});
+
+test('the WhatsApp conversational assistant returns a reply, spec and definition', function () {
+    $result = [
+        'reply' => 'Added a welcome message.',
+        'spec' => ['welcome_message' => 'Hi', 'roles' => ['triage'], 'menu' => null],
+        'definition' => ['nodes' => [['id' => 'start', 'type' => 'start', 'data' => []]], 'edges' => []],
+    ];
+
+    $this->mock(BotFlowScaffolder::class)
+        ->shouldReceive('converse')
+        ->once()
+        ->andReturn($result);
+
+    $user = actingWhatsAppUser();
+    $channel = Channel::factory()->whatsapp()->forUser($user)->create();
+    $connection = WhatsAppConnection::factory()->forChannel($channel)->create();
+
+    $this->actingAs($user)
+        ->postJson(route('whatsapp.connections.flow.assistant', $connection), [
+            'messages' => [['role' => 'user', 'content' => 'add a welcome message']],
+            'spec' => null,
+        ])
+        ->assertOk()
+        ->assertJson($result);
+});
+
+test('a foreign user cannot drive another connections assistant', function () {
+    $user = actingWhatsAppUser();
+    $channel = Channel::factory()->whatsapp()->forUser($user)->create();
+    $connection = WhatsAppConnection::factory()->forChannel($channel)->create();
+
+    $intruder = actingWhatsAppUser();
+
+    $this->actingAs($intruder)
+        ->postJson(route('whatsapp.connections.flow.assistant', $connection), [
+            'messages' => [['role' => 'user', 'content' => 'hi']],
+        ])
+        ->assertForbidden();
 });
 
 test('store rejects a duplicate phone_number_id', function () {
