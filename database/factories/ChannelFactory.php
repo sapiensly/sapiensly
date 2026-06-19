@@ -23,8 +23,6 @@ class ChannelFactory extends Factory
             'visibility' => Visibility::Private,
             'channel_type' => ChannelType::Widget,
             'name' => fake()->unique()->words(2, true),
-            'agent_id' => null,
-            'agent_team_id' => null,
             'status' => ChannelStatus::Draft,
             'metadata' => null,
         ];

@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Handles SSE streaming for widget chat responses.
  *
- * Supports both single Agent and AgentTeam targets,
+ * Streams a single agent or a Bot Flow roster,
  * integrating with LLMService and TeamOrchestrationService.
  */
 class WidgetStreamService

@@ -31,7 +31,6 @@ class AgentController extends Controller
 
         $query = Agent::query()
             ->forAccountContext($request->user())
-            ->with('team:id,name')
             ->withCount(['knowledgeBaseLinks as knowledge_bases_count', 'tools'])
             ->latest();
 
@@ -86,7 +85,6 @@ class AgentController extends Controller
             'user_id' => $user->id,
             'organization_id' => $user->organization_id,
             'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
-            'agent_team_id' => null,
             'type' => $request->type,
             'name' => $request->name,
             'description' => $request->description,

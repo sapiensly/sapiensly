@@ -64,11 +64,6 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
         ];
     }
 
-    public function agentTeams(): HasMany
-    {
-        return $this->hasMany(AgentTeam::class);
-    }
-
     public function agents(): HasMany
     {
         return $this->hasMany(Agent::class);

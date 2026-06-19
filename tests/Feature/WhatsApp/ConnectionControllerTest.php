@@ -76,7 +76,6 @@ test('store creates a channel + connection and redirects to show', function () {
     $this->assertDatabaseHas('channels', [
         'name' => 'My WA Business',
         'channel_type' => ChannelType::WhatsApp->value,
-        'agent_id' => $agent->id,
         'status' => ChannelStatus::Draft->value,
     ]);
 });

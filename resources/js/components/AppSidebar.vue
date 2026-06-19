@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import AdminDashboardController from '@/actions/App/Http/Controllers/Admin/AdminDashboardController';
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
-import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
@@ -73,11 +72,6 @@ const mainNavItems = computed<NavItem[]>(() => [
         title: t('nav.agents'),
         href: AgentController.index(),
         icon: Bot,
-    },
-    {
-        title: t('nav.agent_teams'),
-        href: AgentTeamController.index(),
-        icon: Users,
     },
 ]);
 

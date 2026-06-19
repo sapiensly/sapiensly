@@ -7,8 +7,6 @@ const { t } = useI18n();
 
 const props = defineProps<{
     connection: Record<string, unknown>;
-    agents: Array<{ id: string; name: string }>;
-    agentTeams: Array<{ id: string; name: string }>;
 }>();
 
 const form = useForm({

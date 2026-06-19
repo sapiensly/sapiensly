@@ -116,9 +116,7 @@ const {
 
 const config = computed(() => props.chatbot.config);
 
-const hasTarget = computed(
-    () => props.chatbot.agent_id || props.chatbot.agent_team_id,
-);
+const hasTarget = computed(() => true);
 
 const sendMessage = async () => {
     if (!message.value.trim() || isLoading.value || isStreaming.value) return;

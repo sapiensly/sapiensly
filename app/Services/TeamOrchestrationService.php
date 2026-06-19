@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Enums\BotFlowActionType;
 use App\Enums\MessageRole;
 use App\Models\Agent;
-use App\Models\AgentTeam;
 use App\Models\BotFlow;
 use App\Models\Conversation;
 use App\Models\Message;
@@ -16,8 +15,8 @@ use Illuminate\Support\Facades\Log;
 /**
  * Orchestrates the flow between agents in an agent roster.
  *
- * The roster (triage / knowledge / action) is resolved either from a Bot Flow's
- * agent nodes (the AI Bot path) or from a legacy AgentTeam. Either way:
+ * The roster (triage / knowledge / action) is resolved from a Bot Flow's agent
+ * nodes:
  * 1. User message arrives
  * 2. Triage Agent creates an execution plan (one or more steps)
  * 3. Execute each step in sequence (Knowledge, Action, or Direct)
@@ -31,33 +30,6 @@ class TeamOrchestrationService
         private readonly TriageRoutingService $routingService,
         private readonly BotFlowExecutorService $flowExecutor,
     ) {}
-
-    /**
-     * Orchestrate a user message through a legacy agent team.
-     *
-     * @return Generator<array<string, mixed>>
-     */
-    public function orchestrate(
-        AgentTeam $team,
-        Conversation $conversation,
-        string $userMessage
-    ): Generator {
-        $team->load(['triageAgent', 'knowledgeAgent', 'actionAgent']);
-
-        $roster = [
-            'triage' => $team->triageAgent,
-            'knowledge' => $team->knowledgeAgent,
-            'action' => $team->actionAgent,
-        ];
-
-        yield from $this->run(
-            $roster,
-            $team->triageAgent?->activeFlow(),
-            "team:{$team->id}",
-            $conversation,
-            $userMessage
-        );
-    }
 
     /**
      * Orchestrate a user message through a Bot Flow's agent roster.

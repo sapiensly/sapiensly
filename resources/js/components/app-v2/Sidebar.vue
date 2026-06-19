@@ -104,7 +104,7 @@ const sections = computed<NavSection[]>(() => [
                 label: t('app_v2.nav.agents'),
                 href: AgentController.index().url,
                 icon: Bot,
-                match: (u) => u.startsWith('/agents') || u.startsWith('/agent-teams'),
+                match: (u) => u.startsWith('/agents'),
             },
             {
                 key: 'apps',

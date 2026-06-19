@@ -103,7 +103,6 @@ describe('store', function () {
 
         $this->assertDatabaseHas('agents', [
             'user_id' => $this->user->id,
-            'agent_team_id' => null,
             'name' => 'My Triage Agent',
             'type' => AgentType::Triage->value,
             'status' => AgentStatus::Draft->value,

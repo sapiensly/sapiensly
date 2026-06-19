@@ -7,8 +7,6 @@ use App\Enums\ChannelType;
 use App\Enums\Visibility;
 use App\Http\Requests\WhatsApp\StoreWhatsAppConnectionRequest;
 use App\Http\Requests\WhatsApp\UpdateWhatsAppConnectionRequest;
-use App\Models\Agent;
-use App\Models\AgentTeam;
 use App\Models\BotFlow;
 use App\Models\Channel;
 use App\Models\WhatsAppConnection;
@@ -28,7 +26,7 @@ class WhatsAppConnectionController extends Controller
         $channels = Channel::query()
             ->where('channel_type', ChannelType::WhatsApp)
             ->forAccountContext($request->user())
-            ->with(['whatsAppConnection', 'agent:id,name', 'agentTeam:id,name'])
+            ->with(['whatsAppConnection'])
             ->latest()
             ->paginate(12);
 
@@ -41,10 +39,7 @@ class WhatsAppConnectionController extends Controller
     {
         $this->authorize('create', WhatsAppConnection::class);
 
-        return Inertia::render('system/whatsapp/Create', [
-            'agents' => Agent::forAccountContext($request->user())->get(['id', 'name', 'type', 'status']),
-            'agentTeams' => AgentTeam::forAccountContext($request->user())->get(['id', 'name', 'status']),
-        ]);
+        return Inertia::render('system/whatsapp/Create', []);
     }
 
     public function store(StoreWhatsAppConnectionRequest $request): RedirectResponse
@@ -62,8 +57,6 @@ class WhatsAppConnectionController extends Controller
                 'visibility' => $visibility,
                 'channel_type' => ChannelType::WhatsApp,
                 'name' => $request->validated('name'),
-                'agent_id' => $request->validated('agent_id'),
-                'agent_team_id' => $request->validated('agent_team_id'),
                 'status' => ChannelStatus::Draft,
             ]);
 
@@ -100,7 +93,7 @@ class WhatsAppConnectionController extends Controller
     {
         $this->authorize('view', $whatsappConnection);
 
-        $whatsappConnection->load(['channel.agent', 'channel.agentTeam', 'templates']);
+        $whatsappConnection->load(['channel', 'templates']);
 
         $webhookUrl = route('webhooks.whatsapp.receive', $whatsappConnection);
 
@@ -123,8 +116,6 @@ class WhatsAppConnectionController extends Controller
             'connection' => array_merge($whatsappConnection->toArray(), [
                 'masked_auth' => $whatsappConnection->maskedAuthConfig(),
             ]),
-            'agents' => Agent::forAccountContext($request->user())->get(['id', 'name', 'type', 'status']),
-            'agentTeams' => AgentTeam::forAccountContext($request->user())->get(['id', 'name', 'status']),
         ]);
     }
 
@@ -137,8 +128,6 @@ class WhatsAppConnectionController extends Controller
         $channelUpdates = array_filter([
             'name' => $request->validated('name') ?? null,
             'status' => $request->has('status') ? ChannelStatus::from($request->validated('status')) : null,
-            'agent_id' => $request->has('agent_id') ? $request->validated('agent_id') : null,
-            'agent_team_id' => $request->has('agent_team_id') ? $request->validated('agent_team_id') : null,
         ], fn ($value) => $value !== null);
 
         if (! empty($channelUpdates)) {

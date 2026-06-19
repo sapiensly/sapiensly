@@ -77,9 +77,4 @@ class Organization extends Model
     {
         return $this->hasMany(Agent::class);
     }
-
-    public function agentTeams(): HasMany
-    {
-        return $this->hasMany(AgentTeam::class);
-    }
 }

@@ -239,7 +239,6 @@ class BotFlowController extends Controller
             'user_id' => $user->id,
             'organization_id' => $user->organization_id,
             'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
-            'agent_team_id' => null,
             'type' => $validated['type'],
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,

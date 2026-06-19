@@ -32,8 +32,6 @@ class Channel extends Model
         'visibility',
         'channel_type',
         'name',
-        'agent_id',
-        'agent_team_id',
         'status',
         'metadata',
     ];
@@ -58,16 +56,6 @@ class Channel extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function agent(): BelongsTo
-    {
-        return $this->belongsTo(Agent::class);
-    }
-
-    public function agentTeam(): BelongsTo
-    {
-        return $this->belongsTo(AgentTeam::class);
-    }
-
     public function chatbot(): HasOne
     {
         return $this->hasOne(Chatbot::class);
@@ -86,17 +74,5 @@ class Channel extends Model
     public function whatsAppConversations(): HasMany
     {
         return $this->hasMany(WhatsAppConversation::class);
-    }
-
-    public function getTarget(): Agent|AgentTeam|null
-    {
-        if ($this->agent_id) {
-            return $this->agent;
-        }
-        if ($this->agent_team_id) {
-            return $this->agentTeam;
-        }
-
-        return null;
     }
 }

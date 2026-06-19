@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
@@ -40,10 +39,6 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    {
-        title: t('agent_teams.index.title'),
-        href: AgentTeamController.index().url,
-    },
     {
         title: props.agent.name,
         href: '#',

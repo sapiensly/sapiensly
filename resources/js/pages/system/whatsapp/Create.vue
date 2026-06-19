@@ -17,19 +17,12 @@ import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const props = defineProps<{
-    agents: Array<{ id: string; name: string; type: string; status: string }>;
-    agentTeams: Array<{ id: string; name: string; status: string }>;
-}>();
-
 const form = useForm({
     name: '',
     display_phone_number: '',
     phone_number_id: '',
     business_account_id: '',
     messaging_tier: 'unverified',
-    agent_id: null as string | null,
-    agent_team_id: null as string | null,
     auth: {
         access_token: '',
         app_id: '',
@@ -157,46 +150,16 @@ function submit() {
                     </div>
                 </SettingsCard>
 
-                <!-- Routing target. -->
+                <!-- Agents live in the Bot Flow. -->
                 <SettingsCard
                     :icon="Bot"
-                    title="Routing"
-                    :description="t('whatsapp.connections.target')"
-                    tint="var(--sp-accent-blue)"
+                    :title="t('chatbots.create.agents_title')"
+                    :description="t('chatbots.create.agents_description')"
+                    tint="#a855f7"
                 >
-                    <div class="space-y-1.5">
-                        <Label for="agent_id">
-                            {{ t('whatsapp.connections.target') }}
-                        </Label>
-                        <Select
-                            :model-value="form.agent_id ?? ''"
-                            @update:model-value="
-                                (v) => (form.agent_id = v === '' ? null : String(v))
-                            "
-                        >
-                            <SelectTrigger id="agent_id" class="h-9">
-                                <SelectValue
-                                    :placeholder="t('whatsapp.connections.target_none')"
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="">
-                                    {{ t('whatsapp.connections.target_none') }}
-                                </SelectItem>
-                                <SelectItem
-                                    v-for="a in props.agents"
-                                    :key="a.id"
-                                    :value="a.id"
-                                >
-                                    {{ a.name }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p class="text-[11px] text-ink-subtle">
-                            Incoming messages are dispatched to this agent
-                            (leave empty to handle them manually from the inbox).
-                        </p>
-                    </div>
+                    <p class="text-[11px] text-ink-subtle">
+                        {{ t('chatbots.create.agents_note') }}
+                    </p>
                 </SettingsCard>
 
                 <!-- Footer actions. -->

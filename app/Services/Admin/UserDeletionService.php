@@ -4,7 +4,6 @@ namespace App\Services\Admin;
 
 use App\Enums\MembershipRole;
 use App\Models\Agent;
-use App\Models\AgentTeam;
 use App\Models\BotFlow;
 use App\Models\Channel;
 use App\Models\Chatbot;
@@ -30,7 +29,7 @@ use Illuminate\Support\Facades\DB;
  *     delete every resource they own alongside the user.
  *
  * Resources with a `user_id` FK covered here: Document, Chatbot, Agent,
- * AgentTeam, KnowledgeBase, BotFlow, Integration, CloudProvider, Channel,
+ * KnowledgeBase, BotFlow, Integration, CloudProvider, Channel,
  * Folder, Tool. Adding a new user-owned model? Extend the $ownedModels list.
  */
 class UserDeletionService
@@ -46,7 +45,6 @@ class UserDeletionService
         Document::class,
         Chatbot::class,
         Agent::class,
-        AgentTeam::class,
         KnowledgeBase::class,
         BotFlow::class,
         Integration::class,

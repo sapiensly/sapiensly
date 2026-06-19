@@ -24,7 +24,6 @@ class Agent extends Model
     protected $fillable = [
         'user_id',
         'organization_id',
-        'agent_team_id',
         'type',
         'name',
         'description',
@@ -57,11 +56,6 @@ class Agent extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    public function team(): BelongsTo
-    {
-        return $this->belongsTo(AgentTeam::class, 'agent_team_id');
     }
 
     /**
@@ -151,18 +145,17 @@ class Agent extends Model
         return $this->flows()->active()->latest()->first();
     }
 
-    public function scopeStandalone(Builder $query): Builder
-    {
-        return $query->whereNull('agent_team_id');
-    }
-
     public function scopeOfType(Builder $query, AgentType $type): Builder
     {
         return $query->where('type', $type);
     }
 
-    public function isStandalone(): bool
+    /**
+     * Every agent is standalone now that teams are dissolved; kept as a no-op
+     * pass-through so call sites that filter for standalone agents still work.
+     */
+    public function scopeStandalone(Builder $query): Builder
     {
-        return $this->agent_team_id === null;
+        return $query;
     }
 }

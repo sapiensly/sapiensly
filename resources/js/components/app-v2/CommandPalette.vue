@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
-import * as AgentTeamController from '@/actions/App/Http/Controllers/AgentTeamController';
 import * as AiProviderController from '@/actions/App/Http/Controllers/AiProviderController';
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
@@ -103,13 +102,6 @@ const navCommands = computed<PaletteCommand[]>(() => [
         label: t('app_v2.nav.agents'),
         icon: Bot,
         perform: () => router.visit(AgentController.index()),
-    },
-    {
-        id: 'nav-agent-teams',
-        group: t('app_v2.palette.navigation'),
-        label: t('app_v2.nav.agent_teams'),
-        icon: Users,
-        perform: () => router.visit(AgentTeamController.index()),
     },
     {
         id: 'nav-tools',

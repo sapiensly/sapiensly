@@ -24,9 +24,6 @@ class UpdateWhatsAppConnectionRequest extends FormRequest
             'display_phone_number' => ['sometimes', 'string', 'regex:/^\+[1-9]\d{6,14}$/'],
             'messaging_tier' => ['sometimes', 'in:unverified,1k,10k,100k,unlimited'],
 
-            'agent_id' => ['sometimes', 'nullable', 'string', 'exists:agents,id'],
-            'agent_team_id' => ['sometimes', 'nullable', 'string', 'exists:agent_teams,id'],
-
             // Credentials: each field is optional on update (blank = keep existing).
             'auth.access_token' => ['sometimes', 'nullable', 'string', 'max:500'],
             'auth.app_id' => ['sometimes', 'nullable', 'string', 'max:40'],

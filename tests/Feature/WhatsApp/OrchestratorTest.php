@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\BotFlowStatus;
 use App\Enums\ConversationStatus;
 use App\Enums\MessageDirection;
 use App\Enums\MessageRole;
@@ -8,6 +9,7 @@ use App\Enums\WhatsAppContentType;
 use App\Jobs\GenerateWhatsAppReplyJob;
 use App\Jobs\SendWhatsAppMessageJob;
 use App\Models\Agent;
+use App\Models\BotFlow;
 use App\Models\Channel;
 use App\Models\Contact;
 use App\Models\User;
@@ -22,10 +24,20 @@ function makeWhatsAppAgentStack(): array
 {
     $user = User::factory()->create();
     $agent = Agent::factory()->standalone()->active()->forUser($user)->create();
-    $channel = Channel::factory()->whatsapp()->active()->forUser($user)->create([
-        'agent_id' => $agent->id,
-    ]);
+    $channel = Channel::factory()->whatsapp()->active()->forUser($user)->create();
     $connection = WhatsAppConnection::factory()->forChannel($channel)->create();
+    BotFlow::factory()->create([
+        'user_id' => $user->id,
+        'whatsapp_connection_id' => $connection->id,
+        'status' => BotFlowStatus::Active,
+        'definition' => [
+            'nodes' => [
+                ['id' => 'start', 'type' => 'start', 'data' => ['trigger' => 'conversation_start']],
+                ['id' => 'agent_triage', 'type' => 'agent', 'data' => ['role' => 'triage', 'agent_id' => $agent->id, 'agent_name' => $agent->name]],
+            ],
+            'edges' => [],
+        ],
+    ]);
     $contact = Contact::factory()->forChannel($channel)->whatsapp('15551112222')->recentlyActive()->create();
     $conv = WhatsAppConversation::factory()->forChannel($channel, $contact)->create([
         'status' => ConversationStatus::Open,
