@@ -3,13 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AgentType;
-use App\Enums\FlowActionType;
+use App\Enums\BotFlowActionType;
 use App\Enums\MessageRole;
 use App\Models\Agent;
+use App\Models\BotFlow;
 use App\Models\Conversation;
-use App\Models\Flow;
-use App\Services\FlowAction;
-use App\Services\FlowExecutorService;
+use App\Services\BotFlowAction;
+use App\Services\BotFlowExecutorService;
 use App\Services\LLMService;
 use App\Services\RetrievalService;
 use Illuminate\Http\Request;
@@ -20,7 +20,7 @@ class ChatStreamController extends Controller
 {
     public function __construct(
         private LLMService $llmService,
-        private FlowExecutorService $flowExecutor,
+        private BotFlowExecutorService $flowExecutor,
     ) {}
 
     public function stream(Request $request, Agent $agent, Conversation $conversation): StreamedResponse
@@ -320,7 +320,7 @@ class ChatStreamController extends Controller
             try {
                 $this->emitFlowEvents($action, $flow, $conversation);
             } catch (\Exception $e) {
-                \Log::error('Flow stream error', ['error' => $e->getMessage()]);
+                \Log::error('BotFlow stream error', ['error' => $e->getMessage()]);
                 echo 'data: '.json_encode(['error' => $e->getMessage()])."\n\n";
                 $this->flushOutput();
             }
@@ -330,15 +330,15 @@ class ChatStreamController extends Controller
         }, 200, $this->streamHeaders());
     }
 
-    private function emitFlowEvents(FlowAction $action, Flow $flow, Conversation $conversation): void
+    private function emitFlowEvents(BotFlowAction $action, BotFlow $flow, Conversation $conversation): void
     {
         match ($action->type) {
-            FlowActionType::ShowMenu => $this->emitEvent([
+            BotFlowActionType::ShowMenu => $this->emitEvent([
                 'type' => 'flow_menu',
                 'message' => $action->data['message'] ?? '',
                 'options' => $action->data['options'] ?? [],
             ]),
-            FlowActionType::SendMessage => (function () use ($action, $flow, $conversation) {
+            BotFlowActionType::SendMessage => (function () use ($action, $flow, $conversation) {
                 $this->emitEvent(['type' => 'flow_message', 'content' => $action->data['message'] ?? '']);
 
                 // Save as assistant message
@@ -356,17 +356,17 @@ class ChatStreamController extends Controller
                     $this->emitFlowEvents($nextAction, $flow, $conversation);
                 }
             })(),
-            FlowActionType::AgentHandoff => (function () use ($action) {
+            BotFlowActionType::AgentHandoff => (function () use ($action) {
                 if ($action->data['message'] ?? null) {
                     $this->emitEvent(['type' => 'flow_message', 'content' => $action->data['message']]);
                 }
                 $this->emitEvent(['type' => 'flow_end', 'action' => 'agent_handoff']);
             })(),
-            FlowActionType::End => $this->emitEvent([
+            BotFlowActionType::End => $this->emitEvent([
                 'type' => 'flow_end',
                 'action' => $action->data['action'] ?? 'resume_conversation',
             ]),
-            FlowActionType::AwaitLlmClassification => $this->emitEvent([
+            BotFlowActionType::AwaitLlmClassification => $this->emitEvent([
                 'type' => 'flow_await_input',
                 'input_type' => 'text',
             ]),

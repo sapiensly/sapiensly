@@ -6,7 +6,7 @@ import * as ChatController from '@/actions/App/Http/Controllers/ChatController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
-import * as FlowController from '@/actions/App/Http/Controllers/FlowController';
+import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
 import * as IntegrationController from '@/actions/App/Http/Controllers/IntegrationController';
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
@@ -116,7 +116,7 @@ const sections = computed<NavSection[]>(() => [
             {
                 key: 'flows',
                 label: t('app_v2.nav.flows'),
-                href: FlowController.globalIndex().url,
+                href: BotFlowController.globalIndex().url,
                 icon: GitBranch,
                 match: (u) => u.startsWith('/flows'),
             },

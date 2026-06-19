@@ -3,17 +3,17 @@
 namespace App\Jobs;
 
 use App\Enums\AgentType;
-use App\Enums\FlowActionType;
+use App\Enums\BotFlowActionType;
 use App\Enums\MessageRole;
 use App\Events\AgentStreamChunk;
 use App\Events\AgentStreamComplete;
 use App\Events\AgentStreamError;
 use App\Models\Agent;
+use App\Models\BotFlow;
 use App\Models\Conversation;
-use App\Models\Flow;
 use App\Services\AiProviderService;
-use App\Services\FlowAction;
-use App\Services\FlowExecutorService;
+use App\Services\BotFlowAction;
+use App\Services\BotFlowExecutorService;
 use App\Services\LLMService;
 use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -58,7 +58,7 @@ class ProcessAgentChat implements ShouldQueue
 
             // Check for active flow on Triage agents
             if ($this->agent->type === AgentType::Triage) {
-                $flowExecutor = app(FlowExecutorService::class);
+                $flowExecutor = app(BotFlowExecutorService::class);
                 $flowState = $this->conversation->metadata['flow_state'] ?? null;
                 $userMessage = $messages->last()->content;
 
@@ -134,7 +134,7 @@ class ProcessAgentChat implements ShouldQueue
         }
     }
 
-    private function handleFlowChat(FlowExecutorService $flowExecutor, string $userMessage, ?array $flowState): void
+    private function handleFlowChat(BotFlowExecutorService $flowExecutor, string $userMessage, ?array $flowState): void
     {
         $flow = $this->agent->activeFlow();
         if (! $flow) {
@@ -155,10 +155,10 @@ class ProcessAgentChat implements ShouldQueue
         $this->broadcastFlowAction($flowExecutor, $flow, $action);
     }
 
-    private function broadcastFlowAction(FlowExecutorService $flowExecutor, Flow $flow, FlowAction $action): void
+    private function broadcastFlowAction(BotFlowExecutorService $flowExecutor, BotFlow $flow, BotFlowAction $action): void
     {
         match ($action->type) {
-            FlowActionType::ShowMenu => $this->sendBroadcast(new AgentStreamChunk(
+            BotFlowActionType::ShowMenu => $this->sendBroadcast(new AgentStreamChunk(
                 $this->conversation->id,
                 '',
                 'flow_menu',
@@ -167,7 +167,7 @@ class ProcessAgentChat implements ShouldQueue
                     'options' => $action->data['options'] ?? [],
                 ],
             )),
-            FlowActionType::SendMessage => (function () use ($flowExecutor, $flow, $action) {
+            BotFlowActionType::SendMessage => (function () use ($flowExecutor, $flow, $action) {
                 $message = $action->data['message'] ?? '';
 
                 $this->sendBroadcast(new AgentStreamChunk(
@@ -193,7 +193,7 @@ class ProcessAgentChat implements ShouldQueue
                     $this->broadcastFlowAction($flowExecutor, $flow, $nextAction);
                 }
             })(),
-            FlowActionType::AgentHandoff => (function () use ($action) {
+            BotFlowActionType::AgentHandoff => (function () use ($action) {
                 if ($action->data['message'] ?? null) {
                     $this->sendBroadcast(new AgentStreamChunk(
                         $this->conversation->id,
@@ -209,13 +209,13 @@ class ProcessAgentChat implements ShouldQueue
                     ['action' => 'agent_handoff'],
                 ));
             })(),
-            FlowActionType::End => $this->sendBroadcast(new AgentStreamChunk(
+            BotFlowActionType::End => $this->sendBroadcast(new AgentStreamChunk(
                 $this->conversation->id,
                 '',
                 'flow_end',
                 ['action' => $action->data['action'] ?? 'resume_conversation'],
             )),
-            FlowActionType::AwaitLlmClassification => $this->sendBroadcast(new AgentStreamChunk(
+            BotFlowActionType::AwaitLlmClassification => $this->sendBroadcast(new AgentStreamChunk(
                 $this->conversation->id,
                 '',
                 'flow_await_input',

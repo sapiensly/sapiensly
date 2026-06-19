@@ -14,13 +14,13 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Bridges a WhatsApp conversation into the existing Agent / AgentTeam / Flow
+ * Bridges a WhatsApp conversation into the existing Agent / AgentTeam / BotFlow
  * orchestration layer. The contract with the rest of the system is intentionally
  * identical to the widget's SSE path: build a synthetic `Conversation` with a
  * messages relation, drive it through `LLMService` or `TeamOrchestrationService`,
  * then persist the assistant reply via `WhatsAppMessageSender`.
  *
- * Flow state continuity is preserved across turns by copying
+ * BotFlow state continuity is preserved across turns by copying
  * `$wa->flow_state ↔ synth->metadata['flow_state']` before and after the
  * generator runs.
  */
@@ -175,7 +175,7 @@ class WhatsAppReplyOrchestrator
     }
 
     /**
-     * Flow menus arrive as { message, options: [{label, value}, …] }. Render them
+     * BotFlow menus arrive as { message, options: [{label, value}, …] }. Render them
      * as "<message>\n\n1. <label>\n2. <label>…" which is the canonical plain-text
      * fallback for non-interactive channels.
      */

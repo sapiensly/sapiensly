@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Enums\FlowActionType;
+use App\Enums\BotFlowActionType;
 use App\Enums\MessageRole;
 use App\Models\AgentTeam;
 use App\Models\Conversation;
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Orchestrates the flow between agents in an Agent Team.
  *
- * Flow:
+ * BotFlow:
  * 1. User message arrives
  * 2. Triage Agent creates an execution plan (one or more steps)
  * 3. Execute each step in sequence (Knowledge, Action, or Direct)
@@ -26,7 +26,7 @@ class TeamOrchestrationService
     public function __construct(
         private readonly LLMService $llmService,
         private readonly TriageRoutingService $routingService,
-        private readonly FlowExecutorService $flowExecutor,
+        private readonly BotFlowExecutorService $flowExecutor,
     ) {}
 
     /**
@@ -516,22 +516,22 @@ PROMPT;
     }
 
     /**
-     * Convert a FlowAction into SSE events.
+     * Convert a BotFlowAction into SSE events.
      *
      * @return Generator<array<string, mixed>>
      */
     private function emitFlowAction(
         AgentTeam $team,
         Conversation $conversation,
-        FlowAction $action
+        BotFlowAction $action
     ): Generator {
         match ($action->type) {
-            FlowActionType::ShowMenu => yield [
+            BotFlowActionType::ShowMenu => yield [
                 'type' => 'flow_menu',
                 'message' => $action->data['message'] ?? '',
                 'options' => $action->data['options'] ?? [],
             ],
-            FlowActionType::SendMessage => (function () use ($action, $team, $conversation) {
+            BotFlowActionType::SendMessage => (function () use ($action, $team, $conversation) {
                 yield ['type' => 'flow_message', 'content' => $action->data['message'] ?? ''];
 
                 // If there's a next node, auto-advance
@@ -546,7 +546,7 @@ PROMPT;
                     }
                 }
             })(),
-            FlowActionType::AgentHandoff => (function () use ($action, $team, $conversation) {
+            BotFlowActionType::AgentHandoff => (function () use ($action, $team, $conversation) {
                 if ($action->data['message'] ?? null) {
                     yield ['type' => 'flow_message', 'content' => $action->data['message']];
                 }
@@ -574,11 +574,11 @@ PROMPT;
                     };
                 }
             })(),
-            FlowActionType::End => yield [
+            BotFlowActionType::End => yield [
                 'type' => 'flow_end',
                 'action' => $action->data['action'] ?? 'resume_conversation',
             ],
-            FlowActionType::AwaitLlmClassification => yield [
+            BotFlowActionType::AwaitLlmClassification => yield [
                 'type' => 'flow_await_input',
                 'input_type' => 'text',
             ],

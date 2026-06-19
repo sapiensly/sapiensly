@@ -402,7 +402,7 @@ async function handleSendMessage(content: string) {
                         "
                     />
 
-                    <!-- Flow menu -->
+                    <!-- BotFlow menu -->
                     <div
                         v-if="flowMenu"
                         class="flex flex-wrap gap-2"

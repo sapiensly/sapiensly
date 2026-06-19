@@ -86,7 +86,7 @@ const contentFilters = computed({
             <InputError :message="errors['config.temperature']" />
         </div>
 
-        <!-- Flow row. -->
+        <!-- BotFlow row. -->
         <div class="space-y-2">
             <Label class="text-xs text-ink-muted">
                 {{ t('agents.config.triage.flow') }}

@@ -143,10 +143,10 @@ class Agent extends Model
 
     public function flows(): HasMany
     {
-        return $this->hasMany(Flow::class);
+        return $this->hasMany(BotFlow::class);
     }
 
-    public function activeFlow(): ?Flow
+    public function activeFlow(): ?BotFlow
     {
         return $this->flows()->active()->latest()->first();
     }
