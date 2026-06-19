@@ -13,6 +13,7 @@ use App\Models\Channel;
 use App\Models\Chatbot;
 use App\Models\ChatbotApiToken;
 use App\Models\WidgetConversation;
+use App\Models\WidgetSession;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -25,9 +26,30 @@ class ChatbotController extends Controller
         $chatbots = Chatbot::query()
             ->forAccountContext($request->user())
             ->with(['botFlow:id,chatbot_id,name'])
-            ->withCount(['conversations', 'sessions'])
             ->latest()
             ->paginate(12);
+
+        // conversations/sessions live in the tenant schema, which the platform
+        // connection can't reach in a withCount subquery — count them on the
+        // tenant connection (scoped to the page) and attach the aggregates.
+        $ids = $chatbots->getCollection()->pluck('id')->all();
+
+        $conversationCounts = WidgetConversation::query()
+            ->whereIn('chatbot_id', $ids)
+            ->selectRaw('chatbot_id, count(*) as aggregate')
+            ->groupBy('chatbot_id')
+            ->pluck('aggregate', 'chatbot_id');
+
+        $sessionCounts = WidgetSession::query()
+            ->whereIn('chatbot_id', $ids)
+            ->selectRaw('chatbot_id, count(*) as aggregate')
+            ->groupBy('chatbot_id')
+            ->pluck('aggregate', 'chatbot_id');
+
+        $chatbots->getCollection()->each(function (Chatbot $chatbot) use ($conversationCounts, $sessionCounts) {
+            $chatbot->conversations_count = (int) ($conversationCounts[$chatbot->id] ?? 0);
+            $chatbot->sessions_count = (int) ($sessionCounts[$chatbot->id] ?? 0);
+        });
 
         return Inertia::render('chatbots/Index', [
             'chatbots' => $chatbots,
