@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
 import * as ChatbotAnalyticsController from '@/actions/App/Http/Controllers/ChatbotAnalyticsController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import HeadingSmall from '@/components/HeadingSmall.vue';
@@ -39,6 +40,7 @@ import {
     Target,
     Trash2,
     Users,
+    Workflow,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -124,6 +126,18 @@ const formatDate = (date: string) => {
                             </Link>
                         </Button>
                         <Button as-child>
+                            <Link
+                                :href="
+                                    BotFlowController.editForChatbot({
+                                        chatbot: chatbot.id,
+                                    }).url
+                                "
+                            >
+                                <Workflow class="mr-2 h-4 w-4" />
+                                {{ t('chatbots.show.edit_flow') }}
+                            </Link>
+                        </Button>
+                        <Button variant="outline" as-child>
                             <Link
                                 :href="
                                     ChatbotController.embed({

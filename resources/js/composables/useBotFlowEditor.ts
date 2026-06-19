@@ -59,6 +59,12 @@ export function useBotFlowEditor(initialDefinition?: BotFlowDefinition) {
                     match_type: 'contains',
                     rules: [{ id: 'match_0', pattern: '', label: '' }],
                 };
+            case 'agent':
+                return {
+                    role: 'triage',
+                    agent_id: null,
+                    agent_name: null,
+                };
             case 'agent_handoff':
                 return {
                     target_agent: 'triage_llm',

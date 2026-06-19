@@ -2,6 +2,7 @@
 import type { BotFlowNodeType } from '@/types/botFlows';
 import {
     ArrowRightLeft,
+    Bot,
     CircleStop,
     CornerDownLeft,
     GitBranch,
@@ -24,6 +25,13 @@ interface PaletteItem {
 }
 
 const items: PaletteItem[] = [
+    {
+        type: 'agent',
+        label: 'flows.nodes.agent',
+        description: 'flows.palette.agent_description',
+        icon: Bot,
+        tint: '#a855f7',
+    },
     {
         type: 'menu',
         label: 'flows.nodes.menu',

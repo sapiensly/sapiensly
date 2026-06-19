@@ -2,10 +2,13 @@ export type BotFlowNodeType =
     | 'start'
     | 'menu'
     | 'condition'
+    | 'agent'
     | 'agent_handoff'
     | 'message'
     | 'connector'
     | 'end';
+
+export type AgentRole = 'triage' | 'knowledge' | 'action';
 
 export interface BotFlowDefinition {
     nodes: BotFlowNodeData[];
@@ -21,6 +24,7 @@ export interface BotFlowNodeData {
         | StartNodeConfig
         | MenuNodeConfig
         | ConditionNodeConfig
+        | AgentNodeConfig
         | AgentHandoffNodeConfig
         | MessageNodeConfig
         | ConnectorNodeConfig
@@ -64,6 +68,13 @@ export interface ConditionRule {
 
 export interface AgentLayerConfig {
     enabled: boolean;
+    agent_id: string | null;
+    agent_name?: string | null;
+}
+
+export interface AgentNodeConfig {
+    /** Which role this agent plays in the bot's roster. */
+    role: AgentRole;
     agent_id: string | null;
     agent_name?: string | null;
 }

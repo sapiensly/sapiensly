@@ -15,6 +15,8 @@ import { Textarea } from '@/components/ui/textarea';
 import type {
     AgentHandoffNodeConfig,
     AgentLayerConfig,
+    AgentNodeConfig,
+    AgentRole,
     ConditionNodeConfig,
     ConditionRule,
     ConnectorNodeConfig,
@@ -92,6 +94,21 @@ const startData = computed(() => props.node.data as StartNodeConfig);
 const menuData = computed(() => props.node.data as MenuNodeConfig);
 const conditionData = computed(() => props.node.data as ConditionNodeConfig);
 const agentData = computed(() => props.node.data as AgentHandoffNodeConfig);
+const agentNodeData = computed(() => props.node.data as AgentNodeConfig);
+
+const agentsForRole = computed(
+    () => props.availableAgents[agentNodeData.value.role] ?? [],
+);
+
+const changeAgentRole = (role: AgentRole) => {
+    // Switching role resets the picked agent — the roster lists differ per role.
+    update({ role, agent_id: null, agent_name: null });
+};
+
+const selectAgentForNode = (agentId: string) => {
+    const agent = agentsForRole.value.find((a) => a.id === agentId);
+    update({ agent_id: agentId, agent_name: agent?.name ?? null });
+};
 const messageData = computed(() => props.node.data as MessageNodeConfig);
 const connectorData = computed(() => props.node.data as ConnectorNodeConfig);
 const endData = computed(() => props.node.data as EndNodeConfig);
@@ -294,6 +311,66 @@ function onAgentCreated(agentId: string, agentName: string) {
                             })
                         "
                     />
+                </div>
+            </template>
+
+            <!-- Agent Node -->
+            <template v-if="nodeType === 'agent'">
+                <div class="grid gap-2">
+                    <Label>{{ t('flows.panel.agent_role') }}</Label>
+                    <Select
+                        :model-value="agentNodeData.role"
+                        @update:model-value="changeAgentRole($event as AgentRole)"
+                    >
+                        <SelectTrigger>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="triage">
+                                {{ t('flows.panel.layer_triage') }}
+                            </SelectItem>
+                            <SelectItem value="knowledge">
+                                {{ t('flows.panel.layer_knowledge') }}
+                            </SelectItem>
+                            <SelectItem value="action">
+                                {{ t('flows.panel.layer_action') }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <p class="text-[11px] text-ink-subtle">
+                        {{ t('flows.panel.agent_role_hint') }}
+                    </p>
+                </div>
+
+                <div class="grid gap-2">
+                    <Label>{{ t('flows.panel.agent_pick') }}</Label>
+                    <Select
+                        v-if="agentsForRole.length > 0"
+                        :model-value="agentNodeData.agent_id ?? ''"
+                        @update:model-value="selectAgentForNode($event as string)"
+                    >
+                        <SelectTrigger>
+                            <SelectValue
+                                :placeholder="t('flows.panel.agent_pick_placeholder')"
+                            />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                v-for="a in agentsForRole"
+                                :key="a.id"
+                                :value="a.id"
+                            >
+                                {{ a.name }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <p
+                        v-else
+                        class="flex items-center gap-1.5 text-[11px] text-sp-warning"
+                    >
+                        <AlertTriangle class="size-3.5" />
+                        {{ t('flows.panel.agent_none_for_role') }}
+                    </p>
                 </div>
             </template>
 

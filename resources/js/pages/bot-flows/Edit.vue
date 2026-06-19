@@ -5,6 +5,7 @@ import FlowNodePanel from '@/components/bot-flows/FlowNodePanel.vue';
 import FlowTestWidget from '@/components/bot-flows/FlowTestWidget.vue';
 import FlowToolbar from '@/components/bot-flows/FlowToolbar.vue';
 import AgentHandoffNode from '@/components/bot-flows/nodes/AgentHandoffNode.vue';
+import AgentNode from '@/components/bot-flows/nodes/AgentNode.vue';
 import ConditionNode from '@/components/bot-flows/nodes/ConditionNode.vue';
 import ConnectorNode from '@/components/bot-flows/nodes/ConnectorNode.vue';
 import EndNode from '@/components/bot-flows/nodes/EndNode.vue';
@@ -38,6 +39,7 @@ const nodeTintMap: Record<string, string> = {
     start: 'var(--sp-success)',
     menu: 'var(--sp-warning)',
     condition: 'var(--sp-accent-cyan)',
+    agent: '#a855f7',
     agent_handoff: 'var(--sp-spectrum-magenta)',
     message: 'var(--sp-accent-blue)',
     connector: 'var(--sp-spectrum-indigo)',
@@ -356,6 +358,9 @@ const backUrl = props.agent
                     </template>
                     <template #node-condition="nodeProps">
                         <ConditionNode v-bind="nodeProps" />
+                    </template>
+                    <template #node-agent="nodeProps">
+                        <AgentNode v-bind="nodeProps" />
                     </template>
                     <template #node-agent_handoff="nodeProps">
                         <AgentHandoffNode v-bind="nodeProps" />
