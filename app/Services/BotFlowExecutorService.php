@@ -24,6 +24,20 @@ class BotFlowExecutorService
             return false;
         }
 
+        return $this->shouldActivateBotFlow($flow, $userMessage, $flowState);
+    }
+
+    /**
+     * Determine if a given Bot Flow should activate for a conversation.
+     * Used when the flow is resolved from the AI Bot rather than the agent.
+     */
+    public function shouldActivateBotFlow(BotFlow $flow, string $userMessage, ?array $flowState): bool
+    {
+        // If already in a flow, continue it
+        if ($flowState && ! ($flowState['completed'] ?? false)) {
+            return true;
+        }
+
         $startNode = $flow->getStartNode();
         if (! $startNode) {
             return false;

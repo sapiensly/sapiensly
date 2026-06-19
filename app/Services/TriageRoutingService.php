@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Ai\Tools\ExecutionPlanTool;
-use App\Models\AgentTeam;
+use App\Models\Agent;
 
 /**
  * Builds routing tools for Triage Agents to create execution plans.
@@ -21,11 +21,9 @@ class TriageRoutingService
      *
      * @return array<ExecutionPlanTool>
      */
-    public function buildRoutingTools(AgentTeam $team): array
+    public function buildRoutingTools(?Agent $knowledgeAgent, ?Agent $actionAgent): array
     {
-        $team->load(['knowledgeAgent', 'actionAgent']);
-
-        return [new ExecutionPlanTool($team)];
+        return [new ExecutionPlanTool($knowledgeAgent, $actionAgent)];
     }
 
     /**

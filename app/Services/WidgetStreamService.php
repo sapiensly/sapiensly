@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\AgentTeam;
+use App\Models\BotFlow;
 use App\Models\Chatbot;
 use App\Models\Conversation;
 use App\Models\WidgetConversation;
@@ -33,18 +34,39 @@ class WidgetStreamService
     public function stream(
         Chatbot $chatbot,
         WidgetConversation $conversation,
-        Agent|AgentTeam $target
+        Agent|AgentTeam|null $target = null
     ): StreamedResponse {
         $startTime = microtime(true);
 
         // Get conversation messages for context
         $messages = $conversation->messages()->orderBy('created_at')->get();
 
+        // Prefer the AI Bot's Bot Flow when present. A single-agent roster runs
+        // as direct LLM chat; a multi-agent roster goes through orchestration.
+        $flow = $chatbot->botFlow;
+        if ($flow !== null) {
+            $roster = $flow->rosterAgents();
+
+            if (count($roster) === 1) {
+                return $this->streamAgentResponse($chatbot, $conversation, $roster[0], $messages, $startTime);
+            }
+
+            if (count($roster) > 1) {
+                return $this->streamBotFlowResponse($chatbot, $conversation, $flow, $messages, $startTime);
+            }
+            // Empty roster falls through to the legacy target below.
+        }
+
         if ($target instanceof AgentTeam) {
             return $this->streamTeamResponse($chatbot, $conversation, $target, $messages, $startTime);
         }
 
-        return $this->streamAgentResponse($chatbot, $conversation, $target, $messages, $startTime);
+        if ($target instanceof Agent) {
+            return $this->streamAgentResponse($chatbot, $conversation, $target, $messages, $startTime);
+        }
+
+        // Nothing to run.
+        return $this->createStreamResponse($conversation, 'unknown', [], 'No agent configured for this bot.', $startTime);
     }
 
     /**
@@ -140,20 +162,68 @@ class WidgetStreamService
         $messages,
         float $startTime
     ): StreamedResponse {
+        return $this->consumeOrchestration(
+            $chatbot,
+            $conversation,
+            $messages,
+            $team->triageAgent?->model ?? 'unknown',
+            $startTime,
+            fn (Conversation $temp, string $userMessage) => $this->orchestrationService->orchestrate($team, $temp, $userMessage),
+            'team_id',
+            $team->id,
+        );
+    }
+
+    /**
+     * Stream a response by orchestrating the AI Bot's Bot Flow roster.
+     */
+    private function streamBotFlowResponse(
+        Chatbot $chatbot,
+        WidgetConversation $conversation,
+        BotFlow $flow,
+        $messages,
+        float $startTime
+    ): StreamedResponse {
+        return $this->consumeOrchestration(
+            $chatbot,
+            $conversation,
+            $messages,
+            $flow->roster()['triage']?->model ?? 'unknown',
+            $startTime,
+            fn (Conversation $temp, string $userMessage) => $this->orchestrationService->orchestrateBotFlow($flow, $temp, $userMessage),
+            'flow_id',
+            $flow->id,
+        );
+    }
+
+    /**
+     * Drive an orchestration generator into a streamed SSE response. Shared by
+     * the legacy team path and the Bot Flow roster path.
+     *
+     * @param  callable(Conversation, string): \Generator  $orchestrate
+     */
+    private function consumeOrchestration(
+        Chatbot $chatbot,
+        WidgetConversation $conversation,
+        $messages,
+        string $model,
+        float $startTime,
+        callable $orchestrate,
+        string $sourceKey,
+        string $sourceId
+    ): StreamedResponse {
         $chunks = [];
         $events = [];
         $error = null;
 
         try {
-            Log::info('Widget: Starting team stream', [
+            Log::info('Widget: Starting orchestration stream', [
                 'chatbot_id' => $chatbot->id,
                 'conversation_id' => $conversation->id,
-                'team_id' => $team->id,
+                $sourceKey => $sourceId,
             ]);
 
-            // Get the last user message
-            $lastUserMessage = $messages->last();
-            $userMessage = $lastUserMessage?->content ?? '';
+            $userMessage = $messages->last()?->content ?? '';
 
             // Create a temporary conversation-like object for orchestration
             $tempConversation = new Conversation([
@@ -161,8 +231,7 @@ class WidgetStreamService
             ]);
             $tempConversation->setRelation('messages', $messages);
 
-            // Run orchestration
-            foreach ($this->orchestrationService->orchestrate($team, $tempConversation, $userMessage) as $event) {
+            foreach ($orchestrate($tempConversation, $userMessage) as $event) {
                 if ($event['type'] === 'content') {
                     $chunks[] = $event['content'] ?? '';
                 } else {
@@ -170,10 +239,10 @@ class WidgetStreamService
                 }
             }
         } catch (\Exception $e) {
-            Log::error('Widget: Team stream error', [
+            Log::error('Widget: Orchestration stream error', [
                 'chatbot_id' => $chatbot->id,
                 'conversation_id' => $conversation->id,
-                'team_id' => $team->id,
+                $sourceKey => $sourceId,
                 'error' => $e->getMessage(),
             ]);
             $error = $e->getMessage();
@@ -194,8 +263,6 @@ class WidgetStreamService
                 ];
             }
         }
-
-        $model = $team->triageAgent?->model ?? 'unknown';
 
         return $this->createStreamResponse(
             $conversation,

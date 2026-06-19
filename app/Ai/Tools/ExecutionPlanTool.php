@@ -2,7 +2,7 @@
 
 namespace App\Ai\Tools;
 
-use App\Models\AgentTeam;
+use App\Models\Agent;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -13,10 +13,10 @@ class ExecutionPlanTool implements Tool
 
     private string $stepsDescription;
 
-    public function __construct(AgentTeam $team)
+    public function __construct(?Agent $knowledgeAgent, ?Agent $actionAgent)
     {
-        $this->availableAgents = $this->describeAvailableAgents($team);
-        $this->stepsDescription = $this->buildStepsDescription($team);
+        $this->availableAgents = $this->describeAvailableAgents($knowledgeAgent, $actionAgent);
+        $this->stepsDescription = $this->buildStepsDescription($knowledgeAgent, $actionAgent);
     }
 
     public function name(): string
@@ -44,18 +44,18 @@ class ExecutionPlanTool implements Tool
         return $request->data('steps', '[]');
     }
 
-    private function describeAvailableAgents(AgentTeam $team): string
+    private function describeAvailableAgents(?Agent $knowledgeAgent, ?Agent $actionAgent): string
     {
         $agents = [];
 
-        if ($team->knowledgeAgent) {
-            $name = $team->knowledgeAgent->name ?? 'Knowledge Agent';
+        if ($knowledgeAgent) {
+            $name = $knowledgeAgent->name ?? 'Knowledge Agent';
             $agents[] = "- knowledge: {$name} - handles questions about documentation, FAQs, policies, guides, or any information lookup";
         }
 
-        if ($team->actionAgent) {
-            $name = $team->actionAgent->name ?? 'Action Agent';
-            $toolNames = $team->actionAgent->tools()
+        if ($actionAgent) {
+            $name = $actionAgent->name ?? 'Action Agent';
+            $toolNames = $actionAgent->tools()
                 ->where('status', 'active')
                 ->pluck('name')
                 ->join(', ');
@@ -72,17 +72,17 @@ class ExecutionPlanTool implements Tool
         return "Available agents:\n".implode("\n", $agents);
     }
 
-    private function buildStepsDescription(AgentTeam $team): string
+    private function buildStepsDescription(?Agent $knowledgeAgent, ?Agent $actionAgent): string
     {
         $examples = [];
 
         $examples[] = '[{"agent":"direct","response":"Hello! How can I help you today?"}]';
 
-        if ($team->knowledgeAgent && $team->actionAgent) {
+        if ($knowledgeAgent && $actionAgent) {
             $examples[] = '[{"agent":"knowledge","query":"refund policy","urgency":"medium"},{"agent":"action","task":"check order status for #12345"}]';
-        } elseif ($team->knowledgeAgent) {
+        } elseif ($knowledgeAgent) {
             $examples[] = '[{"agent":"knowledge","query":"how to reset password","urgency":"high"}]';
-        } elseif ($team->actionAgent) {
+        } elseif ($actionAgent) {
             $examples[] = '[{"agent":"action","task":"cancel subscription for user"}]';
         }
 

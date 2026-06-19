@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Enums\BotFlowActionType;
 use App\Enums\MessageRole;
+use App\Models\Agent;
 use App\Models\AgentTeam;
+use App\Models\BotFlow;
 use App\Models\Conversation;
 use App\Models\Message;
 use Generator;
@@ -12,13 +14,14 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Orchestrates the flow between agents in an Agent Team.
+ * Orchestrates the flow between agents in an agent roster.
  *
- * BotFlow:
+ * The roster (triage / knowledge / action) is resolved either from a Bot Flow's
+ * agent nodes (the AI Bot path) or from a legacy AgentTeam. Either way:
  * 1. User message arrives
  * 2. Triage Agent creates an execution plan (one or more steps)
  * 3. Execute each step in sequence (Knowledge, Action, or Direct)
- * 4. If multiple steps, consolidate responses into coherent reply
+ * 4. If multiple steps, consolidate responses into a coherent reply
  * 5. Return the final response
  */
 class TeamOrchestrationService
@@ -30,7 +33,53 @@ class TeamOrchestrationService
     ) {}
 
     /**
-     * Orchestrate a user message through the agent team.
+     * Orchestrate a user message through a legacy agent team.
+     *
+     * @return Generator<array<string, mixed>>
+     */
+    public function orchestrate(
+        AgentTeam $team,
+        Conversation $conversation,
+        string $userMessage
+    ): Generator {
+        $team->load(['triageAgent', 'knowledgeAgent', 'actionAgent']);
+
+        $roster = [
+            'triage' => $team->triageAgent,
+            'knowledge' => $team->knowledgeAgent,
+            'action' => $team->actionAgent,
+        ];
+
+        yield from $this->run(
+            $roster,
+            $team->triageAgent?->activeFlow(),
+            "team:{$team->id}",
+            $conversation,
+            $userMessage
+        );
+    }
+
+    /**
+     * Orchestrate a user message through a Bot Flow's agent roster.
+     *
+     * @return Generator<array<string, mixed>>
+     */
+    public function orchestrateBotFlow(
+        BotFlow $flow,
+        Conversation $conversation,
+        string $userMessage
+    ): Generator {
+        yield from $this->run(
+            $flow->roster(),
+            $flow,
+            "flow:{$flow->id}",
+            $conversation,
+            $userMessage
+        );
+    }
+
+    /**
+     * Run orchestration against a resolved agent roster.
      *
      * Yields events as the orchestration progresses:
      * - ['type' => 'execution_plan', 'steps' => [...]]
@@ -41,22 +90,22 @@ class TeamOrchestrationService
      * - ['type' => 'consolidating'] (when multiple steps need consolidation)
      * - ['type' => 'content', 'content' => 'text chunk']
      *
+     * @param  array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}  $roster
      * @return Generator<array<string, mixed>>
      */
-    public function orchestrate(
-        AgentTeam $team,
+    private function run(
+        array $roster,
+        ?BotFlow $flow,
+        string $label,
         Conversation $conversation,
         string $userMessage
     ): Generator {
-        // Load team agents
-        $team->load(['triageAgent', 'knowledgeAgent', 'actionAgent']);
-
         // Check for active flow before LLM triage
-        if ($team->triageAgent) {
+        if ($flow !== null) {
             $flowState = $conversation->metadata['flow_state'] ?? null;
 
-            if ($this->flowExecutor->shouldActivateFlow($team->triageAgent, $userMessage, $flowState)) {
-                yield from $this->executeFlow($team, $conversation, $userMessage, $flowState);
+            if ($this->flowExecutor->shouldActivateBotFlow($flow, $userMessage, $flowState)) {
+                yield from $this->executeFlow($roster, $flow, $conversation, $userMessage, $flowState);
 
                 return;
             }
@@ -69,13 +118,13 @@ class TeamOrchestrationService
             : $conversation->messages()->get();
 
         Log::info('Starting team orchestration', [
-            'team_id' => $team->id,
+            'orchestration' => $label,
             'conversation_id' => $conversation->id,
             'message_count' => $messages->count(),
         ]);
 
         // Step 1: Run triage to create execution plan
-        $executionPlan = $this->createExecutionPlan($team, $messages, $userMessage);
+        $executionPlan = $this->createExecutionPlan($roster, $messages, $userMessage);
 
         yield [
             'type' => 'execution_plan',
@@ -83,7 +132,7 @@ class TeamOrchestrationService
         ];
 
         Log::info('Execution plan created', [
-            'team_id' => $team->id,
+            'orchestration' => $label,
             'step_count' => count($executionPlan),
             'steps' => $executionPlan,
         ]);
@@ -100,7 +149,7 @@ class TeamOrchestrationService
             ];
 
             Log::info('Executing step', [
-                'team_id' => $team->id,
+                'orchestration' => $label,
                 'step' => $index,
                 'agent' => $step['agent'],
             ]);
@@ -110,7 +159,7 @@ class TeamOrchestrationService
 
             switch ($step['agent']) {
                 case 'knowledge':
-                    foreach ($this->executeKnowledgeWithEvents($team, $messages, $step, $userMessage) as $event) {
+                    foreach ($this->executeKnowledgeWithEvents($roster, $messages, $step, $userMessage) as $event) {
                         if ($event['type'] === 'content') {
                             $stepContent .= $event['content'] ?? '';
                         } else {
@@ -121,7 +170,7 @@ class TeamOrchestrationService
                     break;
 
                 case 'action':
-                    foreach ($this->executeActionWithEvents($team, $messages, $step, $userMessage) as $event) {
+                    foreach ($this->executeActionWithEvents($roster, $messages, $step, $userMessage) as $event) {
                         if ($event['type'] === 'content') {
                             $stepContent .= $event['content'] ?? '';
                         } else {
@@ -159,26 +208,27 @@ class TeamOrchestrationService
             yield ['type' => 'consolidating'];
 
             Log::info('Consolidating responses', [
-                'team_id' => $team->id,
+                'orchestration' => $label,
                 'step_count' => count($stepResponses),
             ]);
 
-            yield from $this->consolidateResponses($team, $userMessage, $stepResponses);
+            yield from $this->consolidateResponses($roster, $userMessage, $stepResponses);
         }
     }
 
     /**
      * Consolidate multiple step responses into a coherent reply.
      *
+     * @param  array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}  $roster
      * @param  array<array{agent: string, query: ?string, response: string}>  $stepResponses
      * @return Generator<array<string, mixed>>
      */
     private function consolidateResponses(
-        AgentTeam $team,
+        array $roster,
         string $userMessage,
         array $stepResponses
     ): Generator {
-        if (! $team->triageAgent) {
+        if (! $roster['triage']) {
             // No triage agent - just concatenate with separator
             foreach ($stepResponses as $i => $step) {
                 if ($i > 0) {
@@ -200,12 +250,11 @@ class TeamOrchestrationService
         ]);
 
         Log::info('Running consolidation', [
-            'team_id' => $team->id,
-            'triage_agent_id' => $team->triageAgent->id,
+            'triage_agent_id' => $roster['triage']->id,
         ]);
 
         // Stream consolidated response
-        foreach ($this->llmService->streamChat($team->triageAgent, [$consolidationMessage]) as $chunk) {
+        foreach ($this->llmService->streamChat($roster['triage'], [$consolidationMessage]) as $chunk) {
             yield ['type' => 'content', 'content' => $chunk];
         }
     }
@@ -253,30 +302,30 @@ PROMPT;
     /**
      * Create an execution plan using the Triage Agent.
      *
+     * @param  array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}  $roster
      * @param  Collection<int, Message>  $messages
      * @return array<array{agent: string, query?: string, task?: string, response?: string, urgency?: string, context?: array}>
      */
-    private function createExecutionPlan(AgentTeam $team, Collection $messages, string $userMessage): array
+    private function createExecutionPlan(array $roster, Collection $messages, string $userMessage): array
     {
-        if (! $team->triageAgent) {
+        if (! $roster['triage']) {
             // No triage agent - create simple plan based on available agents
-            return $this->createFallbackPlan($team, $userMessage);
+            return $this->createFallbackPlan($roster, $userMessage);
         }
 
         // Build the execution plan tool
-        $routingTools = $this->routingService->buildRoutingTools($team);
+        $routingTools = $this->routingService->buildRoutingTools($roster['knowledge'], $roster['action']);
 
         // Prepare messages for triage (include conversation history)
         $triageMessages = $this->prepareTriageMessages($messages, $userMessage);
 
         Log::info('Running triage for execution plan', [
-            'team_id' => $team->id,
-            'triage_agent_id' => $team->triageAgent->id,
+            'triage_agent_id' => $roster['triage']->id,
         ]);
 
         // Call triage with execution plan tool
         $response = $this->llmService->chatWithRoutingTools(
-            $team->triageAgent,
+            $roster['triage'],
             $triageMessages,
             $routingTools
         );
@@ -288,15 +337,16 @@ PROMPT;
     /**
      * Create a fallback plan when no triage agent is configured.
      *
+     * @param  array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}  $roster
      * @return array<array{agent: string, query?: string, task?: string, response?: string}>
      */
-    private function createFallbackPlan(AgentTeam $team, string $userMessage): array
+    private function createFallbackPlan(array $roster, string $userMessage): array
     {
-        if ($team->knowledgeAgent) {
+        if ($roster['knowledge']) {
             return [['agent' => 'knowledge', 'query' => $userMessage, 'urgency' => 'medium']];
         }
 
-        if ($team->actionAgent) {
+        if ($roster['action']) {
             return [['agent' => 'action', 'task' => $userMessage, 'context' => []]];
         }
 
@@ -351,16 +401,17 @@ PROMPT;
     /**
      * Execute the Knowledge Agent (RAG) flow, yielding events.
      *
+     * @param  array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}  $roster
      * @param  Collection<int, Message>  $messages
      * @return Generator<array<string, mixed>>
      */
     private function executeKnowledgeWithEvents(
-        AgentTeam $team,
+        array $roster,
         Collection $messages,
         array $step,
         string $originalMessage
     ): Generator {
-        if (! $team->knowledgeAgent) {
+        if (! $roster['knowledge']) {
             yield ['type' => 'content', 'content' => 'Knowledge agent is not configured.'];
 
             return;
@@ -373,14 +424,13 @@ PROMPT;
         $knowledgeMessages = $this->prepareAgentMessages($messages, $originalMessage);
 
         Log::info('Executing knowledge agent', [
-            'team_id' => $team->id,
-            'agent_id' => $team->knowledgeAgent->id,
+            'agent_id' => $roster['knowledge']->id,
             'query' => $query,
         ]);
 
         // Use RAG with info to get knowledge bases
         $result = $this->llmService->streamChatWithRAGInfo(
-            $team->knowledgeAgent,
+            $roster['knowledge'],
             $knowledgeMessages,
             $query
         );
@@ -403,16 +453,17 @@ PROMPT;
     /**
      * Execute the Action Agent (Tools) flow, yielding events.
      *
+     * @param  array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}  $roster
      * @param  Collection<int, Message>  $messages
      * @return Generator<array<string, mixed>>
      */
     private function executeActionWithEvents(
-        AgentTeam $team,
+        array $roster,
         Collection $messages,
         array $step,
         string $originalMessage
     ): Generator {
-        if (! $team->actionAgent) {
+        if (! $roster['action']) {
             yield ['type' => 'content', 'content' => 'Action agent is not configured.'];
 
             return;
@@ -433,14 +484,13 @@ PROMPT;
         $actionMessages = $this->prepareAgentMessages($messages, $taskMessage);
 
         Log::info('Executing action agent', [
-            'team_id' => $team->id,
-            'agent_id' => $team->actionAgent->id,
+            'agent_id' => $roster['action']->id,
             'task' => $task,
         ]);
 
         // Execute with tools (non-streaming due to tool calls)
         $response = $this->llmService->chatWithTools(
-            $team->actionAgent,
+            $roster['action'],
             $actionMessages
         );
 
@@ -479,21 +529,18 @@ PROMPT;
     }
 
     /**
-     * Execute a flow for the triage agent.
+     * Execute a Bot Flow turn against the roster.
      *
+     * @param  array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}  $roster
      * @return Generator<array<string, mixed>>
      */
     private function executeFlow(
-        AgentTeam $team,
+        array $roster,
+        BotFlow $flow,
         Conversation $conversation,
         string $userMessage,
         ?array $flowState
     ): Generator {
-        $flow = $team->triageAgent->activeFlow();
-        if (! $flow) {
-            return;
-        }
-
         // Initialize or continue flow
         if ($flowState === null || ($flowState['completed'] ?? false)) {
             $flowState = $this->flowExecutor->initializeFlow($flow);
@@ -512,16 +559,18 @@ PROMPT;
         $metadata['flow_state'] = $action->updatedState;
         $conversation->update(['metadata' => $metadata]);
 
-        yield from $this->emitFlowAction($team, $conversation, $action);
+        yield from $this->emitFlowAction($roster, $flow, $conversation, $action);
     }
 
     /**
      * Convert a BotFlowAction into SSE events.
      *
+     * @param  array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}  $roster
      * @return Generator<array<string, mixed>>
      */
     private function emitFlowAction(
-        AgentTeam $team,
+        array $roster,
+        BotFlow $flow,
         Conversation $conversation,
         BotFlowAction $action
     ): Generator {
@@ -531,22 +580,19 @@ PROMPT;
                 'message' => $action->data['message'] ?? '',
                 'options' => $action->data['options'] ?? [],
             ],
-            BotFlowActionType::SendMessage => (function () use ($action, $team, $conversation) {
+            BotFlowActionType::SendMessage => (function () use ($action, $roster, $flow, $conversation) {
                 yield ['type' => 'flow_message', 'content' => $action->data['message'] ?? ''];
 
                 // If there's a next node, auto-advance
                 if (isset($action->data['next_node_id'])) {
-                    $flow = $team->triageAgent->activeFlow();
-                    if ($flow) {
-                        $nextAction = $this->flowExecutor->advanceToNode($flow, $action->updatedState, $action->data['next_node_id']);
-                        $metadata = $conversation->metadata ?? [];
-                        $metadata['flow_state'] = $nextAction->updatedState;
-                        $conversation->update(['metadata' => $metadata]);
-                        yield from $this->emitFlowAction($team, $conversation, $nextAction);
-                    }
+                    $nextAction = $this->flowExecutor->advanceToNode($flow, $action->updatedState, $action->data['next_node_id']);
+                    $metadata = $conversation->metadata ?? [];
+                    $metadata['flow_state'] = $nextAction->updatedState;
+                    $conversation->update(['metadata' => $metadata]);
+                    yield from $this->emitFlowAction($roster, $flow, $conversation, $nextAction);
                 }
             })(),
-            BotFlowActionType::AgentHandoff => (function () use ($action, $team, $conversation) {
+            BotFlowActionType::AgentHandoff => (function () use ($action, $roster, $conversation) {
                 if ($action->data['message'] ?? null) {
                     yield ['type' => 'flow_message', 'content' => $action->data['message']];
                 }
@@ -569,8 +615,8 @@ PROMPT;
                 if ($step) {
                     $lastMessage = $messages->last()?->content ?? '';
                     match ($step['agent']) {
-                        'knowledge' => yield from $this->executeKnowledgeWithEvents($team, $messages, $step, $lastMessage),
-                        'action' => yield from $this->executeActionWithEvents($team, $messages, $step, $lastMessage),
+                        'knowledge' => yield from $this->executeKnowledgeWithEvents($roster, $messages, $step, $lastMessage),
+                        'action' => yield from $this->executeActionWithEvents($roster, $messages, $step, $lastMessage),
                     };
                 }
             })(),

@@ -187,7 +187,8 @@ describe('triage routing service', function () {
         ]);
 
         $service = app(TriageRoutingService::class);
-        $tools = $service->buildRoutingTools($this->team->fresh());
+        $team = $this->team->fresh();
+        $tools = $service->buildRoutingTools($team->knowledgeAgent, $team->actionAgent);
 
         // Should have 1 tool: create_execution_plan
         expect($tools)->toHaveCount(1);
