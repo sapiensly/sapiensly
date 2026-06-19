@@ -17,6 +17,8 @@ Route::middleware([
         ->name('chatbots.flow.edit');
     Route::post('chatbots/{chatbot}/flow/scaffold', [BotFlowController::class, 'scaffold'])
         ->name('chatbots.flow.scaffold');
+    Route::post('chatbots/{chatbot}/flow/assistant', [BotFlowController::class, 'converse'])
+        ->name('chatbots.flow.assistant');
 
     Route::get('chatbots/{chatbot}/embed', [ChatbotController::class, 'embed'])
         ->name('chatbots.embed');

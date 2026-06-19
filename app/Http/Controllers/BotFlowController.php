@@ -114,6 +114,31 @@ class BotFlowController extends Controller
         return response()->json(['definition' => $definition]);
     }
 
+    /**
+     * One conversational turn editing the Bot Flow: refine the running spec from
+     * the chat and return the reply, the updated spec, and the new definition.
+     */
+    public function converse(Request $request, Chatbot $chatbot, BotFlowScaffolder $scaffolder): JsonResponse
+    {
+        $this->authorize('update', $chatbot);
+
+        $validated = $request->validate([
+            'messages' => ['required', 'array', 'min:1', 'max:40'],
+            'messages.*.role' => ['required', 'string', 'in:user,assistant'],
+            'messages.*.content' => ['required', 'string', 'max:2000'],
+            'spec' => ['nullable', 'array'],
+        ]);
+
+        $result = $scaffolder->converse(
+            $validated['messages'],
+            $validated['spec'] ?? null,
+            $this->getAvailableAgents($request->user()),
+            $request->user(),
+        );
+
+        return response()->json($result);
+    }
+
     public function globalUpdate(UpdateBotFlowRequest $request, BotFlow $flow): RedirectResponse
     {
         $flow->update($request->validated());

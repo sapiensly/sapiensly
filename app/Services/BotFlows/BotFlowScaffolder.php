@@ -28,6 +28,16 @@ class BotFlowScaffolder
         - route_role: for a menu option, one of "knowledge" or "action" to hand off there, or null for a general option.
         SYS;
 
+    private const CONVERSE_SYSTEM = <<<'SYS'
+        You help a user design a conversational customer-support bot through chat.
+        You are given the current flow spec and the conversation so far. Respond with ONLY a single minified JSON object — no markdown, no code fences, no commentary — using exactly this schema:
+        {"reply": string, "spec": {"welcome_message": string, "roles": string[], "menu": {"message": string, "options": [{"label": string, "route_role": string|null}]} | null}}
+        - reply: a short, friendly message to the user describing what you changed.
+        - spec: the COMPLETE updated flow (not a diff) reflecting all changes requested so far. Keep prior content unless the user asked to change it.
+        - roles: any of "triage", "knowledge", "action" — only those the bot needs.
+        - menu: a menu (max 4 options) or null. route_role is "knowledge", "action", or null.
+        SYS;
+
     public function __construct(
         private readonly AiDefaults $aiDefaults,
         private readonly AiProviderService $providers,
@@ -40,6 +50,79 @@ class BotFlowScaffolder
     public function scaffold(string $description, array $availableAgents, ?User $user = null): array
     {
         return $this->assemble($this->extractSpec($description, $user), $availableAgents);
+    }
+
+    /**
+     * One multi-turn chat step: refine the running spec from the conversation and
+     * re-assemble. Stateless — the caller round-trips the spec each turn.
+     *
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @param  array<string, mixed>|null  $currentSpec
+     * @param  array{triage?: array, knowledge?: array, action?: array}  $availableAgents
+     * @return array{reply: string, spec: array<string, mixed>, definition: array{nodes: array, edges: array}}
+     */
+    public function converse(array $messages, ?array $currentSpec, array $availableAgents, ?User $user = null): array
+    {
+        $refined = $this->refineSpec($messages, $currentSpec, $user);
+
+        return [
+            'reply' => $refined['reply'],
+            'spec' => $refined['spec'],
+            'definition' => $this->assemble($refined['spec'], $availableAgents),
+        ];
+    }
+
+    /**
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @param  array<string, mixed>|null  $currentSpec
+     * @return array{reply: string, spec: array<string, mixed>}
+     */
+    private function refineSpec(array $messages, ?array $currentSpec, ?User $user): array
+    {
+        $model = $this->aiDefaults->model('flows');
+        $provider = $this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic;
+
+        $spec = $currentSpec ? $this->normalizeSpec($currentSpec) : $this->defaultSpec();
+        $prompt = 'Current flow spec:'.PHP_EOL.json_encode($spec).PHP_EOL.PHP_EOL
+            .'Conversation:'.PHP_EOL.$this->buildTranscript($messages);
+
+        try {
+            $agent = new ChatAgent(instructions: self::CONVERSE_SYSTEM, messages: [], tools: []);
+            $response = $agent->prompt(Str::limit($prompt, 4000), provider: $provider, model: $model);
+            $decoded = $this->decodeJson((string) ($response->text ?? ''));
+
+            if ($decoded === null) {
+                return ['reply' => 'Sorry, I could not apply that. Try rephrasing.', 'spec' => $spec];
+            }
+
+            return [
+                'reply' => (string) ($decoded['reply'] ?? 'Updated the flow.'),
+                'spec' => isset($decoded['spec']) && is_array($decoded['spec'])
+                    ? $this->normalizeSpec($decoded['spec'])
+                    : $spec,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('Bot flow converse: model call failed', ['error' => $e->getMessage()]);
+
+            return ['reply' => 'Sorry, something went wrong. Try again.', 'spec' => $spec];
+        }
+    }
+
+    /**
+     * @param  array<int, array{role: string, content: string}>  $messages
+     */
+    private function buildTranscript(array $messages): string
+    {
+        $lines = [];
+        foreach (array_slice($messages, -12) as $message) {
+            $role = ($message['role'] ?? 'user') === 'assistant' ? 'Assistant' : 'User';
+            $content = trim((string) ($message['content'] ?? ''));
+            if ($content !== '') {
+                $lines[] = "{$role}: {$content}";
+            }
+        }
+
+        return implode(PHP_EOL, $lines);
     }
 
     /**
@@ -67,6 +150,16 @@ class BotFlowScaffolder
      */
     private function parseSpec(string $raw): array
     {
+        $decoded = $this->decodeJson($raw);
+
+        return $decoded === null ? $this->defaultSpec() : $this->normalizeSpec($decoded);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function decodeJson(string $raw): ?array
+    {
         $json = trim($raw);
         $json = (string) preg_replace('/^```(?:json)?\s*|\s*```$/m', '', $json);
         if (preg_match('/\{.*\}/s', $json, $m)) {
@@ -74,10 +167,16 @@ class BotFlowScaffolder
         }
 
         $decoded = json_decode($json, true);
-        if (! is_array($decoded)) {
-            return $this->defaultSpec();
-        }
 
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $decoded
+     * @return array{welcome_message: string, roles: array<int, string>, menu: array{message: string, options: array<int, array{label: string, route_role: ?string}>}|null}
+     */
+    private function normalizeSpec(array $decoded): array
+    {
         $roles = array_values(array_intersect(
             ['triage', 'knowledge', 'action'],
             array_map('strval', is_array($decoded['roles'] ?? null) ? $decoded['roles'] : []),
