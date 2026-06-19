@@ -231,18 +231,7 @@ class ChatController extends Controller
             ], 400);
         }
 
-        // Get the target (Agent or AgentTeam)
-        $chatbot->load(['agent', 'agentTeam']);
-        $target = $chatbot->agent ?? $chatbot->agentTeam;
-
-        if (! $target) {
-            return response()->json([
-                'error' => 'No target configured',
-                'message' => 'This chatbot has no agent or team configured',
-            ], 500);
-        }
-
-        // Stream the response
-        return $this->streamService->stream($chatbot, $widgetConversation, $target);
+        // The AI Bot runs on its Bot Flow roster.
+        return $this->streamService->stream($chatbot, $widgetConversation);
     }
 }

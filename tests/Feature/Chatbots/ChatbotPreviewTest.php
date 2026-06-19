@@ -13,7 +13,6 @@ beforeEach(function () {
     $this->agent = Agent::factory()->create(['user_id' => $this->user->id]);
     $this->chatbot = Chatbot::factory()->create([
         'user_id' => $this->user->id,
-        'agent_id' => $this->agent->id,
         'status' => ChatbotStatus::Active,
     ]);
 });
@@ -226,11 +225,9 @@ describe('preview stream', function () {
         $response->assertNotFound();
     });
 
-    it('returns 400 when chatbot has no agent or team', function () {
+    it('streams an error when the bot has no agents in its flow', function () {
         $chatbotNoAgent = Chatbot::factory()->create([
             'user_id' => $this->user->id,
-            'agent_id' => null,
-            'agent_team_id' => null,
         ]);
 
         // Init and send a message
@@ -253,8 +250,8 @@ describe('preview stream', function () {
             ])
         );
 
-        $response->assertBadRequest();
-        expect($response->json('error'))->toBe('No agent or team configured for this chatbot');
+        $response->assertOk();
+        expect($response->streamedContent())->toContain('No agent configured');
     });
 
     it('returns existing response as stream when already responded', function () {

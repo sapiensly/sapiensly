@@ -20,10 +20,6 @@ class UpdateChatbotRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
 
-            // Target: either agent_id OR agent_team_id (not both)
-            'agent_id' => ['nullable', 'string', 'exists:agents,id'],
-            'agent_team_id' => ['nullable', 'string', 'exists:agent_teams,id'],
-
             // Status
             'status' => ['nullable', Rule::enum(ChatbotStatus::class)],
 
@@ -64,13 +60,5 @@ class UpdateChatbotRequest extends FormRequest
         return [
             'config.appearance.primary_color.regex' => __('Color must be a valid hex code (e.g., #3B82F6).'),
         ];
-    }
-
-    protected function prepareForValidation(): void
-    {
-        // Ensure only one of agent_id or agent_team_id is set
-        if ($this->agent_id && $this->agent_team_id) {
-            $this->merge(['agent_team_id' => null]);
-        }
     }
 }

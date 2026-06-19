@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Enums\MessageRole;
 use App\Models\Agent;
-use App\Models\AgentTeam;
 use App\Models\BotFlow;
 use App\Models\Chatbot;
 use App\Models\Conversation;
@@ -33,39 +32,26 @@ class WidgetStreamService
      */
     public function stream(
         Chatbot $chatbot,
-        WidgetConversation $conversation,
-        Agent|AgentTeam|null $target = null
+        WidgetConversation $conversation
     ): StreamedResponse {
         $startTime = microtime(true);
 
         // Get conversation messages for context
         $messages = $conversation->messages()->orderBy('created_at')->get();
 
-        // Prefer the AI Bot's Bot Flow when present. A single-agent roster runs
-        // as direct LLM chat; a multi-agent roster goes through orchestration.
-        $flow = $chatbot->botFlow;
-        if ($flow !== null) {
-            $roster = $flow->rosterAgents();
+        // The AI Bot runs on its Bot Flow roster. A single-agent roster runs as
+        // direct LLM chat; a multi-agent roster goes through orchestration.
+        $roster = $chatbot->botFlow?->rosterAgents() ?? [];
 
-            if (count($roster) === 1) {
-                return $this->streamAgentResponse($chatbot, $conversation, $roster[0], $messages, $startTime);
-            }
-
-            if (count($roster) > 1) {
-                return $this->streamBotFlowResponse($chatbot, $conversation, $flow, $messages, $startTime);
-            }
-            // Empty roster falls through to the legacy target below.
+        if (count($roster) === 1) {
+            return $this->streamAgentResponse($chatbot, $conversation, $roster[0], $messages, $startTime);
         }
 
-        if ($target instanceof AgentTeam) {
-            return $this->streamTeamResponse($chatbot, $conversation, $target, $messages, $startTime);
+        if (count($roster) > 1) {
+            return $this->streamBotFlowResponse($chatbot, $conversation, $chatbot->botFlow, $messages, $startTime);
         }
 
-        if ($target instanceof Agent) {
-            return $this->streamAgentResponse($chatbot, $conversation, $target, $messages, $startTime);
-        }
-
-        // Nothing to run.
+        // No agents in the flow yet.
         return $this->createStreamResponse($conversation, 'unknown', [], 'No agent configured for this bot.', $startTime);
     }
 
@@ -149,28 +135,6 @@ class WidgetStreamService
             $startTime,
             $knowledgeBases,
             $toolCalls
-        );
-    }
-
-    /**
-     * Stream response from an agent team.
-     */
-    private function streamTeamResponse(
-        Chatbot $chatbot,
-        WidgetConversation $conversation,
-        AgentTeam $team,
-        $messages,
-        float $startTime
-    ): StreamedResponse {
-        return $this->consumeOrchestration(
-            $chatbot,
-            $conversation,
-            $messages,
-            $team->triageAgent?->model ?? 'unknown',
-            $startTime,
-            fn (Conversation $temp, string $userMessage) => $this->orchestrationService->orchestrate($team, $temp, $userMessage),
-            'team_id',
-            $team->id,
         );
     }
 

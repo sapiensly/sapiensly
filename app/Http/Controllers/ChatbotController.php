@@ -8,8 +8,6 @@ use App\Enums\ChatbotStatus;
 use App\Enums\Visibility;
 use App\Http\Requests\Chatbot\StoreChatbotRequest;
 use App\Http\Requests\Chatbot\UpdateChatbotRequest;
-use App\Models\Agent;
-use App\Models\AgentTeam;
 use App\Models\BotFlow;
 use App\Models\Channel;
 use App\Models\Chatbot;
@@ -26,7 +24,7 @@ class ChatbotController extends Controller
     {
         $chatbots = Chatbot::query()
             ->forAccountContext($request->user())
-            ->with(['agent:id,name,type', 'agentTeam:id,name'])
+            ->with(['botFlow:id,chatbot_id,name'])
             ->withCount(['conversations', 'sessions'])
             ->latest()
             ->paginate(12);
@@ -41,10 +39,6 @@ class ChatbotController extends Controller
         $user = $request->user();
 
         return Inertia::render('chatbots/Create', [
-            'agents' => Agent::forAccountContext($user)
-                ->get(['id', 'name', 'type', 'status']),
-            'agentTeams' => AgentTeam::forAccountContext($user)
-                ->get(['id', 'name', 'status']),
             'defaultConfig' => Chatbot::getDefaultConfig(),
             'visibilityOptions' => collect(Visibility::cases())->map(fn ($v) => [
                 'value' => $v->value,
@@ -62,16 +56,14 @@ class ChatbotController extends Controller
         $visibility = $user->organization_id ? Visibility::Organization : Visibility::Private;
 
         // Create the companion Channel row first so the Chatbot can reference
-        // it. Channels centralise tenant scope, target (agent/team), and
-        // status across all channel types (widget, WhatsApp, …).
+        // it. Channels centralise tenant scope and status across channel types
+        // (widget, WhatsApp, …); a widget AI Bot's agents live in its Bot Flow.
         $channel = Channel::create([
             'user_id' => $user->id,
             'organization_id' => $user->organization_id,
             'visibility' => $visibility,
             'channel_type' => ChannelType::Widget,
             'name' => $request->name,
-            'agent_id' => $request->agent_id,
-            'agent_team_id' => $request->agent_team_id,
             'status' => ChannelStatus::Draft,
         ]);
 
@@ -80,8 +72,6 @@ class ChatbotController extends Controller
             'organization_id' => $user->organization_id,
             'visibility' => $visibility,
             'channel_id' => $channel->id,
-            'agent_id' => $request->agent_id,
-            'agent_team_id' => $request->agent_team_id,
             'name' => $request->name,
             'description' => $request->description,
             'config' => $request->config ?? Chatbot::getDefaultConfig(),
@@ -122,7 +112,7 @@ class ChatbotController extends Controller
         ];
 
         return Inertia::render('chatbots/Show', [
-            'chatbot' => $chatbot->load(['agent', 'agentTeam']),
+            'chatbot' => $chatbot->load('botFlow:id,chatbot_id,name'),
             'recentConversations' => $recentConversations,
             'stats' => $stats,
         ]);
@@ -135,11 +125,7 @@ class ChatbotController extends Controller
         $user = $request->user();
 
         return Inertia::render('chatbots/Edit', [
-            'chatbot' => $chatbot->load(['agent', 'agentTeam']),
-            'agents' => Agent::forAccountContext($user)
-                ->get(['id', 'name', 'type', 'status']),
-            'agentTeams' => AgentTeam::forAccountContext($user)
-                ->get(['id', 'name', 'status']),
+            'chatbot' => $chatbot->load('botFlow:id,chatbot_id,name'),
             'visibilityOptions' => collect(Visibility::cases())->map(fn ($v) => [
                 'value' => $v->value,
                 'label' => $v->label(),
@@ -156,8 +142,6 @@ class ChatbotController extends Controller
         $chatbot->update([
             'name' => $request->name,
             'description' => $request->description,
-            'agent_id' => $request->agent_id,
-            'agent_team_id' => $request->agent_team_id,
             'config' => $request->config ?? $chatbot->config,
             'allowed_origins' => $request->allowed_origins,
             'status' => $request->status ?? $chatbot->status,

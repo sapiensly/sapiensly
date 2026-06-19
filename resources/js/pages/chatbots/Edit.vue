@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
@@ -15,38 +16,25 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import type {
-    Chatbot,
-    ChatbotAgent,
-    ChatbotAgentTeam,
-    VisibilityOption,
-} from '@/types/chatbot';
+import type { Chatbot, VisibilityOption } from '@/types/chatbot';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Bot, Users } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { Workflow } from '@lucide/vue';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
 interface Props {
     chatbot: Chatbot;
-    agents: ChatbotAgent[];
-    agentTeams: ChatbotAgentTeam[];
     visibilityOptions: VisibilityOption[];
     canShareWithOrg: boolean;
 }
 
 const props = defineProps<Props>();
 
-const targetType = ref<'agent' | 'team'>(
-    props.chatbot.agent_id ? 'agent' : 'team',
-);
-
 const form = useForm({
     name: props.chatbot.name,
     description: props.chatbot.description ?? '',
-    agent_id: props.chatbot.agent_id,
-    agent_team_id: props.chatbot.agent_team_id,
     status: props.chatbot.status,
     visibility: props.chatbot.visibility,
     config: props.chatbot.config,
@@ -164,101 +152,24 @@ const submit = () => {
                     <!-- Target Selection -->
                     <div class="space-y-6">
                         <HeadingSmall
-                            :title="t('chatbots.edit.agent_section')"
-                            :description="
-                                t('chatbots.edit.agent_section_description')
-                            "
+                            :title="t('chatbots.create.agents_title')"
+                            :description="t('chatbots.create.agents_description')"
                         />
-
-                        <div class="grid gap-4">
-                            <!-- Target Type Selector -->
-                            <div class="flex gap-4">
-                                <Button
-                                    type="button"
-                                    :variant="
-                                        targetType === 'agent'
-                                            ? 'default'
-                                            : 'outline'
-                                    "
-                                    class="flex-1"
-                                    @click="
-                                        targetType = 'agent';
-                                        form.agent_team_id = null;
-                                    "
-                                >
-                                    <Bot class="mr-2 h-4 w-4" />
-                                    {{ t('chatbots.create.single_agent') }}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    :variant="
-                                        targetType === 'team'
-                                            ? 'default'
-                                            : 'outline'
-                                    "
-                                    class="flex-1"
-                                    @click="
-                                        targetType = 'team';
-                                        form.agent_id = null;
-                                    "
-                                >
-                                    <Users class="mr-2 h-4 w-4" />
-                                    {{ t('chatbots.create.agents_team') }}
-                                </Button>
-                            </div>
-
-                            <!-- Agent Selection -->
-                            <div
-                                v-if="targetType === 'agent'"
-                                class="grid gap-2"
+                        <p class="text-sm text-ink-subtle">
+                            {{ t('chatbots.create.agents_note') }}
+                        </p>
+                        <Button as-child variant="outline">
+                            <Link
+                                :href="
+                                    BotFlowController.editForChatbot({
+                                        chatbot: chatbot.id,
+                                    }).url
+                                "
                             >
-                                <Label>Select Agent</Label>
-                                <Select v-model="form.agent_id">
-                                    <SelectTrigger>
-                                        <SelectValue
-                                            placeholder="Choose an agent"
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem
-                                            v-for="agent in agents"
-                                            :key="agent.id"
-                                            :value="agent.id"
-                                        >
-                                            {{ agent.name }} ({{ agent.type }})
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <InputError :message="form.errors.agent_id" />
-                            </div>
-
-                            <!-- Team Selection -->
-                            <div
-                                v-if="targetType === 'team'"
-                                class="grid gap-2"
-                            >
-                                <Label>Select Multi-Agent</Label>
-                                <Select v-model="form.agent_team_id">
-                                    <SelectTrigger>
-                                        <SelectValue
-                                            placeholder="Choose a Multi-Agent"
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem
-                                            v-for="team in agentTeams"
-                                            :key="team.id"
-                                            :value="team.id"
-                                        >
-                                            {{ team.name }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <InputError
-                                    :message="form.errors.agent_team_id"
-                                />
-                            </div>
-                        </div>
+                                <Workflow class="mr-2 h-4 w-4" />
+                                {{ t('chatbots.show.edit_flow') }}
+                            </Link>
+                        </Button>
                     </div>
 
                     <!-- Appearance Settings -->

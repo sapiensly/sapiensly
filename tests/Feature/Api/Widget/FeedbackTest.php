@@ -16,7 +16,6 @@ beforeEach(function () {
     ]);
     $this->chatbot = Chatbot::factory()->create([
         'user_id' => $this->user->id,
-        'agent_id' => $this->agent->id,
         'status' => ChatbotStatus::Active,
     ]);
     $this->token = ChatbotApiToken::create([
@@ -119,7 +118,6 @@ describe('feedback', function () {
     it('cannot submit feedback for conversation from different chatbot', function () {
         $otherChatbot = Chatbot::factory()->create([
             'user_id' => $this->user->id,
-            'agent_id' => $this->agent->id,
             'status' => ChatbotStatus::Active,
         ]);
 

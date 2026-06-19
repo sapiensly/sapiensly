@@ -14,22 +14,14 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import type {
-    ChatbotAgent,
-    ChatbotAgentTeam,
-    ChatbotConfig,
-    VisibilityOption,
-} from '@/types/chatbot';
+import type { ChatbotConfig, VisibilityOption } from '@/types/chatbot';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Bot, MessageSquare, Palette, Users } from '@lucide/vue';
-import { ref } from 'vue';
+import { Bot, MessageSquare, Palette } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
 interface Props {
-    agents: ChatbotAgent[];
-    agentTeams: ChatbotAgentTeam[];
     defaultConfig: ChatbotConfig;
     visibilityOptions: VisibilityOption[];
     canShareWithOrg: boolean;
@@ -40,13 +32,9 @@ const props = defineProps<Props>();
 const form = useForm({
     name: '',
     description: '',
-    agent_id: null as string | null,
-    agent_team_id: null as string | null,
     config: props.defaultConfig,
     allowed_origins: [] as string[],
 });
-
-const targetType = ref<'agent' | 'team'>('agent');
 
 const submit = () => {
     form.post(ChatbotController.store().url);
@@ -99,98 +87,16 @@ const submit = () => {
                     </div>
                 </SettingsCard>
 
-                <!-- Target selection -->
+                <!-- Agents live in the Bot Flow -->
                 <SettingsCard
                     :icon="Bot"
-                    :title="t('chatbots.create.select_agent')"
-                    :description="t('chatbots.create.select_agent_description')"
-                    tint="var(--sp-spectrum-magenta)"
+                    :title="t('chatbots.create.agents_title')"
+                    :description="t('chatbots.create.agents_description')"
+                    tint="#a855f7"
                 >
-                    <!-- Target type toggle — pill rhythm. -->
-                    <div class="flex gap-1.5">
-                        <button
-                            type="button"
-                            :class="[
-                                'inline-flex flex-1 items-center justify-center gap-1.5 rounded-pill border px-3 py-1.5 text-xs transition-colors',
-                                targetType === 'agent'
-                                    ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                                    : 'border-medium bg-surface text-ink-muted hover:text-ink',
-                            ]"
-                            @click="
-                                targetType = 'agent';
-                                form.agent_team_id = null;
-                            "
-                        >
-                            <Bot class="size-3.5" />
-                            {{ t('chatbots.create.single_agent') }}
-                        </button>
-                        <button
-                            type="button"
-                            :class="[
-                                'inline-flex flex-1 items-center justify-center gap-1.5 rounded-pill border px-3 py-1.5 text-xs transition-colors',
-                                targetType === 'team'
-                                    ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                                    : 'border-medium bg-surface text-ink-muted hover:text-ink',
-                            ]"
-                            @click="
-                                targetType = 'team';
-                                form.agent_id = null;
-                            "
-                        >
-                            <Users class="size-3.5" />
-                            {{ t('chatbots.create.agents_team') }}
-                        </button>
-                    </div>
-
-                    <div v-if="targetType === 'agent'" class="space-y-1.5">
-                        <Label class="text-xs text-ink-muted">
-                            {{ t('chatbots.create.select_agent') }}
-                        </Label>
-                        <Select v-model="form.agent_id">
-                            <SelectTrigger class="h-9 border-medium bg-surface">
-                                <SelectValue
-                                    :placeholder="t('chatbots.create.choose_agent')"
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem
-                                    v-for="agent in agents"
-                                    :key="agent.id"
-                                    :value="agent.id"
-                                >
-                                    {{ agent.name }} ({{ agent.type }})
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p class="text-[11px] text-ink-subtle">
-                            {{ t('chatbots.create.single_agent_note') }}
-                        </p>
-                        <InputError :message="form.errors.agent_id" />
-                    </div>
-
-                    <div v-if="targetType === 'team'" class="space-y-1.5">
-                        <Label class="text-xs text-ink-muted">
-                            Select Multi-Agent
-                        </Label>
-                        <Select v-model="form.agent_team_id">
-                            <SelectTrigger class="h-9 border-medium bg-surface">
-                                <SelectValue placeholder="Choose a Multi-Agent" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem
-                                    v-for="team in agentTeams"
-                                    :key="team.id"
-                                    :value="team.id"
-                                >
-                                    {{ team.name }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p class="text-[11px] text-ink-subtle">
-                            Use a team for orchestrated multi-agent flows
-                        </p>
-                        <InputError :message="form.errors.agent_team_id" />
-                    </div>
+                    <p class="text-[11px] text-ink-subtle">
+                        {{ t('chatbots.create.agents_note') }}
+                    </p>
                 </SettingsCard>
 
                 <!-- Appearance -->

@@ -184,18 +184,8 @@ class ChatbotPreviewController extends Controller
             return $this->streamExistingResponse($existingResponse);
         }
 
-        // Get the target (Agent or AgentTeam)
-        $chatbot->load(['agent', 'agentTeam']);
-        $target = $chatbot->agent ?? $chatbot->agentTeam;
-
-        if (! $target) {
-            return response()->json([
-                'error' => 'No agent or team configured for this chatbot',
-            ], 400);
-        }
-
-        // Stream the response
-        return $this->streamService->stream($chatbot, $conversation, $target);
+        // The AI Bot runs on its Bot Flow roster.
+        return $this->streamService->stream($chatbot, $conversation);
     }
 
     /**

@@ -17,11 +17,6 @@ class StoreChatbotRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
 
-            // Optional legacy target. An AI Bot's agents live in its Bot Flow;
-            // a freshly created bot has a blank flow and no direct agent.
-            'agent_id' => ['nullable', 'string', 'exists:agents,id'],
-            'agent_team_id' => ['nullable', 'string', 'exists:agent_teams,id'],
-
             // Config
             'config' => ['nullable', 'array'],
             'config.appearance' => ['nullable', 'array'],
@@ -54,17 +49,7 @@ class StoreChatbotRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'agent_id.required_without' => __('Please select an agent or agent team.'),
-            'agent_team_id.required_without' => __('Please select an agent or agent team.'),
             'config.appearance.primary_color.regex' => __('Color must be a valid hex code (e.g., #3B82F6).'),
         ];
-    }
-
-    protected function prepareForValidation(): void
-    {
-        // Ensure only one of agent_id or agent_team_id is set
-        if ($this->agent_id && $this->agent_team_id) {
-            $this->merge(['agent_team_id' => null]);
-        }
     }
 }

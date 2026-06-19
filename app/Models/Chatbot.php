@@ -24,8 +24,6 @@ class Chatbot extends Model
         'organization_id',
         'visibility',
         'channel_id',
-        'agent_id',
-        'agent_team_id',
         'name',
         'description',
         'status',
@@ -52,16 +50,6 @@ class Chatbot extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    public function agent(): BelongsTo
-    {
-        return $this->belongsTo(Agent::class);
-    }
-
-    public function agentTeam(): BelongsTo
-    {
-        return $this->belongsTo(AgentTeam::class);
     }
 
     public function botFlow(): HasOne
@@ -98,11 +86,6 @@ class Chatbot extends Model
     public function isActive(): bool
     {
         return $this->status === ChatbotStatus::Active;
-    }
-
-    public function getTarget(): Agent|AgentTeam|null
-    {
-        return $this->agent ?? $this->agentTeam;
     }
 
     public function isOriginAllowed(string $origin): bool

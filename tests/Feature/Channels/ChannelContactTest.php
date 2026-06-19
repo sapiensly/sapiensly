@@ -76,7 +76,6 @@ test('Creating a chatbot provisions its companion Channel', function () {
 
     $this->actingAs($user)->post('/chatbots', [
         'name' => 'Bot',
-        'agent_id' => $agent->id,
     ]);
 
     $chatbot = Chatbot::where('name', 'Bot')->first();
@@ -86,7 +85,6 @@ test('Creating a chatbot provisions its companion Channel', function () {
     $channel = Channel::find($chatbot->channel_id);
     expect($channel)->not->toBeNull()
         ->and($channel->channel_type)->toBe(ChannelType::Widget)
-        ->and($channel->agent_id)->toBe($agent->id)
         ->and($channel->status)->toBe(ChannelStatus::Draft);
 });
 

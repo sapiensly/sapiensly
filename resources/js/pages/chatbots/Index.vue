@@ -4,7 +4,7 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { PaginatedChatbots } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
-import { Bot, Code, MessageSquare, Plus, Users } from '@lucide/vue';
+import { Code, MessageSquare, Plus, Workflow } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -125,18 +125,11 @@ function tintFor(status: string) {
                             class="flex flex-wrap items-center gap-3 text-[11px] text-ink-subtle"
                         >
                             <span
-                                v-if="chatbot.agent"
+                                v-if="chatbot.bot_flow"
                                 class="inline-flex items-center gap-1"
                             >
-                                <Bot class="size-3" />
-                                {{ chatbot.agent.name }}
-                            </span>
-                            <span
-                                v-else-if="chatbot.agent_team"
-                                class="inline-flex items-center gap-1"
-                            >
-                                <Users class="size-3" />
-                                {{ chatbot.agent_team.name }}
+                                <Workflow class="size-3" />
+                                {{ chatbot.bot_flow.name }}
                             </span>
                             <span
                                 v-if="chatbot.conversations_count"

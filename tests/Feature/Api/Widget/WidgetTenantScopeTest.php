@@ -44,7 +44,6 @@ it('stamps the chatbot owner organization onto widget rows (business mode)', fun
     $chatbot = Chatbot::factory()->create([
         'user_id' => $user->id,
         'organization_id' => $org->id,
-        'agent_id' => $agent->id,
         'status' => ChatbotStatus::Active,
     ]);
 
@@ -59,7 +58,6 @@ it('stamps the chatbot owner user onto widget rows (personal mode)', function ()
     $chatbot = Chatbot::factory()->create([
         'user_id' => $user->id,
         'organization_id' => null,
-        'agent_id' => $agent->id,
         'status' => ChatbotStatus::Active,
     ]);
 

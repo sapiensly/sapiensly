@@ -30,27 +30,17 @@ export interface ChatbotConfig {
     advanced: ChatbotAdvanced;
 }
 
-export interface ChatbotAgent {
+export interface ChatbotBotFlow {
     id: string;
+    chatbot_id: string;
     name: string;
-    type: 'triage' | 'knowledge' | 'action';
-    status?: string;
-}
-
-export interface ChatbotAgentTeam {
-    id: string;
-    name: string;
-    status?: string;
 }
 
 export interface Chatbot {
     id: string;
     user_id: number;
     organization_id: string | null;
-    agent_id: string | null;
-    agent_team_id: string | null;
-    agent?: ChatbotAgent | null;
-    agent_team?: ChatbotAgentTeam | null;
+    bot_flow?: ChatbotBotFlow | null;
     name: string;
     description: string | null;
     status: ChatbotStatus;

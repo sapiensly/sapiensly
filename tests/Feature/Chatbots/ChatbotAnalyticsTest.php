@@ -17,7 +17,6 @@ beforeEach(function () {
     $this->agent = Agent::factory()->triage()->create(['user_id' => $this->user->id]);
     $this->chatbot = Chatbot::factory()->create([
         'user_id' => $this->user->id,
-        'agent_id' => $this->agent->id,
         'status' => ChatbotStatus::Active,
     ]);
     $this->analyticsService = app(ChatbotAnalyticsService::class);

@@ -272,33 +272,26 @@ const formatDate = (date: string) => {
                     </Card>
                 </div>
 
-                <!-- Target Info -->
+                <!-- Bot Flow -->
                 <div class="mb-8 space-y-6">
                     <HeadingSmall
-                        title="Agent or Multi-Agent"
-                        description="The agent or Multi-Agent powering this chatbot"
+                        :title="t('chatbots.create.agents_title')"
+                        :description="t('chatbots.create.agents_description')"
                     />
 
                     <Card>
                         <CardHeader>
                             <div class="flex items-center gap-3">
-                                <component
-                                    :is="chatbot.agent ? Bot : Users"
-                                    class="h-5 w-5 text-muted-foreground"
-                                />
+                                <Workflow class="h-5 w-5 text-muted-foreground" />
                                 <div>
                                     <CardTitle class="text-base">
                                         {{
-                                            chatbot.agent?.name ||
-                                            chatbot.agent_team?.name
+                                            chatbot.bot_flow?.name ||
+                                            t('chatbots.show.edit_flow')
                                         }}
                                     </CardTitle>
                                     <CardDescription>
-                                        {{
-                                            chatbot.agent
-                                                ? `${chatbot.agent.type} agent`
-                                                : 'Multi-Agent'
-                                        }}
+                                        {{ t('chatbots.create.agents_note') }}
                                     </CardDescription>
                                 </div>
                             </div>
