@@ -277,7 +277,6 @@ const typeIcon = computed<Component>(
                         v-else-if="agent.type === 'triage'"
                         v-model:config="form.config"
                         :errors="form.errors"
-                        :agent-id="agent.id"
                     />
 
                     <KnowledgeAgentConfig

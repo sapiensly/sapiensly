@@ -4,34 +4,15 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import type { TriageAgentConfig } from '@/types/agents';
-import { router } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const props = withDefaults(
-    defineProps<{
-        config: TriageAgentConfig;
-        errors: Record<string, string>;
-        hasFlow?: boolean;
-        agentId?: string | null;
-        flowUrl?: string | null;
-    }>(),
-    {
-        hasFlow: false,
-        agentId: null,
-        flowUrl: null,
-    },
-);
-
-function navigateToFlow(): void {
-    if (props.flowUrl) {
-        router.visit(props.flowUrl);
-    } else if (props.agentId) {
-        router.visit(`/agents/${props.agentId}/flows/create`);
-    }
-}
+const props = defineProps<{
+    config: TriageAgentConfig;
+    errors: Record<string, string>;
+}>();
 
 const emit = defineEmits<{
     'update:config': [config: TriageAgentConfig];
@@ -84,37 +65,6 @@ const contentFilters = computed({
                 {{ t('agents.config.triage.temperature_description') }}
             </p>
             <InputError :message="errors['config.temperature']" />
-        </div>
-
-        <!-- BotFlow row. -->
-        <div class="space-y-2">
-            <Label class="text-xs text-ink-muted">
-                {{ t('agents.config.triage.flow') }}
-            </Label>
-            <div
-                class="flex items-center justify-between gap-3 rounded-xs border border-soft bg-white/[0.03] p-3"
-            >
-                <div class="min-w-0 space-y-0.5">
-                    <p class="text-sm font-medium text-ink">
-                        {{ t('agents.config.triage.flow_title') }}
-                    </p>
-                    <p class="text-[11px] text-ink-subtle">
-                        {{ t('agents.config.triage.flow_description') }}
-                    </p>
-                </div>
-                <button
-                    type="button"
-                    :disabled="!agentId"
-                    class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
-                    @click="navigateToFlow"
-                >
-                    {{
-                        hasFlow
-                            ? t('agents.config.triage.edit_flow')
-                            : t('agents.config.triage.add_flow')
-                    }}
-                </button>
-            </div>
         </div>
 
         <!-- Guardrails — content filters toggle row. -->
