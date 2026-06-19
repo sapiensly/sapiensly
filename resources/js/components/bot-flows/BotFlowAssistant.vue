@@ -60,7 +60,7 @@ const send = async () => {
         emit('generated', data.definition as BotFlowDefinition);
         await scrollToBottom();
     } catch {
-        error.value = t('flows.assistant.error');
+        error.value = t('botFlows.assistant.error');
     } finally {
         loading.value = false;
     }
@@ -83,7 +83,7 @@ const send = async () => {
                 <Sparkles class="size-3.5" />
             </span>
             <span class="flex-1 text-[13px] font-medium text-ink">
-                {{ t('flows.assistant.title') }}
+                {{ t('botFlows.assistant.title') }}
             </span>
             <ChevronDown
                 class="size-4 text-ink-subtle transition-transform"
@@ -101,7 +101,7 @@ const send = async () => {
                     v-if="messages.length === 0"
                     class="py-1 text-[11px] leading-snug text-ink-subtle"
                 >
-                    {{ t('flows.assistant.hint') }}
+                    {{ t('botFlows.assistant.hint') }}
                 </p>
 
                 <div
@@ -127,7 +127,7 @@ const send = async () => {
                     class="flex items-center gap-1.5 text-[11px] text-ink-subtle"
                 >
                     <Loader2 class="size-3.5 animate-spin" />
-                    {{ t('flows.assistant.thinking') }}
+                    {{ t('botFlows.assistant.thinking') }}
                 </div>
 
                 <p v-if="error" class="text-[11px] text-sp-danger">{{ error }}</p>
@@ -140,15 +140,15 @@ const send = async () => {
                     :rows="2"
                     :placeholder="
                         messages.length === 0
-                            ? t('flows.assistant.placeholder')
-                            : t('flows.assistant.followup_placeholder')
+                            ? t('botFlows.assistant.placeholder')
+                            : t('botFlows.assistant.followup_placeholder')
                     "
                     :disabled="loading"
                     @keydown.enter.exact.prevent="send"
                 />
                 <div class="mt-2 flex items-center justify-between gap-2">
                     <span class="text-[10px] text-ink-subtle">
-                        {{ t('flows.assistant.replace_warning') }}
+                        {{ t('botFlows.assistant.replace_warning') }}
                     </span>
                     <Button
                         size="sm"
@@ -157,7 +157,7 @@ const send = async () => {
                     >
                         <Loader2 v-if="loading" class="mr-1.5 size-3.5 animate-spin" />
                         <Send v-else class="mr-1.5 size-3.5" />
-                        {{ t('flows.assistant.send') }}
+                        {{ t('botFlows.assistant.send') }}
                     </Button>
                 </div>
             </div>

@@ -52,7 +52,7 @@ function onKeydown(event: KeyboardEvent) {
         <Handle type="target" :position="Position.Top" class="!bg-accent-blue" />
 
         <div class="mb-1 text-xs font-medium text-ink-muted">
-            {{ t('flows.nodes.message') }}
+            {{ t('botFlows.nodes.message') }}
         </div>
 
         <textarea
@@ -61,7 +61,7 @@ function onKeydown(event: KeyboardEvent) {
             v-model="draft"
             class="nodrag w-full resize-none rounded-xs border border-medium bg-surface p-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
             rows="3"
-            :placeholder="t('flows.nodes.no_message')"
+            :placeholder="t('botFlows.nodes.no_message')"
             @blur="commit"
             @keydown="onKeydown"
             @click.stop
@@ -72,7 +72,7 @@ function onKeydown(event: KeyboardEvent) {
             :class="{ 'italic text-ink-subtle': !data.message }"
             @dblclick="startEdit"
         >
-            {{ data.message || t('flows.nodes.no_message') }}
+            {{ data.message || t('botFlows.nodes.no_message') }}
         </div>
 
         <Handle type="source" :position="Position.Bottom" class="!bg-accent-blue" />

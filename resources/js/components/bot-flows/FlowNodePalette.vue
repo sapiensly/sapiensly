@@ -27,50 +27,50 @@ interface PaletteItem {
 const items: PaletteItem[] = [
     {
         type: 'agent',
-        label: 'flows.nodes.agent',
-        description: 'flows.palette.agent_description',
+        label: 'botFlows.nodes.agent',
+        description: 'botFlows.palette.agent_description',
         icon: Bot,
         tint: '#a855f7',
     },
     {
         type: 'menu',
-        label: 'flows.nodes.menu',
-        description: 'flows.palette.menu_description',
+        label: 'botFlows.nodes.menu',
+        description: 'botFlows.palette.menu_description',
         icon: ListOrdered,
         tint: 'var(--sp-warning)',
     },
     {
         type: 'condition',
-        label: 'flows.nodes.condition',
-        description: 'flows.palette.condition_description',
+        label: 'botFlows.nodes.condition',
+        description: 'botFlows.palette.condition_description',
         icon: GitBranch,
         tint: 'var(--sp-accent-cyan)',
     },
     {
         type: 'agent_handoff',
-        label: 'flows.nodes.agent_handoff',
-        description: 'flows.palette.agent_handoff_description',
+        label: 'botFlows.nodes.agent_handoff',
+        description: 'botFlows.palette.agent_handoff_description',
         icon: ArrowRightLeft,
         tint: 'var(--sp-spectrum-magenta)',
     },
     {
         type: 'message',
-        label: 'flows.nodes.message',
-        description: 'flows.palette.message_description',
+        label: 'botFlows.nodes.message',
+        description: 'botFlows.palette.message_description',
         icon: MessageSquare,
         tint: 'var(--sp-accent-blue)',
     },
     {
         type: 'connector',
-        label: 'flows.nodes.connector',
-        description: 'flows.palette.connector_description',
+        label: 'botFlows.nodes.connector',
+        description: 'botFlows.palette.connector_description',
         icon: CornerDownLeft,
         tint: 'var(--sp-spectrum-indigo)',
     },
     {
         type: 'end',
-        label: 'flows.nodes.end',
-        description: 'flows.palette.end_description',
+        label: 'botFlows.nodes.end',
+        description: 'botFlows.palette.end_description',
         icon: CircleStop,
         tint: 'var(--sp-danger)',
     },
@@ -90,7 +90,7 @@ const onDragStart = (event: DragEvent, type: BotFlowNodeType) => {
             <h3
                 class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
             >
-                {{ t('flows.palette.title') }}
+                {{ t('botFlows.palette.title') }}
             </h3>
         </div>
 

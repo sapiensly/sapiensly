@@ -22,7 +22,7 @@ defineProps<{
         <Handle type="target" :position="Position.Top" class="!bg-sp-danger" />
 
         <span class="text-xs font-semibold text-sp-danger">
-            {{ t('flows.nodes.end') }}
+            {{ t('botFlows.nodes.end') }}
         </span>
     </div>
 </template>

@@ -16,10 +16,10 @@ defineProps<{
         <Handle type="target" :position="Position.Top" class="!bg-accent-blue" />
 
         <div class="mb-1 text-xs font-medium text-ink-muted">
-            {{ t('flows.nodes.menu') }}
+            {{ t('botFlows.nodes.menu') }}
         </div>
         <div class="mb-2 text-sm text-ink">
-            {{ data.message || t('flows.nodes.no_message') }}
+            {{ data.message || t('botFlows.nodes.no_message') }}
         </div>
 
         <div

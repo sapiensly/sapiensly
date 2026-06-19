@@ -14,9 +14,9 @@ const props = defineProps<{
 
 const label = computed(() => {
     if (props.data.target_node_id === '__start__') {
-        return t('flows.nodes.connector_to_start');
+        return t('botFlows.nodes.connector_to_start');
     }
-    return props.data.target_label || t('flows.nodes.connector_no_target');
+    return props.data.target_label || t('botFlows.nodes.connector_no_target');
 });
 </script>
 
@@ -31,7 +31,7 @@ const label = computed(() => {
         <Handle type="target" :position="Position.Top" class="!bg-spectrum-indigo" />
 
         <div class="mb-1 text-xs font-medium text-ink-muted">
-            {{ t('flows.nodes.connector') }}
+            {{ t('botFlows.nodes.connector') }}
         </div>
 
         <div class="flex items-center gap-2 text-sm text-spectrum-indigo">

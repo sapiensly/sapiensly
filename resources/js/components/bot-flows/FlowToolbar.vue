@@ -53,7 +53,7 @@ const statusTint = computed(() => {
         <Input
             :model-value="props.name"
             class="h-8 max-w-[280px] border-medium bg-surface text-sm font-medium text-ink placeholder:text-ink-subtle"
-            :placeholder="t('flows.toolbar.name_placeholder')"
+            :placeholder="t('botFlows.toolbar.name_placeholder')"
             @update:model-value="emit('update:name', $event as string)"
         />
 
@@ -76,23 +76,23 @@ const statusTint = computed(() => {
         >
             <template v-if="autoSaveStatus === 'saving'">
                 <Loader2 class="size-3.5 animate-spin" />
-                <span>{{ t('flows.toolbar.saving') }}</span>
+                <span>{{ t('botFlows.toolbar.saving') }}</span>
             </template>
             <template v-else-if="autoSaveStatus === 'saved'">
                 <Cloud class="size-3.5 text-sp-success" />
                 <span class="text-sp-success">
-                    {{ t('flows.toolbar.saved') }}
+                    {{ t('botFlows.toolbar.saved') }}
                 </span>
             </template>
             <template v-else-if="autoSaveStatus === 'error'">
                 <CloudOff class="size-3.5 text-sp-danger" />
                 <span class="text-sp-danger">
-                    {{ t('flows.toolbar.save_error') }}
+                    {{ t('botFlows.toolbar.save_error') }}
                 </span>
             </template>
             <template v-else>
                 <Check class="size-3.5" />
-                <span>{{ t('flows.toolbar.up_to_date') }}</span>
+                <span>{{ t('botFlows.toolbar.up_to_date') }}</span>
             </template>
         </div>
 
@@ -106,8 +106,8 @@ const statusTint = computed(() => {
             <PowerOff v-else class="size-3.5" />
             {{
                 props.status === 'active'
-                    ? t('flows.toolbar.deactivate')
-                    : t('flows.toolbar.activate')
+                    ? t('botFlows.toolbar.deactivate')
+                    : t('botFlows.toolbar.activate')
             }}
         </button>
 
@@ -120,7 +120,7 @@ const statusTint = computed(() => {
             @click="emit('save')"
         >
             <Save class="size-3.5" />
-            {{ t('flows.toolbar.save') }}
+            {{ t('botFlows.toolbar.save') }}
         </button>
     </div>
 </template>

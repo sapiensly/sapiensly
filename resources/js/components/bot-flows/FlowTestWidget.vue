@@ -174,7 +174,7 @@ watch(
             @click="open"
         >
             <MessageSquare class="h-6 w-6" />
-            <span class="text-xs font-bold tracking-wider">{{ t('flows.test.preview') }}</span>
+            <span class="text-xs font-bold tracking-wider">{{ t('botFlows.test.preview') }}</span>
         </button>
 
         <!-- Chat window when open -->

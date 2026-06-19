@@ -18,7 +18,7 @@ defineProps<{
 
         <div class="mb-1 flex items-center gap-2">
             <span class="text-xs font-medium text-ink-muted">
-                {{ t('flows.nodes.condition') }}
+                {{ t('botFlows.nodes.condition') }}
             </span>
             <Badge variant="secondary" class="text-[10px]">
                 {{ data.match_type }}
@@ -31,7 +31,7 @@ defineProps<{
             class="relative flex items-center py-1 text-xs text-ink"
         >
             <span class="truncate">{{
-                rule.label || rule.pattern || t('flows.nodes.empty_rule')
+                rule.label || rule.pattern || t('botFlows.nodes.empty_rule')
             }}</span>
             <Handle
                 type="source"
@@ -45,7 +45,7 @@ defineProps<{
         <div
             class="relative flex items-center py-1 text-xs text-ink-subtle italic"
         >
-            <span>{{ t('flows.nodes.default') }}</span>
+            <span>{{ t('botFlows.nodes.default') }}</span>
             <Handle
                 type="source"
                 :position="Position.Right"

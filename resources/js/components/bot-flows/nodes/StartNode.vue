@@ -20,7 +20,7 @@ defineProps<{
         "
     >
         <span class="text-xs font-semibold text-sp-success">
-            {{ t('flows.nodes.start') }}
+            {{ t('botFlows.nodes.start') }}
         </span>
 
         <Handle

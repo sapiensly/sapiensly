@@ -143,7 +143,7 @@ const onAssistantGenerated = (definition: BotFlowDefinition) => {
     loadDefinition(definition);
 };
 
-const flowName = ref(props.flow?.name ?? t('flows.editor.new_flow'));
+const flowName = ref(props.flow?.name ?? t('botFlows.editor.new_flow'));
 const flowStatus = ref<'draft' | 'active' | 'inactive'>(
     props.flow?.status ?? 'draft',
 );

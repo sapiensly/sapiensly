@@ -32,7 +32,7 @@ const unassigned = computed(() => !props.data.agent_id);
         <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink-muted">
             <AlertTriangle v-if="unassigned" class="h-3.5 w-3.5 text-sp-warning" />
             <Bot v-else class="h-3.5 w-3.5" />
-            {{ t('flows.nodes.agent') }}
+            {{ t('botFlows.nodes.agent') }}
         </div>
 
         <div class="flex items-center gap-2 text-xs">
@@ -48,7 +48,7 @@ const unassigned = computed(() => !props.data.agent_id);
                 · {{ data.agent_name }}
             </span>
             <span v-else class="text-sp-warning">
-                · {{ t('flows.panel.agent_unassigned') }}
+                · {{ t('botFlows.panel.agent_unassigned') }}
             </span>
         </div>
 

@@ -144,7 +144,7 @@ async function submit() {
 
         const agentId = response.data?.agent?.id ?? null;
         const agentName = response.data?.agent?.name ?? name.value;
-        toast.success(t('flows.modal.agent_created'));
+        toast.success(t('botFlows.modal.agent_created'));
         if (agentId) emit('created', agentId, agentName);
         emit('update:open', false);
     } catch (e: unknown) {
@@ -171,9 +171,9 @@ async function submit() {
     <Dialog :open="open" @update:open="emit('update:open', $event)">
         <DialogContent class="max-h-[90vh] max-w-3xl overflow-y-auto">
             <DialogHeader>
-                <DialogTitle>{{ t('flows.modal.create_title', { type: typeLabels[type] }) }}</DialogTitle>
+                <DialogTitle>{{ t('botFlows.modal.create_title', { type: typeLabels[type] }) }}</DialogTitle>
                 <DialogDescription>
-                    {{ t('flows.modal.create_description') }}
+                    {{ t('botFlows.modal.create_description') }}
                 </DialogDescription>
             </DialogHeader>
 
@@ -287,7 +287,7 @@ async function submit() {
                         {{ t('common.cancel') }}
                     </Button>
                     <Button type="submit" :disabled="processing || !name || !model">
-                        {{ processing ? t('flows.modal.creating') : t('flows.modal.create_agent') }}
+                        {{ processing ? t('botFlows.modal.creating') : t('botFlows.modal.create_agent') }}
                     </Button>
                 </DialogFooter>
             </form>

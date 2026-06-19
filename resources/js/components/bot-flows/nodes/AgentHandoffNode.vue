@@ -25,21 +25,21 @@ const layers = computed<LayerDisplay[]>(() => {
     return [
         {
             key: 'triage',
-            label: t('flows.panel.layer_triage'),
+            label: t('botFlows.panel.layer_triage'),
             dotColor: 'bg-purple-500',
             enabled: l?.triage?.enabled ?? true,
             agentName: l?.triage?.agent_name ?? null,
         },
         {
             key: 'knowledge',
-            label: t('flows.panel.layer_knowledge'),
+            label: t('botFlows.panel.layer_knowledge'),
             dotColor: 'bg-blue-500',
             enabled: l?.knowledge?.enabled ?? false,
             agentName: l?.knowledge?.agent_name ?? null,
         },
         {
             key: 'tools',
-            label: t('flows.panel.layer_tools'),
+            label: t('botFlows.panel.layer_tools'),
             dotColor: 'bg-orange-500',
             enabled: l?.tools?.enabled ?? false,
             agentName: l?.tools?.agent_name ?? null,
@@ -61,7 +61,7 @@ const hasWarning = computed(() =>
 
         <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink-muted">
             <AlertTriangle v-if="hasWarning" class="h-3.5 w-3.5 text-sp-warning" />
-            {{ t('flows.nodes.agent_handoff') }}
+            {{ t('botFlows.nodes.agent_handoff') }}
         </div>
 
         <div class="space-y-1.5">

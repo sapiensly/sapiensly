@@ -116,7 +116,7 @@ const endData = computed(() => props.node.data as EndNodeConfig);
 // Connector: list of targets (start + all menu nodes)
 const connectorTargets = computed(() => {
     const targets: { id: string; label: string }[] = [
-        { id: '__start__', label: t('flows.panel.connector_to_start') },
+        { id: '__start__', label: t('botFlows.panel.connector_to_start') },
     ];
 
     for (const n of props.allNodes) {
@@ -258,7 +258,7 @@ function onAgentCreated(agentId: string, agentName: string) {
             <h3
                 class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
             >
-                {{ t('flows.panel.title') }}
+                {{ t('botFlows.panel.title') }}
             </h3>
             <button
                 type="button"
@@ -273,7 +273,7 @@ function onAgentCreated(agentId: string, agentName: string) {
             <!-- Start Node -->
             <template v-if="nodeType === 'start'">
                 <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.trigger') }}</Label>
+                    <Label>{{ t('botFlows.panel.trigger') }}</Label>
                     <Select
                         :model-value="startData.trigger"
                         @update:model-value="update({ trigger: $event })"
@@ -284,24 +284,24 @@ function onAgentCreated(agentId: string, agentName: string) {
                         <SelectContent>
                             <SelectItem value="conversation_start">
                                 {{
-                                    t('flows.panel.trigger_conversation_start')
+                                    t('botFlows.panel.trigger_conversation_start')
                                 }}
                             </SelectItem>
                             <SelectItem value="keyword">
-                                {{ t('flows.panel.trigger_keyword') }}
+                                {{ t('botFlows.panel.trigger_keyword') }}
                             </SelectItem>
                             <SelectItem value="always">
-                                {{ t('flows.panel.trigger_always') }}
+                                {{ t('botFlows.panel.trigger_always') }}
                             </SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
 
                 <div v-if="startData.trigger === 'keyword'" class="grid gap-2">
-                    <Label>{{ t('flows.panel.keywords') }}</Label>
+                    <Label>{{ t('botFlows.panel.keywords') }}</Label>
                     <Input
                         :model-value="(startData.keywords || []).join(', ')"
-                        :placeholder="t('flows.panel.keywords_placeholder')"
+                        :placeholder="t('botFlows.panel.keywords_placeholder')"
                         @update:model-value="
                             update({
                                 keywords: ($event as string)
@@ -317,7 +317,7 @@ function onAgentCreated(agentId: string, agentName: string) {
             <!-- Agent Node -->
             <template v-if="nodeType === 'agent'">
                 <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.agent_role') }}</Label>
+                    <Label>{{ t('botFlows.panel.agent_role') }}</Label>
                     <Select
                         :model-value="agentNodeData.role"
                         @update:model-value="changeAgentRole($event as AgentRole)"
@@ -327,23 +327,23 @@ function onAgentCreated(agentId: string, agentName: string) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="triage">
-                                {{ t('flows.panel.layer_triage') }}
+                                {{ t('botFlows.panel.layer_triage') }}
                             </SelectItem>
                             <SelectItem value="knowledge">
-                                {{ t('flows.panel.layer_knowledge') }}
+                                {{ t('botFlows.panel.layer_knowledge') }}
                             </SelectItem>
                             <SelectItem value="action">
-                                {{ t('flows.panel.layer_action') }}
+                                {{ t('botFlows.panel.layer_action') }}
                             </SelectItem>
                         </SelectContent>
                     </Select>
                     <p class="text-[11px] text-ink-subtle">
-                        {{ t('flows.panel.agent_role_hint') }}
+                        {{ t('botFlows.panel.agent_role_hint') }}
                     </p>
                 </div>
 
                 <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.agent_pick') }}</Label>
+                    <Label>{{ t('botFlows.panel.agent_pick') }}</Label>
                     <Select
                         v-if="agentsForRole.length > 0"
                         :model-value="agentNodeData.agent_id ?? ''"
@@ -351,7 +351,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                     >
                         <SelectTrigger>
                             <SelectValue
-                                :placeholder="t('flows.panel.agent_pick_placeholder')"
+                                :placeholder="t('botFlows.panel.agent_pick_placeholder')"
                             />
                         </SelectTrigger>
                         <SelectContent>
@@ -369,7 +369,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                         class="flex items-center gap-1.5 text-[11px] text-sp-warning"
                     >
                         <AlertTriangle class="size-3.5" />
-                        {{ t('flows.panel.agent_none_for_role') }}
+                        {{ t('botFlows.panel.agent_none_for_role') }}
                     </p>
                 </div>
             </template>
@@ -377,10 +377,10 @@ function onAgentCreated(agentId: string, agentName: string) {
             <!-- Menu Node -->
             <template v-if="nodeType === 'menu'">
                 <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.menu_message') }}</Label>
+                    <Label>{{ t('botFlows.panel.menu_message') }}</Label>
                     <Textarea
                         :model-value="menuData.message"
-                        :placeholder="t('flows.panel.menu_message_placeholder')"
+                        :placeholder="t('botFlows.panel.menu_message_placeholder')"
                         rows="3"
                         @update:model-value="update({ message: $event })"
                     />
@@ -388,7 +388,7 @@ function onAgentCreated(agentId: string, agentName: string) {
 
                 <div class="grid gap-2">
                     <div class="flex items-center justify-between">
-                        <Label>{{ t('flows.panel.options') }}</Label>
+                        <Label>{{ t('botFlows.panel.options') }}</Label>
                         <Button
                             variant="ghost"
                             size="sm"
@@ -396,7 +396,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                             @click="addMenuOption"
                         >
                             <Plus class="mr-1 h-3 w-3" />
-                            {{ t('flows.panel.add_option') }}
+                            {{ t('botFlows.panel.add_option') }}
                         </Button>
                     </div>
 
@@ -407,7 +407,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                     >
                         <Input
                             :model-value="option.label"
-                            :placeholder="`${t('flows.panel.option')} ${index + 1}`"
+                            :placeholder="`${t('botFlows.panel.option')} ${index + 1}`"
                             class="h-8 text-xs"
                             @update:model-value="
                                 updateMenuOption(
@@ -433,7 +433,7 @@ function onAgentCreated(agentId: string, agentName: string) {
             <!-- Condition Node -->
             <template v-if="nodeType === 'condition'">
                 <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.match_type') }}</Label>
+                    <Label>{{ t('botFlows.panel.match_type') }}</Label>
                     <Select
                         :model-value="conditionData.match_type"
                         @update:model-value="update({ match_type: $event })"
@@ -443,16 +443,16 @@ function onAgentCreated(agentId: string, agentName: string) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="exact">{{
-                                t('flows.panel.match_exact')
+                                t('botFlows.panel.match_exact')
                             }}</SelectItem>
                             <SelectItem value="contains">{{
-                                t('flows.panel.match_contains')
+                                t('botFlows.panel.match_contains')
                             }}</SelectItem>
                             <SelectItem value="regex">{{
-                                t('flows.panel.match_regex')
+                                t('botFlows.panel.match_regex')
                             }}</SelectItem>
                             <SelectItem value="llm_classification">{{
-                                t('flows.panel.match_llm')
+                                t('botFlows.panel.match_llm')
                             }}</SelectItem>
                         </SelectContent>
                     </Select>
@@ -460,7 +460,7 @@ function onAgentCreated(agentId: string, agentName: string) {
 
                 <div class="grid gap-2">
                     <div class="flex items-center justify-between">
-                        <Label>{{ t('flows.panel.rules') }}</Label>
+                        <Label>{{ t('botFlows.panel.rules') }}</Label>
                         <Button
                             variant="ghost"
                             size="sm"
@@ -468,7 +468,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                             @click="addConditionRule"
                         >
                             <Plus class="mr-1 h-3 w-3" />
-                            {{ t('flows.panel.add_rule') }}
+                            {{ t('botFlows.panel.add_rule') }}
                         </Button>
                     </div>
 
@@ -480,7 +480,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                         <div class="flex items-center gap-2">
                             <Input
                                 :model-value="rule.label"
-                                :placeholder="t('flows.panel.rule_label')"
+                                :placeholder="t('botFlows.panel.rule_label')"
                                 class="h-8 text-xs"
                                 @update:model-value="
                                     updateConditionRule(
@@ -502,7 +502,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                         </div>
                         <Input
                             :model-value="rule.pattern"
-                            :placeholder="t('flows.panel.rule_pattern')"
+                            :placeholder="t('botFlows.panel.rule_pattern')"
                             class="h-8 text-xs"
                             @update:model-value="
                                 updateConditionRule(
@@ -519,7 +519,7 @@ function onAgentCreated(agentId: string, agentName: string) {
             <!-- AI Agents Node (3-layer team: Triage / Knowledge / Tools) -->
             <template v-if="nodeType === 'agent_handoff'">
                 <p class="text-xs text-muted-foreground">
-                    {{ t('flows.panel.agents_team_description') }}
+                    {{ t('botFlows.panel.agents_team_description') }}
                 </p>
 
                 <Tabs default-value="triage" class="w-full">
@@ -529,13 +529,13 @@ function onAgentCreated(agentId: string, agentName: string) {
                                 v-if="triageMissing"
                                 class="h-3 w-3 text-amber-500"
                             />
-                            {{ t('flows.panel.layer_triage') }}
+                            {{ t('botFlows.panel.layer_triage') }}
                         </TabsTrigger>
                         <TabsTrigger value="knowledge" class="text-xs">
-                            {{ t('flows.panel.layer_knowledge') }}
+                            {{ t('botFlows.panel.layer_knowledge') }}
                         </TabsTrigger>
                         <TabsTrigger value="tools" class="text-xs">
-                            {{ t('flows.panel.layer_tools') }}
+                            {{ t('botFlows.panel.layer_tools') }}
                         </TabsTrigger>
                     </TabsList>
 
@@ -547,20 +547,20 @@ function onAgentCreated(agentId: string, agentName: string) {
                         >
                             <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
                             <p class="text-xs text-amber-800 dark:text-amber-200">
-                                {{ t('flows.panel.triage_required_warning') }}
+                                {{ t('botFlows.panel.triage_required_warning') }}
                             </p>
                         </div>
 
                         <div class="grid gap-2">
                             <Label class="text-xs">
-                                {{ t('flows.panel.layer_select_agent') }}
+                                {{ t('botFlows.panel.layer_select_agent') }}
                             </Label>
                             <Select
                                 :model-value="agentLayers.triage.agent_id ?? ''"
                                 @update:model-value="selectAgent('triage', $event as string)"
                             >
                                 <SelectTrigger class="h-8 text-xs">
-                                    <SelectValue :placeholder="t('flows.panel.layer_select_agent_placeholder')" />
+                                    <SelectValue :placeholder="t('botFlows.panel.layer_select_agent_placeholder')" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem
@@ -578,7 +578,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                         <div class="flex items-center gap-2">
                             <div class="h-px flex-1 bg-border" />
                             <span class="text-[10px] text-muted-foreground uppercase">
-                                {{ t('flows.panel.layer_or') }}
+                                {{ t('botFlows.panel.layer_or') }}
                             </span>
                             <div class="h-px flex-1 bg-border" />
                         </div>
@@ -590,7 +590,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                             @click="openCreateModal('triage')"
                         >
                             <Plus class="h-3.5 w-3.5" />
-                            {{ t('flows.panel.layer_create_agent') }}
+                            {{ t('botFlows.panel.layer_create_agent') }}
                         </Button>
                     </TabsContent>
 
@@ -603,7 +603,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                     >
                         <div class="flex items-center justify-between">
                             <Label class="text-xs">
-                                {{ t('flows.panel.layer_enabled') }}
+                                {{ t('botFlows.panel.layer_enabled') }}
                             </Label>
                             <Switch
                                 :model-value="agentLayers[layer].enabled"
@@ -616,14 +616,14 @@ function onAgentCreated(agentId: string, agentName: string) {
                         <template v-if="agentLayers[layer].enabled">
                             <div class="grid gap-2">
                                 <Label class="text-xs">
-                                    {{ t('flows.panel.layer_select_agent') }}
+                                    {{ t('botFlows.panel.layer_select_agent') }}
                                 </Label>
                                 <Select
                                     :model-value="agentLayers[layer].agent_id ?? ''"
                                     @update:model-value="selectAgent(layer, $event as string)"
                                 >
                                     <SelectTrigger class="h-8 text-xs">
-                                        <SelectValue :placeholder="t('flows.panel.layer_select_agent_placeholder')" />
+                                        <SelectValue :placeholder="t('botFlows.panel.layer_select_agent_placeholder')" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -641,7 +641,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                             <div class="flex items-center gap-2">
                                 <div class="h-px flex-1 bg-border" />
                                 <span class="text-[10px] text-muted-foreground uppercase">
-                                    {{ t('flows.panel.layer_or') }}
+                                    {{ t('botFlows.panel.layer_or') }}
                                 </span>
                                 <div class="h-px flex-1 bg-border" />
                             </div>
@@ -653,7 +653,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                                 @click="openCreateModal(layer)"
                             >
                                 <Plus class="h-3.5 w-3.5" />
-                                {{ t('flows.panel.layer_create_agent') }}
+                                {{ t('botFlows.panel.layer_create_agent') }}
                             </Button>
                         </template>
 
@@ -661,7 +661,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                             v-else
                             class="rounded-md bg-muted/50 px-3 py-2 text-xs italic text-muted-foreground"
                         >
-                            {{ t('flows.panel.layer_disabled_hint') }}
+                            {{ t('botFlows.panel.layer_disabled_hint') }}
                         </p>
                     </TabsContent>
                 </Tabs>
@@ -680,10 +680,10 @@ function onAgentCreated(agentId: string, agentName: string) {
             <!-- Message Node -->
             <template v-if="nodeType === 'message'">
                 <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.message_text') }}</Label>
+                    <Label>{{ t('botFlows.panel.message_text') }}</Label>
                     <Textarea
                         :model-value="messageData.message"
-                        :placeholder="t('flows.panel.message_placeholder')"
+                        :placeholder="t('botFlows.panel.message_placeholder')"
                         rows="4"
                         @update:model-value="update({ message: $event })"
                     />
@@ -693,13 +693,13 @@ function onAgentCreated(agentId: string, agentName: string) {
             <!-- Connector Node -->
             <template v-if="nodeType === 'connector'">
                 <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.connector_target') }}</Label>
+                    <Label>{{ t('botFlows.panel.connector_target') }}</Label>
                     <Select
                         :model-value="connectorData.target_node_id"
                         @update:model-value="selectConnectorTarget($event as string)"
                     >
                         <SelectTrigger>
-                            <SelectValue :placeholder="t('flows.panel.connector_target_placeholder')" />
+                            <SelectValue :placeholder="t('botFlows.panel.connector_target_placeholder')" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem
@@ -713,14 +713,14 @@ function onAgentCreated(agentId: string, agentName: string) {
                     </Select>
                 </div>
                 <p class="text-xs text-muted-foreground">
-                    {{ t('flows.panel.connector_description') }}
+                    {{ t('botFlows.panel.connector_description') }}
                 </p>
             </template>
 
             <!-- End Node -->
             <template v-if="nodeType === 'end'">
                 <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.end_action') }}</Label>
+                    <Label>{{ t('botFlows.panel.end_action') }}</Label>
                     <Select
                         :model-value="endData.action"
                         @update:model-value="update({ action: $event })"
@@ -730,20 +730,20 @@ function onAgentCreated(agentId: string, agentName: string) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="resume_conversation">
-                                {{ t('flows.panel.end_resume') }}
+                                {{ t('botFlows.panel.end_resume') }}
                             </SelectItem>
                             <SelectItem value="close_conversation">
-                                {{ t('flows.panel.end_close') }}
+                                {{ t('botFlows.panel.end_close') }}
                             </SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
 
                 <div class="grid gap-2">
-                    <Label>{{ t('flows.panel.end_message') }}</Label>
+                    <Label>{{ t('botFlows.panel.end_message') }}</Label>
                     <Textarea
                         :model-value="endData.message || ''"
-                        :placeholder="t('flows.panel.end_message_placeholder')"
+                        :placeholder="t('botFlows.panel.end_message_placeholder')"
                         rows="2"
                         @update:model-value="update({ message: $event })"
                     />
@@ -759,7 +759,7 @@ function onAgentCreated(agentId: string, agentName: string) {
                 @click="emit('removeNode', node.id)"
             >
                 <Trash2 class="size-3.5" />
-                {{ t('flows.panel.delete_node') }}
+                {{ t('botFlows.panel.delete_node') }}
             </button>
         </div>
     </div>
