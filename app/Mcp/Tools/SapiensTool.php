@@ -5,6 +5,7 @@ namespace App\Mcp\Tools;
 use App\Mcp\McpContext;
 use App\Models\App;
 use App\Models\User;
+use Illuminate\Support\Str;
 use Laravel\Mcp\Server\Tool;
 
 /**
@@ -20,6 +21,15 @@ abstract class SapiensTool extends Tool
 {
     /** The token ability required to use this tool; null = no specific ability. */
     protected const ABILITY = null;
+
+    /**
+     * Expose a clean snake_case name (e.g. ReadManifestTool -> "read_manifest")
+     * so tool names match how the instructions/descriptions refer to them.
+     */
+    public function name(): string
+    {
+        return (string) Str::of(class_basename($this))->beforeLast('Tool')->snake();
+    }
 
     /**
      * Registered only when the request's token grants this tool's ability.
