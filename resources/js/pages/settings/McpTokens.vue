@@ -6,7 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, KeyRound, Plug, Trash2 } from '@lucide/vue';
+import {
+    CheckCircle2,
+    ExternalLink,
+    Globe,
+    KeyRound,
+    Plug,
+    Trash2,
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -79,13 +86,59 @@ function formatDate(value: string | null): string {
 
     <SettingsLayout>
         <div class="space-y-4">
+            <!-- Claude web connects over OAuth — no token needed, just the URL. -->
+            <SettingsCard
+                :icon="Globe"
+                :title="t('settings.mcp.web_title')"
+                :description="t('settings.mcp.web_hint')"
+                tint="var(--sp-spectrum-indigo)"
+            >
+                <div class="space-y-3">
+                    <div class="space-y-1.5">
+                        <Label>{{ t('settings.mcp.server_url') }}</Label>
+                        <div class="flex gap-2">
+                            <Input
+                                :model-value="serverUrl"
+                                class="h-9 font-mono"
+                                readonly
+                            />
+                            <button
+                                type="button"
+                                class="h-9 shrink-0 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                                @click="copy(serverUrl, 'url')"
+                            >
+                                {{
+                                    copied === 'url'
+                                        ? t('settings.mcp.copied')
+                                        : t('settings.mcp.copy')
+                                }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-ink-muted">
+                        {{ t('settings.mcp.web_steps') }}
+                    </p>
+
+                    <a
+                        href="https://claude.ai/settings/connectors"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex h-9 items-center gap-2 rounded-xs border border-soft px-3 text-[13px] font-medium text-ink transition-colors hover:bg-surface"
+                    >
+                        <ExternalLink class="size-4" />
+                        {{ t('settings.mcp.web_open_connectors') }}
+                    </a>
+                </div>
+            </SettingsCard>
+
             <!-- One-time reveal of a freshly created token. -->
             <SettingsCard
                 v-if="justCreatedToken"
                 :icon="CheckCircle2"
                 :title="t('settings.mcp.created_title')"
                 :description="t('settings.mcp.created_hint')"
-                tint="var(--sp-accent-green)"
+                tint="var(--sp-spectrum-cyan)"
             >
                 <div class="space-y-3">
                     <div class="space-y-1.5">
