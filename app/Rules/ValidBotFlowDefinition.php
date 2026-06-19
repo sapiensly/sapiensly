@@ -81,8 +81,26 @@ class ValidBotFlowDefinition implements ValidationRule
             }
         }
 
+        // Validate agent nodes declare the roster: each binds a real agent and
+        // a role the orchestrator resolves handoffs against.
+        $validRoles = ['triage', 'knowledge', 'action'];
+        foreach ($nodes as $node) {
+            if (($node['type'] ?? null) === 'agent') {
+                if (empty($node['data']['agent_id'])) {
+                    $fail("Agent node {$node['id']} must reference an agent_id.");
+
+                    return;
+                }
+                if (! in_array($node['data']['role'] ?? null, $validRoles, true)) {
+                    $fail("Agent node {$node['id']} must have a role of triage, knowledge, or action.");
+
+                    return;
+                }
+            }
+        }
+
         // Validate valid node types
-        $validTypes = ['start', 'menu', 'condition', 'agent_handoff', 'message', 'connector', 'end'];
+        $validTypes = ['start', 'menu', 'condition', 'agent', 'agent_handoff', 'message', 'connector', 'end'];
         foreach ($nodes as $node) {
             if (! in_array($node['type'], $validTypes)) {
                 $fail("Node {$node['id']} has invalid type {$node['type']}.");

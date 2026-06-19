@@ -72,6 +72,36 @@ test('rejects invalid node type', function () {
     ]))->toBeFalse();
 });
 
+test('accepts agent node with agent_id and valid role', function () {
+    expect(validateDefinition([
+        'nodes' => [
+            ['id' => 'node_start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => []],
+            ['id' => 'node_agent', 'type' => 'agent', 'position' => ['x' => 0, 'y' => 100], 'data' => ['agent_id' => 'agent_123', 'role' => 'triage']],
+        ],
+        'edges' => [],
+    ]))->toBeTrue();
+});
+
+test('rejects agent node without agent_id', function () {
+    expect(validateDefinition([
+        'nodes' => [
+            ['id' => 'node_start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => []],
+            ['id' => 'node_agent', 'type' => 'agent', 'position' => ['x' => 0, 'y' => 100], 'data' => ['role' => 'triage']],
+        ],
+        'edges' => [],
+    ]))->toBeFalse();
+});
+
+test('rejects agent node with invalid role', function () {
+    expect(validateDefinition([
+        'nodes' => [
+            ['id' => 'node_start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => []],
+            ['id' => 'node_agent', 'type' => 'agent', 'position' => ['x' => 0, 'y' => 100], 'data' => ['agent_id' => 'agent_123', 'role' => 'supervisor']],
+        ],
+        'edges' => [],
+    ]))->toBeFalse();
+});
+
 test('accepts complete flow definition', function () {
     expect(validateDefinition([
         'nodes' => [

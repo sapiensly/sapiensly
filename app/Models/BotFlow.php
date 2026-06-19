@@ -60,6 +60,46 @@ class BotFlow extends Model
         return $this->belongsTo(Chatbot::class);
     }
 
+    /**
+     * The agent roster declared by this flow's `agent` nodes, keyed by role.
+     * The orchestrator resolves handoffs (target_agent) against this map.
+     *
+     * @return array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}
+     */
+    public function roster(): array
+    {
+        $byRole = [];
+        foreach ($this->definition['nodes'] ?? [] as $node) {
+            if (($node['type'] ?? null) !== 'agent') {
+                continue;
+            }
+            $role = $node['data']['role'] ?? null;
+            $agentId = $node['data']['agent_id'] ?? null;
+            if ($role !== null && $agentId !== null && ! isset($byRole[$role])) {
+                $byRole[$role] = $agentId;
+            }
+        }
+
+        $agents = Agent::query()->whereIn('id', array_values($byRole))->get()->keyBy('id');
+
+        return [
+            'triage' => isset($byRole['triage']) ? $agents->get($byRole['triage']) : null,
+            'knowledge' => isset($byRole['knowledge']) ? $agents->get($byRole['knowledge']) : null,
+            'action' => isset($byRole['action']) ? $agents->get($byRole['action']) : null,
+        ];
+    }
+
+    /**
+     * Distinct agents declared by this flow, nulls removed.
+     * A single-agent roster runs as direct LLM chat (no orchestration).
+     *
+     * @return list<Agent>
+     */
+    public function rosterAgents(): array
+    {
+        return array_values(array_filter($this->roster()));
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', BotFlowStatus::Active);
