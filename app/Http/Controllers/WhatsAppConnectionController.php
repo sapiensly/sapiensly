@@ -9,6 +9,7 @@ use App\Http\Requests\WhatsApp\StoreWhatsAppConnectionRequest;
 use App\Http\Requests\WhatsApp\UpdateWhatsAppConnectionRequest;
 use App\Models\Agent;
 use App\Models\AgentTeam;
+use App\Models\BotFlow;
 use App\Models\Channel;
 use App\Models\WhatsAppConnection;
 use Illuminate\Http\RedirectResponse;
@@ -66,7 +67,7 @@ class WhatsAppConnectionController extends Controller
                 'status' => ChannelStatus::Draft,
             ]);
 
-            return WhatsAppConnection::create([
+            $connection = WhatsAppConnection::create([
                 'channel_id' => $channel->id,
                 'display_phone_number' => $request->validated('display_phone_number'),
                 'phone_number_id' => $request->validated('phone_number_id'),
@@ -84,6 +85,12 @@ class WhatsAppConnectionController extends Controller
                     'graph_api_version' => $request->input('auth.graph_api_version') ?: 'v20.0',
                 ], fn ($v) => $v !== null && $v !== ''),
             ]);
+
+            // The WhatsApp bot's agents live in its Bot Flow.
+            $connection->setRelation('channel', $channel);
+            BotFlow::blankForWhatsApp($connection);
+
+            return $connection;
         });
 
         return to_route('whatsapp.connections.show', $connection);

@@ -22,6 +22,7 @@ class BotFlow extends Model
         'organization_id',
         'agent_id',
         'chatbot_id',
+        'whatsapp_connection_id',
         'name',
         'description',
         'status',
@@ -58,6 +59,11 @@ class BotFlow extends Model
     public function chatbot(): BelongsTo
     {
         return $this->belongsTo(Chatbot::class);
+    }
+
+    public function whatsAppConnection(): BelongsTo
+    {
+        return $this->belongsTo(WhatsAppConnection::class, 'whatsapp_connection_id');
     }
 
     /**
@@ -106,12 +112,36 @@ class BotFlow extends Model
      */
     public static function blankForChatbot(Chatbot $chatbot): self
     {
+        return self::blankForOwner(['chatbot_id' => $chatbot->id], $chatbot->user_id, $chatbot->organization_id, $chatbot->visibility, $chatbot->name);
+    }
+
+    /**
+     * The blank Bot Flow a WhatsApp connection owns from creation.
+     */
+    public static function blankForWhatsApp(WhatsAppConnection $connection): self
+    {
+        $channel = $connection->channel;
+
+        return self::blankForOwner(
+            ['whatsapp_connection_id' => $connection->id],
+            $channel?->user_id,
+            $channel?->organization_id,
+            $channel?->visibility ?? Visibility::Private,
+            $channel?->name ?? 'WhatsApp',
+        );
+    }
+
+    /**
+     * @param  array<string, string>  $owner
+     */
+    private static function blankForOwner(array $owner, ?int $userId, ?string $organizationId, Visibility $visibility, string $name): self
+    {
         return self::create([
-            'user_id' => $chatbot->user_id,
-            'organization_id' => $chatbot->organization_id,
-            'visibility' => $chatbot->visibility,
-            'chatbot_id' => $chatbot->id,
-            'name' => $chatbot->name,
+            ...$owner,
+            'user_id' => $userId,
+            'organization_id' => $organizationId,
+            'visibility' => $visibility,
+            'name' => $name,
             'status' => BotFlowStatus::Draft,
             'definition' => [
                 'nodes' => [

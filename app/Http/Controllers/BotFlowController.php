@@ -14,6 +14,7 @@ use App\Models\Chatbot;
 use App\Models\KnowledgeBase;
 use App\Models\Tool;
 use App\Models\User;
+use App\Models\WhatsAppConnection;
 use App\Services\AiProviderService;
 use App\Services\BotFlows\BotFlowScaffolder;
 use Illuminate\Http\JsonResponse;
@@ -89,6 +90,22 @@ class BotFlowController extends Controller
             'agent' => null,
             'flow' => $flow,
             'chatbot' => $chatbot->only(['id', 'name']),
+            ...$this->getEditorProps($request->user()),
+        ]);
+    }
+
+    /**
+     * Edit the Bot Flow owned by a WhatsApp connection (visual builder).
+     */
+    public function editForWhatsApp(Request $request, WhatsAppConnection $whatsappConnection): Response
+    {
+        $this->authorize('update', $whatsappConnection);
+
+        $flow = $whatsappConnection->botFlow ?? BotFlow::blankForWhatsApp($whatsappConnection);
+
+        return Inertia::render('bot-flows/Edit', [
+            'agent' => null,
+            'flow' => $flow,
             ...$this->getEditorProps($request->user()),
         ]);
     }

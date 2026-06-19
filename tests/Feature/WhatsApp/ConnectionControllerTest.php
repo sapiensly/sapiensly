@@ -81,6 +81,45 @@ test('store creates a channel + connection and redirects to show', function () {
     ]);
 });
 
+test('store provisions a Bot Flow the connection owns', function () {
+    $user = actingWhatsAppUser();
+    $agent = Agent::factory()->standalone()->active()->forUser($user)->create();
+
+    $this->actingAs($user)
+        ->post(route('whatsapp.connections.store'), [
+            'name' => 'WA Bot',
+            'display_phone_number' => '+15551234999',
+            'phone_number_id' => '19991230000000',
+            'business_account_id' => '9998887776',
+            'agent_id' => $agent->id,
+            'auth' => [
+                'access_token' => 'EAA',
+                'app_id' => '1234',
+                'app_secret' => 'sekret-hash',
+                'graph_api_version' => 'v20.0',
+            ],
+        ])->assertRedirect();
+
+    $connection = WhatsAppConnection::where('phone_number_id', '19991230000000')->first();
+
+    expect($connection->botFlow)->not->toBeNull()
+        ->and($connection->botFlow->whatsapp_connection_id)->toBe($connection->id);
+});
+
+test('the WhatsApp flow editor renders and creates a flow on first open', function () {
+    $user = actingWhatsAppUser();
+    $channel = Channel::factory()->whatsapp()->forUser($user)->create();
+    $connection = WhatsAppConnection::factory()->forChannel($channel)->create();
+
+    expect($connection->botFlow)->toBeNull();
+
+    $this->actingAs($user)
+        ->get(route('whatsapp.connections.flow.edit', $connection))
+        ->assertOk();
+
+    expect($connection->fresh()->botFlow)->not->toBeNull();
+});
+
 test('store rejects a duplicate phone_number_id', function () {
     $user = actingWhatsAppUser();
     $agent = Agent::factory()->standalone()->active()->forUser($user)->create();

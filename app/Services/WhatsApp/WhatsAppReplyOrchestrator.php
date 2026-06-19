@@ -5,6 +5,7 @@ namespace App\Services\WhatsApp;
 use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\AgentTeam;
+use App\Models\BotFlow;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\WhatsAppConversation;
@@ -41,15 +42,19 @@ class WhatsAppReplyOrchestrator
 
     public function reply(WhatsAppConversation $conversation): void
     {
-        $conversation->loadMissing('channel.agent', 'channel.agentTeam');
+        $conversation->loadMissing('channel.agent', 'channel.agentTeam', 'channel.whatsAppConnection.botFlow');
         $channel = $conversation->channel;
 
         if ($channel === null) {
             return;
         }
 
-        $target = $channel->getTarget();
-        if ($target === null) {
+        // Prefer the connection's Bot Flow roster; fall back to the legacy target.
+        $flow = $channel->whatsAppConnection?->botFlow;
+        $roster = $flow?->rosterAgents() ?? [];
+        $target = $roster === [] ? $channel->getTarget() : null;
+
+        if ($roster === [] && $target === null) {
             Log::channel('whatsapp')->warning('orchestrator.no_target', [
                 'conversation_id' => $conversation->id,
                 'channel_id' => $channel->id,
@@ -68,11 +73,12 @@ class WhatsAppReplyOrchestrator
         $synthetic = $this->buildSyntheticConversation($conversation, $messages);
 
         try {
-            if ($target instanceof AgentTeam) {
-                $reply = $this->runTeam($target, $synthetic, $userMessage);
-            } else {
-                $reply = $this->runAgent($target, $messages);
-            }
+            $reply = match (true) {
+                count($roster) > 1 => $this->runBotFlow($flow, $synthetic, $userMessage),
+                count($roster) === 1 => $this->runAgent($roster[0], $messages),
+                $target instanceof AgentTeam => $this->runTeam($target, $synthetic, $userMessage),
+                default => $this->runAgent($target, $messages),
+            };
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->error('orchestrator.failed', [
                 'conversation_id' => $conversation->id,
@@ -156,6 +162,22 @@ class WhatsAppReplyOrchestrator
         }
 
         return $this->llmService->chat($agent, $messageModels);
+    }
+
+    private function runBotFlow(BotFlow $flow, Conversation $synthetic, string $userMessage): string
+    {
+        $reply = '';
+
+        foreach ($this->orchestrationService->orchestrateBotFlow($flow, $synthetic, $userMessage) as $event) {
+            match ($event['type'] ?? null) {
+                'content' => $reply .= (string) ($event['content'] ?? ''),
+                'flow_message' => $reply .= (string) ($event['content'] ?? ''),
+                'flow_menu' => $reply = $this->formatFlowMenu($event, $reply),
+                default => null,
+            };
+        }
+
+        return trim($reply);
     }
 
     private function runTeam(AgentTeam $team, Conversation $synthetic, string $userMessage): string

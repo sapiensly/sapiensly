@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * The satellite model for a WhatsApp channel. Holds Meta Cloud API-specific
@@ -63,6 +64,11 @@ class WhatsAppConnection extends Model
     public function channel(): BelongsTo
     {
         return $this->belongsTo(Channel::class);
+    }
+
+    public function botFlow(): HasOne
+    {
+        return $this->hasOne(BotFlow::class, 'whatsapp_connection_id');
     }
 
     public function templates(): HasMany

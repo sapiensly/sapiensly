@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BotFlowController;
 use App\Http\Controllers\WhatsAppAnalyticsController;
 use App\Http\Controllers\WhatsAppConnectionController;
 use App\Http\Controllers\WhatsAppConversationController;
@@ -13,6 +14,7 @@ Route::middleware(['auth', 'verified'])->prefix('system/whatsapp')->name('whatsa
     Route::post('/', [WhatsAppConnectionController::class, 'store'])->name('connections.store');
     Route::get('/{whatsapp_connection}', [WhatsAppConnectionController::class, 'show'])->name('connections.show');
     Route::get('/{whatsapp_connection}/edit', [WhatsAppConnectionController::class, 'edit'])->name('connections.edit');
+    Route::get('/{whatsapp_connection}/flow/edit', [BotFlowController::class, 'editForWhatsApp'])->name('connections.flow.edit');
     Route::put('/{whatsapp_connection}', [WhatsAppConnectionController::class, 'update'])->name('connections.update');
     Route::delete('/{whatsapp_connection}', [WhatsAppConnectionController::class, 'destroy'])->name('connections.destroy');
 
