@@ -87,6 +87,8 @@ export interface AgentHandoffNodeConfig {
     target_agent: 'knowledge' | 'action' | 'triage_llm';
     context?: string;
     message?: string;
+    /** UI mode: a single agent (default) vs the Triage/Knowledge/Tools team. */
+    mode?: 'agent' | 'multi_agent';
     layers?: {
         triage: AgentLayerConfig;
         knowledge: AgentLayerConfig;

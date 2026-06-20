@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AgentCreateModal from '@/components/bot-flows/AgentCreateModal.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,11 +18,11 @@ import type {
     AgentLayerConfig,
     AgentNodeConfig,
     AgentRole,
+    BotFlowNodeType,
     ConditionNodeConfig,
     ConditionRule,
     ConnectorNodeConfig,
     EndNodeConfig,
-    BotFlowNodeType,
     HumanHandoffNodeConfig,
     InputNodeConfig,
     InputType,
@@ -30,9 +31,8 @@ import type {
     MessageNodeConfig,
     StartNodeConfig,
 } from '@/types/botFlows';
-import AgentCreateModal from '@/components/bot-flows/AgentCreateModal.vue';
-import type { Node } from '@vue-flow/core';
 import { AlertTriangle, Plus, Trash2, X } from '@lucide/vue';
+import type { Node } from '@vue-flow/core';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -114,7 +114,9 @@ const selectAgentForNode = (agentId: string) => {
 const messageData = computed(() => props.node.data as MessageNodeConfig);
 const connectorData = computed(() => props.node.data as ConnectorNodeConfig);
 const inputData = computed(() => props.node.data as InputNodeConfig);
-const humanHandoffData = computed(() => props.node.data as HumanHandoffNodeConfig);
+const humanHandoffData = computed(
+    () => props.node.data as HumanHandoffNodeConfig,
+);
 const endData = computed(() => props.node.data as EndNodeConfig);
 
 // Connector: list of targets (start + all menu nodes)
@@ -203,7 +205,8 @@ const agentLayers = computed(() => {
 });
 
 const triageMissing = computed(
-    () => agentLayers.value.triage.enabled && !agentLayers.value.triage.agent_id,
+    () =>
+        agentLayers.value.triage.enabled && !agentLayers.value.triage.agent_id,
 );
 
 function updateLayer(
@@ -228,6 +231,65 @@ const layerAgentType: Record<string, 'triage' | 'knowledge' | 'action'> = {
 
 function agentsForLayer(layer: 'triage' | 'knowledge' | 'tools') {
     return props.availableAgents[layerAgentType[layer]] ?? [];
+}
+
+// --- Agent vs MultiAgent mode ---
+
+/** Every available agent across roles, de-duplicated — for single-agent mode. */
+const allAgents = computed<AgentRef[]>(() => {
+    const seen = new Set<string>();
+    const out: AgentRef[] = [];
+    for (const list of [
+        props.availableAgents.triage,
+        props.availableAgents.knowledge,
+        props.availableAgents.action,
+    ]) {
+        for (const a of list) {
+            if (!seen.has(a.id)) {
+                seen.add(a.id);
+                out.push(a);
+            }
+        }
+    }
+    return out;
+});
+
+/** 'agent' (single) by default; legacy nodes with extra layers infer 'multi_agent'. */
+const agentMode = computed<'agent' | 'multi_agent'>(() => {
+    const mode = (props.node.data as AgentHandoffNodeConfig).mode;
+    if (mode === 'agent' || mode === 'multi_agent') {
+        return mode;
+    }
+    return agentLayers.value.knowledge.enabled ||
+        agentLayers.value.tools.enabled
+        ? 'multi_agent'
+        : 'agent';
+});
+
+function setAgentMode(mode: 'agent' | 'multi_agent') {
+    if (mode === 'agent') {
+        // Single-agent: keep the (triage) agent as the bot's brain, turn the
+        // optional layers off so the underlying roster stays single.
+        update({
+            mode,
+            layers: {
+                triage: { ...agentLayers.value.triage, enabled: true },
+                knowledge: { ...agentLayers.value.knowledge, enabled: false },
+                tools: { ...agentLayers.value.tools, enabled: false },
+            },
+        });
+    } else {
+        update({ mode });
+    }
+}
+
+function selectSingleAgent(agentId: string) {
+    const agent = allAgents.value.find((a) => a.id === agentId);
+    updateLayer('triage', {
+        enabled: true,
+        agent_id: agentId || null,
+        agent_name: agent?.name ?? null,
+    });
 }
 
 // Create agent modal state
@@ -258,7 +320,9 @@ function onAgentCreated(agentId: string, agentName: string) {
 
 <template>
     <div class="flex h-full w-[320px] flex-col border-l border-soft bg-navy">
-        <div class="flex items-center justify-between border-b border-soft px-3 py-3">
+        <div
+            class="flex items-center justify-between border-b border-soft px-3 py-3"
+        >
             <h3
                 class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
             >
@@ -288,7 +352,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                         <SelectContent>
                             <SelectItem value="conversation_start">
                                 {{
-                                    t('botFlows.panel.trigger_conversation_start')
+                                    t(
+                                        'botFlows.panel.trigger_conversation_start',
+                                    )
                                 }}
                             </SelectItem>
                             <SelectItem value="keyword">
@@ -324,7 +390,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                     <Label>{{ t('botFlows.panel.agent_role') }}</Label>
                     <Select
                         :model-value="agentNodeData.role"
-                        @update:model-value="changeAgentRole($event as AgentRole)"
+                        @update:model-value="
+                            changeAgentRole($event as AgentRole)
+                        "
                     >
                         <SelectTrigger>
                             <SelectValue />
@@ -351,11 +419,15 @@ function onAgentCreated(agentId: string, agentName: string) {
                     <Select
                         v-if="agentsForRole.length > 0"
                         :model-value="agentNodeData.agent_id ?? ''"
-                        @update:model-value="selectAgentForNode($event as string)"
+                        @update:model-value="
+                            selectAgentForNode($event as string)
+                        "
                     >
                         <SelectTrigger>
                             <SelectValue
-                                :placeholder="t('botFlows.panel.agent_pick_placeholder')"
+                                :placeholder="
+                                    t('botFlows.panel.agent_pick_placeholder')
+                                "
                             />
                         </SelectTrigger>
                         <SelectContent>
@@ -384,7 +456,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                     <Label>{{ t('botFlows.panel.menu_message') }}</Label>
                     <Textarea
                         :model-value="menuData.message"
-                        :placeholder="t('botFlows.panel.menu_message_placeholder')"
+                        :placeholder="
+                            t('botFlows.panel.menu_message_placeholder')
+                        "
                         rows="3"
                         @update:model-value="update({ message: $event })"
                     />
@@ -522,13 +596,94 @@ function onAgentCreated(agentId: string, agentName: string) {
 
             <!-- AI Agents Node (3-layer team: Triage / Knowledge / Tools) -->
             <template v-if="nodeType === 'agent_handoff'">
-                <p class="text-xs text-muted-foreground">
-                    {{ t('botFlows.panel.agents_team_description') }}
-                </p>
+                <!-- Mode toggle: a single Agent (default) vs a Multi-agent team. -->
+                <div
+                    class="grid grid-cols-2 gap-1 rounded-md border border-soft p-0.5"
+                >
+                    <button
+                        v-for="m in ['agent', 'multi_agent'] as const"
+                        :key="m"
+                        type="button"
+                        class="rounded-[5px] px-2 py-1.5 text-xs font-medium transition-colors"
+                        :class="
+                            agentMode === m
+                                ? 'bg-accent-blue/15 text-ink'
+                                : 'text-ink-muted hover:text-ink'
+                        "
+                        @click="setAgentMode(m)"
+                    >
+                        {{
+                            m === 'agent'
+                                ? t('botFlows.panel.mode_agent')
+                                : t('botFlows.panel.mode_multi_agent')
+                        }}
+                    </button>
+                </div>
 
-                <Tabs default-value="triage" class="w-full">
+                <!-- Single-agent mode -->
+                <template v-if="agentMode === 'agent'">
+                    <p class="text-xs text-muted-foreground">
+                        {{ t('botFlows.panel.mode_agent_description') }}
+                    </p>
+
+                    <div class="grid gap-2">
+                        <Label class="text-xs">
+                            {{ t('botFlows.panel.layer_select_agent') }}
+                        </Label>
+                        <Select
+                            :model-value="agentLayers.triage.agent_id ?? ''"
+                            @update:model-value="
+                                selectSingleAgent($event as string)
+                            "
+                        >
+                            <SelectTrigger class="h-8 text-xs">
+                                <SelectValue
+                                    :placeholder="
+                                        t(
+                                            'botFlows.panel.layer_select_agent_placeholder',
+                                        )
+                                    "
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="a in allAgents"
+                                    :key="a.id"
+                                    :value="a.id"
+                                >
+                                    {{ a.name }}
+                                    <span class="ml-1 text-muted-foreground"
+                                        >({{ a.model }})</span
+                                    >
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <div class="h-px flex-1 bg-border" />
+                        <span
+                            class="text-[10px] text-muted-foreground uppercase"
+                        >
+                            {{ t('botFlows.panel.layer_or') }}
+                        </span>
+                        <div class="h-px flex-1 bg-border" />
+                    </div>
+
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="w-full gap-1.5 text-xs"
+                        @click="openCreateModal('triage')"
+                    >
+                        <Plus class="h-3.5 w-3.5" />
+                        {{ t('botFlows.panel.layer_create_agent') }}
+                    </Button>
+                </template>
+
+                <Tabs v-else default-value="triage" class="w-full">
                     <TabsList class="grid w-full grid-cols-3">
-                        <TabsTrigger value="triage" class="text-xs gap-1">
+                        <TabsTrigger value="triage" class="gap-1 text-xs">
                             <AlertTriangle
                                 v-if="triageMissing"
                                 class="h-3 w-3 text-amber-500"
@@ -549,9 +704,15 @@ function onAgentCreated(agentId: string, agentName: string) {
                             v-if="triageMissing"
                             class="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950"
                         >
-                            <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                            <p class="text-xs text-amber-800 dark:text-amber-200">
-                                {{ t('botFlows.panel.triage_required_warning') }}
+                            <AlertTriangle
+                                class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                            />
+                            <p
+                                class="text-xs text-amber-800 dark:text-amber-200"
+                            >
+                                {{
+                                    t('botFlows.panel.triage_required_warning')
+                                }}
                             </p>
                         </div>
 
@@ -561,10 +722,18 @@ function onAgentCreated(agentId: string, agentName: string) {
                             </Label>
                             <Select
                                 :model-value="agentLayers.triage.agent_id ?? ''"
-                                @update:model-value="selectAgent('triage', $event as string)"
+                                @update:model-value="
+                                    selectAgent('triage', $event as string)
+                                "
                             >
                                 <SelectTrigger class="h-8 text-xs">
-                                    <SelectValue :placeholder="t('botFlows.panel.layer_select_agent_placeholder')" />
+                                    <SelectValue
+                                        :placeholder="
+                                            t(
+                                                'botFlows.panel.layer_select_agent_placeholder',
+                                            )
+                                        "
+                                    />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem
@@ -573,7 +742,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                                         :value="a.id"
                                     >
                                         {{ a.name }}
-                                        <span class="ml-1 text-muted-foreground">({{ a.model }})</span>
+                                        <span class="ml-1 text-muted-foreground"
+                                            >({{ a.model }})</span
+                                        >
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
@@ -581,7 +752,9 @@ function onAgentCreated(agentId: string, agentName: string) {
 
                         <div class="flex items-center gap-2">
                             <div class="h-px flex-1 bg-border" />
-                            <span class="text-[10px] text-muted-foreground uppercase">
+                            <span
+                                class="text-[10px] text-muted-foreground uppercase"
+                            >
                                 {{ t('botFlows.panel.layer_or') }}
                             </span>
                             <div class="h-px flex-1 bg-border" />
@@ -600,7 +773,7 @@ function onAgentCreated(agentId: string, agentName: string) {
 
                     <!-- Knowledge & Tools: optional, toggle -->
                     <TabsContent
-                        v-for="layer in (['knowledge', 'tools'] as const)"
+                        v-for="layer in ['knowledge', 'tools'] as const"
                         :key="layer"
                         :value="layer"
                         class="space-y-3 pt-3"
@@ -612,7 +785,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                             <Switch
                                 :model-value="agentLayers[layer].enabled"
                                 @update:model-value="
-                                    updateLayer(layer, { enabled: $event as boolean })
+                                    updateLayer(layer, {
+                                        enabled: $event as boolean,
+                                    })
                                 "
                             />
                         </div>
@@ -623,11 +798,21 @@ function onAgentCreated(agentId: string, agentName: string) {
                                     {{ t('botFlows.panel.layer_select_agent') }}
                                 </Label>
                                 <Select
-                                    :model-value="agentLayers[layer].agent_id ?? ''"
-                                    @update:model-value="selectAgent(layer, $event as string)"
+                                    :model-value="
+                                        agentLayers[layer].agent_id ?? ''
+                                    "
+                                    @update:model-value="
+                                        selectAgent(layer, $event as string)
+                                    "
                                 >
                                     <SelectTrigger class="h-8 text-xs">
-                                        <SelectValue :placeholder="t('botFlows.panel.layer_select_agent_placeholder')" />
+                                        <SelectValue
+                                            :placeholder="
+                                                t(
+                                                    'botFlows.panel.layer_select_agent_placeholder',
+                                                )
+                                            "
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
@@ -636,7 +821,10 @@ function onAgentCreated(agentId: string, agentName: string) {
                                             :value="a.id"
                                         >
                                             {{ a.name }}
-                                            <span class="ml-1 text-muted-foreground">({{ a.model }})</span>
+                                            <span
+                                                class="ml-1 text-muted-foreground"
+                                                >({{ a.model }})</span
+                                            >
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
@@ -644,7 +832,9 @@ function onAgentCreated(agentId: string, agentName: string) {
 
                             <div class="flex items-center gap-2">
                                 <div class="h-px flex-1 bg-border" />
-                                <span class="text-[10px] text-muted-foreground uppercase">
+                                <span
+                                    class="text-[10px] text-muted-foreground uppercase"
+                                >
                                     {{ t('botFlows.panel.layer_or') }}
                                 </span>
                                 <div class="h-px flex-1 bg-border" />
@@ -663,7 +853,7 @@ function onAgentCreated(agentId: string, agentName: string) {
 
                         <p
                             v-else
-                            class="rounded-md bg-muted/50 px-3 py-2 text-xs italic text-muted-foreground"
+                            class="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground italic"
                         >
                             {{ t('botFlows.panel.layer_disabled_hint') }}
                         </p>
@@ -700,7 +890,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                     <Label>{{ t('botFlows.panel.input_prompt') }}</Label>
                     <Textarea
                         :model-value="inputData.prompt"
-                        :placeholder="t('botFlows.panel.input_prompt_placeholder')"
+                        :placeholder="
+                            t('botFlows.panel.input_prompt_placeholder')
+                        "
                         rows="3"
                         @update:model-value="update({ prompt: $event })"
                     />
@@ -710,7 +902,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                     <Label>{{ t('botFlows.panel.input_variable') }}</Label>
                     <Input
                         :model-value="inputData.variable"
-                        :placeholder="t('botFlows.panel.input_variable_placeholder')"
+                        :placeholder="
+                            t('botFlows.panel.input_variable_placeholder')
+                        "
                         @update:model-value="update({ variable: $event })"
                     />
                     <p class="text-[11px] text-ink-subtle">
@@ -722,7 +916,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                     <Label>{{ t('botFlows.panel.input_type') }}</Label>
                     <Select
                         :model-value="inputData.input_type ?? 'text'"
-                        @update:model-value="update({ input_type: $event as InputType })"
+                        @update:model-value="
+                            update({ input_type: $event as InputType })
+                        "
                     >
                         <SelectTrigger>
                             <SelectValue />
@@ -748,7 +944,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                     <Label>{{ t('botFlows.panel.input_error_message') }}</Label>
                     <Input
                         :model-value="inputData.error_message || ''"
-                        :placeholder="t('botFlows.panel.input_error_message_placeholder')"
+                        :placeholder="
+                            t('botFlows.panel.input_error_message_placeholder')
+                        "
                         @update:model-value="update({ error_message: $event })"
                     />
                 </div>
@@ -761,29 +959,43 @@ function onAgentCreated(agentId: string, agentName: string) {
                 </p>
 
                 <div class="grid gap-2">
-                    <Label>{{ t('botFlows.panel.human_handoff_message') }}</Label>
+                    <Label>{{
+                        t('botFlows.panel.human_handoff_message')
+                    }}</Label>
                     <Textarea
                         :model-value="humanHandoffData.message || ''"
-                        :placeholder="t('botFlows.panel.human_handoff_message_placeholder')"
+                        :placeholder="
+                            t(
+                                'botFlows.panel.human_handoff_message_placeholder',
+                            )
+                        "
                         rows="2"
                         @update:model-value="update({ message: $event })"
                     />
                 </div>
 
                 <div class="grid gap-2">
-                    <Label>{{ t('botFlows.panel.human_handoff_reason') }}</Label>
+                    <Label>{{
+                        t('botFlows.panel.human_handoff_reason')
+                    }}</Label>
                     <Input
                         :model-value="humanHandoffData.reason || ''"
-                        :placeholder="t('botFlows.panel.human_handoff_reason_placeholder')"
+                        :placeholder="
+                            t('botFlows.panel.human_handoff_reason_placeholder')
+                        "
                         @update:model-value="update({ reason: $event })"
                     />
                 </div>
 
                 <div class="flex items-center justify-between">
-                    <Label>{{ t('botFlows.panel.human_handoff_notify') }}</Label>
+                    <Label>{{
+                        t('botFlows.panel.human_handoff_notify')
+                    }}</Label>
                     <Switch
                         :model-value="humanHandoffData.notify ?? true"
-                        @update:model-value="update({ notify: $event as boolean })"
+                        @update:model-value="
+                            update({ notify: $event as boolean })
+                        "
                     />
                 </div>
             </template>
@@ -794,10 +1006,18 @@ function onAgentCreated(agentId: string, agentName: string) {
                     <Label>{{ t('botFlows.panel.connector_target') }}</Label>
                     <Select
                         :model-value="connectorData.target_node_id"
-                        @update:model-value="selectConnectorTarget($event as string)"
+                        @update:model-value="
+                            selectConnectorTarget($event as string)
+                        "
                     >
                         <SelectTrigger>
-                            <SelectValue :placeholder="t('botFlows.panel.connector_target_placeholder')" />
+                            <SelectValue
+                                :placeholder="
+                                    t(
+                                        'botFlows.panel.connector_target_placeholder',
+                                    )
+                                "
+                            />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem
@@ -841,7 +1061,9 @@ function onAgentCreated(agentId: string, agentName: string) {
                     <Label>{{ t('botFlows.panel.end_message') }}</Label>
                     <Textarea
                         :model-value="endData.message || ''"
-                        :placeholder="t('botFlows.panel.end_message_placeholder')"
+                        :placeholder="
+                            t('botFlows.panel.end_message_placeholder')
+                        "
                         rows="2"
                         @update:model-value="update({ message: $event })"
                     />
