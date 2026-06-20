@@ -136,9 +136,18 @@ class SapiensServer extends Server
      */
     protected function icons(): array
     {
-        return [
-            Icon::from(url('favicon.svg'), 'image/svg+xml'),
-            Icon::from(url('favicon/android-chrome-512x512.png'), 'image/png', ['512x512']),
-        ];
+        $icons = [];
+
+        // Inline the mark as a data URI so the client never has to fetch it
+        // (no CORS / redirect / 404 failure mode). The MCP spec allows data URIs.
+        $svg = @file_get_contents(public_path('favicon.svg'));
+        if ($svg !== false) {
+            $icons[] = Icon::from('data:image/svg+xml;base64,'.base64_encode($svg), 'image/svg+xml');
+        }
+
+        // Raster fallback (absolute URL) for clients that don't render SVG.
+        $icons[] = Icon::from(url('favicon/android-chrome-512x512.png'), 'image/png', ['512x512']);
+
+        return $icons;
     }
 }

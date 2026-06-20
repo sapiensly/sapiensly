@@ -66,7 +66,7 @@ it('advertises the Sapiensly icon in serverInfo', function () {
     $icons = $server->resolvedIcons();
 
     expect($icons)->not->toBeEmpty()
-        ->and($icons[0]->src)->toContain('favicon.svg');
+        ->and($icons[0]->src)->toStartWith('data:image/svg+xml;base64,');
 });
 
 it('exposes snake_case tool names without the Tool suffix', function () {
