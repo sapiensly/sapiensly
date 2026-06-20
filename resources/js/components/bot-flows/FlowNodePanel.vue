@@ -22,6 +22,9 @@ import type {
     ConnectorNodeConfig,
     EndNodeConfig,
     BotFlowNodeType,
+    HumanHandoffNodeConfig,
+    InputNodeConfig,
+    InputType,
     MenuNodeConfig,
     MenuOption,
     MessageNodeConfig,
@@ -93,7 +96,6 @@ const nodeType = computed(() => props.node.type as BotFlowNodeType);
 const startData = computed(() => props.node.data as StartNodeConfig);
 const menuData = computed(() => props.node.data as MenuNodeConfig);
 const conditionData = computed(() => props.node.data as ConditionNodeConfig);
-const agentData = computed(() => props.node.data as AgentHandoffNodeConfig);
 const agentNodeData = computed(() => props.node.data as AgentNodeConfig);
 
 const agentsForRole = computed(
@@ -111,6 +113,8 @@ const selectAgentForNode = (agentId: string) => {
 };
 const messageData = computed(() => props.node.data as MessageNodeConfig);
 const connectorData = computed(() => props.node.data as ConnectorNodeConfig);
+const inputData = computed(() => props.node.data as InputNodeConfig);
+const humanHandoffData = computed(() => props.node.data as HumanHandoffNodeConfig);
 const endData = computed(() => props.node.data as EndNodeConfig);
 
 // Connector: list of targets (start + all menu nodes)
@@ -686,6 +690,100 @@ function onAgentCreated(agentId: string, agentName: string) {
                         :placeholder="t('botFlows.panel.message_placeholder')"
                         rows="4"
                         @update:model-value="update({ message: $event })"
+                    />
+                </div>
+            </template>
+
+            <!-- Input Node -->
+            <template v-if="nodeType === 'input'">
+                <div class="grid gap-2">
+                    <Label>{{ t('botFlows.panel.input_prompt') }}</Label>
+                    <Textarea
+                        :model-value="inputData.prompt"
+                        :placeholder="t('botFlows.panel.input_prompt_placeholder')"
+                        rows="3"
+                        @update:model-value="update({ prompt: $event })"
+                    />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label>{{ t('botFlows.panel.input_variable') }}</Label>
+                    <Input
+                        :model-value="inputData.variable"
+                        :placeholder="t('botFlows.panel.input_variable_placeholder')"
+                        @update:model-value="update({ variable: $event })"
+                    />
+                    <p class="text-[11px] text-ink-subtle">
+                        {{ t('botFlows.panel.input_variable_hint') }}
+                    </p>
+                </div>
+
+                <div class="grid gap-2">
+                    <Label>{{ t('botFlows.panel.input_type') }}</Label>
+                    <Select
+                        :model-value="inputData.input_type ?? 'text'"
+                        @update:model-value="update({ input_type: $event as InputType })"
+                    >
+                        <SelectTrigger>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="text">
+                                {{ t('botFlows.panel.input_type_text') }}
+                            </SelectItem>
+                            <SelectItem value="email">
+                                {{ t('botFlows.panel.input_type_email') }}
+                            </SelectItem>
+                            <SelectItem value="number">
+                                {{ t('botFlows.panel.input_type_number') }}
+                            </SelectItem>
+                            <SelectItem value="phone">
+                                {{ t('botFlows.panel.input_type_phone') }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div class="grid gap-2">
+                    <Label>{{ t('botFlows.panel.input_error_message') }}</Label>
+                    <Input
+                        :model-value="inputData.error_message || ''"
+                        :placeholder="t('botFlows.panel.input_error_message_placeholder')"
+                        @update:model-value="update({ error_message: $event })"
+                    />
+                </div>
+            </template>
+
+            <!-- Human Handoff Node -->
+            <template v-if="nodeType === 'human_handoff'">
+                <p class="text-xs text-muted-foreground">
+                    {{ t('botFlows.panel.human_handoff_description') }}
+                </p>
+
+                <div class="grid gap-2">
+                    <Label>{{ t('botFlows.panel.human_handoff_message') }}</Label>
+                    <Textarea
+                        :model-value="humanHandoffData.message || ''"
+                        :placeholder="t('botFlows.panel.human_handoff_message_placeholder')"
+                        rows="2"
+                        @update:model-value="update({ message: $event })"
+                    />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label>{{ t('botFlows.panel.human_handoff_reason') }}</Label>
+                    <Input
+                        :model-value="humanHandoffData.reason || ''"
+                        :placeholder="t('botFlows.panel.human_handoff_reason_placeholder')"
+                        @update:model-value="update({ reason: $event })"
+                    />
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <Label>{{ t('botFlows.panel.human_handoff_notify') }}</Label>
+                    <Switch
+                        :model-value="humanHandoffData.notify ?? true"
+                        @update:model-value="update({ notify: $event as boolean })"
                     />
                 </div>
             </template>

@@ -22,20 +22,22 @@ class BotFlowScaffolder
     private const SYSTEM = <<<'SYS'
         You design conversational customer-support bots.
         Given a description, respond with ONLY a single minified JSON object — no markdown, no code fences, no commentary — using exactly this schema:
-        {"welcome_message": string, "roles": string[], "menu": {"message": string, "options": [{"label": string, "route_role": string|null}]} | null}
+        {"welcome_message": string, "roles": string[], "collect": [{"prompt": string, "variable": string, "input_type": "text"|"email"|"number"|"phone"}] | null, "menu": {"message": string, "options": [{"label": string, "route_role": "knowledge"|"action"|"human"|null}]} | null}
         - roles: any of "triage" (routes the conversation), "knowledge" (answers from docs), "action" (runs tasks/tools). Include only the roles the bot actually needs.
+        - collect: details to capture from the user up front (e.g. name, email) before the menu. Each needs a short prompt, a snake_case variable, and an input_type. Use null when there is nothing to collect. At most 3.
         - menu: a starting menu, or null if the bot should just talk. At most 4 options.
-        - route_role: for a menu option, one of "knowledge" or "action" to hand off there, or null for a general option.
+        - route_role: for a menu option, "knowledge" or "action" to hand off to that agent, "human" to escalate to a human agent, or null for a general option.
         SYS;
 
     private const CONVERSE_SYSTEM = <<<'SYS'
         You help a user design a conversational customer-support bot through chat.
         You are given the current flow spec and the conversation so far. Respond with ONLY a single minified JSON object — no markdown, no code fences, no commentary — using exactly this schema:
-        {"reply": string, "spec": {"welcome_message": string, "roles": string[], "menu": {"message": string, "options": [{"label": string, "route_role": string|null}]} | null}}
+        {"reply": string, "spec": {"welcome_message": string, "roles": string[], "collect": [{"prompt": string, "variable": string, "input_type": "text"|"email"|"number"|"phone"}] | null, "menu": {"message": string, "options": [{"label": string, "route_role": "knowledge"|"action"|"human"|null}]} | null}}
         - reply: a short, friendly message to the user describing what you changed.
         - spec: the COMPLETE updated flow (not a diff) reflecting all changes requested so far. Keep prior content unless the user asked to change it.
         - roles: any of "triage", "knowledge", "action" — only those the bot needs.
-        - menu: a menu (max 4 options) or null. route_role is "knowledge", "action", or null.
+        - collect: details to capture before the menu (max 3), each with a prompt, snake_case variable, and input_type; or null.
+        - menu: a menu (max 4 options) or null. route_role is "knowledge", "action", "human", or null.
         SYS;
 
     public function __construct(
@@ -173,7 +175,7 @@ class BotFlowScaffolder
 
     /**
      * @param  array<string, mixed>  $decoded
-     * @return array{welcome_message: string, roles: array<int, string>, menu: array{message: string, options: array<int, array{label: string, route_role: ?string}>}|null}
+     * @return array{welcome_message: string, roles: array<int, string>, collect: array<int, array{prompt: string, variable: string, input_type: string}>, menu: array{message: string, options: array<int, array{label: string, route_role: ?string}>}|null}
      */
     private function normalizeSpec(array $decoded): array
     {
@@ -185,8 +187,43 @@ class BotFlowScaffolder
         return [
             'welcome_message' => (string) ($decoded['welcome_message'] ?? ''),
             'roles' => $roles ?: ['triage'],
+            'collect' => $this->normalizeCollect($decoded['collect'] ?? null),
             'menu' => $this->normalizeMenu($decoded['menu'] ?? null),
         ];
+    }
+
+    /**
+     * Normalize the up-front data-capture fields. Each becomes an input node;
+     * the variable is slugified so the captured value has a safe, stable key.
+     *
+     * @return array<int, array{prompt: string, variable: string, input_type: string}>
+     */
+    private function normalizeCollect(mixed $collect): array
+    {
+        if (! is_array($collect)) {
+            return [];
+        }
+
+        $fields = [];
+        foreach (array_slice($collect, 0, 3) as $i => $field) {
+            if (! is_array($field)) {
+                continue;
+            }
+
+            $variable = trim((string) preg_replace('/[^a-z0-9_]+/', '_', mb_strtolower((string) ($field['variable'] ?? ''))), '_');
+            if ($variable === '') {
+                continue;
+            }
+
+            $type = $field['input_type'] ?? 'text';
+            $fields[] = [
+                'prompt' => (string) ($field['prompt'] ?? ('Please provide '.$variable.'.')),
+                'variable' => $variable,
+                'input_type' => in_array($type, ['text', 'email', 'number', 'phone'], true) ? $type : 'text',
+            ];
+        }
+
+        return $fields;
     }
 
     /**
@@ -206,7 +243,7 @@ class BotFlowScaffolder
             $role = $opt['route_role'] ?? null;
             $options[] = [
                 'label' => (string) ($opt['label'] ?? ('Option '.($i + 1))),
-                'route_role' => in_array($role, ['knowledge', 'action'], true) ? $role : null,
+                'route_role' => in_array($role, ['knowledge', 'action', 'human'], true) ? $role : null,
             ];
         }
 
@@ -218,17 +255,17 @@ class BotFlowScaffolder
     }
 
     /**
-     * @return array{welcome_message: string, roles: array<int, string>, menu: null}
+     * @return array{welcome_message: string, roles: array<int, string>, collect: array<int, mixed>, menu: null}
      */
     private function defaultSpec(): array
     {
-        return ['welcome_message' => '', 'roles' => ['triage'], 'menu' => null];
+        return ['welcome_message' => '', 'roles' => ['triage'], 'collect' => [], 'menu' => null];
     }
 
     /**
      * Deterministically assemble a valid Bot Flow graph from a spec.
      *
-     * @param  array{welcome_message?: string, roles?: array<int, string>, menu?: array{message?: string, options?: array<int, array{label?: string, route_role?: ?string}>}|null}  $spec
+     * @param  array{welcome_message?: string, roles?: array<int, string>, collect?: array<int, array{prompt?: string, variable?: string, input_type?: string}>, menu?: array{message?: string, options?: array<int, array{label?: string, route_role?: ?string}>}|null}  $spec
      * @param  array{triage?: array, knowledge?: array, action?: array}  $availableAgents
      * @return array{nodes: array<int, array<string, mixed>>, edges: array<int, array<string, mixed>>}
      */
@@ -271,6 +308,19 @@ class BotFlowScaffolder
             $y += 130;
         }
 
+        // Up-front data capture: a chain of input nodes gathered before the menu.
+        foreach ($spec['collect'] ?? [] as $i => $field) {
+            $nodeId = 'collect_'.$i;
+            $nodes[] = ['id' => $nodeId, 'type' => 'input', 'position' => ['x' => 250, 'y' => $y], 'data' => [
+                'prompt' => (string) ($field['prompt'] ?? ''),
+                'variable' => (string) ($field['variable'] ?? ('field_'.$i)),
+                'input_type' => $field['input_type'] ?? 'text',
+            ]];
+            $addEdge($prev, $nodeId);
+            $prev = $nodeId;
+            $y += 130;
+        }
+
         $options = is_array($spec['menu']['options'] ?? null) ? array_slice($spec['menu']['options'], 0, 4) : [];
 
         if ($options !== []) {
@@ -287,6 +337,9 @@ class BotFlowScaffolder
                 if (in_array($role, ['knowledge', 'action'], true)) {
                     $nodes[] = ['id' => 'handoff_'.$i, 'type' => 'agent_handoff', 'position' => ['x' => 80 + $i * 190, 'y' => $y], 'data' => ['target_agent' => $role]];
                     $addEdge('menu', 'handoff_'.$i, 'option_'.$i);
+                } elseif ($role === 'human') {
+                    $nodes[] = ['id' => 'human_'.$i, 'type' => 'human_handoff', 'position' => ['x' => 80 + $i * 190, 'y' => $y], 'data' => ['notify' => true]];
+                    $addEdge('menu', 'human_'.$i, 'option_'.$i);
                 } else {
                     $nodes[] = ['id' => 'end_'.$i, 'type' => 'end', 'position' => ['x' => 80 + $i * 190, 'y' => $y], 'data' => ['action' => 'resume_conversation']];
                     $addEdge('menu', 'end_'.$i, 'option_'.$i);

@@ -69,6 +69,8 @@ class BotFlowExecutorService
             'agent_handoff' => $this->processAgentHandoff($flowState, $currentNode),
             'message' => $this->processMessageNode($flow, $flowState, $currentNode),
             'connector' => $this->processConnectorNode($flow, $flowState, $currentNode),
+            'input' => $this->processInputNode($flow, $flowState, $currentNode, $userInput),
+            'human_handoff' => $this->humanHandoff($flowState, $currentNode),
             'end' => $this->endFlow($flowState, $currentNode['data']['action'] ?? 'resume_conversation'),
             default => $this->endFlow($flowState, 'resume_conversation'),
         };
@@ -107,6 +109,8 @@ class BotFlowExecutorService
             'message' => $this->processMessageNode($flow, $flowState, $node),
             'connector' => $this->processConnectorNode($flow, $flowState, $node),
             'agent_handoff' => $this->processAgentHandoff($flowState, $node),
+            'input' => $this->promptInput($flowState, $node),
+            'human_handoff' => $this->humanHandoff($flowState, $node),
             'end' => $this->endFlow($flowState, $node['data']['action'] ?? 'resume_conversation'),
             'condition' => new BotFlowAction(
                 BotFlowActionType::ShowMenu, // Condition nodes wait for input
@@ -207,6 +211,97 @@ class BotFlowExecutorService
             ],
             $flowState
         );
+    }
+
+    /**
+     * Emit the prompt for an input node and wait for the user's reply. The
+     * current node stays put (like a menu) so the next turn lands back here in
+     * processInputNode to capture the answer.
+     */
+    private function promptInput(array $flowState, array $node): BotFlowAction
+    {
+        return new BotFlowAction(
+            BotFlowActionType::CollectInput,
+            [
+                'prompt' => $node['data']['prompt'] ?? '',
+                'variable' => $node['data']['variable'] ?? 'input',
+                'input_type' => $node['data']['input_type'] ?? 'text',
+            ],
+            $flowState
+        );
+    }
+
+    /**
+     * Capture the user's reply into the flow's variable bag, then follow the
+     * outgoing edge. Re-prompts (without advancing) when the value fails the
+     * node's input_type validation.
+     */
+    private function processInputNode(BotFlow $flow, array $flowState, array $node, string $userInput): BotFlowAction
+    {
+        $variable = $node['data']['variable'] ?? 'input';
+        $inputType = $node['data']['input_type'] ?? 'text';
+        $value = trim($userInput);
+
+        if (! $this->isValidInput($inputType, $value)) {
+            return new BotFlowAction(
+                BotFlowActionType::CollectInput,
+                [
+                    'prompt' => $node['data']['error_message'] ?? $node['data']['prompt'] ?? '',
+                    'variable' => $variable,
+                    'input_type' => $inputType,
+                    'invalid' => true,
+                ],
+                $flowState
+            );
+        }
+
+        $variables = $flowState['variables'] ?? [];
+        $variables[$variable] = $value;
+        $flowState['variables'] = $variables;
+
+        $edges = $flow->getEdgesFrom($node['id']);
+        if (empty($edges)) {
+            return $this->endFlow($flowState, 'resume_conversation');
+        }
+
+        return $this->advanceToNode($flow, $flowState, $edges[0]['target']);
+    }
+
+    /**
+     * Terminate the flow and signal that a human should take over. Escalation is
+     * persisted by the channel layer that consumes the HumanHandoff action.
+     */
+    private function humanHandoff(array $flowState, array $node): BotFlowAction
+    {
+        $flowState['completed'] = true;
+
+        return new BotFlowAction(
+            BotFlowActionType::HumanHandoff,
+            [
+                'message' => $node['data']['message'] ?? null,
+                'reason' => $node['data']['reason'] ?? null,
+                'notify' => $node['data']['notify'] ?? true,
+            ],
+            $flowState
+        );
+    }
+
+    /**
+     * Validate captured input against the node's declared type. An empty value
+     * never passes — the node re-prompts until the user supplies something.
+     */
+    private function isValidInput(string $type, string $value): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+
+        return match ($type) {
+            'email' => filter_var($value, FILTER_VALIDATE_EMAIL) !== false,
+            'number' => is_numeric($value),
+            'phone' => (bool) preg_match('/^[0-9+\-()\s]{7,}$/', $value),
+            default => true,
+        };
     }
 
     private function processMessageNode(BotFlow $flow, array $flowState, array $node): BotFlowAction

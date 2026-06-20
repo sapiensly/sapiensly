@@ -85,6 +85,105 @@ test('processes message node and follows edge', function () {
     expect($action->data['message'])->toBe('Let me help you with your return.');
 });
 
+test('input node prompts for a value then waits', function () {
+    $flow = BotFlow::factory()->create([
+        'definition' => [
+            'nodes' => [
+                ['id' => 'start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => ['trigger' => 'conversation_start']],
+                ['id' => 'ask', 'type' => 'input', 'position' => ['x' => 0, 'y' => 100], 'data' => ['prompt' => 'Your email?', 'variable' => 'email', 'input_type' => 'email']],
+                ['id' => 'done', 'type' => 'end', 'position' => ['x' => 0, 'y' => 200], 'data' => ['action' => 'resume_conversation']],
+            ],
+            'edges' => [
+                ['id' => 'e1', 'source' => 'start', 'target' => 'ask'],
+                ['id' => 'e2', 'source' => 'ask', 'target' => 'done'],
+            ],
+        ],
+    ]);
+
+    $state = $this->executor->initializeFlow($flow);
+    $action = $this->executor->processInput($flow, $state, '');
+
+    expect($action->type)->toBe(BotFlowActionType::CollectInput);
+    expect($action->data['prompt'])->toBe('Your email?');
+    expect($action->data['variable'])->toBe('email');
+    // Still parked on the input node, waiting for the reply.
+    expect($action->updatedState['current_node_id'])->toBe('ask');
+});
+
+test('input node captures a valid value into flow variables and advances', function () {
+    $flow = BotFlow::factory()->create([
+        'definition' => [
+            'nodes' => [
+                ['id' => 'start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => ['trigger' => 'conversation_start']],
+                ['id' => 'ask', 'type' => 'input', 'position' => ['x' => 0, 'y' => 100], 'data' => ['prompt' => 'Your email?', 'variable' => 'email', 'input_type' => 'email']],
+                ['id' => 'done', 'type' => 'end', 'position' => ['x' => 0, 'y' => 200], 'data' => ['action' => 'close_conversation']],
+            ],
+            'edges' => [
+                ['id' => 'e1', 'source' => 'start', 'target' => 'ask'],
+                ['id' => 'e2', 'source' => 'ask', 'target' => 'done'],
+            ],
+        ],
+    ]);
+
+    $state = $this->executor->initializeFlow($flow);
+    $prompt = $this->executor->processInput($flow, $state, '');
+
+    $action = $this->executor->processInput($flow, $prompt->updatedState, 'jane@example.com');
+
+    expect($action->type)->toBe(BotFlowActionType::End);
+    expect($action->data['action'])->toBe('close_conversation');
+    expect($action->updatedState['variables']['email'])->toBe('jane@example.com');
+});
+
+test('input node re-prompts when the value fails type validation', function () {
+    $flow = BotFlow::factory()->create([
+        'definition' => [
+            'nodes' => [
+                ['id' => 'start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => ['trigger' => 'conversation_start']],
+                ['id' => 'ask', 'type' => 'input', 'position' => ['x' => 0, 'y' => 100], 'data' => ['prompt' => 'Your email?', 'variable' => 'email', 'input_type' => 'email', 'error_message' => 'Bad email.']],
+                ['id' => 'done', 'type' => 'end', 'position' => ['x' => 0, 'y' => 200], 'data' => ['action' => 'resume_conversation']],
+            ],
+            'edges' => [
+                ['id' => 'e1', 'source' => 'start', 'target' => 'ask'],
+                ['id' => 'e2', 'source' => 'ask', 'target' => 'done'],
+            ],
+        ],
+    ]);
+
+    $state = $this->executor->initializeFlow($flow);
+    $prompt = $this->executor->processInput($flow, $state, '');
+
+    $action = $this->executor->processInput($flow, $prompt->updatedState, 'not-an-email');
+
+    expect($action->type)->toBe(BotFlowActionType::CollectInput);
+    expect($action->data['prompt'])->toBe('Bad email.');
+    expect($action->data['invalid'])->toBeTrue();
+    expect($action->updatedState)->not->toHaveKey('variables');
+});
+
+test('human handoff node ends the flow and signals escalation', function () {
+    $flow = BotFlow::factory()->create([
+        'definition' => [
+            'nodes' => [
+                ['id' => 'start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => ['trigger' => 'conversation_start']],
+                ['id' => 'human', 'type' => 'human_handoff', 'position' => ['x' => 0, 'y' => 100], 'data' => ['message' => 'Connecting you…', 'reason' => 'requested human', 'notify' => true]],
+            ],
+            'edges' => [
+                ['id' => 'e1', 'source' => 'start', 'target' => 'human'],
+            ],
+        ],
+    ]);
+
+    $state = $this->executor->initializeFlow($flow);
+    $action = $this->executor->processInput($flow, $state, '');
+
+    expect($action->type)->toBe(BotFlowActionType::HumanHandoff);
+    expect($action->data['message'])->toBe('Connecting you…');
+    expect($action->data['reason'])->toBe('requested human');
+    expect($action->data['notify'])->toBeTrue();
+    expect($action->updatedState['completed'])->toBeTrue();
+});
+
 test('condition node with exact match', function () {
     $flow = BotFlow::factory()->create([
         'definition' => [

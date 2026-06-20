@@ -102,6 +102,56 @@ test('rejects agent node with invalid role', function () {
     ]))->toBeFalse();
 });
 
+test('rejects agent_handoff with an invalid target_agent', function () {
+    expect(validateDefinition([
+        'nodes' => [
+            ['id' => 'node_start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => []],
+            ['id' => 'node_handoff', 'type' => 'agent_handoff', 'position' => ['x' => 0, 'y' => 100], 'data' => ['target_agent' => 'agent_01abc']],
+        ],
+        'edges' => [],
+    ]))->toBeFalse();
+});
+
+test('accepts agent_handoff with a valid target_agent role slug', function () {
+    expect(validateDefinition([
+        'nodes' => [
+            ['id' => 'node_start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => []],
+            ['id' => 'node_handoff', 'type' => 'agent_handoff', 'position' => ['x' => 0, 'y' => 100], 'data' => ['target_agent' => 'knowledge']],
+        ],
+        'edges' => [],
+    ]))->toBeTrue();
+});
+
+test('accepts an input node with a variable', function () {
+    expect(validateDefinition([
+        'nodes' => [
+            ['id' => 'node_start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => []],
+            ['id' => 'node_input', 'type' => 'input', 'position' => ['x' => 0, 'y' => 100], 'data' => ['prompt' => 'Email?', 'variable' => 'email', 'input_type' => 'email']],
+        ],
+        'edges' => [],
+    ]))->toBeTrue();
+});
+
+test('rejects an input node without a variable', function () {
+    expect(validateDefinition([
+        'nodes' => [
+            ['id' => 'node_start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => []],
+            ['id' => 'node_input', 'type' => 'input', 'position' => ['x' => 0, 'y' => 100], 'data' => ['prompt' => 'Email?']],
+        ],
+        'edges' => [],
+    ]))->toBeFalse();
+});
+
+test('accepts a human_handoff node', function () {
+    expect(validateDefinition([
+        'nodes' => [
+            ['id' => 'node_start', 'type' => 'start', 'position' => ['x' => 0, 'y' => 0], 'data' => []],
+            ['id' => 'node_human', 'type' => 'human_handoff', 'position' => ['x' => 0, 'y' => 100], 'data' => ['message' => 'One moment…', 'notify' => true]],
+        ],
+        'edges' => [],
+    ]))->toBeTrue();
+});
+
 test('accepts complete flow definition', function () {
     expect(validateDefinition([
         'nodes' => [

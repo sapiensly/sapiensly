@@ -70,6 +70,53 @@ test('assemble produces a simple start to end flow with no menu', function () {
         ->and($types)->not->toContain('menu');
 });
 
+test('assemble emits an input chain for collected fields before the menu', function () {
+    $def = scaffolder()->assemble(
+        [
+            'welcome_message' => 'Hi!',
+            'roles' => ['triage'],
+            'collect' => [
+                ['prompt' => 'Your name?', 'variable' => 'name', 'input_type' => 'text'],
+                ['prompt' => 'Your email?', 'variable' => 'email', 'input_type' => 'email'],
+            ],
+            'menu' => null,
+        ],
+        ['triage' => [], 'knowledge' => [], 'action' => []],
+    );
+
+    expect(assembleDefinitionValid($def))->toBeTrue();
+
+    $inputs = collect($def['nodes'])->where('type', 'input')->values();
+    expect($inputs)->toHaveCount(2)
+        ->and($inputs[0]['data']['variable'])->toBe('name')
+        ->and($inputs[1]['data']['variable'])->toBe('email')
+        ->and($inputs[1]['data']['input_type'])->toBe('email');
+
+    // The capture chain is wired in sequence from the welcome message.
+    $sources = collect($def['edges'])->pluck('target')->all();
+    expect($sources)->toContain($inputs[0]['id'])->toContain($inputs[1]['id']);
+});
+
+test('assemble routes a human menu option to a human_handoff node', function () {
+    $def = scaffolder()->assemble(
+        [
+            'roles' => ['triage'],
+            'menu' => [
+                'message' => 'How can I help?',
+                'options' => [
+                    ['label' => 'FAQ', 'route_role' => 'knowledge'],
+                    ['label' => 'Talk to a human', 'route_role' => 'human'],
+                ],
+            ],
+        ],
+        ['triage' => [], 'knowledge' => [], 'action' => []],
+    );
+
+    expect(assembleDefinitionValid($def))->toBeTrue();
+    $types = array_column($def['nodes'], 'type');
+    expect($types)->toContain('human_handoff')->toContain('agent_handoff');
+});
+
 test('assemble always emits exactly one start node', function () {
     $def = scaffolder()->assemble(['roles' => [], 'menu' => null], ['triage' => [], 'knowledge' => [], 'action' => []]);
 

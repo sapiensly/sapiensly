@@ -6,6 +6,8 @@ export type BotFlowNodeType =
     | 'agent_handoff'
     | 'message'
     | 'connector'
+    | 'input'
+    | 'human_handoff'
     | 'end';
 
 export type AgentRole = 'triage' | 'knowledge' | 'action';
@@ -28,6 +30,8 @@ export interface BotFlowNodeData {
         | AgentHandoffNodeConfig
         | MessageNodeConfig
         | ConnectorNodeConfig
+        | InputNodeConfig
+        | HumanHandoffNodeConfig
         | EndNodeConfig;
 }
 
@@ -98,6 +102,28 @@ export interface ConnectorNodeConfig {
     /** '__start__' to go to flow start, or a node ID of a menu node */
     target_node_id: string;
     target_label?: string;
+}
+
+export type InputType = 'text' | 'email' | 'number' | 'phone';
+
+export interface InputNodeConfig {
+    /** The question shown to the user to elicit the value. */
+    prompt: string;
+    /** Key the captured value is stored under in the flow's variable bag. */
+    variable: string;
+    /** Validation applied to the reply; re-prompts until it passes. */
+    input_type?: InputType;
+    /** Shown when the reply fails validation. Falls back to `prompt`. */
+    error_message?: string;
+}
+
+export interface HumanHandoffNodeConfig {
+    /** Optional notice shown to the user before handing off. */
+    message?: string;
+    /** Internal note describing why the conversation was escalated. */
+    reason?: string;
+    /** Whether to notify the team of the escalation. Defaults to true. */
+    notify?: boolean;
 }
 
 export interface EndNodeConfig {

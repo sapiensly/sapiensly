@@ -9,6 +9,8 @@ import {
     GripVertical,
     ListOrdered,
     MessageSquare,
+    TextCursorInput,
+    UserRound,
 } from '@lucide/vue';
 import { type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -59,6 +61,20 @@ const items: PaletteItem[] = [
         description: 'botFlows.palette.message_description',
         icon: MessageSquare,
         tint: 'var(--sp-accent-blue)',
+    },
+    {
+        type: 'input',
+        label: 'botFlows.nodes.input',
+        description: 'botFlows.palette.input_description',
+        icon: TextCursorInput,
+        tint: 'var(--sp-accent-teal)',
+    },
+    {
+        type: 'human_handoff',
+        label: 'botFlows.nodes.human_handoff',
+        description: 'botFlows.palette.human_handoff_description',
+        icon: UserRound,
+        tint: 'var(--sp-warning)',
     },
     {
         type: 'connector',

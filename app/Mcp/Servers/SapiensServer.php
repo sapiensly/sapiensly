@@ -31,8 +31,10 @@ Build & debug apps (apps:build):
     list_workflow_proposals → approve_workflow_proposal / dismiss_workflow_proposal.
 
 Chatbots (apps:build):
-  - list_chatbots, read_bot_flow, scaffold_bot_flow (generate from a prompt),
-    update_bot_flow (persist a definition), test_bot_flow (step it with messages).
+  - list_chatbots, get_chatbot (full config + roster); bot_flow_reference (the
+    node/edge schema — read before authoring a flow); read_bot_flow,
+    scaffold_bot_flow (generate from a prompt), update_bot_flow (persist a
+    definition), test_bot_flow (step it with messages).
 
 Integrations (apps:build):
   - list_integrations, list_tools, list_connector_actions, test_tool_connection,
@@ -91,6 +93,8 @@ class SapiensServer extends Server
         Tools\Workflows\DismissWorkflowProposalTool::class,
         // Chatbots & bot flows.
         Tools\Chatbots\ListChatbotsTool::class,
+        Tools\Chatbots\GetChatbotTool::class,
+        Tools\Chatbots\BotFlowReferenceTool::class,
         Tools\Chatbots\ReadBotFlowTool::class,
         Tools\Chatbots\ScaffoldBotFlowTool::class,
         Tools\Chatbots\UpdateBotFlowTool::class,

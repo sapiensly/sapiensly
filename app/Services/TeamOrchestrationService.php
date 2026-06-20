@@ -552,7 +552,7 @@ PROMPT;
                 'message' => $action->data['message'] ?? '',
                 'options' => $action->data['options'] ?? [],
             ],
-            BotFlowActionType::SendMessage => (function () use ($action, $roster, $flow, $conversation) {
+            BotFlowActionType::SendMessage => yield from (function () use ($action, $roster, $flow, $conversation) {
                 yield ['type' => 'flow_message', 'content' => $action->data['message'] ?? ''];
 
                 // If there's a next node, auto-advance
@@ -564,7 +564,7 @@ PROMPT;
                     yield from $this->emitFlowAction($roster, $flow, $conversation, $nextAction);
                 }
             })(),
-            BotFlowActionType::AgentHandoff => (function () use ($action, $roster, $conversation) {
+            BotFlowActionType::AgentHandoff => yield from (function () use ($action, $roster, $conversation) {
                 if ($action->data['message'] ?? null) {
                     yield ['type' => 'flow_message', 'content' => $action->data['message']];
                 }
@@ -591,6 +591,27 @@ PROMPT;
                         'action' => yield from $this->executeActionWithEvents($roster, $messages, $step, $lastMessage),
                     };
                 }
+            })(),
+            BotFlowActionType::CollectInput => yield from (function () use ($action) {
+                if (($action->data['prompt'] ?? '') !== '') {
+                    yield ['type' => 'flow_message', 'content' => $action->data['prompt']];
+                }
+                yield [
+                    'type' => 'flow_await_input',
+                    'input_type' => $action->data['input_type'] ?? 'text',
+                    'variable' => $action->data['variable'] ?? 'input',
+                ];
+            })(),
+            BotFlowActionType::HumanHandoff => yield from (function () use ($action) {
+                if ($action->data['message'] ?? null) {
+                    yield ['type' => 'flow_message', 'content' => $action->data['message']];
+                }
+                yield [
+                    'type' => 'flow_human_handoff',
+                    'reason' => $action->data['reason'] ?? null,
+                    'notify' => $action->data['notify'] ?? true,
+                ];
+                yield ['type' => 'flow_end', 'action' => 'human_handoff'];
             })(),
             BotFlowActionType::End => yield [
                 'type' => 'flow_end',

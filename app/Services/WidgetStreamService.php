@@ -225,6 +225,17 @@ class WidgetStreamService
                 $toolCalls[] = [
                     'name' => $event['tool'] ?? 'unknown',
                 ];
+            } elseif ($event['type'] === 'flow_human_handoff') {
+                // A human_handoff node fired — flag the conversation for human
+                // takeover so the inbox/analytics can pick it up. The event is
+                // still forwarded to the client to render the escalation notice.
+                $metadata = $conversation->metadata ?? [];
+                $metadata['human_handoff'] = [
+                    'reason' => $event['reason'] ?? null,
+                    'notify' => $event['notify'] ?? true,
+                    'at' => now()->toISOString(),
+                ];
+                $conversation->update(['metadata' => $metadata]);
             }
         }
 

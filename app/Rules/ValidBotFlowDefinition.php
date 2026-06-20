@@ -95,8 +95,34 @@ class ValidBotFlowDefinition implements ValidationRule
             }
         }
 
+        // Validate agent_handoff nodes route to a known target. target_agent is a
+        // fixed role slug resolved against the flow roster — not an account agent id.
+        $validTargets = ['knowledge', 'action', 'triage_llm'];
+        foreach ($nodes as $node) {
+            if (($node['type'] ?? null) === 'agent_handoff') {
+                $target = $node['data']['target_agent'] ?? null;
+                if ($target !== null && ! in_array($target, $validTargets, true)) {
+                    $fail("Agent handoff node {$node['id']} has invalid target_agent '{$target}'; expected one of: ".implode(', ', $validTargets).'.');
+
+                    return;
+                }
+            }
+        }
+
+        // Validate input nodes declare a variable to store the captured value.
+        foreach ($nodes as $node) {
+            if (($node['type'] ?? null) === 'input') {
+                $variable = $node['data']['variable'] ?? null;
+                if (! is_string($variable) || trim($variable) === '') {
+                    $fail("Input node {$node['id']} must declare a non-empty 'variable' to store the captured value.");
+
+                    return;
+                }
+            }
+        }
+
         // Validate valid node types
-        $validTypes = ['start', 'menu', 'condition', 'agent', 'agent_handoff', 'message', 'connector', 'end'];
+        $validTypes = ['start', 'menu', 'condition', 'agent', 'agent_handoff', 'message', 'connector', 'end', 'input', 'human_handoff'];
         foreach ($nodes as $node) {
             if (! in_array($node['type'], $validTypes)) {
                 $fail("Node {$node['id']} has invalid type {$node['type']}.");

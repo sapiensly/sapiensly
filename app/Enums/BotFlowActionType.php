@@ -9,4 +9,6 @@ enum BotFlowActionType: string
     case AgentHandoff = 'agent_handoff';
     case End = 'end';
     case AwaitLlmClassification = 'await_llm_classification';
+    case CollectInput = 'collect_input';
+    case HumanHandoff = 'human_handoff';
 }

@@ -120,6 +120,19 @@ class BotFlowTestController extends Controller
 
                     return $state;
 
+                case BotFlowActionType::CollectInput:
+                    $messages[] = ['role' => 'assistant', 'content' => $action->data['prompt'] ?? ''];
+
+                    return $state;
+
+                case BotFlowActionType::HumanHandoff:
+                    $messages[] = [
+                        'role' => 'assistant',
+                        'content' => $action->data['message'] ?? '[Escalated to a human agent]',
+                    ];
+
+                    return $state;
+
                 case BotFlowActionType::AwaitLlmClassification:
                     $messages[] = [
                         'role' => 'assistant',

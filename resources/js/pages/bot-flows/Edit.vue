@@ -11,6 +11,8 @@ import AgentNode from '@/components/bot-flows/nodes/AgentNode.vue';
 import ConditionNode from '@/components/bot-flows/nodes/ConditionNode.vue';
 import ConnectorNode from '@/components/bot-flows/nodes/ConnectorNode.vue';
 import EndNode from '@/components/bot-flows/nodes/EndNode.vue';
+import HumanHandoffNode from '@/components/bot-flows/nodes/HumanHandoffNode.vue';
+import InputNode from '@/components/bot-flows/nodes/InputNode.vue';
 import MenuNode from '@/components/bot-flows/nodes/MenuNode.vue';
 import MessageNode from '@/components/bot-flows/nodes/MessageNode.vue';
 import StartNode from '@/components/bot-flows/nodes/StartNode.vue';
@@ -18,7 +20,7 @@ import { useBotFlowEditor } from '@/composables/useBotFlowEditor';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Agent } from '@/types/agents';
 import type { BotFlow, BotFlowDefinition, BotFlowNodeType } from '@/types/botFlows';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { VueFlow } from '@vue-flow/core';
@@ -44,6 +46,8 @@ const nodeTintMap: Record<string, string> = {
     agent: '#a855f7',
     agent_handoff: 'var(--sp-spectrum-magenta)',
     message: 'var(--sp-accent-blue)',
+    input: 'var(--sp-accent-teal)',
+    human_handoff: 'var(--sp-warning)',
     connector: 'var(--sp-spectrum-indigo)',
     end: 'var(--sp-danger)',
 };
@@ -344,6 +348,12 @@ const backUrl = props.backUrl ?? ChatbotController.index().url;
                     </template>
                     <template #node-message="nodeProps">
                         <MessageNode v-bind="nodeProps" />
+                    </template>
+                    <template #node-input="nodeProps">
+                        <InputNode v-bind="nodeProps" />
+                    </template>
+                    <template #node-human_handoff="nodeProps">
+                        <HumanHandoffNode v-bind="nodeProps" />
                     </template>
                     <template #node-connector="nodeProps">
                         <ConnectorNode v-bind="nodeProps" />

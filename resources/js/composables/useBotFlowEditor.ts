@@ -78,6 +78,10 @@ export function useBotFlowEditor(initialDefinition?: BotFlowDefinition) {
                 return { target_node_id: '__start__', target_label: '' };
             case 'message':
                 return { message: '' };
+            case 'input':
+                return { prompt: '', variable: '', input_type: 'text' };
+            case 'human_handoff':
+                return { message: '', reason: '', notify: true };
             case 'end':
                 return { action: 'resume_conversation' };
             default:
