@@ -1,6 +1,13 @@
 <?php
 
+use App\Enums\MembershipRole;
+use App\Enums\MembershipStatus;
+use App\Models\McpAccessToken;
+use App\Models\Organization;
+use App\Models\OrganizationMembership;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /*
@@ -47,4 +54,54 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/*
+ * Shared MCP test helpers (org-bound access), used across tests/Feature/Mcp and
+ * tests/Feature/System.
+ */
+function mcpOrg(string $name = 'Acme'): Organization
+{
+    return Organization::create([
+        'name' => $name,
+        'slug' => Str::slug($name).'-'.Str::lower(Str::random(6)),
+    ]);
+}
+
+function mcpMember(
+    Organization $org,
+    MembershipRole $role = MembershipRole::Owner,
+    ?Organization $activeOrg = null,
+): User {
+    $user = User::factory()->create([
+        'email_verified_at' => now(),
+        'organization_id' => ($activeOrg ?? $org)->id,
+    ]);
+    OrganizationMembership::create([
+        'organization_id' => $org->id,
+        'user_id' => $user->id,
+        'role' => $role,
+        'status' => MembershipStatus::Active,
+    ]);
+
+    return $user;
+}
+
+function mcpToken(Organization $org, User $user, array $attrs = []): string
+{
+    $plain = McpAccessToken::generateToken();
+    McpAccessToken::create(array_merge([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        'name' => 'cc',
+        'token' => $plain,
+    ], $attrs));
+
+    return $plain;
+}
+
+/** @return array<string, mixed> */
+function mcpToolsList(): array
+{
+    return ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'];
 }

@@ -35,7 +35,7 @@ import {
     Cloud,
     Database,
     FileText,
-    GitBranch,
+    KeyRound,
     LayoutGrid,
     MessageCircle,
     MessageSquare,
@@ -186,6 +186,13 @@ const sections = computed<NavSection[]>(() => [
                 href: IntegrationController.index().url,
                 icon: Plug,
                 match: (u) => u.startsWith('/system/integrations'),
+            },
+            {
+                key: 'mcp',
+                label: t('app_v2.nav.mcp'),
+                href: '/system/mcp',
+                icon: KeyRound,
+                match: (u) => u.startsWith('/system/mcp'),
             },
             {
                 key: 'whatsapp',

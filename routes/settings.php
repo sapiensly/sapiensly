@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Settings\McpTokenController;
 use App\Http\Controllers\Settings\OrganizationController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SsoConnectionController;
@@ -30,8 +29,4 @@ Route::middleware([
     Route::get('settings/sso', [SsoConnectionController::class, 'show'])->name('sso.show');
     Route::put('settings/sso', [SsoConnectionController::class, 'update'])->name('sso.update');
     Route::post('settings/sso/discover', [SsoConnectionController::class, 'discover'])->name('sso.discover');
-
-    Route::get('settings/mcp', [McpTokenController::class, 'show'])->name('mcp-tokens.show');
-    Route::post('settings/mcp', [McpTokenController::class, 'store'])->name('mcp-tokens.store');
-    Route::delete('settings/mcp/{mcpToken}', [McpTokenController::class, 'destroy'])->name('mcp-tokens.destroy');
 });

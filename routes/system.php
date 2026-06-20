@@ -8,6 +8,7 @@ use App\Http\Controllers\IntegrationEnvironmentController;
 use App\Http\Controllers\IntegrationExecutionController;
 use App\Http\Controllers\IntegrationRequestController;
 use App\Http\Controllers\IntegrationVariableController;
+use App\Http\Controllers\System\McpTokenController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware([
@@ -16,6 +17,10 @@ Route::middleware([
 ])->prefix('system')->group(function () {
     Route::get('ai-spend', [AiSpendController::class, 'index'])->name('system.ai-spend');
     Route::post('ai-spend/budget', [AiSpendController::class, 'updateBudget'])->name('system.ai-spend.budget');
+
+    Route::get('mcp', [McpTokenController::class, 'show'])->name('system.mcp.show');
+    Route::post('mcp', [McpTokenController::class, 'store'])->name('system.mcp.store');
+    Route::delete('mcp/{mcpToken}', [McpTokenController::class, 'destroy'])->name('system.mcp.destroy');
 
     Route::resource('ai-providers', AiProviderController::class)
         ->except(['show'])

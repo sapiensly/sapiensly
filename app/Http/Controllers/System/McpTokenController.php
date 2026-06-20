@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Settings;
+namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
 use App\Models\McpAccessToken;
@@ -10,20 +10,27 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Self-service management of a user's MCP access tokens — the bearer tokens an
- * external client (Claude Code / Claude web) uses to reach the Sapiensly MCP
- * server as this user. The raw token is shown exactly once, on creation, via a
- * flash; afterwards only a masked prefix is ever returned.
+ * Owner-managed MCP access for an organization. Tokens authenticate a user but
+ * are bound to THIS organization (and used against its per-org MCP URL); the raw
+ * token is shown once on creation. Mirrors the SSO settings surface — every
+ * action is gated by OrganizationPolicy@manageMcp.
  */
 class McpTokenController extends Controller
 {
-    public function show(Request $request): Response
+    public function show(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
+        if ($user->organization_id === null) {
+            return to_route('organization.create');
+        }
 
-        return Inertia::render('settings/McpTokens', [
+        $organization = $user->organization;
+        $this->authorize('manageMcp', $organization);
+
+        return Inertia::render('system/McpTokens', [
             'tokens' => McpAccessToken::query()
-                ->where('user_id', $user->id)
+                ->where('organization_id', $organization->id)
+                ->with('user:id,name')
                 ->latest()
                 ->get()
                 ->map(fn (McpAccessToken $token) => [
@@ -31,20 +38,23 @@ class McpTokenController extends Controller
                     'name' => $token->name,
                     'masked' => substr($token->token, 0, 8).'…',
                     'abilities' => $token->abilities,
+                    'created_by' => $token->user?->name,
                     'last_used_at' => $token->last_used_at?->toIso8601String(),
                     'created_at' => $token->created_at->toIso8601String(),
                 ])
                 ->all(),
             'abilities' => McpAccessToken::ABILITIES,
-            'serverUrl' => url('mcp/v1'),
-            // The raw token, flashed by store() exactly once, so the page can
-            // show it (and the connection snippet) before it becomes unreadable.
+            'serverUrl' => url("mcp/{$organization->slug}/v1"),
             'justCreatedToken' => $request->session()->get('plain_token'),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $user = $request->user();
+        $organization = $user->organization;
+        $this->authorize('manageMcp', $organization);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:80'],
             'abilities' => ['array'],
@@ -54,10 +64,10 @@ class McpTokenController extends Controller
         $plain = McpAccessToken::generateToken();
 
         McpAccessToken::create([
-            'user_id' => $request->user()->id,
+            'user_id' => $user->id,
+            'organization_id' => $organization->id,
             'name' => $validated['name'],
             'token' => $plain,
-            // Empty selection = all abilities (null), matching McpAccessToken::hasAbility.
             'abilities' => empty($validated['abilities']) ? null : array_values($validated['abilities']),
         ]);
 
@@ -66,7 +76,10 @@ class McpTokenController extends Controller
 
     public function destroy(Request $request, McpAccessToken $mcpToken): RedirectResponse
     {
-        abort_unless($mcpToken->user_id === $request->user()->id, 403);
+        $organization = $request->user()->organization;
+        $this->authorize('manageMcp', $organization);
+
+        abort_unless($mcpToken->organization_id === $organization?->id, 403);
 
         $mcpToken->delete();
 

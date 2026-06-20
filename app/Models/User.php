@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MembershipStatus;
 use App\Models\Concerns\UsesPlatformConnection;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -135,5 +136,22 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     public function belongsToOrganization(string $organizationId): bool
     {
         return $this->organization_id === $organizationId;
+    }
+
+    /**
+     * Whether the user currently belongs to the organization — either it is
+     * their active org or they hold an active membership in it. Used to bind an
+     * MCP credential to an org regardless of the user's active-org pointer.
+     */
+    public function isActiveMemberOf(string $organizationId): bool
+    {
+        if ($this->organization_id === $organizationId) {
+            return true;
+        }
+
+        return $this->memberships()
+            ->where('organization_id', $organizationId)
+            ->where('status', MembershipStatus::Active)
+            ->exists();
     }
 }

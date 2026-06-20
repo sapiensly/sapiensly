@@ -7,8 +7,14 @@ use App\Mcp\Tools\Build\ListAvailableComponentsTool;
 use App\Mcp\Tools\Chatbots\ListChatbotsTool;
 use App\Mcp\Tools\Integrations\ListIntegrationsTool;
 use App\Models\App;
-use App\Models\McpAccessToken;
 use App\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
+use Spatie\Permission\PermissionRegistrar;
+
+beforeEach(function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    app()[PermissionRegistrar::class]->forgetCachedPermissions();
+});
 
 /**
  * The expanded tool catalog: every tool registers and lists cleanly, the catalog
@@ -16,14 +22,13 @@ use App\Models\User;
  * within the caller's account context.
  */
 it('lists tools from every module', function () {
-    $user = User::factory()->create();
-    $plain = McpAccessToken::generateToken();
-    McpAccessToken::create(['user_id' => $user->id, 'name' => 'cc', 'token' => $plain]);
+    $org = mcpOrg();
+    $plain = mcpToken($org, mcpMember($org));
 
     // tools/list paginates; the first page proves the server boots with the
     // expanded catalog and there are more pages (nextCursor) behind it.
     $this->withToken($plain)
-        ->postJson('/mcp/v1', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])
+        ->postJson("/mcp/{$org->slug}/v1", ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])
         ->assertOk()
         ->assertSee('list_apps')
         ->assertSee('list_available_components')

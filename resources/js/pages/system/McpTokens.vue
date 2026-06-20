@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import McpTokenController from '@/actions/App/Http/Controllers/Settings/McpTokenController';
+import McpTokenController from '@/actions/App/Http/Controllers/System/McpTokenController';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import SettingsCard from '@/components/admin/SettingsCard.vue';
 import InputError from '@/components/InputError.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import SettingsLayout from '@/layouts/settings/Layout.vue';
+import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import {
     CheckCircle2,
@@ -22,6 +23,7 @@ interface TokenRow {
     name: string;
     masked: string;
     abilities: string[] | null;
+    created_by: string | null;
     last_used_at: string | null;
     created_at: string;
 }
@@ -49,7 +51,7 @@ function submit(): void {
 
 function revoke(token: TokenRow): void {
     if (
-        !window.confirm(t('settings.mcp.revoke_confirm', { name: token.name }))
+        !window.confirm(t('system.mcp.revoke_confirm', { name: token.name }))
     ) {
         return;
     }
@@ -71,31 +73,36 @@ function copy(value: string, key: string): void {
 }
 
 function abilityLabel(ability: string): string {
-    return t(`settings.mcp.abilities.${ability.replace(':', '_')}`);
+    return t(`system.mcp.abilities.${ability.replace(':', '_')}`);
 }
 
 function formatDate(value: string | null): string {
     return value
         ? new Date(value).toLocaleDateString()
-        : t('settings.mcp.never');
+        : t('system.mcp.never');
 }
 </script>
 
 <template>
-    <Head :title="t('settings.mcp.breadcrumb')" />
+    <Head :title="t('system.mcp.title')" />
 
-    <SettingsLayout>
-        <div class="space-y-4">
-            <!-- Claude web connects over OAuth — no token needed, just the URL. -->
+    <AppLayoutV2 :title="t('app_v2.nav.mcp')">
+        <div class="mx-auto max-w-5xl space-y-5">
+            <PageHeader
+                :title="t('system.mcp.title')"
+                :description="t('system.mcp.page_description')"
+            />
+
+            <!-- Claude web connects over OAuth — no token, just the org URL. -->
             <SettingsCard
                 :icon="Globe"
-                :title="t('settings.mcp.web_title')"
-                :description="t('settings.mcp.web_hint')"
+                :title="t('system.mcp.web_title')"
+                :description="t('system.mcp.web_hint')"
                 tint="var(--sp-spectrum-indigo)"
             >
                 <div class="space-y-3">
                     <div class="space-y-1.5">
-                        <Label>{{ t('settings.mcp.server_url') }}</Label>
+                        <Label>{{ t('system.mcp.server_url') }}</Label>
                         <div class="flex gap-2">
                             <Input
                                 :model-value="serverUrl"
@@ -109,15 +116,15 @@ function formatDate(value: string | null): string {
                             >
                                 {{
                                     copied === 'url'
-                                        ? t('settings.mcp.copied')
-                                        : t('settings.mcp.copy')
+                                        ? t('system.mcp.copied')
+                                        : t('system.mcp.copy')
                                 }}
                             </button>
                         </div>
                     </div>
 
                     <p class="text-xs text-ink-muted">
-                        {{ t('settings.mcp.web_steps') }}
+                        {{ t('system.mcp.web_steps') }}
                     </p>
 
                     <a
@@ -127,7 +134,7 @@ function formatDate(value: string | null): string {
                         class="inline-flex h-9 items-center gap-2 rounded-xs border border-soft px-3 text-[13px] font-medium text-ink transition-colors hover:bg-surface"
                     >
                         <ExternalLink class="size-4" />
-                        {{ t('settings.mcp.web_open_connectors') }}
+                        {{ t('system.mcp.web_open_connectors') }}
                     </a>
                 </div>
             </SettingsCard>
@@ -136,13 +143,13 @@ function formatDate(value: string | null): string {
             <SettingsCard
                 v-if="justCreatedToken"
                 :icon="CheckCircle2"
-                :title="t('settings.mcp.created_title')"
-                :description="t('settings.mcp.created_hint')"
+                :title="t('system.mcp.created_title')"
+                :description="t('system.mcp.created_hint')"
                 tint="var(--sp-spectrum-cyan)"
             >
                 <div class="space-y-3">
                     <div class="space-y-1.5">
-                        <Label>{{ t('settings.mcp.your_token') }}</Label>
+                        <Label>{{ t('system.mcp.your_token') }}</Label>
                         <div class="flex gap-2">
                             <Input
                                 :model-value="justCreatedToken"
@@ -156,17 +163,15 @@ function formatDate(value: string | null): string {
                             >
                                 {{
                                     copied === 'token'
-                                        ? t('settings.mcp.copied')
-                                        : t('settings.mcp.copy')
+                                        ? t('system.mcp.copied')
+                                        : t('system.mcp.copy')
                                 }}
                             </button>
                         </div>
                     </div>
 
                     <div class="space-y-1.5">
-                        <Label>{{
-                            t('settings.mcp.connect_claude_code')
-                        }}</Label>
+                        <Label>{{ t('system.mcp.connect_claude_code') }}</Label>
                         <div class="flex gap-2">
                             <code
                                 class="flex h-auto min-w-0 flex-1 items-center overflow-x-auto rounded-xs border border-soft bg-navy px-3 py-2 font-mono text-[11px] whitespace-nowrap text-ink-muted"
@@ -180,8 +185,8 @@ function formatDate(value: string | null): string {
                             >
                                 {{
                                     copied === 'cmd'
-                                        ? t('settings.mcp.copied')
-                                        : t('settings.mcp.copy')
+                                        ? t('system.mcp.copied')
+                                        : t('system.mcp.copy')
                                 }}
                             </button>
                         </div>
@@ -189,28 +194,28 @@ function formatDate(value: string | null): string {
                 </div>
             </SettingsCard>
 
-            <!-- Create a new token. -->
+            <!-- Create a token (Claude Code). -->
             <SettingsCard
                 :icon="KeyRound"
-                :title="t('settings.mcp.title')"
-                :description="t('settings.mcp.description')"
+                :title="t('system.mcp.title_create')"
+                :description="t('system.mcp.description')"
             >
                 <form class="space-y-4" @submit.prevent="submit">
                     <div class="space-y-1.5">
-                        <Label for="name">{{ t('settings.mcp.name') }}</Label>
+                        <Label for="name">{{ t('system.mcp.name') }}</Label>
                         <Input
                             id="name"
                             v-model="form.name"
                             class="h-9"
-                            :placeholder="t('settings.mcp.name_placeholder')"
+                            :placeholder="t('system.mcp.name_placeholder')"
                         />
                         <InputError :message="form.errors.name" />
                     </div>
 
                     <div class="space-y-2">
-                        <Label>{{ t('settings.mcp.abilities_label') }}</Label>
+                        <Label>{{ t('system.mcp.abilities_label') }}</Label>
                         <p class="text-xs text-ink-muted">
-                            {{ t('settings.mcp.abilities_hint') }}
+                            {{ t('system.mcp.abilities_hint') }}
                         </p>
                         <div class="grid gap-2 sm:grid-cols-2">
                             <label
@@ -240,7 +245,7 @@ function formatDate(value: string | null): string {
                         class="inline-flex h-9 items-center gap-2 rounded-xs bg-accent-blue px-4 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                     >
                         <Plug class="size-4" />
-                        {{ t('settings.mcp.create') }}
+                        {{ t('system.mcp.create') }}
                     </button>
                 </form>
             </SettingsCard>
@@ -248,12 +253,15 @@ function formatDate(value: string | null): string {
             <!-- Existing tokens. -->
             <SettingsCard
                 :icon="KeyRound"
-                :title="t('settings.mcp.existing_title')"
-                :description="t('settings.mcp.existing_hint')"
+                :title="t('system.mcp.existing_title')"
+                :description="t('system.mcp.existing_hint')"
                 tint="var(--sp-accent-cyan)"
             >
-                <p v-if="tokens.length === 0" class="text-xs text-ink-muted">
-                    {{ t('settings.mcp.empty') }}
+                <p
+                    v-if="tokens.length === 0"
+                    class="text-xs text-ink-muted"
+                >
+                    {{ t('system.mcp.empty') }}
                 </p>
 
                 <ul v-else class="divide-y divide-soft/60">
@@ -268,10 +276,9 @@ function formatDate(value: string | null): string {
                                     class="truncate text-[13px] font-medium text-ink"
                                     >{{ token.name }}</span
                                 >
-                                <span
-                                    class="font-mono text-xs text-ink-muted"
-                                    >{{ token.masked }}</span
-                                >
+                                <span class="font-mono text-xs text-ink-muted">{{
+                                    token.masked
+                                }}</span>
                             </div>
                             <div
                                 class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted"
@@ -279,18 +286,22 @@ function formatDate(value: string | null): string {
                                 <span>{{
                                     token.abilities && token.abilities.length
                                         ? token.abilities.join(', ')
-                                        : t('settings.mcp.all_abilities')
+                                        : t('system.mcp.all_abilities')
                                 }}</span>
+                                <span v-if="token.created_by"
+                                    >{{ t('system.mcp.created_by') }}:
+                                    {{ token.created_by }}</span
+                                >
                                 <span
-                                    >{{ t('settings.mcp.last_used') }}:
+                                    >{{ t('system.mcp.last_used') }}:
                                     {{ formatDate(token.last_used_at) }}</span
                                 >
                             </div>
                         </div>
                         <button
                             type="button"
-                            class="hover:border-accent-red/40 hover:bg-accent-red/10 hover:text-accent-red inline-flex size-8 shrink-0 items-center justify-center rounded-xs border border-soft text-ink-muted transition-colors"
-                            :title="t('settings.mcp.revoke')"
+                            class="inline-flex size-8 shrink-0 items-center justify-center rounded-xs border border-soft text-ink-muted transition-colors hover:border-accent-red/40 hover:bg-accent-red/10 hover:text-accent-red"
+                            :title="t('system.mcp.revoke')"
                             @click="revoke(token)"
                         >
                             <Trash2 class="size-4" />
@@ -299,5 +310,5 @@ function formatDate(value: string | null): string {
                 </ul>
             </SettingsCard>
         </div>
-    </SettingsLayout>
+    </AppLayoutV2>
 </template>

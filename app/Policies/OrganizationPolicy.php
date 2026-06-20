@@ -29,6 +29,15 @@ class OrganizationPolicy
         return $this->isActiveOwner($user, $organization);
     }
 
+    /**
+     * Only an active Owner may manage the org's MCP access tokens (sysadmins
+     * are short-circuited by the Gate::before hook).
+     */
+    public function manageMcp(User $user, Organization $organization): bool
+    {
+        return $this->isActiveOwner($user, $organization);
+    }
+
     private function isActiveOwner(User $user, Organization $organization): bool
     {
         return OrganizationMembership::query()
