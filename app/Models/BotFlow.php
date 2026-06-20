@@ -60,9 +60,15 @@ class BotFlow extends Model
         return $this->belongsTo(WhatsAppConnection::class, 'whatsapp_connection_id');
     }
 
+    /** Maps the agent_handoff node's editor layers to roster roles. */
+    private const LAYER_ROLES = ['triage' => 'triage', 'knowledge' => 'knowledge', 'tools' => 'action'];
+
     /**
-     * The agent roster declared by this flow's `agent` nodes, keyed by role.
-     * The orchestrator resolves handoffs (target_agent) against this map.
+     * The agent roster this flow declares, keyed by role. Two equivalent
+     * sources feed it: standalone `agent` nodes (role + agent_id), and the
+     * "AI Agents" (`agent_handoff`) node's inline `layers` set in the visual
+     * editor. The orchestrator resolves handoffs (target_agent) against this map.
+     * First-seen wins per role, so the two never fight.
      *
      * @return array{triage: ?Agent, knowledge: ?Agent, action: ?Agent}
      */
@@ -70,13 +76,22 @@ class BotFlow extends Model
     {
         $byRole = [];
         foreach ($this->definition['nodes'] ?? [] as $node) {
-            if (($node['type'] ?? null) !== 'agent') {
-                continue;
-            }
-            $role = $node['data']['role'] ?? null;
-            $agentId = $node['data']['agent_id'] ?? null;
-            if ($role !== null && $agentId !== null && ! isset($byRole[$role])) {
-                $byRole[$role] = $agentId;
+            $type = $node['type'] ?? null;
+
+            if ($type === 'agent') {
+                $role = $node['data']['role'] ?? null;
+                $agentId = $node['data']['agent_id'] ?? null;
+                if ($role !== null && $agentId !== null && ! isset($byRole[$role])) {
+                    $byRole[$role] = $agentId;
+                }
+            } elseif ($type === 'agent_handoff') {
+                foreach ($node['data']['layers'] ?? [] as $layer => $cfg) {
+                    $role = self::LAYER_ROLES[$layer] ?? null;
+                    $agentId = $cfg['agent_id'] ?? null;
+                    if ($role !== null && ($cfg['enabled'] ?? false) && $agentId !== null && ! isset($byRole[$role])) {
+                        $byRole[$role] = $agentId;
+                    }
+                }
             }
         }
 
