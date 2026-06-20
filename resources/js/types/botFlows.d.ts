@@ -60,8 +60,16 @@ export interface MenuOption {
 }
 
 export interface ConditionNodeConfig {
-    match_type: 'exact' | 'contains' | 'regex' | 'llm_classification';
+    match_type:
+        | 'exact'
+        | 'contains'
+        | 'regex'
+        | 'llm_classification'
+        | 'has_file'
+        | 'file_type_is';
     rules: ConditionRule[];
+    /** For file matches: the variable holding the file (defaults to _last_upload). */
+    variable?: string;
 }
 
 export interface ConditionRule {
@@ -106,7 +114,7 @@ export interface ConnectorNodeConfig {
     target_label?: string;
 }
 
-export type InputType = 'text' | 'email' | 'number' | 'phone';
+export type InputType = 'text' | 'email' | 'number' | 'phone' | 'file';
 
 export interface InputNodeConfig {
     /** The question shown to the user to elicit the value. */
@@ -115,6 +123,8 @@ export interface InputNodeConfig {
     variable: string;
     /** Validation applied to the reply; re-prompts until it passes. */
     input_type?: InputType;
+    /** For `file` input: accepted file kinds/types (empty = any). */
+    accept?: string[];
     /** Shown when the reply fails validation. Falls back to `prompt`. */
     error_message?: string;
 }

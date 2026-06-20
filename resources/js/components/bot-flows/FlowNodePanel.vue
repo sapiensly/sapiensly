@@ -120,6 +120,23 @@ const selectAgentForNode = (agentId: string) => {
 const messageData = computed(() => props.node.data as MessageNodeConfig);
 const connectorData = computed(() => props.node.data as ConnectorNodeConfig);
 const inputData = computed(() => props.node.data as InputNodeConfig);
+
+// Accepted-files control maps the runtime `accept` array to a single choice.
+const acceptValue = computed<string>(() => {
+    const accept = inputData.value.accept ?? [];
+    if (accept.includes('image')) {
+        return 'image';
+    }
+    if (accept.includes('document')) {
+        return 'document';
+    }
+    return 'any';
+});
+
+function setAcceptValue(value: string): void {
+    update({ accept: value === 'any' ? [] : [value] });
+}
+
 const humanHandoffData = computed(
     () => props.node.data as HumanHandoffNodeConfig,
 );
@@ -539,8 +556,23 @@ function onAgentCreated(agentId: string, agentName: string) {
                             <SelectItem value="llm_classification">{{
                                 t('botFlows.panel.match_llm')
                             }}</SelectItem>
+                            <SelectItem value="has_file">{{
+                                t('botFlows.panel.match_has_file')
+                            }}</SelectItem>
+                            <SelectItem value="file_type_is">{{
+                                t('botFlows.panel.match_file_type')
+                            }}</SelectItem>
                         </SelectContent>
                     </Select>
+                    <p
+                        v-if="
+                            conditionData.match_type === 'has_file' ||
+                            conditionData.match_type === 'file_type_is'
+                        "
+                        class="text-xs text-muted-foreground"
+                    >
+                        {{ t('botFlows.panel.match_file_hint') }}
+                    </p>
                 </div>
 
                 <div class="grid gap-2">
@@ -942,6 +974,32 @@ function onAgentCreated(agentId: string, agentName: string) {
                             </SelectItem>
                             <SelectItem value="phone">
                                 {{ t('botFlows.panel.input_type_phone') }}
+                            </SelectItem>
+                            <SelectItem value="file">
+                                {{ t('botFlows.panel.input_type_file') }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div v-if="inputData.input_type === 'file'" class="grid gap-2">
+                    <Label>{{ t('botFlows.panel.input_accept') }}</Label>
+                    <Select
+                        :model-value="acceptValue"
+                        @update:model-value="setAcceptValue($event as string)"
+                    >
+                        <SelectTrigger>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="any">
+                                {{ t('botFlows.panel.input_accept_any') }}
+                            </SelectItem>
+                            <SelectItem value="image">
+                                {{ t('botFlows.panel.input_accept_image') }}
+                            </SelectItem>
+                            <SelectItem value="document">
+                                {{ t('botFlows.panel.input_accept_document') }}
                             </SelectItem>
                         </SelectContent>
                     </Select>

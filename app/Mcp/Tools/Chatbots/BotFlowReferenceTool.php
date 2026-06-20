@@ -88,21 +88,24 @@ class BotFlowReferenceTool extends SapiensTool
                 ],
                 [
                     'type' => 'condition',
-                    'purpose' => 'Branch on the user input.',
+                    'purpose' => 'Branch on the user input — or on an uploaded file.',
                     'fields' => [
-                        'match_type' => "'exact' | 'contains' | 'regex' | 'llm_classification'",
+                        'match_type' => "'exact' | 'contains' | 'regex' | 'llm_classification' | 'has_file' | 'file_type_is'",
                         'rules' => 'array of {id, pattern, label?}',
+                        'variable' => "for file matches only: the variable holding the file; defaults to '_last_upload' (the turn's upload)",
                     ],
+                    'file_routing' => "'has_file' routes a rule when a file is present; 'file_type_is' matches a rule whose pattern is a kind ('image' | 'document' | 'audio'), a MIME substring ('pdf'), or an extension ('png'). The 'default' edge handles the no-match case.",
                     'edges_out' => "one per rule (sourceHandle = rule id), plus an optional sourceHandle = 'default' edge for the no-match case",
                     'example' => ['id' => 'cond', 'type' => 'condition', 'position' => ['x' => 250, 'y' => 390], 'data' => ['match_type' => 'contains', 'rules' => [['id' => 'r_yes', 'pattern' => 'yes', 'label' => 'Yes'], ['id' => 'r_no', 'pattern' => 'no', 'label' => 'No']]]],
                 ],
                 [
                     'type' => 'input',
-                    'purpose' => 'Ask a question and capture the reply into a flow variable. Re-prompts until the reply passes input_type validation.',
+                    'purpose' => 'Ask a question and capture the reply into a flow variable. Re-prompts until the reply passes input_type validation. With input_type "file", captures the uploaded file(s) instead of text.',
                     'fields' => [
                         'prompt' => 'string — the question shown to the user',
                         'variable' => 'string (required) — the captured value is stored under flow variables[variable]',
-                        'input_type' => "'text' (default) | 'email' | 'number' | 'phone' — validation applied to the reply",
+                        'input_type' => "'text' (default) | 'email' | 'number' | 'phone' | 'file' — validation applied to the reply",
+                        'accept' => "for input_type 'file': array of accepted kinds/types (e.g. ['image'], ['document']); empty/omitted = any. Re-prompts when nothing acceptable is attached",
                         'error_message' => 'string — shown on invalid input; falls back to prompt',
                     ],
                     'edges_out' => 'one (followed once a valid value is captured)',
