@@ -56,6 +56,7 @@ class SapiensServer extends Server
     protected array $tools = [
         // Identity & context.
         Tools\Account\WhoamiTool::class,
+        Tools\Account\ListTeamMembersTool::class,
         // Build & debug apps.
         Tools\Build\ListAppsTool::class,
         Tools\Build\ReadManifestTool::class,

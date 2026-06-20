@@ -2,6 +2,7 @@
 
 use App\Enums\MembershipRole;
 use App\Mcp\Servers\SapiensServer;
+use App\Mcp\Tools\Account\ListTeamMembersTool;
 use App\Mcp\Tools\Account\WhoamiTool;
 use App\Mcp\Tools\Build\FrameworkReferenceTool;
 use App\Mcp\Tools\Build\ListAppsTool;
@@ -104,6 +105,19 @@ it('whoami returns the acting user and the bound organization', function () {
         ->assertSee($user->email)
         ->assertSee($org->slug)
         ->assertSee('owner');
+});
+
+it('list_team_members lists the org members with roles', function () {
+    $org = mcpOrg();
+    $owner = mcpMember($org, MembershipRole::Owner);
+    $member = mcpMember($org, MembershipRole::Member);
+
+    SapiensServer::actingAs($owner)
+        ->tool(ListTeamMembersTool::class, [])
+        ->assertOk()
+        ->assertSee($owner->email)
+        ->assertSee($member->email)
+        ->assertSee('member');
 });
 
 it('list tools return empty cleanly with no data', function () {
