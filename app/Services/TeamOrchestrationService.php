@@ -532,7 +532,8 @@ PROMPT;
         $service = app(ConversationAttachmentService::class);
         $stored = [];
         foreach ($attachments as $descriptor) {
-            if (($descriptor['kind'] ?? null) === 'image') {
+            // A resolvable disk is required to hand the file to the SDK.
+            if (($descriptor['kind'] ?? null) === 'image' && ! empty($descriptor['disk'])) {
                 $stored[] = $service->toStoredFile($descriptor);
             }
         }

@@ -8,7 +8,10 @@ use App\Models\BotFlow;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\WhatsAppConversation;
+use App\Models\WhatsAppMessage;
+use App\Services\ConversationAttachmentService;
 use App\Services\LLMService;
+use App\Services\Storage\TenantStorage;
 use App\Services\TeamOrchestrationService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -37,6 +40,8 @@ class WhatsAppReplyOrchestrator
         private LLMService $llmService,
         private TeamOrchestrationService $orchestrationService,
         private WhatsAppMessageSender $sender,
+        private ConversationAttachmentService $attachments,
+        private TenantStorage $tenantStorage,
     ) {}
 
     public function reply(WhatsAppConversation $conversation): void
@@ -70,10 +75,14 @@ class WhatsAppReplyOrchestrator
 
         $synthetic = $this->buildSyntheticConversation($conversation, $messages);
 
+        // Files the contact sent this turn (a PDF/image on WhatsApp) — documents
+        // are surfaced to the bot via their extracted text.
+        $attachments = $this->turnAttachments($messages, $channel->organization_id);
+
         try {
             $reply = count($roster) === 1
-                ? $this->runAgent($roster[0], $messages)
-                : $this->runBotFlow($flow, $synthetic, $userMessage);
+                ? $this->runAgent($roster[0], $messages, $attachments)
+                : $this->runBotFlow($flow, $synthetic, $userMessage, $attachments);
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->error('orchestrator.failed', [
                 'conversation_id' => $conversation->id,
@@ -143,27 +152,85 @@ class WhatsAppReplyOrchestrator
         return $synth;
     }
 
-    private function runAgent(Agent $agent, Collection $messages): string
+    /**
+     * @param  array<int, array<string, mixed>>  $attachments
+     */
+    private function runAgent(Agent $agent, Collection $messages, array $attachments = []): string
     {
-        $messageModels = $messages->map(fn ($waMsg) => new Message([
+        $models = $messages->map(fn ($waMsg) => new Message([
             'role' => $waMsg->role instanceof MessageRole ? $waMsg->role : MessageRole::from((string) $waMsg->role),
             'content' => (string) $waMsg->content,
         ]))->all();
 
+        // Fold any document text into the last user message so a single agent
+        // can read it without depending on the SDK's document support.
+        $documentContext = $this->attachments->documentContext($attachments);
+        if ($documentContext !== '' && $models !== []) {
+            $last = $models[count($models) - 1];
+            $last->content = (string) $last->content."\n\n".$documentContext;
+        }
+
+        $images = [];
+        foreach ($attachments as $descriptor) {
+            if (($descriptor['kind'] ?? null) === 'image' && ! empty($descriptor['disk'])) {
+                $images[] = $this->attachments->toStoredFile($descriptor);
+            }
+        }
+
         if ($agent->tools()->where('status', 'active')->exists()) {
-            $response = $this->llmService->chatWithTools($agent, $messageModels);
+            $response = $this->llmService->chatWithTools($agent, $models, attachments: $images);
 
             return (string) ($response->text ?? '');
         }
 
-        return $this->llmService->chat($agent, $messageModels);
+        return $this->llmService->chat($agent, $models, $images);
     }
 
-    private function runBotFlow(BotFlow $flow, Conversation $synthetic, string $userMessage): string
+    /**
+     * Build normalized descriptors for the file the contact sent this turn.
+     * Documents carry their extracted text (no disk needed); images need a
+     * resolvable disk for vision, which we attach best-effort.
+     *
+     * @param  Collection<int, WhatsAppMessage>  $messages
+     * @return array<int, array<string, mixed>>
+     */
+    private function turnAttachments(Collection $messages, ?string $organizationId): array
+    {
+        $last = $messages->last();
+        if ($last === null || ! $last->media_mime || ! $last->media_local_path) {
+            return [];
+        }
+
+        $mime = (string) $last->media_mime;
+        $disk = '';
+        if ($this->attachments->kindForMime($mime) === 'image') {
+            try {
+                $disk = $this->tenantStorage->diskNameForOwner($organizationId, null);
+            } catch (\Throwable) {
+                $disk = '';
+            }
+        }
+
+        return [
+            $this->attachments->descriptor(
+                (string) $last->id,
+                basename((string) $last->media_local_path),
+                $mime,
+                $disk,
+                (string) $last->media_local_path,
+                $last->metadata['extracted_text'] ?? null,
+            ),
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $attachments
+     */
+    private function runBotFlow(BotFlow $flow, Conversation $synthetic, string $userMessage, array $attachments = []): string
     {
         $reply = '';
 
-        foreach ($this->orchestrationService->orchestrateBotFlow($flow, $synthetic, $userMessage) as $event) {
+        foreach ($this->orchestrationService->orchestrateBotFlow($flow, $synthetic, $userMessage, $attachments) as $event) {
             match ($event['type'] ?? null) {
                 'content' => $reply .= (string) ($event['content'] ?? ''),
                 'flow_message' => $reply .= (string) ($event['content'] ?? ''),

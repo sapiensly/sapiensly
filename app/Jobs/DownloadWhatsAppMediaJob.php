@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\WhatsAppMessage;
 use App\Services\CloudProviderService;
+use App\Services\ConversationAttachmentService;
 use App\Services\WhatsApp\WhatsAppProviderContract;
 use App\Support\Storage\TenantPath;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -76,6 +77,36 @@ class DownloadWhatsAppMediaJob implements ShouldQueue
         $disk->put($path, $bytes);
 
         $message->forceFill(['media_local_path' => $path])->save();
+
+        $this->extractDocumentText($message, $bytes);
+    }
+
+    /**
+     * Best-effort: pull readable text out of a document attachment (pdf/word/…)
+     * so the bot flow + agents can use its content. Stored on the message's
+     * metadata; images/audio/unparseable types are skipped.
+     */
+    private function extractDocumentText(WhatsAppMessage $message, string $bytes): void
+    {
+        $service = app(ConversationAttachmentService::class);
+        if ($service->kindForMime((string) $message->media_mime) !== 'document') {
+            return;
+        }
+
+        $tmp = tempnam(sys_get_temp_dir(), 'wamedia_');
+        file_put_contents($tmp, $bytes);
+
+        try {
+            $text = $service->extractText($tmp, (string) $message->media_mime);
+        } finally {
+            @unlink($tmp);
+        }
+
+        if ($text !== null) {
+            $metadata = $message->metadata ?? [];
+            $metadata['extracted_text'] = $text;
+            $message->forceFill(['metadata' => $metadata])->save();
+        }
     }
 
     private function guessExtension(?string $mime): string
