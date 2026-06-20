@@ -49,6 +49,14 @@ TXT)]
 class SapiensServer extends Server
 {
     /**
+     * Return the whole catalog in a single tools/list page (no pagination /
+     * nextCursor). Both must clear the tool count — perPage is min(default, max).
+     */
+    public int $defaultPaginationLength = 200;
+
+    public int $maxPaginationLength = 200;
+
+    /**
      * Tools are registered conditionally per request from the token's abilities
      * (see App\Mcp\Tools\SapiensTool::shouldRegister), so e.g. a read-only token
      * never sees the write tools.

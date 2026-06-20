@@ -29,15 +29,18 @@ it('lists tools from every module', function () {
     $org = mcpOrg();
     $plain = mcpToken($org, mcpMember($org));
 
-    // tools/list paginates; the first page proves the server boots with the
-    // expanded catalog and there are more pages (nextCursor) behind it.
+    // The whole catalog comes back in a single page — no pagination.
     $this->withToken($plain)
         ->postJson("/mcp/{$org->slug}/v1", ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])
         ->assertOk()
         ->assertSee('whoami')
+        ->assertSee('get_ai_spend')
         ->assertSee('list_apps')
-        ->assertSee('list_available_components')
-        ->assertSee('nextCursor');
+        ->assertSee('framework_reference')
+        ->assertSee('run_workflow')
+        ->assertSee('list_chatbots')
+        ->assertSee('invoke_agent')
+        ->assertDontSee('nextCursor');
 });
 
 it('every registered tool instantiates with a unique snake_case name', function () {
