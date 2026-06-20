@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
+import BotFlowAssistant from '@/components/bot-flows/BotFlowAssistant.vue';
 import FlowNodePalette from '@/components/bot-flows/FlowNodePalette.vue';
 import FlowNodePanel from '@/components/bot-flows/FlowNodePanel.vue';
 import FlowTestWidget from '@/components/bot-flows/FlowTestWidget.vue';
 import FlowToolbar from '@/components/bot-flows/FlowToolbar.vue';
-import BotFlowAssistant from '@/components/bot-flows/BotFlowAssistant.vue';
 import AgentHandoffNode from '@/components/bot-flows/nodes/AgentHandoffNode.vue';
 import AgentNode from '@/components/bot-flows/nodes/AgentNode.vue';
 import ConditionNode from '@/components/bot-flows/nodes/ConditionNode.vue';
@@ -16,16 +16,21 @@ import InputNode from '@/components/bot-flows/nodes/InputNode.vue';
 import MenuNode from '@/components/bot-flows/nodes/MenuNode.vue';
 import MessageNode from '@/components/bot-flows/nodes/MessageNode.vue';
 import StartNode from '@/components/bot-flows/nodes/StartNode.vue';
+import ResizableSplit from '@/components/ResizableSplit.vue';
 import { useBotFlowEditor } from '@/composables/useBotFlowEditor';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Agent } from '@/types/agents';
-import type { BotFlow, BotFlowDefinition, BotFlowNodeType } from '@/types/botFlows';
+import type {
+    BotFlow,
+    BotFlowDefinition,
+    BotFlowNodeType,
+} from '@/types/botFlows';
 import { Head, useForm } from '@inertiajs/vue3';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
+import type { Node } from '@vue-flow/core';
 import { VueFlow } from '@vue-flow/core';
 import { MiniMap } from '@vue-flow/minimap';
-import type { Node } from '@vue-flow/core';
 import axios from 'axios';
 import { onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -167,7 +172,18 @@ const onPaneClick = () => {
     selectNode(null);
 };
 
-const onEdgeUpdate = ({ edge, connection }: { edge: { id: string }; connection: { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null } }) => {
+const onEdgeUpdate = ({
+    edge,
+    connection,
+}: {
+    edge: { id: string };
+    connection: {
+        source: string;
+        target: string;
+        sourceHandle?: string | null;
+        targetHandle?: string | null;
+    };
+}) => {
     // Remove old edge and add the updated one
     edges.value = edges.value.filter((e) => e.id !== edge.id);
     onConnect(connection);
@@ -284,7 +300,6 @@ const handleRemoveNode = (id: string) => {
 };
 
 const backUrl = props.backUrl ?? ChatbotController.index().url;
-
 </script>
 
 <template>
@@ -296,114 +311,125 @@ const backUrl = props.backUrl ?? ChatbotController.index().url;
         force-collapsed-on-mount
     >
         <div class="flex min-h-0 flex-1 flex-col">
-        <FlowToolbar
-            :back-url="backUrl"
-            :name="flowName"
-            :status="flowStatus"
-            :processing="form.processing"
-            :auto-save-status="autoSaveStatus"
-            :is-creating="isCreating"
-            @update:name="flowName = $event"
-            @save="save"
-            @toggle-status="toggleStatus"
-        />
-
-        <div class="flex min-h-0 flex-1 overflow-hidden">
-            <FlowNodePalette />
-
-            <div
-                ref="vueFlowRef"
-                class="relative flex-1"
-                style="min-height: 0"
-                @dragover="onDragOver"
-                @drop="onDrop"
-            >
-                <VueFlow
-                    v-model:nodes="nodes"
-                    v-model:edges="edges"
-                    :default-viewport="{ x: 100, y: 50, zoom: 1 }"
-                    :min-zoom="0.2"
-                    :max-zoom="4"
-                    :edges-updatable="true"
-                    style="width: 100%; height: 100%"
-                    @node-click="onNodeClick"
-                    @pane-click="onPaneClick"
-                    @connect="onConnect"
-                    @edge-update="onEdgeUpdate"
-                >
-                    <template #node-start="nodeProps">
-                        <StartNode v-bind="nodeProps" />
-                    </template>
-                    <template #node-menu="nodeProps">
-                        <MenuNode v-bind="nodeProps" />
-                    </template>
-                    <template #node-condition="nodeProps">
-                        <ConditionNode v-bind="nodeProps" />
-                    </template>
-                    <template #node-agent="nodeProps">
-                        <AgentNode v-bind="nodeProps" />
-                    </template>
-                    <template #node-agent_handoff="nodeProps">
-                        <AgentHandoffNode v-bind="nodeProps" />
-                    </template>
-                    <template #node-message="nodeProps">
-                        <MessageNode v-bind="nodeProps" />
-                    </template>
-                    <template #node-input="nodeProps">
-                        <InputNode v-bind="nodeProps" />
-                    </template>
-                    <template #node-human_handoff="nodeProps">
-                        <HumanHandoffNode v-bind="nodeProps" />
-                    </template>
-                    <template #node-connector="nodeProps">
-                        <ConnectorNode v-bind="nodeProps" />
-                    </template>
-                    <template #node-end="nodeProps">
-                        <EndNode v-bind="nodeProps" />
-                    </template>
-
-                    <Background
-                        pattern-color="rgba(255, 255, 255, 0.06)"
-                        :gap="20"
-                        :size="1.2"
-                    />
-                    <Controls class="sp-flow-controls" position="bottom-left" />
-                    <MiniMap
-                        class="sp-flow-minimap"
-                        position="bottom-left"
-                        :node-color="minimapNodeColor"
-                        :node-stroke-color="minimapNodeColor"
-                        :node-stroke-width="2"
-                        :node-border-radius="4"
-                        mask-color="rgba(0, 3, 28, 0.6)"
-                        pannable
-                        zoomable
-                    />
-                </VueFlow>
-
-                <BotFlowAssistant
-                    v-if="assistantUrl"
-                    :converse-url="assistantUrl"
-                    @generated="onAssistantGenerated"
-                />
-
-                <FlowTestWidget v-if="flow" :flow-id="flow.id" />
-            </div>
-
-            <FlowNodePanel
-                v-if="selectedNode"
-                :node="selectedNode"
-                :all-nodes="nodes"
-                :available-models="availableModels"
-                :available-agents="availableAgents"
-                :knowledge-bases="knowledgeBases"
-                :tools="tools"
-                @close="selectNode(null)"
-                @update-data="handleUpdateData"
-                @remove-node="handleRemoveNode"
+            <FlowToolbar
+                :back-url="backUrl"
+                :name="flowName"
+                :status="flowStatus"
+                :processing="form.processing"
+                :auto-save-status="autoSaveStatus"
+                :is-creating="isCreating"
+                @update:name="flowName = $event"
+                @save="save"
+                @toggle-status="toggleStatus"
             />
-        </div>
 
+            <ResizableSplit
+                storage-key="botflow.chatWidth"
+                :show-left="!!assistantUrl"
+                class="overflow-hidden"
+            >
+                <template v-if="assistantUrl" #left>
+                    <BotFlowAssistant
+                        :converse-url="assistantUrl"
+                        @generated="onAssistantGenerated"
+                    />
+                </template>
+
+                <template #right>
+                    <div class="flex min-h-0 flex-1 overflow-hidden">
+                        <FlowNodePalette />
+
+                        <div
+                            ref="vueFlowRef"
+                            class="relative flex-1"
+                            style="min-height: 0"
+                            @dragover="onDragOver"
+                            @drop="onDrop"
+                        >
+                            <VueFlow
+                                v-model:nodes="nodes"
+                                v-model:edges="edges"
+                                :default-viewport="{ x: 100, y: 50, zoom: 1 }"
+                                :min-zoom="0.2"
+                                :max-zoom="4"
+                                :edges-updatable="true"
+                                style="width: 100%; height: 100%"
+                                @node-click="onNodeClick"
+                                @pane-click="onPaneClick"
+                                @connect="onConnect"
+                                @edge-update="onEdgeUpdate"
+                            >
+                                <template #node-start="nodeProps">
+                                    <StartNode v-bind="nodeProps" />
+                                </template>
+                                <template #node-menu="nodeProps">
+                                    <MenuNode v-bind="nodeProps" />
+                                </template>
+                                <template #node-condition="nodeProps">
+                                    <ConditionNode v-bind="nodeProps" />
+                                </template>
+                                <template #node-agent="nodeProps">
+                                    <AgentNode v-bind="nodeProps" />
+                                </template>
+                                <template #node-agent_handoff="nodeProps">
+                                    <AgentHandoffNode v-bind="nodeProps" />
+                                </template>
+                                <template #node-message="nodeProps">
+                                    <MessageNode v-bind="nodeProps" />
+                                </template>
+                                <template #node-input="nodeProps">
+                                    <InputNode v-bind="nodeProps" />
+                                </template>
+                                <template #node-human_handoff="nodeProps">
+                                    <HumanHandoffNode v-bind="nodeProps" />
+                                </template>
+                                <template #node-connector="nodeProps">
+                                    <ConnectorNode v-bind="nodeProps" />
+                                </template>
+                                <template #node-end="nodeProps">
+                                    <EndNode v-bind="nodeProps" />
+                                </template>
+
+                                <Background
+                                    pattern-color="rgba(255, 255, 255, 0.06)"
+                                    :gap="20"
+                                    :size="1.2"
+                                />
+                                <Controls
+                                    class="sp-flow-controls"
+                                    position="bottom-left"
+                                />
+                                <MiniMap
+                                    class="sp-flow-minimap"
+                                    position="bottom-left"
+                                    :node-color="minimapNodeColor"
+                                    :node-stroke-color="minimapNodeColor"
+                                    :node-stroke-width="2"
+                                    :node-border-radius="4"
+                                    mask-color="rgba(0, 3, 28, 0.6)"
+                                    pannable
+                                    zoomable
+                                />
+                            </VueFlow>
+
+                            <FlowTestWidget v-if="flow" :flow-id="flow.id" />
+                        </div>
+
+                        <FlowNodePanel
+                            v-if="selectedNode"
+                            :node="selectedNode"
+                            :all-nodes="nodes"
+                            :available-models="availableModels"
+                            :available-agents="availableAgents"
+                            :knowledge-bases="knowledgeBases"
+                            :tools="tools"
+                            @close="selectNode(null)"
+                            @update-data="handleUpdateData"
+                            @remove-node="handleRemoveNode"
+                        />
+                    </div>
+                </template>
+            </ResizableSplit>
         </div>
     </AppLayoutV2>
 </template>
