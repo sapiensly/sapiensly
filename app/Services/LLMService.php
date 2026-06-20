@@ -13,6 +13,9 @@ use Illuminate\Support\Facades\Log;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Files\StoredAudio;
+use Laravel\Ai\Files\StoredDocument;
+use Laravel\Ai\Files\StoredImage;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\AgentResponse;
@@ -97,14 +100,16 @@ class LLMService
      * Send a chat message and get a response (non-streaming).
      *
      * @param  array<Message>  $messages
+     * @param  array<int, StoredImage|StoredDocument|StoredAudio>  $attachments
      */
-    public function chat(Agent $agent, array $messages): string
+    public function chat(Agent $agent, array $messages, array $attachments = []): string
     {
         [$history, $prompt] = $this->splitMessages($messages);
         $sdkAgent = $this->buildAgent($agent, $history);
 
         $response = $sdkAgent->prompt(
             $prompt,
+            attachments: $attachments,
             provider: $this->getProvider($agent->model, $agent),
             model: $agent->model,
         );
@@ -118,15 +123,17 @@ class LLMService
      * Stream a chat response.
      *
      * @param  array<Message>  $messages
+     * @param  array<int, StoredImage|StoredDocument|StoredAudio>  $attachments
      * @return Generator<string>
      */
-    public function streamChat(Agent $agent, array $messages): Generator
+    public function streamChat(Agent $agent, array $messages, array $attachments = []): Generator
     {
         [$history, $prompt] = $this->splitMessages($messages);
         $sdkAgent = $this->buildAgent($agent, $history);
 
         $response = $sdkAgent->stream(
             $prompt,
+            attachments: $attachments,
             provider: $this->getProvider($agent->model, $agent),
             model: $agent->model,
         );
@@ -158,15 +165,16 @@ class LLMService
      *
      * @param  array<Message>  $messages
      * @param  string|null  $userQuery  The query to use for retrieval (defaults to last user message)
+     * @param  array<int, StoredImage|StoredDocument|StoredAudio>  $attachments
      * @return array{generator: Generator<string>, knowledge_bases: array<array{id: string, name: string}>, chunk_count: int}
      */
-    public function streamChatWithRAGInfo(Agent $agent, array $messages, ?string $userQuery = null): array
+    public function streamChatWithRAGInfo(Agent $agent, array $messages, ?string $userQuery = null, array $attachments = []): array
     {
         $knowledgeBaseIds = $agent->knowledgeBaseIds();
 
         if (empty($knowledgeBaseIds)) {
             return [
-                'generator' => $this->streamChat($agent, $messages),
+                'generator' => $this->streamChat($agent, $messages, $attachments),
                 'knowledge_bases' => [],
                 'chunk_count' => 0,
             ];
@@ -182,7 +190,7 @@ class LLMService
 
         if (empty(trim($userQuery))) {
             return [
-                'generator' => $this->streamChat($agent, $messages),
+                'generator' => $this->streamChat($agent, $messages, $attachments),
                 'knowledge_bases' => [],
                 'chunk_count' => 0,
             ];
@@ -204,7 +212,7 @@ class LLMService
 
         if (empty($retrieval['context'])) {
             return [
-                'generator' => $this->streamChat($agent, $messages),
+                'generator' => $this->streamChat($agent, $messages, $attachments),
                 'knowledge_bases' => [],
                 'chunk_count' => 0,
             ];
@@ -218,9 +226,10 @@ class LLMService
         [$history, $prompt] = $this->splitMessages($messages);
         $sdkAgent = $this->buildAgent($agent, $history, systemPrompt: $augmentedSystemPrompt);
 
-        $generator = (function () use ($sdkAgent, $prompt, $agent) {
+        $generator = (function () use ($sdkAgent, $prompt, $agent, $attachments) {
             $response = $sdkAgent->stream(
                 $prompt,
+                attachments: $attachments,
                 provider: $this->getProvider($agent->model, $agent),
                 model: $agent->model,
             );
@@ -246,7 +255,7 @@ class LLMService
      *
      * @param  array<Message>  $messages
      */
-    public function chatWithTools(Agent $agent, array $messages, int $maxSteps = 5): AgentResponse
+    public function chatWithTools(Agent $agent, array $messages, int $maxSteps = 5, array $attachments = []): AgentResponse
     {
         $tools = $agent->tools()->where('status', 'active')->get();
 
@@ -264,6 +273,7 @@ class LLMService
 
         $response = $sdkAgent->prompt(
             $prompt,
+            attachments: $attachments,
             provider: $this->getProvider($agent->model, $agent),
             model: $agent->model,
         );

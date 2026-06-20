@@ -25,7 +25,40 @@ class WidgetStreamService
         private LLMService $llmService,
         private TeamOrchestrationService $orchestrationService,
         private AiDefaults $aiDefaults,
+        private ConversationAttachmentService $attachments,
     ) {}
+
+    /**
+     * Normalized descriptors for the files attached to the conversation's most
+     * recent user message — the turn the bot is about to answer.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function turnAttachments(WidgetConversation $conversation): array
+    {
+        $lastUser = $conversation->messages()
+            ->where('role', MessageRole::User->value)
+            ->latest('created_at')
+            ->first();
+
+        if ($lastUser === null) {
+            return [];
+        }
+
+        $descriptors = [];
+        foreach ($lastUser->attachments as $att) {
+            $descriptors[] = $this->attachments->descriptor(
+                $att->id,
+                $att->original_name,
+                $att->mime,
+                $att->disk,
+                $att->storage_path,
+                $att->extracted_text,
+            );
+        }
+
+        return $descriptors;
+    }
 
     /**
      * Stream an AI response for a widget conversation.
@@ -82,10 +115,18 @@ class WidgetStreamService
                 'agent_id' => $agent->id,
             ]);
 
+            // Files the visitor attached this turn, as SDK stored files (images
+            // for vision, documents for the model to read).
+            $descriptors = $this->turnAttachments($conversation);
+            $storedAttachments = array_map(
+                fn (array $descriptor) => $this->attachments->toStoredFile($descriptor),
+                $descriptors,
+            );
+
             // Check if agent has active tools
             if ($agent->tools()->where('status', 'active')->exists()) {
                 // Use tool-enabled chat (non-streaming)
-                $response = $this->llmService->chatWithTools($agent, $messages->all());
+                $response = $this->llmService->chatWithTools($agent, $messages->all(), attachments: $storedAttachments);
                 $chunks[] = $response->text ?? '';
 
                 // Extract tool calls
@@ -112,7 +153,7 @@ class WidgetStreamService
                     $knowledgeBases = $retrieval['knowledge_bases'] ?? [];
                 }
 
-                $fullContent = $this->llmService->chat($agent, $messages->all());
+                $fullContent = $this->llmService->chat($agent, $messages->all(), $storedAttachments);
                 if ($fullContent !== '') {
                     $chunks[] = $fullContent;
                 }
@@ -148,13 +189,15 @@ class WidgetStreamService
         $messages,
         float $startTime
     ): StreamedResponse {
+        $attachments = $this->turnAttachments($conversation);
+
         return $this->consumeOrchestration(
             $chatbot,
             $conversation,
             $messages,
             $flow->roster()['triage']?->model ?? 'unknown',
             $startTime,
-            fn (Conversation $temp, string $userMessage) => $this->orchestrationService->orchestrateBotFlow($flow, $temp, $userMessage),
+            fn (Conversation $temp, string $userMessage) => $this->orchestrationService->orchestrateBotFlow($flow, $temp, $userMessage, $attachments),
             'flow_id',
             $flow->id,
         );

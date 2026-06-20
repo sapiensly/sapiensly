@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Widget\AttachmentController;
 use App\Http\Controllers\Api\Widget\ChatController;
 use App\Http\Controllers\Api\Widget\ConfigController;
 use App\Http\Controllers\Api\Widget\ErrorController;
@@ -55,6 +56,12 @@ Route::prefix('widget/v1')->group(function () {
             ->name('widget.conversations.send');
         Route::get('/conversations/{conversation}/stream', [ChatController::class, 'stream'])
             ->name('widget.conversations.stream');
+
+        // Attachments — upload before send, then serve back to the transcript.
+        Route::post('/conversations/{conversation}/attachments', [AttachmentController::class, 'store'])
+            ->name('widget.conversations.attachments.store');
+        Route::get('/conversations/{conversation}/attachments/{attachment}', [AttachmentController::class, 'show'])
+            ->name('widget.conversations.attachments.show');
 
         // Feedback
         Route::post('/conversations/{conversation}/feedback', [FeedbackController::class, 'store'])

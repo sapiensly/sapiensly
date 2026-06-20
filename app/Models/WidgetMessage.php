@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WidgetMessage extends Model
 {
@@ -37,6 +38,11 @@ class WidgetMessage extends Model
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(WidgetConversation::class, 'widget_conversation_id');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(WidgetAttachment::class, 'widget_message_id');
     }
 
     public function isFromUser(): bool

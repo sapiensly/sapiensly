@@ -55,6 +55,7 @@ final class Schemas
         'widget_sessions',
         'widget_conversations',
         'widget_messages',
+        'widget_attachments',
         'chatbot_analytics',
         // Channels runtime
         'contacts',

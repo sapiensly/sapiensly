@@ -73,6 +73,11 @@ class WidgetConversation extends Model
         return $this->hasMany(WidgetMessage::class)->orderBy('created_at');
     }
 
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(WidgetAttachment::class)->orderBy('created_at');
+    }
+
     public function lastMessage(): ?WidgetMessage
     {
         return $this->messages()->latest()->first();

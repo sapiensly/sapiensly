@@ -77,4 +77,22 @@ enum DocumentType: string
             default => throw new \InvalidArgumentException("Unsupported file extension: {$extension}"),
         };
     }
+
+    /**
+     * Best-effort match of a MIME type to a parseable document type, or null
+     * when the MIME isn't a text-extractable document (e.g. images, audio).
+     */
+    public static function fromMime(string $mime): ?self
+    {
+        foreach (self::cases() as $case) {
+            if (in_array($mime, $case->mimeTypes(), true)) {
+                return $case;
+            }
+        }
+
+        return match ($mime) {
+            'application/msword' => self::Docx,
+            default => null,
+        };
+    }
 }

@@ -11,6 +11,9 @@ use App\Models\Message;
 use Generator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Laravel\Ai\Files\StoredAudio;
+use Laravel\Ai\Files\StoredDocument;
+use Laravel\Ai\Files\StoredImage;
 
 /**
  * Orchestrates the flow between agents in an agent roster.
@@ -34,19 +37,22 @@ class TeamOrchestrationService
     /**
      * Orchestrate a user message through a Bot Flow's agent roster.
      *
+     * @param  array<int, array<string, mixed>>  $attachments  Normalized attachment descriptors for this turn.
      * @return Generator<array<string, mixed>>
      */
     public function orchestrateBotFlow(
         BotFlow $flow,
         Conversation $conversation,
-        string $userMessage
+        string $userMessage,
+        array $attachments = []
     ): Generator {
         yield from $this->run(
             $flow->roster(),
             $flow,
             "flow:{$flow->id}",
             $conversation,
-            $userMessage
+            $userMessage,
+            $attachments
         );
     }
 
@@ -70,14 +76,15 @@ class TeamOrchestrationService
         ?BotFlow $flow,
         string $label,
         Conversation $conversation,
-        string $userMessage
+        string $userMessage,
+        array $attachments = []
     ): Generator {
         // Check for active flow before LLM triage
         if ($flow !== null) {
             $flowState = $conversation->metadata['flow_state'] ?? null;
 
             if ($this->flowExecutor->shouldActivateBotFlow($flow, $userMessage, $flowState)) {
-                yield from $this->executeFlow($roster, $flow, $conversation, $userMessage, $flowState);
+                yield from $this->executeFlow($roster, $flow, $conversation, $userMessage, $flowState, $attachments);
 
                 return;
             }
@@ -131,7 +138,7 @@ class TeamOrchestrationService
 
             switch ($step['agent']) {
                 case 'knowledge':
-                    foreach ($this->executeKnowledgeWithEvents($roster, $messages, $step, $userMessage) as $event) {
+                    foreach ($this->executeKnowledgeWithEvents($roster, $messages, $step, $userMessage, $attachments) as $event) {
                         if ($event['type'] === 'content') {
                             $stepContent .= $event['content'] ?? '';
                         } else {
@@ -142,7 +149,7 @@ class TeamOrchestrationService
                     break;
 
                 case 'action':
-                    foreach ($this->executeActionWithEvents($roster, $messages, $step, $userMessage) as $event) {
+                    foreach ($this->executeActionWithEvents($roster, $messages, $step, $userMessage, $attachments) as $event) {
                         if ($event['type'] === 'content') {
                             $stepContent .= $event['content'] ?? '';
                         } else {
@@ -381,7 +388,8 @@ PROMPT;
         array $roster,
         Collection $messages,
         array $step,
-        string $originalMessage
+        string $originalMessage,
+        array $attachments = []
     ): Generator {
         if (! $roster['knowledge']) {
             yield ['type' => 'content', 'content' => 'Knowledge agent is not configured.'];
@@ -392,8 +400,9 @@ PROMPT;
         // Use the refined query from the step
         $query = $step['query'] ?? $originalMessage;
 
-        // Prepare messages for knowledge agent
-        $knowledgeMessages = $this->prepareAgentMessages($messages, $originalMessage);
+        // Prepare messages for knowledge agent (document attachments are folded
+        // into the message; images go to the model as stored files).
+        $knowledgeMessages = $this->prepareAgentMessages($messages, $originalMessage, $attachments);
 
         Log::info('Executing knowledge agent', [
             'agent_id' => $roster['knowledge']->id,
@@ -404,7 +413,8 @@ PROMPT;
         $result = $this->llmService->streamChatWithRAGInfo(
             $roster['knowledge'],
             $knowledgeMessages,
-            $query
+            $query,
+            $this->imageAttachments($attachments)
         );
 
         // Emit knowledge base events
@@ -433,7 +443,8 @@ PROMPT;
         array $roster,
         Collection $messages,
         array $step,
-        string $originalMessage
+        string $originalMessage,
+        array $attachments = []
     ): Generator {
         if (! $roster['action']) {
             yield ['type' => 'content', 'content' => 'Action agent is not configured.'];
@@ -453,7 +464,7 @@ PROMPT;
         }
 
         // Prepare messages for action agent
-        $actionMessages = $this->prepareAgentMessages($messages, $taskMessage);
+        $actionMessages = $this->prepareAgentMessages($messages, $taskMessage, $attachments);
 
         Log::info('Executing action agent', [
             'agent_id' => $roster['action']->id,
@@ -463,7 +474,8 @@ PROMPT;
         // Execute with tools (non-streaming due to tool calls)
         $response = $this->llmService->chatWithTools(
             $roster['action'],
-            $actionMessages
+            $actionMessages,
+            attachments: $this->imageAttachments($attachments)
         );
 
         // Emit tool call events
@@ -486,18 +498,46 @@ PROMPT;
      * @param  Collection<int, Message>  $messages
      * @return array<Message>
      */
-    private function prepareAgentMessages(Collection $messages, string $currentMessage): array
+    private function prepareAgentMessages(Collection $messages, string $currentMessage, array $attachments = []): array
     {
         // Include recent conversation history (last 6 messages for context)
         $history = $messages->take(-6)->values()->all();
 
-        // Add the current message
+        // Fold any document attachments' extracted text into the current message
+        // so the agent can read their content. Images are passed to the model
+        // separately as stored files (see imageAttachments()).
+        $content = $currentMessage;
+        $documentContext = app(ConversationAttachmentService::class)->documentContext($attachments);
+        if ($documentContext !== '') {
+            $content .= "\n\n".$documentContext;
+        }
+
         $current = new Message([
             'role' => MessageRole::User,
-            'content' => $currentMessage,
+            'content' => $content,
         ]);
 
         return array_merge($history, [$current]);
+    }
+
+    /**
+     * Convert image attachment descriptors into Laravel AI stored files for the
+     * model (vision). Non-image attachments are surfaced via documentContext().
+     *
+     * @param  array<int, array<string, mixed>>  $attachments
+     * @return array<int, StoredImage|StoredDocument|StoredAudio>
+     */
+    private function imageAttachments(array $attachments): array
+    {
+        $service = app(ConversationAttachmentService::class);
+        $stored = [];
+        foreach ($attachments as $descriptor) {
+            if (($descriptor['kind'] ?? null) === 'image') {
+                $stored[] = $service->toStoredFile($descriptor);
+            }
+        }
+
+        return $stored;
     }
 
     /**
@@ -511,7 +551,8 @@ PROMPT;
         BotFlow $flow,
         Conversation $conversation,
         string $userMessage,
-        ?array $flowState
+        ?array $flowState,
+        array $attachments = []
     ): Generator {
         // Initialize or continue flow
         if ($flowState === null || ($flowState['completed'] ?? false)) {
@@ -524,14 +565,14 @@ PROMPT;
             ];
         }
 
-        $action = $this->flowExecutor->processInput($flow, $flowState, $userMessage);
+        $action = $this->flowExecutor->processInput($flow, $flowState, $userMessage, $attachments);
 
         // Persist updated state
         $metadata = $conversation->metadata ?? [];
         $metadata['flow_state'] = $action->updatedState;
         $conversation->update(['metadata' => $metadata]);
 
-        yield from $this->emitFlowAction($roster, $flow, $conversation, $action);
+        yield from $this->emitFlowAction($roster, $flow, $conversation, $action, $attachments);
     }
 
     /**
@@ -544,7 +585,8 @@ PROMPT;
         array $roster,
         BotFlow $flow,
         Conversation $conversation,
-        BotFlowAction $action
+        BotFlowAction $action,
+        array $attachments = []
     ): Generator {
         match ($action->type) {
             BotFlowActionType::ShowMenu => yield [
@@ -552,7 +594,7 @@ PROMPT;
                 'message' => $action->data['message'] ?? '',
                 'options' => $action->data['options'] ?? [],
             ],
-            BotFlowActionType::SendMessage => yield from (function () use ($action, $roster, $flow, $conversation) {
+            BotFlowActionType::SendMessage => yield from (function () use ($action, $roster, $flow, $conversation, $attachments) {
                 yield ['type' => 'flow_message', 'content' => $action->data['message'] ?? ''];
 
                 // If there's a next node, auto-advance
@@ -561,10 +603,10 @@ PROMPT;
                     $metadata = $conversation->metadata ?? [];
                     $metadata['flow_state'] = $nextAction->updatedState;
                     $conversation->update(['metadata' => $metadata]);
-                    yield from $this->emitFlowAction($roster, $flow, $conversation, $nextAction);
+                    yield from $this->emitFlowAction($roster, $flow, $conversation, $nextAction, $attachments);
                 }
             })(),
-            BotFlowActionType::AgentHandoff => yield from (function () use ($action, $roster, $conversation) {
+            BotFlowActionType::AgentHandoff => yield from (function () use ($action, $roster, $conversation, $attachments) {
                 if ($action->data['message'] ?? null) {
                     yield ['type' => 'flow_message', 'content' => $action->data['message']];
                 }
@@ -587,8 +629,8 @@ PROMPT;
                 if ($step) {
                     $lastMessage = $messages->last()?->content ?? '';
                     match ($step['agent']) {
-                        'knowledge' => yield from $this->executeKnowledgeWithEvents($roster, $messages, $step, $lastMessage),
-                        'action' => yield from $this->executeActionWithEvents($roster, $messages, $step, $lastMessage),
+                        'knowledge' => yield from $this->executeKnowledgeWithEvents($roster, $messages, $step, $lastMessage, $attachments),
+                        'action' => yield from $this->executeActionWithEvents($roster, $messages, $step, $lastMessage, $attachments),
                     };
                 }
             })(),

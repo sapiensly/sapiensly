@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Widget;
 use App\Enums\MessageRole;
 use App\Http\Controllers\Controller;
 use App\Models\Chatbot;
+use App\Models\WidgetAttachment;
 use App\Models\WidgetConversation;
 use App\Models\WidgetMessage;
 use App\Models\WidgetSession;
@@ -156,15 +157,35 @@ class ChatController extends Controller
         }
 
         $validated = $request->validate([
-            'content' => ['required', 'string', 'max:4000'],
+            'content' => ['nullable', 'string', 'max:4000'],
+            'attachment_ids' => ['nullable', 'array', 'max:10'],
+            'attachment_ids.*' => ['string'],
         ]);
+
+        $attachmentIds = $validated['attachment_ids'] ?? [];
+
+        // A message must carry text, file(s), or both.
+        if (trim((string) ($validated['content'] ?? '')) === '' && $attachmentIds === []) {
+            return response()->json([
+                'error' => 'Empty message',
+                'message' => 'A message must include text or an attachment.',
+            ], 422);
+        }
 
         // Create the user message
         $message = WidgetMessage::create([
             'widget_conversation_id' => $widgetConversation->id,
             'role' => MessageRole::User,
-            'content' => $validated['content'],
+            'content' => $validated['content'] ?? '',
         ]);
+
+        // Link any pre-uploaded attachments to this message.
+        if ($attachmentIds !== []) {
+            WidgetAttachment::where('widget_conversation_id', $widgetConversation->id)
+                ->whereIn('id', $attachmentIds)
+                ->whereNull('widget_message_id')
+                ->update(['widget_message_id' => $message->id]);
+        }
 
         $widgetConversation->increment('message_count');
 

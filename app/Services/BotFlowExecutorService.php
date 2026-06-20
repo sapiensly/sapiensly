@@ -52,9 +52,19 @@ class BotFlowExecutorService
 
     /**
      * Process user input through the flow state machine.
+     *
+     * @param  array<int, array<string, mixed>>  $attachments  Normalized attachment descriptors uploaded this turn.
      */
-    public function processInput(BotFlow $flow, array $flowState, string $userInput): BotFlowAction
+    public function processInput(BotFlow $flow, array $flowState, string $userInput, array $attachments = []): BotFlowAction
     {
+        // Expose this turn's uploads to the flow (file-input capture + condition
+        // routing) and to downstream agents. Stored light (no extracted_text) so
+        // the persisted flow_state stays small.
+        if ($attachments !== []) {
+            $flowState['variables'] = $flowState['variables'] ?? [];
+            $flowState['variables']['_last_upload'] = $this->lightDescriptors($attachments);
+        }
+
         $currentNodeId = $flowState['current_node_id'];
         $currentNode = $flow->getNode($currentNodeId);
 
@@ -69,7 +79,7 @@ class BotFlowExecutorService
             'agent_handoff' => $this->processAgentHandoff($flowState, $currentNode),
             'message' => $this->processMessageNode($flow, $flowState, $currentNode),
             'connector' => $this->processConnectorNode($flow, $flowState, $currentNode),
-            'input' => $this->processInputNode($flow, $flowState, $currentNode, $userInput),
+            'input' => $this->processInputNode($flow, $flowState, $currentNode, $userInput, $attachments),
             'human_handoff' => $this->humanHandoff($flowState, $currentNode),
             'end' => $this->endFlow($flowState, $currentNode['data']['action'] ?? 'resume_conversation'),
             default => $this->endFlow($flowState, 'resume_conversation'),
@@ -179,9 +189,18 @@ class BotFlowExecutorService
             );
         }
 
+        // File-based routing reads the uploaded file(s) (a named variable, or
+        // this turn's upload) rather than the text input.
+        $isFileMatch = in_array($matchType, ['has_file', 'file_type_is'], true);
+        $files = $isFileMatch ? $this->resolveConditionFiles($flowState, $node) : [];
+
         // Try to match locally
         foreach ($rules as $rule) {
-            if ($this->matchesCondition($matchType, $rule['pattern'] ?? '', $userInput)) {
+            $matched = $isFileMatch
+                ? $this->matchesFileCondition($matchType, $rule['pattern'] ?? '', $files)
+                : $this->matchesCondition($matchType, $rule['pattern'] ?? '', $userInput);
+
+            if ($matched) {
                 $edges = $flow->getEdgesFrom($node['id'], $rule['id']);
                 if (! empty($edges)) {
                     return $this->advanceToNode($flow, $flowState, $edges[0]['target']);
@@ -236,10 +255,45 @@ class BotFlowExecutorService
      * outgoing edge. Re-prompts (without advancing) when the value fails the
      * node's input_type validation.
      */
-    private function processInputNode(BotFlow $flow, array $flowState, array $node, string $userInput): BotFlowAction
+    /**
+     * @param  array<int, array<string, mixed>>  $attachments  This turn's uploads.
+     */
+    private function processInputNode(BotFlow $flow, array $flowState, array $node, string $userInput, array $attachments = []): BotFlowAction
     {
         $variable = $node['data']['variable'] ?? 'input';
         $inputType = $node['data']['input_type'] ?? 'text';
+
+        // File input: capture the accepted uploads instead of a text value, and
+        // re-prompt when nothing acceptable was attached this turn.
+        if ($inputType === 'file') {
+            $accepted = $this->filterAcceptedFiles($attachments, $node['data']['accept'] ?? []);
+
+            if ($accepted === []) {
+                return new BotFlowAction(
+                    BotFlowActionType::CollectInput,
+                    [
+                        'prompt' => $node['data']['error_message'] ?? $node['data']['prompt'] ?? '',
+                        'variable' => $variable,
+                        'input_type' => 'file',
+                        'accept' => $node['data']['accept'] ?? [],
+                        'invalid' => true,
+                    ],
+                    $flowState
+                );
+            }
+
+            $variables = $flowState['variables'] ?? [];
+            $variables[$variable] = $this->lightDescriptors($accepted);
+            $flowState['variables'] = $variables;
+
+            $edges = $flow->getEdgesFrom($node['id']);
+            if (empty($edges)) {
+                return $this->endFlow($flowState, 'resume_conversation');
+            }
+
+            return $this->advanceToNode($flow, $flowState, $edges[0]['target']);
+        }
+
         $value = trim($userInput);
 
         if (! $this->isValidInput($inputType, $value)) {
@@ -302,6 +356,28 @@ class BotFlowExecutorService
             'phone' => (bool) preg_match('/^[0-9+\-()\s]{7,}$/', $value),
             default => true,
         };
+    }
+
+    /**
+     * Keep only attachments matching the node's `accept` tokens (kinds, MIME
+     * prefixes, or extensions). An empty `accept` accepts everything.
+     *
+     * @param  array<int, array<string, mixed>>  $attachments
+     * @param  array<int, string>  $accept
+     * @return array<int, array<string, mixed>>
+     */
+    private function filterAcceptedFiles(array $attachments, array $accept): array
+    {
+        if ($accept === []) {
+            return array_values($attachments);
+        }
+
+        return array_values(array_filter(
+            $attachments,
+            fn ($file) => collect($accept)->contains(
+                fn (string $token) => $this->anyFileMatchesType([$file], $token)
+            )
+        ));
     }
 
     private function processMessageNode(BotFlow $flow, array $flowState, array $node): BotFlowAction
@@ -408,6 +484,86 @@ class BotFlowExecutorService
             'regex' => (bool) @preg_match($pattern, $input),
             default => false,
         };
+    }
+
+    /**
+     * Resolve the file descriptor(s) a condition routes on: the node's named
+     * `variable` if set, otherwise this turn's `_last_upload`.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function resolveConditionFiles(array $flowState, array $node): array
+    {
+        $variable = $node['data']['variable'] ?? '_last_upload';
+
+        return $this->lightDescriptors($flowState['variables'][$variable] ?? []);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $files
+     */
+    private function matchesFileCondition(string $matchType, string $pattern, array $files): bool
+    {
+        return match ($matchType) {
+            'has_file' => $files !== [],
+            'file_type_is' => $this->anyFileMatchesType($files, $pattern),
+            default => false,
+        };
+    }
+
+    /**
+     * Whether any file matches a type token: a coarse kind (`image`, `document`,
+     * `audio`), a MIME (prefix) match, or an extension/keyword on the filename.
+     *
+     * @param  array<int, array<string, mixed>>  $files
+     */
+    private function anyFileMatchesType(array $files, string $pattern): bool
+    {
+        $needle = mb_strtolower(trim($pattern));
+        if ($needle === '') {
+            return false;
+        }
+
+        foreach ($files as $file) {
+            $kind = mb_strtolower((string) ($file['kind'] ?? ''));
+            $mime = mb_strtolower((string) ($file['mime'] ?? ''));
+            $name = mb_strtolower((string) ($file['original_name'] ?? ''));
+
+            if ($kind === $needle
+                || str_contains($mime, $needle)
+                || str_ends_with($name, '.'.$needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Normalize a descriptor or list of descriptors into a list, dropping the
+     * (potentially large) extracted_text so it never bloats the persisted
+     * flow_state — agents read fresh extracted text from the turn's attachments.
+     *
+     * @param  mixed  $value
+     * @return array<int, array<string, mixed>>
+     */
+    private function lightDescriptors($value): array
+    {
+        if (! is_array($value) || $value === []) {
+            return [];
+        }
+
+        // A single descriptor (associative) vs a list of them.
+        $list = array_is_list($value) ? $value : [$value];
+
+        return array_values(array_map(function ($descriptor) {
+            if (! is_array($descriptor)) {
+                return $descriptor;
+            }
+            unset($descriptor['extracted_text']);
+
+            return $descriptor;
+        }, $list));
     }
 
     private function matchesKeywords(string $message, array $keywords): bool
