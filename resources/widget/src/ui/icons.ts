@@ -19,4 +19,8 @@ export const icons = {
     minimize: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M19 13H5v-2h14v2z"/>
     </svg>`,
+
+    attach: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16.5 6v11.5a4 4 0 01-8 0V5a2.5 2.5 0 015 0v10.5a1 1 0 01-2 0V6H10v9.5a2.5 2.5 0 005 0V5a4 4 0 00-8 0v12.5a5.5 5.5 0 0011 0V6h-1.5z"/>
+    </svg>`,
 };

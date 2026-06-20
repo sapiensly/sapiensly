@@ -3,6 +3,7 @@ import { ErrorTracker } from './errors';
 import { EventEmitter } from './events';
 import { Storage } from './storage';
 import type {
+    Attachment,
     ConversationData,
     Message,
     SessionData,
@@ -110,7 +111,9 @@ export class Widget {
                 this.config.config.appearance,
                 this.config.config.behavior,
                 {
-                    onSend: (message) => this.sendMessage(message),
+                    onSend: (message, attachments) =>
+                        this.sendMessage(message, attachments),
+                    onUpload: (file) => this.uploadFile(file),
                     onOpen: () => this.handleOpen(),
                     onClose: () => this.handleClose(),
                 },
@@ -263,8 +266,22 @@ export class Widget {
     /**
      * Send a message.
      */
-    private async sendMessage(content: string): Promise<void> {
-        if (this.isStreaming || !content.trim()) return;
+    /**
+     * Upload a file for the current conversation, creating one if needed, and
+     * return the stored attachment so the input can stage it for the next send.
+     */
+    private async uploadFile(file: File): Promise<Attachment> {
+        const conversation = await this.ensureConversation();
+        return this.api.uploadAttachment(conversation.conversation_id, file);
+    }
+
+    private async sendMessage(
+        content: string,
+        attachments: Attachment[] = [],
+    ): Promise<void> {
+        if (this.isStreaming || (!content.trim() && attachments.length === 0)) {
+            return;
+        }
 
         try {
             this.isStreaming = true;
@@ -279,6 +296,7 @@ export class Widget {
                 role: 'user',
                 content,
                 created_at: new Date().toISOString(),
+                attachments: attachments.length ? attachments : undefined,
             };
 
             this.messages.push(userMessage);
@@ -289,6 +307,7 @@ export class Widget {
             const response = await this.api.sendMessage(
                 conversation.conversation_id,
                 content,
+                attachments.map((a) => a.id),
             );
 
             // Update message ID

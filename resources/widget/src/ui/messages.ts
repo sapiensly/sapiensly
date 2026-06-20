@@ -1,4 +1,4 @@
-import type { Message } from '../types';
+import type { Attachment, Message } from '../types';
 import { parseMarkdown } from './markdown';
 
 /**
@@ -61,10 +61,34 @@ export class Messages {
             messageEl.innerHTML = parseMarkdown(message.content);
         }
 
+        if (message.attachments?.length) {
+            messageEl.appendChild(this.renderAttachments(message.attachments));
+        }
+
         this.element.appendChild(messageEl);
         this.scrollToBottom();
 
         return messageEl;
+    }
+
+    /**
+     * Render a message's attachments as a row of links to the stored files.
+     */
+    private renderAttachments(attachments: Attachment[]): HTMLDivElement {
+        const row = document.createElement('div');
+        row.className = 'sapiensly-message-attachments';
+
+        for (const attachment of attachments) {
+            const link = document.createElement('a');
+            link.className = 'sapiensly-message-attachment';
+            link.href = attachment.url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = attachment.original_name;
+            row.appendChild(link);
+        }
+
+        return row;
     }
 
     /**

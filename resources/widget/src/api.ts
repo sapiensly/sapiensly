@@ -1,4 +1,5 @@
 import type {
+    Attachment,
     ConversationData,
     Message,
     SessionData,
@@ -146,16 +147,53 @@ export class ApiClient {
     }
 
     /**
-     * Send a message.
+     * Upload a file to a conversation. Uses multipart/form-data — the browser
+     * sets the Content-Type boundary, so we don't send a JSON content type.
+     */
+    async uploadAttachment(
+        conversationId: string,
+        file: File,
+    ): Promise<Attachment> {
+        const url = `${this.baseUrl}/api/widget/v1/conversations/${conversationId}/attachments`;
+        const form = new FormData();
+        form.append('file', file);
+
+        const headers: Record<string, string> = {
+            Authorization: `Bearer ${this.token}`,
+        };
+        if (this.sessionToken) {
+            headers['X-Session-Token'] = this.sessionToken;
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: form,
+        });
+        if (!response.ok) {
+            const error = await response
+                .json()
+                .catch(() => ({ message: 'Upload failed' }));
+            throw new Error(
+                error.message || `Upload error: ${response.status}`,
+            );
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Send a message, optionally with the ids of files already uploaded.
      */
     async sendMessage(
         conversationId: string,
         content: string,
+        attachmentIds: string[] = [],
     ): Promise<{ message_id: string; stream_url: string }> {
         return this.request(
             'POST',
             `/conversations/${conversationId}/messages`,
-            { content },
+            { content, attachment_ids: attachmentIds },
         );
     }
 

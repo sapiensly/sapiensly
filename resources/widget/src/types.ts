@@ -51,12 +51,22 @@ export interface ConversationData {
 /**
  * Message in a conversation.
  */
+export interface Attachment {
+    id: string;
+    original_name: string;
+    mime: string;
+    kind: string;
+    size_bytes: number;
+    url: string;
+}
+
 export interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
     created_at: string;
     isStreaming?: boolean;
+    attachments?: Attachment[];
 }
 
 /**

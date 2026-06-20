@@ -376,8 +376,116 @@ export function generateStyles(config: AppearanceConfig): string {
             padding: 12px 16px;
             border-top: 1px solid rgba(0, 0, 0, 0.1);
             display: flex;
+            flex-direction: column;
             gap: 8px;
             flex-shrink: 0;
+        }
+
+        .sapiensly-input-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .sapiensly-attach {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .sapiensly-attach:hover {
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        .sapiensly-attach:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .sapiensly-attach svg {
+            width: 18px;
+            height: 18px;
+            fill: rgba(0, 0, 0, 0.55);
+        }
+
+        .sapiensly-attachments {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .sapiensly-attachments:empty {
+            display: none;
+        }
+
+        .sapiensly-attachment {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 180px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.06);
+            font-size: 12px;
+            color: var(--sw-text);
+        }
+
+        .sapiensly-attachment-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .sapiensly-attachment-loading {
+            opacity: 0.6;
+        }
+
+        .sapiensly-attachment-error {
+            background: rgba(220, 38, 38, 0.12);
+            color: #b91c1c;
+        }
+
+        .sapiensly-attachment-remove {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            padding: 0;
+        }
+
+        .sapiensly-attachment-remove svg {
+            width: 12px;
+            height: 12px;
+            fill: rgba(0, 0, 0, 0.45);
+        }
+
+        .sapiensly-message-attachments {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .sapiensly-message-attachment {
+            display: inline-block;
+            max-width: 100%;
+            padding: 4px 8px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.2);
+            font-size: 12px;
+            color: inherit;
+            text-decoration: underline;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .sapiensly-input {

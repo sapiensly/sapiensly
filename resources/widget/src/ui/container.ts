@@ -1,4 +1,9 @@
-import type { AppearanceConfig, BehaviorConfig, Message } from '../types';
+import type {
+    AppearanceConfig,
+    Attachment,
+    BehaviorConfig,
+    Message,
+} from '../types';
 import { Bubble } from './bubble';
 import { icons } from './icons';
 import { Input } from './input';
@@ -17,7 +22,8 @@ export class Container {
     private input: Input;
     private isOpen = false;
 
-    private onSend: (message: string) => void;
+    private onSend: (message: string, attachments: Attachment[]) => void;
+    private onUpload: (file: File) => Promise<Attachment>;
     private onOpen: () => void;
     private onClose: () => void;
 
@@ -25,12 +31,14 @@ export class Container {
         appearance: AppearanceConfig,
         behavior: BehaviorConfig,
         callbacks: {
-            onSend: (message: string) => void;
+            onSend: (message: string, attachments: Attachment[]) => void;
+            onUpload: (file: File) => Promise<Attachment>;
             onOpen: () => void;
             onClose: () => void;
         },
     ) {
         this.onSend = callbacks.onSend;
+        this.onUpload = callbacks.onUpload;
         this.onOpen = callbacks.onOpen;
         this.onClose = callbacks.onClose;
 
@@ -53,7 +61,11 @@ export class Container {
         this.messages = new Messages(appearance.welcome_message);
 
         // Create input component
-        this.input = new Input(appearance.placeholder_text, this.onSend);
+        this.input = new Input(
+            appearance.placeholder_text,
+            this.onSend,
+            this.onUpload,
+        );
 
         // Assemble the window
         const messagesContainer = this.window.querySelector(
