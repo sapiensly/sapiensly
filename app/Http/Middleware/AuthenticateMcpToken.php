@@ -53,6 +53,11 @@ class AuthenticateMcpToken
         $request->setUserResolver(fn () => $user);
         app()->instance(McpContext::class, $context);
 
+        // Scope spatie team-based permissions to the bound org (the MCP route has
+        // no SetPermissionsTeam middleware), so policy checks using
+        // hasPermissionTo resolve against this organization.
+        setPermissionsTeamId($org->id);
+
         return $next($request);
     }
 

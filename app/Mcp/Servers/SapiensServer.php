@@ -73,6 +73,7 @@ class SapiensServer extends Server
         Tools\Build\ValidateManifestTool::class,
         Tools\Build\ListAppVersionsTool::class,
         Tools\Build\RollbackAppTool::class,
+        Tools\Build\DeleteAppTool::class,
         Tools\Build\VerifyWorkflowTool::class,
         // Build catalogs.
         Tools\Build\ListAvailableComponentsTool::class,
@@ -94,6 +95,7 @@ class SapiensServer extends Server
         Tools\Chatbots\ScaffoldBotFlowTool::class,
         Tools\Chatbots\UpdateBotFlowTool::class,
         Tools\Chatbots\TestBotFlowTool::class,
+        Tools\Chatbots\DeleteChatbotTool::class,
         // Integrations & tools.
         Tools\Integrations\ListIntegrationsTool::class,
         Tools\Integrations\ListToolsTool::class,
@@ -114,6 +116,7 @@ class SapiensServer extends Server
         Tools\Agents\ListAgentsTool::class,
         Tools\Agents\GetAgentTool::class,
         Tools\Agents\InvokeAgentTool::class,
+        Tools\Agents\DeleteAgentTool::class,
     ];
 
     protected array $resources = [

@@ -5,12 +5,17 @@ use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Account\GetAiSpendTool;
 use App\Mcp\Tools\Account\ListTeamMembersTool;
 use App\Mcp\Tools\Account\WhoamiTool;
+use App\Mcp\Tools\Agents\DeleteAgentTool;
+use App\Mcp\Tools\Build\DeleteAppTool;
 use App\Mcp\Tools\Build\FrameworkReferenceTool;
 use App\Mcp\Tools\Build\ListAppsTool;
 use App\Mcp\Tools\Build\ListAvailableComponentsTool;
+use App\Mcp\Tools\Chatbots\DeleteChatbotTool;
 use App\Mcp\Tools\Chatbots\ListChatbotsTool;
 use App\Mcp\Tools\Integrations\ListIntegrationsTool;
+use App\Models\Agent;
 use App\Models\App;
+use App\Models\Chatbot;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Spatie\Permission\PermissionRegistrar;
@@ -136,6 +141,24 @@ it('get_ai_spend returns the report for an owner and is denied to a member', fun
     SapiensServer::actingAs($member)
         ->tool(GetAiSpendTool::class, [])
         ->assertHasErrors();
+});
+
+it('delete tools remove owned app, agent and chatbot', function () {
+    $org = mcpOrg();
+    $owner = mcpMember($org, MembershipRole::Owner);
+    setPermissionsTeamId($org->id); // spatie team, normally set by middleware
+
+    $app = App::factory()->create(['user_id' => $owner->id, 'organization_id' => $org->id, 'visibility' => 'private']);
+    $agent = Agent::factory()->create(['user_id' => $owner->id, 'organization_id' => $org->id, 'visibility' => 'private']);
+    $chatbot = Chatbot::factory()->create(['user_id' => $owner->id, 'organization_id' => $org->id, 'visibility' => 'private']);
+
+    SapiensServer::actingAs($owner)->tool(DeleteAppTool::class, ['app_slug' => $app->slug])->assertOk();
+    SapiensServer::actingAs($owner)->tool(DeleteAgentTool::class, ['agent_id' => $agent->id])->assertOk();
+    SapiensServer::actingAs($owner)->tool(DeleteChatbotTool::class, ['chatbot_id' => $chatbot->id])->assertOk();
+
+    expect(App::find($app->id))->toBeNull()
+        ->and(Agent::find($agent->id))->toBeNull()
+        ->and(Chatbot::find($chatbot->id))->toBeNull();
 });
 
 it('list tools return empty cleanly with no data', function () {
