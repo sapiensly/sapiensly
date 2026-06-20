@@ -3,6 +3,7 @@
 namespace App\Mcp\Servers;
 
 use App\Mcp\Tools;
+use Laravel\Mcp\Schema\Icon;
 use Laravel\Mcp\Server;
 use Laravel\Mcp\Server\Attributes\Instructions;
 use Laravel\Mcp\Server\Attributes\Name;
@@ -107,4 +108,19 @@ class SapiensServer extends Server
     protected array $prompts = [
         //
     ];
+
+    /**
+     * The Sapiensly mark, advertised in the MCP serverInfo so clients (e.g.
+     * claude.ai) display it next to the connector. Absolute URLs so a remote
+     * client can fetch them.
+     *
+     * @return list<Icon>
+     */
+    protected function icons(): array
+    {
+        return [
+            Icon::from(url('favicon.svg'), 'image/svg+xml'),
+            Icon::from(url('favicon/android-chrome-512x512.png'), 'image/png', ['512x512']),
+        ];
+    }
 }

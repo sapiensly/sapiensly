@@ -31,12 +31,13 @@
 
     <title>Authorize Application - {{ config('app.name', 'MCP Server') }}</title>
 
-    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="shortcut icon" href="/favicon.ico" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <meta name="apple-mobile-web-app-title" content="Authorize MCP" />
-    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png" />
+    <link rel="shortcut icon" href="/favicon/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="{{ config('app.name', 'Sapiensly') }}" />
+    <link rel="manifest" href="/favicon/site.webmanifest" />
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
@@ -51,9 +52,9 @@
             <!-- Header -->
             <div class="flex flex-col space-y-1.5 p-6">
                 <div class="flex items-center justify-center mb-4">
-                    <!-- Shield Icon -->
-                    <svg class="h-12 w-12 text-primary" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.031 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    <!-- Sapiensly mark -->
+                    <svg class="h-12 w-12" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+                        <path fill="#0059ff" d="M53.3 10.4c-11.6 2.9-23 10.8-29.1 20.3-13.1 20.5-8 49.9 11 63.9 6.5 4.7 14.6 8.2 21.7 9.1 6.4.8 7.1 1.6 7.1 8.4 0 3.2.5 6.1 1 6.4 1 .6 11.2-7.6 28.2-22.8 15.2-13.5 21.5-28.9 18.8-46.3-4.2-27.7-31.2-45.6-58.7-39z m22.4 15.2c14.2 4.8 23.1 17.9 20.4 30C94 64.9 83.2 74 74.3 74c-2.8 0-3.3.4-3.3 2.5 0 12.2-15.7 12.5-29.3.4C34.9 71 32 64.4 32 55.1c0-8.8 1.9-13.8 7.5-20 6.8-7.5 14.6-10.9 25.2-11 3.4-.1 8.4.6 11 1.5z"></path>
                     </svg>
                 </div>
 
@@ -62,7 +63,7 @@
                 </h3>
 
                 <p class="text-sm text-muted-foreground text-center">
-                    This application will be able to:<br/>Use available MCP functionality.
+                    Connect {{ $client->name }} to your {{ config('app.name', 'Sapiensly') }} organization over MCP.
                 </p>
             </div>
 

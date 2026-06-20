@@ -50,6 +50,14 @@ it('every registered tool instantiates with a unique snake_case name', function 
         ->and($names->every(fn ($n) => (bool) preg_match('/^[a-z][a-z0-9_]+$/', $n)))->toBeTrue();
 });
 
+it('advertises the Sapiensly icon in serverInfo', function () {
+    $server = (new ReflectionClass(SapiensServer::class))->newInstanceWithoutConstructor();
+    $icons = $server->resolvedIcons();
+
+    expect($icons)->not->toBeEmpty()
+        ->and($icons[0]->src)->toContain('favicon.svg');
+});
+
 it('exposes snake_case tool names without the Tool suffix', function () {
     expect((new ListAppsTool)->name())->toBe('list_apps')
         ->and((new ListAvailableComponentsTool)->name())->toBe('list_available_components');
