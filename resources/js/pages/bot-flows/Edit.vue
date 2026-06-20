@@ -80,6 +80,7 @@ interface AgentRef {
 }
 
 interface AvailableAgents {
+    general: AgentRef[];
     triage: AgentRef[];
     knowledge: AgentRef[];
     action: AgentRef[];
@@ -113,7 +114,12 @@ const props = withDefaults(defineProps<Props>(), {
     backUrl: null,
     assistantUrl: null,
     availableModels: () => [],
-    availableAgents: () => ({ triage: [], knowledge: [], action: [] }),
+    availableAgents: () => ({
+        general: [],
+        triage: [],
+        knowledge: [],
+        action: [],
+    }),
     knowledgeBases: () => [],
     tools: () => [],
 });

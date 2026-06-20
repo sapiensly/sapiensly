@@ -51,6 +51,7 @@ interface AgentRef {
 }
 
 interface AvailableAgents {
+    general: AgentRef[];
     triage: AgentRef[];
     knowledge: AgentRef[];
     action: AgentRef[];
@@ -79,7 +80,12 @@ const props = withDefaults(
     {
         allNodes: () => [],
         availableModels: () => [],
-        availableAgents: () => ({ triage: [], knowledge: [], action: [] }),
+        availableAgents: () => ({
+            general: [],
+            triage: [],
+            knowledge: [],
+            action: [],
+        }),
         knowledgeBases: () => [],
         tools: () => [],
     },
@@ -240,6 +246,7 @@ const allAgents = computed<AgentRef[]>(() => {
     const seen = new Set<string>();
     const out: AgentRef[] = [];
     for (const list of [
+        props.availableAgents.general,
         props.availableAgents.triage,
         props.availableAgents.knowledge,
         props.availableAgents.action,

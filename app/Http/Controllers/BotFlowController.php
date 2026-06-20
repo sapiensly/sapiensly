@@ -227,6 +227,9 @@ class BotFlowController extends Controller
         ])->values()->all();
 
         return [
+            // The roster roles drive the Multi-agent team; `general` (and the
+            // roles) feed the single-Agent picker.
+            'general' => $shape($agents->get('general', collect())),
             'triage' => $shape($agents->get('triage', collect())),
             'knowledge' => $shape($agents->get('knowledge', collect())),
             'action' => $shape($agents->get('action', collect())),
