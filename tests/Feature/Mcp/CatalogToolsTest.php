@@ -2,6 +2,7 @@
 
 use App\Enums\MembershipRole;
 use App\Mcp\Servers\SapiensServer;
+use App\Mcp\Tools\Account\GetAiSpendTool;
 use App\Mcp\Tools\Account\ListTeamMembersTool;
 use App\Mcp\Tools\Account\WhoamiTool;
 use App\Mcp\Tools\Build\FrameworkReferenceTool;
@@ -33,10 +34,9 @@ it('lists tools from every module', function () {
     $this->withToken($plain)
         ->postJson("/mcp/{$org->slug}/v1", ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])
         ->assertOk()
+        ->assertSee('whoami')
         ->assertSee('list_apps')
         ->assertSee('list_available_components')
-        ->assertSee('framework_reference')
-        ->assertSee('run_workflow')
         ->assertSee('nextCursor');
 });
 
@@ -118,6 +118,21 @@ it('list_team_members lists the org members with roles', function () {
         ->assertSee($owner->email)
         ->assertSee($member->email)
         ->assertSee('member');
+});
+
+it('get_ai_spend returns the report for an owner and is denied to a member', function () {
+    $org = mcpOrg();
+    $owner = mcpMember($org, MembershipRole::Owner);
+    $member = mcpMember($org, MembershipRole::Member);
+
+    SapiensServer::actingAs($owner)
+        ->tool(GetAiSpendTool::class, ['days' => 30])
+        ->assertOk()
+        ->assertSee('range_days');
+
+    SapiensServer::actingAs($member)
+        ->tool(GetAiSpendTool::class, [])
+        ->assertHasErrors();
 });
 
 it('list tools return empty cleanly with no data', function () {

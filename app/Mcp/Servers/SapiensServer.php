@@ -57,6 +57,7 @@ class SapiensServer extends Server
         // Identity & context.
         Tools\Account\WhoamiTool::class,
         Tools\Account\ListTeamMembersTool::class,
+        Tools\Account\GetAiSpendTool::class,
         // Build & debug apps.
         Tools\Build\ListAppsTool::class,
         Tools\Build\ReadManifestTool::class,
