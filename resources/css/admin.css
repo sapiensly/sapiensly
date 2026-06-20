@@ -751,6 +751,32 @@
     border: 1px solid var(--sp-accent-blue);
 }
 
+/*
+ * Our custom `input` node type collides with Vue Flow's reserved built-in type
+ * name (`input`, alongside `output` / `default`), so theme-default.css paints it
+ * with its default chrome — a white box, fixed 150px width, border and a
+ * selection box-shadow — wrapping our own card. Strip that default so the custom
+ * node card is the only thing rendered, like every other node type.
+ */
+.vue-flow__node-input,
+.vue-flow__node-output,
+.vue-flow__node-default {
+    width: auto;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: inherit;
+    text-align: left;
+    font-size: inherit;
+}
+.vue-flow__node-input.selected,
+.vue-flow__node-output.selected,
+.vue-flow__node-default.selected {
+    box-shadow: none;
+}
+
 /* Zoom / fit-view controls — bottom-left pill cluster. */
 .sp-flow-controls.vue-flow__controls {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
