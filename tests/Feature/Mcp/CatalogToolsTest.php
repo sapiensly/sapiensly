@@ -1,6 +1,8 @@
 <?php
 
+use App\Enums\MembershipRole;
 use App\Mcp\Servers\SapiensServer;
+use App\Mcp\Tools\Account\WhoamiTool;
 use App\Mcp\Tools\Build\FrameworkReferenceTool;
 use App\Mcp\Tools\Build\ListAppsTool;
 use App\Mcp\Tools\Build\ListAvailableComponentsTool;
@@ -90,6 +92,18 @@ it('list_apps returns the caller apps', function () {
         ->tool(ListAppsTool::class, [])
         ->assertOk()
         ->assertSee($app->slug);
+});
+
+it('whoami returns the acting user and the bound organization', function () {
+    $org = mcpOrg();
+    $user = mcpMember($org, MembershipRole::Owner);
+
+    SapiensServer::actingAs($user)
+        ->tool(WhoamiTool::class, [])
+        ->assertOk()
+        ->assertSee($user->email)
+        ->assertSee($org->slug)
+        ->assertSee('owner');
 });
 
 it('list tools return empty cleanly with no data', function () {

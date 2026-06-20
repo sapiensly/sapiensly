@@ -16,6 +16,9 @@ Sapiensly MCP server. Tools act within your organization's tenant — every app,
 record, knowledge base, chatbot and agent is scoped to you automatically. Which
 tools you see depends on your token's abilities.
 
+Start with whoami to see who you're acting as (user + role) and the organization
+this connection is bound to.
+
 Build & debug apps (apps:build):
   - list_apps, read_manifest, then propose_change (RFC 6902 patches, saved as
     reversible versions); validate_manifest checks a draft first.
@@ -51,6 +54,8 @@ class SapiensServer extends Server
      * never sees the write tools.
      */
     protected array $tools = [
+        // Identity & context.
+        Tools\Account\WhoamiTool::class,
         // Build & debug apps.
         Tools\Build\ListAppsTool::class,
         Tools\Build\ReadManifestTool::class,
