@@ -57,6 +57,7 @@ class BotFlowReferenceTool extends SapiensTool
             ],
             'variables' => "An `input` node stores the captured value in the flow state's `variables` bag, keyed by the node's `variable` field. Variables persist across turns for the rest of the conversation.",
             'target_agent' => "An `agent_handoff` node's `target_agent` is a fixed ROLE SLUG — one of `knowledge`, `action`, or `triage_llm` — NOT an account agent id. It is resolved against the flow's roster: the `agent` nodes bind real account agents (via `agent_id`) to the `triage` / `knowledge` / `action` roles. `triage_llm` is the built-in fallback when no roster agent applies. To use a specific account agent, add an `agent` node with that agent_id and the matching role.",
+            'editor_only_fields' => "An `agent_handoff` node from the visual editor may also carry `mode` ('agent' | 'multi_agent') and `layers` (triage/knowledge/tools agent picks). These are EDITOR-ONLY presentation state — the runtime ignores them and routes purely by `target_agent` + the `agent` roster nodes. When authoring via update_bot_flow, set `target_agent` (and add `agent` roster nodes); you may leave `mode`/`layers` out. Don't infer the bot's real agent from them when reading a flow.",
             'node_types' => [
                 [
                     'type' => 'start',
