@@ -57,7 +57,7 @@ paste `https://<app>/mcp/<org-slug>/v1` and authorize (OAuth, no token).
 
 Leaving abilities empty grants all of them.
 
-## Tool catalog (47 tools)
+## Tool catalog (49 tools)
 
 ### Identity & context
 
@@ -107,6 +107,8 @@ Leaving abilities empty grants all of them.
 | Tool | Description |
 |---|---|
 | `list_chatbots` | Your chatbots and whether they have a bot flow. |
+| `get_chatbot` | A single chatbot's full config (status, channel, widget config, allowed origins, agent roster). |
+| `bot_flow_reference` | Authoring reference for bot flows: node types, fields, edges and a worked example. Read before editing a flow; pass `node_type` to drill in. |
 | `read_bot_flow` | The chatbot's flow graph (nodes/edges). |
 | `scaffold_bot_flow` | Generate a flow from a plain-language description (returns, doesn't save). |
 | `update_bot_flow` | Replace a chatbot's flow definition (validated). |
