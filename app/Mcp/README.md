@@ -50,14 +50,16 @@ paste `https://<app>/mcp/<org-slug>/v1` and authorize (OAuth, no token).
 | Ability | Grants |
 |---|---|
 | _(none)_ | Identity tools (`whoami`, `list_team_members`); `get_ai_spend` is owner-gated. |
-| `apps:build` | Build/debug apps & chatbots, workflows, integrations, and **delete** apps/agents/chatbots. |
-| `data:read` | Read records & knowledge. |
-| `data:write` | Create/update/delete records. |
-| `agents:invoke` | List/inspect/invoke agents. |
+| `apps:build` | Create/build/debug & delete apps and chatbots; workflows; manage tools and **author** agents (create/update/delete); integrations. |
+| `data:read` | Read records, knowledge bases and documents. |
+| `data:write` | Create/update/delete records, knowledge bases and documents. |
+| `agents:invoke` | List/inspect/**invoke** agents and resume conversations. |
 
-Leaving abilities empty grants all of them.
+Leaving abilities empty grants all of them. Note the split for agents:
+**authoring** one (create/update/delete) is `apps:build`, while **invoking** it
+and listing conversations is `agents:invoke`.
 
-## Tool catalog (49 tools)
+## Tool catalog (67 tools)
 
 ### Identity & context
 
@@ -71,6 +73,7 @@ Leaving abilities empty grants all of them.
 
 | Tool | Description |
 |---|---|
+| `create_app` | Create a new app, seeded with an empty valid manifest as version 1. |
 | `list_apps` | List the apps you can build/edit. |
 | `read_manifest` | Read an app's active manifest (objects, pages, workflows, agent config). |
 | `propose_change` | Apply RFC 6902 JSON Patch ops to the manifest → saved as a reversible version. |
@@ -108,6 +111,8 @@ Leaving abilities empty grants all of them.
 |---|---|
 | `list_chatbots` | Your chatbots and whether they have a bot flow. |
 | `get_chatbot` | A single chatbot's full config (status, channel, widget config, allowed origins, agent roster). |
+| `create_chatbot` | Create a draft widget chatbot (companion channel + blank bot flow). |
+| `update_chatbot` | Partial update of the chatbot's own config (name, status, visibility, widget config, allowed origins); `status=active` publishes it. |
 | `bot_flow_reference` | Authoring reference for bot flows: node types, fields, edges and a worked example. Read before editing a flow; pass `node_type` to drill in. |
 | `read_bot_flow` | The chatbot's flow graph (nodes/edges). |
 | `scaffold_bot_flow` | Generate a flow from a plain-language description (returns, doesn't save). |
@@ -121,6 +126,10 @@ Leaving abilities empty grants all of them.
 |---|---|
 | `list_integrations` | Provisioned integrations (REST/GraphQL/database/MCP). |
 | `list_tools` | Connector operations, with effect (read/write) and safe flag. |
+| `get_tool` | A tool's full config (secrets masked) + resolved connector contract (typed IO + effect). |
+| `create_tool` | Create a tool of a given type (function/mcp/rest_api/graphql/database/group); secrets encrypted at rest. |
+| `update_tool` | Partial update of a tool (type immutable; secrets merged + encrypted). |
+| `delete_tool` | **Delete** a tool. |
 | `list_connector_actions` | Typed connector actions (inputs/outputs/effect). |
 | `test_tool_connection` | Check a tool/connector can reach its endpoint. |
 | `execute_tool` | Run a tool with parameters (a write tool performs a real external op). |
@@ -135,17 +144,38 @@ Leaving abilities empty grants all of them.
 | `create_record` | data:write | Create a record (validated against the object's fields). |
 | `update_record` | data:write | Update fields on a record. |
 | `delete_record` | data:write | **Delete** a record by id. |
+
+### Knowledge bases (`data:read` / `data:write`)
+
+| Tool | Ability | Description |
+|---|---|---|
 | `search_knowledge` | data:read | RAG search across the tenant's knowledge bases. |
 | `list_knowledge_bases` | data:read | Knowledge bases with status and counts. |
-| `list_documents` | data:read | Documents in the account, optionally per knowledge base. |
+| `get_knowledge_base` | data:read | A KB's config (chunking), status, counts and attached documents. |
+| `create_knowledge_base` | data:write | Create a RAG corpus (configurable chunking). |
+| `update_knowledge_base` | data:write | Partial update (name, description, keywords, chunking config). |
+| `delete_knowledge_base` | data:write | **Delete** a knowledge base. |
 
-### Agents (`agents:invoke`)
+### Documents (`data:read` / `data:write`)
+
+| Tool | Ability | Description |
+|---|---|---|
+| `list_documents` | data:read | Documents in the account, optionally per knowledge base. |
+| `get_document` | data:read | A document's body (if inline) and the KBs it's attached to. |
+| `add_document` | data:write | Add a document from raw text; optionally attach to a KB (triggers embedding). |
+| `delete_document` | data:write | **Delete** a document, or just detach it from one KB. |
+
+### Agents (`agents:invoke` to use, `apps:build` to author)
 
 | Tool | Ability | Description |
 |---|---|---|
 | `list_agents` | agents:invoke | Agents you can use (id, name, type, status). |
 | `get_agent` | agents:invoke | Full agent config: model, system prompt, tools, knowledge bases. |
-| `invoke_agent` | agents:invoke | Send a message to an agent and get its reply (synchronous). |
+| `invoke_agent` | agents:invoke | Send a message to an agent and get its reply (synchronous); reuse `conversation_id` for memory. |
+| `list_conversations` | agents:invoke | Your existing agent conversations, to resume one. |
+| `list_agent_models` | apps:build | The chat model ids you can assign to an agent (the picker catalog). |
+| `create_agent` | apps:build | Create a draft agent (type, model, prompt, tools, knowledge bases). |
+| `update_agent` | apps:build | Partial update of an agent (e.g. `status=active` to publish, or switch model). |
 | `delete_agent` | apps:build | **Permanently delete** an agent. |
 
 ## Conventions
@@ -161,5 +191,7 @@ Leaving abilities empty grants all of them.
 ## Tests
 
 `tests/Feature/Mcp/**` (auth/binding, tool handlers, ability gating, the
-expanded catalog). Shared helpers (`mcpOrg`/`mcpMember`/`mcpToken`) live in
-`tests/Pest.php`.
+expanded catalog) — including the management slices
+`{Tool,KnowledgeBase,Document,App,Chatbot}ManagementTest` and agent
+create/update/invoke in `SapiensServerTest`. Shared helpers
+(`mcpOrg`/`mcpMember`/`mcpToken`) live in `tests/Pest.php`.
