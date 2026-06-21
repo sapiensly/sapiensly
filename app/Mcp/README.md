@@ -59,13 +59,14 @@ Leaving abilities empty grants all of them. Note the split for agents:
 **authoring** one (create/update/delete) is `apps:build`, while **invoking** it
 and listing conversations is `agents:invoke`.
 
-## Tool catalog (67 tools)
+## Tool catalog (68 tools)
 
 ### Identity & context
 
 | Tool | Ability | Description |
 |---|---|---|
 | `whoami` | — | Who you act as (user + role) and the bound organization (name, members, AI limits). Call this first. |
+| `guide` | — | Orientation + cross-tool task playbooks (deploy a support squad, build an app, RAG, …), the abilities map and conventions. Call with a `topic` for full steps. |
 | `list_team_members` | — | The org's members with name, email, role and status. |
 | `get_ai_spend` | owner | The org's AI spend over 7/30/90 days: cost, calls, tokens, own-vs-system split, per-model breakdown, daily series, and budgets/caps. |
 

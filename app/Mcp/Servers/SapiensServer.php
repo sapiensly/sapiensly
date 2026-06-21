@@ -17,7 +17,8 @@ record, knowledge base, chatbot and agent is scoped to you automatically. Which
 tools you see depends on your token's abilities.
 
 Start with whoami to see who you're acting as (user + role) and the organization
-this connection is bound to.
+this connection is bound to. Call guide for task playbooks that span tools
+(deploy a support squad, build an app, stand up RAG, …) and the abilities map.
 
 Build & debug apps (apps:build):
   - create_app starts a new app (empty valid manifest, version 1). Then
@@ -81,6 +82,7 @@ class SapiensServer extends Server
     protected array $tools = [
         // Identity & context.
         Tools\Account\WhoamiTool::class,
+        Tools\Account\GuideTool::class,
         Tools\Account\ListTeamMembersTool::class,
         Tools\Account\GetAiSpendTool::class,
         // Build & debug apps.
