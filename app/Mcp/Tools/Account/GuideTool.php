@@ -20,6 +20,7 @@ class GuideTool extends SapiensTool
 
         if ($topic === '') {
             return Response::json([
+                'what_is_sapiensly' => $this->whatIsSapiensly(),
                 'overview' => $this->overview(),
                 'abilities' => $this->abilities(),
                 'conventions' => $this->conventions(),
@@ -50,9 +51,14 @@ class GuideTool extends SapiensTool
         return Response::json(['playbook' => $playbook]);
     }
 
+    private function whatIsSapiensly(): string
+    {
+        return 'Sapiensly is a self-serve agentic-AI platform that sells agents which do real work on the write path — they call APIs, process payments, update the CRM, write to databases, and run code in a sandbox. Its modules include Chat, Agents, Apps, Chatbots, Tools, Documents, Knowledge Bases (KBs), and Integrations.';
+    }
+
     private function overview(): string
     {
-        return 'Sapiensly MCP lets you build and operate an organization\'s AI workforce end to end — apps, agents, tools, knowledge bases, documents and chatbots — all scoped to your tenant automatically. Call whoami first to see who you act as and the bound org. Then pick a playbook below for a cross-tool recipe; each individual tool\'s description has its own parameter detail.';
+        return 'This MCP connection lets you build and operate an organization\'s AI workforce end to end — apps, agents, tools, knowledge bases, documents and chatbots — all scoped to your tenant automatically. Call whoami first to see who you act as and the bound org. Then pick a playbook below for a cross-tool recipe; each individual tool\'s description has its own parameter detail.';
     }
 
     /**

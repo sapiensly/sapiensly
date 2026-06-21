@@ -14,7 +14,8 @@ it('guide with no topic returns the map and the playbook index', function () {
     SapiensServer::actingAs($this->user)
         ->tool(GuideTool::class, [])
         ->assertOk()
-        ->assertSee('overview')
+        ->assertSee('what_is_sapiensly')
+        ->assertSee('agentic-AI platform')
         ->assertSee('abilities')
         ->assertSee('support_squad');
 });
