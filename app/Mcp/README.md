@@ -179,6 +179,39 @@ and listing conversations is `agents:invoke`.
 | `update_agent` | apps:build | Partial update of an agent (e.g. `status=active` to publish, or switch model). |
 | `delete_agent` | apps:build | **Permanently delete** an agent. |
 
+## Internal agents (platform tools)
+
+The same catalogue is also exposed **in-process** to every Sapiensly agent/model
+so an internal agent can build and orchestrate like an external client — without
+authoring `Tool` records. This is a one-way bridge from the MCP tools to the
+Laravel AI SDK; the MCP server itself is untouched.
+
+- **Bridge:** `app/Ai/Tools/Platform/McpBridgeTool.php` adapts one `SapiensTool`
+  to a `Laravel\Ai\Contracts\Tool` (`description()`/`schema()` delegate). Its
+  `handle()` runs the MCP handler **as the agent's owner** — it sets the auth
+  user + `TenantContext` (RLS GUCs) to the owner and restores them after — so the
+  handler's own `forAccountContext` + `$user->can()` + RLS cap every call at the
+  owner. **An agent can never do more than the user who owns it.**
+- **Factory:** `app/Ai/Tools/Platform/PlatformToolsFactory.php` bridges
+  `SapiensServer::TOOLS` (the same `public const` the server registers — no
+  drift) **minus a `DENYLIST`** of destructive/irreversible ops, the
+  "read + safe writes" posture: `delete_*`, `execute_tool`, `run_workflow`,
+  `approve_/dismiss_workflow_proposal`, `rollback_app`, `test_tool_connection`.
+  `merge()` dedupes so an explicitly-attached tool wins.
+- **Where it's injected (every agent-run seam):** `LLMService::buildAgent`
+  (covers `invoke_agent` + the `chatWith*` paths; routing/triage runs opt out),
+  `ChatAiService::buildChatTools`, and `RunDebateTurnJob`. Each bridged tool gets
+  a unique class name via `app/Ai/Tools/RuntimeToolFactory.php`.
+- **Excluded by design:** the **app-runtime agents** (`RuntimeAgentService` /
+  `RuntimeAgentToolset`) — they are a deliberate sandbox scoped to what the app
+  manifest grants, so the platform catalogue is *not* added there. The
+  **builder** meta-agent is likewise excluded.
+- **Recursion:** `invoke_agent` stays in the safe set with a depth cap (3) on top
+  of the `AiSpendGuard` budget ceiling.
+- **A new MCP tool propagates automatically** — a Pest drift guard
+  (`tests/Feature/Ai/PlatformToolsTest.php`) fails CI if a registered tool is
+  neither exposed nor denylisted, forcing an explicit safe/unsafe call.
+
 ## Conventions
 
 - **propose-don't-apply** — app/agent writes go through validated, reversible

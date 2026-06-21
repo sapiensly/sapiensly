@@ -3,7 +3,6 @@
 namespace App\Services\Runtime;
 
 use App\Ai\ChatAgent;
-use App\Ai\Tools\Platform\PlatformToolsFactory;
 use App\Events\Runtime\RuntimeAgentStreamChunk;
 use App\Events\Runtime\RuntimeAgentStreamComplete;
 use App\Events\Runtime\RuntimeAgentStreamError;
@@ -75,12 +74,11 @@ class RuntimeAgentService
         }
 
         $proposals = new ProposedActions;
+        // App runtime agents are intentionally NOT granted the platform tools:
+        // RuntimeAgentToolset is a deliberate sandbox scoped to what the app
+        // manifest grants ("an agent can never exceed its manifest"), and the
+        // platform catalogue would widen that to the whole tenant.
         $tools = $this->toolset->tools($app, $manifest, $proposals);
-
-        // Add the platform tools (MCP catalogue) scoped to the conversation owner.
-        if ($conversation->user !== null) {
-            $tools = PlatformToolsFactory::merge($tools, $conversation->user);
-        }
 
         $history = $this->buildHistory($conversation, $placeholder->id);
         $promptText = $this->popLastUserPrompt($history, $userText);
