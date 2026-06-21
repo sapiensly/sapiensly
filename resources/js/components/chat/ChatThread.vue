@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ActionCard from '@/components/chat/ActionCard.vue';
+import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import AgentMessageBubble from '@/components/chat/AgentMessageBubble.vue';
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
 import { type Artifact, parseArtifacts, type Segment } from '@/lib/artifacts';
@@ -8,6 +9,7 @@ import type {
     ChatAgentRef,
     ChatMessageDto,
     ChatSynthesisStatus,
+    ConsultationDto,
 } from '@/types/chatModule';
 import { Check, Copy, FileText, RotateCw, Sparkles, Wrench } from '@lucide/vue';
 import DOMPurify from 'dompurify';
@@ -22,10 +24,17 @@ const props = defineProps<{
     title?: string | null;
     activeArtifactId?: string | null;
     toolActivity?: Record<string, string>;
+    consultations?: Record<string, ConsultationDto[]>;
     synthesisStatus?: ChatSynthesisStatus;
     actionBusy?: boolean;
     agents?: ChatAgentRef[];
 }>();
+
+// The consultations to render for a message: the live (streaming) ones while
+// they arrive, falling back to the persisted consultation_context on reload.
+function consultationsFor(m: ChatMessageDto): ConsultationDto[] {
+    return props.consultations?.[m.id] ?? m.consultation_context ?? [];
+}
 
 // Split a user message into plain runs and @mention runs so the mentioned
 // agents' full names render as distinct chips. Matches the longest agent names
@@ -225,6 +234,7 @@ function isLast(index: number): boolean {
                     <AgentMessageBubble
                         v-else-if="isAgentMessage(m)"
                         :message="m"
+                        :consultations="consultationsFor(m)"
                         :tool-activity="
                             toolActivity ? toolActivity[m.id] : null
                         "
@@ -275,6 +285,11 @@ function isLast(index: number): boolean {
                                         })
                                     }}
                                 </div>
+                                <AgentConsultationCard
+                                    v-for="c in consultationsFor(m)"
+                                    :key="c.id"
+                                    :consultation="c"
+                                />
                                 <template
                                     v-for="(seg, si) in segmentsFor(m)"
                                     :key="si"

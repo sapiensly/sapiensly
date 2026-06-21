@@ -38,6 +38,7 @@ class ChatMessagePresenter
             'message_type' => $message->message_type ?? 'text',
             'agent_data_context' => $message->agent_data_context,
             'action_payload' => $message->action_payload,
+            'consultation_context' => $message->consultation_context,
             'attachments' => $message->attachments->map(fn ($a) => [
                 'id' => $a->id,
                 'original_name' => $a->original_name,

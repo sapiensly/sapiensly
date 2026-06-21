@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
 import { type Artifact, parseArtifacts, type Segment } from '@/lib/artifacts';
 import { normalizeChatMarkdown } from '@/lib/markdown';
-import type { ChatMessageDto } from '@/types/chatModule';
+import type { ChatMessageDto, ConsultationDto } from '@/types/chatModule';
 import { Bot, Wrench } from '@lucide/vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -14,8 +15,13 @@ const { t } = useI18n();
 const props = defineProps<{
     message: ChatMessageDto;
     toolActivity?: string | null;
+    consultations?: ConsultationDto[];
     activeArtifactId?: string | null;
 }>();
+
+const consultationCards = computed<ConsultationDto[]>(
+    () => props.consultations ?? props.message.consultation_context ?? [],
+);
 
 defineEmits<{ openArtifact: [artifact: Artifact] }>();
 
@@ -106,6 +112,11 @@ function renderMarkdown(content: string | null): string {
                         })
                     }}
                 </div>
+                <AgentConsultationCard
+                    v-for="c in consultationCards"
+                    :key="c.id"
+                    :consultation="c"
+                />
 
                 <template v-for="(seg, si) in segments()" :key="si">
                     <ArtifactCard

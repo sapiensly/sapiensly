@@ -3,6 +3,7 @@
 namespace App\Services\Chat;
 
 use App\Ai\ChatAgent;
+use App\Ai\Tools\Chat\ConsultAgentTool;
 use App\Ai\Tools\DynamicTool;
 use App\Ai\Tools\McpServerTool;
 use App\Ai\Tools\Platform\PlatformToolsFactory;
@@ -26,7 +27,9 @@ use App\Services\RetrievalService;
 use App\Services\ToolConfigService;
 use App\Services\ToolExecutionService;
 use App\Services\Tools\McpClient;
+use App\Support\Chat\ConsultationLog;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -237,6 +240,9 @@ class ChatAiService
         // as data pills. Only persisted for explicit agent turns (multi-agent).
         $usedSources = [];
 
+        // Agents this turn consulted (via consult_agent), persisted as cards.
+        $consultationLog = new ConsultationLog;
+
         try {
             $provider = Lab::Anthropic;
             if ($user !== null) {
@@ -255,6 +261,20 @@ class ChatAiService
             }
 
             $tools = $this->buildChatTools($toolIds, $user, $webSearch);
+
+            // Cross-agent consultation: when other agents exist, the running
+            // model/agent can consult them mid-turn (background or in the front)
+            // and is told they exist + how to reach them. Always user-visible.
+            if ($user !== null) {
+                $roster = $this->consultableAgents($user, $agent);
+                if ($roster->isNotEmpty()) {
+                    $tools[] = RuntimeToolFactory::named(
+                        'consult_agent',
+                        new ConsultAgentTool($chat, $placeholder, $user, $agent, $consultationLog),
+                    );
+                    $instructions .= "\n\n".$this->consultationGuidance($roster);
+                }
+            }
 
             $sdkAgent = new ChatAgent(
                 instructions: $instructions,
@@ -304,8 +324,11 @@ class ChatAiService
                 }
 
                 if ($event instanceof ToolCall) {
-                    $usedSources[$this->prettySource($event->toolCall->name)] = 'used';
-                    $this->safeBroadcast(fn () => ChatToolCall::dispatch($chat->id, $placeholder->id, $event->toolCall->name));
+                    // consult_agent has its own richer ChatAgentConsultation event.
+                    if ($event->toolCall->name !== 'consult_agent') {
+                        $usedSources[$this->prettySource($event->toolCall->name)] = 'used';
+                        $this->safeBroadcast(fn () => ChatToolCall::dispatch($chat->id, $placeholder->id, $event->toolCall->name));
+                    }
 
                     continue;
                 }
@@ -338,6 +361,9 @@ class ChatAiService
             ];
             if ($explicitAgent !== null) {
                 $finalAttributes['agent_data_context'] = $usedSources ?: null;
+            }
+            if (! $consultationLog->isEmpty()) {
+                $finalAttributes['consultation_context'] = $consultationLog->all();
             }
             $placeholder->update($finalAttributes);
 
@@ -514,6 +540,45 @@ class ChatAiService
         $label = trim((string) preg_replace('/[_-]+/', ' ', $name));
 
         return $label === '' ? $name : Str::ucfirst($label);
+    }
+
+    /**
+     * The other agents the running model/agent may consult this turn — active
+     * agents in the user's account context, excluding the one already running.
+     *
+     * @return Collection<int, Agent>
+     */
+    private function consultableAgents(User $user, ?Agent $current): Collection
+    {
+        return Agent::query()
+            ->forAccountContext($user)
+            ->where('status', 'active')
+            ->when($current !== null, fn ($q) => $q->where('id', '!=', $current->id))
+            ->orderBy('name')
+            ->get(['id', 'name', 'description', 'type']);
+    }
+
+    /**
+     * System-prompt addendum that makes the running agent aware of its peers and
+     * how to consult them, with a roster of who's available.
+     *
+     * @param  Collection<int, Agent>  $roster
+     */
+    private function consultationGuidance(Collection $roster): string
+    {
+        $list = $roster
+            ->map(fn (Agent $a) => '- '.$a->name.' (id: '.$a->id.', '.$a->type?->value.')'
+                .($a->description ? ' — '.$a->description : ''))
+            ->implode("\n");
+
+        return <<<PROMPT
+            ## Consulting other agents
+            You are not alone — these other agents are available in this workspace, each with their own expertise:
+
+            {$list}
+
+            When a question genuinely falls in another agent's domain, or a decision warrants a second opinion, consult one with the `consult_agent` tool (agent_id, question, visible). Set `visible: true` to show the user that agent's full answer as a card; leave it false to consult quietly and fold the answer into your reply. Briefly tell the user when you're consulting someone and why. Do NOT consult for routine questions you can answer yourself, and never consult more than necessary.
+            PROMPT;
     }
 
     /**

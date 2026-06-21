@@ -28,6 +28,7 @@ class ChatMessage extends Model
         'message_type',
         'agent_data_context',
         'action_payload',
+        'consultation_context',
     ];
 
     protected function casts(): array
@@ -35,6 +36,7 @@ class ChatMessage extends Model
         return [
             'agent_data_context' => 'array',
             'action_payload' => 'array',
+            'consultation_context' => 'array',
         ];
     }
 

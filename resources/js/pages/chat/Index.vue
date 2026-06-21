@@ -16,6 +16,7 @@ import type {
     ChatModelOption,
     ChatProjectDto,
     ChatToolOption,
+    ConsultationDto,
     KnowledgeBaseOption,
 } from '@/types/chatModule';
 import { Head, router } from '@inertiajs/vue3';
@@ -57,6 +58,8 @@ const currentModel = ref<string | null>(
 );
 const selectedToolIds = ref<string[]>(props.activeChat?.tool_ids ?? []);
 const toolActivity = ref<Record<string, string>>({});
+// Live agent-consultation cards per streaming message, keyed by consultation id.
+const consultations = ref<Record<string, ConsultationDto[]>>({});
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null);
 const stopped = ref<Set<string>>(new Set());
 
@@ -197,6 +200,37 @@ function subscribe(id: string) {
     );
 
     channel.listen(
+        '.ChatAgentConsultation',
+        (data: {
+            message_id: string;
+            phase: 'start' | 'result';
+            consultation_id: string;
+            agent_id: string;
+            agent_name: string;
+            question: string;
+            visible: boolean;
+            answer: string | null;
+        }) => {
+            const list = (consultations.value[data.message_id] ?? []).filter(
+                (c) => c.id !== data.consultation_id,
+            );
+            list.push({
+                id: data.consultation_id,
+                agent_id: data.agent_id,
+                agent_name: data.agent_name,
+                question: data.question,
+                answer: data.answer,
+                visible: data.visible,
+                pending: data.phase === 'start',
+            });
+            consultations.value = {
+                ...consultations.value,
+                [data.message_id]: list,
+            };
+        },
+    );
+
+    channel.listen(
         '.ChatStreamComplete',
         (payload: {
             message: ChatMessageDto;
@@ -206,6 +240,10 @@ function subscribe(id: string) {
             upsert({ ...payload.message, attachments: [] });
             delete toolActivity.value[payload.message.id];
             toolActivity.value = { ...toolActivity.value };
+            // The completed message now carries consultation_context; drop the
+            // live copy so the persisted one renders.
+            delete consultations.value[payload.message.id];
+            consultations.value = { ...consultations.value };
             if (payload.title && payload.chat_id === activeId.value) {
                 activeTitle.value = payload.title;
             }
@@ -265,6 +303,8 @@ function subscribe(id: string) {
 function unsubscribe() {
     if (channel && subscribedId) {
         channel.stopListening('.ChatStreamChunk');
+        channel.stopListening('.ChatToolCall');
+        channel.stopListening('.ChatAgentConsultation');
         channel.stopListening('.ChatStreamComplete');
         channel.stopListening('.ChatStreamError');
         channel.stopListening('.ChatAgentStarted');
@@ -288,6 +328,7 @@ watch(
         synthesisStatus.value = props.activeChat?.synthesis_status ?? null;
         actionBusy.value = false;
         toolActivity.value = {};
+        consultations.value = {};
         stopped.value = new Set();
         // Treat artifacts already in the loaded conversation as "seen" so we
         // don't auto-open an old artifact every time the chat is opened.
@@ -498,6 +539,7 @@ function retry() {
                         :title="activeTitle"
                         :active-artifact-id="activeArtifactId"
                         :tool-activity="toolActivity"
+                        :consultations="consultations"
                         :synthesis-status="synthesisStatus"
                         :action-busy="actionBusy"
                         :agents="agents"

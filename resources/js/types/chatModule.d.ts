@@ -48,6 +48,19 @@ export interface ChatMessageDto {
     message_type?: ChatMessageType;
     agent_data_context?: Record<string, string> | null;
     action_payload?: ActionPayloadDto | null;
+    // Agents this turn consulted (the "ask another agent" feature).
+    consultation_context?: ConsultationDto[] | null;
+}
+
+export interface ConsultationDto {
+    id: string;
+    agent_id: string;
+    agent_name: string;
+    question: string;
+    answer: string | null;
+    visible: boolean;
+    // Client-only: true while awaiting the consulted agent's answer (live).
+    pending?: boolean;
 }
 
 export type ChatSynthesisStatus =
