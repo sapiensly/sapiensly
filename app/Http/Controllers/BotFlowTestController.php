@@ -6,6 +6,7 @@ use App\Enums\BotFlowActionType;
 use App\Models\BotFlow;
 use App\Services\BotFlowAction;
 use App\Services\BotFlowExecutorService;
+use App\Services\ConversationAttachmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,6 +14,7 @@ class BotFlowTestController extends Controller
 {
     public function __construct(
         private readonly BotFlowExecutorService $executor,
+        private readonly ConversationAttachmentService $attachments,
     ) {}
 
     /**
@@ -51,7 +53,12 @@ class BotFlowTestController extends Controller
 
         $validated = $request->validate([
             'state' => ['required', 'array'],
-            'message' => ['required', 'string', 'max:4000'],
+            'message' => ['nullable', 'string', 'max:4000'],
+            // Simulated uploads for testing file-input / file-routing nodes — no
+            // bytes are stored, only the type metadata the runtime routes on.
+            'attachments' => ['nullable', 'array', 'max:10'],
+            'attachments.*.original_name' => ['required', 'string'],
+            'attachments.*.mime' => ['required', 'string'],
         ]);
 
         if ($validated['state']['completed'] ?? false) {
@@ -63,8 +70,17 @@ class BotFlowTestController extends Controller
             ]);
         }
 
+        $attachments = array_map(fn (array $a) => $this->attachments->descriptor(
+            'test_'.uniqid(),
+            $a['original_name'],
+            $a['mime'],
+            '',
+            '',
+            null,
+        ), $validated['attachments'] ?? []);
+
         $messages = [];
-        $action = $this->executor->processInput($flow, $validated['state'], $validated['message']);
+        $action = $this->executor->processInput($flow, $validated['state'], (string) ($validated['message'] ?? ''), $attachments);
         $state = $this->collectMessages($flow, $action, $messages);
 
         return response()->json([
