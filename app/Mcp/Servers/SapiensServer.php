@@ -36,14 +36,23 @@ Chatbots (apps:build):
     scaffold_bot_flow (generate from a prompt), update_bot_flow (persist a
     definition), test_bot_flow (step it with messages).
 
-Integrations (apps:build):
-  - list_integrations, list_tools, list_connector_actions, test_tool_connection,
+Integrations & tools (apps:build):
+  - list_integrations, list_connector_actions, test_tool_connection,
     execute_tool (a write tool performs a real external operation — confirm first).
+  - Manage tools (one tool = one connector operation): list_tools, get_tool
+    (config masked + typed contract), create_tool, update_tool, delete_tool.
+    create_tool needs a type (function/mcp/rest_api/graphql/database/group) and
+    its type-specific config; secrets are encrypted at rest.
 
 Tenant data (data:read / data:write):
-  - query_records, get_record, aggregate_records, search_knowledge (RAG),
-    list_knowledge_bases, list_documents; create_record / update_record /
-    delete_record to write.
+  - Records: query_records, get_record, aggregate_records; create_record /
+    update_record / delete_record to write.
+  - Knowledge bases (RAG): search_knowledge, list_knowledge_bases,
+    get_knowledge_base; create_knowledge_base / update_knowledge_base /
+    delete_knowledge_base to manage the corpus.
+  - Documents: list_documents, get_document; add_document feeds raw text into a
+    KB (triggers embedding); delete_document removes it (or just detaches from
+    one KB). Binary files (PDF/DOCX) are uploaded via the web app.
 
 Agents (agents:invoke):
   - list_agents, get_agent, invoke_agent (synchronous reply). For a multi-turn
@@ -105,6 +114,10 @@ class SapiensServer extends Server
         // Integrations & tools.
         Tools\Integrations\ListIntegrationsTool::class,
         Tools\Integrations\ListToolsTool::class,
+        Tools\Integrations\GetToolTool::class,
+        Tools\Integrations\CreateToolTool::class,
+        Tools\Integrations\UpdateToolTool::class,
+        Tools\Integrations\DeleteToolTool::class,
         Tools\Integrations\ListConnectorActionsTool::class,
         Tools\Integrations\TestToolConnectionTool::class,
         Tools\Integrations\ExecuteToolTool::class,
@@ -116,8 +129,17 @@ class SapiensServer extends Server
         Tools\Data\UpdateRecordTool::class,
         Tools\Data\DeleteRecordTool::class,
         Tools\Data\SearchKnowledgeTool::class,
+        // Knowledge bases.
         Tools\Data\ListKnowledgeBasesTool::class,
+        Tools\Data\GetKnowledgeBaseTool::class,
+        Tools\Data\CreateKnowledgeBaseTool::class,
+        Tools\Data\UpdateKnowledgeBaseTool::class,
+        Tools\Data\DeleteKnowledgeBaseTool::class,
+        // Documents.
         Tools\Data\ListDocumentsTool::class,
+        Tools\Data\GetDocumentTool::class,
+        Tools\Data\AddDocumentTool::class,
+        Tools\Data\DeleteDocumentTool::class,
         // Agents.
         Tools\Agents\ListAgentsTool::class,
         Tools\Agents\GetAgentTool::class,
