@@ -439,6 +439,21 @@ class CloudProviderService
     }
 
     /**
+     * Persistable disk NAME mirroring {@see diskForOrganizationOrFallback()}:
+     * the resolved provider's deterministic name, else the static 'documents'
+     * disk. Store this on a row so the file round-trips back to the same disk via
+     * {@see ensureDiskRegistered()} in any later process (e.g. when surfacing a
+     * downloaded WhatsApp image to a vision model).
+     */
+    public function diskNameForOrganizationOrFallback(?string $organizationId): string
+    {
+        $organization = $organizationId ? Organization::find($organizationId) : null;
+        $provider = $this->resolveStorage($organization);
+
+        return $provider ? $this->registerDisk($provider) : 'documents';
+    }
+
+    /**
      * Owner-aware variant of {@see diskForOrganizationOrFallback()}: honors a
      * **personal** (no-org) storage provider too, so a user's own object
      * storage is used. Resolution: org tenant → personal → global → the

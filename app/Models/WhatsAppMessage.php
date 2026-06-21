@@ -28,6 +28,7 @@ class WhatsAppMessage extends Model
         'media_url',
         'media_local_path',
         'media_mime',
+        'media_disk',
         'template_name',
         'template_language',
         'wamid',

@@ -11,7 +11,6 @@ use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
 use App\Services\ConversationAttachmentService;
 use App\Services\LLMService;
-use App\Services\Storage\TenantStorage;
 use App\Services\TeamOrchestrationService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -41,7 +40,6 @@ class WhatsAppReplyOrchestrator
         private TeamOrchestrationService $orchestrationService,
         private WhatsAppMessageSender $sender,
         private ConversationAttachmentService $attachments,
-        private TenantStorage $tenantStorage,
     ) {}
 
     public function reply(WhatsAppConversation $conversation): void
@@ -75,9 +73,9 @@ class WhatsAppReplyOrchestrator
 
         $synthetic = $this->buildSyntheticConversation($conversation, $messages);
 
-        // Files the contact sent this turn (a PDF/image on WhatsApp) — documents
-        // are surfaced to the bot via their extracted text.
-        $attachments = $this->turnAttachments($messages, $channel->organization_id);
+        // Files the contact sent this turn (a PDF/image on WhatsApp): documents
+        // via their extracted text, images for vision.
+        $attachments = $this->turnAttachments($messages);
 
         try {
             $reply = count($roster) === 1
@@ -187,36 +185,26 @@ class WhatsAppReplyOrchestrator
     }
 
     /**
-     * Build normalized descriptors for the file the contact sent this turn.
-     * Documents carry their extracted text (no disk needed); images need a
-     * resolvable disk for vision, which we attach best-effort.
+     * Build a normalized descriptor for the file the contact sent this turn.
+     * `media_disk` (persisted by the download job) lets images resolve for
+     * vision; documents also carry their extracted text.
      *
      * @param  Collection<int, WhatsAppMessage>  $messages
      * @return array<int, array<string, mixed>>
      */
-    private function turnAttachments(Collection $messages, ?string $organizationId): array
+    private function turnAttachments(Collection $messages): array
     {
         $last = $messages->last();
         if ($last === null || ! $last->media_mime || ! $last->media_local_path) {
             return [];
         }
 
-        $mime = (string) $last->media_mime;
-        $disk = '';
-        if ($this->attachments->kindForMime($mime) === 'image') {
-            try {
-                $disk = $this->tenantStorage->diskNameForOwner($organizationId, null);
-            } catch (\Throwable) {
-                $disk = '';
-            }
-        }
-
         return [
             $this->attachments->descriptor(
                 (string) $last->id,
                 basename((string) $last->media_local_path),
-                $mime,
-                $disk,
+                (string) $last->media_mime,
+                (string) ($last->media_disk ?? ''),
                 (string) $last->media_local_path,
                 $last->metadata['extracted_text'] ?? null,
             ),

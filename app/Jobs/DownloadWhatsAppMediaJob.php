@@ -10,6 +10,7 @@ use App\Support\Storage\TenantPath;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
@@ -65,7 +66,10 @@ class DownloadWhatsAppMediaJob implements ShouldQueue
         }
 
         $organization = $connection->channel?->organization;
-        $disk = $cloud->diskForOrganizationOrFallback($organization?->id);
+        // Persist the disk NAME (not just the path) so the reply orchestrator can
+        // resolve the same disk in its own process and hand an image to a vision
+        // model. Same resolution as before — no behavioural change to the write.
+        $diskName = $cloud->diskNameForOrganizationOrFallback($organization?->id);
 
         $extension = $this->guessExtension($message->media_mime);
         $path = TenantPath::scope(
@@ -74,9 +78,9 @@ class DownloadWhatsAppMediaJob implements ShouldQueue
             sprintf('whatsapp/%s/%s%s', $connection->id, $message->id, $extension),
         );
 
-        $disk->put($path, $bytes);
+        Storage::disk($diskName)->put($path, $bytes);
 
-        $message->forceFill(['media_local_path' => $path])->save();
+        $message->forceFill(['media_local_path' => $path, 'media_disk' => $diskName])->save();
 
         $this->extractDocumentText($message, $bytes);
     }
