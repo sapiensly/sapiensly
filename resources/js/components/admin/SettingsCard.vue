@@ -20,7 +20,7 @@ withDefaults(defineProps<Props>(), { tint: 'var(--sp-accent-blue)' });
 
 <template>
     <section
-        class="grid gap-4 rounded-sp-sm border border-soft bg-navy p-5 md:grid-cols-[220px_1fr]"
+        class="grid gap-4 rounded-sp-sm border border-soft bg-navy p-5 md:grid-cols-[220px_minmax(0,1fr)]"
     >
         <header class="space-y-2">
             <div
@@ -39,7 +39,7 @@ withDefaults(defineProps<Props>(), { tint: 'var(--sp-accent-blue)' });
             </p>
             <slot name="badge" />
         </header>
-        <div class="space-y-3">
+        <div class="min-w-0 space-y-3">
             <slot />
         </div>
     </section>

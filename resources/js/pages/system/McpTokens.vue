@@ -153,7 +153,7 @@ function formatDate(value: string | null): string {
                         <div class="flex gap-2">
                             <Input
                                 :model-value="justCreatedToken"
-                                class="h-9 font-mono"
+                                class="h-9 min-w-0 flex-1 font-mono"
                                 readonly
                             />
                             <button

@@ -46,7 +46,9 @@ Tenant data (data:read / data:write):
     delete_record to write.
 
 Agents (agents:invoke):
-  - list_agents, get_agent, invoke_agent (synchronous reply).
+  - list_agents, get_agent, invoke_agent (synchronous reply). For a multi-turn
+    conversation, reuse the conversation_id invoke_agent returns on the next
+    call; list_conversations resumes an earlier thread.
 TXT)]
 class SapiensServer extends Server
 {
@@ -120,6 +122,7 @@ class SapiensServer extends Server
         Tools\Agents\ListAgentsTool::class,
         Tools\Agents\GetAgentTool::class,
         Tools\Agents\InvokeAgentTool::class,
+        Tools\Agents\ListConversationsTool::class,
         Tools\Agents\DeleteAgentTool::class,
     ];
 

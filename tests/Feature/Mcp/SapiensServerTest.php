@@ -2,14 +2,18 @@
 
 use App\Mcp\McpContext;
 use App\Mcp\Servers\SapiensServer;
+use App\Mcp\Tools\Agents\InvokeAgentTool;
 use App\Mcp\Tools\Agents\ListAgentsTool;
+use App\Mcp\Tools\Agents\ListConversationsTool;
 use App\Mcp\Tools\Build\ReadManifestTool;
 use App\Mcp\Tools\Data\QueryRecordsTool;
 use App\Models\Agent;
 use App\Models\App;
 use App\Models\AppVersion;
+use App\Models\Conversation;
 use App\Models\McpAccessToken;
 use App\Models\User;
+use App\Services\LLMService;
 use Illuminate\Support\Str;
 
 /**
@@ -100,6 +104,66 @@ it('list_agents only returns agents in the caller account context', function () 
     $response = SapiensServer::actingAs($this->user)->tool(ListAgentsTool::class, []);
 
     $response->assertOk()->assertSee($mine->id);
+});
+
+it('invoke_agent starts a conversation and returns its id', function () {
+    $agent = Agent::factory()->create(['user_id' => $this->user->id, 'organization_id' => $this->user->organization_id]);
+
+    $llm = Mockery::mock(LLMService::class);
+    $llm->shouldReceive('setContext')->andReturnSelf();
+    $llm->shouldReceive('chat')->once()->andReturn('Hello back!');
+    $this->app->instance(LLMService::class, $llm);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(InvokeAgentTool::class, ['agent_id' => $agent->id, 'message' => 'Hello'])
+        ->assertOk()
+        ->assertSee('Hello back!')
+        ->assertSee('conversation_id');
+
+    $conversation = Conversation::where('user_id', $this->user->id)->where('agent_id', $agent->id)->first();
+    expect($conversation)->not->toBeNull();
+    expect($conversation->messages()->count())->toBe(2);
+    expect($conversation->title)->toBe('Hello');
+});
+
+it('invoke_agent replays prior turns when given a conversation_id', function () {
+    $agent = Agent::factory()->create(['user_id' => $this->user->id, 'organization_id' => $this->user->organization_id]);
+    $conversation = Conversation::create(['user_id' => $this->user->id, 'agent_id' => $agent->id, 'title' => 'prior']);
+    $conversation->messages()->create(['role' => 'user', 'content' => 'first question']);
+    $conversation->messages()->create(['role' => 'assistant', 'content' => 'first answer']);
+
+    $llm = Mockery::mock(LLMService::class);
+    $llm->shouldReceive('setContext')->andReturnSelf();
+    $llm->shouldReceive('chat')
+        ->once()
+        ->withArgs(function ($agentArg, $messages) {
+            // Two prior turns + the new user message are handed to the model.
+            return count($messages) === 3 && end($messages)->content === 'follow up';
+        })
+        ->andReturn('second answer');
+    $this->app->instance(LLMService::class, $llm);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(InvokeAgentTool::class, [
+            'agent_id' => $agent->id,
+            'message' => 'follow up',
+            'conversation_id' => $conversation->id,
+        ])
+        ->assertOk()
+        ->assertSee('second answer');
+
+    expect($conversation->fresh()->messages()->count())->toBe(4);
+});
+
+it('list_conversations returns the caller threads for an agent', function () {
+    $agent = Agent::factory()->create(['user_id' => $this->user->id, 'organization_id' => $this->user->organization_id]);
+    $mine = Conversation::create(['user_id' => $this->user->id, 'agent_id' => $agent->id, 'title' => 'my thread']);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ListConversationsTool::class, ['agent_id' => $agent->id])
+        ->assertOk()
+        ->assertSee($mine->id)
+        ->assertSee('my thread');
 });
 
 it('hides a tool the token has no ability for', function () {
