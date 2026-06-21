@@ -1,0 +1,139 @@
+<?php
+
+use App\Mcp\Servers\SapiensServer;
+use App\Mcp\Tools\Build\ScaffoldAppTool;
+use App\Models\App;
+use App\Models\User;
+use App\Services\Ai\AiDefaults;
+use App\Services\AiProviderService;
+use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\ManifestValidator;
+use Illuminate\Support\Str;
+
+beforeEach(function () {
+    $this->user = User::factory()->create(['email_verified_at' => now()]);
+});
+
+/**
+ * Stub the model-driven spec extraction with a fixed spec, but run it through
+ * the REAL deterministic assembler so the test exercises the tool's persistence
+ * path against a genuinely-assembled (and validator-checked) manifest.
+ *
+ * @param  array<int, array<string, mixed>>  $objects
+ */
+function fakeScaffold(array $objects): void
+{
+    test()->mock(AppScaffolder::class)
+        ->shouldReceive('scaffold')
+        ->once()
+        ->andReturnUsing(function (array $base) use ($objects): array {
+            $real = new AppScaffolder(app(AiDefaults::class), app(AiProviderService::class));
+
+            return $real->assemble($base, ['objects' => $objects]);
+        });
+}
+
+it('scaffold_app creates a populated app with a CRUD page per object', function () {
+    fakeScaffold([
+        ['name' => 'Ideas', 'slug' => 'ideas', 'fields' => [
+            ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null],
+            ['name' => 'Status', 'slug' => 'status', 'type' => 'single_select', 'options' => [
+                ['value' => 'backlog', 'label' => 'Backlog'],
+                ['value' => 'ready', 'label' => 'Ready'],
+            ]],
+        ]],
+        ['name' => 'Drafts', 'slug' => 'drafts', 'fields' => [
+            ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null],
+        ]],
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Content Engine',
+            'description' => 'Track content ideas through drafts to publication.',
+        ])
+        ->assertOk()
+        ->assertSee('content_engine')
+        ->assertSee('version_number');
+
+    $app = App::where('user_id', $this->user->id)->where('slug', 'content_engine')->first();
+    expect($app)->not->toBeNull();
+    expect($app->versions()->count())->toBe(1);
+
+    $manifest = $app->versions()->first()->manifest;
+    expect($manifest['objects'])->toHaveCount(2);
+    expect($manifest['pages'])->toHaveCount(2);
+    expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('scaffold_app derives a unique slug from the name when omitted', function () {
+    App::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'slug' => 'content_engine',
+    ]);
+
+    fakeScaffold([
+        ['name' => 'Ideas', 'slug' => 'ideas', 'fields' => [
+            ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null],
+        ]],
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Content Engine',
+            'description' => 'Another content app.',
+        ])
+        ->assertOk()
+        ->assertSee('content_engine_2');
+});
+
+it('scaffold_app rejects an explicit duplicate slug without creating an app', function () {
+    App::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'slug' => 'taken',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Dup',
+            'slug' => 'taken',
+            'description' => 'x',
+        ])
+        ->assertHasErrors();
+
+    expect(App::where('name', 'Dup')->exists())->toBeFalse();
+});
+
+it('assembles a valid manifest with the create-modal wiring', function () {
+    $base = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_'.strtolower((string) Str::ulid()),
+        'slug' => 'demo',
+        'name' => 'Demo',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [
+            ['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true],
+        ]],
+        'settings' => ['default_currency' => 'MXN'],
+    ];
+
+    $manifest = app(AppScaffolder::class)->assemble($base, ['objects' => [
+        ['name' => 'Tasks', 'slug' => 'tasks', 'fields' => [
+            ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null],
+        ]],
+    ]]);
+
+    expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+
+    $blockTypes = collect($manifest['pages'][0]['blocks'])->pluck('type')->all();
+    expect($blockTypes)->toContain('heading', 'modal', 'button', 'table');
+
+    // The button opens the modal that actually exists on the page.
+    $button = collect($manifest['pages'][0]['blocks'])->firstWhere('type', 'button');
+    $modal = collect($manifest['pages'][0]['blocks'])->firstWhere('type', 'modal');
+    expect($button['on_click'][0]['modal_block_id'])->toBe($modal['id']);
+});

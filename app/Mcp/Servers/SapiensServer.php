@@ -92,6 +92,7 @@ class SapiensServer extends Server
         // Build & debug apps.
         Tools\Build\ListAppsTool::class,
         Tools\Build\CreateAppTool::class,
+        Tools\Build\ScaffoldAppTool::class,
         Tools\Build\ReadManifestTool::class,
         Tools\Build\ProposeChangeTool::class,
         Tools\Build\ValidateManifestTool::class,

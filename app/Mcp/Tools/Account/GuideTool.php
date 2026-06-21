@@ -84,7 +84,7 @@ class GuideTool extends SapiensTool
         return [
             'Drafts first: create_* makes a draft (app/agent/tool/chatbot). Configure it, then the matching update_* with status=active publishes it.',
             'Partial updates: every update_* changes only the fields you pass — omit the rest to leave them untouched.',
-            'Apps are patched, not replaced: read_manifest, then propose_change with RFC 6902 ops. Each change is validated and saved as a reversible version; rollback_app reverts. validate_manifest dry-checks a draft first.',
+            'Apps: start with scaffold_app (a description in, a complete working app out) rather than building from scratch with patches. After that, apps are patched, not replaced: read_manifest, then propose_change with RFC 6902 ops. Each change is validated and saved as a reversible version; rollback_app reverts. validate_manifest dry-checks a draft first.',
             'Secrets are protected: tool auth/credentials are encrypted at rest and masked in get_tool — re-send a secret only when changing it.',
             'Destructive tools are irreversible: delete_* and a full delete_document remove data for good — confirm with the user first.',
             'Everything is tenant-scoped: you only ever see and write your own organization\'s data; ids from other tenants are simply not visible.',
@@ -116,12 +116,11 @@ class GuideTool extends SapiensTool
                 'topic' => 'build_app',
                 'when' => 'Build a data app (objects, pages, workflows).',
                 'steps' => [
-                    '1. create_app (slug matches ^[a-z][a-z0-9_]*$, unique in your account).',
-                    '2. Browse the catalogs before authoring: list_available_components / list_available_field_types / list_available_actions / list_available_triggers / list_available_steps; framework_reference for depth.',
-                    '3. read_manifest, then propose_change with RFC 6902 ops to add objects/pages/workflows. validate_manifest dry-checks a draft manifest first.',
-                    '4. list_app_versions / rollback_app to manage history (every change is a reversible version).',
-                    '5. Workflows: verify_workflow (dry-run, writes simulated) then run_workflow; approve_workflow_proposal for gated writes.',
-                    '6. Records (data:read/write): query_records / create_record / update_record once objects exist.',
+                    '1. PREFER scaffold_app: give it the app name + a plain-language description and it generates a COMPLETE working app (objects, fields, and a list+create page each) in one step, saved as version 1. This is the reliable way to start — far less error-prone than hand-writing patches. Use create_app instead only when you deliberately want an empty manifest.',
+                    '2. Refine from there: read_manifest, then propose_change with RFC 6902 ops to add/adjust objects, pages and workflows. Browse the catalogs first (list_available_components / list_available_field_types / list_available_actions / list_available_triggers / list_available_steps; framework_reference for depth); validate_manifest dry-checks a draft manifest.',
+                    '3. list_app_versions / rollback_app to manage history (every change is a reversible version).',
+                    '4. Workflows: verify_workflow (dry-run, writes simulated) then run_workflow; approve_workflow_proposal for gated writes.',
+                    '5. Records (data:read/write): query_records / create_record / update_record once objects exist.',
                 ],
             ],
             [
