@@ -62,7 +62,22 @@ it('scaffold_app creates a populated app with a CRUD page per object', function 
 
     $manifest = $app->versions()->first()->manifest;
     expect($manifest['objects'])->toHaveCount(2);
-    expect($manifest['pages'])->toHaveCount(2);
+    // A dashboard landing page plus one CRUD page per object.
+    expect($manifest['pages'])->toHaveCount(3);
+    expect(collect($manifest['pages'])->pluck('path'))->toContain('/', '/ideas', '/drafts');
+
+    // The dashboard shows a KPI per object and a status distribution chart.
+    $dashboard = collect($manifest['pages'])->firstWhere('path', '/');
+    $metricGrid = collect($dashboard['blocks'])->firstWhere('type', 'metric_grid');
+    expect($metricGrid['items'])->toHaveCount(2);
+    expect(collect($dashboard['blocks'])->pluck('type'))->toContain('chart');
+
+    // The status-bearing object's page gets a kanban board; the other doesn't.
+    $ideas = collect($manifest['pages'])->firstWhere('path', '/ideas');
+    $drafts = collect($manifest['pages'])->firstWhere('path', '/drafts');
+    expect(collect($ideas['blocks'])->pluck('type'))->toContain('kanban', 'table');
+    expect(collect($drafts['blocks'])->pluck('type'))->not->toContain('kanban');
+
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 });
 
@@ -129,11 +144,12 @@ it('assembles a valid manifest with the create-modal wiring', function () {
 
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 
-    $blockTypes = collect($manifest['pages'][0]['blocks'])->pluck('type')->all();
+    $page = collect($manifest['pages'])->firstWhere('path', '/tasks');
+    $blockTypes = collect($page['blocks'])->pluck('type')->all();
     expect($blockTypes)->toContain('heading', 'modal', 'button', 'table');
 
     // The button opens the modal that actually exists on the page.
-    $button = collect($manifest['pages'][0]['blocks'])->firstWhere('type', 'button');
-    $modal = collect($manifest['pages'][0]['blocks'])->firstWhere('type', 'modal');
+    $button = collect($page['blocks'])->firstWhere('type', 'button');
+    $modal = collect($page['blocks'])->firstWhere('type', 'modal');
     expect($button['on_click'][0]['modal_block_id'])->toBe($modal['id']);
 });

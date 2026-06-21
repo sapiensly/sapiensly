@@ -240,7 +240,9 @@ class AppScaffolder
     }
 
     /**
-     * Deterministically assemble objects + a CRUD page each into the base manifest.
+     * Deterministically assemble objects, a CRUD page each (with a kanban board
+     * when the object has a status field), and a dashboard landing page, into
+     * the base manifest.
      *
      * @param  array<string, mixed>  $base
      * @param  array{objects: array<int, array{name: string, slug: string, fields: array<int, array<string, mixed>>}>}  $spec
@@ -252,11 +254,20 @@ class AppScaffolder
 
         $objects = [];
         $pages = [];
+        $built = [];
 
         foreach ($spec['objects'] as $object) {
             [$objectDef, $fieldIndex] = $this->buildObject($object, $currency);
             $objects[] = $objectDef;
-            $pages[] = $this->buildPage($object, $objectDef['id'], $fieldIndex);
+            $pages[] = $this->buildPage(['name' => $objectDef['name'], 'slug' => $objectDef['slug']], $objectDef['id'], $fieldIndex);
+            $built[] = ['name' => $objectDef['name'], 'id' => $objectDef['id'], 'fieldIndex' => $fieldIndex];
+        }
+
+        // A dashboard landing page summarising every object goes first so it is
+        // the app's home. Only worth it once there is something to summarise.
+        if ($built !== []) {
+            $dashboardSlug = $this->uniqueSlug('dashboard', array_column($pages, 'slug'), 'dashboard');
+            array_unshift($pages, $this->buildDashboard($base['name'] ?? 'Dashboard', $dashboardSlug, $built));
         }
 
         $base['objects'] = $objects;
@@ -292,7 +303,7 @@ class AppScaffolder
      * Build one field definition + its index entry from a normalized field spec.
      *
      * @param  array{name: string, slug: string, type: string, options?: array<int, array{value: string, label: string}>|null}  $field
-     * @return array{0: array<string, mixed>, 1: array{id: string, slug: string}}
+     * @return array{0: array<string, mixed>, 1: array{id: string, slug: string, type: string}}
      */
     public function buildField(array $field, string $currency): array
     {
@@ -316,7 +327,7 @@ class AppScaffolder
             ], $field['options'] ?? []);
         }
 
-        return [$definition, ['id' => $fieldId, 'slug' => $field['slug']]];
+        return [$definition, ['id' => $fieldId, 'slug' => $field['slug'], 'type' => $field['type']]];
     }
 
     /**
@@ -380,18 +391,143 @@ class AppScaffolder
             'columns' => $columns,
         ];
 
+        $blocks = [
+            ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $object['name']],
+            $modal,
+            $button,
+        ];
+
+        // A status (single_select) field turns the page into a board: a kanban
+        // grouped by that status, with the title field on each card.
+        $kanban = $this->buildKanban($objectId, $fieldIndex);
+        if ($kanban !== null) {
+            $blocks[] = $kanban;
+        }
+
+        $blocks[] = $table;
+
         return [
             'id' => $this->id('pag'),
             'slug' => $object['slug'],
             'name' => $object['name'],
             'path' => '/'.$object['slug'],
-            'blocks' => [
-                ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $object['name']],
-                $modal,
-                $button,
-                $table,
-            ],
+            'blocks' => $blocks,
         ];
+    }
+
+    /**
+     * A kanban board grouped by the object's first status (single_select) field,
+     * or null when the object has no such field. Cards show the title field plus
+     * up to two other non-status fields.
+     *
+     * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
+     * @return array<string, mixed>|null
+     */
+    private function buildKanban(string $objectId, array $fieldIndex): ?array
+    {
+        $status = $this->firstFieldOfType($fieldIndex, 'single_select');
+        $title = $this->titleField($fieldIndex);
+        if ($status === null || $title === null) {
+            return null;
+        }
+
+        $meta = [];
+        foreach ($fieldIndex as $field) {
+            if ($field['id'] !== $status['id'] && $field['id'] !== $title['id'] && count($meta) < 2) {
+                $meta[] = ['field_id' => $field['id']];
+            }
+        }
+
+        $kanban = [
+            'id' => $this->id('blk'),
+            'type' => 'kanban',
+            'data_source' => ['object_id' => $objectId],
+            'group_by_field_id' => $status['id'],
+            'card_title_field_id' => $title['id'],
+        ];
+        if ($meta !== []) {
+            $kanban['card_meta_fields'] = $meta;
+        }
+
+        return $kanban;
+    }
+
+    /**
+     * A dashboard landing page: a KPI per object (record count) plus a
+     * distribution chart for each object that has a status field (capped).
+     *
+     * @param  array<int, array{name: string, id: string, fieldIndex: array<int, array{id: string, slug: string, type: string}>}>  $objects
+     * @return array<string, mixed>
+     */
+    private function buildDashboard(string $appName, string $slug, array $objects): array
+    {
+        $items = array_map(fn (array $o): array => [
+            'id' => $this->id('itm'),
+            'label' => $o['name'],
+            'query' => ['object_id' => $o['id']],
+            'aggregation' => 'count',
+        ], $objects);
+
+        $blocks = [
+            ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $appName],
+            ['id' => $this->id('blk'), 'type' => 'metric_grid', 'items' => $items],
+        ];
+
+        $charts = 0;
+        foreach ($objects as $object) {
+            if ($charts >= 3) {
+                break;
+            }
+            $status = $this->firstFieldOfType($object['fieldIndex'], 'single_select');
+            if ($status === null) {
+                continue;
+            }
+            $blocks[] = [
+                'id' => $this->id('blk'),
+                'type' => 'chart',
+                'label' => $object['name'].' by status',
+                'chart_type' => 'bar',
+                'data_source' => ['object_id' => $object['id']],
+                'aggregation' => 'count',
+                'group_by_field_id' => $status['id'],
+            ];
+            $charts++;
+        }
+
+        return [
+            'id' => $this->id('pag'),
+            'slug' => $slug,
+            'name' => 'Dashboard',
+            'path' => '/',
+            'blocks' => $blocks,
+        ];
+    }
+
+    /**
+     * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
+     * @return array{id: string, slug: string, type: string}|null
+     */
+    private function firstFieldOfType(array $fieldIndex, string $type): ?array
+    {
+        foreach ($fieldIndex as $field) {
+            if ($field['type'] === $type) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The field to label a record by: the first string field, else the first
+     * field of any kind.
+     *
+     * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
+     * @return array{id: string, slug: string, type: string}|null
+     */
+    private function titleField(array $fieldIndex): ?array
+    {
+        return $this->firstFieldOfType($fieldIndex, 'string') ?? ($fieldIndex[0] ?? null);
     }
 
     /**

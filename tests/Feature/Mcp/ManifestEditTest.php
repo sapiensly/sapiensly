@@ -69,7 +69,7 @@ it('add_field adds the field and wires it into the table and create form', funct
     $newField = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'status');
     expect($newField['type'])->toBe('single_select');
 
-    $page = $manifest['pages'][0];
+    $page = collect($manifest['pages'])->firstWhere('path', '/ideas');
     $table = findBlock($page['blocks'], 'table');
     $form = findBlock($page['blocks'], 'form');
 
@@ -100,7 +100,8 @@ it('add_object adds a new object with its own CRUD page', function () {
     $manifest = currentManifest($this->appModel);
 
     expect($manifest['objects'])->toHaveCount(2);
-    expect($manifest['pages'])->toHaveCount(2);
+    // Seeded dashboard + ideas page, plus the new drafts page.
+    expect($manifest['pages'])->toHaveCount(3);
     expect(collect($manifest['objects'])->pluck('slug'))->toContain('drafts');
     expect(collect($manifest['pages'])->pluck('path'))->toContain('/drafts');
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
