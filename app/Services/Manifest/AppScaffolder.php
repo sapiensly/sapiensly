@@ -136,10 +136,32 @@ class AppScaffolder
     }
 
     /**
+     * Coerce one loose field spec into the normalized, always-valid shape,
+     * keeping its slug unique against $takenSlugs. Used when adding a single
+     * field to an existing object.
+     *
+     * @param  array<string, mixed>  $field
+     * @param  array<int, string>  $takenSlugs
+     * @return array{name: string, slug: string, type: string, options: array<int, array{value: string, label: string}>|null}|null
+     */
+    public function normalizeField(array $field, array $takenSlugs = []): ?array
+    {
+        $normalized = $this->normalizeFields([$field]);
+        if ($normalized === []) {
+            return null;
+        }
+
+        $only = $normalized[0];
+        $only['slug'] = $this->uniqueSlug($only['slug'], $takenSlugs, 'field');
+
+        return $only;
+    }
+
+    /**
      * @param  array<int, mixed>  $rawFields
      * @return array<int, array{name: string, slug: string, type: string, options: array<int, array{value: string, label: string}>|null}>
      */
-    private function normalizeFields(array $rawFields): array
+    public function normalizeFields(array $rawFields): array
     {
         $fields = [];
         $usedSlugs = [];
@@ -247,34 +269,15 @@ class AppScaffolder
      * @param  array{name: string, slug: string, fields: array<int, array<string, mixed>>}  $object
      * @return array{0: array<string, mixed>, 1: array<int, array{id: string, slug: string}>}
      */
-    private function buildObject(array $object, string $currency): array
+    public function buildObject(array $object, string $currency): array
     {
         $fields = [];
         $fieldIndex = [];
 
         foreach ($object['fields'] as $field) {
-            $fieldId = $this->id('fld');
-            $definition = [
-                'id' => $fieldId,
-                'slug' => $field['slug'],
-                'name' => $field['name'],
-                'type' => $field['type'],
-            ];
-
-            if ($field['type'] === 'currency') {
-                $definition['currency_code'] = $currency;
-            }
-
-            if (in_array($field['type'], ['single_select', 'multi_select'], true)) {
-                $definition['options'] = array_map(fn (array $opt): array => [
-                    'id' => $this->id('opt'),
-                    'value' => $opt['value'],
-                    'label' => $opt['label'],
-                ], $field['options'] ?? []);
-            }
-
+            [$definition, $indexEntry] = $this->buildField($field, $currency);
             $fields[] = $definition;
-            $fieldIndex[] = ['id' => $fieldId, 'slug' => $field['slug']];
+            $fieldIndex[] = $indexEntry;
         }
 
         return [[
@@ -286,13 +289,44 @@ class AppScaffolder
     }
 
     /**
+     * Build one field definition + its index entry from a normalized field spec.
+     *
+     * @param  array{name: string, slug: string, type: string, options?: array<int, array{value: string, label: string}>|null}  $field
+     * @return array{0: array<string, mixed>, 1: array{id: string, slug: string}}
+     */
+    public function buildField(array $field, string $currency): array
+    {
+        $fieldId = $this->id('fld');
+        $definition = [
+            'id' => $fieldId,
+            'slug' => $field['slug'],
+            'name' => $field['name'],
+            'type' => $field['type'],
+        ];
+
+        if ($field['type'] === 'currency') {
+            $definition['currency_code'] = $currency;
+        }
+
+        if (in_array($field['type'], ['single_select', 'multi_select'], true)) {
+            $definition['options'] = array_map(fn (array $opt): array => [
+                'id' => $this->id('opt'),
+                'value' => $opt['value'],
+                'label' => $opt['label'],
+            ], $field['options'] ?? []);
+        }
+
+        return [$definition, ['id' => $fieldId, 'slug' => $field['slug']]];
+    }
+
+    /**
      * One list page per object: heading + "new" button + create modal/form + table.
      *
      * @param  array{name: string, slug: string}  $object
      * @param  array<int, array{id: string, slug: string}>  $fieldIndex
      * @return array<string, mixed>
      */
-    private function buildPage(array $object, string $objectId, array $fieldIndex): array
+    public function buildPage(array $object, string $objectId, array $fieldIndex): array
     {
         $modalId = $this->id('blk');
 
@@ -361,9 +395,10 @@ class AppScaffolder
     }
 
     /**
-     * A schema-valid prefixed id: `<prefix>_<lowercased ULID>`.
+     * A schema-valid prefixed id: `<prefix>_<lowercased ULID>`. Public so the
+     * manifest editor can mint ids when injecting blocks into existing pages.
      */
-    private function id(string $prefix): string
+    public function id(string $prefix): string
     {
         return $prefix.'_'.strtolower((string) Str::ulid());
     }
