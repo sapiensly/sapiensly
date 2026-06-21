@@ -121,6 +121,9 @@ class SapiensServer extends Server
         // Agents.
         Tools\Agents\ListAgentsTool::class,
         Tools\Agents\GetAgentTool::class,
+        Tools\Agents\ListAgentModelsTool::class,
+        Tools\Agents\CreateAgentTool::class,
+        Tools\Agents\UpdateAgentTool::class,
         Tools\Agents\InvokeAgentTool::class,
         Tools\Agents\ListConversationsTool::class,
         Tools\Agents\DeleteAgentTool::class,

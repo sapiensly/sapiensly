@@ -1,10 +1,14 @@
 <?php
 
+use App\Enums\AgentStatus;
 use App\Mcp\McpContext;
 use App\Mcp\Servers\SapiensServer;
+use App\Mcp\Tools\Agents\CreateAgentTool;
 use App\Mcp\Tools\Agents\InvokeAgentTool;
+use App\Mcp\Tools\Agents\ListAgentModelsTool;
 use App\Mcp\Tools\Agents\ListAgentsTool;
 use App\Mcp\Tools\Agents\ListConversationsTool;
+use App\Mcp\Tools\Agents\UpdateAgentTool;
 use App\Mcp\Tools\Build\ReadManifestTool;
 use App\Mcp\Tools\Data\QueryRecordsTool;
 use App\Models\Agent;
@@ -164,6 +168,63 @@ it('list_conversations returns the caller threads for an agent', function () {
         ->assertOk()
         ->assertSee($mine->id)
         ->assertSee('my thread');
+});
+
+it('create_agent creates a draft agent in the caller account context', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(CreateAgentTool::class, [
+            'type' => 'general',
+            'name' => 'My MCP Bot',
+            'model' => 'claude-sonnet-4-20250514',
+            'description' => 'Built over MCP',
+        ])
+        ->assertOk()
+        ->assertSee('My MCP Bot')
+        ->assertSee('draft');
+
+    $agent = Agent::where('user_id', $this->user->id)->where('name', 'My MCP Bot')->first();
+    expect($agent)->not->toBeNull();
+    expect($agent->status)->toBe(AgentStatus::Draft);
+    expect($agent->type->value)->toBe('general');
+});
+
+it('update_agent applies a partial update without nulling other fields', function () {
+    $agent = Agent::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'name' => 'Original Name',
+        'status' => AgentStatus::Draft,
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(UpdateAgentTool::class, [
+            'agent_id' => $agent->id,
+            'status' => 'active',
+        ])
+        ->assertOk()
+        ->assertSee('active')
+        ->assertSee('Original Name');
+
+    $agent->refresh();
+    expect($agent->status)->toBe(AgentStatus::Active);
+    expect($agent->name)->toBe('Original Name'); // untouched
+});
+
+it('update_agent will not touch an agent outside the caller context', function () {
+    $other = Agent::factory()->create(); // a different account's agent
+
+    SapiensServer::actingAs($this->user)
+        ->tool(UpdateAgentTool::class, ['agent_id' => $other->id, 'name' => 'Hijacked'])
+        ->assertHasErrors();
+
+    expect($other->fresh()->name)->not->toBe('Hijacked');
+});
+
+it('list_agent_models returns a models array', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(ListAgentModelsTool::class, [])
+        ->assertOk()
+        ->assertSee('models');
 });
 
 it('hides a tool the token has no ability for', function () {
