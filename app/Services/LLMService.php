@@ -74,7 +74,12 @@ class LLMService
         app(AiSpendGuard::class)->assertWithinBudget($user, $user?->organization_id ?? $agent?->organization_id, $model);
 
         if ($user) {
-            return $this->getAiProviderService()->resolveProvider($model, $user);
+            // Resolve by the model's own catalog driver first (broker-aware, e.g.
+            // OpenRouter ids like `deepseek/deepseek-v4-pro`), matching the UI chat
+            // path; fall back to the tenant's configured providers. Without this,
+            // a brokered model is misrouted to the Anthropic fallback and 404s.
+            return $this->getAiProviderService()->resolveProviderForCatalogModel($model, $user)
+                ?? $this->getAiProviderService()->resolveProvider($model, $user);
         }
 
         return Lab::Anthropic;
