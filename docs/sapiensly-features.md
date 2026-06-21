@@ -69,6 +69,21 @@ Bring several agents into one thread and have them deliberate, then close on a c
 - **Execute** the card in one click to close the thread (recorded inline), or **dismiss** it. If
   the agents don't reach a clear recommendation, the thread says so instead of forcing an action.
 
+### Cross-agent consultation (agent-initiated)
+
+Unlike @mention (which **you** drive), the agent or model running a turn can **consult other
+agents on its own** when a question falls outside its expertise or a decision warrants a second
+opinion — and it always tells you it's doing so.
+
+- The running agent is **always aware of the other agents** in the workspace (a live roster of
+  name + expertise is given to it) and can reach any of them with a built-in consult tool. Works
+  for agent chats **and** plain-model chats.
+- It chooses how to consult: **in the background** (a compact "Consulting <Agent>…" indicator,
+  then the answer folded into its reply) or **in the front** (the consulted agent's full answer
+  shown as its own card, with the question). Either way the exchange streams live.
+- The consulted agent runs as **you** (your data scope and permissions), and an agent can't
+  consult itself. Consultations are saved on the message, so the cards remain after a reload.
+
 ## IA Debate
 
 Convene a council of AI models to deliberate a decision and converge on an answer.

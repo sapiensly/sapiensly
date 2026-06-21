@@ -73,7 +73,8 @@ Grouped by area (`app/Models/`):
   `AgentTeam`, `Flow`. Pivots link agents to knowledge bases and tools.
 - **Chat:** `Chat` (model, optional `agent_id`, tool ids, project; `mode` `single|multi_agent`
   and `synthesis_status` for @mention threads), `ChatMessage` (`agent_id`, `message_type`
-  `text|action_proposal|action_result`, `agent_data_context`, `action_payload`), `ChatAttachment`,
+  `text|action_proposal|action_result`, `agent_data_context`, `action_payload`,
+  `consultation_context` — agents this turn consulted), `ChatAttachment`,
   `ChatProject` (custom instructions + KB pivot), `ChatParticipant` (tenant table `chat_agents` —
   the @mention roster).
 - **Debate:** `Debate`, `DebateParticipant` (model or `agent_id`), `DebateRound`, `DebateTurn`.
@@ -158,6 +159,12 @@ Grouped by area (`app/Models/`):
   `ActionRegistry` — v1 closes `manual`); `ActionExecutor` runs/dismisses it. New
   `ShouldBroadcastNow` events (`ChatAgentStarted`, `ChatActionProposalReady`, `ChatActionExecuted`)
   reuse the `chat.conversation.{id}` channel.
+- **Agent-initiated consultation** (separate from @mention): `ChatAiService` injects a live agent
+  roster + guidance into the running turn's system prompt and adds `ConsultAgentTool`
+  (`App\Ai\Tools\Chat\`). The model calls it to consult another agent mid-turn (background or
+  `visible`), which runs as the chat user (`LLMService::chat`, owner-scoped). Each consultation
+  streams a `ChatAgentConsultation` event (start → result) and is collected (`ConsultationLog`)
+  into the message's `consultation_context` for reload. Applies to agent turns and plain-model chats.
 
 ## No-code Apps (Builder + runtime)
 
