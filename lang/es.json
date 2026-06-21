@@ -1,4 +1,7 @@
 {
+    "The assistant ran out of time finishing this response. Please try again — and if it was a large build, ask for it in smaller steps.": "Al asistente se le acabó el tiempo para terminar esta respuesta. Inténtalo de nuevo — y si era una construcción grande, pídela en pasos más pequeños.",
+    "Anything it already built is saved: :names — open it from your apps (every change is a reversible version).": "Lo que ya construyó está guardado: :names — ábrelo desde tus apps (cada cambio es una versión reversible).",
+    "The chat request did not finish in time.": "La solicitud del chat no terminó a tiempo.",
     "Verify your email address": "Verifica tu correo electrónico",
     "Verify Email Address": "Verificar correo",
     "Please click the button below to verify your email address.": "Haz clic en el botón de abajo para verificar tu correo electrónico.",
