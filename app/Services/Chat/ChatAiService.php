@@ -5,6 +5,7 @@ namespace App\Services\Chat;
 use App\Ai\ChatAgent;
 use App\Ai\Tools\DynamicTool;
 use App\Ai\Tools\McpServerTool;
+use App\Ai\Tools\Platform\PlatformToolsFactory;
 use App\Ai\Tools\RuntimeToolFactory;
 use App\Enums\ToolType;
 use App\Events\Chat\ChatStreamChunk;
@@ -414,7 +415,8 @@ class ChatAiService
         }
 
         if (empty($toolIds) || $user === null) {
-            return $tools;
+            // Still grant platform tools when the agent has no tools of its own.
+            return $user !== null ? PlatformToolsFactory::merge($tools, $user) : $tools;
         }
 
         $dbTools = Tool::query()
@@ -464,7 +466,7 @@ class ChatAiService
             }
         }
 
-        return $tools;
+        return PlatformToolsFactory::merge($tools, $user);
     }
 
     /**

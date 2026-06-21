@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Ai\Tools\Platform\PlatformToolsFactory;
 use App\Events\Debate\DebateTurnError;
 use App\Models\Agent;
 use App\Models\DebateTurn;
@@ -67,6 +68,12 @@ class RunDebateTurnJob implements ShouldQueue
             $tools = app(ToolBuilderService::class)->buildTools(
                 $agent->tools()->where('status', 'active')->get()
             );
+        }
+
+        // The debater (agent- or model-backed) also gets the platform tools,
+        // scoped to the debate owner.
+        if ($turn->debate->user !== null) {
+            $tools = PlatformToolsFactory::merge($tools, $turn->debate->user);
         }
 
         $streamer->stream($turn, $instructions, $prompt, $model, $tools);

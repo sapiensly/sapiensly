@@ -3,6 +3,7 @@
 namespace App\Services\Runtime;
 
 use App\Ai\ChatAgent;
+use App\Ai\Tools\Platform\PlatformToolsFactory;
 use App\Events\Runtime\RuntimeAgentStreamChunk;
 use App\Events\Runtime\RuntimeAgentStreamComplete;
 use App\Events\Runtime\RuntimeAgentStreamError;
@@ -75,6 +76,11 @@ class RuntimeAgentService
 
         $proposals = new ProposedActions;
         $tools = $this->toolset->tools($app, $manifest, $proposals);
+
+        // Add the platform tools (MCP catalogue) scoped to the conversation owner.
+        if ($conversation->user !== null) {
+            $tools = PlatformToolsFactory::merge($tools, $conversation->user);
+        }
 
         $history = $this->buildHistory($conversation, $placeholder->id);
         $promptText = $this->popLastUserPrompt($history, $userText);

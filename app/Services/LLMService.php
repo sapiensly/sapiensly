@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Ai\Tools\Platform\PlatformToolsFactory;
 use App\Enums\MessageRole;
 use App\Models\Agent;
 use App\Models\Message;
@@ -374,7 +375,8 @@ class LLMService
         ]);
 
         [$history, $prompt] = $this->splitMessages($messages);
-        $sdkAgent = $this->buildAgent($agent, $history, $tools);
+        // Routing/triage agents only get their handoff tools — no platform tools.
+        $sdkAgent = $this->buildAgent($agent, $history, $tools, platformTools: false);
 
         $response = $sdkAgent->prompt(
             $prompt,
@@ -458,9 +460,16 @@ EOT;
      * @param  array<UserMessage|AssistantMessage>  $messages
      * @param  array<Tool>  $tools
      */
-    private function buildAgent(Agent $agent, array $messages, array $tools = [], ?string $systemPrompt = null): AnonymousAgent
+    private function buildAgent(Agent $agent, array $messages, array $tools = [], ?string $systemPrompt = null, bool $platformTools = true): AnonymousAgent
     {
         $instructions = $systemPrompt ?? $agent->prompt_template ?? '';
+
+        // Every internal agent run gets the MCP catalogue as built-in platform
+        // tools, scoped to the agent's owner. Skipped for routing/triage runs,
+        // which must only see their handoff tools.
+        if ($platformTools && ($owner = $this->resolveUser($agent)) !== null) {
+            $tools = PlatformToolsFactory::merge($tools, $owner);
+        }
 
         return new AnonymousAgent($instructions, $messages, $tools);
     }

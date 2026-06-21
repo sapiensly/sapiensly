@@ -78,8 +78,12 @@ class SapiensServer extends Server
      * Tools are registered conditionally per request from the token's abilities
      * (see App\Mcp\Tools\SapiensTool::shouldRegister), so e.g. a read-only token
      * never sees the write tools.
+     *
+     * Declared as a public const so the same catalog can be reused internally
+     * (App\Ai\Tools\Platform\PlatformToolsFactory bridges it to in-process
+     * agents) without drifting from what external clients see.
      */
-    protected array $tools = [
+    public const TOOLS = [
         // Identity & context.
         Tools\Account\WhoamiTool::class,
         Tools\Account\GuideTool::class,
@@ -159,6 +163,9 @@ class SapiensServer extends Server
         Tools\Agents\ListConversationsTool::class,
         Tools\Agents\DeleteAgentTool::class,
     ];
+
+    /** @var list<class-string> */
+    protected array $tools = self::TOOLS;
 
     protected array $resources = [
         //
