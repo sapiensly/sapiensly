@@ -2,7 +2,6 @@
 
 namespace App\Mcp\Tools\Chatbots;
 
-use App\Models\Agent;
 use App\Models\User;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -28,37 +27,7 @@ class GetChatbotTool extends ChatbotTool
             return Response::error("No chatbot '{$validated['chatbot_id']}' is visible to you.");
         }
 
-        $chatbot->loadMissing('channel', 'botFlow');
-        $flow = $chatbot->botFlow;
-
-        return Response::json([
-            'id' => $chatbot->id,
-            'name' => $chatbot->name,
-            'description' => $chatbot->description,
-            'status' => $chatbot->status?->value,
-            'channel' => $chatbot->channel === null ? null : [
-                'id' => $chatbot->channel->id,
-                'name' => $chatbot->channel->name,
-                'type' => $chatbot->channel->channel_type?->value,
-                'status' => $chatbot->channel->status?->value,
-            ],
-            'allowed_origins' => $chatbot->allowed_origins ?? [],
-            'config' => $chatbot->config ?? [],
-            'has_flow' => $flow !== null,
-            'flow' => $flow === null ? null : [
-                'id' => $flow->id,
-                'status' => $flow->status?->value,
-                'version' => $flow->version,
-            ],
-            // The agents the flow hands off to, keyed by role — the same roster
-            // the orchestrator resolves agent_handoff target_agent against.
-            'roster' => $flow === null ? [] : collect($flow->roster())
-                ->map(fn (?Agent $agent) => $agent === null ? null : [
-                    'agent_id' => $agent->id,
-                    'agent_name' => $agent->name,
-                ])
-                ->all(),
-        ]);
+        return Response::json($this->chatbotPayload($chatbot));
     }
 
     /**

@@ -45,4 +45,44 @@ abstract class ChatbotTool extends SapiensTool
             'action' => $shape($byType->get('action', collect())),
         ];
     }
+
+    /**
+     * The JSON shape returned for a single chatbot: config, channel, flow and the
+     * agent roster the flow hands off to. Shared by get/create/update_chatbot.
+     *
+     * @return array<string, mixed>
+     */
+    protected function chatbotPayload(Chatbot $chatbot): array
+    {
+        $chatbot->loadMissing('channel', 'botFlow');
+        $flow = $chatbot->botFlow;
+
+        return [
+            'id' => $chatbot->id,
+            'name' => $chatbot->name,
+            'description' => $chatbot->description,
+            'status' => $chatbot->status?->value,
+            'visibility' => $chatbot->visibility?->value,
+            'channel' => $chatbot->channel === null ? null : [
+                'id' => $chatbot->channel->id,
+                'name' => $chatbot->channel->name,
+                'type' => $chatbot->channel->channel_type?->value,
+                'status' => $chatbot->channel->status?->value,
+            ],
+            'allowed_origins' => $chatbot->allowed_origins ?? [],
+            'config' => $chatbot->config ?? [],
+            'has_flow' => $flow !== null,
+            'flow' => $flow === null ? null : [
+                'id' => $flow->id,
+                'status' => $flow->status?->value,
+                'version' => $flow->version,
+            ],
+            'roster' => $flow === null ? [] : collect($flow->roster())
+                ->map(fn (?Agent $agent) => $agent === null ? null : [
+                    'agent_id' => $agent->id,
+                    'agent_name' => $agent->name,
+                ])
+                ->all(),
+        ];
+    }
 }

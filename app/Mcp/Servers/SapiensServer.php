@@ -20,7 +20,8 @@ Start with whoami to see who you're acting as (user + role) and the organization
 this connection is bound to.
 
 Build & debug apps (apps:build):
-  - list_apps, read_manifest, then propose_change (RFC 6902 patches, saved as
+  - create_app starts a new app (empty valid manifest, version 1). Then
+    list_apps, read_manifest, and propose_change (RFC 6902 patches, saved as
     reversible versions); validate_manifest checks a draft first.
   - Catalogs (call before authoring): list_available_components,
     list_available_field_types, list_available_actions, list_available_triggers,
@@ -31,10 +32,13 @@ Build & debug apps (apps:build):
     list_workflow_proposals → approve_workflow_proposal / dismiss_workflow_proposal.
 
 Chatbots (apps:build):
-  - list_chatbots, get_chatbot (full config + roster); bot_flow_reference (the
-    node/edge schema — read before authoring a flow); read_bot_flow,
-    scaffold_bot_flow (generate from a prompt), update_bot_flow (persist a
-    definition), test_bot_flow (step it with messages).
+  - Manage the chatbot: list_chatbots, get_chatbot (full config + roster),
+    create_chatbot (draft widget bot with a blank flow), update_chatbot (partial
+    — name/status/visibility/widget config; set status=active to publish),
+    delete_chatbot.
+  - Author its conversation: bot_flow_reference (the node/edge schema — read
+    before authoring a flow), read_bot_flow, scaffold_bot_flow (generate from a
+    prompt), update_bot_flow (persist a definition), test_bot_flow (step it).
 
 Integrations & tools (apps:build):
   - list_integrations, list_connector_actions, test_tool_connection,
@@ -81,6 +85,7 @@ class SapiensServer extends Server
         Tools\Account\GetAiSpendTool::class,
         // Build & debug apps.
         Tools\Build\ListAppsTool::class,
+        Tools\Build\CreateAppTool::class,
         Tools\Build\ReadManifestTool::class,
         Tools\Build\ProposeChangeTool::class,
         Tools\Build\ValidateManifestTool::class,
@@ -105,6 +110,8 @@ class SapiensServer extends Server
         // Chatbots & bot flows.
         Tools\Chatbots\ListChatbotsTool::class,
         Tools\Chatbots\GetChatbotTool::class,
+        Tools\Chatbots\CreateChatbotTool::class,
+        Tools\Chatbots\UpdateChatbotTool::class,
         Tools\Chatbots\BotFlowReferenceTool::class,
         Tools\Chatbots\ReadBotFlowTool::class,
         Tools\Chatbots\ScaffoldBotFlowTool::class,

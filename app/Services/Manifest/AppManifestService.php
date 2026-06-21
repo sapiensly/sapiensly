@@ -7,6 +7,7 @@ use App\Models\AppVersion;
 use App\Models\User;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Owns the lifecycle of an App's manifest: read the active version, create new
@@ -44,6 +45,44 @@ class AppManifestService
                 return $version?->manifest;
             },
         );
+    }
+
+    /**
+     * The minimal valid manifest for a freshly-created App: empty objects/pages
+     * and two default roles. Used to seed the first version on create.
+     *
+     * @return array<string, mixed>
+     */
+    public function initialManifest(App $app): array
+    {
+        $manifest = [
+            'schema_version' => '1.0.0',
+            'id' => $app->id,
+            'slug' => $app->slug,
+            'name' => $app->name,
+            'version' => 1,
+            'objects' => [],
+            'pages' => [],
+            'permissions' => [
+                'roles' => [
+                    ['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin', 'is_default' => false],
+                    ['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'user', 'name' => 'User', 'is_default' => true],
+                ],
+            ],
+            'settings' => [
+                'default_locale' => 'es-MX',
+                'default_timezone' => 'America/Mexico_City',
+                'default_currency' => 'MXN',
+            ],
+        ];
+
+        foreach (['description', 'icon', 'color'] as $optional) {
+            if ($app->{$optional} !== null) {
+                $manifest[$optional] = $app->{$optional};
+            }
+        }
+
+        return $manifest;
     }
 
     /**

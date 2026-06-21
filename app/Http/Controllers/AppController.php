@@ -10,7 +10,6 @@ use App\Models\Record;
 use App\Services\Manifest\AppManifestService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -62,7 +61,7 @@ class AppController extends Controller
 
         $this->manifestService->createVersion(
             $app,
-            $this->initialManifest($app),
+            $this->manifestService->initialManifest($app),
             $user,
             'Initial version',
         );
@@ -189,45 +188,5 @@ class AppController extends Controller
     private function authorizeAccess(Request $request, App $app): void
     {
         abort_unless($app->isVisibleTo($request->user()), 403);
-    }
-
-    /**
-     * Minimal valid manifest for a freshly-created App.
-     *
-     * @return array<string, mixed>
-     */
-    private function initialManifest(App $app): array
-    {
-        $rolAdminId = 'rol_'.strtolower((string) Str::ulid());
-        $rolUserId = 'rol_'.strtolower((string) Str::ulid());
-
-        $manifest = [
-            'schema_version' => '1.0.0',
-            'id' => $app->id,
-            'slug' => $app->slug,
-            'name' => $app->name,
-            'version' => 1,
-            'objects' => [],
-            'pages' => [],
-            'permissions' => [
-                'roles' => [
-                    ['id' => $rolAdminId, 'slug' => 'admin', 'name' => 'Admin', 'is_default' => false],
-                    ['id' => $rolUserId, 'slug' => 'user', 'name' => 'User', 'is_default' => true],
-                ],
-            ],
-            'settings' => [
-                'default_locale' => 'es-MX',
-                'default_timezone' => 'America/Mexico_City',
-                'default_currency' => 'MXN',
-            ],
-        ];
-
-        foreach (['description', 'icon', 'color'] as $optional) {
-            if ($app->{$optional} !== null) {
-                $manifest[$optional] = $app->{$optional};
-            }
-        }
-
-        return $manifest;
     }
 }
