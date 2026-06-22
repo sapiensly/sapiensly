@@ -95,6 +95,43 @@ class ManifestEditor
     }
 
     /**
+     * Link two existing objects with a belongs-to relation: a $fromSlug record
+     * belongs to one $toSlug record. Creates the bidirectional pair and wires the
+     * picker into the $fromSlug create form + table.
+     */
+    public function addRelation(App $app, string $fromSlug, string $toSlug, ?string $name = null, bool $addToPage = true, ?User $user = null): AppVersion
+    {
+        $manifest = $this->activeManifest($app);
+
+        if ($fromSlug === $toSlug) {
+            throw new \InvalidArgumentException('A relation needs two different objects.');
+        }
+        $fromIndex = $this->findObjectIndex($manifest, $fromSlug);
+        $toIndex = $this->findObjectIndex($manifest, $toSlug);
+
+        $pair = $this->scaffolder->buildRelation(
+            $manifest['objects'][$fromIndex],
+            $manifest['objects'][$toIndex],
+            $name,
+        );
+
+        $manifest['objects'][$fromIndex]['fields'][] = $pair['child_field'];
+        $manifest['objects'][$toIndex]['fields'][] = $pair['parent_field'];
+
+        if ($addToPage) {
+            $fromObjectId = $manifest['objects'][$fromIndex]['id'];
+            foreach ($manifest['pages'] as &$page) {
+                if (isset($page['blocks']) && is_array($page['blocks'])) {
+                    $this->injectFieldIntoBlocks($page['blocks'], $fromObjectId, $pair['child_index']['id'], $pair['child_index']['slug']);
+                }
+            }
+            unset($page);
+        }
+
+        return $this->manifests->createVersion($app, $manifest, $user, "Linked \"{$fromSlug}\" to \"{$toSlug}\"");
+    }
+
+    /**
      * Append a column to every table over $objectId and a field (plus its
      * create_record value mapping) to every create form over $objectId, walking
      * nested modal/container blocks. Mutates $blocks in place.

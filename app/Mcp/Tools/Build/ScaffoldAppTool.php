@@ -15,7 +15,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Create a COMPLETE working app from a plain-language description in ONE step — the easy alternative to create_app + a long chain of propose_change patches. It generates the data objects and their fields, a ready-to-use list+create page for each (with a kanban board when the object has a status field), and a dashboard landing page with KPIs and a status chart — saved as version 1. Use this to start any new app; then refine details with the add_object / add_field tools or propose_change.')]
+#[Description('Create a COMPLETE working app from a plain-language description in ONE step — the easy alternative to create_app + a long chain of propose_change patches. It generates the data objects and their fields, the belongs-to relations between them (e.g. a draft belongs to one idea), a ready-to-use list+create page for each (with a kanban board when the object has a status field), and a dashboard landing page with KPIs and a status chart — saved as version 1. Use this to start any new app; then refine details with the add_object / add_field / add_relation tools or propose_change.')]
 class ScaffoldAppTool extends SapiensTool
 {
     protected const ABILITY = 'apps:build';

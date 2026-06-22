@@ -20,16 +20,17 @@ beforeEach(function () {
  * path against a genuinely-assembled (and validator-checked) manifest.
  *
  * @param  array<int, array<string, mixed>>  $objects
+ * @param  array<int, array<string, mixed>>  $links
  */
-function fakeScaffold(array $objects): void
+function fakeScaffold(array $objects, array $links = []): void
 {
     test()->mock(AppScaffolder::class)
         ->shouldReceive('scaffold')
         ->once()
-        ->andReturnUsing(function (array $base) use ($objects): array {
+        ->andReturnUsing(function (array $base) use ($objects, $links): array {
             $real = new AppScaffolder(app(AiDefaults::class), app(AiProviderService::class));
 
-            return $real->assemble($base, ['objects' => $objects]);
+            return $real->assemble($base, ['objects' => $objects, 'links' => $links]);
         });
 }
 
@@ -77,6 +78,48 @@ it('scaffold_app creates a populated app with a CRUD page per object', function 
     $drafts = collect($manifest['pages'])->firstWhere('path', '/drafts');
     expect(collect($ideas['blocks'])->pluck('type'))->toContain('kanban', 'table');
     expect(collect($drafts['blocks'])->pluck('type'))->not->toContain('kanban');
+
+    expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('scaffold_app links objects with a belongs-to relation pair', function () {
+    fakeScaffold([
+        ['name' => 'Ideas', 'slug' => 'ideas', 'fields' => [
+            ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null],
+        ]],
+        ['name' => 'Drafts', 'slug' => 'drafts', 'fields' => [
+            ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null],
+        ]],
+    ], [
+        ['from' => 'drafts', 'to' => 'ideas', 'name' => 'idea'],
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Content Engine',
+            'description' => 'Ideas become drafts.',
+        ])
+        ->assertOk();
+
+    $manifest = App::where('slug', 'content_engine')->first()->versions()->first()->manifest;
+    $ideas = collect($manifest['objects'])->firstWhere('slug', 'ideas');
+    $drafts = collect($manifest['objects'])->firstWhere('slug', 'drafts');
+
+    // Drafts gets the many_to_one (belongs to one idea); Ideas gets the inverse.
+    $belongsTo = collect($drafts['fields'])->firstWhere('type', 'relation');
+    $hasMany = collect($ideas['fields'])->firstWhere('type', 'relation');
+    expect($belongsTo['cardinality'])->toBe('many_to_one');
+    expect($belongsTo['target_object_id'])->toBe($ideas['id']);
+    expect($hasMany['cardinality'])->toBe('one_to_many');
+    expect($hasMany['target_object_id'])->toBe($drafts['id']);
+    // Inverses point at each other.
+    expect($belongsTo['inverse_field_id'])->toBe($hasMany['id']);
+    expect($hasMany['inverse_field_id'])->toBe($belongsTo['id']);
+
+    // The picker shows up on the Drafts page (table column).
+    $draftsPage = collect($manifest['pages'])->firstWhere('path', '/drafts');
+    $table = collect($draftsPage['blocks'])->firstWhere('type', 'table');
+    expect(collect($table['columns'])->pluck('field_id'))->toContain($belongsTo['id']);
 
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 });

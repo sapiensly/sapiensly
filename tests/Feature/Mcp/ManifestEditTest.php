@@ -3,6 +3,7 @@
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Build\AddFieldTool;
 use App\Mcp\Tools\Build\AddObjectTool;
+use App\Mcp\Tools\Build\AddRelationTool;
 use App\Models\App;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
@@ -105,6 +106,54 @@ it('add_object adds a new object with its own CRUD page', function () {
     expect(collect($manifest['objects'])->pluck('slug'))->toContain('drafts');
     expect(collect($manifest['pages'])->pluck('path'))->toContain('/drafts');
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('add_relation links two objects belongs-to and wires the picker into the page', function () {
+    // Seed a second object to link to.
+    SapiensServer::actingAs($this->user)
+        ->tool(AddObjectTool::class, [
+            'app_slug' => 'content_engine',
+            'name' => 'Drafts',
+            'fields' => [['name' => 'Title', 'type' => 'string']],
+        ])
+        ->assertOk();
+
+    SapiensServer::actingAs($this->user)
+        ->tool(AddRelationTool::class, [
+            'app_slug' => 'content_engine',
+            'from_object' => 'drafts',
+            'to_object' => 'ideas',
+            'name' => 'Idea',
+        ])
+        ->assertOk();
+
+    $manifest = currentManifest($this->appModel);
+    $ideas = collect($manifest['objects'])->firstWhere('slug', 'ideas');
+    $drafts = collect($manifest['objects'])->firstWhere('slug', 'drafts');
+
+    $belongsTo = collect($drafts['fields'])->firstWhere('type', 'relation');
+    $hasMany = collect($ideas['fields'])->firstWhere('type', 'relation');
+    expect($belongsTo['cardinality'])->toBe('many_to_one');
+    expect($belongsTo['target_object_id'])->toBe($ideas['id']);
+    expect($hasMany['cardinality'])->toBe('one_to_many');
+    expect($belongsTo['inverse_field_id'])->toBe($hasMany['id']);
+
+    // Picker on the Drafts create form.
+    $draftsPage = collect($manifest['pages'])->firstWhere('path', '/drafts');
+    $form = findBlock($draftsPage['blocks'], 'form');
+    expect(collect($form['fields'])->pluck('field_id'))->toContain($belongsTo['id']);
+
+    expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('add_relation rejects an unknown object', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(AddRelationTool::class, [
+            'app_slug' => 'content_engine',
+            'from_object' => 'ideas',
+            'to_object' => 'nope',
+        ])
+        ->assertHasErrors();
 });
 
 it('add_field rejects an unknown object', function () {
