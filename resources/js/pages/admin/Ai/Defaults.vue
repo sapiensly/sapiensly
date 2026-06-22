@@ -104,6 +104,15 @@ function modelsFor(module: string): AiModel[] {
     );
 }
 
+// Input/output price per 1M tokens, e.g. "$3 / $15". Empty when unpriced.
+function priceLabel(model: AiModel): string {
+    const inP = model.inputPricePerMTok;
+    const outP = model.outputPricePerMTok;
+    if (inP == null && outP == null) return '';
+    const fmt = (n: number | null) => (n == null ? '—' : `$${n}`);
+    return `${fmt(inP)} / ${fmt(outP)}`;
+}
+
 // Local editable copy so a failed PATCH can roll back to the last good value.
 const form = reactive<Record<string, ModuleDefaults>>(
     Object.fromEntries(props.modules.map((m) => [m, { ...props.defaults[m] }])),
@@ -210,13 +219,26 @@ function updateModel(module: string, slot: Slot, id: string | null) {
                                         :value="model.id"
                                     >
                                         <span
-                                            class="inline-flex items-center gap-2"
+                                            class="inline-flex w-full items-center gap-2"
                                         >
                                             <DriverChip
                                                 :driver="model.driver"
                                                 size="sm"
                                             />
-                                            {{ model.name }}
+                                            <span class="truncate">{{
+                                                model.name
+                                            }}</span>
+                                            <span
+                                                v-if="priceLabel(model)"
+                                                class="ml-auto pl-3 font-mono text-[11px] whitespace-nowrap text-ink-subtle"
+                                                :title="
+                                                    t(
+                                                        'admin.ai.defaults.price_per_mtok',
+                                                    )
+                                                "
+                                            >
+                                                {{ priceLabel(model) }}
+                                            </span>
                                         </span>
                                     </SelectItem>
                                 </SelectContent>

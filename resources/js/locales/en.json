@@ -2176,5 +2176,6 @@
     "admin.ai.defaults.module.image_vision.title": "Image Vision",
     "admin.ai.defaults.module.image_vision.description": "Vision model for image OCR and image understanding.",
     "app_v2.playground.cap.image_vision": "Image Vision",
-    "app_v2.playground.capdesc.image_vision": "Extract text from an image, or ask a question about it."
+    "app_v2.playground.capdesc.image_vision": "Extract text from an image, or ask a question about it.",
+    "admin.ai.defaults.price_per_mtok": "Input / output price per 1M tokens"
 }
