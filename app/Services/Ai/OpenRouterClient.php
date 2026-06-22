@@ -272,6 +272,37 @@ class OpenRouterClient
         return is_string($url) && $url !== '' ? $url : null;
     }
 
+    /**
+     * Generated audio (TTS) as a base64 data URL, or null. OpenRouter returns it
+     * at choices[0].message.audio.data (base64) with an optional format.
+     *
+     * @param  array<string, mixed>  $response
+     */
+    public static function firstAudioDataUrl(array $response): ?string
+    {
+        $data = data_get($response, 'choices.0.message.audio.data');
+        if (! is_string($data) || $data === '') {
+            return null;
+        }
+
+        // Already a data URL on some providers; otherwise wrap the base64.
+        if (str_starts_with($data, 'data:')) {
+            return $data;
+        }
+
+        $format = strtolower((string) (data_get($response, 'choices.0.message.audio.format') ?: 'mp3'));
+        $mime = match ($format) {
+            'wav' => 'audio/wav',
+            'pcm' => 'audio/pcm',
+            'opus' => 'audio/opus',
+            'flac' => 'audio/flac',
+            'ogg' => 'audio/ogg',
+            default => 'audio/mpeg',
+        };
+
+        return 'data:'.$mime.';base64,'.$data;
+    }
+
     private function apiKey(User $user): string
     {
         // Resolve tenant → global → env the same way the SDK is configured.

@@ -72,6 +72,9 @@ type FormState = {
     query: string;
     documents: string;
     question: string;
+    voice: string;
+    gender: string;
+    instructions: string;
     file: File | null;
     running: boolean;
     result: RunResult | null;
@@ -87,6 +90,9 @@ function form(key: string): FormState {
             query: '',
             documents: '',
             question: '',
+            voice: '',
+            gender: '',
+            instructions: '',
             file: null,
             running: false,
             result: null,
@@ -199,6 +205,11 @@ async function run() {
     if (cap.input === 'prompt' || cap.input === 'image_q')
         fd.append('prompt', cap.input === 'image_q' ? f.question : f.prompt);
     if (cap.input === 'text') fd.append('text', f.text);
+    if (cap.key === 'speech_generation') {
+        if (f.voice) fd.append('voice', f.voice);
+        if (f.gender) fd.append('gender', f.gender);
+        if (f.instructions) fd.append('instructions', f.instructions);
+    }
     if (cap.input === 'rerank') {
         fd.append('query', f.query);
         f.documents
@@ -327,6 +338,58 @@ async function run() {
                             rows="4"
                             class="w-full rounded-md border border-medium bg-surface p-2.5 text-sm text-ink"
                         />
+                    </div>
+
+                    <!-- Voice controls for speech generation. -->
+                    <div
+                        v-if="selected.key === 'speech_generation'"
+                        class="grid grid-cols-2 gap-3"
+                    >
+                        <div class="space-y-1.5">
+                            <label class="text-xs text-ink-muted">{{
+                                t('app_v2.playground.field_voice')
+                            }}</label>
+                            <input
+                                v-model="current.voice"
+                                :placeholder="
+                                    t('app_v2.playground.voice_placeholder')
+                                "
+                                class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-xs text-ink-muted">{{
+                                t('app_v2.playground.field_gender')
+                            }}</label>
+                            <select
+                                v-model="current.gender"
+                                class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                            >
+                                <option value="">
+                                    {{ t('app_v2.playground.gender_auto') }}
+                                </option>
+                                <option value="female">
+                                    {{ t('app_v2.playground.gender_female') }}
+                                </option>
+                                <option value="male">
+                                    {{ t('app_v2.playground.gender_male') }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-span-2 space-y-1.5">
+                            <label class="text-xs text-ink-muted">{{
+                                t('app_v2.playground.field_instructions')
+                            }}</label>
+                            <input
+                                v-model="current.instructions"
+                                :placeholder="
+                                    t(
+                                        'app_v2.playground.instructions_placeholder',
+                                    )
+                                "
+                                class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
+                            />
+                        </div>
                     </div>
 
                     <div v-if="selected.input === 'rerank'" class="space-y-3">

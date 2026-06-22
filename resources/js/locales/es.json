@@ -2179,5 +2179,13 @@
     "app_v2.playground.capdesc.image_vision": "Extrae texto de una imagen o hazle una pregunta.",
     "admin.ai.defaults.price_per_mtok": "Precio input / output por 1M tokens",
     "admin.ai.providers.badge_output": "Tipo de salida",
-    "admin.ai.providers.filter_output": "Modalidad de salida"
+    "admin.ai.providers.filter_output": "Modalidad de salida",
+    "app_v2.playground.field_voice": "Voz",
+    "app_v2.playground.voice_placeholder": "p. ej. alloy, nova (id de voz del proveedor)",
+    "app_v2.playground.field_gender": "Género",
+    "app_v2.playground.gender_auto": "Auto",
+    "app_v2.playground.gender_female": "Femenino",
+    "app_v2.playground.gender_male": "Masculino",
+    "app_v2.playground.field_instructions": "Estilo / idioma / acento",
+    "app_v2.playground.instructions_placeholder": "p. ej. Español de México, cálido y casual"
 }

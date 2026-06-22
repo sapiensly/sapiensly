@@ -271,6 +271,38 @@ test('OCR-PDF inlines extracted figures into the markdown instead of broken refs
         ->and($res['text'])->not->toContain('(img-0.jpeg)');
 });
 
+test('speech generation via OpenRouter returns audio and passes voice + instructions', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = seedModel('speech', 'openrouter', 'openai/gpt-audio-mini');
+    setDefault('speech_generation', $model);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response([
+            'choices' => [['message' => ['audio' => ['data' => 'QUJD', 'format' => 'mp3']]]],
+        ]),
+    ]);
+
+    $res = $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'speech_generation',
+            'text' => 'Hola',
+            'voice' => 'nova',
+            'gender' => 'female',
+            'instructions' => 'Mexican Spanish, warm',
+        ])
+        ->assertOk()
+        ->assertJsonPath('ok', true)
+        ->json();
+
+    expect($res['audio'])->toStartWith('data:audio/mpeg;base64,');
+
+    Http::assertSent(function ($req) {
+        return $req['modalities'] === ['audio', 'text']
+            && ($req['audio']['voice'] ?? null) === 'nova'
+            && str_contains($req['messages'][0]['content'][0]['text'], 'Mexican Spanish, warm');
+    });
+});
+
 test('image generation routes through OpenRouter when the model is an OpenRouter model', function () {
     config(['ai.providers.openrouter.key' => 'sk-or-test']);
     $model = seedModel('image', 'openrouter', 'google/gemini-2.5-flash-image');

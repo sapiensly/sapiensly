@@ -668,7 +668,7 @@ class ChatAiService
 
         $factories = [
             'generate_image' => fn () => new GenerateImageTool($user, $caps, $cloud, $openRouter),
-            'synthesize_speech' => fn () => new SynthesizeSpeechTool($user, $caps, $cloud),
+            'synthesize_speech' => fn () => new SynthesizeSpeechTool($user, $caps, $cloud, $openRouter),
             'rerank' => fn () => new RerankTool($caps),
             'transcribe_audio' => fn () => new TranscribeAudioTool($placeholder, $caps, $user, $openRouter),
             'ocr_document' => fn () => new OcrDocumentTool($placeholder, $caps, $user, $openRouter),

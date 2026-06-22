@@ -4,12 +4,14 @@ namespace App\Ai\Tools\Capabilities;
 
 use App\Models\User;
 use App\Services\Ai\AiCapabilities;
+use App\Services\Ai\OpenRouterClient;
 use App\Services\CloudProviderService;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Str;
 use Laravel\Ai\Audio;
 use Laravel\Ai\Contracts\Tool as ToolContract;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Tools\Request as AiRequest;
 use Stringable;
 
@@ -23,6 +25,7 @@ class SynthesizeSpeechTool implements ToolContract
         private User $user,
         private AiCapabilities $capabilities,
         private CloudProviderService $cloud,
+        private OpenRouterClient $openRouter,
     ) {}
 
     public function description(): Stringable|string
@@ -38,6 +41,7 @@ class SynthesizeSpeechTool implements ToolContract
         return [
             'text' => $schema->string()->description('The text to speak.')->required(),
             'voice' => $schema->string()->description('Optional voice id or name supported by the provider.'),
+            'instructions' => $schema->string()->description('Optional style/language/accent coaching, e.g. "Mexican Spanish, warm and casual".'),
         ];
     }
 
@@ -48,32 +52,62 @@ class SynthesizeSpeechTool implements ToolContract
         if ($text === '') {
             return 'Error: provide the text to synthesize.';
         }
+        $voice = is_string($args['voice'] ?? null) ? (string) $args['voice'] : '';
+        $instructions = is_string($args['instructions'] ?? null) ? (string) $args['instructions'] : '';
 
         $handler = $this->capabilities->resolve('speech_generation');
         if ($handler === null) {
             return 'Error: no speech-generation model is configured. Set one in admin AI > Defaults → Speech generation.';
         }
 
-        if ($handler['driver'] === 'openrouter') {
-            return 'Error: text-to-speech is not available through OpenRouter (it has no audio-output endpoint). Configure a direct provider (OpenAI or ElevenLabs) in admin AI > Defaults → Speech generation.';
-        }
-
         try {
-            $pending = Audio::of($text);
-            if (is_string($args['voice'] ?? null) && $args['voice'] !== '') {
-                $pending = $pending->voice($args['voice']);
+            $bytes = $this->synthesize($handler, $text, $voice, $instructions);
+            if ($bytes === null) {
+                return "Error: the model returned no audio. Pick a model with audio output for {$handler['model']}.";
             }
-
-            $audio = $pending->generate($handler['provider'], $handler['model']);
 
             $disk = $this->cloud->diskForOwnerOrFallback($this->user->organization_id, $this->user->id);
             $path = 'ai/generated/audio/'.Str::ulid().'.mp3';
-            $disk->put($path, (string) $audio);
+            $disk->put($path, $bytes);
 
             return "Speech synthesized with {$handler['model']} and stored at: ".$this->urlOrPath($disk, $path);
         } catch (\Throwable $e) {
             return 'Error synthesizing speech: '.$e->getMessage();
         }
+    }
+
+    /**
+     * Generate raw audio bytes via OpenRouter (chat completions audio output) or
+     * the SDK Audio class, depending on the configured provider.
+     *
+     * @param  array{model: string, driver: string, provider: Lab}  $handler
+     */
+    private function synthesize(array $handler, string $text, string $voice, string $instructions): ?string
+    {
+        if ($handler['driver'] === 'openrouter') {
+            $prompt = $instructions !== '' ? $instructions."\n\n".$text : $text;
+            $response = $this->openRouter->chat($this->user, $handler['model'], [
+                OpenRouterClient::textBlock($prompt),
+            ], ['modalities' => ['audio', 'text'], 'audio' => ['voice' => $voice !== '' ? $voice : 'alloy', 'format' => 'mp3']]);
+
+            $dataUrl = OpenRouterClient::firstAudioDataUrl($response);
+            if ($dataUrl === null) {
+                return null;
+            }
+            $comma = strpos($dataUrl, ',');
+
+            return base64_decode($comma !== false ? substr($dataUrl, $comma + 1) : $dataUrl) ?: null;
+        }
+
+        $pending = Audio::of($text);
+        if ($voice !== '') {
+            $pending = $pending->voice($voice);
+        }
+        if ($instructions !== '') {
+            $pending = $pending->instructions($instructions);
+        }
+
+        return (string) $pending->generate($handler['provider'], $handler['model']);
     }
 
     private function urlOrPath(Filesystem $disk, string $path): string

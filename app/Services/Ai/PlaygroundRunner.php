@@ -114,7 +114,14 @@ class PlaygroundRunner
             'image_vision' => ['text' => $this->imageVision($user, $handler, $this->requireFile($file), (string) ($input['prompt'] ?? ''))],
             'image_generation' => ['image' => $this->generateImage($user, $handler, (string) ($input['prompt'] ?? ''))],
             'audio_recognition' => ['text' => $this->transcribe($user, $handler, $this->requireFile($file))],
-            'speech_generation' => ['audio' => $this->synthesizeSpeech($handler, (string) ($input['text'] ?? ''))],
+            'speech_generation' => ['audio' => $this->synthesizeSpeech(
+                $user,
+                $handler,
+                (string) ($input['text'] ?? ''),
+                (string) ($input['voice'] ?? ''),
+                (string) ($input['gender'] ?? ''),
+                (string) ($input['instructions'] ?? ''),
+            )],
             'reranking' => $this->rerank($handler, (string) ($input['query'] ?? ''), (array) ($input['documents'] ?? [])),
             default => throw new RuntimeException("Unknown capability '{$capability}'."),
         };
@@ -353,17 +360,50 @@ class PlaygroundRunner
         return (string) $response->text;
     }
 
-    /** @param array{model: string, driver: string, provider: Lab} $handler */
-    private function synthesizeSpeech(array $handler, string $text): string
+    /**
+     * Synthesize speech. Voice controls: $voice picks a provider voice,
+     * $gender nudges male/female, and $instructions coaches language / region /
+     * accent / style (e.g. "Mexican Spanish, warm and casual").
+     *
+     * @param  array{model: string, driver: string, provider: Lab}  $handler
+     */
+    private function synthesizeSpeech(User $user, array $handler, string $text, string $voice, string $gender, string $instructions): string
     {
         if (trim($text) === '') {
             throw new RuntimeException('Provide text to synthesize.');
         }
+
         if ($handler['driver'] === 'openrouter') {
-            throw new RuntimeException('Text-to-speech is not available through OpenRouter. Pick a direct provider (OpenAI or ElevenLabs).');
+            // OpenRouter TTS rides on chat completions: modalities=["audio","text"]
+            // + an audio param; style/language are coached via the prompt text.
+            $prompt = $instructions !== '' ? $instructions."\n\n".$text : $text;
+            $response = $this->openRouter->chat($user, $handler['model'], [
+                OpenRouterClient::textBlock($prompt),
+            ], ['modalities' => ['audio', 'text'], 'audio' => ['voice' => $voice !== '' ? $voice : 'alloy', 'format' => 'mp3']]);
+
+            $dataUrl = OpenRouterClient::firstAudioDataUrl($response);
+            if ($dataUrl === null) {
+                throw new RuntimeException('The model returned no audio ('.OpenRouterClient::failureReason($response).'). Pick an OpenRouter model with audio output.');
+            }
+            $this->recordOpenRouterUsage($handler, $response);
+
+            return $dataUrl;
         }
 
-        $audio = Audio::of($text)->generate($handler['provider'], $handler['model']);
+        $pending = Audio::of($text);
+        if ($voice !== '') {
+            $pending = $pending->voice($voice);
+        }
+        $pending = match ($gender) {
+            'male' => $pending->male(),
+            'female' => $pending->female(),
+            default => $pending,
+        };
+        if ($instructions !== '') {
+            $pending = $pending->instructions($instructions);
+        }
+
+        $audio = $pending->generate($handler['provider'], $handler['model']);
 
         return 'data:audio/mpeg;base64,'.base64_encode((string) $audio);
     }

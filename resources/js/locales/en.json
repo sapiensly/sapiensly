@@ -2179,5 +2179,13 @@
     "app_v2.playground.capdesc.image_vision": "Extract text from an image, or ask a question about it.",
     "admin.ai.defaults.price_per_mtok": "Input / output price per 1M tokens",
     "admin.ai.providers.badge_output": "Output type",
-    "admin.ai.providers.filter_output": "Output modality"
+    "admin.ai.providers.filter_output": "Output modality",
+    "app_v2.playground.field_voice": "Voice",
+    "app_v2.playground.voice_placeholder": "e.g. alloy, nova (provider voice id)",
+    "app_v2.playground.field_gender": "Gender",
+    "app_v2.playground.gender_auto": "Auto",
+    "app_v2.playground.gender_female": "Female",
+    "app_v2.playground.gender_male": "Male",
+    "app_v2.playground.field_instructions": "Style / language / accent",
+    "app_v2.playground.instructions_placeholder": "e.g. Mexican Spanish, warm and casual"
 }

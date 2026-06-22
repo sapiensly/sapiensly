@@ -64,6 +64,10 @@ class PlaygroundController extends Controller
             'documents' => ['nullable', 'array', 'max:100'],
             'documents.*' => ['string', 'max:10000'],
             'file' => ['nullable', 'file', 'max:30720', 'mimes:jpg,jpeg,png,gif,webp,pdf,mp3,wav,m4a,ogg,webm,flac'],
+            // Speech generation voice controls.
+            'voice' => ['nullable', 'string', 'max:100'],
+            'gender' => ['nullable', 'string', 'in:male,female'],
+            'instructions' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $user = $request->user();
@@ -82,6 +86,9 @@ class PlaygroundController extends Controller
                     'text' => $validated['text'] ?? null,
                     'query' => $validated['query'] ?? null,
                     'documents' => $validated['documents'] ?? [],
+                    'voice' => $validated['voice'] ?? null,
+                    'gender' => $validated['gender'] ?? null,
+                    'instructions' => $validated['instructions'] ?? null,
                 ],
                 $request->file('file'),
             );
