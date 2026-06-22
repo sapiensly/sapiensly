@@ -105,10 +105,20 @@ function onFile(e: Event) {
     current.value.file = input.files?.[0] ?? null;
 }
 
+const MAX_UPLOAD_MB = 30;
+
 async function run() {
     const cap = selected.value;
     const f = current.value;
     if (!cap || f.running) return;
+
+    if (f.file && f.file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+        f.result = {
+            ok: false,
+            error: t('app_v2.playground.file_too_large', { mb: MAX_UPLOAD_MB }),
+        };
+        return;
+    }
 
     f.running = true;
     f.result = null;

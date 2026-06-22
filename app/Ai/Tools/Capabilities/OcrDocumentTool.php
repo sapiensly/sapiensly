@@ -106,7 +106,12 @@ class OcrDocumentTool implements ToolContract
             $fileBlock,
         ], $extra);
 
-        return "Extracted text ({$model}):\n".OpenRouterClient::text($response);
+        $text = OpenRouterClient::text($response);
+        if (trim($text) === '') {
+            return "No text was extracted via {$model} (".OpenRouterClient::failureReason($response).'). Try a vision/OCR-capable model or a different PDF engine.';
+        }
+
+        return "Extracted text ({$model}):\n".$text;
     }
 
     private function latestDocumentAttachment(): ?ChatAttachment

@@ -109,13 +109,45 @@ class OpenRouterClient
     }
 
     /**
-     * The assistant's text reply.
+     * The assistant's text reply. Handles both a plain string content and the
+     * multimodal array-of-parts shape (joining the text parts).
      *
      * @param  array<string, mixed>  $response
      */
     public static function text(array $response): string
     {
-        return (string) data_get($response, 'choices.0.message.content', '');
+        $content = data_get($response, 'choices.0.message.content');
+
+        if (is_string($content)) {
+            return $content;
+        }
+
+        if (is_array($content)) {
+            return collect($content)
+                ->map(fn ($part) => is_array($part) ? (string) ($part['text'] ?? '') : (string) $part)
+                ->implode('');
+        }
+
+        return '';
+    }
+
+    /**
+     * A short reason the response carried no text — an upstream error or the
+     * model's finish_reason — for surfacing a useful message instead of a blank.
+     *
+     * @param  array<string, mixed>  $response
+     */
+    public static function failureReason(array $response): string
+    {
+        $error = data_get($response, 'error.message');
+        $finish = data_get($response, 'choices.0.finish_reason');
+
+        $parts = array_filter([
+            is_string($error) && $error !== '' ? "error: {$error}" : null,
+            is_string($finish) && $finish !== '' ? "finish_reason: {$finish}" : null,
+        ]);
+
+        return $parts !== [] ? implode(', ', $parts) : 'the model returned an empty response';
     }
 
     /**

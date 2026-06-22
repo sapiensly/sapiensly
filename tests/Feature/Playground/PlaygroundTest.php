@@ -154,6 +154,27 @@ test('OCR-PDF via OpenRouter sends the file-parser plugin with the configured en
     });
 });
 
+test('OCR-PDF via OpenRouter surfaces a clear message when the model returns nothing', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = seedModel('vision', 'openrouter', 'mistralai/mistral-nemo');
+    setDefault('ocr_pdf', $model);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response([
+            'choices' => [['message' => ['content' => ''], 'finish_reason' => 'stop']],
+        ]),
+    ]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'ocr_pdf',
+            'file' => UploadedFile::fake()->create('doc.pdf', 12, 'application/pdf'),
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('ok', false)
+        ->assertJson(fn ($json) => $json->where('error', fn ($e) => str_contains($e, 'No text was extracted'))->etc());
+});
+
 test('image generation routes through OpenRouter when the model is an OpenRouter model', function () {
     config(['ai.providers.openrouter.key' => 'sk-or-test']);
     $model = seedModel('image', 'openrouter', 'google/gemini-2.5-flash-image');

@@ -182,10 +182,20 @@ class PlaygroundRunner
                 ? []
                 : ['plugins' => OpenRouterClient::pdfPlugins(OpenRouterClient::configuredPdfEngine())];
 
-            return OpenRouterClient::text($this->openRouter->chat($user, $handler['model'], [
+            $response = $this->openRouter->chat($user, $handler['model'], [
                 OpenRouterClient::textBlock($instruction),
                 $block,
-            ], $extra));
+            ], $extra);
+
+            $text = OpenRouterClient::text($response);
+            if (trim($text) === '') {
+                throw new RuntimeException(
+                    'No text was extracted ('.OpenRouterClient::failureReason($response).'). '
+                    .'Try a vision/OCR model (e.g. a Mistral, Gemini or GPT-4o vision model) or a different PDF engine in admin AI > Defaults.',
+                );
+            }
+
+            return $text;
         }
 
         $attachment = $isImage

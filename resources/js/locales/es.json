@@ -2175,5 +2175,6 @@
     "admin.ai.defaults.ocr_engine_hint": "Cómo procesa OpenRouter el PDF cuando el modelo de OCR es de OpenRouter.",
     "admin.ai.defaults.ocr_engine.mistral-ocr": "Mistral OCR — PDFs escaneados / con imágenes",
     "admin.ai.defaults.ocr_engine.cloudflare-ai": "Cloudflare AI — gratis, a markdown",
-    "admin.ai.defaults.ocr_engine.native": "Nativo — soporte de archivos del modelo"
+    "admin.ai.defaults.ocr_engine.native": "Nativo — soporte de archivos del modelo",
+    "app_v2.playground.file_too_large": "Archivo demasiado grande (máx {mb} MB)."
 }
