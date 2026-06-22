@@ -1004,38 +1004,84 @@ class AiProviderService
      */
     public function syncOpenRouterCatalogModels(array $models): void
     {
-        $keepIds = [];
+        // Each selected model is stored once per catalog capability it covers
+        // (derived from its modalities), so e.g. a transcription model lands in
+        // the Audio recognition picker and an image model in Image generation.
+        $keep = [];
 
         foreach (array_values($models) as $index => $model) {
             $modelId = (string) ($model['id'] ?? '');
             if ($modelId === '') {
                 continue;
             }
-            $keepIds[] = $modelId;
 
-            $row = AiCatalogModel::firstOrNew([
-                'driver' => 'openrouter',
-                'model_id' => $modelId,
-                'capability' => 'chat',
-            ]);
+            foreach ($this->openRouterCapabilities($model) as $capability) {
+                $keep[] = $modelId.'|'.$capability;
 
-            // Preserve a manually-edited label on existing rows.
-            if (! $row->exists) {
-                $row->label = (string) ($model['label'] ?? $modelId);
-                $row->sort_order = $index;
+                $row = AiCatalogModel::firstOrNew([
+                    'driver' => 'openrouter',
+                    'model_id' => $modelId,
+                    'capability' => $capability,
+                ]);
+
+                // Preserve a manually-edited label on existing rows.
+                if (! $row->exists) {
+                    $row->label = (string) ($model['label'] ?? $modelId);
+                    $row->sort_order = $index;
+                }
+
+                $row->context_window = $model['contextWindow'] ?? null;
+                $row->input_price_per_mtok = $model['inputPricePerMTok'] ?? null;
+                $row->output_price_per_mtok = $model['outputPricePerMTok'] ?? null;
+                $row->is_enabled = true;
+                $row->save();
             }
-
-            $row->context_window = $model['contextWindow'] ?? null;
-            $row->input_price_per_mtok = $model['inputPricePerMTok'] ?? null;
-            $row->output_price_per_mtok = $model['outputPricePerMTok'] ?? null;
-            $row->is_enabled = true;
-            $row->save();
         }
 
+        // Prune any OpenRouter row whose (model_id, capability) is no longer kept.
         AiCatalogModel::query()
             ->where('driver', 'openrouter')
-            ->whereNotIn('model_id', $keepIds)
-            ->delete();
+            ->get(['id', 'model_id', 'capability'])
+            ->reject(fn ($row) => in_array($row->model_id.'|'.$row->capability, $keep, true))
+            ->each(fn ($row) => $row->delete());
+    }
+
+    /**
+     * Map an OpenRouter model's output modalities (+ vision input) to the catalog
+     * capabilities it should be listed under. Defaults to `chat` when unknown.
+     *
+     * @param  array<string, mixed>  $model
+     * @return list<string>
+     */
+    private function openRouterCapabilities(array $model): array
+    {
+        $out = array_map('strval', (array) ($model['outputModalities'] ?? []));
+
+        $caps = [];
+        if (in_array('text', $out, true) || $out === []) {
+            $caps[] = 'chat';
+        }
+        if (in_array('image', $out, true)) {
+            $caps[] = 'image';
+        }
+        if (in_array('transcription', $out, true)) {
+            $caps[] = 'transcription';
+        }
+        if (in_array('speech', $out, true) || in_array('audio', $out, true)) {
+            $caps[] = 'speech';
+        }
+        if (in_array('embeddings', $out, true)) {
+            $caps[] = 'embeddings';
+        }
+        if (in_array('rerank', $out, true)) {
+            $caps[] = 'rerank';
+        }
+        // Image input → vision (image understanding / OCR-image).
+        if (! empty($model['vision'])) {
+            $caps[] = 'vision';
+        }
+
+        return array_values(array_unique($caps !== [] ? $caps : ['chat']));
     }
 
     /**

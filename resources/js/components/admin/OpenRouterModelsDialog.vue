@@ -463,6 +463,8 @@ function save() {
             contextWindow: m.contextWindow,
             inputPricePerMTok: m.inputPricePerMTok,
             outputPricePerMTok: m.outputPricePerMTok,
+            outputModalities: m.outputModalities,
+            vision: m.vision,
         }));
 
     router.post(

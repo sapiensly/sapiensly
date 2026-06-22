@@ -585,6 +585,34 @@ test('saveOpenRouterModels upserts the selection and prunes deselected rows', fu
         ->and((float) $row->output_price_per_mtok)->toBe(15.0);
 });
 
+test('saveOpenRouterModels stores models under their output-modality capability', function () {
+    $admin = sysadminForAi();
+
+    $this->actingAs($admin)
+        ->post('/admin/ai/providers/openrouter/models', [
+            'models' => [
+                ['id' => 'some/whisper', 'label' => 'Whisper', 'outputModalities' => ['text', 'transcription']],
+                ['id' => 'some/painter', 'label' => 'Painter', 'outputModalities' => ['image']],
+            ],
+        ])
+        ->assertRedirect();
+
+    // Transcription model is stored under the transcription capability (so it
+    // shows in Defaults > Audio recognition), plus chat for its text output.
+    expect(AiCatalogModel::where('model_id', 'some/whisper')->pluck('capability')->sort()->values()->all())
+        ->toBe(['chat', 'transcription'])
+        ->and(AiCatalogModel::where('model_id', 'some/painter')->pluck('capability')->all())
+        ->toBe(['image']);
+
+    // And it surfaces in the Audio recognition picker.
+    $this->actingAs($admin)
+        ->get('/admin/ai')
+        ->assertInertia(fn ($page) => $page
+            ->where('modelsByCapability.transcription', fn ($models) => collect($models)->contains(
+                fn ($m) => $m['name'] === 'some/whisper'
+            )));
+});
+
 test('saveOpenRouterModels keeps a manually edited label but refreshes pricing', function () {
     $admin = sysadminForAi();
 

@@ -309,6 +309,9 @@ class AdminAiController extends Controller
             'models.*.contextWindow' => ['nullable', 'integer', 'min:0'],
             'models.*.inputPricePerMTok' => ['nullable', 'numeric', 'min:0'],
             'models.*.outputPricePerMTok' => ['nullable', 'numeric', 'min:0'],
+            'models.*.outputModalities' => ['sometimes', 'array'],
+            'models.*.outputModalities.*' => ['string'],
+            'models.*.vision' => ['sometimes', 'boolean'],
         ]);
 
         $this->aiProviderService->syncOpenRouterCatalogModels($validated['models']);
