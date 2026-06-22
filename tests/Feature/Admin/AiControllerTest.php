@@ -450,7 +450,7 @@ test('setProviderKey rejects an unknown driver', function () {
 
 test('openRouterModels returns the live catalog and current selection', function () {
     Http::fake([
-        'openrouter.ai/api/v1/models' => Http::response([
+        'openrouter.ai/api/v1/models*' => Http::response([
             'data' => [
                 [
                     'id' => 'anthropic/claude-sonnet',
@@ -491,9 +491,33 @@ test('openRouterModels returns the live catalog and current selection', function
         ->assertJsonPath('models.0.tools', true);
 });
 
+test('openRouterModels requests all output modalities so image models are included', function () {
+    // The service must pass output_modalities=all, otherwise OpenRouter's /models
+    // returns text-output models only and image models would be missing.
+    Http::fake([
+        'openrouter.ai/api/v1/models*' => Http::response(['data' => [
+            ['id' => 'openai/gpt-4o', 'name' => 'OpenAI: GPT-4o'],
+            ['id' => 'x-ai/grok-imagine-image-quality', 'name' => 'Grok Imagine'],
+        ]]),
+    ]);
+
+    $admin = sysadminForAi();
+    config(['ai.providers.openrouter.key' => 'sk-or-env-1234567890abcd']);
+
+    $this->actingAs($admin)
+        ->getJson('/admin/ai/providers/openrouter/models')
+        ->assertOk()
+        ->assertJsonCount(2, 'models')
+        ->assertJson(fn ($json) => $json->where('models', fn ($models) => collect($models)->contains(
+            fn ($m) => $m['id'] === 'x-ai/grok-imagine-image-quality'
+        ))->etc());
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'output_modalities=all'));
+});
+
 test('openRouterModels resolves an env-only key (no DB row)', function () {
     Http::fake([
-        'openrouter.ai/api/v1/models' => Http::response([
+        'openrouter.ai/api/v1/models*' => Http::response([
             'data' => [
                 ['id' => 'openai/gpt-4o', 'name' => 'OpenAI: GPT-4o'],
             ],

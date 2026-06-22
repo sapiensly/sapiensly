@@ -924,7 +924,25 @@ class AiProviderService
     {
         $base = rtrim($url ?: self::OPENROUTER_BASE_URL, '/');
 
-        $response = Http::withToken($apiKey)->timeout(15)->get($base.'/models');
+        // OpenRouter's /models defaults to text-output models only; passing
+        // output_modalities=all also returns image / audio / etc. models (e.g.
+        // x-ai/grok-imagine-image-quality), which would otherwise be hidden.
+        return collect($this->fetchOpenRouterModelPage($apiKey, $base, ['output_modalities' => 'all']))
+            ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Fetch one page of the OpenRouter /models catalog (optionally filtered),
+     * mapped to the shape the picker expects.
+     *
+     * @param  array<string, mixed>  $query
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchOpenRouterModelPage(string $apiKey, string $base, array $query = []): array
+    {
+        $response = Http::withToken($apiKey)->timeout(15)->get($base.'/models', $query);
 
         if (! $response->successful()) {
             return [];
@@ -935,6 +953,7 @@ class AiProviderService
             ->map(function ($model) {
                 $architecture = $model['architecture'] ?? [];
                 $inputModalities = $architecture['input_modalities'] ?? [];
+                $outputModalities = $architecture['output_modalities'] ?? [];
                 $supportedParameters = $model['supported_parameters'] ?? [];
 
                 return [
@@ -945,6 +964,9 @@ class AiProviderService
                     'outputPricePerMTok' => $this->perMillionPrice($model['pricing']['completion'] ?? null),
                     'vision' => in_array('image', $inputModalities, true)
                         || str_contains((string) ($architecture['modality'] ?? ''), 'image'),
+                    // Output modalities (text, image, audio, …) so the picker can
+                    // mark each model by what it produces.
+                    'outputModalities' => array_values(array_filter((array) $outputModalities, 'is_string')),
                     'tools' => in_array('tools', $supportedParameters, true),
                     'description' => (string) ($model['description'] ?? ''),
                     'created' => isset($model['created']) ? (int) $model['created'] : null,
@@ -953,8 +975,6 @@ class AiProviderService
                     'raw' => $model,
                 ];
             })
-            ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
-            ->values()
             ->all();
     }
 

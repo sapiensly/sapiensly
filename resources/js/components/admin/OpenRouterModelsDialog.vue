@@ -30,6 +30,7 @@ interface OpenRouterModel {
     inputPricePerMTok: number | null;
     outputPricePerMTok: number | null;
     vision: boolean;
+    outputModalities: string[];
     tools: boolean;
     description: string;
     created: number | null;
@@ -94,16 +95,28 @@ function isFree(m: OpenRouterModel): boolean {
     return m.inputPricePerMTok === 0 && m.outputPricePerMTok === 0;
 }
 
+// Output modalities beyond plain text (image, audio, video…), used to mark each
+// model by what it produces.
+function outputTypes(m: OpenRouterModel): string[] {
+    return (m.outputModalities ?? []).filter((o) => o !== 'text');
+}
+
 const INF = Number.POSITIVE_INFINITY;
 
-const comparators: Record<SortKey, (a: OpenRouterModel, b: OpenRouterModel) => number> = {
+const comparators: Record<
+    SortKey,
+    (a: OpenRouterModel, b: OpenRouterModel) => number
+> = {
     name: (a, b) => a.label.localeCompare(b.label),
     name_desc: (a, b) => b.label.localeCompare(a.label),
     context: (a, b) => (b.contextWindow ?? -1) - (a.contextWindow ?? -1),
     context_asc: (a, b) => (a.contextWindow ?? INF) - (b.contextWindow ?? INF),
-    price: (a, b) => (a.inputPricePerMTok ?? INF) - (b.inputPricePerMTok ?? INF),
-    price_desc: (a, b) => (b.inputPricePerMTok ?? -1) - (a.inputPricePerMTok ?? -1),
-    output_price: (a, b) => (a.outputPricePerMTok ?? INF) - (b.outputPricePerMTok ?? INF),
+    price: (a, b) =>
+        (a.inputPricePerMTok ?? INF) - (b.inputPricePerMTok ?? INF),
+    price_desc: (a, b) =>
+        (b.inputPricePerMTok ?? -1) - (a.inputPricePerMTok ?? -1),
+    output_price: (a, b) =>
+        (a.outputPricePerMTok ?? INF) - (b.outputPricePerMTok ?? INF),
     newest: (a, b) => (b.created ?? 0) - (a.created ?? 0),
     oldest: (a, b) => (a.created ?? INF) - (b.created ?? INF),
     provider: (a, b) =>
@@ -116,7 +129,11 @@ const filtered = computed<OpenRouterModel[]>(() => {
     const providerSet = selectedProviders.value;
 
     const list = models.value.filter((m) => {
-        if (q && !m.id.toLowerCase().includes(q) && !m.label.toLowerCase().includes(q)) {
+        if (
+            q &&
+            !m.id.toLowerCase().includes(q) &&
+            !m.label.toLowerCase().includes(q)
+        ) {
             return false;
         }
         if (onlyVision.value && !m.vision) return false;
@@ -167,7 +184,10 @@ function formatContext(n: number | null): string | null {
     return n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);
 }
 
-function formatPrice(input: number | null, output: number | null): string | null {
+function formatPrice(
+    input: number | null,
+    output: number | null,
+): string | null {
     if (input === null && output === null) return null;
     if (input === 0 && (output === 0 || output === null)) {
         return t('admin.ai.providers.price_free');
@@ -220,17 +240,32 @@ const infoSpecs = computed<{ label: string; value: string }[]>(() => {
         Array.isArray(v) && v.length ? v.join(', ') : '—';
 
     return [
-        { label: t('admin.ai.providers.detail_context'), value: asString(formatContext(m.contextWindow)) },
+        {
+            label: t('admin.ai.providers.detail_context'),
+            value: asString(formatContext(m.contextWindow)),
+        },
         {
             label: t('admin.ai.providers.detail_max_output'),
             value: top.max_completion_tokens
                 ? asString(formatContext(Number(top.max_completion_tokens)))
                 : '—',
         },
-        { label: t('admin.ai.providers.detail_input'), value: join(arch.input_modalities) },
-        { label: t('admin.ai.providers.detail_output'), value: join(arch.output_modalities) },
-        { label: t('admin.ai.providers.detail_tokenizer'), value: asString(arch.tokenizer) },
-        { label: t('admin.ai.providers.detail_instruct'), value: asString(arch.instruct_type) },
+        {
+            label: t('admin.ai.providers.detail_input'),
+            value: join(arch.input_modalities),
+        },
+        {
+            label: t('admin.ai.providers.detail_output'),
+            value: join(arch.output_modalities),
+        },
+        {
+            label: t('admin.ai.providers.detail_tokenizer'),
+            value: asString(arch.tokenizer),
+        },
+        {
+            label: t('admin.ai.providers.detail_instruct'),
+            value: asString(arch.instruct_type),
+        },
         {
             label: t('admin.ai.providers.detail_moderated'),
             value:
@@ -240,22 +275,60 @@ const infoSpecs = computed<{ label: string; value: string }[]>(() => {
                       ? t('common.yes')
                       : t('common.no'),
         },
-        { label: t('admin.ai.providers.detail_created'), value: formatCreated(m.created) },
+        {
+            label: t('admin.ai.providers.detail_created'),
+            value: formatCreated(m.created),
+        },
     ];
 });
 
 /** Every priced dimension OpenRouter reports, formatted by its unit. */
 const infoPricing = computed<{ label: string; value: string }[]>(() => {
-    const pricing = (infoModel.value?.raw.pricing ?? {}) as Record<string, unknown>;
+    const pricing = (infoModel.value?.raw.pricing ?? {}) as Record<
+        string,
+        unknown
+    >;
     const defs: { key: string; label: string; unit: 'mtok' | 'each' }[] = [
-        { key: 'prompt', label: t('admin.ai.providers.price_prompt'), unit: 'mtok' },
-        { key: 'completion', label: t('admin.ai.providers.price_completion'), unit: 'mtok' },
-        { key: 'internal_reasoning', label: t('admin.ai.providers.price_reasoning'), unit: 'mtok' },
-        { key: 'input_cache_read', label: t('admin.ai.providers.price_cache_read'), unit: 'mtok' },
-        { key: 'input_cache_write', label: t('admin.ai.providers.price_cache_write'), unit: 'mtok' },
-        { key: 'request', label: t('admin.ai.providers.price_request'), unit: 'each' },
-        { key: 'image', label: t('admin.ai.providers.price_image'), unit: 'each' },
-        { key: 'web_search', label: t('admin.ai.providers.price_web_search'), unit: 'each' },
+        {
+            key: 'prompt',
+            label: t('admin.ai.providers.price_prompt'),
+            unit: 'mtok',
+        },
+        {
+            key: 'completion',
+            label: t('admin.ai.providers.price_completion'),
+            unit: 'mtok',
+        },
+        {
+            key: 'internal_reasoning',
+            label: t('admin.ai.providers.price_reasoning'),
+            unit: 'mtok',
+        },
+        {
+            key: 'input_cache_read',
+            label: t('admin.ai.providers.price_cache_read'),
+            unit: 'mtok',
+        },
+        {
+            key: 'input_cache_write',
+            label: t('admin.ai.providers.price_cache_write'),
+            unit: 'mtok',
+        },
+        {
+            key: 'request',
+            label: t('admin.ai.providers.price_request'),
+            unit: 'each',
+        },
+        {
+            key: 'image',
+            label: t('admin.ai.providers.price_image'),
+            unit: 'each',
+        },
+        {
+            key: 'web_search',
+            label: t('admin.ai.providers.price_web_search'),
+            unit: 'each',
+        },
     ];
 
     return defs
@@ -264,7 +337,11 @@ const infoPricing = computed<{ label: string; value: string }[]>(() => {
             if (v === undefined || v === null || v === '') return null;
             const num = Number(v);
             if (Number.isNaN(num)) return null;
-            if (num === 0) return { label: d.label, value: t('admin.ai.providers.price_free') };
+            if (num === 0)
+                return {
+                    label: d.label,
+                    value: t('admin.ai.providers.price_free'),
+                };
             const value =
                 d.unit === 'mtok'
                     ? `$${(num * 1_000_000).toFixed(2)} /1M`
@@ -418,7 +495,9 @@ const booleanFilters = [
                             {{ t('admin.ai.providers.sort_label') }}
                         </Label>
                         <Select v-model="sortBy">
-                            <SelectTrigger class="h-8 border-medium bg-surface text-xs">
+                            <SelectTrigger
+                                class="h-8 border-medium bg-surface text-xs"
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -432,16 +511,24 @@ const booleanFilters = [
                                     {{ t('admin.ai.providers.sort_context') }}
                                 </SelectItem>
                                 <SelectItem value="context_asc">
-                                    {{ t('admin.ai.providers.sort_context_asc') }}
+                                    {{
+                                        t('admin.ai.providers.sort_context_asc')
+                                    }}
                                 </SelectItem>
                                 <SelectItem value="price">
                                     {{ t('admin.ai.providers.sort_price') }}
                                 </SelectItem>
                                 <SelectItem value="price_desc">
-                                    {{ t('admin.ai.providers.sort_price_desc') }}
+                                    {{
+                                        t('admin.ai.providers.sort_price_desc')
+                                    }}
                                 </SelectItem>
                                 <SelectItem value="output_price">
-                                    {{ t('admin.ai.providers.sort_output_price') }}
+                                    {{
+                                        t(
+                                            'admin.ai.providers.sort_output_price',
+                                        )
+                                    }}
                                 </SelectItem>
                                 <SelectItem value="newest">
                                     {{ t('admin.ai.providers.sort_newest') }}
@@ -461,7 +548,9 @@ const booleanFilters = [
                             {{ t('admin.ai.providers.filter_context') }}
                         </Label>
                         <Select v-model="minContext">
-                            <SelectTrigger class="h-8 border-medium bg-surface text-xs">
+                            <SelectTrigger
+                                class="h-8 border-medium bg-surface text-xs"
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -509,8 +598,12 @@ const booleanFilters = [
                                     :model-value="selectedProviders.has(fam.id)"
                                     class="pointer-events-none"
                                 />
-                                <span class="flex-1 truncate">{{ fam.id }}</span>
-                                <span class="text-ink-subtle">{{ fam.count }}</span>
+                                <span class="flex-1 truncate">{{
+                                    fam.id
+                                }}</span>
+                                <span class="text-ink-subtle">{{
+                                    fam.count
+                                }}</span>
                             </div>
                         </div>
                     </div>
@@ -525,7 +618,9 @@ const booleanFilters = [
                             />
                             <Input
                                 v-model="query"
-                                :placeholder="t('admin.ai.providers.models_search')"
+                                :placeholder="
+                                    t('admin.ai.providers.models_search')
+                                "
                                 class="h-8 border-medium bg-surface pl-8 text-xs"
                             />
                         </div>
@@ -580,7 +675,10 @@ const booleanFilters = [
                         {{ t('admin.ai.providers.models_empty') }}
                     </div>
 
-                    <div v-else class="-mr-1 flex-1 space-y-1 overflow-y-auto pr-1">
+                    <div
+                        v-else
+                        class="-mr-1 flex-1 space-y-1 overflow-y-auto pr-1"
+                    >
                         <div
                             v-for="model in filtered"
                             :key="model.id"
@@ -605,20 +703,38 @@ const booleanFilters = [
                                         v-if="model.vision"
                                         class="shrink-0 rounded-pill bg-accent-blue/15 px-1.5 text-[9px] font-semibold tracking-wide text-accent-blue uppercase"
                                     >
-                                        {{ t('admin.ai.providers.badge_vision') }}
+                                        {{
+                                            t('admin.ai.providers.badge_vision')
+                                        }}
                                     </span>
                                     <span
                                         v-if="model.tools"
-                                        class="shrink-0 rounded-pill bg-sp-spectrum-magenta/15 px-1.5 text-[9px] font-semibold tracking-wide text-sp-spectrum-magenta uppercase"
+                                        class="bg-sp-spectrum-magenta/15 text-sp-spectrum-magenta shrink-0 rounded-pill px-1.5 text-[9px] font-semibold tracking-wide uppercase"
                                     >
-                                        {{ t('admin.ai.providers.badge_tools') }}
+                                        {{
+                                            t('admin.ai.providers.badge_tools')
+                                        }}
+                                    </span>
+                                    <span
+                                        v-for="out in outputTypes(model)"
+                                        :key="out"
+                                        class="bg-sp-spectrum-cyan/15 text-sp-spectrum-cyan shrink-0 rounded-pill px-1.5 text-[9px] font-semibold tracking-wide uppercase"
+                                        :title="
+                                            t('admin.ai.providers.badge_output')
+                                        "
+                                    >
+                                        {{ out }}
                                     </span>
                                 </div>
-                                <p class="truncate font-mono text-[11px] text-ink-subtle">
+                                <p
+                                    class="truncate font-mono text-[11px] text-ink-subtle"
+                                >
                                     {{ model.id }}
                                 </p>
                             </div>
-                            <div class="shrink-0 text-right text-[11px] leading-tight">
+                            <div
+                                class="shrink-0 text-right text-[11px] leading-tight"
+                            >
                                 <p
                                     v-if="formatContext(model.contextWindow)"
                                     class="text-ink-muted"
@@ -626,10 +742,20 @@ const booleanFilters = [
                                     {{ formatContext(model.contextWindow) }}
                                 </p>
                                 <p
-                                    v-if="formatPrice(model.inputPricePerMTok, model.outputPricePerMTok)"
+                                    v-if="
+                                        formatPrice(
+                                            model.inputPricePerMTok,
+                                            model.outputPricePerMTok,
+                                        )
+                                    "
                                     class="text-ink-subtle"
                                 >
-                                    {{ formatPrice(model.inputPricePerMTok, model.outputPricePerMTok) }}
+                                    {{
+                                        formatPrice(
+                                            model.inputPricePerMTok,
+                                            model.outputPricePerMTok,
+                                        )
+                                    }}
                                 </p>
                             </div>
                             <button
@@ -654,7 +780,9 @@ const booleanFilters = [
                             <p class="text-sm font-semibold text-ink">
                                 {{ infoModel.label }}
                             </p>
-                            <p class="truncate font-mono text-[11px] text-ink-subtle">
+                            <p
+                                class="truncate font-mono text-[11px] text-ink-subtle"
+                            >
                                 {{ infoModel.id }}
                             </p>
                         </div>
@@ -671,7 +799,9 @@ const booleanFilters = [
                     <Button
                         type="button"
                         size="sm"
-                        :variant="selected.has(infoModel.id) ? 'default' : 'outline'"
+                        :variant="
+                            selected.has(infoModel.id) ? 'default' : 'outline'
+                        "
                         :class="
                             selected.has(infoModel.id)
                                 ? 'gap-1.5 bg-accent-blue text-white hover:bg-accent-blue-hover'
@@ -705,7 +835,9 @@ const booleanFilters = [
 
                     <!-- Specs -->
                     <div class="space-y-1.5">
-                        <p class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase">
+                        <p
+                            class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
+                        >
                             {{ t('admin.ai.providers.detail_specs') }}
                         </p>
                         <dl class="space-y-1">
@@ -715,14 +847,18 @@ const booleanFilters = [
                                 class="flex items-baseline justify-between gap-3 text-xs"
                             >
                                 <dt class="text-ink-subtle">{{ row.label }}</dt>
-                                <dd class="text-right font-mono text-ink">{{ row.value }}</dd>
+                                <dd class="text-right font-mono text-ink">
+                                    {{ row.value }}
+                                </dd>
                             </div>
                         </dl>
                     </div>
 
                     <!-- Pricing -->
                     <div v-if="infoPricing.length" class="space-y-1.5">
-                        <p class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase">
+                        <p
+                            class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
+                        >
                             {{ t('admin.ai.providers.detail_pricing') }}
                         </p>
                         <dl class="space-y-1">
@@ -732,14 +868,18 @@ const booleanFilters = [
                                 class="flex items-baseline justify-between gap-3 text-xs"
                             >
                                 <dt class="text-ink-subtle">{{ row.label }}</dt>
-                                <dd class="text-right font-mono text-ink">{{ row.value }}</dd>
+                                <dd class="text-right font-mono text-ink">
+                                    {{ row.value }}
+                                </dd>
                             </div>
                         </dl>
                     </div>
 
                     <!-- Capabilities -->
                     <div v-if="infoCapabilities.length" class="space-y-1.5">
-                        <p class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase">
+                        <p
+                            class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
+                        >
                             {{ t('admin.ai.providers.detail_capabilities') }}
                         </p>
                         <div class="flex flex-wrap gap-1">
@@ -755,19 +895,35 @@ const booleanFilters = [
 
                     <!-- Meta -->
                     <div class="space-y-1.5">
-                        <p class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase">
+                        <p
+                            class="text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
+                        >
                             {{ t('admin.ai.providers.detail_meta') }}
                         </p>
                         <dl class="space-y-1">
-                            <div class="flex items-baseline justify-between gap-3 text-xs">
-                                <dt class="text-ink-subtle">{{ t('admin.ai.providers.detail_canonical') }}</dt>
-                                <dd class="truncate text-right font-mono text-ink">
+                            <div
+                                class="flex items-baseline justify-between gap-3 text-xs"
+                            >
+                                <dt class="text-ink-subtle">
+                                    {{
+                                        t('admin.ai.providers.detail_canonical')
+                                    }}
+                                </dt>
+                                <dd
+                                    class="truncate text-right font-mono text-ink"
+                                >
                                     {{ asString(raw('canonical_slug')) }}
                                 </dd>
                             </div>
-                            <div class="flex items-baseline justify-between gap-3 text-xs">
-                                <dt class="text-ink-subtle">{{ t('admin.ai.providers.detail_hf') }}</dt>
-                                <dd class="truncate text-right font-mono text-ink">
+                            <div
+                                class="flex items-baseline justify-between gap-3 text-xs"
+                            >
+                                <dt class="text-ink-subtle">
+                                    {{ t('admin.ai.providers.detail_hf') }}
+                                </dt>
+                                <dd
+                                    class="truncate text-right font-mono text-ink"
+                                >
                                     {{ asString(raw('hugging_face_id')) }}
                                 </dd>
                             </div>
@@ -776,9 +932,15 @@ const booleanFilters = [
                 </aside>
             </div>
 
-            <DialogFooter class="items-center justify-between gap-2 sm:justify-between">
+            <DialogFooter
+                class="items-center justify-between gap-2 sm:justify-between"
+            >
                 <span class="text-[11px] text-ink-subtle">
-                    {{ t('admin.ai.providers.models_selected', { count: selected.size }) }}
+                    {{
+                        t('admin.ai.providers.models_selected', {
+                            count: selected.size,
+                        })
+                    }}
                 </span>
                 <div class="flex items-center gap-2">
                     <Button type="button" variant="ghost" @click="open = false">
