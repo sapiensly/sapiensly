@@ -165,6 +165,16 @@ class GuideTool extends SapiensTool
                     '4. Attach it to an agent via create_agent / update_agent tool_ids.',
                 ],
             ],
+            [
+                'topic' => 'chat_history',
+                'when' => 'Review, QA, or continue past chat conversations (and summarize them).',
+                'steps' => [
+                    '1. Find chats: list_chats (most-recently-active first; filter by title query, date range on last activity, agent_id, pagination) — or search_chat_messages to find conversations by content (e.g. "refund"), with a date range and user/assistant role filter.',
+                    '2. Read one: get_chat (chat_id) returns the full transcript + metadata + rolling summary. Summarize or QA it yourself from that text — there is no separate summarize tool; you do it client-side.',
+                    '3. Continue one: continue_chat (chat_id, message) posts a turn and returns the assistant reply synchronously, as the chat\'s own model/agent/tools. The turn is persisted like any other.',
+                    '4. QA pattern: search_chat_messages to gather candidates → get_chat on each → judge against your criteria. All read tools are data:read and tenant-scoped; you only ever see your account\'s chats.',
+                ],
+            ],
         ];
     }
 
@@ -174,7 +184,7 @@ class GuideTool extends SapiensTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'topic' => $schema->string()->description('A playbook topic (support_squad, build_app, rag, chatbot, agent, tool) or "abilities" / "conventions". Omit to get the map and the list of playbooks.'),
+            'topic' => $schema->string()->description('A playbook topic (support_squad, build_app, rag, chatbot, agent, tool, chat_history) or "abilities" / "conventions". Omit to get the map and the list of playbooks.'),
         ];
     }
 }

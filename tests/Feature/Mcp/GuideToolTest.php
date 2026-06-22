@@ -28,6 +28,14 @@ it('guide returns the full steps for a topic', function () {
         ->assertSee('update_chatbot');
 });
 
+it('guide has a chat-history QA playbook', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(GuideTool::class, ['topic' => 'chat_history'])
+        ->assertOk()
+        ->assertSee('search_chat_messages')
+        ->assertSee('continue_chat');
+});
+
 it('guide reports an unknown topic with the valid topics', function () {
     SapiensServer::actingAs($this->user)
         ->tool(GuideTool::class, ['topic' => 'nope'])
