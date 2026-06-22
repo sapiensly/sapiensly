@@ -37,14 +37,15 @@ class ThreadSynthesizer
         You are a decision synthesizer closing a multi-agent deliberation. Several AI agents, each speaking from its own data sources, have weighed in on the user's question. Your job is to distill their positions into ONE concrete, parametrized action the user can approve in a single click.
 
         Respond with ONLY a single minified JSON object — no markdown, no code fences, no commentary. Use exactly this schema:
-        {"action_type":"<string>","action_label":"<human-readable, max 60 chars>","agreed_by":["<agent name>", ...],"parameters":{"<key>":"<value>"},"rationale":"<max 120 chars>"}
+        {"action_type":"<string>","action_label":"<human-readable, max 60 chars>","summary":"<1-2 sentences>","agreed_by":["<agent name>", ...],"parameters":{"<key>":"<value>"},"rationale":"<max 120 chars>"}
 
         - action_type: a short snake_case verb for the action (e.g. "launch_campaign", "process_refund"). Use "manual" if the agents did not converge on a concrete, executable action.
         - action_label: the action stated as a short imperative the user will see on the button/card.
+        - summary: a direct, plain-language answer to the user's question in 1-2 sentences. State the concrete recommendation — the actual number, amount or choice the user asked for — not a description of the action. This is the headline the user reads first.
         - agreed_by: the names of the agents (from the transcript) whose positions support this action.
         - parameters: the concrete inputs the action needs, as flat key/value pairs.
         - rationale: one short clause on why this is the recommended close.
-        - Write the human-readable text (action_label, rationale, parameter values) in the SAME LANGUAGE as the conversation. Keep the JSON keys in English.
+        - Write the human-readable text (action_label, summary, rationale, parameter values) in the SAME LANGUAGE as the conversation. Keep the JSON keys in English.
         If the agents reached no usable recommendation, return {"action_type":"none", ...} with an explanatory rationale.
         PROMPT;
 
@@ -160,6 +161,7 @@ class ThreadSynthesizer
         return [
             'action_type' => $this->registry->normalizeType($type),
             'action_label' => Str::limit($label, 60, ''),
+            'summary' => Str::limit((string) ($decoded['summary'] ?? ''), 600, ''),
             'agreed_by' => $agreedBy ?: $this->rosterNames($chat),
             'parameters' => is_array($decoded['parameters'] ?? null) ? $decoded['parameters'] : [],
             'rationale' => Str::limit((string) ($decoded['rationale'] ?? ''), 120, ''),

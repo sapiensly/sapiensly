@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { normalizeChatMarkdown } from '@/lib/markdown';
 import type { ChatMessageDto, ChatSynthesisStatus } from '@/types/chatModule';
 import { CircleCheck, Loader2, Sparkles, X } from '@lucide/vue';
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -21,6 +24,19 @@ const parameters = computed(() =>
 );
 const executed = computed(() => props.status === 'executed');
 
+// The plain-language answer the user reads first. Older proposals lack it; in
+// that case the action label stands in as the headline.
+const summaryHtml = computed(() => {
+    const summary = payload.value?.summary?.trim();
+    if (!summary) return '';
+    const raw = marked.parse(normalizeChatMarkdown(summary), {
+        async: false,
+        breaks: true,
+        gfm: true,
+    }) as string;
+    return DOMPurify.sanitize(raw);
+});
+
 function initials(name: string): string {
     return name
         .split(/\s+/)
@@ -40,7 +56,7 @@ function initials(name: string): string {
                 class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue/15 px-2.5 py-0.5 text-[10px] font-bold tracking-wider text-accent-blue uppercase"
             >
                 <Sparkles class="size-3" />
-                {{ t('chat.action.badge') }}
+                {{ t('chat.team.answer') }}
             </span>
             <button
                 v-if="!executed"
@@ -54,7 +70,13 @@ function initials(name: string): string {
         </div>
 
         <div class="px-4 pt-2 pb-4">
-            <h3 class="text-[15px] font-semibold text-ink">
+            <!-- The answer the user reads first. -->
+            <div
+                v-if="summaryHtml"
+                class="sp-chat-prose prose prose-sm max-w-none text-ink dark:prose-invert"
+                v-html="summaryHtml"
+            />
+            <h3 v-else class="text-[15px] font-semibold text-ink">
                 {{ payload.action_label }}
             </h3>
 
@@ -95,6 +117,17 @@ function initials(name: string): string {
                 class="mt-3 text-[12px] leading-relaxed text-ink-muted"
             >
                 {{ payload.rationale }}
+            </p>
+
+            <!-- When a summary leads, restate the action the button will run. -->
+            <p
+                v-if="summaryHtml && !executed"
+                class="mt-3 text-[12px] text-ink-subtle"
+            >
+                {{ t('chat.action.proposed') }}:
+                <span class="font-medium text-ink">{{
+                    payload.action_label
+                }}</span>
             </p>
 
             <!-- Actions -->

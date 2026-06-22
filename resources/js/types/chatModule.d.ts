@@ -27,6 +27,9 @@ export interface ChatAgentRef {
 export interface ActionPayloadDto {
     action_type: string;
     action_label: string;
+    // Plain-language answer to the user's question (the headline they read first).
+    // Optional: older proposals predate this field.
+    summary?: string;
     agreed_by: string[];
     parameters: Record<string, unknown>;
     rationale: string;

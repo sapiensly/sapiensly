@@ -1,12 +1,26 @@
 <script setup lang="ts">
+import { normalizeChatMarkdown } from '@/lib/markdown';
 import type { ConsultationDto } from '@/types/chatModule';
 import { Loader2, MessagesSquare, Users } from '@lucide/vue';
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const props = defineProps<{ consultation: ConsultationDto }>();
 
 const { t } = useI18n();
+
+// Render the consulted agent's answer as markdown, mirroring AgentMessageBubble.
+function renderMarkdown(content: string | null): string {
+    if (!content) return '';
+    const raw = marked.parse(normalizeChatMarkdown(content), {
+        async: false,
+        breaks: true,
+        gfm: true,
+    }) as string;
+    return DOMPurify.sanitize(raw);
+}
 
 // Deterministic per-agent hue, mirroring AgentMessageBubble.
 const hue = computed(() => {
@@ -62,9 +76,10 @@ const open = ref(props.consultation.visible);
                 <span class="font-medium">{{ t('chat.consult.asked') }}:</span>
                 {{ consultation.question }}
             </p>
-            <p class="whitespace-pre-wrap text-ink">
-                {{ consultation.answer }}
-            </p>
+            <div
+                class="sp-chat-prose prose prose-sm max-w-none text-ink dark:prose-invert"
+                v-html="renderMarkdown(consultation.answer)"
+            />
         </div>
     </div>
 </template>
