@@ -30,6 +30,10 @@ class ChatAgent extends AnonymousAgent implements HasProviderOptions
 {
     private ?string $cacheableSystem = null;
 
+    private bool $webSearch = false;
+
+    private ?int $webSearchMaxResults = null;
+
     /**
      * Register a frozen system prefix as cacheable for providers that support
      * explicit cache breakpoints (Anthropic). No-op for other providers.
@@ -42,24 +46,42 @@ class ChatAgent extends AnonymousAgent implements HasProviderOptions
     }
 
     /**
+     * Enable OpenRouter's `web` plugin for this turn — its way of doing web
+     * search, since it can't take the native WebSearch provider tool. Optional
+     * max_results bounds how many results it pulls. No-op for other providers.
+     */
+    public function withWebSearch(?int $maxResults = null): static
+    {
+        $this->webSearch = true;
+        $this->webSearchMaxResults = $maxResults;
+
+        return $this;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function providerOptions(Lab|string $provider): array
     {
-        if ($this->cacheableSystem === null || trim($this->cacheableSystem) === '') {
-            return [];
+        $options = [];
+
+        if (($provider === Lab::Anthropic || $provider === 'anthropic')
+            && $this->cacheableSystem !== null && trim($this->cacheableSystem) !== '') {
+            $options['system'] = [[
+                'type' => 'text',
+                'text' => $this->cacheableSystem,
+                'cache_control' => ['type' => 'ephemeral'],
+            ]];
         }
 
-        if ($provider === Lab::Anthropic || $provider === 'anthropic') {
-            return [
-                'system' => [[
-                    'type' => 'text',
-                    'text' => $this->cacheableSystem,
-                    'cache_control' => ['type' => 'ephemeral'],
-                ]],
-            ];
+        if (($provider === Lab::OpenRouter || $provider === 'openrouter') && $this->webSearch) {
+            $plugin = ['id' => 'web'];
+            if ($this->webSearchMaxResults !== null) {
+                $plugin['max_results'] = $this->webSearchMaxResults;
+            }
+            $options['plugins'] = [$plugin];
         }
 
-        return [];
+        return $options;
     }
 }

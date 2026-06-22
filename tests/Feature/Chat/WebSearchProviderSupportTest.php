@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\ChatAgent;
 use App\Services\Chat\ChatAiService;
 use Laravel\Ai\Enums\Lab;
 
@@ -16,13 +17,6 @@ function supportsWebSearch(Lab $provider): bool
     return $method->invoke(app(ChatAiService::class), $provider);
 }
 
-function onlineModel(string $model): string
-{
-    $method = new ReflectionMethod(ChatAiService::class, 'withOpenRouterOnline');
-
-    return $method->invoke(app(ChatAiService::class), $model);
-}
-
 it('reports web search support only for the gateways that implement it', function () {
     expect(supportsWebSearch(Lab::Anthropic))->toBeTrue();
     expect(supportsWebSearch(Lab::Gemini))->toBeTrue();
@@ -36,7 +30,22 @@ it('reports no web search support for OpenRouter and other gateways', function (
     expect(supportsWebSearch(Lab::Mistral))->toBeFalse();
 });
 
-it('enables OpenRouter web search via the :online model suffix, idempotently', function () {
-    expect(onlineModel('anthropic/claude-sonnet-4'))->toBe('anthropic/claude-sonnet-4:online');
-    expect(onlineModel('openai/gpt-4o:online'))->toBe('openai/gpt-4o:online');
+it('enables the OpenRouter web plugin with a configurable max_results', function () {
+    $agent = (new ChatAgent(instructions: 'sys', messages: [], tools: []))->withWebSearch(7);
+
+    expect($agent->providerOptions(Lab::OpenRouter))->toBe(['plugins' => [['id' => 'web', 'max_results' => 7]]]);
+    // Other providers ignore it.
+    expect($agent->providerOptions(Lab::Anthropic))->toBe([]);
+});
+
+it('omits max_results from the OpenRouter plugin when none is configured', function () {
+    $agent = (new ChatAgent(instructions: 'sys', messages: [], tools: []))->withWebSearch(null);
+
+    expect($agent->providerOptions(Lab::OpenRouter))->toBe(['plugins' => [['id' => 'web']]]);
+});
+
+it('does not emit the web plugin when web search is off', function () {
+    $agent = new ChatAgent(instructions: 'sys', messages: [], tools: []);
+
+    expect($agent->providerOptions(Lab::OpenRouter))->toBe([]);
 });

@@ -39,6 +39,8 @@ class UpdateAgentRequest extends FormRequest
             'config.tool_execution' => ['nullable', 'array'],
             'config.tool_execution.timeout' => ['nullable', 'integer', 'min:1000', 'max:300000'],
             'config.tool_execution.retry_count' => ['nullable', 'integer', 'min:0', 'max:5'],
+            'config.web_search' => ['nullable', 'array'],
+            'config.web_search.max_results' => ['nullable', 'integer', 'min:1', 'max:10'],
 
             'knowledge_base_ids' => ['nullable', 'array'],
             'knowledge_base_ids.*' => ['string', 'exists:tenant.knowledge_bases,id'],

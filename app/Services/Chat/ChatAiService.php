@@ -260,15 +260,18 @@ class ChatAiService
                 $usedSources['Knowledge base'] = $ragChunks.' passage'.($ragChunks === 1 ? '' : 's');
             }
 
+            // How many results web search may pull, when configured on the agent.
+            $webSearchMax = $this->webSearchMaxResults($agent);
+
             // Web search is a provider-native tool only some gateways implement
             // (Anthropic/Gemini/OpenAI). Others can't take the WebSearch tool —
             // attaching it throws and would kill the turn. OpenRouter has its own
-            // web search via the model's `:online` suffix; everyone else degrades
-            // to no web search. Either way we never attach the unsupported tool.
-            $streamModel = $resolvedModel;
+            // web search via its `web` plugin; everyone else degrades to none.
+            // Either way we never attach the unsupported tool.
+            $openRouterWebSearch = false;
             if ($webSearch && ! $this->providerSupportsWebSearch($provider)) {
                 if ($provider === Lab::OpenRouter) {
-                    $streamModel = $this->withOpenRouterOnline($resolvedModel);
+                    $openRouterWebSearch = true;
                     $usedSources['Web search'] = 'via OpenRouter';
                 } else {
                     Log::info('Web search unsupported by provider; continuing without it', [
@@ -281,7 +284,7 @@ class ChatAiService
                 $webSearch = false;
             }
 
-            $tools = $this->buildChatTools($toolIds, $user, $webSearch);
+            $tools = $this->buildChatTools($toolIds, $user, $webSearch, $webSearchMax);
 
             // Cross-agent consultation: when other agents exist, the running
             // model/agent can consult them mid-turn (background or in the front)
@@ -311,6 +314,12 @@ class ChatAiService
                 $sdkAgent->withCacheableSystem($instructions);
             }
 
+            // OpenRouter web search rides on its `web` plugin (set via provider
+            // options on the request), not a tool — enable it on the agent here.
+            if ($openRouterWebSearch) {
+                $sdkAgent->withWebSearch($webSearchMax);
+            }
+
             $attachments = $this->buildAttachments($placeholder);
 
             $placeholder->update(['status' => 'streaming', 'model' => $resolvedModel]);
@@ -330,9 +339,7 @@ class ChatAiService
                 $promptText.$ragContext,
                 attachments: $attachments,
                 provider: $provider,
-                // May carry OpenRouter's `:online` suffix for web search; the
-                // persisted message + spend guard keep the base model id.
-                model: $streamModel,
+                model: $resolvedModel,
             );
 
             $stopKey = self::STOP_CACHE_PREFIX.$placeholder->id;
@@ -467,20 +474,24 @@ class ChatAiService
     }
 
     /**
-     * OpenRouter enables web search through its `:online` model suffix (shorthand
-     * for the `web` plugin), not a provider tool. Appended only for the SDK call;
-     * idempotent so a model already marked `:online` isn't doubled.
+     * The agent's configured cap on web search results (config.web_search.max_results),
+     * clamped to a sane 1–10. Null when unset or no agent — the provider's default applies.
      */
-    private function withOpenRouterOnline(string $model): string
+    private function webSearchMaxResults(?Agent $agent): ?int
     {
-        return str_ends_with($model, ':online') ? $model : $model.':online';
+        $max = $agent?->config['web_search']['max_results'] ?? null;
+        if (! is_numeric($max)) {
+            return null;
+        }
+
+        return max(1, min(10, (int) $max));
     }
 
-    private function buildChatTools(array $toolIds, ?User $user, bool $webSearch): array
+    private function buildChatTools(array $toolIds, ?User $user, bool $webSearch, ?int $webSearchMax = null): array
     {
         $tools = [];
         if ($webSearch) {
-            $tools[] = new WebSearch;
+            $tools[] = new WebSearch(maxSearches: $webSearchMax);
         }
 
         if (empty($toolIds) || $user === null) {

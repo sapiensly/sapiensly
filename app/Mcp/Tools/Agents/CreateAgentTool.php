@@ -88,7 +88,7 @@ class CreateAgentTool extends SapiensTool
             'web_search' => $schema->boolean()->description('Whether the agent may use web search (default false).'),
             'knowledge_base_ids' => $schema->array()->description('Knowledge base ids to attach (from list_knowledge_bases).'),
             'tool_ids' => $schema->array()->description('Tool ids to attach (from list_tools).'),
-            'config' => $schema->object()->description('Optional tuning: { temperature, rag_params: { chunk_size, top_k, similarity_threshold }, tool_execution: { timeout, retry_count } }.'),
+            'config' => $schema->object()->description('Optional tuning: { temperature, rag_params: { chunk_size, top_k, similarity_threshold }, tool_execution: { timeout, retry_count }, web_search: { max_results } (1-10; applies when web_search is enabled) }.'),
         ];
     }
 }
