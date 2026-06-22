@@ -1,0 +1,312 @@
+<?php
+
+namespace App\Services\Ai;
+
+use App\Models\AiCatalogModel;
+use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Laravel\Ai\AnonymousAgent;
+use Laravel\Ai\Audio;
+use Laravel\Ai\Embeddings;
+use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Files;
+use Laravel\Ai\Image;
+use Laravel\Ai\Reranking;
+use Laravel\Ai\Transcription;
+use RuntimeException;
+
+/**
+ * Runs a single, ad-hoc test of one AI capability for the Playground module.
+ *
+ * It resolves the handler model the same way the agent handoff does (the admin
+ * default, or a user-chosen override), then executes the capability against the
+ * provided input — reusing {@see OpenRouterClient} for OpenRouter models (whose
+ * multimodal tasks go through chat completions) and the Laravel AI SDK otherwise.
+ * Binary outputs (generated images, synthesized speech) are returned inline as
+ * base64 data URLs — the Playground is ephemeral, nothing is persisted.
+ */
+class PlaygroundRunner
+{
+    /**
+     * Capability registry: the single source of truth shared with the controller
+     * (page props) and the runner. `default` is the admin-defaults category whose
+     * configured model is used; `catalog` is the capability whose enabled models
+     * are eligible as an override.
+     *
+     * @var array<string, array{default: string, catalog: string, input: string, output: string}>
+     */
+    public const CAPABILITIES = [
+        'text' => ['default' => 'chat', 'catalog' => 'chat', 'input' => 'prompt', 'output' => 'text'],
+        'coding' => ['default' => 'coding', 'catalog' => 'chat', 'input' => 'prompt', 'output' => 'text'],
+        'embeddings' => ['default' => 'embeddings', 'catalog' => 'embeddings', 'input' => 'text', 'output' => 'embeddings'],
+        'ocr_pdf' => ['default' => 'ocr_pdf', 'catalog' => 'vision', 'input' => 'pdf', 'output' => 'text'],
+        'ocr_image' => ['default' => 'ocr_image', 'catalog' => 'vision', 'input' => 'image', 'output' => 'text'],
+        'image_generation' => ['default' => 'image_generation', 'catalog' => 'image', 'input' => 'prompt', 'output' => 'image'],
+        'vision' => ['default' => 'vision', 'catalog' => 'vision', 'input' => 'image_q', 'output' => 'text'],
+        'audio_recognition' => ['default' => 'audio_recognition', 'catalog' => 'transcription', 'input' => 'audio', 'output' => 'text'],
+        'speech_generation' => ['default' => 'speech_generation', 'catalog' => 'speech', 'input' => 'text', 'output' => 'audio'],
+        'reranking' => ['default' => 'reranking', 'catalog' => 'rerank', 'input' => 'rerank', 'output' => 'rerank'],
+    ];
+
+    public function __construct(
+        private readonly AiCapabilities $capabilities,
+        private readonly AiDefaults $defaults,
+        private readonly OpenRouterClient $openRouter,
+        private readonly AiSpendGuard $spendGuard,
+    ) {}
+
+    /**
+     * Resolve the model+provider for a capability run: a user-chosen override
+     * (validated to the right capability), else the admin default, else the
+     * capability's hard default. Throws when nothing is configured.
+     *
+     * @return array{model: string, driver: string, provider: Lab}
+     */
+    public function resolveForRun(string $capability, ?string $explicitModelId): array
+    {
+        $meta = self::CAPABILITIES[$capability] ?? throw new RuntimeException("Unknown capability '{$capability}'.");
+
+        if ($explicitModelId !== null && $explicitModelId !== '') {
+            $row = AiCatalogModel::query()->enabled()->whereKey($explicitModelId)->first(['model_id', 'driver', 'capability']);
+            if ($row === null || $row->capability !== $meta['catalog']) {
+                throw new RuntimeException('The selected model is not an enabled '.$meta['catalog'].' model.');
+            }
+
+            return $this->withProvider((string) $row->model_id, (string) $row->driver);
+        }
+
+        if ($resolved = $this->capabilities->resolve($meta['default'])) {
+            return $resolved;
+        }
+
+        $hard = $this->defaults->hardDefaultFor($meta['default']);
+        if ($hard !== null) {
+            $row = AiCatalogModel::query()->enabled()
+                ->where('model_id', $hard)
+                ->where('capability', $meta['catalog'])
+                ->first(['model_id', 'driver']);
+            if ($row !== null) {
+                return $this->withProvider((string) $row->model_id, (string) $row->driver);
+            }
+        }
+
+        throw new RuntimeException('No model is configured for this capability. Set one in admin AI > Defaults.');
+    }
+
+    /**
+     * Execute a capability run and return a structured result.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    public function execute(User $user, string $capability, ?string $modelId, array $input, ?UploadedFile $file): array
+    {
+        $handler = $this->resolveForRun($capability, $modelId);
+        $this->spendGuard->assertWithinBudget($user, $user->organization_id, $handler['model']);
+
+        $output = match ($capability) {
+            'text' => ['text' => $this->generateText($handler, (string) ($input['prompt'] ?? ''), 'You are a helpful assistant. Answer the user clearly.')],
+            'coding' => ['text' => $this->generateText($handler, (string) ($input['prompt'] ?? ''), 'You are an expert programming assistant. Return correct, idiomatic code with a brief explanation.')],
+            'embeddings' => $this->embeddings($handler, (string) ($input['text'] ?? '')),
+            'ocr_pdf', 'ocr_image' => ['text' => $this->ocr($user, $handler, $this->requireFile($file), $capability === 'ocr_image')],
+            'vision' => ['text' => $this->vision($user, $handler, $this->requireFile($file), (string) ($input['prompt'] ?? 'Describe this image in detail.'))],
+            'image_generation' => ['image' => $this->generateImage($user, $handler, (string) ($input['prompt'] ?? ''))],
+            'audio_recognition' => ['text' => $this->transcribe($user, $handler, $this->requireFile($file))],
+            'speech_generation' => ['audio' => $this->synthesizeSpeech($handler, (string) ($input['text'] ?? ''))],
+            'reranking' => $this->rerank($handler, (string) ($input['query'] ?? ''), (array) ($input['documents'] ?? [])),
+            default => throw new RuntimeException("Unknown capability '{$capability}'."),
+        };
+
+        return ['model' => $handler['model'], 'driver' => $handler['driver']] + $output;
+    }
+
+    /** @return array{model: string, driver: string, provider: Lab} */
+    private function withProvider(string $model, string $driver): array
+    {
+        $provider = Lab::tryFrom($driver) ?? throw new RuntimeException("Unsupported provider driver '{$driver}'.");
+
+        return ['model' => $model, 'driver' => $driver, 'provider' => $provider];
+    }
+
+    private function requireFile(?UploadedFile $file): UploadedFile
+    {
+        return $file ?? throw new RuntimeException('This capability requires a file upload.');
+    }
+
+    /** @param array{model: string, driver: string, provider: Lab} $handler */
+    private function generateText(array $handler, string $prompt, string $system): string
+    {
+        if (trim($prompt) === '') {
+            throw new RuntimeException('Provide a prompt.');
+        }
+
+        // OpenRouter chat is OpenAI-compatible — the SDK driver handles plain text.
+        return (string) (new AnonymousAgent($system, [], []))
+            ->prompt($prompt, provider: $handler['provider'], model: $handler['model'])
+            ->text;
+    }
+
+    /**
+     * @param  array{model: string, driver: string, provider: Lab}  $handler
+     * @return array{dimensions: int, preview: array<int, float>}
+     */
+    private function embeddings(array $handler, string $text): array
+    {
+        if (trim($text) === '') {
+            throw new RuntimeException('Provide text to embed.');
+        }
+        if ($handler['driver'] === 'openrouter') {
+            throw new RuntimeException('Embeddings are not available through OpenRouter. Pick a direct embeddings model.');
+        }
+
+        $vector = Embeddings::for([$text])->generate($handler['provider'], $handler['model'])->embeddings[0] ?? [];
+
+        return [
+            'dimensions' => count($vector),
+            'preview' => array_map(fn ($v) => round((float) $v, 5), array_slice($vector, 0, 8)),
+        ];
+    }
+
+    /** @param array{model: string, driver: string, provider: Lab} $handler */
+    private function ocr(User $user, array $handler, UploadedFile $file, bool $isImage): string
+    {
+        $instruction = 'Extract ALL text from the attached file verbatim, preserving reading order. Output only the extracted text.';
+
+        if ($handler['driver'] === 'openrouter') {
+            $block = $isImage
+                ? OpenRouterClient::imageBlock($this->dataUrl($file))
+                : OpenRouterClient::fileBlock($this->dataUrl($file));
+
+            return OpenRouterClient::text($this->openRouter->chat($user, $handler['model'], [
+                OpenRouterClient::textBlock($instruction),
+                $block,
+            ]));
+        }
+
+        $attachment = $isImage
+            ? Files\Image::fromPath($file->getRealPath())
+            : Files\Document::fromPath($file->getRealPath());
+
+        return (string) (new AnonymousAgent($instruction, [], []))
+            ->prompt('Extract all text from the attached file.', attachments: [$attachment], provider: $handler['provider'], model: $handler['model'])
+            ->text;
+    }
+
+    /** @param array{model: string, driver: string, provider: Lab} $handler */
+    private function vision(User $user, array $handler, UploadedFile $file, string $question): string
+    {
+        if ($handler['driver'] === 'openrouter') {
+            return OpenRouterClient::text($this->openRouter->chat($user, $handler['model'], [
+                OpenRouterClient::textBlock($question),
+                OpenRouterClient::imageBlock($this->dataUrl($file)),
+            ]));
+        }
+
+        return (string) (new AnonymousAgent('You are a vision assistant.', [], []))
+            ->prompt($question, attachments: [Files\Image::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model'])
+            ->text;
+    }
+
+    /** @param array{model: string, driver: string, provider: Lab} $handler */
+    private function generateImage(User $user, array $handler, string $prompt): string
+    {
+        if (trim($prompt) === '') {
+            throw new RuntimeException('Provide a prompt.');
+        }
+
+        if ($handler['driver'] === 'openrouter') {
+            $response = $this->openRouter->chat(
+                $user,
+                $handler['model'],
+                [OpenRouterClient::textBlock($prompt)],
+                ['modalities' => ['image', 'text']],
+            );
+            $dataUrl = OpenRouterClient::firstImageDataUrl($response);
+            if ($dataUrl === null) {
+                throw new RuntimeException('The model returned no image. Pick an OpenRouter model with image output.');
+            }
+
+            return $dataUrl;
+        }
+
+        $image = Image::of($prompt)->generate($handler['provider'], $handler['model']);
+
+        return 'data:image/png;base64,'.base64_encode((string) $image);
+    }
+
+    /** @param array{model: string, driver: string, provider: Lab} $handler */
+    private function transcribe(User $user, array $handler, UploadedFile $file): string
+    {
+        if ($handler['driver'] === 'openrouter') {
+            return OpenRouterClient::text($this->openRouter->chat($user, $handler['model'], [
+                OpenRouterClient::textBlock('Transcribe the attached audio verbatim. Output only the transcript.'),
+                OpenRouterClient::audioBlock(base64_encode((string) file_get_contents($file->getRealPath())), $this->audioFormat($file)),
+            ]));
+        }
+
+        return (string) Transcription::fromUpload($file)->generate($handler['provider'], $handler['model'])->text;
+    }
+
+    /** @param array{model: string, driver: string, provider: Lab} $handler */
+    private function synthesizeSpeech(array $handler, string $text): string
+    {
+        if (trim($text) === '') {
+            throw new RuntimeException('Provide text to synthesize.');
+        }
+        if ($handler['driver'] === 'openrouter') {
+            throw new RuntimeException('Text-to-speech is not available through OpenRouter. Pick a direct provider (OpenAI or ElevenLabs).');
+        }
+
+        $audio = Audio::of($text)->generate($handler['provider'], $handler['model']);
+
+        return 'data:audio/mpeg;base64,'.base64_encode((string) $audio);
+    }
+
+    /**
+     * @param  array{model: string, driver: string, provider: Lab}  $handler
+     * @param  array<int, mixed>  $documents
+     * @return array{ranked: array<int, array{index: int, score: float, document: string}>}
+     */
+    private function rerank(array $handler, string $query, array $documents): array
+    {
+        $docs = array_values(array_filter(array_map('strval', $documents), fn ($d) => trim($d) !== ''));
+        if (trim($query) === '' || $docs === []) {
+            throw new RuntimeException('Provide a query and at least one document.');
+        }
+        if ($handler['driver'] === 'openrouter') {
+            throw new RuntimeException('Reranking is not available through OpenRouter. Pick a direct rerank provider (Cohere, Voyage or Jina).');
+        }
+
+        $response = Reranking::of($docs)->rerank($query, $handler['provider'], $handler['model']);
+
+        return [
+            'ranked' => array_map(fn ($r) => [
+                'index' => (int) $r->index,
+                'score' => round((float) $r->score, 4),
+                'document' => (string) $r->document,
+            ], $response->results),
+        ];
+    }
+
+    private function dataUrl(UploadedFile $file): string
+    {
+        $mime = $file->getClientMimeType() ?: $file->getMimeType() ?: 'application/octet-stream';
+
+        return 'data:'.$mime.';base64,'.base64_encode((string) file_get_contents($file->getRealPath()));
+    }
+
+    private function audioFormat(UploadedFile $file): string
+    {
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->guessExtension() ?: '');
+
+        return match ($ext) {
+            'wav' => 'wav',
+            'mp3', 'mpeg', 'mpga' => 'mp3',
+            'ogg' => 'ogg',
+            'webm' => 'webm',
+            'flac' => 'flac',
+            'm4a', 'mp4' => 'm4a',
+            default => 'mp3',
+        };
+    }
+}

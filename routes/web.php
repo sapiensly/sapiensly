@@ -38,6 +38,7 @@ Route::middleware([
 });
 
 require __DIR__.'/chat.php';
+require __DIR__.'/playground.php';
 require __DIR__.'/debate.php';
 require __DIR__.'/settings.php';
 require __DIR__.'/standalone-agents.php';

@@ -1,0 +1,143 @@
+<?php
+
+use App\Models\AiCatalogModel;
+use App\Models\AppSetting;
+use App\Models\User;
+use Illuminate\Support\Facades\Http;
+use Laravel\Ai\Ai;
+use Laravel\Ai\AnonymousAgent;
+use Laravel\Ai\Embeddings;
+use Laravel\Ai\Image;
+use Laravel\Ai\Reranking;
+use Laravel\Ai\Responses\Data\RankedDocument;
+
+function pgUser(): User
+{
+    return User::factory()->create();
+}
+
+function seedModel(string $capability, string $driver, string $modelId): AiCatalogModel
+{
+    return AiCatalogModel::firstOrCreate(
+        ['driver' => $driver, 'model_id' => $modelId, 'capability' => $capability],
+        ['label' => $modelId, 'is_enabled' => true, 'sort_order' => 0],
+    );
+}
+
+function setDefault(string $category, AiCatalogModel $model): void
+{
+    AppSetting::setValue("admin_v2.ai.{$category}.primary", $model->id);
+}
+
+test('index renders every capability and the per-capability model picker', function () {
+    $this->actingAs(pgUser())
+        ->get('/playground')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('playground/Index')
+            ->has('capabilities', 10)
+            ->has('modelsByCapability.chat')
+            ->has('modelsByCapability.rerank'));
+});
+
+test('text run uses the chat hard default and returns the model reply', function () {
+    Ai::fakeAgent(AnonymousAgent::class, ['Hello from the text model.']);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'text', 'prompt' => 'Hi'])
+        ->assertOk()
+        ->assertJson(['ok' => true])
+        ->assertJsonPath('text', 'Hello from the text model.');
+});
+
+test('embeddings run returns the vector dimensions', function () {
+    $model = seedModel('embeddings', 'openai', 'text-embedding-3-small');
+    setDefault('embeddings', $model);
+    Embeddings::fake([[array_fill(0, 8, 0.1)]]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'embeddings', 'text' => 'napa valley'])
+        ->assertOk()
+        ->assertJsonPath('ok', true)
+        ->assertJsonPath('dimensions', 8);
+});
+
+test('reranking run returns documents ordered best-first', function () {
+    $model = seedModel('rerank', 'cohere', 'rerank-v3.5');
+    setDefault('reranking', $model);
+    Reranking::fake([
+        [
+            new RankedDocument(index: 1, document: 'Laravel is PHP.', score: 0.9),
+            new RankedDocument(index: 0, document: 'Django is Python.', score: 0.2),
+        ],
+    ]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'reranking',
+            'query' => 'PHP frameworks',
+            'documents' => ['Django is Python.', 'Laravel is PHP.'],
+        ])
+        ->assertOk()
+        ->assertJsonPath('ok', true)
+        ->assertJsonPath('ranked.0.document', 'Laravel is PHP.');
+});
+
+test('image generation run returns a base64 data URL', function () {
+    $model = seedModel('image', 'openai', 'gpt-image-1');
+    setDefault('image_generation', $model);
+    Image::fake([base64_encode('PNGDATA')]);
+
+    $res = $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'image_generation', 'prompt' => 'a cat'])
+        ->assertOk()
+        ->assertJsonPath('ok', true)
+        ->json();
+
+    expect($res['image'])->toStartWith('data:image/png;base64,');
+});
+
+test('a model override of the wrong capability is rejected', function () {
+    $embed = seedModel('embeddings', 'openai', 'text-embedding-3-small');
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'text',
+            'model_id' => $embed->id,
+            'prompt' => 'Hi',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('ok', false);
+});
+
+test('an unconfigured capability returns a clear error', function () {
+    // No reranking default set and no hard default exists for it.
+    $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'reranking',
+            'query' => 'x',
+            'documents' => ['a'],
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('ok', false);
+});
+
+test('image generation routes through OpenRouter when the model is an OpenRouter model', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = seedModel('image', 'openrouter', 'google/gemini-2.5-flash-image');
+    setDefault('image_generation', $model);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response([
+            'choices' => [['message' => ['images' => [['image_url' => ['url' => 'data:image/png;base64,QUJD']]]]]],
+        ]),
+    ]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'image_generation', 'prompt' => 'a cat'])
+        ->assertOk()
+        ->assertJsonPath('image', 'data:image/png;base64,QUJD');
+
+    Http::assertSent(fn ($req) => str_contains($req->url(), '/chat/completions')
+        && $req['modalities'] === ['image', 'text']);
+});

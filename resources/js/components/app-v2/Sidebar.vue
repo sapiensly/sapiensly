@@ -35,6 +35,7 @@ import {
     Cloud,
     Database,
     FileText,
+    FlaskConical,
     KeyRound,
     LayoutGrid,
     MessageCircle,
@@ -101,6 +102,13 @@ const sections = computed<NavSection[]>(() => [
                     u.startsWith('/chat/') ||
                     u === '/debates' ||
                     u.startsWith('/debates/'),
+            },
+            {
+                key: 'playground',
+                label: t('app_v2.nav.playground'),
+                href: '/playground',
+                icon: FlaskConical,
+                match: (u) => u.startsWith('/playground'),
             },
             {
                 key: 'apps',
