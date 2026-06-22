@@ -44,6 +44,11 @@ class AdminAiController extends Controller
             $modelsByCapability[$capability] = $this->serialiseEnabledModels($capability);
         }
 
+        // OCR-PDF accepts any OpenRouter model too (OpenRouter parses the PDF via
+        // its file-parser plugin regardless of the model's tagged capability), so
+        // its picker is vision models + every enabled OpenRouter model.
+        $modelsByCapability['ocr_pdf'] = $this->ocrPdfModels();
+
         return Inertia::render('admin/Ai/Defaults', [
             'modules' => AiDefaults::MODULES,
             'capabilityModules' => AiDefaults::CAPABILITY_MODULES,
@@ -148,7 +153,11 @@ class AdminAiController extends Controller
         $rules = [];
         foreach (AiDefaults::MODULES as $module) {
             $capability = $this->aiDefaults->capabilityFor($module);
-            $modelRule = ['sometimes', 'nullable', Rule::exists('ai_catalog_models', 'id')->where('capability', $capability)];
+            // OCR-PDF also accepts any OpenRouter model (parsed via the file-parser plugin).
+            $exists = $module === 'ocr_pdf'
+                ? Rule::exists('ai_catalog_models', 'id')->where(fn ($q) => $q->where('capability', 'vision')->orWhere('driver', 'openrouter'))
+                : Rule::exists('ai_catalog_models', 'id')->where('capability', $capability);
+            $modelRule = ['sometimes', 'nullable', $exists];
             $rules["{$module}.primary"] = $modelRule;
             $rules["{$module}.fallback"] = $modelRule;
         }
@@ -402,6 +411,25 @@ class AdminAiController extends Controller
         return AiCatalogModel::query()
             ->where('capability', $capability)
             ->where('is_enabled', true)
+            ->orderBy('driver')
+            ->orderBy('label')
+            ->get()
+            ->map(fn ($m) => $this->serialiseModel($m))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The OCR-PDF picker: enabled vision models plus every enabled OpenRouter
+     * model (OpenRouter handles the PDF via its file-parser plugin).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function ocrPdfModels(): array
+    {
+        return AiCatalogModel::query()
+            ->where('is_enabled', true)
+            ->where(fn ($q) => $q->where('capability', 'vision')->orWhere('driver', 'openrouter'))
             ->orderBy('driver')
             ->orderBy('label')
             ->get()

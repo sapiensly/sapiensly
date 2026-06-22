@@ -96,7 +96,13 @@ const productModules = computed(() =>
 );
 
 function modelsFor(module: string): AiModel[] {
-    return props.modelsByCapability[props.moduleCapability[module]] ?? [];
+    // A module-keyed list (e.g. ocr_pdf, which also allows OpenRouter models)
+    // wins over the generic per-capability list.
+    return (
+        props.modelsByCapability[module] ??
+        props.modelsByCapability[props.moduleCapability[module]] ??
+        []
+    );
 }
 
 // Local editable copy so a failed PATCH can roll back to the last good value.

@@ -133,6 +133,28 @@ test('updateDefaults rejects a chat model for the image_generation category', fu
         ->assertSessionHasErrors(['image_generation.primary']);
 });
 
+test('OCR-PDF accepts an OpenRouter model and the picker includes it', function () {
+    $admin = sysadminForAi();
+    $orModel = seedCapabilityModel('chat', 'openrouter', 'mistralai/mistral-ocr');
+
+    // Picker for ocr_pdf lists OpenRouter models (not just vision models).
+    $this->actingAs($admin)
+        ->get('/admin/ai')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('modelsByCapability.ocr_pdf', fn ($models) => collect($models)->contains(
+                fn ($m) => $m['name'] === 'mistralai/mistral-ocr'
+            )));
+
+    // And it is accepted as the ocr_pdf default.
+    $this->actingAs($admin)
+        ->patch('/admin/ai/defaults', ['ocr_pdf' => ['primary' => $orModel->id]])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect((string) AppSetting::getValue('admin_v2.ai.ocr_pdf.primary'))->toBe((string) $orModel->id);
+});
+
 test('updateDefaults saves the OCR-PDF OpenRouter engine', function () {
     $admin = sysadminForAi();
 
