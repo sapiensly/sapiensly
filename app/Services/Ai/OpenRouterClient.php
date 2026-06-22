@@ -59,12 +59,14 @@ class OpenRouterClient
     }
 
     /**
-     * Generate audio (TTS) via OpenRouter. Audio output requires stream:true, so
-     * this streams the SSE response and concatenates the base64 audio deltas.
+     * Generate audio (TTS) via OpenRouter. Audio output requires stream:true, and
+     * streamed output only supports the raw `pcm16` format — so we stream the SSE
+     * response, concatenate the base64 PCM deltas, and wrap the PCM in a WAV
+     * container so the result is a playable file.
      *
      * @param  array<int, array<string, mixed>>  $content
-     * @param  array<string, mixed>  $audioParams  e.g. ['voice' => 'alloy', 'format' => 'mp3']
-     * @return array{base64: string, format: string}|null
+     * @param  array<string, mixed>  $audioParams  e.g. ['voice' => 'alloy']
+     * @return array{bytes: string, mime: string}|null
      */
     public function audio(User $user, string $model, array $content, array $audioParams, int $timeout = 120): ?array
     {
@@ -82,7 +84,8 @@ class OpenRouterClient
                 'model' => $model,
                 'messages' => [['role' => 'user', 'content' => $content]],
                 'modalities' => ['audio', 'text'],
-                'audio' => $audioParams,
+                // Streamed audio output only supports raw PCM (pcm16).
+                'audio' => $audioParams + ['format' => 'pcm16'],
                 'stream' => true,
             ]);
 
@@ -91,7 +94,6 @@ class OpenRouterClient
         }
 
         $body = $response->toPsrResponse()->getBody();
-        $format = (string) ($audioParams['format'] ?? 'mp3');
         $b64 = '';
         $buffer = '';
 
@@ -118,14 +120,32 @@ class OpenRouterClient
                 if (is_string($delta)) {
                     $b64 .= $delta;
                 }
-                $fmt = data_get($json, 'choices.0.delta.audio.format');
-                if (is_string($fmt) && $fmt !== '') {
-                    $format = $fmt;
-                }
             }
         }
 
-        return $b64 !== '' ? ['base64' => $b64, 'format' => $format] : null;
+        if ($b64 === '') {
+            return null;
+        }
+
+        $pcm = base64_decode($b64) ?: '';
+
+        // OpenAI streamed audio is 24kHz mono 16-bit PCM; wrap it as WAV.
+        return ['bytes' => self::pcm16ToWav($pcm), 'mime' => 'audio/wav'];
+    }
+
+    /** Wrap raw PCM16 audio in a minimal WAV container so it's a playable file. */
+    private static function pcm16ToWav(string $pcm, int $sampleRate = 24000, int $channels = 1, int $bits = 16): string
+    {
+        $byteRate = (int) ($sampleRate * $channels * $bits / 8);
+        $blockAlign = (int) ($channels * $bits / 8);
+        $dataLen = strlen($pcm);
+
+        $header = 'RIFF'.pack('V', 36 + $dataLen).'WAVE'
+            .'fmt '.pack('V', 16).pack('v', 1).pack('v', $channels).pack('V', $sampleRate)
+            .pack('V', $byteRate).pack('v', $blockAlign).pack('v', $bits)
+            .'data'.pack('V', $dataLen);
+
+        return $header.$pcm;
     }
 
     /** @return array{type: string, text: string} */

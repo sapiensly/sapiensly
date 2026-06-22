@@ -61,14 +61,14 @@ class SynthesizeSpeechTool implements ToolContract
         }
 
         try {
-            $bytes = $this->synthesize($handler, $text, $voice, $instructions);
-            if ($bytes === null) {
+            $audio = $this->synthesize($handler, $text, $voice, $instructions);
+            if ($audio === null) {
                 return "Error: the model returned no audio. Pick a model with audio output for {$handler['model']}.";
             }
 
             $disk = $this->cloud->diskForOwnerOrFallback($this->user->organization_id, $this->user->id);
-            $path = 'ai/generated/audio/'.Str::ulid().'.mp3';
-            $disk->put($path, $bytes);
+            $path = 'ai/generated/audio/'.Str::ulid().'.'.$audio['ext'];
+            $disk->put($path, $audio['bytes']);
 
             return "Speech synthesized with {$handler['model']} and stored at: ".$this->urlOrPath($disk, $path);
         } catch (\Throwable $e) {
@@ -77,21 +77,21 @@ class SynthesizeSpeechTool implements ToolContract
     }
 
     /**
-     * Generate raw audio bytes via OpenRouter (chat completions audio output) or
-     * the SDK Audio class, depending on the configured provider.
+     * Generate audio via OpenRouter (streamed chat completions → WAV) or the SDK
+     * Audio class (mp3), depending on the configured provider.
      *
      * @param  array{model: string, driver: string, provider: Lab}  $handler
+     * @return array{bytes: string, ext: string}|null
      */
-    private function synthesize(array $handler, string $text, string $voice, string $instructions): ?string
+    private function synthesize(array $handler, string $text, string $voice, string $instructions): ?array
     {
         if ($handler['driver'] === 'openrouter') {
-            // Audio output requires streamed chat completions.
             $prompt = $instructions !== '' ? $instructions."\n\n".$text : $text;
             $audio = $this->openRouter->audio($this->user, $handler['model'], [
                 OpenRouterClient::textBlock($prompt),
-            ], ['voice' => $voice !== '' ? $voice : 'alloy', 'format' => 'mp3']);
+            ], ['voice' => $voice !== '' ? $voice : 'alloy']);
 
-            return $audio !== null ? (base64_decode($audio['base64']) ?: null) : null;
+            return $audio !== null ? ['bytes' => $audio['bytes'], 'ext' => 'wav'] : null;
         }
 
         $pending = Audio::of($text);
@@ -102,7 +102,7 @@ class SynthesizeSpeechTool implements ToolContract
             $pending = $pending->instructions($instructions);
         }
 
-        return (string) $pending->generate($handler['provider'], $handler['model']);
+        return ['bytes' => (string) $pending->generate($handler['provider'], $handler['model']), 'ext' => 'mp3'];
     }
 
     private function urlOrPath(Filesystem $disk, string $path): string

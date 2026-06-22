@@ -295,11 +295,13 @@ test('speech generation via OpenRouter returns audio and passes voice + instruct
         ->assertJsonPath('ok', true)
         ->json();
 
-    expect($res['audio'])->toStartWith('data:audio/mpeg;base64,');
+    expect($res['audio'])->toStartWith('data:audio/wav;base64,');
 
     Http::assertSent(function ($req) {
         return $req['modalities'] === ['audio', 'text']
             && ($req['audio']['voice'] ?? null) === 'nova'
+            && ($req['audio']['format'] ?? null) === 'pcm16'
+            && ($req['stream'] ?? null) === true
             && str_contains($req['messages'][0]['content'][0]['text'], 'Mexican Spanish, warm');
     });
 });

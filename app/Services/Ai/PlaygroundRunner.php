@@ -381,14 +381,14 @@ class PlaygroundRunner
                 $user,
                 $handler['model'],
                 [OpenRouterClient::textBlock($prompt)],
-                ['voice' => $voice !== '' ? $voice : 'alloy', 'format' => 'mp3'],
+                ['voice' => $voice !== '' ? $voice : 'alloy'],
             );
 
             if ($audio === null) {
                 throw new RuntimeException('The model returned no audio. Pick an OpenRouter model with audio output.');
             }
 
-            return 'data:audio/mpeg;base64,'.$audio['base64'];
+            return 'data:'.$audio['mime'].';base64,'.base64_encode($audio['bytes']);
         }
 
         $pending = Audio::of($text);
