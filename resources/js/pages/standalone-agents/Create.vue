@@ -208,6 +208,21 @@ const typeTint = computed(
 const typeIcon = computed<Component>(
     () => typeIconMap[currentType.value ?? ''] ?? Bot,
 );
+
+// Optional cap on web search results (config.web_search.max_results). Empty =
+// the provider default.
+const webSearchMaxResults = computed<number | null>({
+    get: () => (form.config as any)?.web_search?.max_results ?? null,
+    set: (value) => {
+        const config = { ...((form.config as any) ?? {}) };
+        const max = value === null || (value as unknown) === '' ? null : Number(value);
+        config.web_search = { ...(config.web_search ?? {}), max_results: max };
+        if (max === null) {
+            delete config.web_search.max_results;
+        }
+        form.config = config;
+    },
+});
 </script>
 
 <template>
@@ -350,6 +365,28 @@ const typeIcon = computed<Component>(
                             </p>
                         </div>
                         <Switch id="web_search" v-model="form.web_search" />
+                    </div>
+
+                    <div v-if="form.web_search" class="space-y-1">
+                        <Label
+                            for="web_search_max_results"
+                            class="text-xs font-medium text-ink"
+                        >
+                            {{ t('agents.create.web_search_max_results_label') }}
+                        </Label>
+                        <Input
+                            id="web_search_max_results"
+                            v-model="webSearchMaxResults"
+                            type="number"
+                            min="1"
+                            max="10"
+                            :placeholder="t('agents.create.web_search_max_results_placeholder')"
+                            class="w-32"
+                        />
+                        <p class="text-[11px] text-ink-subtle">
+                            {{ t('agents.create.web_search_max_results_description') }}
+                        </p>
+                        <InputError :message="form.errors['config.web_search.max_results']" />
                     </div>
                 </SettingsCard>
 
