@@ -40,9 +40,8 @@ class PlaygroundRunner
         'coding' => ['default' => 'coding', 'catalog' => 'chat', 'input' => 'prompt', 'output' => 'text'],
         'embeddings' => ['default' => 'embeddings', 'catalog' => 'embeddings', 'input' => 'text', 'output' => 'embeddings'],
         'ocr_pdf' => ['default' => 'ocr_pdf', 'catalog' => 'vision', 'input' => 'pdf', 'output' => 'text'],
-        'ocr_image' => ['default' => 'ocr_image', 'catalog' => 'vision', 'input' => 'image', 'output' => 'text'],
+        'image_vision' => ['default' => 'image_vision', 'catalog' => 'vision', 'input' => 'image_q', 'output' => 'text'],
         'image_generation' => ['default' => 'image_generation', 'catalog' => 'image', 'input' => 'prompt', 'output' => 'image'],
-        'vision' => ['default' => 'vision', 'catalog' => 'vision', 'input' => 'image_q', 'output' => 'text'],
         'audio_recognition' => ['default' => 'audio_recognition', 'catalog' => 'transcription', 'input' => 'audio', 'output' => 'text'],
         'speech_generation' => ['default' => 'speech_generation', 'catalog' => 'speech', 'input' => 'text', 'output' => 'audio'],
         'reranking' => ['default' => 'reranking', 'catalog' => 'rerank', 'input' => 'rerank', 'output' => 'rerank'],
@@ -69,7 +68,7 @@ class PlaygroundRunner
         if ($explicitModelId !== null && $explicitModelId !== '') {
             $row = AiCatalogModel::query()->enabled()->whereKey($explicitModelId)->first(['model_id', 'driver', 'capability']);
             // OCR also accepts any OpenRouter model (PDF via file-parser, image via vision).
-            $ocrOpenRouter = in_array($capability, ['ocr_pdf', 'ocr_image'], true) && $row?->driver === 'openrouter';
+            $ocrOpenRouter = in_array($capability, ['ocr_pdf', 'image_vision'], true) && $row?->driver === 'openrouter';
             if ($row === null || ! ($row->capability === $meta['catalog'] || $ocrOpenRouter)) {
                 throw new RuntimeException('The selected model is not an enabled '.$meta['catalog'].' model.');
             }
@@ -111,8 +110,8 @@ class PlaygroundRunner
             'text' => ['text' => $this->generateText($handler, (string) ($input['prompt'] ?? ''), 'You are a helpful assistant. Answer the user clearly.')],
             'coding' => ['text' => $this->generateText($handler, (string) ($input['prompt'] ?? ''), 'You are an expert programming assistant. Return correct, idiomatic code with a brief explanation.')],
             'embeddings' => $this->embeddings($handler, (string) ($input['text'] ?? '')),
-            'ocr_pdf', 'ocr_image' => ['text' => $this->ocr($user, $handler, $this->requireFile($file), $capability === 'ocr_image')],
-            'vision' => ['text' => $this->vision($user, $handler, $this->requireFile($file), (string) ($input['prompt'] ?? 'Describe this image in detail.'))],
+            'ocr_pdf' => ['text' => $this->ocrPdf($user, $handler, $this->requireFile($file))],
+            'image_vision' => ['text' => $this->imageVision($user, $handler, $this->requireFile($file), (string) ($input['prompt'] ?? ''))],
             'image_generation' => ['image' => $this->generateImage($user, $handler, (string) ($input['prompt'] ?? ''))],
             'audio_recognition' => ['text' => $this->transcribe($user, $handler, $this->requireFile($file))],
             'speech_generation' => ['audio' => $this->synthesizeSpeech($handler, (string) ($input['text'] ?? ''))],
@@ -243,31 +242,20 @@ class PlaygroundRunner
     }
 
     /** @param array{model: string, driver: string, provider: Lab} $handler */
-    private function ocr(User $user, array $handler, UploadedFile $file, bool $isImage): string
+    private function ocrPdf(User $user, array $handler, UploadedFile $file): string
     {
         $instruction = 'Extract ALL text from the attached file verbatim, preserving reading order. Output only the extracted text.';
 
         if ($handler['driver'] === 'openrouter') {
-            $block = $isImage
-                ? OpenRouterClient::imageBlock($this->dataUrl($file))
-                : OpenRouterClient::fileBlock($this->dataUrl($file), $file->getClientOriginalName() ?: 'document.pdf');
-
             // PDFs use the file-parser plugin with the admin-configured OCR engine.
-            $extra = $isImage
-                ? []
-                : ['plugins' => OpenRouterClient::pdfPlugins(OpenRouterClient::configuredPdfEngine())];
-
             $response = $this->openRouter->chat($user, $handler['model'], [
                 OpenRouterClient::textBlock($instruction),
-                $block,
-            ], $extra);
+                OpenRouterClient::fileBlock($this->dataUrl($file), $file->getClientOriginalName() ?: 'document.pdf'),
+            ], ['plugins' => OpenRouterClient::pdfPlugins(OpenRouterClient::configuredPdfEngine())]);
 
-            // For PDFs the parsed text comes back in the file-parser annotations
-            // (as markdown with the extracted figures inlined), not the model's
-            // chat reply; fall back to the reply otherwise.
-            $text = $isImage
-                ? OpenRouterClient::text($response)
-                : (OpenRouterClient::fileAnnotationMarkdown($response) ?: OpenRouterClient::text($response));
+            // The parsed text comes back in the file-parser annotations (markdown
+            // with the extracted figures inlined), not the model's chat reply.
+            $text = OpenRouterClient::fileAnnotationMarkdown($response) ?: OpenRouterClient::text($response);
 
             if (trim($text) === '') {
                 throw new RuntimeException(
@@ -281,23 +269,28 @@ class PlaygroundRunner
             return $text;
         }
 
-        $attachment = $isImage
-            ? Files\Image::fromPath($file->getRealPath())
-            : Files\Document::fromPath($file->getRealPath());
-
         $response = (new AnonymousAgent($instruction, [], []))
-            ->prompt('Extract all text from the attached file.', attachments: [$attachment], provider: $handler['provider'], model: $handler['model']);
+            ->prompt('Extract all text from the attached file.', attachments: [Files\Document::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model']);
         $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
 
         return (string) $response->text;
     }
 
-    /** @param array{model: string, driver: string, provider: Lab} $handler */
-    private function vision(User $user, array $handler, UploadedFile $file, string $question): string
+    /**
+     * Image understanding: answer the user's question about the image, or — when
+     * no question is given — extract its text (OCR). Merged OCR-image + Vision.
+     *
+     * @param  array{model: string, driver: string, provider: Lab}  $handler
+     */
+    private function imageVision(User $user, array $handler, UploadedFile $file, string $question): string
     {
+        $instruction = trim($question) !== ''
+            ? $question
+            : 'Extract ALL text from the attached image verbatim, preserving reading order. Output only the extracted text.';
+
         if ($handler['driver'] === 'openrouter') {
             $response = $this->openRouter->chat($user, $handler['model'], [
-                OpenRouterClient::textBlock($question),
+                OpenRouterClient::textBlock($instruction),
                 OpenRouterClient::imageBlock($this->dataUrl($file)),
             ]);
             $this->recordOpenRouterUsage($handler, $response);
@@ -306,7 +299,7 @@ class PlaygroundRunner
         }
 
         $response = (new AnonymousAgent('You are a vision assistant.', [], []))
-            ->prompt($question, attachments: [Files\Image::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model']);
+            ->prompt($instruction, attachments: [Files\Image::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model']);
         $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
 
         return (string) $response->text;

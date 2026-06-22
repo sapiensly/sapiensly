@@ -36,7 +36,7 @@ test('index renders every capability and the per-capability model picker', funct
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('playground/Index')
-            ->has('capabilities', 10)
+            ->has('capabilities', 9)
             ->has('modelsByCapability.chat')
             ->has('modelsByCapability.rerank'));
 });

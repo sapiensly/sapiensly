@@ -52,8 +52,8 @@ class OcrDocumentTool implements ToolContract
         }
 
         $isImage = $attachment->isImage();
-        $handler = $this->capabilities->resolve($isImage ? 'ocr_image' : 'ocr_pdf')
-            ?? $this->capabilities->resolve($isImage ? 'ocr_pdf' : 'ocr_image');
+        $handler = $this->capabilities->resolve($isImage ? 'image_vision' : 'ocr_pdf')
+            ?? $this->capabilities->resolve($isImage ? 'ocr_pdf' : 'image_vision');
 
         if ($handler === null) {
             return 'Error: no OCR/vision model is configured. Set one in admin AI > Defaults → OCR pdf / OCR image.';

@@ -155,7 +155,7 @@ test('OCR-PDF accepts an OpenRouter model and the picker includes it', function 
     expect((string) AppSetting::getValue('admin_v2.ai.ocr_pdf.primary'))->toBe((string) $orModel->id);
 });
 
-test('OCR-Image also accepts an OpenRouter model in its picker', function () {
+test('Image Vision also accepts an OpenRouter model in its picker', function () {
     $admin = sysadminForAi();
     $orModel = seedCapabilityModel('chat', 'openrouter', 'mistralai/pixtral-12b');
 
@@ -163,16 +163,16 @@ test('OCR-Image also accepts an OpenRouter model in its picker', function () {
         ->get('/admin/ai')
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('modelsByCapability.ocr_image', fn ($models) => collect($models)->contains(
+            ->where('modelsByCapability.image_vision', fn ($models) => collect($models)->contains(
                 fn ($m) => $m['name'] === 'mistralai/pixtral-12b'
             )));
 
     $this->actingAs($admin)
-        ->patch('/admin/ai/defaults', ['ocr_image' => ['primary' => $orModel->id]])
+        ->patch('/admin/ai/defaults', ['image_vision' => ['primary' => $orModel->id]])
         ->assertRedirect()
         ->assertSessionHasNoErrors();
 
-    expect((string) AppSetting::getValue('admin_v2.ai.ocr_image.primary'))->toBe((string) $orModel->id);
+    expect((string) AppSetting::getValue('admin_v2.ai.image_vision.primary'))->toBe((string) $orModel->id);
 });
 
 test('updateDefaults saves the OCR-PDF OpenRouter engine', function () {

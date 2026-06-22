@@ -41,8 +41,8 @@ class AiDefaults
         // Product modules (chat capability).
         'chat', 'summary_short', 'summary_large', 'builder', 'flows', 'chatbots',
         // Specialized capability handlers.
-        'embeddings', 'coding', 'ocr_pdf', 'ocr_image', 'image_generation',
-        'vision', 'audio_recognition', 'speech_generation', 'reranking',
+        'embeddings', 'coding', 'ocr_pdf', 'image_vision', 'image_generation',
+        'audio_recognition', 'speech_generation', 'reranking',
     ];
 
     /**
@@ -52,8 +52,8 @@ class AiDefaults
      * @var list<string>
      */
     public const CAPABILITY_MODULES = [
-        'embeddings', 'coding', 'ocr_pdf', 'ocr_image', 'image_generation',
-        'vision', 'audio_recognition', 'speech_generation', 'reranking',
+        'embeddings', 'coding', 'ocr_pdf', 'image_vision', 'image_generation',
+        'audio_recognition', 'speech_generation', 'reranking',
     ];
 
     /**
@@ -72,9 +72,8 @@ class AiDefaults
         'embeddings' => 'embeddings',
         'coding' => 'chat',
         'ocr_pdf' => 'vision',
-        'ocr_image' => 'vision',
+        'image_vision' => 'vision',
         'image_generation' => 'image',
-        'vision' => 'vision',
         'audio_recognition' => 'transcription',
         'speech_generation' => 'speech',
         'reranking' => 'rerank',

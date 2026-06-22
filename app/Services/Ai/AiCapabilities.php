@@ -29,7 +29,7 @@ class AiCapabilities
     public const TOOLS = [
         'image_generation' => 'generate_image',
         'ocr_pdf' => 'ocr_document',
-        'ocr_image' => 'ocr_document',
+        'image_vision' => 'ocr_document',
         'audio_recognition' => 'transcribe_audio',
         'speech_generation' => 'synthesize_speech',
         'reranking' => 'rerank',
@@ -72,7 +72,7 @@ class AiCapabilities
 
     /**
      * Configured capability handlers, keyed by tool name, for prompt guidance and
-     * tool registration. Deduplicated by tool (ocr_pdf/ocr_image share one tool;
+     * tool registration. Deduplicated by tool (ocr_pdf/image_vision share one tool;
      * the first configured wins for the model shown).
      *
      * @return array<string, array{tool: string, categories: list<string>, model: string, provider: Lab}>

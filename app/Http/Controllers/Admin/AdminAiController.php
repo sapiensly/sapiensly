@@ -47,7 +47,7 @@ class AdminAiController extends Controller
         // OCR accepts any OpenRouter model too: PDFs are parsed by OpenRouter's
         // file-parser plugin, and images are sent to a vision model — so both OCR
         // pickers are vision models + every enabled OpenRouter model.
-        $modelsByCapability['ocr_pdf'] = $modelsByCapability['ocr_image'] = $this->ocrModels();
+        $modelsByCapability['ocr_pdf'] = $modelsByCapability['image_vision'] = $this->ocrModels();
 
         return Inertia::render('admin/Ai/Defaults', [
             'modules' => AiDefaults::MODULES,
@@ -154,7 +154,7 @@ class AdminAiController extends Controller
         foreach (AiDefaults::MODULES as $module) {
             $capability = $this->aiDefaults->capabilityFor($module);
             // OCR (PDF + image) also accepts any OpenRouter model.
-            $exists = in_array($module, ['ocr_pdf', 'ocr_image'], true)
+            $exists = in_array($module, ['ocr_pdf', 'image_vision'], true)
                 ? Rule::exists('ai_catalog_models', 'id')->where(fn ($q) => $q->where('capability', 'vision')->orWhere('driver', 'openrouter'))
                 : Rule::exists('ai_catalog_models', 'id')->where('capability', $capability);
             $modelRule = ['sometimes', 'nullable', $exists];
