@@ -151,6 +151,43 @@ class OpenRouterClient
     }
 
     /**
+     * The parsed PDF text from the file-parser plugin's annotations
+     * (choices[0].message.annotations[].file.content[].text). This — not the
+     * model's chat reply — is the authoritative OCR output, per
+     * https://openrouter.ai/docs/guides/overview/multimodal/pdfs.
+     *
+     * @param  array<string, mixed>  $response
+     */
+    public static function fileAnnotationText(array $response): string
+    {
+        $annotations = data_get($response, 'choices.0.message.annotations', []);
+        if (! is_array($annotations)) {
+            return '';
+        }
+
+        $out = [];
+        foreach ($annotations as $annotation) {
+            $content = data_get($annotation, 'file.content');
+            if (is_string($content)) {
+                $out[] = $content;
+
+                continue;
+            }
+            if (is_array($content)) {
+                foreach ($content as $part) {
+                    if (is_array($part) && ($part['type'] ?? null) === 'text') {
+                        $out[] = (string) ($part['text'] ?? '');
+                    } elseif (is_string($part)) {
+                        $out[] = $part;
+                    }
+                }
+            }
+        }
+
+        return trim(implode("\n", array_filter($out)));
+    }
+
+    /**
      * The first generated image as a base64 data URL, or null.
      *
      * @param  array<string, mixed>  $response

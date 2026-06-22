@@ -187,11 +187,16 @@ class PlaygroundRunner
                 $block,
             ], $extra);
 
-            $text = OpenRouterClient::text($response);
+            // For PDFs the parsed text comes back in the file-parser annotations,
+            // not the model's chat reply; fall back to the reply otherwise.
+            $text = $isImage
+                ? OpenRouterClient::text($response)
+                : (OpenRouterClient::fileAnnotationText($response) ?: OpenRouterClient::text($response));
+
             if (trim($text) === '') {
                 throw new RuntimeException(
                     'No text was extracted ('.OpenRouterClient::failureReason($response).'). '
-                    .'Try a vision/OCR model (e.g. a Mistral, Gemini or GPT-4o vision model) or a different PDF engine in admin AI > Defaults.',
+                    .'Check your OpenRouter credits/PDF engine, or pick a vision/OCR model in admin AI > Defaults.',
                 );
             }
 

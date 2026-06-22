@@ -129,9 +129,22 @@ test('OCR-PDF via OpenRouter sends the file-parser plugin with the configured en
     setDefault('ocr_pdf', $model);
     AppSetting::setValue('admin_v2.ai.ocr_pdf.engine', 'cloudflare-ai');
 
+    // The parsed PDF text comes back in the file-parser annotations, even when
+    // the model's own reply is a refusal.
     Http::fake([
         'openrouter.ai/*' => Http::response([
-            'choices' => [['message' => ['content' => 'Extracted text body']]],
+            'choices' => [[
+                'message' => [
+                    'content' => "I can't access external files.",
+                    'annotations' => [[
+                        'type' => 'file',
+                        'file' => [
+                            'name' => 'doc.pdf',
+                            'content' => [['type' => 'text', 'text' => 'Extracted text body']],
+                        ],
+                    ]],
+                ],
+            ]],
         ]),
     ]);
 
