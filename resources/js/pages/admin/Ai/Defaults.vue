@@ -160,7 +160,7 @@ function updateModel(module: string, slot: Slot, id: string | null) {
                                 "
                             >
                                 <SelectTrigger
-                                    class="h-9 border-medium bg-surface"
+                                    class="h-9 w-full min-w-0 border-medium bg-surface"
                                 >
                                     <SelectValue
                                         :placeholder="
