@@ -16,6 +16,13 @@ function supportsWebSearch(Lab $provider): bool
     return $method->invoke(app(ChatAiService::class), $provider);
 }
 
+function onlineModel(string $model): string
+{
+    $method = new ReflectionMethod(ChatAiService::class, 'withOpenRouterOnline');
+
+    return $method->invoke(app(ChatAiService::class), $model);
+}
+
 it('reports web search support only for the gateways that implement it', function () {
     expect(supportsWebSearch(Lab::Anthropic))->toBeTrue();
     expect(supportsWebSearch(Lab::Gemini))->toBeTrue();
@@ -27,4 +34,9 @@ it('reports no web search support for OpenRouter and other gateways', function (
     expect(supportsWebSearch(Lab::Groq))->toBeFalse();
     expect(supportsWebSearch(Lab::DeepSeek))->toBeFalse();
     expect(supportsWebSearch(Lab::Mistral))->toBeFalse();
+});
+
+it('enables OpenRouter web search via the :online model suffix, idempotently', function () {
+    expect(onlineModel('anthropic/claude-sonnet-4'))->toBe('anthropic/claude-sonnet-4:online');
+    expect(onlineModel('openai/gpt-4o:online'))->toBe('openai/gpt-4o:online');
 });

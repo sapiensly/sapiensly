@@ -261,16 +261,23 @@ class ChatAiService
             }
 
             // Web search is a provider-native tool only some gateways implement
-            // (Anthropic/Gemini/OpenAI). On others (e.g. OpenRouter) attaching it
-            // throws and would kill the whole turn — so drop it and note it
-            // instead of blocking.
+            // (Anthropic/Gemini/OpenAI). Others can't take the WebSearch tool —
+            // attaching it throws and would kill the turn. OpenRouter has its own
+            // web search via the model's `:online` suffix; everyone else degrades
+            // to no web search. Either way we never attach the unsupported tool.
+            $streamModel = $resolvedModel;
             if ($webSearch && ! $this->providerSupportsWebSearch($provider)) {
-                Log::info('Web search unsupported by provider; continuing without it', [
-                    'chat_id' => $chat->id,
-                    'provider' => $provider->value,
-                    'model' => $resolvedModel,
-                ]);
-                $usedSources['Web search'] = 'not available on this model — skipped';
+                if ($provider === Lab::OpenRouter) {
+                    $streamModel = $this->withOpenRouterOnline($resolvedModel);
+                    $usedSources['Web search'] = 'via OpenRouter';
+                } else {
+                    Log::info('Web search unsupported by provider; continuing without it', [
+                        'chat_id' => $chat->id,
+                        'provider' => $provider->value,
+                        'model' => $resolvedModel,
+                    ]);
+                    $usedSources['Web search'] = 'not available on this model — skipped';
+                }
                 $webSearch = false;
             }
 
@@ -323,7 +330,9 @@ class ChatAiService
                 $promptText.$ragContext,
                 attachments: $attachments,
                 provider: $provider,
-                model: $resolvedModel,
+                // May carry OpenRouter's `:online` suffix for web search; the
+                // persisted message + spend guard keep the base model id.
+                model: $streamModel,
             );
 
             $stopKey = self::STOP_CACHE_PREFIX.$placeholder->id;
@@ -455,6 +464,16 @@ class ChatAiService
     private function providerSupportsWebSearch(Lab $provider): bool
     {
         return in_array($provider, [Lab::Anthropic, Lab::Gemini, Lab::OpenAI], true);
+    }
+
+    /**
+     * OpenRouter enables web search through its `:online` model suffix (shorthand
+     * for the `web` plugin), not a provider tool. Appended only for the SDK call;
+     * idempotent so a model already marked `:online` isn't doubled.
+     */
+    private function withOpenRouterOnline(string $model): string
+    {
+        return str_ends_with($model, ':online') ? $model : $model.':online';
     }
 
     private function buildChatTools(array $toolIds, ?User $user, bool $webSearch): array
