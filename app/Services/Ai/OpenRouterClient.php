@@ -188,6 +188,79 @@ class OpenRouterClient
     }
 
     /**
+     * The parsed PDF as markdown with the extracted figures inlined. The OCR
+     * markdown references images by filename (e.g. `![img-0.jpeg](img-0.jpeg)`),
+     * while the actual image bytes arrive as separate `image_url` parts in the
+     * annotation content — so we splice each data URL into its placeholder (in
+     * order) and drop any reference without a matching image (avoiding 404s).
+     *
+     * @param  array<string, mixed>  $response
+     */
+    public static function fileAnnotationMarkdown(array $response): string
+    {
+        $annotations = data_get($response, 'choices.0.message.annotations', []);
+        if (! is_array($annotations)) {
+            return '';
+        }
+
+        $texts = [];
+        $images = [];
+        foreach ($annotations as $annotation) {
+            $content = data_get($annotation, 'file.content');
+            if (is_string($content)) {
+                $texts[] = $content;
+
+                continue;
+            }
+            if (! is_array($content)) {
+                continue;
+            }
+            foreach ($content as $part) {
+                if (! is_array($part)) {
+                    if (is_string($part)) {
+                        $texts[] = $part;
+                    }
+
+                    continue;
+                }
+                if (($part['type'] ?? null) === 'text') {
+                    $texts[] = (string) ($part['text'] ?? '');
+                } elseif (($part['type'] ?? null) === 'image_url') {
+                    $url = (string) data_get($part, 'image_url.url', '');
+                    if ($url !== '') {
+                        $images[] = $url;
+                    }
+                }
+            }
+        }
+
+        $markdown = trim(implode("\n", array_filter($texts)));
+        if ($images === []) {
+            return $markdown;
+        }
+
+        // Splice each extracted image into its markdown placeholder, in order.
+        $i = 0;
+        $markdown = (string) preg_replace_callback(
+            '/!\[([^\]]*)\]\([^)]*\)/',
+            function (array $m) use (&$i, $images): string {
+                $url = $images[$i] ?? null;
+                $i++;
+
+                return $url !== null ? '!['.$m[1].']('.$url.')' : '';
+            },
+            $markdown,
+        );
+
+        // Append any images that had no placeholder reference.
+        for (; $i < count($images); $i++) {
+            $markdown .= "\n\n![]({$images[$i]})";
+        }
+
+        return trim($markdown);
+    }
+
+    /**
      * The first generated image as a base64 data URL, or null.
      *
      * @param  array<string, mixed>  $response

@@ -106,11 +106,12 @@ class OcrDocumentTool implements ToolContract
             $fileBlock,
         ], $extra);
 
-        // For PDFs the parsed text is in the file-parser annotations, not the
-        // model's chat reply; images come back in the reply.
+        // For PDFs the parsed text is in the file-parser annotations (markdown
+        // with extracted figures inlined), not the model's chat reply; images
+        // come back in the reply.
         $text = $isImage
             ? OpenRouterClient::text($response)
-            : (OpenRouterClient::fileAnnotationText($response) ?: OpenRouterClient::text($response));
+            : (OpenRouterClient::fileAnnotationMarkdown($response) ?: OpenRouterClient::text($response));
 
         if (trim($text) === '') {
             return "No text was extracted via {$model} (".OpenRouterClient::failureReason($response).'). Check OpenRouter credits/PDF engine or pick a vision/OCR-capable model.';

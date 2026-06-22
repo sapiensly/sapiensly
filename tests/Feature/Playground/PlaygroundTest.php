@@ -233,6 +233,44 @@ test('a run reports duration, token usage and cost', function () {
         ->and($res['duration_ms'])->toBeGreaterThanOrEqual(0);
 });
 
+test('OCR-PDF inlines extracted figures into the markdown instead of broken refs', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = seedModel('vision', 'openrouter', 'mistralai/mistral-ocr');
+    setDefault('ocr_pdf', $model);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response([
+            'choices' => [[
+                'message' => [
+                    'content' => '',
+                    'annotations' => [[
+                        'type' => 'file',
+                        'file' => [
+                            'content' => [
+                                ['type' => 'text', 'text' => "Intro\n\n![img-0.jpeg](img-0.jpeg)\n\nEnd"],
+                                ['type' => 'image_url', 'image_url' => ['url' => 'data:image/jpeg;base64,QUJD']],
+                            ],
+                        ],
+                    ]],
+                ],
+            ]],
+        ]),
+    ]);
+
+    $res = $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'ocr_pdf',
+            'file' => UploadedFile::fake()->create('doc.pdf', 12, 'application/pdf'),
+        ])
+        ->assertOk()
+        ->assertJsonPath('ok', true)
+        ->json();
+
+    // The placeholder now points at the inlined data URL, not the bare filename.
+    expect($res['text'])->toContain('data:image/jpeg;base64,QUJD')
+        ->and($res['text'])->not->toContain('(img-0.jpeg)');
+});
+
 test('image generation routes through OpenRouter when the model is an OpenRouter model', function () {
     config(['ai.providers.openrouter.key' => 'sk-or-test']);
     $model = seedModel('image', 'openrouter', 'google/gemini-2.5-flash-image');

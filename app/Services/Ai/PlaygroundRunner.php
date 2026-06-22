@@ -260,11 +260,12 @@ class PlaygroundRunner
                 $block,
             ], $extra);
 
-            // For PDFs the parsed text comes back in the file-parser annotations,
-            // not the model's chat reply; fall back to the reply otherwise.
+            // For PDFs the parsed text comes back in the file-parser annotations
+            // (as markdown with the extracted figures inlined), not the model's
+            // chat reply; fall back to the reply otherwise.
             $text = $isImage
                 ? OpenRouterClient::text($response)
-                : (OpenRouterClient::fileAnnotationText($response) ?: OpenRouterClient::text($response));
+                : (OpenRouterClient::fileAnnotationMarkdown($response) ?: OpenRouterClient::text($response));
 
             if (trim($text) === '') {
                 throw new RuntimeException(
