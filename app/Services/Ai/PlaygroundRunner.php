@@ -60,7 +60,7 @@ class PlaygroundRunner
      * (validated to the right capability), else the admin default, else the
      * capability's hard default. Throws when nothing is configured.
      *
-     * @return array{model: string, driver: string, provider: Lab}
+     * @return array{model: string, driver: string, provider: Lab, input_price: ?float, output_price: ?float}
      */
     public function resolveForRun(string $capability, ?string $explicitModelId): array
     {
@@ -76,7 +76,7 @@ class PlaygroundRunner
         }
 
         if ($resolved = $this->capabilities->resolve($meta['default'])) {
-            return $resolved;
+            return $this->withProvider($resolved['model'], $resolved['driver']);
         }
 
         $hard = $this->defaults->hardDefaultFor($meta['default']);
@@ -101,6 +101,7 @@ class PlaygroundRunner
      */
     public function execute(User $user, string $capability, ?string $modelId, array $input, ?UploadedFile $file): array
     {
+        $this->usage = null;
         $handler = $this->resolveForRun($capability, $modelId);
         $this->spendGuard->assertWithinBudget($user, $user->organization_id, $handler['model']);
 
@@ -117,15 +118,82 @@ class PlaygroundRunner
             default => throw new RuntimeException("Unknown capability '{$capability}'."),
         };
 
-        return ['model' => $handler['model'], 'driver' => $handler['driver']] + $output;
+        $meta = ['model' => $handler['model'], 'driver' => $handler['driver']];
+        if ($this->usage !== null) {
+            $meta['usage'] = $this->usage;
+        }
+
+        return $meta + $output;
     }
 
-    /** @return array{model: string, driver: string, provider: Lab} */
+    /** Token usage + cost for the current run, populated by the capability methods. */
+    private ?array $usage = null;
+
+    /** @return array{model: string, driver: string, provider: Lab, input_price: ?float, output_price: ?float} */
     private function withProvider(string $model, string $driver): array
     {
         $provider = Lab::tryFrom($driver) ?? throw new RuntimeException("Unsupported provider driver '{$driver}'.");
 
-        return ['model' => $model, 'driver' => $driver, 'provider' => $provider];
+        $row = AiCatalogModel::query()
+            ->where('model_id', $model)
+            ->where('driver', $driver)
+            ->first(['input_price_per_mtok', 'output_price_per_mtok']);
+
+        return [
+            'model' => $model,
+            'driver' => $driver,
+            'provider' => $provider,
+            'input_price' => $row?->input_price_per_mtok,
+            'output_price' => $row?->output_price_per_mtok,
+        ];
+    }
+
+    /**
+     * Record token usage + cost for the current run. Cost is derived from the
+     * catalog's per-Mtok prices when available.
+     *
+     * @param  array{input_price: ?float, output_price: ?float, ...}  $handler
+     */
+    private function recordUsage(array $handler, ?int $prompt, ?int $completion, bool $estimated = false): void
+    {
+        $ip = $handler['input_price'] ?? null;
+        $op = $handler['output_price'] ?? null;
+
+        $cost = null;
+        if ($ip !== null || $op !== null) {
+            $cost = round((($prompt ?? 0) / 1_000_000) * (float) ($ip ?? 0)
+                + (($completion ?? 0) / 1_000_000) * (float) ($op ?? 0), 6);
+        }
+
+        $total = ($prompt ?? 0) + ($completion ?? 0);
+
+        $this->usage = array_filter([
+            'prompt_tokens' => $prompt,
+            'completion_tokens' => $completion,
+            'total_tokens' => $total > 0 ? $total : null,
+            'cost' => $cost,
+            'estimated' => $estimated ?: null,
+        ], fn ($v) => $v !== null);
+    }
+
+    /**
+     * Pull token usage out of a direct OpenRouter chat response.
+     *
+     * @param  array{input_price: ?float, output_price: ?float, ...}  $handler
+     * @param  array<string, mixed>  $response
+     */
+    private function recordOpenRouterUsage(array $handler, array $response): void
+    {
+        $usage = data_get($response, 'usage');
+        if (! is_array($usage)) {
+            return;
+        }
+
+        $this->recordUsage(
+            $handler,
+            isset($usage['prompt_tokens']) ? (int) $usage['prompt_tokens'] : null,
+            isset($usage['completion_tokens']) ? (int) $usage['completion_tokens'] : null,
+        );
     }
 
     private function requireFile(?UploadedFile $file): UploadedFile
@@ -141,9 +209,11 @@ class PlaygroundRunner
         }
 
         // OpenRouter chat is OpenAI-compatible — the SDK driver handles plain text.
-        return (string) (new AnonymousAgent($system, [], []))
-            ->prompt($prompt, provider: $handler['provider'], model: $handler['model'])
-            ->text;
+        $response = (new AnonymousAgent($system, [], []))
+            ->prompt($prompt, provider: $handler['provider'], model: $handler['model']);
+        $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
+
+        return (string) $response->text;
     }
 
     /**
@@ -160,6 +230,9 @@ class PlaygroundRunner
         }
 
         $vector = Embeddings::for([$text])->generate($handler['provider'], $handler['model'])->embeddings[0] ?? [];
+
+        // Embeddings responses don't carry token counts — estimate (~4 chars/token).
+        $this->recordUsage($handler, (int) ceil(mb_strlen($text) / 4), 0, estimated: true);
 
         return [
             'dimensions' => count($vector),
@@ -200,6 +273,8 @@ class PlaygroundRunner
                 );
             }
 
+            $this->recordOpenRouterUsage($handler, $response);
+
             return $text;
         }
 
@@ -207,24 +282,31 @@ class PlaygroundRunner
             ? Files\Image::fromPath($file->getRealPath())
             : Files\Document::fromPath($file->getRealPath());
 
-        return (string) (new AnonymousAgent($instruction, [], []))
-            ->prompt('Extract all text from the attached file.', attachments: [$attachment], provider: $handler['provider'], model: $handler['model'])
-            ->text;
+        $response = (new AnonymousAgent($instruction, [], []))
+            ->prompt('Extract all text from the attached file.', attachments: [$attachment], provider: $handler['provider'], model: $handler['model']);
+        $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
+
+        return (string) $response->text;
     }
 
     /** @param array{model: string, driver: string, provider: Lab} $handler */
     private function vision(User $user, array $handler, UploadedFile $file, string $question): string
     {
         if ($handler['driver'] === 'openrouter') {
-            return OpenRouterClient::text($this->openRouter->chat($user, $handler['model'], [
+            $response = $this->openRouter->chat($user, $handler['model'], [
                 OpenRouterClient::textBlock($question),
                 OpenRouterClient::imageBlock($this->dataUrl($file)),
-            ]));
+            ]);
+            $this->recordOpenRouterUsage($handler, $response);
+
+            return OpenRouterClient::text($response);
         }
 
-        return (string) (new AnonymousAgent('You are a vision assistant.', [], []))
-            ->prompt($question, attachments: [Files\Image::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model'])
-            ->text;
+        $response = (new AnonymousAgent('You are a vision assistant.', [], []))
+            ->prompt($question, attachments: [Files\Image::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model']);
+        $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
+
+        return (string) $response->text;
     }
 
     /** @param array{model: string, driver: string, provider: Lab} $handler */
@@ -245,11 +327,13 @@ class PlaygroundRunner
             if ($dataUrl === null) {
                 throw new RuntimeException('The model returned no image. Pick an OpenRouter model with image output.');
             }
+            $this->recordOpenRouterUsage($handler, $response);
 
             return $dataUrl;
         }
 
         $image = Image::of($prompt)->generate($handler['provider'], $handler['model']);
+        $this->recordUsage($handler, $image->usage->promptTokens, $image->usage->completionTokens);
 
         return 'data:image/png;base64,'.base64_encode((string) $image);
     }
@@ -258,13 +342,19 @@ class PlaygroundRunner
     private function transcribe(User $user, array $handler, UploadedFile $file): string
     {
         if ($handler['driver'] === 'openrouter') {
-            return OpenRouterClient::text($this->openRouter->chat($user, $handler['model'], [
+            $response = $this->openRouter->chat($user, $handler['model'], [
                 OpenRouterClient::textBlock('Transcribe the attached audio verbatim. Output only the transcript.'),
                 OpenRouterClient::audioBlock(base64_encode((string) file_get_contents($file->getRealPath())), $this->audioFormat($file)),
-            ]));
+            ]);
+            $this->recordOpenRouterUsage($handler, $response);
+
+            return OpenRouterClient::text($response);
         }
 
-        return (string) Transcription::fromUpload($file)->generate($handler['provider'], $handler['model'])->text;
+        $response = Transcription::fromUpload($file)->generate($handler['provider'], $handler['model']);
+        $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
+
+        return (string) $response->text;
     }
 
     /** @param array{model: string, driver: string, provider: Lab} $handler */

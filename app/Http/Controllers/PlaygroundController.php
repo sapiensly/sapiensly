@@ -70,6 +70,8 @@ class PlaygroundController extends Controller
         // Resolve the tenant's runtime AI keys (used by the SDK and OpenRouter).
         $this->providers->applyRuntimeConfig($user);
 
+        $startedAt = hrtime(true);
+
         try {
             $result = $this->runner->execute(
                 $user,
@@ -84,9 +86,15 @@ class PlaygroundController extends Controller
                 $request->file('file'),
             );
 
+            $result['duration_ms'] = (int) round((hrtime(true) - $startedAt) / 1_000_000);
+
             return response()->json(['ok' => true] + $result);
         } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+                'duration_ms' => (int) round((hrtime(true) - $startedAt) / 1_000_000),
+            ], 422);
         }
     }
 

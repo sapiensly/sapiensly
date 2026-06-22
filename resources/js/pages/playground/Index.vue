@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
+import { normalizeChatMarkdown } from '@/lib/markdown';
 import { Head } from '@inertiajs/vue3';
-import { Loader2, Play } from '@lucide/vue';
+import { Check, Copy, Download, Loader2, Play, Timer } from '@lucide/vue';
 import axios from 'axios';
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -22,6 +25,14 @@ interface Capability {
     defaultModel: string | null;
 }
 
+interface Usage {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    cost?: number;
+    estimated?: boolean;
+}
+
 interface RunResult {
     ok: boolean;
     model?: string;
@@ -31,6 +42,8 @@ interface RunResult {
     dimensions?: number;
     preview?: number[];
     ranked?: { index: number; score: number; document: string }[];
+    usage?: Usage;
+    duration_ms?: number;
     error?: string;
 }
 
@@ -62,6 +75,7 @@ type FormState = {
     file: File | null;
     running: boolean;
     result: RunResult | null;
+    elapsedMs: number;
 };
 const forms = reactive<Record<string, FormState>>({});
 function form(key: string): FormState {
@@ -76,6 +90,7 @@ function form(key: string): FormState {
             file: null,
             running: false,
             result: null,
+            elapsedMs: 0,
         };
     }
     return forms[key];
@@ -105,6 +120,53 @@ function onFile(e: Event) {
     current.value.file = input.files?.[0] ?? null;
 }
 
+const copied = ref(false);
+async function copyText(text: string) {
+    try {
+        await navigator.clipboard.writeText(text);
+        copied.value = true;
+        setTimeout(() => (copied.value = false), 1500);
+    } catch {
+        /* clipboard unavailable */
+    }
+}
+
+function triggerDownload(href: string, filename: string) {
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+function downloadText(text: string, filename: string) {
+    const url = URL.createObjectURL(
+        new Blob([text], { type: 'text/markdown;charset=utf-8' }),
+    );
+    triggerDownload(url, filename);
+    URL.revokeObjectURL(url);
+}
+
+function renderMarkdown(content: string | null | undefined): string {
+    if (!content) return '';
+    const raw = marked.parse(normalizeChatMarkdown(content), {
+        async: false,
+        breaks: true,
+        gfm: true,
+    }) as string;
+    return DOMPurify.sanitize(raw);
+}
+
+function fmtDuration(ms: number): string {
+    return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
+function fmtCost(cost: number): string {
+    // Sub-cent costs need more precision than 2 decimals.
+    return cost >= 0.01 ? `$${cost.toFixed(2)}` : `$${cost.toFixed(5)}`;
+}
+
 const MAX_UPLOAD_MB = 30;
 
 async function run() {
@@ -122,6 +184,13 @@ async function run() {
 
     f.running = true;
     f.result = null;
+
+    // Live stopwatch from RUN until the response settles.
+    const startedAt = performance.now();
+    f.elapsedMs = 0;
+    const timer = window.setInterval(() => {
+        f.elapsedMs = performance.now() - startedAt;
+    }, 100);
 
     const fd = new FormData();
     fd.append('capability', cap.key);
@@ -151,6 +220,8 @@ async function run() {
             error: t('app_v2.playground.error'),
         };
     } finally {
+        window.clearInterval(timer);
+        f.elapsedMs = performance.now() - startedAt;
         f.running = false;
     }
 }
@@ -313,23 +384,33 @@ async function run() {
                         </div>
                     </div>
 
-                    <button
-                        type="button"
-                        :disabled="current.running || !hasModel"
-                        class="inline-flex items-center gap-1.5 rounded-xl bg-accent-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:opacity-60"
-                        @click="run"
-                    >
-                        <Loader2
-                            v-if="current.running"
-                            class="size-4 animate-spin"
-                        />
-                        <Play v-else class="size-4" />
-                        {{
-                            current.running
-                                ? t('app_v2.playground.running')
-                                : t('app_v2.playground.run')
-                        }}
-                    </button>
+                    <div class="flex items-center gap-3">
+                        <button
+                            type="button"
+                            :disabled="current.running || !hasModel"
+                            class="inline-flex items-center gap-1.5 rounded-xl bg-accent-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:opacity-60"
+                            @click="run"
+                        >
+                            <Loader2
+                                v-if="current.running"
+                                class="size-4 animate-spin"
+                            />
+                            <Play v-else class="size-4" />
+                            {{
+                                current.running
+                                    ? t('app_v2.playground.running')
+                                    : t('app_v2.playground.run')
+                            }}
+                        </button>
+                        <!-- Live stopwatch. -->
+                        <span
+                            v-if="current.running || current.elapsedMs > 0"
+                            class="inline-flex items-center gap-1 font-mono text-sm text-ink-muted tabular-nums"
+                        >
+                            <Timer class="size-3.5" />
+                            {{ fmtDuration(current.elapsedMs) }}
+                        </span>
+                    </div>
 
                     <!-- Result -->
                     <div v-if="current.result" class="space-y-2">
@@ -341,17 +422,123 @@ async function run() {
                         </div>
                         <template v-else>
                             <div
-                                class="flex items-center justify-between text-xs text-ink-subtle"
+                                class="flex items-center justify-between gap-2 text-xs text-ink-subtle"
                             >
                                 <span>{{ t('app_v2.playground.result') }}</span>
-                                <span>{{ current.result.model }}</span>
+                                <div class="flex items-center gap-3">
+                                    <!-- Copy / download the result. -->
+                                    <button
+                                        v-if="
+                                            selected.output === 'text' &&
+                                            current.result.text
+                                        "
+                                        type="button"
+                                        class="inline-flex items-center gap-1 transition-colors hover:text-ink"
+                                        @click="copyText(current.result.text)"
+                                    >
+                                        <Check
+                                            v-if="copied"
+                                            class="size-3.5 text-sp-success"
+                                        />
+                                        <Copy v-else class="size-3.5" />
+                                        {{
+                                            copied
+                                                ? t('app_v2.playground.copied')
+                                                : t('app_v2.playground.copy')
+                                        }}
+                                    </button>
+                                    <button
+                                        v-if="
+                                            selected.output === 'text' &&
+                                            current.result.text
+                                        "
+                                        type="button"
+                                        class="inline-flex items-center gap-1 transition-colors hover:text-ink"
+                                        @click="
+                                            downloadText(
+                                                current.result.text,
+                                                `playground-${selected.key}.md`,
+                                            )
+                                        "
+                                    >
+                                        <Download class="size-3.5" />
+                                        {{ t('app_v2.playground.download') }}
+                                    </button>
+                                    <button
+                                        v-if="
+                                            selected.output === 'image' &&
+                                            current.result.image
+                                        "
+                                        type="button"
+                                        class="inline-flex items-center gap-1 transition-colors hover:text-ink"
+                                        @click="
+                                            triggerDownload(
+                                                current.result.image,
+                                                `playground-${selected.key}.png`,
+                                            )
+                                        "
+                                    >
+                                        <Download class="size-3.5" />
+                                        {{ t('app_v2.playground.download') }}
+                                    </button>
+                                    <button
+                                        v-if="
+                                            selected.output === 'audio' &&
+                                            current.result.audio
+                                        "
+                                        type="button"
+                                        class="inline-flex items-center gap-1 transition-colors hover:text-ink"
+                                        @click="
+                                            triggerDownload(
+                                                current.result.audio,
+                                                `playground-${selected.key}.mp3`,
+                                            )
+                                        "
+                                    >
+                                        <Download class="size-3.5" />
+                                        {{ t('app_v2.playground.download') }}
+                                    </button>
+                                    <span>{{ current.result.model }}</span>
+                                </div>
                             </div>
 
-                            <pre
-                                v-if="selected.output === 'text'"
-                                class="max-h-[420px] overflow-auto rounded-xl border border-soft bg-surface p-3 text-sm whitespace-pre-wrap text-ink"
-                                >{{ current.result.text }}</pre
+                            <!-- Run metrics: time, tokens, cost. -->
+                            <div
+                                class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-subtle"
                             >
+                                <span
+                                    v-if="current.result.duration_ms != null"
+                                    class="inline-flex items-center gap-1"
+                                >
+                                    <Timer class="size-3" />
+                                    {{
+                                        fmtDuration(current.result.duration_ms)
+                                    }}
+                                </span>
+                                <span v-if="current.result.usage?.total_tokens">
+                                    {{
+                                        t('app_v2.playground.tokens', {
+                                            n: current.result.usage.total_tokens.toLocaleString(),
+                                        })
+                                    }}{{
+                                        current.result.usage.estimated
+                                            ? ' (~)'
+                                            : ''
+                                    }}
+                                </span>
+                                <span
+                                    v-if="current.result.usage?.cost != null"
+                                    class="font-medium text-ink-muted"
+                                >
+                                    {{ fmtCost(current.result.usage.cost) }}
+                                </span>
+                            </div>
+
+                            <div
+                                v-if="selected.output === 'text'"
+                                class="sp-chat-prose prose prose-sm max-h-[420px] max-w-none overflow-auto rounded-xl border border-soft bg-surface p-3 text-ink dark:prose-invert"
+                                v-html="renderMarkdown(current.result.text)"
+                            />
 
                             <div
                                 v-else-if="selected.output === 'embeddings'"

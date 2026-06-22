@@ -188,6 +188,51 @@ test('OCR-PDF via OpenRouter surfaces a clear message when the model returns not
         ->assertJson(fn ($json) => $json->where('error', fn ($e) => str_contains($e, 'No text was extracted'))->etc());
 });
 
+test('a run reports duration, token usage and cost', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = AiCatalogModel::create([
+        'driver' => 'openrouter',
+        'model_id' => 'mistralai/mistral-ocr',
+        'capability' => 'vision',
+        'label' => 'OCR',
+        'is_enabled' => true,
+        'sort_order' => 0,
+        'input_price_per_mtok' => 1.0,
+        'output_price_per_mtok' => 2.0,
+    ]);
+    setDefault('ocr_pdf', $model);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response([
+            'choices' => [[
+                'message' => [
+                    'content' => 'x',
+                    'annotations' => [[
+                        'type' => 'file',
+                        'file' => ['content' => [['type' => 'text', 'text' => 'Parsed text']]],
+                    ]],
+                ],
+            ]],
+            'usage' => ['prompt_tokens' => 1000, 'completion_tokens' => 500, 'total_tokens' => 1500],
+        ]),
+    ]);
+
+    $res = $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'ocr_pdf',
+            'file' => UploadedFile::fake()->create('doc.pdf', 12, 'application/pdf'),
+        ])
+        ->assertOk()
+        ->assertJsonPath('ok', true)
+        ->assertJsonPath('usage.total_tokens', 1500)
+        // cost = 1000/1e6*1 + 500/1e6*2 = 0.002
+        ->assertJsonPath('usage.cost', 0.002)
+        ->json();
+
+    expect($res)->toHaveKey('duration_ms')
+        ->and($res['duration_ms'])->toBeGreaterThanOrEqual(0);
+});
+
 test('image generation routes through OpenRouter when the model is an OpenRouter model', function () {
     config(['ai.providers.openrouter.key' => 'sk-or-test']);
     $model = seedModel('image', 'openrouter', 'google/gemini-2.5-flash-image');
