@@ -38,6 +38,9 @@ class AppScaffolder
         'date', 'datetime', 'single_select', 'multi_select', 'rating',
     ];
 
+    /** Read-only computed types — shown in tables, never in create forms. */
+    private const DERIVED_TYPES = ['rollup', 'lookup', 'formula'];
+
     private const SYSTEM = <<<'SYS'
         You design simple internal business apps as a set of data objects (like database tables) with fields, and the links between them.
         Given a description, respond with ONLY a single minified JSON object — no markdown, no code fences, no commentary — using exactly this schema:
@@ -325,7 +328,11 @@ class AppScaffolder
             $pair = $this->buildRelation($built[$fromIndex]['def'], $built[$toIndex]['def'], $link['name']);
             $built[$fromIndex]['def']['fields'][] = $pair['child_field'];
             $built[$fromIndex]['pageFields'][] = $pair['child_index'];
+            // The one_to_many inverse is structural (not on the page); the rollup
+            // count is shown as a column on the parent's table.
             $built[$toIndex]['def']['fields'][] = $pair['parent_field'];
+            $built[$toIndex]['def']['fields'][] = $pair['parent_rollup_field'];
+            $built[$toIndex]['pageFields'][] = $pair['parent_rollup_index'];
         }
 
         // Pass 3: pages (now that relation fields exist on the objects).
@@ -411,19 +418,28 @@ class AppScaffolder
      * carry inverse_field_id so lookups/rollups work later. Returns the two field
      * definitions and the from-side index entry (so the page can show it).
      *
+     * Also creates a rollup on the `to` side that counts its children, so the
+     * relationship pays off immediately (e.g. a "Drafts" count on each Idea).
+     *
      * @param  array{id: string, name: string, slug: string, fields: array<int, array<string, mixed>>}  $from  the "many" side (a $from belongs to one $to)
      * @param  array{id: string, name: string, slug: string, fields: array<int, array<string, mixed>>}  $to  the "one" side
-     * @return array{child_field: array<string, mixed>, parent_field: array<string, mixed>, child_index: array{id: string, slug: string, type: string}}
+     * @return array{child_field: array<string, mixed>, parent_field: array<string, mixed>, child_index: array{id: string, slug: string, type: string}, parent_rollup_field: array<string, mixed>, parent_rollup_index: array{id: string, slug: string, type: string}}
      */
     public function buildRelation(array $from, array $to, ?string $name = null): array
     {
         $childFieldId = $this->id('fld');
         $parentFieldId = $this->id('fld');
+        $rollupFieldId = $this->id('fld');
 
         $relName = ($name !== null && trim($name) !== '') ? trim($name) : (string) Str::singular($to['name']);
         $relSlug = $this->uniqueSlug($relName, array_column($from['fields'], 'slug'), 'related');
 
-        $inverseSlug = $this->uniqueSlug($from['slug'], array_column($to['fields'], 'slug'), 'related');
+        // Inverse + rollup both land on the `to` object — keep their slugs unique
+        // against each other as well as the existing fields.
+        $parentTaken = array_column($to['fields'], 'slug');
+        $inverseSlug = $this->uniqueSlug($from['slug'], $parentTaken, 'related');
+        $parentTaken[] = $inverseSlug;
+        $rollupSlug = $this->uniqueSlug($from['slug'].'_count', $parentTaken, 'count');
 
         $childField = [
             'id' => $childFieldId,
@@ -448,10 +464,24 @@ class AppScaffolder
             'inverse_field_id' => $childFieldId,
         ];
 
+        // Counts the children through the one_to_many side (which carries
+        // inverse_field_id — required for a rollup to resolve).
+        $rollupField = [
+            'id' => $rollupFieldId,
+            'slug' => $rollupSlug,
+            'name' => $from['name'],
+            'type' => 'rollup',
+            'via_relation_field_id' => $parentFieldId,
+            'aggregator' => 'count',
+            'readonly' => true,
+        ];
+
         return [
             'child_field' => $childField,
             'parent_field' => $parentField,
             'child_index' => ['id' => $childFieldId, 'slug' => $relSlug, 'type' => 'relation'],
+            'parent_rollup_field' => $rollupField,
+            'parent_rollup_index' => ['id' => $rollupFieldId, 'slug' => $rollupSlug, 'type' => 'rollup'],
         ];
     }
 
@@ -466,9 +496,15 @@ class AppScaffolder
     {
         $modalId = $this->id('blk');
 
-        $formFields = array_map(fn (array $f): array => ['field_id' => $f['id']], $fieldIndex);
+        // Derived/read-only fields (rollup/lookup/formula) are computed, not
+        // entered — they belong in the table but never in the create form.
+        $formIndex = array_values(array_filter(
+            $fieldIndex,
+            fn (array $f): bool => ! in_array($f['type'] ?? 'string', self::DERIVED_TYPES, true),
+        ));
+        $formFields = array_map(fn (array $f): array => ['field_id' => $f['id']], $formIndex);
         $createValues = [];
-        foreach ($fieldIndex as $f) {
+        foreach ($formIndex as $f) {
             $createValues[$f['slug']] = '{{form.'.$f['slug'].'}}';
         }
 

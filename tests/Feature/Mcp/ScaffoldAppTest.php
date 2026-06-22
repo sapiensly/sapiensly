@@ -121,6 +121,17 @@ it('scaffold_app links objects with a belongs-to relation pair', function () {
     $table = collect($draftsPage['blocks'])->firstWhere('type', 'table');
     expect(collect($table['columns'])->pluck('field_id'))->toContain($belongsTo['id']);
 
+    // Ideas gets a child-count rollup, shown on its table but not its create form.
+    $rollup = collect($ideas['fields'])->firstWhere('type', 'rollup');
+    expect($rollup['aggregator'])->toBe('count');
+    expect($rollup['via_relation_field_id'])->toBe($hasMany['id']);
+    $ideasPage = collect($manifest['pages'])->firstWhere('path', '/ideas');
+    $ideasTable = collect($ideasPage['blocks'])->firstWhere('type', 'table');
+    $ideasModal = collect($ideasPage['blocks'])->firstWhere('type', 'modal');
+    $ideasForm = collect($ideasModal['blocks'])->firstWhere('type', 'form');
+    expect(collect($ideasTable['columns'])->pluck('field_id'))->toContain($rollup['id']);
+    expect(collect($ideasForm['fields'])->pluck('field_id'))->not->toContain($rollup['id']);
+
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 });
 

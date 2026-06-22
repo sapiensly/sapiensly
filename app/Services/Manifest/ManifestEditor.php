@@ -117,13 +117,19 @@ class ManifestEditor
 
         $manifest['objects'][$fromIndex]['fields'][] = $pair['child_field'];
         $manifest['objects'][$toIndex]['fields'][] = $pair['parent_field'];
+        $manifest['objects'][$toIndex]['fields'][] = $pair['parent_rollup_field'];
 
         if ($addToPage) {
             $fromObjectId = $manifest['objects'][$fromIndex]['id'];
+            $toObjectId = $manifest['objects'][$toIndex]['id'];
             foreach ($manifest['pages'] as &$page) {
-                if (isset($page['blocks']) && is_array($page['blocks'])) {
-                    $this->injectFieldIntoBlocks($page['blocks'], $fromObjectId, $pair['child_index']['id'], $pair['child_index']['slug']);
+                if (! isset($page['blocks']) || ! is_array($page['blocks'])) {
+                    continue;
                 }
+                // The picker goes on the child's form + table; the (read-only)
+                // rollup count is a column on the parent's table only.
+                $this->injectFieldIntoBlocks($page['blocks'], $fromObjectId, $pair['child_index']['id'], $pair['child_index']['slug']);
+                $this->injectFieldIntoBlocks($page['blocks'], $toObjectId, $pair['parent_rollup_index']['id'], $pair['parent_rollup_index']['slug'], formToo: false);
             }
             unset($page);
         }
@@ -132,13 +138,14 @@ class ManifestEditor
     }
 
     /**
-     * Append a column to every table over $objectId and a field (plus its
-     * create_record value mapping) to every create form over $objectId, walking
-     * nested modal/container blocks. Mutates $blocks in place.
+     * Append a column to every table over $objectId and (when $formToo) a field
+     * plus its create_record value mapping to every create form over $objectId,
+     * walking nested modal/container blocks. Mutates $blocks in place. Pass
+     * $formToo=false for read-only fields (rollups) that belong only in tables.
      *
      * @param  array<int, mixed>  $blocks
      */
-    private function injectFieldIntoBlocks(array &$blocks, string $objectId, string $fieldId, string $slug): void
+    private function injectFieldIntoBlocks(array &$blocks, string $objectId, string $fieldId, string $slug, bool $formToo = true): void
     {
         foreach ($blocks as &$block) {
             if (! is_array($block)) {
@@ -161,7 +168,8 @@ class ManifestEditor
                 $block['columns'] = $columns;
             }
 
-            if ($type === 'form'
+            if ($formToo
+                && $type === 'form'
                 && ($block['object_id'] ?? null) === $objectId
                 && ($block['mode'] ?? null) === 'create'
             ) {
@@ -177,7 +185,7 @@ class ManifestEditor
             }
 
             if (isset($block['blocks']) && is_array($block['blocks'])) {
-                $this->injectFieldIntoBlocks($block['blocks'], $objectId, $fieldId, $slug);
+                $this->injectFieldIntoBlocks($block['blocks'], $objectId, $fieldId, $slug, $formToo);
             }
         }
         unset($block);

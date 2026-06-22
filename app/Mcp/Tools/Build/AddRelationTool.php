@@ -11,7 +11,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Link two existing objects with a belongs-to relation: each `from` record belongs to one `to` record (e.g. each Draft belongs to one Idea). Creates both sides (the picker on `from` and its inverse "has many" on `to`) and wires the picker into the `from` create form + table. The typed alternative to hand-writing relation fields with propose_change. Saved as a new reversible version.')]
+#[Description('Link two existing objects with a belongs-to relation: each `from` record belongs to one `to` record (e.g. each Draft belongs to one Idea). Creates both sides (the picker on `from` and its inverse "has many" on `to`), wires the picker into the `from` create form + table, and adds a child-count rollup column on the `to` table (e.g. how many Drafts each Idea has). The typed alternative to hand-writing relation fields with propose_change. Saved as a new reversible version.')]
 class AddRelationTool extends SapiensTool
 {
     protected const ABILITY = 'apps:build';

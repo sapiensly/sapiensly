@@ -143,6 +143,15 @@ it('add_relation links two objects belongs-to and wires the picker into the page
     $form = findBlock($draftsPage['blocks'], 'form');
     expect(collect($form['fields'])->pluck('field_id'))->toContain($belongsTo['id']);
 
+    // Ideas gains a child-count rollup, shown on its table only.
+    $rollup = collect($ideas['fields'])->firstWhere('type', 'rollup');
+    expect($rollup['aggregator'])->toBe('count');
+    $ideasPage = collect($manifest['pages'])->firstWhere('path', '/ideas');
+    $ideasTable = findBlock($ideasPage['blocks'], 'table');
+    $ideasForm = findBlock($ideasPage['blocks'], 'form');
+    expect(collect($ideasTable['columns'])->pluck('field_id'))->toContain($rollup['id']);
+    expect(collect($ideasForm['fields'])->pluck('field_id'))->not->toContain($rollup['id']);
+
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 });
 
