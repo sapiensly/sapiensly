@@ -28,6 +28,7 @@ use App\Services\Ai\AiCapabilities;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
+use App\Services\Ai\OpenRouterClient;
 use App\Services\AiProviderService;
 use App\Services\CloudProviderService;
 use App\Services\RetrievalService;
@@ -663,13 +664,14 @@ class ChatAiService
     {
         $caps = app(AiCapabilities::class);
         $cloud = app(CloudProviderService::class);
+        $openRouter = app(OpenRouterClient::class);
 
         $factories = [
-            'generate_image' => fn () => new GenerateImageTool($user, $caps, $cloud),
+            'generate_image' => fn () => new GenerateImageTool($user, $caps, $cloud, $openRouter),
             'synthesize_speech' => fn () => new SynthesizeSpeechTool($user, $caps, $cloud),
             'rerank' => fn () => new RerankTool($caps),
-            'transcribe_audio' => fn () => new TranscribeAudioTool($placeholder, $caps),
-            'ocr_document' => fn () => new OcrDocumentTool($placeholder, $caps),
+            'transcribe_audio' => fn () => new TranscribeAudioTool($placeholder, $caps, $user, $openRouter),
+            'ocr_document' => fn () => new OcrDocumentTool($placeholder, $caps, $user, $openRouter),
         ];
 
         $tools = [];

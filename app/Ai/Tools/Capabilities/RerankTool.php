@@ -52,6 +52,10 @@ class RerankTool implements ToolContract
             return 'Error: no reranking model is configured. Set one in admin AI > Defaults → Reranking.';
         }
 
+        if ($handler['driver'] === 'openrouter') {
+            return 'Error: reranking is not available through OpenRouter (it has no rerank endpoint). Configure a direct rerank provider (Cohere, Voyage AI or Jina) in admin AI > Defaults → Reranking.';
+        }
+
         try {
             $limit = isset($args['limit']) ? (int) $args['limit'] : null;
             $response = Reranking::of($documents)

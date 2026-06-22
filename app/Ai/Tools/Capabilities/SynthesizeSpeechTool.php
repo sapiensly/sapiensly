@@ -54,6 +54,10 @@ class SynthesizeSpeechTool implements ToolContract
             return 'Error: no speech-generation model is configured. Set one in admin AI > Defaults → Speech generation.';
         }
 
+        if ($handler['driver'] === 'openrouter') {
+            return 'Error: text-to-speech is not available through OpenRouter (it has no audio-output endpoint). Configure a direct provider (OpenAI or ElevenLabs) in admin AI > Defaults → Speech generation.';
+        }
+
         try {
             $pending = Audio::of($text);
             if (is_string($args['voice'] ?? null) && $args['voice'] !== '') {
