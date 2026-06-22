@@ -58,6 +58,76 @@ class OpenRouterClient
         return (array) $response->json();
     }
 
+    /**
+     * Generate audio (TTS) via OpenRouter. Audio output requires stream:true, so
+     * this streams the SSE response and concatenates the base64 audio deltas.
+     *
+     * @param  array<int, array<string, mixed>>  $content
+     * @param  array<string, mixed>  $audioParams  e.g. ['voice' => 'alloy', 'format' => 'mp3']
+     * @return array{base64: string, format: string}|null
+     */
+    public function audio(User $user, string $model, array $content, array $audioParams, int $timeout = 120): ?array
+    {
+        $key = $this->apiKey($user);
+        if ($key === '') {
+            throw new RuntimeException('No OpenRouter API key is configured.');
+        }
+
+        $base = rtrim((string) (config('ai.providers.openrouter.url') ?: AiProviderService::OPENROUTER_BASE_URL), '/');
+
+        $response = Http::withToken($key)
+            ->timeout($timeout)
+            ->withOptions(['stream' => true])
+            ->post($base.'/chat/completions', [
+                'model' => $model,
+                'messages' => [['role' => 'user', 'content' => $content]],
+                'modalities' => ['audio', 'text'],
+                'audio' => $audioParams,
+                'stream' => true,
+            ]);
+
+        if (! $response->successful()) {
+            throw new RuntimeException('OpenRouter audio request failed ('.$response->status().'): '.$response->body());
+        }
+
+        $body = $response->toPsrResponse()->getBody();
+        $format = (string) ($audioParams['format'] ?? 'mp3');
+        $b64 = '';
+        $buffer = '';
+
+        while (! $body->eof()) {
+            $buffer .= $body->read(8192);
+
+            while (($pos = strpos($buffer, "\n")) !== false) {
+                $line = trim(substr($buffer, 0, $pos));
+                $buffer = substr($buffer, $pos + 1);
+
+                if (! str_starts_with($line, 'data:')) {
+                    continue;
+                }
+                $data = trim(substr($line, 5));
+                if ($data === '' || $data === '[DONE]') {
+                    continue;
+                }
+
+                $json = json_decode($data, true);
+                if (! is_array($json)) {
+                    continue;
+                }
+                $delta = data_get($json, 'choices.0.delta.audio.data');
+                if (is_string($delta)) {
+                    $b64 .= $delta;
+                }
+                $fmt = data_get($json, 'choices.0.delta.audio.format');
+                if (is_string($fmt) && $fmt !== '') {
+                    $format = $fmt;
+                }
+            }
+        }
+
+        return $b64 !== '' ? ['base64' => $b64, 'format' => $format] : null;
+    }
+
     /** @return array{type: string, text: string} */
     public static function textBlock(string $text): array
     {

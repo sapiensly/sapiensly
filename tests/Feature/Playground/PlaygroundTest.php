@@ -276,10 +276,11 @@ test('speech generation via OpenRouter returns audio and passes voice + instruct
     $model = seedModel('speech', 'openrouter', 'openai/gpt-audio-mini');
     setDefault('speech_generation', $model);
 
+    // Audio output is streamed (SSE); the base64 arrives in delta.audio.data.
     Http::fake([
-        'openrouter.ai/*' => Http::response([
-            'choices' => [['message' => ['audio' => ['data' => 'QUJD', 'format' => 'mp3']]]],
-        ]),
+        'openrouter.ai/*' => Http::response(
+            'data: {"choices":[{"delta":{"audio":{"data":"QUJD","format":"mp3"}}}]}'."\n\n".'data: [DONE]'."\n",
+        ),
     ]);
 
     $res = $this->actingAs(pgUser())

@@ -85,18 +85,13 @@ class SynthesizeSpeechTool implements ToolContract
     private function synthesize(array $handler, string $text, string $voice, string $instructions): ?string
     {
         if ($handler['driver'] === 'openrouter') {
+            // Audio output requires streamed chat completions.
             $prompt = $instructions !== '' ? $instructions."\n\n".$text : $text;
-            $response = $this->openRouter->chat($this->user, $handler['model'], [
+            $audio = $this->openRouter->audio($this->user, $handler['model'], [
                 OpenRouterClient::textBlock($prompt),
-            ], ['modalities' => ['audio', 'text'], 'audio' => ['voice' => $voice !== '' ? $voice : 'alloy', 'format' => 'mp3']]);
+            ], ['voice' => $voice !== '' ? $voice : 'alloy', 'format' => 'mp3']);
 
-            $dataUrl = OpenRouterClient::firstAudioDataUrl($response);
-            if ($dataUrl === null) {
-                return null;
-            }
-            $comma = strpos($dataUrl, ',');
-
-            return base64_decode($comma !== false ? substr($dataUrl, $comma + 1) : $dataUrl) ?: null;
+            return $audio !== null ? (base64_decode($audio['base64']) ?: null) : null;
         }
 
         $pending = Audio::of($text);

@@ -374,20 +374,21 @@ class PlaygroundRunner
         }
 
         if ($handler['driver'] === 'openrouter') {
-            // OpenRouter TTS rides on chat completions: modalities=["audio","text"]
-            // + an audio param; style/language are coached via the prompt text.
+            // OpenRouter TTS rides on streamed chat completions (audio output
+            // requires stream:true); style/language are coached via the prompt.
             $prompt = $instructions !== '' ? $instructions."\n\n".$text : $text;
-            $response = $this->openRouter->chat($user, $handler['model'], [
-                OpenRouterClient::textBlock($prompt),
-            ], ['modalities' => ['audio', 'text'], 'audio' => ['voice' => $voice !== '' ? $voice : 'alloy', 'format' => 'mp3']]);
+            $audio = $this->openRouter->audio(
+                $user,
+                $handler['model'],
+                [OpenRouterClient::textBlock($prompt)],
+                ['voice' => $voice !== '' ? $voice : 'alloy', 'format' => 'mp3'],
+            );
 
-            $dataUrl = OpenRouterClient::firstAudioDataUrl($response);
-            if ($dataUrl === null) {
-                throw new RuntimeException('The model returned no audio ('.OpenRouterClient::failureReason($response).'). Pick an OpenRouter model with audio output.');
+            if ($audio === null) {
+                throw new RuntimeException('The model returned no audio. Pick an OpenRouter model with audio output.');
             }
-            $this->recordOpenRouterUsage($handler, $response);
 
-            return $dataUrl;
+            return 'data:audio/mpeg;base64,'.$audio['base64'];
         }
 
         $pending = Audio::of($text);
