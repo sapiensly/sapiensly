@@ -1947,7 +1947,7 @@
             }
         },
         "step": {
-            "description": "A workflow step. Its `type` must be one of: record.create, record.update, record.delete, record.query, set_variable, log, branch, foreach, ai.complete, http.request, script.run, connector.call. If this failed, the step `type` is unknown or it is missing a required arg for that type — call list_available_steps for each step's required props and the canonical patterns.",
+            "description": "A workflow step. Its `type` must be one of: record.create, record.update, record.delete, record.query, set_variable, log, branch, foreach, ai.complete, agent.invoke, http.request, script.run, connector.call. If this failed, the step `type` is unknown or it is missing a required arg for that type — call list_available_steps for each step's required props and the canonical patterns.",
             "oneOf": [
                 {
                     "allOf": [
@@ -2115,6 +2115,22 @@
                                 "temperature": { "type": "number", "minimum": 0, "maximum": 1 }
                             },
                             "required": ["type", "user_prompt"]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        { "$ref": "#/$defs/step_base" },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true, "name": true, "output_variable": true, "skip_if": true, "retry": true,
+                                "type": { "const": "agent.invoke" },
+                                "agent_id": { "type": "string", "minLength": 1, "description": "Id of the Sapiensly agent to invoke. Unlike ai.complete (a bare prompt), this runs the configured agent with its own model, instructions, knowledge bases (RAG) and tools. Use list_agents to get a real id — never invent one." },
+                                "message": { "type": "string", "maxLength": 50000, "description": "The input/prompt sent to the agent, resolved against the workflow context. The reply is addressable via {{steps.<id>.output.text}}." }
+                            },
+                            "required": ["type", "agent_id", "message"]
                         }
                     ]
                 },

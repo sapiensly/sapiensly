@@ -76,6 +76,13 @@ class ListAvailableStepsTool implements Tool
                 'type' => 'ai.complete',
                 'props' => 'model? (claude-sonnet-4-..., etc), system_prompt?, user_prompt, max_tokens?, temperature?',
                 'output' => '{text, model}',
+                'note' => 'A bare LLM call (your prompt, your model). For a configured persona with its own brand voice, knowledge base and tools, use agent.invoke instead.',
+            ],
+            [
+                'type' => 'agent.invoke',
+                'props' => 'agent_id (a real id from list_agents), message (the input/prompt, expression-resolved)',
+                'output' => '{text, agent_id, knowledge_bases} — the reply is {{steps.<id>.output.text}}',
+                'note' => 'Run a CONFIGURED agent: its own model, instructions, knowledge bases (RAG) and tools all apply — unlike ai.complete, which is a raw prompt. Use for "let the CMO/support/research agent produce X". Call list_agents first for a real agent_id.',
             ],
             [
                 'type' => 'http.request',

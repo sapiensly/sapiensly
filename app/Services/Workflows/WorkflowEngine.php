@@ -2,8 +2,11 @@
 
 namespace App\Services\Workflows;
 
+use App\Enums\MessageRole;
+use App\Models\Agent;
 use App\Models\App;
 use App\Models\IntegrationUserToken;
+use App\Models\Message;
 use App\Models\Record;
 use App\Models\Tool;
 use App\Models\User;
@@ -14,6 +17,7 @@ use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Connectors\ConnectorActionResolver;
+use App\Services\LLMService;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
@@ -23,6 +27,7 @@ use App\Services\ToolExecutionService;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Responses\AgentResponse;
 
 /**
  * Executes a manifest workflow inline (no queue for MVP). Iterates the step
@@ -261,6 +266,7 @@ class WorkflowEngine
             'branch' => $this->handleBranch($step, $context, $app, $manifest, $user, $run),
             'foreach' => $this->handleForeach($step, $context, $app, $manifest, $user, $run),
             'ai.complete' => $this->handleAiComplete($step, $context, $user),
+            'agent.invoke' => $this->handleAgentInvoke($step, $context, $app, $user),
             'http.request' => $this->handleHttpRequest($step, $context),
             'connector.call' => $this->handleConnectorCall($step, $context, $app, $user),
             'script.run' => $this->handleScriptRun($step, $context),
@@ -306,6 +312,50 @@ class WorkflowEngine
         return [
             'text' => $response->text ?? '',
             'model' => $model,
+        ];
+    }
+
+    /**
+     * Invoke a configured agent — unlike ai.complete (a bare prompt), this runs
+     * the agent with its own model, instructions, knowledge bases (RAG) and tools.
+     *
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $manifest
+     * @return array{text: string, agent_id: string, knowledge_bases?: array<int, string>}
+     */
+    private function handleAgentInvoke(array $step, array $context, App $app, ?User $user): array
+    {
+        $agentId = (string) $step['agent_id'];
+        $message = (string) $this->expressions->resolve((string) $step['message'], $context);
+
+        if ($this->dryRun) {
+            return ['text' => '[simulated agent output]', 'agent_id' => $agentId, 'simulated' => true];
+        }
+
+        // Resolve within the run's owner context when present, else within the
+        // app's organization (scheduled/webhook runs without a user).
+        $agent = $user !== null
+            ? Agent::query()->forAccountContext($user)->find($agentId)
+            : Agent::query()->where('organization_id', $app->organization_id)->find($agentId);
+
+        if ($agent === null) {
+            throw new StepFailedException("agent.invoke references unknown agent '{$agentId}' — use list_agents for a real id.");
+        }
+
+        app(AiSpendGuard::class)->assertWithinBudget(
+            $user, $user?->organization_id ?? $app->organization_id, $agent->model,
+        );
+
+        $userMessage = new Message(['role' => MessageRole::User, 'content' => $message]);
+        $result = app(LLMService::class)->setContext($user)->chatWithKnowledgeAndTools($agent, [$userMessage]);
+
+        /** @var AgentResponse $response */
+        $response = $result['response'];
+
+        return [
+            'text' => $response->text ?? '',
+            'agent_id' => $agent->id,
+            'knowledge_bases' => array_column($result['knowledge_bases'] ?? [], 'name'),
         ];
     }
 
