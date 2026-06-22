@@ -104,13 +104,6 @@ const sections = computed<NavSection[]>(() => [
                     u.startsWith('/debates/'),
             },
             {
-                key: 'playground',
-                label: t('app_v2.nav.playground'),
-                href: '/playground',
-                icon: FlaskConical,
-                match: (u) => u.startsWith('/playground'),
-            },
-            {
                 key: 'apps',
                 label: t('app_v2.nav.apps'),
                 href: AppController.index().url,
@@ -157,6 +150,13 @@ const sections = computed<NavSection[]>(() => [
                 href: KnowledgeBaseController.index().url,
                 icon: Database,
                 match: (u) => u.startsWith('/knowledge-bases'),
+            },
+            {
+                key: 'playground',
+                label: t('app_v2.nav.playground'),
+                href: '/playground',
+                icon: FlaskConical,
+                match: (u) => u.startsWith('/playground'),
             },
         ],
     },
