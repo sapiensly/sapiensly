@@ -121,6 +121,7 @@ class GuideTool extends SapiensTool
                     '3. list_app_versions / rollback_app to manage history (every change is a reversible version).',
                     '4. Workflows: verify_workflow (dry-run, writes simulated) then run_workflow; approve_workflow_proposal for gated writes.',
                     '5. Records (data:read/write): query_records / create_record / update_record once objects exist.',
+                    '6. Demo data is OPT-IN: a fresh app opens empty. OFFER to add sample data and only call generate_demo_data after the user agrees — never seed automatically.',
                 ],
             ],
             [
