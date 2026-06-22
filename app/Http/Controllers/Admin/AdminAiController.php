@@ -44,10 +44,10 @@ class AdminAiController extends Controller
             $modelsByCapability[$capability] = $this->serialiseEnabledModels($capability);
         }
 
-        // OCR-PDF accepts any OpenRouter model too (OpenRouter parses the PDF via
-        // its file-parser plugin regardless of the model's tagged capability), so
-        // its picker is vision models + every enabled OpenRouter model.
-        $modelsByCapability['ocr_pdf'] = $this->ocrPdfModels();
+        // OCR accepts any OpenRouter model too: PDFs are parsed by OpenRouter's
+        // file-parser plugin, and images are sent to a vision model — so both OCR
+        // pickers are vision models + every enabled OpenRouter model.
+        $modelsByCapability['ocr_pdf'] = $modelsByCapability['ocr_image'] = $this->ocrModels();
 
         return Inertia::render('admin/Ai/Defaults', [
             'modules' => AiDefaults::MODULES,
@@ -153,8 +153,8 @@ class AdminAiController extends Controller
         $rules = [];
         foreach (AiDefaults::MODULES as $module) {
             $capability = $this->aiDefaults->capabilityFor($module);
-            // OCR-PDF also accepts any OpenRouter model (parsed via the file-parser plugin).
-            $exists = $module === 'ocr_pdf'
+            // OCR (PDF + image) also accepts any OpenRouter model.
+            $exists = in_array($module, ['ocr_pdf', 'ocr_image'], true)
                 ? Rule::exists('ai_catalog_models', 'id')->where(fn ($q) => $q->where('capability', 'vision')->orWhere('driver', 'openrouter'))
                 : Rule::exists('ai_catalog_models', 'id')->where('capability', $capability);
             $modelRule = ['sometimes', 'nullable', $exists];
@@ -420,12 +420,13 @@ class AdminAiController extends Controller
     }
 
     /**
-     * The OCR-PDF picker: enabled vision models plus every enabled OpenRouter
-     * model (OpenRouter handles the PDF via its file-parser plugin).
+     * The OCR picker (PDF + image): enabled vision models plus every enabled
+     * OpenRouter model (PDFs are parsed by the file-parser plugin; images are
+     * sent to the chosen vision model).
      *
      * @return array<int, array<string, mixed>>
      */
-    private function ocrPdfModels(): array
+    private function ocrModels(): array
     {
         return AiCatalogModel::query()
             ->where('is_enabled', true)

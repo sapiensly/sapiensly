@@ -68,7 +68,9 @@ class PlaygroundRunner
 
         if ($explicitModelId !== null && $explicitModelId !== '') {
             $row = AiCatalogModel::query()->enabled()->whereKey($explicitModelId)->first(['model_id', 'driver', 'capability']);
-            if ($row === null || $row->capability !== $meta['catalog']) {
+            // OCR also accepts any OpenRouter model (PDF via file-parser, image via vision).
+            $ocrOpenRouter = in_array($capability, ['ocr_pdf', 'ocr_image'], true) && $row?->driver === 'openrouter';
+            if ($row === null || ! ($row->capability === $meta['catalog'] || $ocrOpenRouter)) {
                 throw new RuntimeException('The selected model is not an enabled '.$meta['catalog'].' model.');
             }
 
