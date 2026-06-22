@@ -591,7 +591,8 @@ test('saveOpenRouterModels stores models under their output-modality capability'
     $this->actingAs($admin)
         ->post('/admin/ai/providers/openrouter/models', [
             'models' => [
-                ['id' => 'some/whisper', 'label' => 'Whisper', 'outputModalities' => ['text', 'transcription']],
+                // Audio-input model → transcription (audio → text), plus chat for text output.
+                ['id' => 'some/whisper', 'label' => 'Whisper', 'outputModalities' => ['text'], 'audioInput' => true],
                 ['id' => 'some/painter', 'label' => 'Painter', 'outputModalities' => ['image']],
             ],
         ])

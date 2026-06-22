@@ -964,6 +964,8 @@ class AiProviderService
                     'outputPricePerMTok' => $this->perMillionPrice($model['pricing']['completion'] ?? null),
                     'vision' => in_array('image', $inputModalities, true)
                         || str_contains((string) ($architecture['modality'] ?? ''), 'image'),
+                    // Accepts audio input → can transcribe (audio → text).
+                    'audioInput' => in_array('audio', $inputModalities, true),
                     // Output modalities (text, image, audio, …) so the picker can
                     // mark each model by what it produces.
                     'outputModalities' => array_values(array_filter((array) $outputModalities, 'is_string')),
@@ -1058,14 +1060,12 @@ class AiProviderService
         $out = array_map('strval', (array) ($model['outputModalities'] ?? []));
 
         $caps = [];
+        // Output modalities define what the model produces.
         if (in_array('text', $out, true) || $out === []) {
             $caps[] = 'chat';
         }
         if (in_array('image', $out, true)) {
             $caps[] = 'image';
-        }
-        if (in_array('transcription', $out, true)) {
-            $caps[] = 'transcription';
         }
         if (in_array('speech', $out, true) || in_array('audio', $out, true)) {
             $caps[] = 'speech';
@@ -1076,9 +1076,13 @@ class AiProviderService
         if (in_array('rerank', $out, true)) {
             $caps[] = 'rerank';
         }
-        // Image input → vision (image understanding / OCR-image).
+        // Input modalities define what the model can consume:
+        // image input → vision (OCR-image / understanding), audio input → transcription.
         if (! empty($model['vision'])) {
             $caps[] = 'vision';
+        }
+        if (! empty($model['audioInput'])) {
+            $caps[] = 'transcription';
         }
 
         return array_values(array_unique($caps !== [] ? $caps : ['chat']));

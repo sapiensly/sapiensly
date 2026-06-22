@@ -312,6 +312,7 @@ class AdminAiController extends Controller
             'models.*.outputModalities' => ['sometimes', 'array'],
             'models.*.outputModalities.*' => ['string'],
             'models.*.vision' => ['sometimes', 'boolean'],
+            'models.*.audioInput' => ['sometimes', 'boolean'],
         ]);
 
         $this->aiProviderService->syncOpenRouterCatalogModels($validated['models']);

@@ -30,6 +30,7 @@ interface OpenRouterModel {
     inputPricePerMTok: number | null;
     outputPricePerMTok: number | null;
     vision: boolean;
+    audioInput: boolean;
     outputModalities: string[];
     tools: boolean;
     description: string;
@@ -465,6 +466,7 @@ function save() {
             outputPricePerMTok: m.outputPricePerMTok,
             outputModalities: m.outputModalities,
             vision: m.vision,
+            audioInput: m.audioInput,
         }));
 
     router.post(
