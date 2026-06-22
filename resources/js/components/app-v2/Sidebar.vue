@@ -96,14 +96,11 @@ const sections = computed<NavSection[]>(() => [
                 label: t('app_v2.nav.chat'),
                 href: ChatController.index().url,
                 icon: MessagesSquare,
-                match: (u) => u === '/chat' || u.startsWith('/chat/') || u === '/debates' || u.startsWith('/debates/'),
-            },
-            {
-                key: 'agents',
-                label: t('app_v2.nav.agents'),
-                href: AgentController.index().url,
-                icon: Bot,
-                match: (u) => u.startsWith('/agents'),
+                match: (u) =>
+                    u === '/chat' ||
+                    u.startsWith('/chat/') ||
+                    u === '/debates' ||
+                    u.startsWith('/debates/'),
             },
             {
                 key: 'apps',
@@ -125,6 +122,13 @@ const sections = computed<NavSection[]>(() => [
         key: 'capabilities',
         label: t('app_v2.sidebar.section_capabilities'),
         items: [
+            {
+                key: 'agents',
+                label: t('app_v2.nav.agents'),
+                href: AgentController.index().url,
+                icon: Bot,
+                match: (u) => u.startsWith('/agents'),
+            },
             {
                 key: 'tools',
                 label: t('app_v2.nav.tools'),
@@ -157,7 +161,9 @@ const sections = computed<NavSection[]>(() => [
                 label: t('app_v2.nav.dashboard'),
                 href: dashboardHref.value,
                 icon: LayoutGrid,
-                match: (u) => u === dashboardHref.value || u.startsWith(`${dashboardHref.value}?`),
+                match: (u) =>
+                    u === dashboardHref.value ||
+                    u.startsWith(`${dashboardHref.value}?`),
             },
             {
                 key: 'ai-providers',
@@ -253,7 +259,10 @@ const workspaceLabel = computed(() =>
                 collapsed ? 'justify-center px-3' : 'gap-2 px-5',
             ]"
         >
-            <Link :href="ChatController.index().url" class="flex items-center gap-1 outline-none">
+            <Link
+                :href="ChatController.index().url"
+                class="flex items-center gap-1 outline-none"
+            >
                 <AppLogo tone="white" :collapsed="collapsed" />
             </Link>
         </div>
@@ -303,7 +312,10 @@ const workspaceLabel = computed(() =>
                                             :is="item.icon"
                                             class="size-4 shrink-0"
                                         />
-                                        <span v-if="!collapsed" class="truncate">
+                                        <span
+                                            v-if="!collapsed"
+                                            class="truncate"
+                                        >
                                             {{ item.label }}
                                         </span>
                                     </Link>
@@ -358,7 +370,10 @@ const workspaceLabel = computed(() =>
                                 {{ authUser?.name ?? '—' }}
                             </span>
                             <span class="truncate text-xs text-ink-subtle">
-                                {{ workspaceLabel }}<template v-if="hasOrganization"> · {{ userRole }}</template>
+                                {{ workspaceLabel
+                                }}<template v-if="hasOrganization">
+                                    · {{ userRole }}</template
+                                >
                             </span>
                         </div>
                         <ChevronsUpDown
