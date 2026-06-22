@@ -175,6 +175,26 @@ test('Image Vision also accepts an OpenRouter model in its picker', function () 
     expect((string) AppSetting::getValue('admin_v2.ai.image_vision.primary'))->toBe((string) $orModel->id);
 });
 
+test('Image generation also accepts an OpenRouter model in its picker', function () {
+    $admin = sysadminForAi();
+    $orModel = seedCapabilityModel('chat', 'openrouter', 'google/gemini-2.5-flash-image');
+
+    $this->actingAs($admin)
+        ->get('/admin/ai')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('modelsByCapability.image_generation', fn ($models) => collect($models)->contains(
+                fn ($m) => $m['name'] === 'google/gemini-2.5-flash-image'
+            )));
+
+    $this->actingAs($admin)
+        ->patch('/admin/ai/defaults', ['image_generation' => ['primary' => $orModel->id]])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect((string) AppSetting::getValue('admin_v2.ai.image_generation.primary'))->toBe((string) $orModel->id);
+});
+
 test('updateDefaults saves the OCR-PDF OpenRouter engine', function () {
     $admin = sysadminForAi();
 
