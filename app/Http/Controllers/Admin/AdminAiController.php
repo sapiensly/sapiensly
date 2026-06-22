@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
+use App\Models\AppSetting;
 use App\Models\OrganizationAiBudget;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiUsageReport;
+use App\Services\Ai\OpenRouterClient;
 use App\Services\AiProviderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -48,6 +50,11 @@ class AdminAiController extends Controller
             'moduleCapability' => AiDefaults::CAPABILITY,
             'defaults' => $this->readDefaults(),
             'modelsByCapability' => $modelsByCapability,
+            // OCR-PDF via OpenRouter: surface the file-parser engine picker only
+            // when OpenRouter is connected globally (env or saved key).
+            'openRouterActive' => $this->aiProviderService->driverConfiguredSource('openrouter') !== null,
+            'pdfEngines' => OpenRouterClient::PDF_ENGINES,
+            'ocrPdfEngine' => OpenRouterClient::configuredPdfEngine(),
         ]);
     }
 
@@ -146,6 +153,9 @@ class AdminAiController extends Controller
             $rules["{$module}.fallback"] = $modelRule;
         }
 
+        // The OCR-PDF OpenRouter engine (file-parser plugin) is a separate setting.
+        $rules['ocr_pdf_engine'] = ['sometimes', 'nullable', Rule::in(OpenRouterClient::PDF_ENGINES)];
+
         $validated = $request->validate($rules);
 
         foreach (AiDefaults::MODULES as $module) {
@@ -158,6 +168,13 @@ class AdminAiController extends Controller
                     );
                 }
             }
+        }
+
+        if ($request->has('ocr_pdf_engine')) {
+            AppSetting::setValue(
+                'admin_v2.ai.ocr_pdf.engine',
+                (string) ($validated['ocr_pdf_engine'] ?? OpenRouterClient::DEFAULT_PDF_ENGINE),
+            );
         }
 
         return back()->with('success', __('AI defaults updated.'));

@@ -28,7 +28,7 @@ import {
 import type { AiModel, UUID } from '@/lib/admin/types';
 import { Head, router } from '@inertiajs/vue3';
 import type { Component } from 'vue';
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 type Slot = 'primary' | 'fallback';
@@ -40,10 +40,36 @@ interface Props {
     moduleCapability: Record<string, string>;
     defaults: Record<string, ModuleDefaults>;
     modelsByCapability: Record<string, AiModel[]>;
+    openRouterActive: boolean;
+    pdfEngines: string[];
+    ocrPdfEngine: string;
 }
 
 const props = defineProps<Props>();
 const { t } = useI18n();
+
+// OCR-PDF OpenRouter engine (file-parser plugin). Only shown when OpenRouter is
+// connected globally; persisted separately from the primary/fallback model.
+const ocrPdfEngine = ref(props.ocrPdfEngine);
+function updateEngine(value: string) {
+    const prev = ocrPdfEngine.value;
+    ocrPdfEngine.value = value;
+    router.patch(
+        '/admin/ai/defaults',
+        { ocr_pdf_engine: value },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['ocrPdfEngine'],
+            onSuccess: () => {
+                ocrPdfEngine.value = props.ocrPdfEngine;
+            },
+            onError: () => {
+                ocrPdfEngine.value = prev;
+            },
+        },
+    );
+}
 
 // Per-module presentation. Icon + tint only; copy comes from i18n keyed by module.
 const moduleMeta: Record<string, { icon: Component; tint?: string }> = {
@@ -194,6 +220,39 @@ function updateModel(module: string, slot: Slot, id: string | null) {
                         <p class="text-[10px] text-ink-subtle">
                             {{ t('admin.ai.defaults.fallback_hint') }}
                         </p>
+
+                        <!-- OCR-PDF: OpenRouter file-parser engine picker. -->
+                        <div
+                            v-if="m === 'ocr_pdf' && openRouterActive"
+                            class="space-y-1.5 border-t border-soft pt-3"
+                        >
+                            <Label class="text-xs text-ink-muted">
+                                {{ t('admin.ai.defaults.ocr_engine_label') }}
+                            </Label>
+                            <select
+                                :value="ocrPdfEngine"
+                                class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                                @change="
+                                    updateEngine(
+                                        ($event.target as HTMLSelectElement)
+                                            .value,
+                                    )
+                                "
+                            >
+                                <option
+                                    v-for="eng in pdfEngines"
+                                    :key="eng"
+                                    :value="eng"
+                                >
+                                    {{
+                                        t(`admin.ai.defaults.ocr_engine.${eng}`)
+                                    }}
+                                </option>
+                            </select>
+                            <p class="text-[10px] text-ink-subtle">
+                                {{ t('admin.ai.defaults.ocr_engine_hint') }}
+                            </p>
+                        </div>
                     </SettingsCard>
                 </div>
             </section>

@@ -2,6 +2,7 @@
 
 namespace App\Services\Ai;
 
+use App\Models\AppSetting;
 use App\Models\User;
 use App\Services\AiProviderService;
 use Illuminate\Support\Facades\Http;
@@ -69,10 +70,36 @@ class OpenRouterClient
         return ['type' => 'image_url', 'image_url' => ['url' => $url]];
     }
 
-    /** @return array{type: string, file: array{url: string}} */
-    public static function fileBlock(string $dataUrl): array
+    /**
+     * PDF processing engines for the file-parser plugin, per
+     * https://openrouter.ai/docs/guides/overview/multimodal/pdfs.
+     */
+    public const PDF_ENGINES = ['mistral-ocr', 'cloudflare-ai', 'native'];
+
+    public const DEFAULT_PDF_ENGINE = 'mistral-ocr';
+
+    /** @return array{type: string, file: array{filename: string, file_data: string}} */
+    public static function fileBlock(string $dataUrl, string $filename = 'document.pdf'): array
     {
-        return ['type' => 'file', 'file' => ['url' => $dataUrl]];
+        return ['type' => 'file', 'file' => ['filename' => $filename, 'file_data' => $dataUrl]];
+    }
+
+    /**
+     * The `file-parser` plugin body that selects the PDF processing engine.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function pdfPlugins(string $engine): array
+    {
+        return [['id' => 'file-parser', 'pdf' => ['engine' => $engine]]];
+    }
+
+    /** The admin-configured OCR-PDF engine (admin AI > Defaults), or the default. */
+    public static function configuredPdfEngine(): string
+    {
+        $engine = (string) AppSetting::getValue('admin_v2.ai.ocr_pdf.engine', self::DEFAULT_PDF_ENGINE);
+
+        return in_array($engine, self::PDF_ENGINES, true) ? $engine : self::DEFAULT_PDF_ENGINE;
     }
 
     /** @return array{type: string, input_audio: array{data: string, format: string}} */

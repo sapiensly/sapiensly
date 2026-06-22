@@ -133,6 +133,39 @@ test('updateDefaults rejects a chat model for the image_generation category', fu
         ->assertSessionHasErrors(['image_generation.primary']);
 });
 
+test('updateDefaults saves the OCR-PDF OpenRouter engine', function () {
+    $admin = sysadminForAi();
+
+    $this->actingAs($admin)
+        ->patch('/admin/ai/defaults', ['ocr_pdf_engine' => 'cloudflare-ai'])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect((string) AppSetting::getValue('admin_v2.ai.ocr_pdf.engine'))->toBe('cloudflare-ai');
+});
+
+test('updateDefaults rejects an unknown OCR-PDF engine', function () {
+    $admin = sysadminForAi();
+
+    $this->actingAs($admin)
+        ->patch('/admin/ai/defaults', ['ocr_pdf_engine' => 'bogus'])
+        ->assertSessionHasErrors(['ocr_pdf_engine']);
+});
+
+test('defaults tab exposes the OpenRouter engine state', function () {
+    $admin = sysadminForAi();
+    seedChatModel();
+
+    $this->actingAs($admin)
+        ->get('/admin/ai')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/Ai/Defaults')
+            ->has('openRouterActive')
+            ->has('pdfEngines', 3)
+            ->where('ocrPdfEngine', 'mistral-ocr'));
+});
+
 test('toggleModel flips is_enabled on the catalog row', function () {
     $admin = sysadminForAi();
     $model = seedChatModel();

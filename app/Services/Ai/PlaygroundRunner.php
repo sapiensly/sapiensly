@@ -175,12 +175,17 @@ class PlaygroundRunner
         if ($handler['driver'] === 'openrouter') {
             $block = $isImage
                 ? OpenRouterClient::imageBlock($this->dataUrl($file))
-                : OpenRouterClient::fileBlock($this->dataUrl($file));
+                : OpenRouterClient::fileBlock($this->dataUrl($file), $file->getClientOriginalName() ?: 'document.pdf');
+
+            // PDFs use the file-parser plugin with the admin-configured OCR engine.
+            $extra = $isImage
+                ? []
+                : ['plugins' => OpenRouterClient::pdfPlugins(OpenRouterClient::configuredPdfEngine())];
 
             return OpenRouterClient::text($this->openRouter->chat($user, $handler['model'], [
                 OpenRouterClient::textBlock($instruction),
                 $block,
-            ]));
+            ], $extra));
         }
 
         $attachment = $isImage

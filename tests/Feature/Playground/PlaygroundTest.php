@@ -3,6 +3,7 @@
 use App\Models\AiCatalogModel;
 use App\Models\AppSetting;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Ai;
 use Laravel\Ai\AnonymousAgent;
@@ -120,6 +121,37 @@ test('an unconfigured capability returns a clear error', function () {
         ])
         ->assertStatus(422)
         ->assertJsonPath('ok', false);
+});
+
+test('OCR-PDF via OpenRouter sends the file-parser plugin with the configured engine', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = seedModel('vision', 'openrouter', 'mistralai/mistral-ocr');
+    setDefault('ocr_pdf', $model);
+    AppSetting::setValue('admin_v2.ai.ocr_pdf.engine', 'cloudflare-ai');
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response([
+            'choices' => [['message' => ['content' => 'Extracted text body']]],
+        ]),
+    ]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'ocr_pdf',
+            'file' => UploadedFile::fake()->create('doc.pdf', 12, 'application/pdf'),
+        ])
+        ->assertOk()
+        ->assertJsonPath('ok', true)
+        ->assertJsonPath('text', 'Extracted text body');
+
+    Http::assertSent(function ($req) {
+        $plugin = $req['plugins'][0] ?? [];
+        $fileBlock = collect($req['messages'][0]['content'])->firstWhere('type', 'file');
+
+        return ($plugin['id'] ?? null) === 'file-parser'
+            && ($plugin['pdf']['engine'] ?? null) === 'cloudflare-ai'
+            && isset($fileBlock['file']['file_data']);
+    });
 });
 
 test('image generation routes through OpenRouter when the model is an OpenRouter model', function () {

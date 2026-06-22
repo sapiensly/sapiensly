@@ -93,12 +93,18 @@ class OcrDocumentTool implements ToolContract
 
         $fileBlock = $isImage
             ? OpenRouterClient::imageBlock($dataUrl)
-            : OpenRouterClient::fileBlock($dataUrl);
+            : OpenRouterClient::fileBlock($dataUrl, $attachment->original_name ?: 'document.pdf');
+
+        // PDFs route through the file-parser plugin with the admin-configured
+        // OCR engine (mistral-ocr / cloudflare-ai / native).
+        $extra = $isImage
+            ? []
+            : ['plugins' => OpenRouterClient::pdfPlugins(OpenRouterClient::configuredPdfEngine())];
 
         $response = $this->openRouter->chat($this->user, $model, [
             OpenRouterClient::textBlock(self::INSTRUCTIONS),
             $fileBlock,
-        ]);
+        ], $extra);
 
         return "Extracted text ({$model}):\n".OpenRouterClient::text($response);
     }

@@ -2170,5 +2170,10 @@
     "app_v2.playground.capdesc.vision": "Haz una pregunta sobre una imagen.",
     "app_v2.playground.capdesc.audio_recognition": "Transcribe un archivo de audio.",
     "app_v2.playground.capdesc.speech_generation": "Sintetiza voz a partir de texto.",
-    "app_v2.playground.capdesc.reranking": "Reordena documentos por relevancia a una consulta."
+    "app_v2.playground.capdesc.reranking": "Reordena documentos por relevancia a una consulta.",
+    "admin.ai.defaults.ocr_engine_label": "Motor PDF de OpenRouter",
+    "admin.ai.defaults.ocr_engine_hint": "Cómo procesa OpenRouter el PDF cuando el modelo de OCR es de OpenRouter.",
+    "admin.ai.defaults.ocr_engine.mistral-ocr": "Mistral OCR — PDFs escaneados / con imágenes",
+    "admin.ai.defaults.ocr_engine.cloudflare-ai": "Cloudflare AI — gratis, a markdown",
+    "admin.ai.defaults.ocr_engine.native": "Nativo — soporte de archivos del modelo"
 }
