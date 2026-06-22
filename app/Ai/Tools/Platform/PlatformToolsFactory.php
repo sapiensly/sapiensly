@@ -38,6 +38,9 @@ class PlatformToolsFactory
         'dismiss_workflow_proposal',
         'rollback_app',
         'test_tool_connection',
+        // Spawns a full chat AI turn (token spend + tools); keep it out of
+        // agent-initiated runs to avoid recursive/runaway turns.
+        'continue_chat',
     ];
 
     /** @var array<string, list<ToolContract>> */

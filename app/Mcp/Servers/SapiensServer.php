@@ -167,6 +167,11 @@ class SapiensServer extends Server
         Tools\Agents\InvokeAgentTool::class,
         Tools\Agents\ListConversationsTool::class,
         Tools\Agents\DeleteAgentTool::class,
+        // Chat history (search / retrieve / continue conversations).
+        Tools\Chats\ListChatsTool::class,
+        Tools\Chats\GetChatTool::class,
+        Tools\Chats\SearchChatMessagesTool::class,
+        Tools\Chats\ContinueChatTool::class,
     ];
 
     /** @var list<class-string> */
