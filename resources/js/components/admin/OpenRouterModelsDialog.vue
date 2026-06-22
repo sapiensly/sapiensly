@@ -67,6 +67,7 @@ const onlyFree = ref(false);
 const onlySelected = ref(false);
 const minContext = ref('0');
 const selectedProviders = ref<Set<string>>(new Set());
+const selectedOutputModalities = ref<Set<string>>(new Set());
 
 const contextOptions = [
     { value: '0', label: t('admin.ai.providers.filter_ctx_any') },
@@ -99,6 +100,29 @@ function isFree(m: OpenRouterModel): boolean {
 // model by what it produces.
 function outputTypes(m: OpenRouterModel): string[] {
     return (m.outputModalities ?? []).filter((o) => o !== 'text');
+}
+
+// Distinct output modalities across the loaded models, for the filter list.
+const outputModalityOptions = computed(() => {
+    const map = new Map<string, number>();
+    for (const m of models.value) {
+        for (const o of m.outputModalities ?? []) {
+            map.set(o, (map.get(o) ?? 0) + 1);
+        }
+    }
+    return [...map.entries()]
+        .map(([id, count]) => ({ id, count }))
+        .sort((a, b) => a.id.localeCompare(b.id));
+});
+
+function toggleOutputModality(id: string) {
+    const next = new Set(selectedOutputModalities.value);
+    if (next.has(id)) {
+        next.delete(id);
+    } else {
+        next.add(id);
+    }
+    selectedOutputModalities.value = next;
 }
 
 const INF = Number.POSITIVE_INFINITY;
@@ -141,6 +165,14 @@ const filtered = computed<OpenRouterModel[]>(() => {
         if (onlyFree.value && !isFree(m)) return false;
         if (onlySelected.value && !selected.value.has(m.id)) return false;
         if (providerSet.size && !providerSet.has(family(m))) return false;
+        if (
+            selectedOutputModalities.value.size &&
+            !(m.outputModalities ?? []).some((o) =>
+                selectedOutputModalities.value.has(o),
+            )
+        ) {
+            return false;
+        }
         if (min > 0 && (m.contextWindow ?? 0) < min) return false;
         return true;
     });
@@ -155,7 +187,8 @@ const activeFilterCount = computed(
         (onlyFree.value ? 1 : 0) +
         (onlySelected.value ? 1 : 0) +
         (minContext.value !== '0' ? 1 : 0) +
-        selectedProviders.value.size,
+        selectedProviders.value.size +
+        selectedOutputModalities.value.size,
 );
 
 function resetFilters() {
@@ -166,6 +199,7 @@ function resetFilters() {
     onlySelected.value = false;
     minContext.value = '0';
     selectedProviders.value = new Set();
+    selectedOutputModalities.value = new Set();
 }
 
 function toggleProvider(id: string) {
@@ -580,6 +614,29 @@ const booleanFilters = [
                                 class="pointer-events-none"
                             />
                             {{ t(`admin.ai.providers.filter_${f.key}`) }}
+                        </div>
+                    </div>
+
+                    <div v-if="outputModalityOptions.length" class="space-y-2">
+                        <Label class="text-[11px] text-ink-muted">
+                            {{ t('admin.ai.providers.filter_output') }}
+                        </Label>
+                        <div
+                            v-for="opt in outputModalityOptions"
+                            :key="opt.id"
+                            class="flex cursor-pointer items-center gap-2 text-xs text-ink"
+                            @click="toggleOutputModality(opt.id)"
+                        >
+                            <Checkbox
+                                :model-value="
+                                    selectedOutputModalities.has(opt.id)
+                                "
+                                class="pointer-events-none"
+                            />
+                            <span class="flex-1 truncate capitalize">{{
+                                opt.id
+                            }}</span>
+                            <span class="text-ink-subtle">{{ opt.count }}</span>
                         </div>
                     </div>
 

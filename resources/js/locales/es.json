@@ -2178,5 +2178,6 @@
     "app_v2.playground.cap.image_vision": "Image Vision",
     "app_v2.playground.capdesc.image_vision": "Extrae texto de una imagen o hazle una pregunta.",
     "admin.ai.defaults.price_per_mtok": "Precio input / output por 1M tokens",
-    "admin.ai.providers.badge_output": "Tipo de salida"
+    "admin.ai.providers.badge_output": "Tipo de salida",
+    "admin.ai.providers.filter_output": "Modalidad de salida"
 }
