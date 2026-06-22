@@ -75,6 +75,34 @@ it('rejects an invalid manifest with InvalidManifestException', function () {
     expect($app->refresh()->current_version_id)->toBeNull();
 });
 
+it('spells out the specific failures in the exception message, not just a count', function () {
+    $app = App::factory()->create();
+    $bad = manifest();
+    // A single, clean fault: a valid object with one invalid field type — the
+    // validator names exactly what's wrong instead of just counting.
+    $bad['objects'] = [[
+        'id' => 'obj_'.strtolower((string) Illuminate\Support\Str::ulid()),
+        'slug' => 'ideas',
+        'name' => 'Ideas',
+        'fields' => [[
+            'id' => 'fld_'.strtolower((string) Illuminate\Support\Str::ulid()),
+            'slug' => 'title',
+            'name' => 'Title',
+            'type' => 'not_a_real_type',
+        ]],
+    ]];
+
+    try {
+        makeService()->createVersion($app, $bad);
+        $this->fail('Expected InvalidManifestException.');
+    } catch (InvalidManifestException $e) {
+        expect($e->getMessage())
+            ->toContain('Manifest validation failed')
+            ->toContain('/objects/0/fields/0')
+            ->and($e->result->errors)->not->toBeEmpty();
+    }
+});
+
 it('returns the active manifest via getActiveManifest', function () {
     $app = App::factory()->create();
     $service = makeService();
