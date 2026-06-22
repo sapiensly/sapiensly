@@ -260,6 +260,20 @@ class ChatAiService
                 $usedSources['Knowledge base'] = $ragChunks.' passage'.($ragChunks === 1 ? '' : 's');
             }
 
+            // Web search is a provider-native tool only some gateways implement
+            // (Anthropic/Gemini/OpenAI). On others (e.g. OpenRouter) attaching it
+            // throws and would kill the whole turn — so drop it and note it
+            // instead of blocking.
+            if ($webSearch && ! $this->providerSupportsWebSearch($provider)) {
+                Log::info('Web search unsupported by provider; continuing without it', [
+                    'chat_id' => $chat->id,
+                    'provider' => $provider->value,
+                    'model' => $resolvedModel,
+                ]);
+                $usedSources['Web search'] = 'not available on this model — skipped';
+                $webSearch = false;
+            }
+
             $tools = $this->buildChatTools($toolIds, $user, $webSearch);
 
             // Cross-agent consultation: when other agents exist, the running
@@ -433,6 +447,16 @@ class ChatAiService
      * @param  array<int, string>  $toolIds
      * @return array<int, object>
      */
+    /**
+     * Whether the resolved provider's gateway implements the native WebSearch
+     * provider tool. Only Anthropic, Gemini and OpenAI do; every other gateway
+     * (OpenRouter, Groq, DeepSeek, …) throws when a provider tool is attached.
+     */
+    private function providerSupportsWebSearch(Lab $provider): bool
+    {
+        return in_array($provider, [Lab::Anthropic, Lab::Gemini, Lab::OpenAI], true);
+    }
+
     private function buildChatTools(array $toolIds, ?User $user, bool $webSearch): array
     {
         $tools = [];
