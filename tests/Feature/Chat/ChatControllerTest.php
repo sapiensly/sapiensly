@@ -1,16 +1,33 @@
 <?php
 
 use App\Jobs\RunChatAiJob;
+use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
+use App\Models\AppSetting;
 use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Models\User;
+use App\Services\AiProviderService;
 use Illuminate\Contracts\Broadcasting\Broadcaster;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
     AiProvider::factory()->anthropic()->forUser($this->user)->create(['status' => 'active']);
+});
+
+it('defaults the chat model to the admin-configured chat default', function () {
+    $models = app(AiProviderService::class)->getEnabledChatModels($this->user);
+    // Pick a model that isn't first, to prove the default isn't just models[0].
+    $target = end($models)['value'];
+    $row = AiCatalogModel::where('model_id', $target)->where('capability', 'chat')->firstOrFail();
+    AppSetting::setValue('admin_v2.ai.chat.primary', $row->id);
+
+    $this->actingAs($this->user)
+        ->get(route('chat.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('defaultModel', $target)
+            ->where('defaultModel', fn ($v) => $v !== $models[0]['value']));
 });
 
 it('renders the chat index with models and the user\'s chats', function () {

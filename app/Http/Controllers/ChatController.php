@@ -11,6 +11,7 @@ use App\Models\ChatMessage;
 use App\Models\ChatProject;
 use App\Models\KnowledgeBase;
 use App\Models\Tool;
+use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Chat\MentionParser;
 use App\Services\Chat\MultiAgentDispatcher;
@@ -213,11 +214,19 @@ class ChatController extends Controller
                 'web_search' => (bool) $agent->web_search,
             ]);
 
+        // Default to the admin-configured chat model (admin AI > Defaults) when it
+        // is among the enabled models; otherwise fall back to the first enabled one.
+        $chatDefault = app(AiDefaults::class)->model('chat');
+        $modelValues = array_column($models, 'value');
+        $defaultModel = in_array($chatDefault, $modelValues, true)
+            ? $chatDefault
+            : ($models[0]['value'] ?? null);
+
         return [
             'chats' => $chats,
             'projects' => $projects,
             'models' => $models,
-            'defaultModel' => $models[0]['value'] ?? null,
+            'defaultModel' => $defaultModel,
             'knowledgeBases' => $knowledgeBases,
             'tools' => $tools,
             'agents' => $agents,
