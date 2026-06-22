@@ -8,10 +8,14 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Per-module default AI models. Each product module (chat, the automatic
- * short/large summary helpers, app builder, flows, chatbots) has a configurable
- * PRIMARY model and a FALLBACK, set on the admin AI > Defaults screen and stored
- * in `app_settings` under `admin_v2.ai.{module}.{primary|fallback}`.
+ * Per-category default AI models. Each category — a product module (chat, the
+ * automatic short/large summary helpers, app builder, flows, chatbots) or a
+ * specialized capability handler (embeddings, coding, OCR, image generation,
+ * vision, transcription, speech, reranking) — has a configurable PRIMARY model
+ * and a FALLBACK, set on the admin AI > Defaults screen and stored in
+ * `app_settings` under `admin_v2.ai.{module}.{primary|fallback}`. Each category
+ * maps to a model {@see self::CAPABILITY} that constrains which catalog models
+ * are eligible.
  *
  * The stored value is an `ai_catalog_models` id (what the admin select submits);
  * the runtime needs the model string. So this service speaks two shapes:
@@ -26,14 +30,83 @@ use Throwable;
  */
 class AiDefaults
 {
-    /** @var list<string> */
-    public const MODULES = ['chat', 'summary_short', 'summary_large', 'builder', 'flows', 'chatbots'];
+    /**
+     * Configurable default categories. The first group are product modules (all
+     * chat models); the second are specialized capability handlers an agent can
+     * hand off to (image generation, OCR, transcription, TTS, reranking, …).
+     *
+     * @var list<string>
+     */
+    public const MODULES = [
+        // Product modules (chat capability).
+        'chat', 'summary_short', 'summary_large', 'builder', 'flows', 'chatbots',
+        // Specialized capability handlers.
+        'embeddings', 'coding', 'ocr_pdf', 'ocr_image', 'image_generation',
+        'vision', 'audio_recognition', 'speech_generation', 'reranking',
+    ];
 
     /**
-     * Last-resort model when nothing is configured for a module. Mirrors the
-     * constants the modules carried before defaults were wired in.
+     * The specialized capability categories (everything beyond the chat product
+     * modules). These are what an agent can hand off to.
+     *
+     * @var list<string>
+     */
+    public const CAPABILITY_MODULES = [
+        'embeddings', 'coding', 'ocr_pdf', 'ocr_image', 'image_generation',
+        'vision', 'audio_recognition', 'speech_generation', 'reranking',
+    ];
+
+    /**
+     * Maps each category to the `ai_catalog_models.capability` whose models are
+     * eligible for it. Drives both the admin picker filtering and validation.
+     *
+     * @var array<string, string>
+     */
+    public const CAPABILITY = [
+        'chat' => 'chat',
+        'summary_short' => 'chat',
+        'summary_large' => 'chat',
+        'builder' => 'chat',
+        'flows' => 'chat',
+        'chatbots' => 'chat',
+        'embeddings' => 'embeddings',
+        'coding' => 'chat',
+        'ocr_pdf' => 'vision',
+        'ocr_image' => 'vision',
+        'image_generation' => 'image',
+        'vision' => 'vision',
+        'audio_recognition' => 'transcription',
+        'speech_generation' => 'speech',
+        'reranking' => 'rerank',
+    ];
+
+    /**
+     * Last-resort model per capability when nothing is configured. Only `chat`
+     * has a safe universal fallback; specialized capabilities resolve to null
+     * (the consumer reports "not configured" rather than calling a wrong model).
+     *
+     * @var array<string, string>
+     */
+    public const HARD_DEFAULTS = [
+        'chat' => 'claude-haiku-4-5-20251001',
+    ];
+
+    /**
+     * Last-resort model for chat modules. Kept for the chat call sites.
      */
     public const HARD_DEFAULT = 'claude-haiku-4-5-20251001';
+
+    /** The capability whose models are eligible for a category. */
+    public function capabilityFor(string $module): string
+    {
+        return self::CAPABILITY[$module] ?? 'chat';
+    }
+
+    /** The last-resort model string for a category, or null when none is safe. */
+    public function hardDefaultFor(string $module): ?string
+    {
+        return self::HARD_DEFAULTS[$this->capabilityFor($module)] ?? null;
+    }
 
     public function key(string $module, string $slot): string
     {
@@ -77,15 +150,34 @@ class AiDefaults
 
     /**
      * The single model string to use (no error-retry): explicit → primary →
-     * fallback → hard default.
+     * fallback → hard default. Throws when a specialized capability category has
+     * nothing configured (no safe hard default) — callers that tolerate an
+     * unconfigured handler should use {@see self::modelOrNull()}.
      */
     public function model(string $module, ?string $explicit = null): string
     {
-        return $this->candidates($module, $explicit)[0];
+        $candidate = $this->candidates($module, $explicit)[0] ?? null;
+
+        if ($candidate === null) {
+            throw new RuntimeException("No model is configured for '{$module}'. Set one in admin AI > Defaults.");
+        }
+
+        return $candidate;
     }
 
     /**
-     * The ordered, de-duplicated candidate model strings for a module.
+     * Like {@see self::model()} but returns null instead of throwing when nothing
+     * is configured. Use for specialized capabilities that may be unconfigured.
+     */
+    public function modelOrNull(string $module, ?string $explicit = null): ?string
+    {
+        return $this->candidates($module, $explicit)[0] ?? null;
+    }
+
+    /**
+     * The ordered, de-duplicated candidate model strings for a module. The final
+     * fallback is the category's capability hard default (null for specialized
+     * capabilities, so they yield an empty list when unconfigured).
      *
      * @return list<string>
      */
@@ -97,7 +189,7 @@ class AiDefaults
             $explicit,
             $this->primary($module),
             $this->fallback($module),
-            self::HARD_DEFAULT,
+            $this->hardDefaultFor($module),
         ])));
     }
 

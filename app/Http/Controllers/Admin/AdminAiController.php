@@ -34,10 +34,20 @@ class AdminAiController extends Controller
 
     public function defaults(): Response
     {
+        // Enabled models grouped by the capability each default category needs,
+        // so the picker only offers eligible models per category.
+        $capabilities = array_values(array_unique(array_values(AiDefaults::CAPABILITY)));
+        $modelsByCapability = [];
+        foreach ($capabilities as $capability) {
+            $modelsByCapability[$capability] = $this->serialiseEnabledModels($capability);
+        }
+
         return Inertia::render('admin/Ai/Defaults', [
             'modules' => AiDefaults::MODULES,
+            'capabilityModules' => AiDefaults::CAPABILITY_MODULES,
+            'moduleCapability' => AiDefaults::CAPABILITY,
             'defaults' => $this->readDefaults(),
-            'chatModels' => $this->serialiseEnabledModels('chat'),
+            'modelsByCapability' => $modelsByCapability,
         ]);
     }
 
@@ -125,12 +135,13 @@ class AdminAiController extends Controller
 
     public function updateDefaults(Request $request): RedirectResponse
     {
-        // Per-module primary/fallback chat model. The value is an
-        // ai_catalog_models id (what the select submits); null/'' clears it.
-        $modelRule = ['sometimes', 'nullable', Rule::exists('ai_catalog_models', 'id')->where('capability', 'chat')];
-
+        // Per-category primary/fallback model. The value is an ai_catalog_models
+        // id (what the select submits); null/'' clears it. Each category only
+        // accepts models of its capability (chat, embeddings, vision, image, …).
         $rules = [];
         foreach (AiDefaults::MODULES as $module) {
+            $capability = $this->aiDefaults->capabilityFor($module);
+            $modelRule = ['sometimes', 'nullable', Rule::exists('ai_catalog_models', 'id')->where('capability', $capability)];
             $rules["{$module}.primary"] = $modelRule;
             $rules["{$module}.fallback"] = $modelRule;
         }
@@ -369,10 +380,8 @@ class AdminAiController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function serialiseEnabledModels(string $kind): array
+    private function serialiseEnabledModels(string $capability): array
     {
-        $capability = $kind === 'embedding' ? 'embeddings' : 'chat';
-
         return AiCatalogModel::query()
             ->where('capability', $capability)
             ->where('is_enabled', true)
@@ -394,7 +403,9 @@ class AdminAiController extends Controller
             'driver' => $model->driver,
             'name' => $model->model_id,
             'label' => $model->label,
-            // Map ai_catalog_models.capability → handoff's AiModelKind.
+            // Raw capability (chat, embeddings, vision, image, transcription, …).
+            'capability' => $model->capability,
+            // Legacy coarse kind kept for the catalog view's chat/embedding split.
             'kind' => $model->capability === 'embeddings' ? 'embedding' : 'chat',
             // Group catalog rows by direct provider vs broker/aggregator.
             'providerKind' => $this->aiProviderService->isBroker($model->driver) ? 'broker' : 'direct',

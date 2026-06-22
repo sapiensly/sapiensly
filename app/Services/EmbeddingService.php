@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\KnowledgeBase;
 use App\Models\User;
+use App\Services\Ai\AiCapabilities;
 use App\Services\Ai\AiUsageRecorder;
 use Laravel\Ai\Embeddings;
 use Laravel\Ai\Enums\Lab;
@@ -36,6 +37,16 @@ class EmbeddingService
                     $provider ??= $defaultEmbeddings->driver;
                     $model ??= $embeddingModels[0]['id'];
                 }
+            }
+        }
+
+        // Fall back to the platform default configured in admin AI > Defaults →
+        // Embeddings before the hardcoded config() default.
+        if ($model === null) {
+            $handler = app(AiCapabilities::class)->resolve('embeddings');
+            if ($handler !== null) {
+                $provider ??= $handler['driver'];
+                $model = $handler['model'];
             }
         }
 

@@ -3,6 +3,11 @@
 namespace App\Services\Chat;
 
 use App\Ai\ChatAgent;
+use App\Ai\Tools\Capabilities\GenerateImageTool;
+use App\Ai\Tools\Capabilities\OcrDocumentTool;
+use App\Ai\Tools\Capabilities\RerankTool;
+use App\Ai\Tools\Capabilities\SynthesizeSpeechTool;
+use App\Ai\Tools\Capabilities\TranscribeAudioTool;
 use App\Ai\Tools\Chat\ConsultAgentTool;
 use App\Ai\Tools\DynamicTool;
 use App\Ai\Tools\McpServerTool;
@@ -19,10 +24,12 @@ use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Models\Tool;
 use App\Models\User;
+use App\Services\Ai\AiCapabilities;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
+use App\Services\CloudProviderService;
 use App\Services\RetrievalService;
 use App\Services\ToolConfigService;
 use App\Services\ToolExecutionService;
@@ -297,6 +304,17 @@ class ChatAiService
                         new ConsultAgentTool($chat, $placeholder, $user, $agent, $consultationLog),
                     );
                     $instructions .= "\n\n".$this->consultationGuidance($roster);
+                }
+
+                // Specialized-capability handoff: expose a tool per capability
+                // that has a model configured in admin AI > Defaults, and tell the
+                // agent which task each one handles and through which tool.
+                $configuredTools = app(AiCapabilities::class)->configuredTools();
+                if ($configuredTools !== []) {
+                    foreach ($this->capabilityTools($configuredTools, $user, $placeholder) as $name => $tool) {
+                        $tools[] = RuntimeToolFactory::named($name, $tool);
+                    }
+                    $instructions .= "\n\n".$this->capabilityGuidance($configuredTools);
                 }
             }
 
@@ -632,6 +650,68 @@ class ChatAiService
             {$list}
 
             When a question genuinely falls in another agent's domain, or a decision warrants a second opinion, consult one with the `consult_agent` tool (agent_id, question, visible). Set `visible: true` to show the user that agent's full answer as a card; leave it false to consult quietly and fold the answer into your reply. Briefly tell the user when you're consulting someone and why. Do NOT consult for routine questions you can answer yourself, and never consult more than necessary.
+            PROMPT;
+    }
+
+    /**
+     * Instantiate the capability tools that are configured, keyed by tool name.
+     *
+     * @param  array<string, array{tool: string, categories: list<string>, model: string, provider: Lab}>  $configured
+     * @return array<string, ToolContract>
+     */
+    private function capabilityTools(array $configured, User $user, ChatMessage $placeholder): array
+    {
+        $caps = app(AiCapabilities::class);
+        $cloud = app(CloudProviderService::class);
+
+        $factories = [
+            'generate_image' => fn () => new GenerateImageTool($user, $caps, $cloud),
+            'synthesize_speech' => fn () => new SynthesizeSpeechTool($user, $caps, $cloud),
+            'rerank' => fn () => new RerankTool($caps),
+            'transcribe_audio' => fn () => new TranscribeAudioTool($placeholder, $caps),
+            'ocr_document' => fn () => new OcrDocumentTool($placeholder, $caps),
+        ];
+
+        $tools = [];
+        foreach (array_keys($configured) as $name) {
+            if (isset($factories[$name])) {
+                $tools[$name] = $factories[$name]();
+            }
+        }
+
+        return $tools;
+    }
+
+    /**
+     * Tell the agent which specialized tasks it can hand off and through which
+     * tool — listing only capabilities with a model configured in Defaults.
+     *
+     * @param  array<string, array{tool: string, categories: list<string>, model: string, provider: Lab}>  $configured
+     */
+    private function capabilityGuidance(array $configured): string
+    {
+        $descriptions = [
+            'generate_image' => 'generate an image from a description',
+            'synthesize_speech' => 'turn text into spoken audio',
+            'rerank' => 'reorder candidate passages by relevance to a query',
+            'transcribe_audio' => 'transcribe an attached audio file to text',
+            'ocr_document' => 'extract text from an attached PDF or image (incl. scans)',
+        ];
+
+        $lines = [];
+        foreach ($configured as $name => $info) {
+            $what = $descriptions[$name] ?? $name;
+            $lines[] = "- `{$name}` — {$what} (handled by {$info['model']}).";
+        }
+        $list = implode("\n", $lines);
+
+        return <<<PROMPT
+            ## Specialized capabilities
+            Beyond chatting, you can hand off specialized tasks to dedicated models by calling these tools:
+
+            {$list}
+
+            Call the matching tool when the user's request needs that capability; don't attempt these tasks yourself. If a needed capability isn't listed, it isn't configured — tell the user it's unavailable rather than guessing.
             PROMPT;
     }
 

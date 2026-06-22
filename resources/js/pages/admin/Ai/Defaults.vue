@@ -11,11 +11,24 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { Bot, Cpu, FileText, ScrollText, Sparkles, Zap } from '@/lib/admin/icons';
+import {
+    Bot,
+    Brain,
+    Cpu,
+    Database,
+    Eye,
+    FileText,
+    NavStack,
+    Radio,
+    ScrollText,
+    Sparkles,
+    Star,
+    Zap,
+} from '@/lib/admin/icons';
 import type { AiModel, UUID } from '@/lib/admin/types';
 import { Head, router } from '@inertiajs/vue3';
 import type { Component } from 'vue';
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 type Slot = 'primary' | 'fallback';
@@ -23,8 +36,10 @@ type ModuleDefaults = { primary: UUID | null; fallback: UUID | null };
 
 interface Props {
     modules: string[];
+    capabilityModules: string[];
+    moduleCapability: Record<string, string>;
     defaults: Record<string, ModuleDefaults>;
-    chatModels: AiModel[];
+    modelsByCapability: Record<string, AiModel[]>;
 }
 
 const props = defineProps<Props>();
@@ -38,13 +53,29 @@ const moduleMeta: Record<string, { icon: Component; tint?: string }> = {
     builder: { icon: Cpu, tint: 'var(--sp-accent-cyan)' },
     flows: { icon: Zap, tint: 'var(--sp-spectrum-indigo)' },
     chatbots: { icon: Bot, tint: 'var(--sp-spectrum-magenta)' },
+    embeddings: { icon: Database, tint: 'var(--sp-spectrum-cyan)' },
+    coding: { icon: Brain, tint: 'var(--sp-accent-cyan)' },
+    ocr_pdf: { icon: FileText, tint: 'var(--sp-spectrum-indigo)' },
+    ocr_image: { icon: Eye, tint: 'var(--sp-spectrum-indigo)' },
+    image_generation: { icon: Star, tint: 'var(--sp-spectrum-magenta)' },
+    vision: { icon: Eye, tint: 'var(--sp-spectrum-cyan)' },
+    audio_recognition: { icon: Radio, tint: 'var(--sp-spectrum-indigo)' },
+    speech_generation: { icon: Radio, tint: 'var(--sp-spectrum-magenta)' },
+    reranking: { icon: NavStack, tint: 'var(--sp-accent-cyan)' },
 };
+
+// The product modules (everything that isn't a specialized capability handler).
+const productModules = computed(() =>
+    props.modules.filter((m) => !props.capabilityModules.includes(m)),
+);
+
+function modelsFor(module: string): AiModel[] {
+    return props.modelsByCapability[props.moduleCapability[module]] ?? [];
+}
 
 // Local editable copy so a failed PATCH can roll back to the last good value.
 const form = reactive<Record<string, ModuleDefaults>>(
-    Object.fromEntries(
-        props.modules.map((m) => [m, { ...props.defaults[m] }]),
-    ),
+    Object.fromEntries(props.modules.map((m) => [m, { ...props.defaults[m] }])),
 );
 
 function updateModel(module: string, slot: Slot, id: string | null) {
@@ -85,61 +116,87 @@ function updateModel(module: string, slot: Slot, id: string | null) {
 
             <AiTabs current="defaults" />
 
-            <div class="grid gap-4 xl:grid-cols-2">
-                <SettingsCard
-                    v-for="m in modules"
-                    :key="m"
-                    :icon="moduleMeta[m]?.icon ?? Sparkles"
-                    :tint="moduleMeta[m]?.tint"
-                    :title="t(`admin.ai.defaults.module.${m}.title`)"
-                    :description="t(`admin.ai.defaults.module.${m}.description`)"
+            <section
+                v-for="group in [
+                    { key: 'product', items: productModules },
+                    { key: 'capabilities', items: capabilityModules },
+                ]"
+                :key="group.key"
+                class="space-y-3"
+            >
+                <h2
+                    class="text-xs font-semibold tracking-wide text-ink-muted uppercase"
                 >
-                    <div
-                        v-for="slot in (['primary', 'fallback'] as const)"
-                        :key="slot"
-                        class="space-y-1.5"
+                    {{ t(`admin.ai.defaults.group.${group.key}`) }}
+                </h2>
+                <div class="grid gap-4 xl:grid-cols-2">
+                    <SettingsCard
+                        v-for="m in group.items"
+                        :key="m"
+                        :icon="moduleMeta[m]?.icon ?? Sparkles"
+                        :tint="moduleMeta[m]?.tint"
+                        :title="t(`admin.ai.defaults.module.${m}.title`)"
+                        :description="
+                            t(`admin.ai.defaults.module.${m}.description`)
+                        "
                     >
-                        <Label class="text-xs text-ink-muted">
-                            {{ t(`admin.ai.defaults.${slot}_label`) }}
-                        </Label>
-                        <Select
-                            :model-value="form[m][slot] ?? ''"
-                            @update:model-value="
-                                (v) =>
-                                    updateModel(
-                                        m,
-                                        slot,
-                                        v === '' ? null : String(v),
-                                    )
-                            "
+                        <div
+                            v-for="slot in ['primary', 'fallback'] as const"
+                            :key="slot"
+                            class="space-y-1.5"
                         >
-                            <SelectTrigger class="h-9 border-medium bg-surface">
-                                <SelectValue
-                                    :placeholder="t('admin.ai.defaults.unset')"
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem
-                                    v-for="model in chatModels"
-                                    :key="model.id"
-                                    :value="model.id"
+                            <Label class="text-xs text-ink-muted">
+                                {{ t(`admin.ai.defaults.${slot}_label`) }}
+                            </Label>
+                            <Select
+                                :model-value="form[m][slot] ?? ''"
+                                @update:model-value="
+                                    (v) =>
+                                        updateModel(
+                                            m,
+                                            slot,
+                                            v === '' ? null : String(v),
+                                        )
+                                "
+                            >
+                                <SelectTrigger
+                                    class="h-9 border-medium bg-surface"
                                 >
-                                    <span class="inline-flex items-center gap-2">
-                                        <DriverChip
-                                            :driver="model.driver"
-                                            size="sm"
-                                        />
-                                        {{ model.name }}
-                                    </span>
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <p class="text-[10px] text-ink-subtle">
-                        {{ t('admin.ai.defaults.fallback_hint') }}
-                    </p>
-                </SettingsCard>
-            </div>
+                                    <SelectValue
+                                        :placeholder="
+                                            modelsFor(m).length
+                                                ? t('admin.ai.defaults.unset')
+                                                : t(
+                                                      'admin.ai.defaults.no_models',
+                                                  )
+                                        "
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="model in modelsFor(m)"
+                                        :key="model.id"
+                                        :value="model.id"
+                                    >
+                                        <span
+                                            class="inline-flex items-center gap-2"
+                                        >
+                                            <DriverChip
+                                                :driver="model.driver"
+                                                size="sm"
+                                            />
+                                            {{ model.name }}
+                                        </span>
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <p class="text-[10px] text-ink-subtle">
+                            {{ t('admin.ai.defaults.fallback_hint') }}
+                        </p>
+                    </SettingsCard>
+                </div>
+            </section>
         </div>
     </AdminLayout>
 </template>

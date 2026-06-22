@@ -18,26 +18,32 @@ class AiProviderService
      */
     public const MODEL_CATALOGS = [
         'anthropic' => [
-            ['id' => 'claude-sonnet-4-20250514', 'label' => 'Claude Sonnet 4', 'capabilities' => ['chat']],
-            ['id' => 'claude-sonnet-4-5-20250929', 'label' => 'Claude Sonnet 4.5', 'capabilities' => ['chat']],
-            ['id' => 'claude-opus-4-20250514', 'label' => 'Claude Opus 4', 'capabilities' => ['chat']],
-            ['id' => 'claude-haiku-4-5-20251001', 'label' => 'Claude Haiku 4.5', 'capabilities' => ['chat']],
+            ['id' => 'claude-sonnet-4-20250514', 'label' => 'Claude Sonnet 4', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'claude-sonnet-4-5-20250929', 'label' => 'Claude Sonnet 4.5', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'claude-opus-4-20250514', 'label' => 'Claude Opus 4', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'claude-haiku-4-5-20251001', 'label' => 'Claude Haiku 4.5', 'capabilities' => ['chat', 'vision']],
         ],
         'openai' => [
-            ['id' => 'gpt-4o', 'label' => 'GPT-4o', 'capabilities' => ['chat']],
-            ['id' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini', 'capabilities' => ['chat']],
+            ['id' => 'gpt-4o', 'label' => 'GPT-4o', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini', 'capabilities' => ['chat', 'vision']],
             ['id' => 'gpt-4-turbo', 'label' => 'GPT-4 Turbo', 'capabilities' => ['chat']],
             ['id' => 'text-embedding-3-small', 'label' => 'Embedding 3 Small', 'capabilities' => ['embeddings']],
             ['id' => 'text-embedding-3-large', 'label' => 'Embedding 3 Large', 'capabilities' => ['embeddings']],
+            ['id' => 'gpt-image-1', 'label' => 'GPT Image 1', 'capabilities' => ['image']],
+            ['id' => 'gpt-4o-transcribe', 'label' => 'GPT-4o Transcribe', 'capabilities' => ['transcription']],
+            ['id' => 'whisper-1', 'label' => 'Whisper', 'capabilities' => ['transcription']],
+            ['id' => 'gpt-4o-mini-tts', 'label' => 'GPT-4o Mini TTS', 'capabilities' => ['speech']],
+            ['id' => 'tts-1', 'label' => 'TTS 1', 'capabilities' => ['speech']],
         ],
         'azure' => [
-            ['id' => 'gpt-4o', 'label' => 'GPT-4o (Azure)', 'capabilities' => ['chat']],
-            ['id' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini (Azure)', 'capabilities' => ['chat']],
+            ['id' => 'gpt-4o', 'label' => 'GPT-4o (Azure)', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini (Azure)', 'capabilities' => ['chat', 'vision']],
             ['id' => 'text-embedding-3-small', 'label' => 'Embedding 3 Small (Azure)', 'capabilities' => ['embeddings']],
         ],
         'gemini' => [
-            ['id' => 'gemini-2.0-flash', 'label' => 'Gemini 2.0 Flash', 'capabilities' => ['chat']],
-            ['id' => 'gemini-2.5-pro-preview-05-06', 'label' => 'Gemini 2.5 Pro', 'capabilities' => ['chat']],
+            ['id' => 'gemini-2.0-flash', 'label' => 'Gemini 2.0 Flash', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'gemini-2.5-pro-preview-05-06', 'label' => 'Gemini 2.5 Pro', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'imagen-3.0-generate-002', 'label' => 'Imagen 3', 'capabilities' => ['image']],
         ],
         'mistral' => [
             ['id' => 'mistral-large-latest', 'label' => 'Mistral Large', 'capabilities' => ['chat']],
@@ -51,15 +57,19 @@ class AiProviderService
         'groq' => [
             ['id' => 'llama-3.3-70b-versatile', 'label' => 'Llama 3.3 70B', 'capabilities' => ['chat']],
             ['id' => 'llama-3.1-8b-instant', 'label' => 'Llama 3.1 8B', 'capabilities' => ['chat']],
+            ['id' => 'whisper-large-v3', 'label' => 'Whisper Large v3', 'capabilities' => ['transcription']],
+            ['id' => 'whisper-large-v3-turbo', 'label' => 'Whisper Large v3 Turbo', 'capabilities' => ['transcription']],
         ],
         'xai' => [
             ['id' => 'grok-3', 'label' => 'Grok 3', 'capabilities' => ['chat']],
             ['id' => 'grok-3-mini', 'label' => 'Grok 3 Mini', 'capabilities' => ['chat']],
+            ['id' => 'grok-2-image-1212', 'label' => 'Grok 2 Image', 'capabilities' => ['image']],
         ],
         'cohere' => [
             ['id' => 'command-r-plus', 'label' => 'Command R+', 'capabilities' => ['chat']],
             ['id' => 'command-r', 'label' => 'Command R', 'capabilities' => ['chat']],
             ['id' => 'embed-english-v3.0', 'label' => 'Embed English v3', 'capabilities' => ['embeddings']],
+            ['id' => 'rerank-v3.5', 'label' => 'Rerank v3.5', 'capabilities' => ['rerank']],
         ],
         'voyageai' => [
             ['id' => 'voyage-4-large', 'label' => 'Voyage 4 Large', 'capabilities' => ['embeddings']],
@@ -69,13 +79,19 @@ class AiProviderService
             ['id' => 'voyage-code-3', 'label' => 'Voyage Code 3', 'capabilities' => ['embeddings']],
             ['id' => 'voyage-finance-2', 'label' => 'Voyage Finance 2', 'capabilities' => ['embeddings']],
             ['id' => 'voyage-law-2', 'label' => 'Voyage Law 2', 'capabilities' => ['embeddings']],
+            ['id' => 'rerank-2.5', 'label' => 'Voyage Rerank 2.5', 'capabilities' => ['rerank']],
+            ['id' => 'rerank-2.5-lite', 'label' => 'Voyage Rerank 2.5 Lite', 'capabilities' => ['rerank']],
         ],
         'jina' => [
             ['id' => 'jina-embeddings-v3', 'label' => 'Jina Embeddings v3', 'capabilities' => ['embeddings']],
+            ['id' => 'jina-reranker-v2-base-multilingual', 'label' => 'Jina Reranker v2', 'capabilities' => ['rerank']],
         ],
         'ollama' => [],
         'openrouter' => [],
-        'eleven' => [],
+        'eleven' => [
+            ['id' => 'scribe_v1', 'label' => 'Scribe v1', 'capabilities' => ['transcription']],
+            ['id' => 'eleven_multilingual_v2', 'label' => 'Multilingual v2', 'capabilities' => ['speech']],
+        ],
     ];
 
     /**

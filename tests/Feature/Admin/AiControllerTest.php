@@ -4,6 +4,7 @@ use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
 use App\Models\AppSetting;
 use App\Models\User;
+use App\Services\Ai\AiDefaults;
 use Illuminate\Support\Facades\Http;
 use Spatie\Permission\Models\Role;
 
@@ -35,7 +36,7 @@ function seedEmbeddingModel(string $modelId = 'test-embedding-model-1'): AiCatal
     );
 }
 
-test('defaults tab renders per-module primary/fallback with enabled chat models', function () {
+test('defaults tab renders per-category primary/fallback with models grouped by capability', function () {
     $admin = sysadminForAi();
     seedChatModel();
 
@@ -44,12 +45,13 @@ test('defaults tab renders per-module primary/fallback with enabled chat models'
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('admin/Ai/Defaults')
-            ->has('modules', 6)
+            ->has('modules', count(AiDefaults::MODULES))
             ->has('defaults.chat')
             ->has('defaults.summary_short')
-            ->has('defaults.summary_large')
-            ->has('defaults.chatbots')
-            ->has('chatModels.0'));
+            ->has('defaults.embeddings')
+            ->has('defaults.image_generation')
+            ->where('moduleCapability.image_generation', 'image')
+            ->has('modelsByCapability.chat.0'));
 });
 
 test('catalog tab lists every catalog model', function () {
@@ -88,6 +90,47 @@ test('updateDefaults rejects a non-chat model as a module default', function () 
     $this->actingAs($admin)
         ->patch('/admin/ai/defaults', ['builder' => ['primary' => $embed->id]])
         ->assertSessionHasErrors(['builder.primary']);
+});
+
+function seedCapabilityModel(string $capability, string $driver, string $modelId): AiCatalogModel
+{
+    return AiCatalogModel::firstOrCreate(
+        ['driver' => $driver, 'model_id' => $modelId, 'capability' => $capability],
+        ['label' => $modelId, 'is_enabled' => true, 'sort_order' => 0],
+    );
+}
+
+test('updateDefaults saves an embeddings model for the embeddings category', function () {
+    $admin = sysadminForAi();
+    $embed = seedEmbeddingModel('emb-default-1');
+
+    $this->actingAs($admin)
+        ->patch('/admin/ai/defaults', ['embeddings' => ['primary' => $embed->id]])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect((string) AppSetting::getValue('admin_v2.ai.embeddings.primary'))->toBe((string) $embed->id);
+});
+
+test('updateDefaults accepts a vision model for the ocr_pdf category', function () {
+    $admin = sysadminForAi();
+    $vision = seedCapabilityModel('vision', 'anthropic', 'claude-vision-test');
+
+    $this->actingAs($admin)
+        ->patch('/admin/ai/defaults', ['ocr_pdf' => ['primary' => $vision->id]])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect((string) AppSetting::getValue('admin_v2.ai.ocr_pdf.primary'))->toBe((string) $vision->id);
+});
+
+test('updateDefaults rejects a chat model for the image_generation category', function () {
+    $admin = sysadminForAi();
+    $chat = seedChatModel('anthropic', 'not-an-image-model');
+
+    $this->actingAs($admin)
+        ->patch('/admin/ai/defaults', ['image_generation' => ['primary' => $chat->id]])
+        ->assertSessionHasErrors(['image_generation.primary']);
 });
 
 test('toggleModel flips is_enabled on the catalog row', function () {
@@ -553,9 +596,12 @@ test('syncProviderModels classifies openai models and skips non-text ones', func
         ->assertRedirect();
 
     $rows = AiCatalogModel::where('driver', 'openai')->get();
+    // Sync only registers text models (chat/embeddings); audio/image models are
+    // skipped — whisper-1 is only ever present as a seeded transcription row,
+    // never added as chat by sync, and dall-e-3 is not imported at all.
     expect($rows->where('model_id', 'gpt-4o')->where('capability', 'chat'))->toHaveCount(1)
         ->and($rows->where('model_id', 'text-embedding-3-small')->where('capability', 'embeddings'))->toHaveCount(1)
-        ->and($rows->where('model_id', 'whisper-1'))->toHaveCount(0)
+        ->and($rows->where('model_id', 'whisper-1')->where('capability', 'chat'))->toHaveCount(0)
         ->and($rows->where('model_id', 'dall-e-3'))->toHaveCount(0);
 });
 
