@@ -49,6 +49,11 @@ class SearchKnowledgeTool extends SapiensTool
             'chunks' => collect($result['chunks'])->map(fn ($c) => [
                 'content' => $c->content,
                 'knowledge_base_id' => $c->knowledge_base_id,
+                // Reranking score when the KB opted into reranking, else the
+                // vector cosine similarity (1 - distance).
+                'score' => isset($c->rerank_score)
+                    ? $c->rerank_score
+                    : (isset($c->distance) ? round(1 - (float) $c->distance, 4) : null),
             ])->values(),
         ]);
     }

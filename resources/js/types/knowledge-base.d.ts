@@ -16,6 +16,20 @@ export interface DocumentTypeOption {
 export interface KnowledgeBaseConfig {
     chunk_size?: number;
     chunk_overlap?: number;
+    rerank?: boolean;
+}
+
+export interface IngestionCostEstimate {
+    method: 'php' | 'ocr';
+    engine: string | null;
+    pages: number;
+    estimated_tokens: number;
+    embedding_model: string;
+    ocr_cost: number;
+    embedding_cost: number;
+    total_cost: number;
+    currency: string;
+    estimated: boolean;
 }
 
 export interface KnowledgeBaseDocument {

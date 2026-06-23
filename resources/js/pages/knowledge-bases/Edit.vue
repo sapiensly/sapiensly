@@ -6,6 +6,7 @@ import InputError from '@/components/InputError.vue';
 import KeywordsInput from '@/components/KeywordsInput.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { KnowledgeBase } from '@/types/knowledge-base';
@@ -28,6 +29,7 @@ const form = useForm({
     config: {
         chunk_size: props.knowledgeBase.config?.chunk_size ?? 1000,
         chunk_overlap: props.knowledgeBase.config?.chunk_overlap ?? 200,
+        rerank: props.knowledgeBase.config?.rerank ?? false,
     },
 });
 
@@ -111,7 +113,9 @@ const submit = () => {
                             <p class="text-[11px] text-ink-subtle">
                                 Number of characters per chunk (100–4000)
                             </p>
-                            <InputError :message="form.errors['config.chunk_size']" />
+                            <InputError
+                                :message="form.errors['config.chunk_size']"
+                            />
                         </div>
 
                         <div class="space-y-1.5">
@@ -127,8 +131,28 @@ const submit = () => {
                             <p class="text-[11px] text-ink-subtle">
                                 Overlap between chunks (0–500)
                             </p>
-                            <InputError :message="form.errors['config.chunk_overlap']" />
+                            <InputError
+                                :message="form.errors['config.chunk_overlap']"
+                            />
                         </div>
+                    </div>
+
+                    <div
+                        class="flex items-start justify-between gap-4 border-t border-medium pt-3"
+                    >
+                        <div class="space-y-0.5">
+                            <Label for="rerank">Reranking</Label>
+                            <p class="text-[11px] text-ink-subtle">
+                                Reorder retrieved chunks by relevance using the
+                                workspace's configured reranking model before
+                                answering. Improves accuracy; requires a rerank
+                                model set in admin AI &gt; Defaults.
+                            </p>
+                            <InputError
+                                :message="form.errors['config.rerank']"
+                            />
+                        </div>
+                        <Switch id="rerank" v-model="form.config.rerank" />
                     </div>
                 </SettingsCard>
 

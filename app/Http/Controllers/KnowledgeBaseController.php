@@ -13,7 +13,9 @@ use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Services\DocumentService;
 use App\Services\FolderService;
+use App\Services\IngestionCostEstimator;
 use App\Services\VectorStoreService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -182,6 +184,24 @@ class KnowledgeBaseController extends Controller
         ProcessDocumentForKnowledgeBase::dispatch($document, $knowledgeBase);
 
         return back()->with('success', __('Document reprocessing started.'));
+    }
+
+    /**
+     * Estimate the USD cost of ingesting a document into this knowledge base
+     * before processing it (OCR + embeddings). Returns JSON for the UI preview.
+     */
+    public function estimateCost(
+        Request $request,
+        KnowledgeBase $knowledgeBase,
+        Document $document,
+        IngestionCostEstimator $estimator,
+    ): JsonResponse {
+        $this->authorize('view', $knowledgeBase);
+        abort_unless($document->isVisibleTo($request->user()), 403);
+
+        return response()->json(
+            $estimator->estimateForDocument($document, $knowledgeBase)
+        );
     }
 
     public function detachDocument(Request $request, KnowledgeBase $knowledgeBase, Document $document, DocumentService $documentService): RedirectResponse

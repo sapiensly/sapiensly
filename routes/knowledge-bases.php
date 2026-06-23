@@ -27,4 +27,8 @@ Route::middleware([
         ->name('knowledge-bases.reprocess-document');
     Route::delete('knowledge-bases/{knowledge_base}/detach-document/{document}', [KnowledgeBaseController::class, 'detachDocument'])
         ->name('knowledge-bases.detach-document');
+
+    // Pre-flight ingestion cost estimate for a document against this KB (JSON).
+    Route::get('knowledge-bases/{knowledge_base}/documents/{document}/cost-estimate', [KnowledgeBaseController::class, 'estimateCost'])
+        ->name('knowledge-bases.documents.cost-estimate');
 });

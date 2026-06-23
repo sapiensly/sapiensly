@@ -54,20 +54,48 @@ class VectorStoreService
         }
 
         $connection = $this->connectionFor($kb);
+        $driver = $connection->getDriverName();
         $now = now();
 
-        $rows = array_map(fn (array $chunk) => [
-            'knowledge_base_id' => $kb->id,
-            'document_id' => $documentId,
-            'knowledge_base_document_id' => $knowledgeBaseDocumentId,
-            'content' => $chunk['content'],
-            'chunk_index' => $chunk['index'] ?? 0,
-            'metadata' => isset($chunk['metadata']) ? json_encode($chunk['metadata']) : null,
-            'embedding' => $this->serializeEmbedding($chunk['embedding'] ?? null),
-            'embedding_model' => $embeddingModel,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ], $chunks);
+        $rows = array_map(function (array $chunk) use ($kb, $documentId, $knowledgeBaseDocumentId, $embeddingModel, $now, $driver) {
+            $vector = $chunk['embedding'] ?? null;
+            $dimensions = is_array($vector) ? count($vector) : null;
+            $serialized = $this->serializeEmbedding($vector);
+
+            $row = [
+                'knowledge_base_id' => $kb->id,
+                'document_id' => $documentId,
+                'knowledge_base_document_id' => $knowledgeBaseDocumentId,
+                'content' => $chunk['content'],
+                'chunk_index' => $chunk['index'] ?? 0,
+                'metadata' => isset($chunk['metadata']) ? json_encode($chunk['metadata']) : null,
+                'embedding_model' => $embeddingModel,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+
+            // pgvector can only HNSW-index the fixed-dimension `embedding` column
+            // (and that index caps at 2000 dims). Vectors of any other dimension
+            // (e.g. text-embedding-3-large at 3072) go to the unindexed
+            // `embedding_alt` column instead; `embedding_dimensions` records the
+            // stored dimension so retrieval routes to the right column and never
+            // compares vectors of mismatched dimension. Non-pgsql drivers
+            // (dev/test placeholder) keep the single text `embedding` column.
+            if ($driver === 'pgsql') {
+                $row['embedding_dimensions'] = $dimensions;
+
+                if ($dimensions !== null && $dimensions !== VectorStoreSchema::VECTOR_DIMENSIONS) {
+                    $row['embedding'] = null;
+                    $row['embedding_alt'] = $serialized;
+                } else {
+                    $row['embedding'] = $serialized;
+                }
+            } else {
+                $row['embedding'] = $serialized;
+            }
+
+            return $row;
+        }, $chunks);
 
         $connection->transaction(function () use ($connection, $rows) {
             $connection->table(self::TABLE)->insert($rows);
@@ -181,6 +209,13 @@ class VectorStoreService
 
         $vectorString = '['.implode(',', $queryEmbedding).']';
         $distanceThreshold = 1 - $threshold;
+        $dimensions = count($queryEmbedding);
+
+        // Route to the column the query's dimension lives in: the indexed
+        // `embedding` column for the default dimension, the unindexed
+        // `embedding_alt` column otherwise. The whitelist of column names keeps
+        // the raw SQL injection-safe.
+        $column = $dimensions === VectorStoreSchema::VECTOR_DIMENSIONS ? 'embedding' : 'embedding_alt';
 
         $results = collect();
 
@@ -188,18 +223,22 @@ class VectorStoreService
             $driver = DB::connection($connectionName)->getDriverName();
 
             $query = KnowledgeBaseChunk::on($connectionName)
-                ->whereIn('knowledge_base_id', $kbIds)
-                ->whereNotNull('embedding');
+                ->whereIn('knowledge_base_id', $kbIds);
 
             if ($driver === 'pgsql') {
                 $query
-                    ->whereRaw('embedding <=> ? <= ?', [$vectorString, $distanceThreshold])
-                    ->selectRaw('*, embedding <=> ? as distance', [$vectorString])
-                    ->orderByRaw('embedding <=> ? ASC', [$vectorString]);
+                    ->whereNotNull($column)
+                    // The alt column may hold mixed dimensions across KBs; only
+                    // compare rows matching the query's dimension or pgvector's
+                    // `<=>` operator errors on a dimension mismatch.
+                    ->when($column === 'embedding_alt', fn ($q) => $q->where('embedding_dimensions', $dimensions))
+                    ->whereRaw("{$column} <=> ? <= ?", [$vectorString, $distanceThreshold])
+                    ->selectRaw("*, {$column} <=> ? as distance", [$vectorString])
+                    ->orderByRaw("{$column} <=> ? ASC", [$vectorString]);
             } else {
                 // Non-pgsql (dev/test): skip cosine distance and return
                 // whatever chunks exist so callers keep working.
-                $query->selectRaw('*, 0.0 as distance');
+                $query->whereNotNull('embedding')->selectRaw('*, 0.0 as distance');
             }
 
             $results = $results->concat($query->limit($topK)->get());

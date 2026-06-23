@@ -20,6 +20,8 @@ class AiCatalogModel extends Model
         'context_window',
         'input_price_per_mtok',
         'output_price_per_mtok',
+        'price_per_page',
+        'price_per_request',
         'is_enabled',
         'sort_order',
     ];
@@ -32,6 +34,8 @@ class AiCatalogModel extends Model
             'context_window' => 'integer',
             'input_price_per_mtok' => 'float',
             'output_price_per_mtok' => 'float',
+            'price_per_page' => 'float',
+            'price_per_request' => 'float',
         ];
     }
 

@@ -147,6 +147,8 @@ class SapiensServer extends Server
         Tools\Data\DeleteRecordTool::class,
         Tools\Data\GenerateDemoDataTool::class,
         Tools\Data\SearchKnowledgeTool::class,
+        Tools\Data\EstimateIngestionCostTool::class,
+        Tools\Data\EstimateRetrievalCostTool::class,
         // Knowledge bases.
         Tools\Data\ListKnowledgeBasesTool::class,
         Tools\Data\GetKnowledgeBaseTool::class,

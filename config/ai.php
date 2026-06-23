@@ -40,6 +40,41 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Document Ingestion
+    |--------------------------------------------------------------------------
+    |
+    | Tunables for the PDF ingestion pipeline: how a PDF is classified as
+    | digital (cheap PHP text extraction) vs scanned (OCR), the heuristic that
+    | picks the OCR engine, the chat model paired with the OpenRouter file-parser
+    | plugin, and the average tokens-per-page used to estimate cost before a
+    | document is processed.
+    |
+    */
+
+    'ingestion' => [
+        // A PDF page counts as "having text" at or above this many characters.
+        'min_chars_per_text_page' => 100,
+        // If fewer than this fraction of pages have text, treat the PDF as scanned → OCR.
+        'scanned_coverage_threshold' => 0.6,
+
+        // OCR engine heuristic (auto): pick the cheap engine only for high-volume,
+        // simple scans; otherwise default to the higher-quality engine.
+        'ocr' => [
+            'default_engine' => 'mistral-ocr',
+            'cheap_engine' => 'cloudflare-ai',
+            'bulk_pages' => 30,                 // "high volume" from here up
+            'simple_bytes_per_page' => 120000,  // <= this ≈ a simple text scan
+            // Chat model paired with the OpenRouter file-parser plugin for extraction.
+            'model' => env('AI_INGESTION_OCR_MODEL', 'openai/gpt-4o-mini'),
+        ],
+
+        // Cost-estimation assumptions (pre-flight, before any text is extracted).
+        'avg_tokens_per_page' => 600,
+        'avg_chunk_tokens' => 200,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Prompt Caching
     |--------------------------------------------------------------------------
     |

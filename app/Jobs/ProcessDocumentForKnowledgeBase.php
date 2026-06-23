@@ -2,16 +2,21 @@
 
 namespace App\Jobs;
 
+use App\Enums\DocumentType;
 use App\Enums\EmbeddingStatus;
 use App\Enums\KnowledgeBaseStatus;
 use App\Events\DocumentStatusChanged;
 use App\Models\Document;
 use App\Models\KnowledgeBase;
+use App\Models\User;
+use App\Services\Ai\AiPricing;
 use App\Services\ChunkingService;
 use App\Services\CloudProviderService;
 use App\Services\DocumentParserService;
 use App\Services\DocumentService;
 use App\Services\EmbeddingService;
+use App\Services\OcrExtractionService;
+use App\Services\PdfIngestionPlanner;
 use App\Services\VectorStoreService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -50,6 +55,9 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
         DocumentService $documentService,
         CloudProviderService $cloudProviderService,
         VectorStoreService $vectorStoreService,
+        PdfIngestionPlanner $pdfPlanner,
+        OcrExtractionService $ocr,
+        AiPricing $pricing,
     ): void {
         $document = $this->document;
         $knowledgeBase = $this->knowledgeBase;
@@ -71,7 +79,8 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
 
             // Parse document content from the resolved tenant storage disk
             Log::info("Parsing document: {$document->id}");
-            $content = $this->parseDocument($document, $parser, $cloudProviderService);
+            $parsed = $this->parseDocument($document, $knowledgeBase, $parser, $cloudProviderService, $pdfPlanner, $ocr);
+            $content = $parsed['text'];
 
             if (empty(trim($content))) {
                 throw new \RuntimeException('Document content is empty');
@@ -126,8 +135,21 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
                 documentId: $document->id,
             );
 
-            // Update pivot status to ready
-            $this->updatePivotStatus(EmbeddingStatus::Ready);
+            // Record the actual ingestion cost on the pivot: OCR (per page, from
+            // the plan) plus embeddings (per estimated token at the KB's model).
+            $embeddingTokens = (int) ceil(array_sum(array_map('mb_strlen', $chunkTexts)) / 4);
+            $embeddingPrice = $pricing->pricesFor($embeddingModel);
+            $embeddingCost = $embeddingPrice !== null
+                ? $embeddingTokens * ($embeddingPrice['input'] / 1_000_000)
+                : 0.0;
+            $totalCost = round(($parsed['ocr_cost'] ?? 0.0) + $embeddingCost, 6);
+
+            // Update pivot status to ready, stamping the ingestion outcome.
+            $this->updatePivotStatus(EmbeddingStatus::Ready, null, [
+                'ingestion_cost' => $totalCost,
+                'extraction_method' => $parsed['method'],
+                'page_count' => $parsed['pages'],
+            ]);
 
             // Update knowledge base counts and status
             $this->updateKnowledgeBaseCounts($knowledgeBase, $vectorStoreService);
@@ -175,13 +197,19 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
      * Inline-authored documents short-circuit: their content lives on the model
      * directly so we hand it to the parser without any disk round-trip.
      */
+    /**
+     * @return array{text: string, method: string, pages: int, ocr_cost: float}
+     */
     private function parseDocument(
         Document $document,
+        KnowledgeBase $knowledgeBase,
         DocumentParserService $parser,
         CloudProviderService $cloudProviderService,
-    ): string {
+        PdfIngestionPlanner $pdfPlanner,
+        OcrExtractionService $ocr,
+    ): array {
         if ($document->isInline()) {
-            return (string) $document->body;
+            return ['text' => (string) $document->body, 'method' => 'php', 'pages' => 0, 'ocr_cost' => 0.0];
         }
 
         if (! $document->file_path) {
@@ -194,15 +222,26 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
             throw new \RuntimeException("Document file not found: {$document->file_path}");
         }
 
-        // Download to temp file for parsing
-        $extension = $document->type->extension();
-        $tempFile = tempnam(sys_get_temp_dir(), 'doc_').'.'.$extension;
+        $content = $storage->get($document->file_path);
+
+        // PDFs are routed through the planner: digital PDFs extract in-process,
+        // scanned ones go to OCR with a heuristically-chosen engine.
+        if ($document->type === DocumentType::Pdf) {
+            return $this->parsePdf($document, $knowledgeBase, $content, $pdfPlanner, $ocr);
+        }
+
+        // Other types: download to temp file and parse in-process.
+        $tempFile = tempnam(sys_get_temp_dir(), 'doc_').'.'.$document->type->extension();
 
         try {
-            $content = $storage->get($document->file_path);
             file_put_contents($tempFile, $content);
 
-            return $parser->parseFile($tempFile, $document->type);
+            return [
+                'text' => $parser->parseFile($tempFile, $document->type),
+                'method' => 'php',
+                'pages' => 0,
+                'ocr_cost' => 0.0,
+            ];
         } finally {
             if (file_exists($tempFile)) {
                 unlink($tempFile);
@@ -211,15 +250,78 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
     }
 
     /**
+     * Extract a PDF's text via the optimal route: in-process text extraction for
+     * digital PDFs (free), OCR for scanned/image PDFs (per-page cost, metered).
+     *
+     * @return array{text: string, method: string, pages: int, ocr_cost: float}
+     */
+    private function parsePdf(
+        Document $document,
+        KnowledgeBase $knowledgeBase,
+        string $content,
+        PdfIngestionPlanner $pdfPlanner,
+        OcrExtractionService $ocr,
+    ): array {
+        $tempFile = tempnam(sys_get_temp_dir(), 'doc_').'.pdf';
+
+        try {
+            file_put_contents($tempFile, $content);
+            $fileSize = (int) ($document->file_size ?: strlen($content));
+            $override = $knowledgeBase->config['ocr_engine'] ?? null;
+
+            $plan = $pdfPlanner->plan($tempFile, $fileSize, $override);
+
+            if (! $plan->usesOcr()) {
+                Log::info("PDF {$document->id}: digital, {$plan->profile->pages} pages, extracted in-process");
+
+                return ['text' => $plan->profile->extractedText, 'method' => 'php', 'pages' => $plan->profile->pages, 'ocr_cost' => 0.0];
+            }
+
+            Log::info("PDF {$document->id}: scanned, OCR via {$plan->engine} ({$plan->profile->pages} pages)");
+
+            $result = $ocr->extract(
+                $content,
+                $document->original_filename ?: 'document.pdf',
+                (string) $plan->engine,
+                $plan->profile->pages,
+                $this->resolveOwner($document),
+            );
+
+            return ['text' => $result['text'], 'method' => 'ocr', 'pages' => $result['pages'], 'ocr_cost' => $result['cost']];
+        } finally {
+            if (file_exists($tempFile)) {
+                unlink($tempFile);
+            }
+        }
+    }
+
+    /**
+     * The user whose OpenRouter credentials/spend the OCR call is attributed to.
+     */
+    private function resolveOwner(Document $document): User
+    {
+        $owner = $document->user_id ? User::find($document->user_id) : null;
+
+        if ($owner === null) {
+            throw new \RuntimeException("Cannot resolve an owner for document {$document->id} to run OCR.");
+        }
+
+        return $owner;
+    }
+
+    /**
      * Update the pivot table status.
      */
-    private function updatePivotStatus(EmbeddingStatus $status, ?string $errorMessage = null): void
+    /**
+     * @param  array<string, mixed>  $extra  extra pivot columns (e.g. ingestion_cost)
+     */
+    private function updatePivotStatus(EmbeddingStatus $status, ?string $errorMessage = null, array $extra = []): void
     {
         $this->document->knowledgeBases()->updateExistingPivot($this->knowledgeBase->id, [
             'embedding_status' => $status->value,
             'error_message' => $errorMessage,
             'updated_at' => now(),
-        ]);
+        ] + $extra);
     }
 
     /**

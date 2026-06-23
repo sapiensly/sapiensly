@@ -37,6 +37,7 @@ class AiUsageRecorder
         ?Usage $usage,
         string $status = 'success',
         bool $estimated = false,
+        ?float $cost = null,
     ): void {
         try {
             $usage ??= new Usage;
@@ -53,7 +54,8 @@ class AiUsageRecorder
                 'cache_read_tokens' => $usage->cacheReadInputTokens,
                 'cache_write_tokens' => $usage->cacheWriteInputTokens,
                 'reasoning_tokens' => $usage->reasoningTokens,
-                'cost' => $this->pricing->costFor($model, $usage),
+                // A precomputed cost (e.g. per-page OCR) overrides token pricing.
+                'cost' => $cost ?? $this->pricing->costFor($model, $usage),
                 'estimated' => $estimated,
                 'status' => $status,
             ];

@@ -21,6 +21,7 @@ class StoreKnowledgeBaseRequest extends FormRequest
             'config' => ['nullable', 'array'],
             'config.chunk_size' => ['nullable', 'integer', 'min:100', 'max:4000'],
             'config.chunk_overlap' => ['nullable', 'integer', 'min:0', 'max:500'],
+            'config.rerank' => ['nullable', 'boolean'],
         ];
     }
 }

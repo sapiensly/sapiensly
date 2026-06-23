@@ -67,7 +67,7 @@ class Document extends Model
     public function knowledgeBases(): BelongsToMany
     {
         return $this->belongsToMany(KnowledgeBase::class, 'document_knowledge_base')
-            ->withPivot(['embedding_status', 'error_message'])
+            ->withPivot(['embedding_status', 'error_message', 'ingestion_cost', 'extraction_method', 'page_count'])
             ->withTimestamps();
     }
 

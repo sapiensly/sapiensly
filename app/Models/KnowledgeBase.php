@@ -70,7 +70,7 @@ class KnowledgeBase extends Model
     public function attachedDocuments(): BelongsToMany
     {
         return $this->belongsToMany(Document::class, 'document_knowledge_base')
-            ->withPivot(['embedding_status', 'error_message'])
+            ->withPivot(['embedding_status', 'error_message', 'ingestion_cost', 'extraction_method', 'page_count'])
             ->withTimestamps();
     }
 

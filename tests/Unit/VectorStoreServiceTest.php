@@ -321,3 +321,68 @@ test('searchSimilar silently drops KB ids that no longer exist', function () {
     $results = $this->service->searchSimilar(['kb_ghost_id'], [0.1], 5, 0.7);
     expect($results)->toBeEmpty();
 });
+
+test('insertChunks routes non-default-dimension vectors to the alt column', function () {
+    $kb = makeKbForTest();
+    $doc = makeDocumentForKb($kb);
+
+    // A 3-dim vector (not the indexed 1536) must land in embedding_alt, leaving
+    // the indexed embedding column null, with the dimension recorded.
+    $this->service->insertChunks(
+        $kb,
+        [['content' => 'hd', 'index' => 0, 'metadata' => null, 'embedding' => [0.1, 0.2, 0.3]]],
+        'text-embedding-3-large',
+        documentId: $doc->id,
+    );
+
+    $row = DB::table('knowledge_base_chunks')->where('knowledge_base_id', $kb->id)->first();
+
+    expect($row->embedding)->toBeNull()
+        ->and($row->embedding_alt)->not->toBeNull()
+        ->and((int) $row->embedding_dimensions)->toBe(3);
+});
+
+test('insertChunks records the default dimension and keeps the indexed column', function () {
+    $kb = makeKbForTest();
+    $doc = makeDocumentForKb($kb);
+
+    $this->service->insertChunks(
+        $kb,
+        [['content' => 'std', 'index' => 0, 'metadata' => null, 'embedding' => dummyEmbedding(0.1)]],
+        'text-embedding-3-small',
+        documentId: $doc->id,
+    );
+
+    $row = DB::table('knowledge_base_chunks')->where('knowledge_base_id', $kb->id)->first();
+
+    expect($row->embedding)->not->toBeNull()
+        ->and($row->embedding_alt)->toBeNull()
+        ->and((int) $row->embedding_dimensions)->toBe(1536);
+});
+
+test('searchSimilar routes by query dimension and never mixes vector spaces', function () {
+    $kb = makeKbForTest();
+    $doc = makeDocumentForKb($kb);
+
+    // One default-dimension chunk and one 3-dim chunk in the same KB.
+    $this->service->insertChunks(
+        $kb,
+        [['content' => 'std', 'index' => 0, 'metadata' => null, 'embedding' => dummyEmbedding(0.1)]],
+        'text-embedding-3-small',
+        documentId: $doc->id,
+    );
+    $this->service->insertChunks(
+        $kb,
+        [['content' => 'hd', 'index' => 1, 'metadata' => null, 'embedding' => [0.1, 0.2, 0.3]]],
+        'text-embedding-3-large',
+        documentId: $doc->id,
+    );
+
+    // A 3-dim query only sees the alt-column chunk...
+    $alt = $this->service->searchSimilar([$kb->id], [0.1, 0.2, 0.3], 10, -1.0);
+    expect($alt->pluck('content')->all())->toBe(['hd']);
+
+    // ...and a 1536-dim query only sees the indexed-column chunk.
+    $std = $this->service->searchSimilar([$kb->id], dummyEmbedding(0.1), 10, -1.0);
+    expect($std->pluck('content')->all())->toBe(['std']);
+});

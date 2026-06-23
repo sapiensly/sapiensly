@@ -151,6 +151,9 @@ class VectorStoreSchema
             $table->unsignedInteger('chunk_index');
             $table->json('metadata')->nullable();
             $table->string('embedding_model')->nullable();
+            // Dimension of the stored vector, used to route similarity searches
+            // to the matching embedding column (see createEmbeddingColumn).
+            $table->smallInteger('embedding_dimensions')->nullable();
             $table->timestamps();
 
             $table->index(['knowledge_base_id', 'chunk_index']);
@@ -161,6 +164,7 @@ class VectorStoreSchema
     private function createEmbeddingColumn(Connection $connection): void
     {
         if ($connection->getDriverName() === 'pgsql') {
+            // Fixed-dimension, HNSW-indexed column for the default dimension.
             $connection->statement(sprintf(
                 'ALTER TABLE %s ADD COLUMN embedding vector(%d)',
                 self::TABLE,
@@ -169,6 +173,14 @@ class VectorStoreSchema
             $connection->statement(
                 'CREATE INDEX knowledge_base_chunks_embedding_idx ON knowledge_base_chunks USING hnsw (embedding vector_cosine_ops)',
             );
+
+            // Dimension-agnostic column for any other embedding dimension
+            // (pgvector cannot HNSW-index a column without a fixed dimension, so
+            // these rows fall back to exact cosine scan, scoped by dimension).
+            $connection->statement(sprintf(
+                'ALTER TABLE %s ADD COLUMN embedding_alt vector',
+                self::TABLE,
+            ));
 
             return;
         }

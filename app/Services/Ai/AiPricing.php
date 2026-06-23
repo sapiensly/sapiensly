@@ -48,6 +48,42 @@ class AiPricing
     }
 
     /**
+     * USD cost of OCR-ing a document of $pages pages with the given engine
+     * (per-page priced — mistral-ocr, cloudflare-ai). Unpriced engine ⇒ 0.
+     */
+    public function costForPages(string $model, int $pages): float
+    {
+        return max(0, $pages) * ($this->pricePerPage($model) ?? 0.0);
+    }
+
+    /**
+     * USD cost of reranking. Search-priced models (e.g. Cohere) bill per query;
+     * token-priced models (e.g. Jina, Voyage) bill on the input tokens of the
+     * query + candidate documents. Whichever the catalog declares is applied.
+     */
+    public function costForRerank(string $model, int $searches, int $inputTokens): float
+    {
+        $perRequest = $this->pricePerRequest($model);
+        if ($perRequest !== null) {
+            return max(0, $searches) * $perRequest;
+        }
+
+        $price = $this->pricesFor($model);
+
+        return $price === null ? 0.0 : max(0, $inputTokens) * ($price['input'] / 1_000_000);
+    }
+
+    public function pricePerPage(string $model): ?float
+    {
+        return $this->unitPriceMap()['page'][$model] ?? null;
+    }
+
+    public function pricePerRequest(string $model): ?float
+    {
+        return $this->unitPriceMap()['request'][$model] ?? null;
+    }
+
+    /**
      * @return array<string, array{input: float, output: float}>
      */
     private function priceMap(): array
@@ -62,6 +98,32 @@ class AiPricing
                     'output' => (float) ($m->output_price_per_mtok ?? 0),
                 ])
                 ->all();
+        });
+    }
+
+    /**
+     * Per-page and per-request prices keyed by model id.
+     *
+     * @return array{page: array<string, float>, request: array<string, float>}
+     */
+    private function unitPriceMap(): array
+    {
+        return Cache::remember('ai_unit_pricing_map', self::PRICE_CACHE_TTL, function (): array {
+            $map = ['page' => [], 'request' => []];
+
+            AiCatalogModel::query()
+                ->where(fn ($q) => $q->whereNotNull('price_per_page')->orWhereNotNull('price_per_request'))
+                ->get(['model_id', 'price_per_page', 'price_per_request'])
+                ->each(function (AiCatalogModel $m) use (&$map): void {
+                    if ($m->price_per_page !== null) {
+                        $map['page'][$m->model_id] = (float) $m->price_per_page;
+                    }
+                    if ($m->price_per_request !== null) {
+                        $map['request'][$m->model_id] = (float) $m->price_per_request;
+                    }
+                });
+
+            return $map;
         });
     }
 }
