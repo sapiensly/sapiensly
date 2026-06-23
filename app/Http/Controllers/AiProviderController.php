@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Enums\Visibility;
 use App\Models\AiProvider;
+use App\Models\User;
 use App\Services\AiProviderService;
+use App\Services\KnowledgeBaseReindexer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -127,6 +129,10 @@ class AiProviderController extends Controller
             'is_default_embeddings' => $makeDefaultEmbeddings ? true : $provider->is_default_embeddings,
         ]);
 
+        if ($makeDefaultEmbeddings) {
+            $this->reindexStaleKnowledgeBases($user);
+        }
+
         return to_route('system.ai-providers.index');
     }
 
@@ -244,7 +250,13 @@ class AiProviderController extends Controller
             }
         }
 
+        $becomesDefaultEmbeddings = ($validated['is_default_embeddings'] ?? false) && ! $aiProvider->is_default_embeddings;
+
         $aiProvider->update($updateData);
+
+        if ($becomesDefaultEmbeddings) {
+            $this->reindexStaleKnowledgeBases($user);
+        }
 
         return to_route('system.ai-providers.index');
     }
@@ -285,9 +297,25 @@ class AiProviderController extends Controller
 
         $user = $request->user();
 
+        $wasDefaultEmbeddings = $aiProvider->is_default_embeddings;
+
         AiProvider::forAccountContext($user)->update(['is_default_embeddings' => false]);
         $aiProvider->update(['is_default_embeddings' => true]);
 
+        if (! $wasDefaultEmbeddings) {
+            $this->reindexStaleKnowledgeBases($user);
+        }
+
         return back();
+    }
+
+    /**
+     * Re-embed every knowledge base whose chunks no longer match the user's
+     * current embedding model. Triggered after the default embeddings provider
+     * changes, since that retroactively changes the model each KB resolves to.
+     */
+    private function reindexStaleKnowledgeBases(User $user): void
+    {
+        app(KnowledgeBaseReindexer::class)->reprocessStaleForUser($user);
     }
 }

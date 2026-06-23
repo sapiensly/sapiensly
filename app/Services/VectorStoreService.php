@@ -166,6 +166,24 @@ class VectorStoreService
     }
 
     /**
+     * The distinct embedding model ids the knowledge base's stored chunks were
+     * embedded with. Used to detect when a KB's resolved embedding model has
+     * drifted from its chunks (a different vector space) so it can be reindexed.
+     *
+     * @return list<string>
+     */
+    public function storedEmbeddingModels(KnowledgeBase $kb): array
+    {
+        return $this->connectionFor($kb)
+            ->table(self::TABLE)
+            ->where('knowledge_base_id', $kb->id)
+            ->whereNotNull('embedding_model')
+            ->distinct()
+            ->pluck('embedding_model')
+            ->all();
+    }
+
+    /**
      * Retrieve the most similar chunks across one or more knowledge bases.
      * KB ids are grouped by their resolved database connection, each group is
      * queried independently (so tenants on their own PostgreSQL hit only their
