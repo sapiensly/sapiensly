@@ -33,6 +33,9 @@ export interface AskKbResult {
         reranked: boolean;
         rerank_model: string | null;
         embedding_model: string;
+        stored_embedding_models: string[];
+        stale: boolean;
+        min_similarity: number;
         chunks: AskKbChunk[];
     };
     timing_ms: {

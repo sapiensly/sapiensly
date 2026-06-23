@@ -203,22 +203,28 @@ class KnowledgeBaseController extends Controller
         RetrievalService $retrieval,
         AiProviderService $providers,
         AiCapabilities $capabilities,
+        VectorStoreService $vectorStore,
     ): JsonResponse {
         $this->authorize('view', $knowledgeBase);
 
         $validated = $request->validate([
             'query' => ['required', 'string', 'max:2000'],
             'top_k' => ['sometimes', 'integer', 'min:1', 'max:20'],
+            'min_similarity' => ['sometimes', 'numeric', 'min:0', 'max:1'],
         ]);
 
         $providers->applyRuntimeConfig($request->user());
 
         $query = $validated['query'];
         $topK = $validated['top_k'] ?? 6;
+        // Debug tool: with no explicit floor, always return the nearest top-K
+        // chunks (threshold -1 ⇒ no similarity filter) so QA sees what's there
+        // and its scores. Production retrieval uses ~0.5.
+        $threshold = isset($validated['min_similarity']) ? (float) $validated['min_similarity'] : -1.0;
 
         // Retrieval — scoped to THIS knowledge base only.
         $startRetrieval = microtime(true);
-        $result = $retrieval->retrieve($query, [$knowledgeBase->id], topK: $topK, threshold: 0.5);
+        $result = $retrieval->retrieve($query, [$knowledgeBase->id], topK: $topK, threshold: $threshold);
         $retrievalMs = (microtime(true) - $startRetrieval) * 1000;
 
         $resultChunks = collect($result['chunks']);
@@ -235,6 +241,13 @@ class KnowledgeBaseController extends Controller
             'rerank_score' => isset($c->rerank_score) ? round((float) $c->rerank_score, 4) : null,
             'snippet' => Str::limit(trim((string) $c->content), 280),
         ])->values();
+
+        // Diagnostics: detect when the KB's chunks were embedded with a model
+        // other than the one queries now resolve to — a different vector space,
+        // which makes retrieval return nothing until the KB is reprocessed.
+        $embeddingModel = EmbeddingService::forKnowledgeBase($knowledgeBase)->getModel();
+        $storedModels = $vectorStore->storedEmbeddingModels($knowledgeBase);
+        $stale = $storedModels !== [] && (count($storedModels) > 1 || $storedModels[0] !== $embeddingModel);
 
         // Generation — answer strictly from the retrieved context.
         $context = (string) $result['context'];
@@ -259,7 +272,10 @@ class KnowledgeBaseController extends Controller
                 'chunk_count' => $result['chunk_count'],
                 'reranked' => $reranked,
                 'rerank_model' => $reranked ? ($capabilities->resolve('reranking')['model'] ?? null) : null,
-                'embedding_model' => EmbeddingService::forKnowledgeBase($knowledgeBase)->getModel(),
+                'embedding_model' => $embeddingModel,
+                'stored_embedding_models' => $storedModels,
+                'stale' => $stale,
+                'min_similarity' => $threshold,
                 'chunks' => $chunks,
             ],
             'timing_ms' => [

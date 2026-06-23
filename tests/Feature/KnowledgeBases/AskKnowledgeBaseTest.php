@@ -45,7 +45,7 @@ it('answers using only this KB and returns retrieval diagnostics + timings', fun
         ->assertOk()
         ->assertJsonStructure([
             'answer',
-            'retrieval' => ['chunk_count', 'reranked', 'rerank_model', 'embedding_model', 'chunks'],
+            'retrieval' => ['chunk_count', 'reranked', 'rerank_model', 'embedding_model', 'stored_embedding_models', 'stale', 'chunks'],
             'timing_ms' => ['retrieval', 'generation', 'total'],
         ]);
 

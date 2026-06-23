@@ -526,6 +526,26 @@ onBeforeUnmount(() => {
                                 {{ askResult.answer }}
                             </div>
 
+                            <!-- Embedding-model drift: chunks live in a different
+                                 vector space than queries → retrieval won't match. -->
+                            <p
+                                v-if="askResult.retrieval.stale"
+                                class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                            >
+                                ⚠ This KB's chunks were embedded with
+                                <strong>{{
+                                    askResult.retrieval.stored_embedding_models.join(
+                                        ', ',
+                                    )
+                                }}</strong>
+                                but queries now use
+                                <strong>{{
+                                    askResult.retrieval.embedding_model
+                                }}</strong>
+                                — a different vector space. Re-process this
+                                knowledge base's documents to fix retrieval.
+                            </p>
+
                             <div
                                 class="flex flex-wrap items-center gap-2 text-xs"
                             >
@@ -599,8 +619,8 @@ onBeforeUnmount(() => {
                                 </div>
                             </div>
                             <p v-else class="text-xs text-ink-subtle">
-                                No chunks matched — the answer falls back to
-                                "not in this knowledge base".
+                                No chunks returned — the knowledge base has no
+                                embedded content yet, or it needs re-processing.
                             </p>
                         </div>
                     </CardContent>
