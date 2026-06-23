@@ -617,7 +617,9 @@ const confirmAttach = () => {
                                                 <DropdownMenuItem
                                                     v-if="
                                                         doc.embedding_status ===
-                                                        'failed'
+                                                            'ready' ||
+                                                        doc.embedding_status ===
+                                                            'failed'
                                                     "
                                                     @click="
                                                         reprocessDocument(doc)
@@ -626,7 +628,12 @@ const confirmAttach = () => {
                                                     <RefreshCw
                                                         class="mr-2 h-4 w-4"
                                                     />
-                                                    Retry Processing
+                                                    {{
+                                                        doc.embedding_status ===
+                                                        'failed'
+                                                            ? 'Retry Processing'
+                                                            : 'Re-process'
+                                                    }}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                     class="text-destructive focus:text-destructive"
