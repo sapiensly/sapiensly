@@ -30,6 +30,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Textarea } from '@/components/ui/textarea';
 import echo from '@/echo';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
@@ -38,6 +39,7 @@ import type {
     VisibilityOption,
 } from '@/types/document';
 import type {
+    AskKbResult,
     DocumentTypeOption,
     IngestionCostEstimate,
     KnowledgeBase,
@@ -45,6 +47,7 @@ import type {
 } from '@/types/knowledge-base';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
+    Clock,
     FileText,
     FolderPlus,
     Loader2,
@@ -52,9 +55,12 @@ import {
     Pencil,
     Plus,
     RefreshCw,
+    Send,
+    Sparkles,
     Trash2,
     Upload,
 } from '@lucide/vue';
+import axios from 'axios';
 import { computed, onBeforeUnmount, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -334,6 +340,57 @@ const confirmAttach = () => {
         { preserveScroll: true },
     );
 };
+
+// --- Ask your KB (single-KB QA / retrieval debug) ---
+const askQuery = ref('');
+const askLoading = ref(false);
+const askError = ref<string | null>(null);
+const askResult = ref<AskKbResult | null>(null);
+const askElapsedMs = ref(0);
+let askTimer: number | null = null;
+
+const formatMs = (ms: number): string =>
+    ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms)}ms`;
+
+const submitAsk = async () => {
+    const q = askQuery.value.trim();
+    if (!q || askLoading.value) return;
+
+    askLoading.value = true;
+    askError.value = null;
+    askResult.value = null;
+    askElapsedMs.value = 0;
+
+    const started = performance.now();
+    askTimer = window.setInterval(() => {
+        askElapsedMs.value = performance.now() - started;
+    }, 100);
+
+    try {
+        const res = await axios.post(
+            KnowledgeBaseController.ask({
+                knowledge_base: props.knowledgeBase.id,
+            }).url,
+            { query: q },
+        );
+        askResult.value = res.data as AskKbResult;
+    } catch (e: unknown) {
+        const err = e as { response?: { data?: { message?: string } } };
+        askError.value =
+            err.response?.data?.message ??
+            'Failed to query the knowledge base.';
+    } finally {
+        askLoading.value = false;
+        if (askTimer) {
+            clearInterval(askTimer);
+            askTimer = null;
+        }
+    }
+};
+
+onBeforeUnmount(() => {
+    if (askTimer) clearInterval(askTimer);
+});
 </script>
 
 <template>
@@ -415,6 +472,140 @@ const confirmAttach = () => {
             </div>
 
             <div class="space-y-8">
+                <!-- Ask your KB: single-KB QA for testing/debugging retrieval -->
+                <Card>
+                    <CardHeader>
+                        <CardTitle class="flex items-center gap-2">
+                            <Sparkles class="h-4 w-4" />
+                            Ask your KB
+                        </CardTitle>
+                        <CardDescription>
+                            Test retrieval — answers come only from this
+                            knowledge base, with timing and retrieval details
+                            for each question.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent class="space-y-3">
+                        <div class="flex gap-2">
+                            <Textarea
+                                v-model="askQuery"
+                                rows="2"
+                                placeholder="Ask a question about this knowledge base…"
+                                class="flex-1"
+                                @keydown.enter.exact.prevent="submitAsk"
+                            />
+                            <Button
+                                :disabled="!askQuery.trim() || askLoading"
+                                @click="submitAsk"
+                            >
+                                <Loader2
+                                    v-if="askLoading"
+                                    class="mr-2 h-4 w-4 animate-spin"
+                                />
+                                <Send v-else class="mr-2 h-4 w-4" />
+                                Ask
+                            </Button>
+                        </div>
+
+                        <div
+                            v-if="askLoading"
+                            class="flex items-center gap-2 text-sm text-ink-subtle"
+                        >
+                            <Clock class="h-4 w-4" />
+                            {{ (askElapsedMs / 1000).toFixed(1) }}s
+                        </div>
+
+                        <p v-if="askError" class="text-sm text-destructive">
+                            {{ askError }}
+                        </p>
+
+                        <div v-if="askResult" class="space-y-3">
+                            <div
+                                class="rounded-md border border-medium bg-surface p-3 text-sm whitespace-pre-wrap"
+                            >
+                                {{ askResult.answer }}
+                            </div>
+
+                            <div
+                                class="flex flex-wrap items-center gap-2 text-xs"
+                            >
+                                <Badge variant="secondary">
+                                    total
+                                    {{ formatMs(askResult.timing_ms.total) }}
+                                </Badge>
+                                <Badge variant="outline">
+                                    retrieval
+                                    {{
+                                        formatMs(askResult.timing_ms.retrieval)
+                                    }}
+                                </Badge>
+                                <Badge variant="outline">
+                                    generation
+                                    {{
+                                        formatMs(askResult.timing_ms.generation)
+                                    }}
+                                </Badge>
+                                <Badge variant="outline">
+                                    {{ askResult.retrieval.chunk_count }} chunks
+                                </Badge>
+                                <Badge
+                                    v-if="askResult.retrieval.reranked"
+                                    variant="default"
+                                >
+                                    reranked{{
+                                        askResult.retrieval.rerank_model
+                                            ? ` · ${askResult.retrieval.rerank_model}`
+                                            : ''
+                                    }}
+                                </Badge>
+                                <Badge variant="outline">
+                                    {{ askResult.retrieval.embedding_model }}
+                                </Badge>
+                            </div>
+
+                            <div
+                                v-if="askResult.retrieval.chunks.length"
+                                class="space-y-2"
+                            >
+                                <p class="text-xs font-medium text-ink-muted">
+                                    Retrieved context
+                                </p>
+                                <div
+                                    v-for="(chunk, i) in askResult.retrieval
+                                        .chunks"
+                                    :key="i"
+                                    class="rounded-md border border-medium px-3 py-2 text-xs"
+                                >
+                                    <div
+                                        class="mb-1 flex items-center justify-between gap-2 text-ink-subtle"
+                                    >
+                                        <span class="truncate font-medium">{{
+                                            chunk.source
+                                        }}</span>
+                                        <span class="shrink-0 tabular-nums">
+                                            <template
+                                                v-if="
+                                                    chunk.rerank_score !== null
+                                                "
+                                                >rerank
+                                                {{ chunk.rerank_score }} ·
+                                            </template>
+                                            sim {{ chunk.similarity ?? '—' }}
+                                        </span>
+                                    </div>
+                                    <p class="text-ink-muted">
+                                        {{ chunk.snippet }}
+                                    </p>
+                                </div>
+                            </div>
+                            <p v-else class="text-xs text-ink-subtle">
+                                No chunks matched — the answer falls back to
+                                "not in this knowledge base".
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <Card>
                     <CardHeader>
                         <CardTitle>{{

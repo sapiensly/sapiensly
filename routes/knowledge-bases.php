@@ -31,4 +31,8 @@ Route::middleware([
     // Pre-flight ingestion cost estimate for a document against this KB (JSON).
     Route::get('knowledge-bases/{knowledge_base}/documents/{document}/cost-estimate', [KnowledgeBaseController::class, 'estimateCost'])
         ->name('knowledge-bases.documents.cost-estimate');
+
+    // Single-KB QA for testing/debugging retrieval (JSON).
+    Route::post('knowledge-bases/{knowledge_base}/ask', [KnowledgeBaseController::class, 'ask'])
+        ->name('knowledge-bases.ask');
 });

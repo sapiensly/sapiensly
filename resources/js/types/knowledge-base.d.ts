@@ -19,6 +19,29 @@ export interface KnowledgeBaseConfig {
     rerank?: boolean;
 }
 
+export interface AskKbChunk {
+    source: string;
+    similarity: number | null;
+    rerank_score: number | null;
+    snippet: string;
+}
+
+export interface AskKbResult {
+    answer: string;
+    retrieval: {
+        chunk_count: number;
+        reranked: boolean;
+        rerank_model: string | null;
+        embedding_model: string;
+        chunks: AskKbChunk[];
+    };
+    timing_ms: {
+        retrieval: number;
+        generation: number;
+        total: number;
+    };
+}
+
 export interface IngestionCostEstimate {
     method: 'php' | 'ocr';
     engine: string | null;

@@ -11,15 +11,21 @@ use App\Http\Requests\KnowledgeBase\UpdateKnowledgeBaseRequest;
 use App\Jobs\ProcessDocumentForKnowledgeBase;
 use App\Models\Document;
 use App\Models\KnowledgeBase;
+use App\Services\Ai\AiCapabilities;
+use App\Services\AiProviderService;
 use App\Services\DocumentService;
+use App\Services\EmbeddingService;
 use App\Services\FolderService;
 use App\Services\IngestionCostEstimator;
+use App\Services\RetrievalService;
 use App\Services\VectorStoreService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Ai\AnonymousAgent;
 
 class KnowledgeBaseController extends Controller
 {
@@ -184,6 +190,84 @@ class KnowledgeBaseController extends Controller
         ProcessDocumentForKnowledgeBase::dispatch($document, $knowledgeBase);
 
         return back()->with('success', __('Document reprocessing started.'));
+    }
+
+    /**
+     * Single-KB QA used for testing/debugging retrieval: retrieve ONLY from this
+     * knowledge base, answer strictly from that context, and return the answer
+     * alongside retrieval diagnostics (chunks + scores, models, timings).
+     */
+    public function ask(
+        Request $request,
+        KnowledgeBase $knowledgeBase,
+        RetrievalService $retrieval,
+        AiProviderService $providers,
+        AiCapabilities $capabilities,
+    ): JsonResponse {
+        $this->authorize('view', $knowledgeBase);
+
+        $validated = $request->validate([
+            'query' => ['required', 'string', 'max:2000'],
+            'top_k' => ['sometimes', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        $providers->applyRuntimeConfig($request->user());
+
+        $query = $validated['query'];
+        $topK = $validated['top_k'] ?? 6;
+
+        // Retrieval — scoped to THIS knowledge base only.
+        $startRetrieval = microtime(true);
+        $result = $retrieval->retrieve($query, [$knowledgeBase->id], topK: $topK, threshold: 0.5);
+        $retrievalMs = (microtime(true) - $startRetrieval) * 1000;
+
+        $resultChunks = collect($result['chunks']);
+        $reranked = $resultChunks->contains(fn ($c) => isset($c->rerank_score));
+
+        $docNames = Document::query()
+            ->whereIn('id', $resultChunks->pluck('document_id')->filter()->unique()->all())
+            ->get(['id', 'original_filename', 'name'])
+            ->mapWithKeys(fn ($d) => [$d->id => $d->original_filename ?? $d->name ?? $d->id]);
+
+        $chunks = $resultChunks->map(fn ($c) => [
+            'source' => $docNames[$c->document_id] ?? 'Unknown source',
+            'similarity' => isset($c->distance) ? round(1 - (float) $c->distance, 4) : null,
+            'rerank_score' => isset($c->rerank_score) ? round((float) $c->rerank_score, 4) : null,
+            'snippet' => Str::limit(trim((string) $c->content), 280),
+        ])->values();
+
+        // Generation — answer strictly from the retrieved context.
+        $context = (string) $result['context'];
+        $system = 'You are a QA assistant for a single knowledge base. Answer the question using ONLY the '
+            .'provided context. If the answer is not contained in the context, say the information is not in '
+            .'this knowledge base. Never use outside knowledge.';
+        $prompt = $context === ''
+            ? "No context was retrieved from the knowledge base.\n\nQuestion: {$query}"
+            : "Context from the knowledge base:\n\n{$context}\n\nQuestion: {$query}";
+
+        $startGen = microtime(true);
+        try {
+            $answer = (string) (new AnonymousAgent($system, [], []))->prompt($prompt)->text;
+        } catch (\Throwable $e) {
+            $answer = 'Error generating answer: '.$e->getMessage();
+        }
+        $generationMs = (microtime(true) - $startGen) * 1000;
+
+        return response()->json([
+            'answer' => $answer,
+            'retrieval' => [
+                'chunk_count' => $result['chunk_count'],
+                'reranked' => $reranked,
+                'rerank_model' => $reranked ? ($capabilities->resolve('reranking')['model'] ?? null) : null,
+                'embedding_model' => EmbeddingService::forKnowledgeBase($knowledgeBase)->getModel(),
+                'chunks' => $chunks,
+            ],
+            'timing_ms' => [
+                'retrieval' => round($retrievalMs, 1),
+                'generation' => round($generationMs, 1),
+                'total' => round($retrievalMs + $generationMs, 1),
+            ],
+        ]);
     }
 
     /**
