@@ -658,6 +658,34 @@ class ManifestValidator
                     break; // one error per object is enough
                 }
             }
+
+            // Validate each formula's expression: well-formed braces + only
+            // catalog functions inside its {{…}} tokens (same checks the action
+            // dialect gets), then that every {{slug}} it references resolves to a
+            // real field on this object (or a system field). Without this, a typo'd
+            // function or a reference to a non-existent field passes silently and
+            // only surfaces as a null value at runtime.
+            $validSlugs = array_fill_keys(array_column($object['fields'], 'slug'), true);
+            foreach ($object['fields'] as $j => $field) {
+                if (($field['type'] ?? null) !== 'formula') {
+                    continue;
+                }
+                $expression = (string) ($field['expression'] ?? '');
+                $path = "/objects/{$i}/fields/{$j}/expression";
+
+                $this->validateExpression($expression, $path, 'formula expression', $errors);
+
+                foreach ($this->formulaVariableReferences($expression) as $ref) {
+                    if (isset($validSlugs[$ref]) || RecordQueryService::systemField($ref) !== null) {
+                        continue;
+                    }
+                    $errors[] = new ManifestValidationError(
+                        $path,
+                        "formula expression references unknown field '{$ref}' — it must be a field on this object (or a system field like sys_created_at)",
+                        'unresolved_ref',
+                    );
+                }
+            }
         }
 
         foreach ($objects as $i => $object) {
@@ -1920,6 +1948,51 @@ class ManifestValidator
         preg_match_all('/\{\{\s*([a-z][a-z0-9_]*)\s*\}\}/', $expression, $matches);
 
         return $matches[1] ?? [];
+    }
+
+    /**
+     * Extract the variable identifiers a formula's {{…}} tokens reference — the
+     * names that must resolve to a field. Unlike extractFormulaReferences (which
+     * only matches a lone `{{slug}}` token, enough for cycle detection), this
+     * inspects the inside of every token so `{{monto * 1.16}}` and
+     * `{{upper(apellido)}}` yield `monto` / `apellido`. String literals, function
+     * names (identifier followed by `(`), member-access properties (identifier
+     * after a `.`) and the expression language's named operators/literals are
+     * excluded, so only genuine top-level variable references remain.
+     *
+     * @return list<string>
+     */
+    private function formulaVariableReferences(string $expression): array
+    {
+        if (preg_match_all('/\{\{\s*(.+?)\s*\}\}/s', $expression, $tokens) === false) {
+            return [];
+        }
+
+        $reserved = ['and', 'or', 'not', 'xor', 'in', 'matches', 'contains', 'true', 'false', 'null'];
+        $functions = SafeExpressionEvaluator::FUNCTIONS;
+
+        $refs = [];
+        foreach ($tokens[1] ?? [] as $inner) {
+            $stripped = preg_replace('/([\'"]).*?\1/s', '', $inner) ?? $inner;
+
+            if (preg_match_all('/(\.)?([a-zA-Z_]\w*)\s*(\()?/', $stripped, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $match) {
+                    $precededByDot = $match[1] === '.';
+                    $name = $match[2];
+                    $isCall = ($match[3] ?? '') === '(';
+
+                    if ($precededByDot || $isCall
+                        || in_array($name, $reserved, true)
+                        || in_array($name, $functions, true)) {
+                        continue;
+                    }
+
+                    $refs[$name] = true;
+                }
+            }
+        }
+
+        return array_keys($refs);
     }
 
     private function cardinalitiesMatch(string $a, string $b): bool

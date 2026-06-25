@@ -1061,6 +1061,80 @@ it('detects a formula cycle (a → b → a)', function () {
     expect(collect($result->errors)->pluck('code'))->toContain('formula_cycle');
 });
 
+it('rejects a formula that calls an unknown function inside a token', function () {
+    $manifest = baseManifest();
+    $manifest['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'total', 'name' => 'Total',
+        'type' => 'formula', 'readonly' => true,
+        'expression' => '{{frobnicate(nombre)}}', 'return_type' => 'string',
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    expect(collect($result->errors)->pluck('code'))->toContain('unknown_function');
+});
+
+it('rejects a formula that references a field that does not exist', function () {
+    $manifest = baseManifest();
+    $manifest['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'total', 'name' => 'Total',
+        'type' => 'formula', 'readonly' => true,
+        'expression' => 'literal {{does_not_exist}}', 'return_type' => 'string',
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    $error = collect($result->errors)->firstWhere('code', 'unresolved_ref');
+    expect($error)->not->toBeNull()
+        ->and($error->message)->toContain('does_not_exist');
+});
+
+it('rejects a formula with unbalanced braces', function () {
+    $manifest = baseManifest();
+    $manifest['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'total', 'name' => 'Total',
+        'type' => 'formula', 'readonly' => true,
+        'expression' => '{{nombre}', 'return_type' => 'string',
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    expect(collect($result->errors)->pluck('code'))->toContain('malformed_expression');
+});
+
+it('accepts a formula that calls a catalog function over a real field', function () {
+    $manifest = baseManifest();
+    $manifest['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'shout', 'name' => 'Shout',
+        'type' => 'formula', 'readonly' => true,
+        'expression' => 'Hola {{upper(nombre)}}', 'return_type' => 'string',
+    ];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('accepts a formula that references a system field', function () {
+    $manifest = baseManifest();
+    $manifest['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'created_label', 'name' => 'Created label',
+        'type' => 'formula', 'readonly' => true,
+        'expression' => '{{sys_created_at}}', 'return_type' => 'datetime',
+    ];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('does not flag arithmetic or numeric literals in a formula as unknown refs', function () {
+    $manifest = baseManifest();
+    $manifest['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'monto', 'name' => 'Monto', 'type' => 'number',
+    ];
+    $manifest['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'con_iva', 'name' => 'Con IVA',
+        'type' => 'formula', 'readonly' => true,
+        'expression' => '{{monto * 1.16}}', 'return_type' => 'number',
+    ];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
 it('rejects a lookup whose via_relation_field_id is not a relation field', function () {
     $manifest = baseManifest();
     $manifest['objects'][0]['fields'][] = [
