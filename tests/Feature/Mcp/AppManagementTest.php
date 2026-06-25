@@ -90,6 +90,28 @@ it('create_app creates an app seeded with a valid version 1', function () {
     expect($app->versions()->count())->toBe(1);
 });
 
+it('clamps an over-long app description into a valid first manifest version', function () {
+    $longDescription = str_repeat('Recruiting pipeline with candidates and vacancies. ', 40); // ~2000 chars
+    expect(mb_strlen($longDescription))->toBeGreaterThan(500);
+
+    $app = App::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'slug' => 'long_desc',
+        'description' => $longDescription,
+    ]);
+
+    $manifests = app(AppManifestService::class);
+    $manifest = $manifests->initialManifest($app);
+
+    expect(mb_strlen($manifest['description']))->toBeLessThanOrEqual(500);
+
+    // The chain that used to fail: a >500 char description must still produce a
+    // schema-valid first version instead of throwing on createVersion.
+    $version = $manifests->createVersion($app, $manifest, $this->user, 'seed');
+    expect($version->version_number)->toBe(1);
+});
+
 it('create_app rejects a duplicate slug in the same account', function () {
     App::factory()->create([
         'user_id' => $this->user->id,

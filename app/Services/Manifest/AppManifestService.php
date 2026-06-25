@@ -19,6 +19,9 @@ class AppManifestService
 {
     private const CACHE_TTL_SECONDS = 3600;
 
+    /** Mirrors the manifest schema's maxLength on `description`. */
+    private const MAX_DESCRIPTION_LENGTH = 500;
+
     public function __construct(
         private ManifestValidator $validator,
         private CacheRepository $cache,
@@ -80,6 +83,14 @@ class AppManifestService
             if ($app->{$optional} !== null) {
                 $manifest[$optional] = $app->{$optional};
             }
+        }
+
+        // The app's description doubles as the (deliberately rich, up to ~2000
+        // char) scaffold prompt, but manifest.description is capped at 500. Clamp
+        // the manifest copy so a long prompt doesn't fail validation on the very
+        // first version; the full text stays on the App row and in the prompt.
+        if (isset($manifest['description']) && mb_strlen($manifest['description']) > self::MAX_DESCRIPTION_LENGTH) {
+            $manifest['description'] = rtrim(mb_substr($manifest['description'], 0, self::MAX_DESCRIPTION_LENGTH - 1)).'…';
         }
 
         return $manifest;
