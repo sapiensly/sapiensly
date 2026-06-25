@@ -11,7 +11,7 @@ use Opis\JsonSchema\Validator as OpisValidator;
 use Symfony\Component\ExpressionLanguage\Lexer;
 
 /**
- * Validates an App manifest against the JSON Schema (storage/app/schemas/app-manifest/v1.json)
+ * Validates an App manifest against the JSON Schema (resources/schemas/app-manifest/v1.json)
  * and then runs cross-cutting semantic rules that JSON Schema cannot express:
  * resolved references, unique slugs in scope, compatible field types per block,
  * coherent relation cardinality, well-formed expressions.
@@ -20,7 +20,13 @@ class ManifestValidator
 {
     private const SCHEMA_URI = 'https://sapiensly.com/schemas/app-manifest/v1.json';
 
-    private const SCHEMA_PATH = 'app/schemas/app-manifest/v1.json';
+    /**
+     * Repo-root-relative path to the schema. It lives under resources/ (immutable
+     * code that ships with every release), NOT storage/ — on hosts where storage/
+     * is a shared/persistent volume that survives deploys, a storage/ copy would
+     * serve a stale schema while the code is current.
+     */
+    private const SCHEMA_PATH = 'resources/schemas/app-manifest/v1.json';
 
     /** Upper bound on schema errors collected per validation (a runaway guard). */
     private const MAX_SCHEMA_ERRORS = 100;
@@ -2172,7 +2178,7 @@ class ManifestValidator
 
         // Resolve relative to the source file so unit tests that don't boot Laravel
         // can still load the schema. Production calls can pass an explicit path.
-        return dirname(__DIR__, 3).'/storage/'.self::SCHEMA_PATH;
+        return dirname(__DIR__, 3).'/'.self::SCHEMA_PATH;
     }
 
     /**

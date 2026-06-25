@@ -7,7 +7,7 @@ namespace App\Services\Manifest;
  * a field type, component (block), action, step or trigger — so the "what can I
  * build" catalogs can hand a model the exact parameters (required/optional names,
  * allowed enum values) and a worked skeleton instead of prose it has to guess
- * from. The schema (storage/app/schemas/app-manifest/v1.json) stays the single
+ * from. The schema (resources/schemas/app-manifest/v1.json) stays the single
  * source of truth: this reads it, it never restates it.
  */
 class ManifestSchemaCatalog

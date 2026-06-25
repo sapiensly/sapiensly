@@ -53,6 +53,21 @@ it('accepts a minimal valid manifest', function () {
         ->and($result->errors)->toBe([]);
 });
 
+it('loads the schema from resources/ (ships with the code, not shared storage)', function () {
+    // The schema must live under resources/ so every deploy ships the current
+    // copy. Under storage/ it can be served stale on hosts where storage is a
+    // shared/persistent volume that survives releases.
+    $base = dirname(__DIR__, 4);
+    expect(file_exists($base.'/resources/schemas/app-manifest/v1.json'))->toBeTrue()
+        ->and(file_exists($base.'/storage/app/schemas/app-manifest/v1.json'))->toBeFalse();
+
+    // And the loaded schema is the current one (workflows supported; no stale
+    // "MVP subset" disclaimer that wrongly excludes them).
+    $schema = (new ManifestValidator)->schemaArray();
+    expect($schema['properties'])->toHaveKey('workflows')
+        ->and($schema['description'] ?? '')->not->toContain('MVP subset');
+});
+
 it('rejects missing required top-level fields', function () {
     $manifest = baseManifest();
     unset($manifest['permissions']);
