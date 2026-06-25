@@ -6,13 +6,14 @@ use App\Mcp\Tools\SapiensTool;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\InvalidManifestException;
+use App\Services\Manifest\ManifestPatch;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Apply a set of RFC 6902 JSON Patch operations to an app\'s manifest. The patch is validated and, if valid, saved as a new (reversible) app version. Read the manifest first to target the right paths. If rejected, returns {applied:false, valid:false, errors:[{path, message, code, expected?, value?}], warnings} — the same structured detail as validate_manifest — so you can fix every error and retry.')]
+#[Description('Apply a set of RFC 6902 JSON Patch operations to an app\'s manifest. The patch is validated and, if valid, saved as a new (reversible) app version. Read the manifest first to target the right paths. On success returns {applied:true, version_number, changed_paths:[{op, path, from?}]} — array appends ("/-") are resolved to the concrete index they landed at, so you can target follow-up patches without re-reading. If rejected, returns {applied:false, valid:false, errors:[{path, message, code, expected?, value?}], warnings} — the same structured detail as validate_manifest — so you can fix every error and retry.')]
 class ProposeChangeTool extends SapiensTool
 {
     protected const ABILITY = 'apps:build';
@@ -36,8 +37,13 @@ class ProposeChangeTool extends SapiensTool
             return Response::error("No app named '{$validated['app_slug']}' is visible to you.");
         }
 
+        $manifests = app(AppManifestService::class);
+        // Snapshot the pre-patch manifest (cached) so we can resolve where each op
+        // landed — array appends ('/-') become concrete indices in the response.
+        $before = $manifests->getActiveManifest($app) ?? [];
+
         try {
-            $version = app(AppManifestService::class)->applyPatch(
+            $version = $manifests->applyPatch(
                 $app,
                 $validated['ops'],
                 $user,
@@ -71,6 +77,9 @@ class ProposeChangeTool extends SapiensTool
             'app_slug' => $app->slug,
             'version_number' => $version->version_number,
             'change_summary' => $version->change_summary,
+            // Where each op landed, with '/-' appends resolved to the concrete
+            // index — so you can target follow-up patches without re-reading.
+            'changed_paths' => ManifestPatch::changedPaths($validated['ops'], $before),
         ]);
     }
 

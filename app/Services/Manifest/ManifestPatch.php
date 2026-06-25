@@ -63,6 +63,52 @@ final class ManifestPatch
     }
 
     /**
+     * The paths a set of ops TOUCHES, with array-append (`/-`) ops resolved to the
+     * concrete index the value landed at — so a caller knows where its addition
+     * went (e.g. `/objects/3`) without re-reading the whole manifest to find out.
+     * `$before` is the pre-patch document; sequential appends to the same array
+     * are counted so each gets its own index. Non-append ops are reported verbatim.
+     *
+     * @param  list<array<string, mixed>>  $ops
+     * @param  array<string, mixed>  $before
+     * @return list<array{op: string, path: string, from?: string}>
+     */
+    public static function changedPaths(array $ops, array $before): array
+    {
+        $appendsSoFar = [];
+        $changed = [];
+
+        foreach ($ops as $op) {
+            if (! is_array($op)) {
+                continue;
+            }
+            $type = (string) ($op['op'] ?? '');
+            $path = (string) ($op['path'] ?? '');
+            if ($path === '') {
+                continue;
+            }
+
+            $resolved = $path;
+            if (str_ends_with($path, '/-')) {
+                $parent = substr($path, 0, -2);
+                $existing = self::resolve($before, self::tokens($parent));
+                $baseLength = is_array($existing) ? count($existing) : 0;
+                $n = $appendsSoFar[$parent] ?? 0;
+                $resolved = $parent.'/'.($baseLength + $n);
+                $appendsSoFar[$parent] = $n + 1;
+            }
+
+            $entry = ['op' => $type, 'path' => $resolved];
+            if ($resolved !== $path) {
+                $entry['from'] = $path;
+            }
+            $changed[] = $entry;
+        }
+
+        return $changed;
+    }
+
+    /**
      * True when the op inserts into an indexed (list) array at a numeric index —
      * the only case the library mishandles. Appends (`/-`), replaces, removes,
      * and writes to object properties all stay on the library path.

@@ -88,3 +88,41 @@ it('create_app rejects an invalid slug', function () {
 
     expect(App::where('name', 'Bad')->exists())->toBeFalse();
 });
+
+it('propose_change returns the resolved paths a patch landed at', function () {
+    $app = App::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'slug' => 'tracker',
+    ]);
+    $manifests = app(AppManifestService::class);
+    $manifest = app(AppScaffolder::class)->assemble($manifests->initialManifest($app), [
+        'objects' => [['name' => 'Tasks', 'slug' => 'tasks', 'fields' => [
+            ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null],
+        ]]],
+    ]);
+    $manifests->createVersion($app, $manifest, $this->user, 'seed');
+
+    // Append a workflow with '/workflows/-' — the response must resolve it to the
+    // concrete index (the first workflow → /workflows/0) so a follow-up patch can
+    // target it without re-reading the manifest.
+    $ops = [['op' => 'add', 'path' => '/workflows/-', 'value' => [
+        'id' => 'wfl_'.strtolower((string) Str::ulid()),
+        'slug' => 'nightly',
+        'name' => 'Nightly',
+        'trigger' => ['type' => 'manual'],
+        'steps' => [['id' => 'stp_'.strtolower((string) Str::ulid()), 'type' => 'log', 'message' => 'hi']],
+    ]]];
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ProposeChangeTool::class, [
+            'app_slug' => 'tracker',
+            'ops' => $ops,
+            'change_summary' => 'Add nightly workflow',
+        ])
+        ->assertOk()
+        ->assertSee('"applied"')
+        ->assertSee('changed_paths')
+        ->assertSee('/workflows/0')
+        ->assertSee('/workflows/-');
+});
