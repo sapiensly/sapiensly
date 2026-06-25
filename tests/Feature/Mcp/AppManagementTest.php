@@ -58,7 +58,8 @@ it('propose_change tells the model exactly what failed, not just a count', funct
 
     // A rejected change comes back as the SAME structured result validate_manifest
     // returns — {applied:false, valid:false, errors:[{path, message, code, ...}]} —
-    // not a flattened, truncated string. The validator's authoring hint survives.
+    // not a flattened, truncated string. The error names the exact missing prop
+    // (its branch matched on `type`) instead of a generic per-type catalog hint.
     SapiensServer::actingAs($this->user)
         ->tool(ProposeChangeTool::class, [
             'app_slug' => 'content_engine',
@@ -69,7 +70,7 @@ it('propose_change tells the model exactly what failed, not just a count', funct
         ->assertSee('"applied"')
         ->assertSee('"valid"')
         ->assertSee('"code"')
-        ->assertSee('list_available_steps');
+        ->assertSee('user_prompt');
 });
 
 it('create_app creates an app seeded with a valid version 1', function () {

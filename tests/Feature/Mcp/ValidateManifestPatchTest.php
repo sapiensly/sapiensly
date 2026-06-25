@@ -46,11 +46,12 @@ it('validate_manifest patch mode reports the exact error of a bad change', funct
         ]],
     ]];
 
-    // The leading hint (only emitted on a step failure) names the fix path.
+    // The step's `type` matched, so the error names the exact missing prop
+    // rather than a generic per-type catalog hint.
     SapiensServer::actingAs($this->user)
         ->tool(ValidateManifestTool::class, ['app_slug' => 'content_engine', 'ops' => $ops])
         ->assertOk()
-        ->assertSee('list_available_steps');
+        ->assertSee('user_prompt');
 });
 
 it('validate_manifest patch mode passes a valid CMO-idea workflow', function () {
