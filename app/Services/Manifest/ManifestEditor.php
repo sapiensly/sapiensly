@@ -83,9 +83,12 @@ class ManifestEditor
         $manifest['objects'][$objectIndex]['fields'][] = $definition;
 
         if ($addToPage) {
+            // Computed fields (formula/lookup/rollup) are read-only — they belong in
+            // tables but never in a create form.
+            $formToo = ! in_array($field['type'], ['formula', 'lookup', 'rollup'], true);
             foreach ($manifest['pages'] as &$page) {
                 if (isset($page['blocks']) && is_array($page['blocks'])) {
-                    $this->injectFieldIntoBlocks($page['blocks'], $object['id'], $indexEntry['id'], $indexEntry['slug']);
+                    $this->injectFieldIntoBlocks($page['blocks'], $object['id'], $indexEntry['id'], $indexEntry['slug'], $formToo);
                 }
             }
             unset($page);

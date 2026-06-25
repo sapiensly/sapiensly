@@ -38,6 +38,50 @@ class AppScaffolder
         'date', 'datetime', 'single_select', 'multi_select', 'rating',
     ];
 
+    /**
+     * The full field type set the typed add_field tool accepts (beyond the scaffold
+     * subset above): the advanced types that previously forced raw RFC 6902 patches.
+     */
+    private const TYPED_FIELD_TYPES = [
+        'string', 'long_text', 'number', 'currency', 'boolean', 'date', 'datetime',
+        'single_select', 'multi_select', 'rating', 'slider', 'date_range', 'file',
+        'rich_text', 'relation', 'formula', 'lookup', 'rollup',
+    ];
+
+    /**
+     * Optional base props (from field_base) accepted on any field via `config`.
+     */
+    private const BASE_OPTIONAL_PROPS = [
+        'description', 'required', 'unique', 'indexed', 'readonly', 'hidden', 'help_text',
+    ];
+
+    /**
+     * Type-specific props copied from a field's `config` into its definition. The
+     * manifest validator enforces required/typed correctness on the result; this
+     * just whitelists what each type may carry so a typed add_field is as capable
+     * as a hand-written patch.
+     *
+     * @var array<string, list<string>>
+     */
+    private const FIELD_CONFIG_PROPS = [
+        'string' => ['min_length', 'max_length', 'pattern', 'default'],
+        'long_text' => ['max_length', 'default'],
+        'number' => ['min', 'max', 'precision', 'format', 'default'],
+        'currency' => ['currency_code', 'min', 'max', 'default'],
+        'boolean' => ['default'],
+        'date' => ['default'],
+        'datetime' => ['default'],
+        'rating' => ['max', 'default', 'icon'],
+        'slider' => ['min', 'max', 'step', 'default', 'format', 'currency_code'],
+        'date_range' => ['include_time', 'default'],
+        'file' => ['max_size_mb', 'mime_types'],
+        'rich_text' => ['default', 'max_length'],
+        'relation' => ['target_object_id', 'cardinality', 'on_delete', 'inverse_field_id'],
+        'formula' => ['expression', 'return_type', 'currency_code'],
+        'lookup' => ['via_relation_field_id', 'target_field_id'],
+        'rollup' => ['via_relation_field_id', 'aggregator', 'target_field_id', 'filter'],
+    ];
+
     /** Read-only computed types — shown in tables, never in create forms. */
     private const DERIVED_TYPES = ['rollup', 'lookup', 'formula'];
 
@@ -181,21 +225,42 @@ class AppScaffolder
      * keeping its slug unique against $takenSlugs. Used when adding a single
      * field to an existing object.
      *
+     * Unlike normalizeFields() (the scaffold/add_object path, restricted to the
+     * basic type subset), this is the typed add_field path: it accepts the full
+     * field type set and preserves a `config` bag of type-specific props. A select
+     * with no options still degrades to plain text, and an unrecognised type still
+     * falls back to `string` — the validator catches malformed advanced configs.
+     *
      * @param  array<string, mixed>  $field
      * @param  array<int, string>  $takenSlugs
-     * @return array{name: string, slug: string, type: string, options: array<int, array{value: string, label: string}>|null}|null
+     * @return array{name: string, slug: string, type: string, options: array<int, array{value: string, label: string}>|null, config: array<string, mixed>|null}|null
      */
     public function normalizeField(array $field, array $takenSlugs = []): ?array
     {
-        $normalized = $this->normalizeFields([$field]);
-        if ($normalized === []) {
-            return null;
+        $name = trim((string) ($field['name'] ?? ''));
+        if ($name === '') {
+            $name = 'Field';
+        }
+        $slug = $this->uniqueSlug($field['slug'] ?? $name, $takenSlugs, 'field');
+
+        $type = (string) ($field['type'] ?? 'string');
+        if (! in_array($type, self::TYPED_FIELD_TYPES, true)) {
+            $type = 'string';
         }
 
-        $only = $normalized[0];
-        $only['slug'] = $this->uniqueSlug($only['slug'], $takenSlugs, 'field');
+        $options = null;
+        if (in_array($type, ['single_select', 'multi_select'], true)) {
+            $options = $this->normalizeOptions($field['options'] ?? null);
+            if ($options === []) {
+                // A select with no options is invalid — degrade to free text.
+                $type = 'string';
+                $options = null;
+            }
+        }
 
-        return $only;
+        $config = is_array($field['config'] ?? null) ? $field['config'] : null;
+
+        return ['name' => $name, 'slug' => $slug, 'type' => $type, 'options' => $options, 'config' => $config];
     }
 
     /**
@@ -390,18 +455,30 @@ class AppScaffolder
     public function buildField(array $field, string $currency): array
     {
         $fieldId = $this->id('fld');
+        $type = $field['type'];
         $definition = [
             'id' => $fieldId,
             'slug' => $field['slug'],
             'name' => $field['name'],
-            'type' => $field['type'],
+            'type' => $type,
         ];
 
-        if ($field['type'] === 'currency') {
+        // Type-specific + base optional props the typed add_field path passes in a
+        // `config` bag (absent on scaffold-built fields, so this is a no-op there).
+        $config = is_array($field['config'] ?? null) ? $field['config'] : [];
+        $allowedProps = array_merge(self::BASE_OPTIONAL_PROPS, self::FIELD_CONFIG_PROPS[$type] ?? []);
+        foreach ($allowedProps as $prop) {
+            if (array_key_exists($prop, $config)) {
+                $definition[$prop] = $config[$prop];
+            }
+        }
+
+        // Currency defaults to the app's currency when not set explicitly.
+        if ($type === 'currency' && ! isset($definition['currency_code'])) {
             $definition['currency_code'] = $currency;
         }
 
-        if (in_array($field['type'], ['single_select', 'multi_select'], true)) {
+        if (in_array($type, ['single_select', 'multi_select'], true)) {
             $definition['options'] = array_map(fn (array $opt): array => [
                 'id' => $this->id('opt'),
                 'value' => $opt['value'],
@@ -409,7 +486,12 @@ class AppScaffolder
             ], $field['options'] ?? []);
         }
 
-        return [$definition, ['id' => $fieldId, 'slug' => $field['slug'], 'type' => $field['type']]];
+        // Computed fields (formula/lookup/rollup) must be read-only per the schema.
+        if (in_array($type, self::DERIVED_TYPES, true)) {
+            $definition['readonly'] = true;
+        }
+
+        return [$definition, ['id' => $fieldId, 'slug' => $field['slug'], 'type' => $type]];
     }
 
     /**

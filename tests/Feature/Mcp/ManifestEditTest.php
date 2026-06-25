@@ -191,3 +191,66 @@ it('add_field degrades a select with no options to plain text', function () {
     expect($field['type'])->toBe('string');
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 });
+
+it('add_field supports advanced scalar types like slider via config', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(AddFieldTool::class, [
+            'app_slug' => 'content_engine',
+            'object_slug' => 'ideas',
+            'name' => 'Confidence',
+            'type' => 'slider',
+            'config' => ['min' => 0, 'max' => 100, 'step' => 5],
+        ])
+        ->assertOk()
+        ->assertSee('version_number');
+
+    $field = collect(currentManifest($this->appModel)['objects'][0]['fields'])->firstWhere('slug', 'confidence');
+
+    expect($field['type'])->toBe('slider')
+        ->and($field['min'])->toBe(0)
+        ->and($field['max'])->toBe(100)
+        ->and($field['step'])->toBe(5);
+});
+
+it('add_field builds a computed field as read-only and keeps it out of the create form', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(AddFieldTool::class, [
+            'app_slug' => 'content_engine',
+            'object_slug' => 'ideas',
+            'name' => 'Title Length',
+            'type' => 'formula',
+            'config' => ['expression' => 'length({{title}})', 'return_type' => 'number'],
+        ])
+        ->assertOk()
+        ->assertSee('version_number');
+
+    $manifest = currentManifest($this->appModel);
+    $field = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'title_length');
+
+    expect($field['type'])->toBe('formula')
+        ->and($field['readonly'])->toBeTrue()
+        ->and($field['expression'])->toBe('length({{title}})');
+
+    // Computed: present as a table column, but never wired into the create form.
+    $page = collect($manifest['pages'])->first(fn ($p) => findBlock($p['blocks'] ?? [], 'form') !== null);
+    $form = findBlock($page['blocks'], 'form');
+    expect(collect($form['fields'] ?? [])->pluck('field_id'))->not->toContain($field['id']);
+});
+
+it('add_field carries common base props from config', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(AddFieldTool::class, [
+            'app_slug' => 'content_engine',
+            'object_slug' => 'ideas',
+            'name' => 'External Ref',
+            'type' => 'string',
+            'config' => ['required' => true, 'unique' => true, 'help_text' => 'From the source system'],
+        ])
+        ->assertOk();
+
+    $field = collect(currentManifest($this->appModel)['objects'][0]['fields'])->firstWhere('slug', 'external_ref');
+
+    expect($field['required'])->toBeTrue()
+        ->and($field['unique'])->toBeTrue()
+        ->and($field['help_text'])->toBe('From the source system');
+});
