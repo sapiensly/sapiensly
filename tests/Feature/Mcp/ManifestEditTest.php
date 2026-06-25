@@ -254,3 +254,20 @@ it('add_field carries common base props from config', function () {
         ->and($field['unique'])->toBeTrue()
         ->and($field['help_text'])->toBe('From the source system');
 });
+
+it('add_field reports a coercion as a warning instead of silently dropping intent', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(AddFieldTool::class, [
+            'app_slug' => 'content_engine',
+            'object_slug' => 'ideas',
+            'name' => 'Stage',
+            'type' => 'single_select', // no options provided → degraded to plain text
+        ])
+        ->assertOk()
+        ->assertSee('warnings')
+        ->assertSee('plain text');
+
+    // It still landed as a usable string field.
+    $field = collect(currentManifest($this->appModel)['objects'][0]['fields'])->firstWhere('slug', 'stage');
+    expect($field['type'])->toBe('string');
+});

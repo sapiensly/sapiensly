@@ -4,10 +4,30 @@ use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Build\CreateAppTool;
 use App\Mcp\Tools\Build\ProposeChangeTool;
 use App\Models\App;
+use App\Models\AppVersion;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use Illuminate\Support\Str;
+
+/** Seed an app with one object so propose_change has something to patch. */
+function seedTrackerApp(User $user, string $slug): App
+{
+    $app = App::factory()->create([
+        'user_id' => $user->id,
+        'organization_id' => $user->organization_id,
+        'slug' => $slug,
+    ]);
+    $manifests = app(AppManifestService::class);
+    $manifest = app(AppScaffolder::class)->assemble($manifests->initialManifest($app), [
+        'objects' => [['name' => 'Tasks', 'slug' => 'tasks', 'fields' => [
+            ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null],
+        ]]],
+    ]);
+    $manifests->createVersion($app, $manifest, $user, 'seed');
+
+    return $app->refresh();
+}
 
 beforeEach(function () {
     $this->user = User::factory()->create(['email_verified_at' => now()]);
@@ -125,4 +145,45 @@ it('propose_change returns the resolved paths a patch landed at', function () {
         ->assertSee('changed_paths')
         ->assertSee('/workflows/0')
         ->assertSee('/workflows/-');
+});
+
+it('create_app replays the same result for a repeated idempotency_key', function () {
+    $args = ['name' => 'Idem', 'slug' => 'idem_app', 'idempotency_key' => 'k-123'];
+
+    SapiensServer::actingAs($this->user)->tool(CreateAppTool::class, $args)->assertOk()->assertSee('idem_app');
+    // Retry with the SAME key replays the result — no "slug already exists" error,
+    // no duplicate app.
+    SapiensServer::actingAs($this->user)->tool(CreateAppTool::class, $args)->assertOk()->assertSee('idem_app');
+
+    expect(App::where('user_id', $this->user->id)->where('slug', 'idem_app')->count())->toBe(1);
+});
+
+it('propose_change replays a repeated idempotency_key without creating a new version', function () {
+    $app = seedTrackerApp($this->user, 'idemp');
+    $args = [
+        'app_slug' => 'idemp',
+        'ops' => [['op' => 'replace', 'path' => '/name', 'value' => 'Renamed']],
+        'change_summary' => 'rename',
+        'idempotency_key' => 'p-1',
+    ];
+
+    SapiensServer::actingAs($this->user)->tool(ProposeChangeTool::class, $args)->assertOk();
+    $versionsAfterFirst = AppVersion::where('app_id', $app->id)->max('version_number');
+
+    SapiensServer::actingAs($this->user)->tool(ProposeChangeTool::class, $args)->assertOk();
+    $versionsAfterRetry = AppVersion::where('app_id', $app->id)->max('version_number');
+
+    expect($versionsAfterRetry)->toBe($versionsAfterFirst);
+});
+
+it('propose_change accepts an omitted change_summary', function () {
+    seedTrackerApp($this->user, 'nosum');
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ProposeChangeTool::class, [
+            'app_slug' => 'nosum',
+            'ops' => [['op' => 'replace', 'path' => '/name', 'value' => 'X']],
+        ])
+        ->assertOk()
+        ->assertSee('"applied"');
 });

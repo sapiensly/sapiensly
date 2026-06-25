@@ -32,7 +32,14 @@ class ScaffoldAppTool extends SapiensTool
             'icon' => ['nullable', 'string', 'max:50'],
             'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'visibility' => ['nullable', Rule::enum(Visibility::class)],
+            'idempotency_key' => ['nullable', 'string', 'max:200'],
         ]);
+
+        // A scaffold is an expensive LLM call; replay a prior result for this key
+        // instead of generating (and billing) a second near-duplicate app.
+        if (($replay = $this->idempotentReplay($user, $validated['idempotency_key'] ?? null)) !== null) {
+            return Response::json($replay);
+        }
 
         $slug = $validated['slug'] ?? $this->deriveSlug($validated['name'], $user);
         if ($slug === null) {
@@ -71,7 +78,7 @@ class ScaffoldAppTool extends SapiensTool
             return Response::error('The app could not be scaffolded: '.$e->getMessage());
         }
 
-        return Response::json([
+        $payload = [
             'created' => true,
             'app_slug' => $app->slug,
             'app_id' => $app->id,
@@ -84,7 +91,10 @@ class ScaffoldAppTool extends SapiensTool
             ], $manifest['objects']),
             'pages' => array_map(fn (array $p): string => $p['path'], $manifest['pages']),
             'next' => 'Open the app to use it, or refine it with read_manifest + propose_change.',
-        ]);
+        ];
+        $this->rememberIdempotent($user, $validated['idempotency_key'] ?? null, $payload);
+
+        return Response::json($payload);
     }
 
     /**
@@ -122,6 +132,7 @@ class ScaffoldAppTool extends SapiensTool
             'icon' => $schema->string()->description('Optional icon name.'),
             'color' => $schema->string()->description('Optional hex accent color (#RRGGBB).'),
             'visibility' => $schema->string()->enum(array_column(Visibility::cases(), 'value'))->description('private (default), organization, global, or public.'),
+            'idempotency_key' => $schema->string()->description('Optional. A unique client token; retrying with the same key replays the original result instead of scaffolding a second app (safe retry after a timeout — and avoids a duplicate LLM call).'),
         ];
     }
 }

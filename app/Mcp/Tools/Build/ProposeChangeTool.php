@@ -23,7 +23,8 @@ class ProposeChangeTool extends SapiensTool
         $validated = $request->validate([
             'app_slug' => ['required', 'string'],
             'ops' => ['required', 'array', 'min:1'],
-            'change_summary' => ['required', 'string', 'max:500'],
+            'change_summary' => ['nullable', 'string', 'max:500'],
+            'idempotency_key' => ['nullable', 'string', 'max:200'],
         ], [
             'ops.required' => 'Provide at least one RFC 6902 operation, e.g. {"op":"add","path":"/objects/-","value":{...}}.',
         ]);
@@ -31,12 +32,19 @@ class ProposeChangeTool extends SapiensTool
         /** @var User $user */
         $user = $request->user();
 
+        // Replay a prior successful apply for this key rather than creating a
+        // duplicate version when a client retries after a timeout.
+        if (($replay = $this->idempotentReplay($user, $validated['idempotency_key'] ?? null)) !== null) {
+            return Response::json($replay);
+        }
+
         try {
             $app = $this->resolveApp($validated['app_slug'], $user);
         } catch (ModelNotFoundException) {
             return Response::error("No app named '{$validated['app_slug']}' is visible to you.");
         }
 
+        $summary = $validated['change_summary'] ?? 'Patch via propose_change';
         $manifests = app(AppManifestService::class);
         // Snapshot the pre-patch manifest (cached) so we can resolve where each op
         // landed — array appends ('/-') become concrete indices in the response.
@@ -47,7 +55,7 @@ class ProposeChangeTool extends SapiensTool
                 $app,
                 $validated['ops'],
                 $user,
-                $validated['change_summary'],
+                $summary,
             );
         } catch (InvalidManifestException $e) {
             // The patch applied but the result failed validation. Return the SAME
@@ -72,7 +80,7 @@ class ProposeChangeTool extends SapiensTool
             ]);
         }
 
-        return Response::json([
+        $payload = [
             'applied' => true,
             'app_slug' => $app->slug,
             'version_number' => $version->version_number,
@@ -80,7 +88,10 @@ class ProposeChangeTool extends SapiensTool
             // Where each op landed, with '/-' appends resolved to the concrete
             // index — so you can target follow-up patches without re-reading.
             'changed_paths' => ManifestPatch::changedPaths($validated['ops'], $before),
-        ]);
+        ];
+        $this->rememberIdempotent($user, $validated['idempotency_key'] ?? null, $payload);
+
+        return Response::json($payload);
     }
 
     /**
@@ -96,8 +107,9 @@ class ProposeChangeTool extends SapiensTool
                 ->description('RFC 6902 JSON Patch operations to apply to the active manifest.')
                 ->required(),
             'change_summary' => $schema->string()
-                ->description('A short human-readable summary of the change (stored on the version).')
-                ->required(),
+                ->description('Optional short human-readable summary of the change (stored on the version).'),
+            'idempotency_key' => $schema->string()
+                ->description('Optional. A unique client token; retrying with the same key replays the original result instead of applying the patch again (safe retry after a timeout).'),
         ];
     }
 }

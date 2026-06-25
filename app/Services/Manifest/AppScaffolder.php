@@ -233,19 +233,25 @@ class AppScaffolder
      *
      * @param  array<string, mixed>  $field
      * @param  array<int, string>  $takenSlugs
+     * @param  list<string>  $coercions  Out: notes for any change made to stay valid.
      * @return array{name: string, slug: string, type: string, options: array<int, array{value: string, label: string}>|null, config: array<string, mixed>|null}|null
      */
-    public function normalizeField(array $field, array $takenSlugs = []): ?array
+    public function normalizeField(array $field, array $takenSlugs = [], array &$coercions = []): ?array
     {
         $name = trim((string) ($field['name'] ?? ''));
         if ($name === '') {
             $name = 'Field';
         }
-        $slug = $this->uniqueSlug($field['slug'] ?? $name, $takenSlugs, 'field');
+        $requestedSlug = isset($field['slug']) ? (string) $field['slug'] : null;
+        $slug = $this->uniqueSlug($requestedSlug ?? $name, $takenSlugs, 'field');
+        if ($requestedSlug !== null && $requestedSlug !== '' && $slug !== $requestedSlug) {
+            $coercions[] = "field \"{$name}\": slug adjusted to \"{$slug}\".";
+        }
 
-        $type = (string) ($field['type'] ?? 'string');
-        if (! in_array($type, self::TYPED_FIELD_TYPES, true)) {
-            $type = 'string';
+        $requestedType = (string) ($field['type'] ?? 'string');
+        $type = in_array($requestedType, self::TYPED_FIELD_TYPES, true) ? $requestedType : 'string';
+        if ($type !== $requestedType) {
+            $coercions[] = "field \"{$name}\": type \"{$requestedType}\" is not a known field type — used \"string\".";
         }
 
         $options = null;
@@ -253,6 +259,7 @@ class AppScaffolder
             $options = $this->normalizeOptions($field['options'] ?? null);
             if ($options === []) {
                 // A select with no options is invalid — degrade to free text.
+                $coercions[] = "field \"{$name}\": {$type} needs a non-empty options array — used plain text instead.";
                 $type = 'string';
                 $options = null;
             }
@@ -265,9 +272,11 @@ class AppScaffolder
 
     /**
      * @param  array<int, mixed>  $rawFields
+     * @param  list<string>  $coercions  Out: human-readable notes for each spec the
+     *                                   scaffolder had to change to stay valid.
      * @return array<int, array{name: string, slug: string, type: string, options: array<int, array{value: string, label: string}>|null}>
      */
-    public function normalizeFields(array $rawFields): array
+    public function normalizeFields(array $rawFields, array &$coercions = []): array
     {
         $fields = [];
         $usedSlugs = [];
@@ -279,14 +288,18 @@ class AppScaffolder
             $name = trim((string) ($field['name'] ?? '')) ?: ('Field '.($i + 1));
             $slug = $this->uniqueSlug($field['slug'] ?? $name, $usedSlugs, 'field_'.($i + 1));
 
-            $type = (string) ($field['type'] ?? 'string');
-            $type = in_array($type, self::ALLOWED_TYPES, true) ? $type : 'string';
+            $requestedType = (string) ($field['type'] ?? 'string');
+            $type = in_array($requestedType, self::ALLOWED_TYPES, true) ? $requestedType : 'string';
+            if ($type !== $requestedType) {
+                $coercions[] = "field \"{$name}\": type \"{$requestedType}\" is not available here — used \"string\".";
+            }
 
             $options = null;
             if (in_array($type, ['single_select', 'multi_select'], true)) {
                 $options = $this->normalizeOptions($field['options'] ?? null);
                 if ($options === []) {
                     // A select with no options is invalid — degrade to free text.
+                    $coercions[] = "field \"{$name}\": {$type} needs a non-empty options array — used plain text instead.";
                     $type = 'string';
                     $options = null;
                 }

@@ -29,14 +29,14 @@ class ManifestEditor
      *
      * @param  array<int, array<string, mixed>>  $rawFields  loose field specs ({name, slug?, type, options?})
      */
-    public function addObject(App $app, string $name, ?string $slug, array $rawFields, bool $withPage = true, ?User $user = null): AppVersion
+    public function addObject(App $app, string $name, ?string $slug, array $rawFields, bool $withPage = true, ?User $user = null, array &$coercions = []): AppVersion
     {
         $manifest = $this->activeManifest($app);
         $currency = (string) ($manifest['settings']['default_currency'] ?? 'MXN');
 
         $objectSlug = $this->uniqueSlug($slug ?? $name, array_column($manifest['objects'] ?? [], 'slug'), 'object');
 
-        $fields = $this->scaffolder->normalizeFields($rawFields);
+        $fields = $this->scaffolder->normalizeFields($rawFields, $coercions);
         if ($fields === []) {
             $fields[] = ['name' => 'Name', 'slug' => 'name', 'type' => 'string', 'options' => null];
         }
@@ -66,7 +66,7 @@ class ManifestEditor
      *
      * @param  array<string, mixed>  $rawField  a loose field spec ({name, slug?, type, options?})
      */
-    public function addField(App $app, string $objectSlug, array $rawField, bool $addToPage = true, ?User $user = null): AppVersion
+    public function addField(App $app, string $objectSlug, array $rawField, bool $addToPage = true, ?User $user = null, array &$coercions = []): AppVersion
     {
         $manifest = $this->activeManifest($app);
 
@@ -74,7 +74,7 @@ class ManifestEditor
         $object = $manifest['objects'][$objectIndex];
         $currency = (string) ($manifest['settings']['default_currency'] ?? 'MXN');
 
-        $field = $this->scaffolder->normalizeField($rawField, array_column($object['fields'] ?? [], 'slug'));
+        $field = $this->scaffolder->normalizeField($rawField, array_column($object['fields'] ?? [], 'slug'), $coercions);
         if ($field === null) {
             throw new \InvalidArgumentException('The field spec was empty or invalid.');
         }

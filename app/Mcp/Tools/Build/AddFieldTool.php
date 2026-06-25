@@ -38,6 +38,8 @@ class AddFieldTool extends SapiensTool
             return Response::error("No app named '{$validated['app_slug']}' is visible to you.");
         }
 
+        $coercions = [];
+
         try {
             $version = app(ManifestEditor::class)->addField(
                 $app,
@@ -51,18 +53,21 @@ class AddFieldTool extends SapiensTool
                 ],
                 $validated['add_to_page'] ?? true,
                 $user,
+                $coercions,
             );
         } catch (\Throwable $e) {
             return Response::error('The field could not be added: '.$e->getMessage());
         }
 
-        return Response::json([
+        return Response::json(array_filter([
             'added' => true,
             'app_slug' => $app->slug,
             'object_slug' => $validated['object_slug'],
             'field' => $validated['name'],
             'version_number' => $version->version_number,
-        ]);
+            // Anything the request asked for that had to be adjusted to stay valid.
+            'warnings' => $coercions ?: null,
+        ], fn ($v) => $v !== null));
     }
 
     /**

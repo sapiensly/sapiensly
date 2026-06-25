@@ -30,7 +30,14 @@ class CreateAppTool extends SapiensTool
             'icon' => ['nullable', 'string', 'max:50'],
             'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'visibility' => ['nullable', Rule::enum(Visibility::class)],
+            'idempotency_key' => ['nullable', 'string', 'max:200'],
         ]);
+
+        // Replay a prior create for this key instead of erroring on the slug a
+        // timed-out-but-succeeded first attempt already took.
+        if (($replay = $this->idempotentReplay($user, $validated['idempotency_key'] ?? null)) !== null) {
+            return Response::json($replay);
+        }
 
         // Slug is unique per tenant (organization_id, slug); fail with a legible
         // message rather than a raw DB constraint violation.
@@ -66,14 +73,17 @@ class CreateAppTool extends SapiensTool
             return Response::error('The app could not be created: '.$e->getMessage());
         }
 
-        return Response::json([
+        $payload = [
             'created' => true,
             'app_slug' => $app->slug,
             'app_id' => $app->id,
             'name' => $app->name,
             'visibility' => $app->visibility?->value,
             'version_number' => $version->version_number,
-        ]);
+        ];
+        $this->rememberIdempotent($user, $validated['idempotency_key'] ?? null, $payload);
+
+        return Response::json($payload);
     }
 
     /**
@@ -88,6 +98,7 @@ class CreateAppTool extends SapiensTool
             'icon' => $schema->string()->description('Optional icon name.'),
             'color' => $schema->string()->description('Optional hex accent color (#RRGGBB).'),
             'visibility' => $schema->string()->enum(array_column(Visibility::cases(), 'value'))->description('private (default), organization, global, or public.'),
+            'idempotency_key' => $schema->string()->description('Optional. A unique client token; retrying with the same key replays the original result instead of creating a duplicate app (safe retry after a timeout).'),
         ];
     }
 }

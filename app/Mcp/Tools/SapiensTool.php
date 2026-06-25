@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Facades\TenantCache;
 use App\Mcp\McpContext;
 use App\Models\App;
 use App\Models\User;
@@ -46,5 +47,49 @@ abstract class SapiensTool extends Tool
     protected function resolveApp(string $slug, User $user): App
     {
         return App::query()->forAccountContext($user)->where('slug', $slug)->firstOrFail();
+    }
+
+    /** How long a client's idempotency key replays its prior result (24h). */
+    protected const IDEMPOTENCY_TTL = 86400;
+
+    /**
+     * The successful result a previous call with this idempotency key produced, or
+     * null if there is none. Scoped to the caller's account (via forOwner) so a key
+     * never collides across tenants. Lets a write tool replay a completed result
+     * instead of repeating the side effect when a client retries after a timeout.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function idempotentReplay(User $user, ?string $key): ?array
+    {
+        if ($key === null || $key === '') {
+            return null;
+        }
+
+        $cached = TenantCache::forOwner($user->organization_id, $user->id)
+            ->get($this->idempotencyCacheKey($key));
+
+        return is_array($cached) ? $cached : null;
+    }
+
+    /**
+     * Remember a successful result so an identical retry replays it. No-op when no
+     * key was supplied. Only call this for results that completed successfully.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function rememberIdempotent(User $user, ?string $key, array $payload): void
+    {
+        if ($key === null || $key === '') {
+            return;
+        }
+
+        TenantCache::forOwner($user->organization_id, $user->id)
+            ->put($this->idempotencyCacheKey($key), $payload, self::IDEMPOTENCY_TTL);
+    }
+
+    private function idempotencyCacheKey(string $key): string
+    {
+        return 'idem:'.$this->name().':'.$key;
     }
 }
