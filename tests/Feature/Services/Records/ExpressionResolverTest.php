@@ -176,3 +176,35 @@ it('malformed parens degrade to null instead of throwing', function () {
     // Unbalanced parens INSIDE a valid {{ … }} envelope — must not throw.
     expect($this->resolver->resolve('{{random(vars.l}}', ['vars' => ['l' => [1]]]))->toBeNull();
 });
+
+/* -------------- mixed templates (embedded tokens) ------------ */
+
+it('interpolates a token embedded in surrounding text', function () {
+    expect($this->resolver->resolve(
+        'Return RMA {{trigger.rma}}, reason: {{trigger.reason}}.',
+        ['trigger' => ['rma' => 'RMA-2042', 'reason' => 'defective']],
+    ))->toBe('Return RMA RMA-2042, reason: defective.');
+});
+
+it('interpolates a step output inside a message', function () {
+    expect($this->resolver->resolve(
+        'Drafted reply: {{steps.s1.output.text}}',
+        ['steps' => ['s1' => ['output' => ['text' => 'Hello there']]]],
+    ))->toBe('Drafted reply: Hello there');
+});
+
+it('keeps a whole-string single token TYPED (not stringified)', function () {
+    expect($this->resolver->resolve('{{vars.monto * 2}}', ['vars' => ['monto' => 21]]))->toBe(42);
+});
+
+it('renders an unresolved embedded token as empty, not the raw braces', function () {
+    expect($this->resolver->resolve('Hi {{vars.missing}}!', ['vars' => []]))->toBe('Hi !');
+});
+
+it('leaves a string without tokens untouched even if it has braces-like text', function () {
+    expect($this->resolver->resolve('100% off, no tokens here', []))->toBe('100% off, no tokens here');
+});
+
+it('interpolates a numeric token into a string', function () {
+    expect($this->resolver->resolve('Total: {{vars.n}}', ['vars' => ['n' => 1160.5]]))->toBe('Total: 1160.5');
+});

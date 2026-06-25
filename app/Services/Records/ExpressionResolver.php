@@ -57,12 +57,40 @@ class ExpressionResolver
     {
         $trimmed = trim($expression);
 
-        if (! preg_match('/^\{\{\s*(.+?)\s*\}\}$/', $trimmed, $matches)) {
-            return $expression; // literal string
+        // Whole string is exactly one token → return its TYPED value (a number
+        // stays a number, an array stays an array). Callers writing into a field,
+        // a record_id_expression or a condition rely on the un-stringified value.
+        if (preg_match('/^\{\{\s*(.+?)\s*\}\}$/', $trimmed, $matches)) {
+            return $this->resolveToken(trim($matches[1]), $context);
         }
 
-        $inner = trim($matches[1]);
+        // No token at all → literal passthrough.
+        if (! str_contains($expression, '{{')) {
+            return $expression;
+        }
 
+        // Mixed template: literal text interleaved with one or more {{…}} tokens
+        // (e.g. a log message, an agent.invoke prompt, an http url). Interpolate
+        // each token in place as a string — without this an embedded token would
+        // reach its consumer un-resolved, as the raw "{{…}}".
+        return preg_replace_callback(
+            '/\{\{\s*(.+?)\s*\}\}/',
+            function (array $m) use ($context): string {
+                $value = $this->resolveToken(trim($m[1]), $context);
+
+                return is_scalar($value) ? (string) $value : '';
+            },
+            $expression,
+        );
+    }
+
+    /**
+     * Resolve a single token's inner expression to its typed value.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function resolveToken(string $inner, array $context): mixed
+    {
         // Prefer the real expression engine — it adds arithmetic, comparison,
         // boolean logic and ternaries on top of the legacy path-and-function
         // grammar. Fall back to the legacy walker for the few constructs the
