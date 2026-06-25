@@ -17,12 +17,14 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Passport\Passport;
 use Pgvector\Laravel\Schema;
+use Psr\Http\Message\RequestInterface;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -81,6 +83,8 @@ class AppServiceProvider extends ServiceProvider
 
         $this->forceOwnerConnectionForMigrations();
 
+        $this->boundStreamingHttpReads();
+
         // Consent screen shown to a user when an MCP client (e.g. claude.ai)
         // requests OAuth access via the MCP server's Passport flow.
         Passport::authorizationView(fn ($parameters) => view('mcp.authorize', $parameters));
@@ -117,6 +121,53 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->registerRuntimeRateLimiters();
+    }
+
+    /**
+     * Give every *streaming* HTTP request a transport-level idle timeout.
+     *
+     * The AI gateways (OpenRouter, DeepSeek, Anthropic, …) open a long-lived SSE
+     * connection with `stream => true` and then read the body byte-by-byte. The
+     * client's `->timeout()` only bounds connection setup / first byte — it does
+     * NOT bound the idle gaps *between* SSE chunks once the stream is open. So a
+     * provider that accepts the request and then stalls (upstream queueing, a
+     * rate limit, a hung model) would keep the socket read blocked until the
+     * worker's hard pcntl timeout kills the job — the 300s hang we saw.
+     *
+     * This installs a Guzzle middleware that, only when `$options['stream']` is
+     * true, sets:
+     *   - read_timeout — idle bound for the PHP StreamHandler path;
+     *   - cURL low-speed limit — abort if < 1 byte/s for the idle window, the
+     *     cURL-handler equivalent (the default handler when ext-curl is present).
+     * (Connection setup keeps Laravel's default connect_timeout — establishment
+     * is not where streaming stalls.) A genuine stall now aborts at the transport
+     * layer with a catchable
+     * exception (surfaced as a clean error) instead of hanging. It is gated on
+     * `stream === true`, so ordinary request/response HTTP — webhooks, REST tool
+     * calls, MCP — is untouched. Tool execution (e.g. consult_agent) runs between
+     * separate HTTP requests, not within one SSE read, so it is never affected.
+     *
+     * Complements ChatAiService's in-stream pcntl watchdog: this guards a single
+     * provider request at the socket layer and works even where pcntl async
+     * signals don't; the watchdog backstops the whole turn (including tool gaps).
+     */
+    private function boundStreamingHttpReads(): void
+    {
+        $idleSeconds = (int) config('ai.stream_idle_timeout', 120);
+
+        Http::globalMiddleware(function (callable $handler) use ($idleSeconds) {
+            return function (RequestInterface $request, array $options) use ($handler, $idleSeconds) {
+                if (($options['stream'] ?? false) === true) {
+                    $options['read_timeout'] ??= $idleSeconds;
+                    $options['curl'] = ($options['curl'] ?? []) + [
+                        CURLOPT_LOW_SPEED_LIMIT => 1,
+                        CURLOPT_LOW_SPEED_TIME => $idleSeconds,
+                    ];
+                }
+
+                return $handler($request, $options);
+            };
+        });
     }
 
     /**

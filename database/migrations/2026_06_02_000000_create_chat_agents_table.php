@@ -88,11 +88,21 @@ return new class extends Migration
             "USING ({$predicate}) WITH CHECK ({$predicate})"
         );
 
-        // 5. Auto-fill trigger (the tenant.fill_tenant_key() function is created by
-        //    the foundation migration; on a fresh DB this trigger is replaced
-        //    idempotently when that migration later runs).
+        // 5. Auto-fill trigger. The tenant.fill_tenant_key() function is created by
+        //    the 2026_06_04_9000xx foundation migration, which is dated *after* this
+        //    one. On a fresh database the function does not exist yet here, so we
+        //    only (re)create the trigger when it already exists — that foundation
+        //    migration installs the trigger for chat_agents itself (it iterates
+        //    Schemas::tenantTables(), which lists this table). On an already-migrated
+        //    database the function exists, so running this standalone still completes
+        //    the setup. CREATE TRIGGER would otherwise fail referencing a missing
+        //    function and abort the whole migration.
         DB::statement("DROP TRIGGER IF EXISTS fill_tenant_key ON {$qualified}");
-        DB::statement("CREATE TRIGGER fill_tenant_key BEFORE INSERT ON {$qualified} FOR EACH ROW EXECUTE FUNCTION tenant.fill_tenant_key()");
+        $functionExists = DB::connection($this->connection)
+            ->scalar("select to_regprocedure('tenant.fill_tenant_key()')") !== null;
+        if ($functionExists) {
+            DB::statement("CREATE TRIGGER fill_tenant_key BEFORE INSERT ON {$qualified} FOR EACH ROW EXECUTE FUNCTION tenant.fill_tenant_key()");
+        }
     }
 
     public function down(): void

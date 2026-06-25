@@ -65,6 +65,21 @@ class ChatAiService
     /** Cache key prefix for the cooperative stop flag the worker polls. */
     public const STOP_CACHE_PREFIX = 'chat-stop:';
 
+    /**
+     * Max seconds the stream may go without producing a new event before we treat
+     * the provider connection as stalled and abort. Guzzle's request timeout only
+     * bounds connection setup, not reads from an already-open SSE body, so a
+     * provider that opens the stream and then hangs would otherwise block until
+     * the worker's pcntl alarm kills the job (an uncatchable hard timeout). This
+     * watchdog turns that into a clean, catchable error.
+     *
+     * Reset on every stream event (including tool calls), so it bounds *idle*
+     * time, not total runtime. Kept generous enough to tolerate slow
+     * time-to-first-token on large prompts and in-stream tool execution
+     * (a `consult_agent` turn or a slow REST tool yields no events while it runs).
+     */
+    private const STREAM_IDLE_TIMEOUT_SECONDS = 120;
+
     private const MAX_HISTORY_MESSAGES = 30;
 
     /**
@@ -364,40 +379,54 @@ class ChatAiService
             $stopKey = self::STOP_CACHE_PREFIX.$placeholder->id;
             $sawText = false;
             $deltaCount = 0;
-            foreach ($stream as $event) {
-                // Cooperative cancellation: the Stop button sets a cache flag the
-                // worker polls every few deltas, then breaks and finalizes the
-                // partial reply. Polling (not every token) keeps cache load low.
-                if (($deltaCount % 16) === 0 && Cache::get($stopKey)) {
-                    break;
-                }
 
-                if ($event instanceof ToolCall) {
-                    // consult_agent has its own richer ChatAgentConsultation event.
-                    if ($event->toolCall->name !== 'consult_agent') {
-                        $usedSources[$this->prettySource($event->toolCall->name)] = 'used';
-                        $this->safeBroadcast(fn () => ChatToolCall::dispatch($chat->id, $placeholder->id, $event->toolCall->name));
+            // Idle watchdog: abort if the provider stalls mid-stream. Reset on
+            // every event below; if it elapses, the handler throws and the catch
+            // block surfaces a clean error — instead of the read blocking until
+            // the worker's hard (uncatchable) pcntl timeout fires.
+            $watchdog = $this->streamIdleWatchdog();
+            $watchdog['arm']();
+
+            try {
+                foreach ($stream as $event) {
+                    $watchdog['tick']();
+
+                    // Cooperative cancellation: the Stop button sets a cache flag the
+                    // worker polls every few deltas, then breaks and finalizes the
+                    // partial reply. Polling (not every token) keeps cache load low.
+                    if (($deltaCount % 16) === 0 && Cache::get($stopKey)) {
+                        break;
                     }
 
-                    continue;
-                }
+                    if ($event instanceof ToolCall) {
+                        // consult_agent has its own richer ChatAgentConsultation event.
+                        if ($event->toolCall->name !== 'consult_agent') {
+                            $usedSources[$this->prettySource($event->toolCall->name)] = 'used';
+                            $this->safeBroadcast(fn () => ChatToolCall::dispatch($chat->id, $placeholder->id, $event->toolCall->name));
+                        }
 
-                if ($event instanceof TextStart) {
-                    $separator = self::blockSeparator($buffer, $sawText);
-                    if ($separator !== '') {
-                        $buffer .= $separator;
-                        $this->safeBroadcast(fn () => ChatStreamChunk::dispatch($chat->id, $placeholder->id, $separator));
+                        continue;
                     }
 
-                    continue;
-                }
+                    if ($event instanceof TextStart) {
+                        $separator = self::blockSeparator($buffer, $sawText);
+                        if ($separator !== '') {
+                            $buffer .= $separator;
+                            $this->safeBroadcast(fn () => ChatStreamChunk::dispatch($chat->id, $placeholder->id, $separator));
+                        }
 
-                if ($event instanceof TextDelta && $event->delta !== '') {
-                    $sawText = true;
-                    $deltaCount++;
-                    $buffer .= $event->delta;
-                    $this->safeBroadcast(fn () => ChatStreamChunk::dispatch($chat->id, $placeholder->id, $event->delta));
+                        continue;
+                    }
+
+                    if ($event instanceof TextDelta && $event->delta !== '') {
+                        $sawText = true;
+                        $deltaCount++;
+                        $buffer .= $event->delta;
+                        $this->safeBroadcast(fn () => ChatStreamChunk::dispatch($chat->id, $placeholder->id, $event->delta));
+                    }
                 }
+            } finally {
+                $watchdog['disarm']();
             }
             Cache::forget($stopKey);
 
@@ -472,6 +501,68 @@ class ChatAiService
 
             return $placeholder;
         }
+    }
+
+    /**
+     * Idle watchdog for a provider stream. Returns arm/tick/disarm closures:
+     * arm() starts a SIGALRM countdown of STREAM_IDLE_TIMEOUT_SECONDS, tick()
+     * resets it on each stream event, disarm() cancels it and restores the prior
+     * signal state. If the countdown elapses the handler throws, which the
+     * streaming try/catch surfaces as a clean provider error rather than letting
+     * a hung read block until the worker's uncatchable hard timeout.
+     *
+     * Degrades to no-ops when pcntl async signals aren't available (non-Linux /
+     * some dev setups), falling back to the worker timeout — the same guard that
+     * existed before. Arming overrides the worker's own SIGALRM handler for the
+     * duration of the stream; disarm() restores it. Since the watchdog window is
+     * shorter than the worker timeout, it always fires first when it fires.
+     *
+     * @return array{arm: callable(): void, tick: callable(): void, disarm: callable(): void}
+     */
+    private function streamIdleWatchdog(): array
+    {
+        $noop = static function (): void {};
+        if (! function_exists('pcntl_async_signals') || ! function_exists('pcntl_alarm')) {
+            return ['arm' => $noop, 'tick' => $noop, 'disarm' => $noop];
+        }
+
+        $timeout = self::STREAM_IDLE_TIMEOUT_SECONDS;
+        $previousHandler = null;
+        $previousAsync = null;
+
+        $arm = function () use (&$previousHandler, &$previousAsync, $timeout): void {
+            $previousAsync = pcntl_async_signals(true);
+            $previousHandler = pcntl_signal_get_handler(SIGALRM);
+            pcntl_signal(SIGALRM, static function (): void {
+                throw new \RuntimeException(sprintf(
+                    'The model stopped responding (no stream activity for %ds).',
+                    self::STREAM_IDLE_TIMEOUT_SECONDS,
+                ));
+            });
+            pcntl_alarm($timeout);
+        };
+
+        $tick = static function () use ($timeout): void {
+            pcntl_alarm($timeout);
+        };
+
+        $disarm = function () use (&$previousHandler, &$previousAsync, $timeout): void {
+            pcntl_alarm(0);
+            if (is_callable($previousHandler) || is_int($previousHandler)) {
+                pcntl_signal(SIGALRM, $previousHandler);
+                // Arming consumed the worker's own alarm; restore a bounded
+                // backstop for the post-stream tail (title/summary AI calls) using
+                // the worker's handler, so the tail can't hang unbounded either.
+                if (is_callable($previousHandler)) {
+                    pcntl_alarm($timeout);
+                }
+            }
+            if ($previousAsync !== null) {
+                pcntl_async_signals($previousAsync);
+            }
+        };
+
+        return ['arm' => $arm, 'tick' => $tick, 'disarm' => $disarm];
     }
 
     /**

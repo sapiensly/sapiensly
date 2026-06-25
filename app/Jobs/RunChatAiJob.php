@@ -26,7 +26,10 @@ class RunChatAiJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 300;
+    // Below the supervisor-ai worker timeout (300s) so the job fails cleanly
+    // before the worker's hard pcntl alarm. ChatAiService's in-stream idle
+    // watchdog is the primary guard and trips well before this.
+    public int $timeout = 280;
 
     public int $tries = 1;
 

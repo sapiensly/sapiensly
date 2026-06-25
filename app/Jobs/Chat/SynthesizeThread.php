@@ -17,7 +17,9 @@ class SynthesizeThread implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 300;
+    // Below the worker/supervisor timeout (300s) so the job can fail cleanly
+    // before the worker's hard pcntl alarm fires.
+    public int $timeout = 280;
 
     public int $tries = 1;
 

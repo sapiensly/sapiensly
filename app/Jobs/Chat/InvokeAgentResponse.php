@@ -25,7 +25,10 @@ class InvokeAgentResponse implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 300;
+    // Kept below the worker/supervisor timeout (300s) so the job can fail and run
+    // failed() cleanly before the worker's hard pcntl alarm fires. The in-stream
+    // idle watchdog (ChatAiService) is the real guard and trips well before this.
+    public int $timeout = 280;
 
     public int $tries = 1;
 

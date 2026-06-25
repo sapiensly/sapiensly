@@ -22,6 +22,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Streaming Transport Timeouts (seconds)
+    |--------------------------------------------------------------------------
+    |
+    | Applied by AppServiceProvider to streaming (SSE) HTTP requests only. The
+    | idle timeout bounds the gap between stream chunks at the socket layer, so
+    | a provider that opens the connection and then stalls aborts cleanly rather
+    | than hanging until the queue worker's hard timeout. Keep the idle value
+    | below the streaming jobs' timeout (280s) and the worker timeout (300s).
+    |
+    */
+
+    'stream_idle_timeout' => (int) env('AI_STREAM_IDLE_TIMEOUT', 120),
+
+    /*
+    |--------------------------------------------------------------------------
     | Caching
     |--------------------------------------------------------------------------
     |
