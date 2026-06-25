@@ -170,6 +170,38 @@ class ThreadSynthesizer
     }
 
     /**
+     * Close a deliberation that could not be synthesized (the synthesis job errored
+     * or timed out, or an agent turn failure halted the chain before synthesis ran)
+     * so the "deliberating" indicator resolves instead of spinning forever. No-op
+     * once the thread already reached a terminal state, so it's safe to call from
+     * both the chain's failure handler and the job's own failed() hook.
+     */
+    public function abort(Chat $chat): void
+    {
+        $chat->refresh();
+        if (in_array($chat->synthesis_status, ['ready', 'dismissed'], true)) {
+            return;
+        }
+
+        $message = ChatMessage::create([
+            'chat_id' => $chat->id,
+            'role' => 'system',
+            'content' => 'The team could not finish deliberating. Please try again.',
+            'status' => 'complete',
+            'message_type' => 'text',
+        ]);
+
+        $chat->forceFill([
+            'synthesis_status' => 'dismissed',
+            'last_message_at' => now(),
+        ])->save();
+
+        $this->broadcast($message, 'dismissed');
+
+        Log::warning('Chat synthesis aborted; deliberation closed without a result', ['chat_id' => $chat->id]);
+    }
+
+    /**
      * Persist the "no clear recommendation" close and mark the thread dismissed.
      */
     private function dismiss(Chat $chat): void

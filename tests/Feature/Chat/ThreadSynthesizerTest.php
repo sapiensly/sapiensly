@@ -2,6 +2,7 @@
 
 use App\Ai\ChatAgent;
 use App\Events\Chat\ChatActionProposalReady;
+use App\Jobs\Chat\SynthesizeThread;
 use App\Models\Agent;
 use App\Models\AiProvider;
 use App\Models\Chat;
@@ -68,5 +69,40 @@ it('falls back to a dismissed system message when nothing is actionable', functi
         ->and(ChatMessage::where('chat_id', $chat->id)->where('role', 'system')->count())->toBe(1)
         ->and($chat->refresh()->synthesis_status)->toBe('dismissed');
 
+    Event::assertDispatched(ChatActionProposalReady::class);
+});
+
+it('abort closes a pending deliberation so the indicator resolves', function () {
+    Event::fake([ChatActionProposalReady::class]);
+    $chat = multiAgentChat($this->user);
+    $chat->forceFill(['synthesis_status' => 'pending'])->save();
+
+    app(ThreadSynthesizer::class)->abort($chat);
+
+    expect($chat->refresh()->synthesis_status)->toBe('dismissed')
+        ->and(ChatMessage::where('chat_id', $chat->id)->where('role', 'system')->exists())->toBeTrue();
+
+    Event::assertDispatched(ChatActionProposalReady::class);
+});
+
+it('abort is a no-op once the thread already reached a terminal state', function () {
+    Event::fake([ChatActionProposalReady::class]);
+    $chat = multiAgentChat($this->user);
+    $chat->forceFill(['synthesis_status' => 'ready'])->save();
+
+    app(ThreadSynthesizer::class)->abort($chat);
+
+    expect($chat->refresh()->synthesis_status)->toBe('ready');
+    Event::assertNotDispatched(ChatActionProposalReady::class);
+});
+
+it('SynthesizeThread::failed closes a deliberation that never synthesized', function () {
+    Event::fake([ChatActionProposalReady::class]);
+    $chat = multiAgentChat($this->user);
+    $chat->forceFill(['synthesis_status' => 'pending'])->save();
+
+    (new SynthesizeThread($chat->id))->failed(new RuntimeException('timed out'));
+
+    expect($chat->refresh()->synthesis_status)->toBe('dismissed');
     Event::assertDispatched(ChatActionProposalReady::class);
 });

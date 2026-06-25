@@ -7,6 +7,7 @@ use App\Services\Chat\ThreadSynthesizer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Closes a multi-agent thread with a synthesized action proposal. Runs as the
@@ -40,5 +41,19 @@ class SynthesizeThread implements ShouldQueue
         }
 
         $synthesizer->synthesize($chat);
+    }
+
+    /**
+     * If synthesis itself dies (error or timeout), still close the deliberation so
+     * the "deliberating" indicator resolves instead of spinning forever.
+     */
+    public function failed(?Throwable $e): void
+    {
+        $chat = Chat::query()->find($this->chatId);
+        if ($chat === null) {
+            return;
+        }
+
+        app(ThreadSynthesizer::class)->abort($chat);
     }
 }

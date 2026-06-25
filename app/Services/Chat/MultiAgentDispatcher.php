@@ -10,6 +10,7 @@ use App\Models\ChatMessage;
 use App\Models\ChatParticipant;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Bus;
+use Throwable;
 
 /**
  * Turns a @mention message into a multi-agent thread: flips the chat into
@@ -56,7 +57,18 @@ class MultiAgentDispatcher
             ->all();
         $jobs[] = new SynthesizeThread($chat->id);
 
-        Bus::chain($jobs)->onQueue('agent-responses')->dispatch();
+        $chatId = $chat->id;
+
+        // A failed agent turn halts the chain BEFORE its SynthesizeThread tail, which
+        // would otherwise leave the "deliberating" indicator spinning forever. The
+        // failure handler still runs synthesis so the deliberation closes from
+        // whatever agents did respond (Synthesize::abort handles the no-result case).
+        Bus::chain($jobs)
+            ->onQueue('agent-responses')
+            ->catch(function (Throwable $e) use ($chatId): void {
+                SynthesizeThread::dispatch($chatId)->onQueue('agent-responses');
+            })
+            ->dispatch();
 
         return $notice;
     }
