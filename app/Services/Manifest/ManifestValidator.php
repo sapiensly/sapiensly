@@ -166,40 +166,173 @@ class ManifestValidator
         $rootError = $result->error();
 
         $formatter = new ErrorFormatter;
-        $formatted = $formatter->format(
-            $rootError,
-            multiple: true,
-            formatter: fn (ValidationError $error): string => $this->describeSchemaError($formatter, $error),
-        );
-
-        $errors = [];
-
-        // A described oneOf/anyOf node (block / field_definition / action) is the
-        // signal a model needs when it invents an unknown type — but Opis reports
-        // it as the per-branch leaf noise ("required properties missing"). Surface
-        // that node's own description as a dedicated, leading hint so the model
-        // self-corrects from one error instead of wading through every branch.
-        $this->collectCompositeHints($rootError, $errors);
 
         // Machine-readable expectation + offending value per data path, so each
         // schema error carries {expected, value} the model can diff — not just prose.
         $argsByPath = [];
         $this->collectLeafArgs($rootError, $argsByPath);
 
-        foreach ($formatted as $path => $messages) {
-            $normPath = $path === '' ? '/' : $path;
-            foreach ((array) $messages as $message) {
-                $errors[] = new ManifestValidationError(
-                    path: $normPath,
-                    message: $message,
-                    code: 'schema',
-                    expected: $argsByPath[$normPath]['expected'] ?? null,
-                    value: $argsByPath[$normPath]['value'] ?? null,
-                );
+        // Walk the error tree emitting one error per failing leaf, but PRUNE
+        // discriminated oneOf/anyOf nodes (step / block / field_definition /
+        // action — each branch pinned by a `type` const): keep only the branch
+        // whose `type` matched the data. Without this, a single deep mistake
+        // (e.g. a too-short step id inside a `branch`) drags in every sibling
+        // branch's "required property missing" / "additionalProperties" noise —
+        // 40+ errors burying the real one, plus a spurious root-level hint.
+        $errors = [];
+        $seen = [];
+        $this->collectSchemaErrors($rootError, $formatter, $argsByPath, $errors, $seen);
+
+        return $errors;
+    }
+
+    /**
+     * Recursively collect leaf schema errors, pruning the losing branches of a
+     * `type`-discriminated oneOf/anyOf. When no branch matched the data's `type`
+     * (an unknown/invented type), the composite node's own description is the
+     * single actionable hint, so emit that instead of every branch's noise.
+     *
+     * @param  array<string, array{expected?: mixed, value?: mixed}>  $argsByPath
+     * @param  list<ManifestValidationError>  $errors
+     * @param  array<string, true>  $seen
+     */
+    private function collectSchemaErrors(
+        ValidationError $error,
+        ErrorFormatter $formatter,
+        array $argsByPath,
+        array &$errors,
+        array &$seen,
+    ): void {
+        $subErrors = $error->subErrors();
+
+        if (in_array($error->keyword(), ['oneOf', 'anyOf'], true)) {
+            $matched = array_values(array_filter(
+                $subErrors,
+                fn (ValidationError $branch): bool => ! $this->branchRejectedByType($branch),
+            ));
+
+            // Every branch rejected on `type` → unknown/invented type. The node's
+            // own description ("A workflow step. Its `type` must be one of …") is
+            // the one useful signal; the per-branch noise is not.
+            if ($matched === []) {
+                if (($description = $this->schemaDescription($error)) !== null) {
+                    $this->pushSchemaError($error, $description, $argsByPath, $errors, $seen);
+
+                    return;
+                }
+                // No description to lean on: fall back to walking every branch.
+                $matched = $subErrors;
+            }
+
+            // Recurse only into the surviving discriminator branch(es). When
+            // nothing was pruned (a oneOf with no `type` discriminator) this is
+            // simply all of them, preserving the previous behaviour.
+            foreach ($matched as $branch) {
+                $this->collectSchemaErrors($branch, $formatter, $argsByPath, $errors, $seen);
+            }
+
+            return;
+        }
+
+        if ($subErrors === []) {
+            $this->pushSchemaError(
+                $error,
+                $this->describeSchemaError($formatter, $error),
+                $argsByPath,
+                $errors,
+                $seen,
+            );
+
+            return;
+        }
+
+        // When a descendant of an object fails, Opis ALSO reports a spurious
+        // `additionalProperties` error on that object listing ALL its (valid)
+        // keys — the cascade that, on a deep mistake, repeats "Additional object
+        // properties are not allowed: …" at every ancestor up to the root. The
+        // real failure is the deeper sibling, so drop the additionalProperties
+        // leaf whenever the node has other sub-errors. A genuine unknown key is
+        // the node's ONLY sub-error, so it is preserved.
+        $hasOtherFailure = count($subErrors) > 1;
+        foreach ($subErrors as $subError) {
+            if ($hasOtherFailure
+                && $subError->keyword() === 'additionalProperties'
+                && $subError->subErrors() === []) {
+                continue;
+            }
+            $this->collectSchemaErrors($subError, $formatter, $argsByPath, $errors, $seen);
+        }
+    }
+
+    /**
+     * Append a schema error at the given node's data path, deduped by path+message.
+     *
+     * @param  array<string, array{expected?: mixed, value?: mixed}>  $argsByPath
+     * @param  list<ManifestValidationError>  $errors
+     * @param  array<string, true>  $seen
+     */
+    private function pushSchemaError(
+        ValidationError $error,
+        string $message,
+        array $argsByPath,
+        array &$errors,
+        array &$seen,
+    ): void {
+        if (count($errors) >= self::MAX_SCHEMA_ERRORS) {
+            return;
+        }
+
+        $path = '/'.implode('/', $error->data()->fullPath());
+        $normPath = $path === '/' ? '/' : rtrim($path, '/');
+
+        $key = $normPath.'|'.$message;
+        if (isset($seen[$key])) {
+            return;
+        }
+        $seen[$key] = true;
+
+        $errors[] = new ManifestValidationError(
+            path: $normPath,
+            message: $message,
+            code: 'schema',
+            expected: $argsByPath[$normPath]['expected'] ?? null,
+            value: $argsByPath[$normPath]['value'] ?? null,
+        );
+    }
+
+    /**
+     * Did this oneOf/anyOf branch fail purely because its OWN `type` const did
+     * not match the data? Such a branch is a losing discriminator alternative,
+     * not the author's intended shape, so its sub-errors are noise. The const
+     * check sits under the branch's allOf wrapper, so we recurse — but only the
+     * branch's own `type` (at its data path + "type") counts: a `type` const
+     * failure from a NESTED discriminator (e.g. a losing action branch inside a
+     * button block) lives deeper and must not condemn the outer branch.
+     */
+    private function branchRejectedByType(ValidationError $branch): bool
+    {
+        return $this->hasTypeConstFailureAtDepth(
+            $branch,
+            count($branch->data()->fullPath()) + 1,
+        );
+    }
+
+    private function hasTypeConstFailureAtDepth(ValidationError $error, int $depth): bool
+    {
+        if ($error->keyword() === 'const') {
+            $path = $error->data()->fullPath();
+            if (count($path) === $depth && end($path) === 'type') {
+                return true;
             }
         }
 
-        return $errors;
+        foreach ($error->subErrors() as $subError) {
+            if ($this->hasTypeConstFailureAtDepth($subError, $depth)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -295,32 +428,6 @@ class ManifestValidator
         return $description !== null
             ? "{$message} — hint: {$description}"
             : $message;
-    }
-
-    /**
-     * Walk the error tree and, for each described `oneOf`/`anyOf` node, emit a
-     * single concise hint error at that data path. Recurses into sub-errors so
-     * nested composites (a bad action inside a block inside a page) are covered.
-     *
-     * @param  list<ManifestValidationError>  $errors
-     */
-    private function collectCompositeHints(ValidationError $error, array &$errors): void
-    {
-        if (in_array($error->keyword(), ['oneOf', 'anyOf'], true)) {
-            $description = $this->schemaDescription($error);
-            if ($description !== null) {
-                $path = '/'.implode('/', $error->data()->fullPath());
-                $errors[] = new ManifestValidationError(
-                    path: $path === '/' ? '/' : rtrim($path, '/'),
-                    message: $description,
-                    code: 'schema',
-                );
-            }
-        }
-
-        foreach ($error->subErrors() as $subError) {
-            $this->collectCompositeHints($subError, $errors);
-        }
     }
 
     /**

@@ -1277,6 +1277,58 @@ it('rejects {{params.*}} inside a workflow record.create value', function () {
         ->toContain('invalid_context');
 });
 
+it('reports a short step id without the oneOf branch explosion or a stale workflows hint', function () {
+    $manifest = baseManifest();
+    $manifest['workflows'] = [[
+        'id' => id('wkf'), 'slug' => 'offer', 'name' => 'Move to offer',
+        'trigger' => ['type' => 'manual'],
+        'steps' => [[
+            'id' => id('stp'), 'type' => 'branch',
+            'cases' => [[
+                'condition' => '1 == 1',
+                // 6 chars after the prefix — the pattern requires 8-60.
+                'steps' => [['id' => 'stp_logone', 'type' => 'log', 'message' => 'hi']],
+            ]],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    $messages = collect($result->errors)->pluck('message')->implode("\n");
+
+    expect($result->valid)->toBeFalse()
+        // The id-pattern error survives and points at the offending step.
+        ->and(collect($result->errors)->contains(
+            fn ($e) => str_contains($e->path, 'steps/0/cases/0/steps/0/id'),
+        ))->toBeTrue()
+        // No cross-branch noise: record.create/record.update/script.run branches
+        // must not bleed their "required property missing" complaints.
+        ->and($messages)->not->toContain('record_id_expression')
+        ->and($messages)->not->toContain('user_prompt')
+        // No misleading root hint claiming workflows are unsupported.
+        ->and($messages)->not->toContain('MVP subset')
+        ->and($messages)->not->toContain('Excludes workflows')
+        // No spurious "additionalProperties" cascade at the ancestor levels.
+        ->and($messages)->not->toContain('Additional object properties')
+        // The dump collapses to the single real error instead of 40+.
+        ->and($result->errors)->toHaveCount(1);
+});
+
+it('still surfaces the step description hint when a workflow step type is unknown', function () {
+    $manifest = baseManifest();
+    $manifest['workflows'] = [[
+        'id' => id('wkf'), 'slug' => 'bad', 'name' => 'Bad',
+        'trigger' => ['type' => 'manual'],
+        'steps' => [['id' => id('stp'), 'type' => 'teleport', 'message' => 'hi']],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    $messages = collect($result->errors)->pluck('message')->implode("\n");
+
+    expect($result->valid)->toBeFalse()
+        ->and($messages)->toContain('type')
+        ->and($messages)->not->toContain('Additional object properties');
+});
+
 it('accepts a workflow that uses {{trigger.*}} and {{vars.*}}', function () {
     $manifest = baseManifest();
     $obj = $manifest['objects'][0];

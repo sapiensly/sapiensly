@@ -1,8 +1,8 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://sapiensly.com/schemas/app-manifest/v1.json",
-    "title": "Sapiensly App Manifest v1 (MVP subset)",
-    "description": "MVP subset of the App manifest schema. Excludes workflows, connections, code-custom field types (formula/lookup/rollup), media field types (file/image/rich_text/percentage/time), and write/interactive blocks (form/button/modal/chart/kanban/calendar/list/tabs/accordion). These layers will be added in later phases without breaking changes.",
+    "title": "Sapiensly App Manifest v1",
+    "description": "The App manifest schema: objects (the data model — fields including formula/lookup/rollup, file, rich_text and relations), pages (with interactive blocks: form, table, button, modal, chart, kanban, calendar, tabs and more), workflows (triggers + steps), permissions, settings and an optional agent.",
     "type": "object",
     "required": ["schema_version", "id", "slug", "name", "version", "objects", "pages", "permissions"],
     "additionalProperties": false,
