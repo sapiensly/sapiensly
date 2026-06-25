@@ -2,12 +2,15 @@
 
 namespace App\Ai\Tools\Builder;
 
+use App\Ai\Tools\Builder\Concerns\EnrichesCatalogEntries;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 class ListAvailableFieldTypesTool implements Tool
 {
+    use EnrichesCatalogEntries;
+
     public function name(): string
     {
         return 'list_available_field_types';
@@ -15,7 +18,7 @@ class ListAvailableFieldTypesTool implements Tool
 
     public function description(): string
     {
-        return 'List the field types you may use inside object.fields. Each entry includes the required and optional props for that type.';
+        return 'List the field types you may use inside object.fields. Each entry includes a prose summary plus `params` (required/optional props + allowed enum values), an `example` skeleton, and the `definition` name to drill into with get_manifest_schema.';
     }
 
     public function schema(JsonSchema $schema): array
@@ -47,7 +50,7 @@ class ListAvailableFieldTypesTool implements Tool
         ];
 
         return json_encode([
-            'field_types' => $catalog,
+            'field_types' => $this->withSchema('field', $catalog),
             'common_props' => 'All fields must have: id (prefix `fld_` then 8-60 chars of [a-z0-9_] — a lowercased ULID works but is not required), slug (^[a-z][a-z0-9_]*$), name, type. Optional: description, required, unique, indexed, readonly, hidden, help_text.',
             'system_fields' => [
                 'note' => 'Every object also has TWO virtual datetime fields you can reference without declaring them. Always prefer these over inventing a manual datetime field for "when was the record created/updated".',

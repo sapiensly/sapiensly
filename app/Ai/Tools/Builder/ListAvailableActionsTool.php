@@ -2,6 +2,7 @@
 
 namespace App\Ai\Tools\Builder;
 
+use App\Ai\Tools\Builder\Concerns\EnrichesCatalogEntries;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -13,6 +14,8 @@ use Laravel\Ai\Tools\Request;
  */
 class ListAvailableActionsTool implements Tool
 {
+    use EnrichesCatalogEntries;
+
     public function name(): string
     {
         return 'list_available_actions';
@@ -20,7 +23,7 @@ class ListAvailableActionsTool implements Tool
 
     public function description(): string
     {
-        return 'List every action type allowed inside action_sequence (button.on_click, form.on_submit). Each entry includes the required arguments. Use this before composing a button or form on_submit.';
+        return 'List every action type allowed inside action_sequence (button.on_click, form.on_submit). Each entry includes a prose summary plus `params` (required/optional args + allowed enum values), an `example` skeleton, and the `definition` name. Use this before composing a button or form on_submit.';
     }
 
     public function schema(JsonSchema $schema): array
@@ -42,7 +45,7 @@ class ListAvailableActionsTool implements Tool
         ];
 
         return json_encode([
-            'actions' => $catalog,
+            'actions' => $this->withSchema('action', $catalog),
             'patterns' => [
                 'create_via_modal' => 'button[on_click: open_modal] → modal containing form[on_submit: create_record, close_modal, show_toast, refresh]',
                 'inline_create' => 'form on a page directly; on_submit: create_record, show_toast, refresh',

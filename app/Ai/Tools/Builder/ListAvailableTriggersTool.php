@@ -2,6 +2,7 @@
 
 namespace App\Ai\Tools\Builder;
 
+use App\Ai\Tools\Builder\Concerns\EnrichesCatalogEntries;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -13,6 +14,8 @@ use Laravel\Ai\Tools\Request;
  */
 class ListAvailableTriggersTool implements Tool
 {
+    use EnrichesCatalogEntries;
+
     public function name(): string
     {
         return 'list_available_triggers';
@@ -20,7 +23,7 @@ class ListAvailableTriggersTool implements Tool
 
     public function description(): string
     {
-        return 'List the trigger types you may use inside workflow.trigger. Each entry includes the required arguments. Call this before proposing a workflow.';
+        return 'List the trigger types you may use inside workflow.trigger. Each entry includes a prose summary plus `params` (required/optional args + allowed enum values), an `example` skeleton, and the `definition` name. Call this before proposing a workflow.';
     }
 
     public function schema(JsonSchema $schema): array
@@ -40,7 +43,7 @@ class ListAvailableTriggersTool implements Tool
         ];
 
         return json_encode([
-            'triggers' => $catalog,
+            'triggers' => $this->withSchema('trigger', $catalog),
             'context_tokens' => [
                 '{{trigger.<path>}}' => 'access trigger payload — e.g. {{trigger.record.data.nombre}}',
                 '{{vars.<X>}}' => 'workflow-scoped variable set by a set_variable step or output_variable',

@@ -2,6 +2,7 @@
 
 namespace App\Ai\Tools\Builder;
 
+use App\Ai\Tools\Builder\Concerns\EnrichesCatalogEntries;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -12,6 +13,8 @@ use Laravel\Ai\Tools\Request;
  */
 class ListAvailableStepsTool implements Tool
 {
+    use EnrichesCatalogEntries;
+
     public function name(): string
     {
         return 'list_available_steps';
@@ -19,7 +22,7 @@ class ListAvailableStepsTool implements Tool
 
     public function description(): string
     {
-        return 'List every step type allowed inside workflow.steps. Each entry includes required args and output shape. Use this before composing a workflow.';
+        return 'List every step type allowed inside workflow.steps. Each entry includes a prose summary, output shape, plus `params` (required/optional args + allowed enum values), an `example` skeleton, and the `definition` name. Use this before composing a workflow.';
     }
 
     public function schema(JsonSchema $schema): array
@@ -105,7 +108,7 @@ class ListAvailableStepsTool implements Tool
         ];
 
         return json_encode([
-            'steps' => $catalog,
+            'steps' => $this->withSchema('step', $catalog),
             'shared_step_props' => 'Every step also accepts: id (stp_<ulid>), name?, output_variable? (assigns the step output to {{vars.<X>}}), skip_if? (expression, truthy skips the step), retry?',
         ], JSON_THROW_ON_ERROR);
     }

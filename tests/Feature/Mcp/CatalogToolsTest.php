@@ -10,6 +10,7 @@ use App\Mcp\Tools\Build\DeleteAppTool;
 use App\Mcp\Tools\Build\FrameworkReferenceTool;
 use App\Mcp\Tools\Build\ListAppsTool;
 use App\Mcp\Tools\Build\ListAvailableComponentsTool;
+use App\Mcp\Tools\Build\ListAvailableFieldTypesTool;
 use App\Mcp\Tools\Chatbots\DeleteChatbotTool;
 use App\Mcp\Tools\Chatbots\ListChatbotsTool;
 use App\Mcp\Tools\Integrations\ListIntegrationsTool;
@@ -81,6 +82,19 @@ it('list_available_components delegates to the builder catalog', function () {
         ->tool(ListAvailableComponentsTool::class, [])
         ->assertOk()
         ->assertSee('table');
+});
+
+it('catalog entries carry the machine-readable schema contract', function () {
+    $user = User::factory()->create();
+
+    // Field types: the relation entry exposes its enum values + a definition pointer.
+    SapiensServer::actingAs($user)
+        ->tool(ListAvailableFieldTypesTool::class, [])
+        ->assertOk()
+        ->assertSee('params')
+        ->assertSee('example')
+        ->assertSee('field_relation')
+        ->assertSee('many_to_many');
 });
 
 it('framework_reference lists topics when called with no topic', function () {

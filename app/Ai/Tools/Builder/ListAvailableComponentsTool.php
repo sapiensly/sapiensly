@@ -2,6 +2,7 @@
 
 namespace App\Ai\Tools\Builder;
 
+use App\Ai\Tools\Builder\Concerns\EnrichesCatalogEntries;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -13,6 +14,8 @@ use Laravel\Ai\Tools\Request;
  */
 class ListAvailableComponentsTool implements Tool
 {
+    use EnrichesCatalogEntries;
+
     public function name(): string
     {
         return 'list_available_components';
@@ -20,7 +23,7 @@ class ListAvailableComponentsTool implements Tool
 
     public function description(): string
     {
-        return 'List the UI block types you may use inside page.blocks. The runtime can only render these types — any other type will fail validation.';
+        return 'List the UI block types you may use inside page.blocks. The runtime can only render these types — any other type will fail validation. Each entry adds `params` (required/optional props + allowed enum values), an `example` skeleton, and the `definition` name to drill into with get_manifest_schema.';
     }
 
     public function schema(JsonSchema $schema): array
@@ -71,7 +74,7 @@ class ListAvailableComponentsTool implements Tool
         ];
 
         return json_encode([
-            'components' => $catalog,
+            'components' => $this->withSchema('component', $catalog),
             'site' => 'A website should have site chrome + a cohesive look, set in manifest `settings`: `accent` ("#RRGGBB" — the ONE brand colour; drives all buttons/links/highlights, set it once per site), `font` (sans|serif|rounded|mono), `theme` (light|dark, default light), `brand` {name, logo? (URL), cta? {label, href}} → renders a sticky site header, and `footer` {text?, links?[{label,href}]} → renders a site footer. Always set `accent` and `brand` for a real website so it does not look like a bare document.',
             'style' => 'EVERY block accepts an optional `style` object to turn it into a section: {padding, margin (none|sm|md|lg), background "#RRGGBB", gradient {from,to,direction:to-b|to-r|to-br|to-tr}, color "#RRGGBB", max_width (sm|md|lg|full), full_bleed (bool)}. Build alternating sections by wrapping a `container` with style.padding="lg" + a background (flat `background` or a `gradient` — keep gradient from/to in the same tonal family). TEXT CONTRAST IS AUTOMATIC: setting background/gradient auto-picks a legible text colour (dark on light, light on dark) — do NOT set `color` and do NOT also put a background on inner heading/markdown. Set style.full_bleed=true on top-level coloured sections so the band spans edge-to-edge. Set style.max_width="md" on text sections so lines stay readable and centre on wide screens. Use this for visual rhythm — never leave a content page as plain text.',
         ], JSON_THROW_ON_ERROR);
