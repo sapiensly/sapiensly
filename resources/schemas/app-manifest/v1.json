@@ -1507,6 +1507,28 @@
                 }
             ]
         },
+        "block_progress": {
+            "description": "Linear progress bar showing one aggregate against a max_value (the 100% mark). Same data shape as gauge but a horizontal bar — compact, and stacks cleanly in a column for several goals at once. Props: label, query, aggregation (count|sum|avg|min|max), field_id (required for non-count), max_value (required), format (number|currency|percentage), color (hex).",
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "progress" },
+                        "label": { "type": "string", "maxLength": 80 },
+                        "query": { "$ref": "#/$defs/query" },
+                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                        "field_id": { "$ref": "#/$defs/id" },
+                        "max_value": { "type": "number" },
+                        "format": { "enum": ["number", "currency", "percentage"] },
+                        "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                    },
+                    "required": ["type", "label", "query", "aggregation", "max_value"]
+                }
+            ]
+        },
         "block_heatmap": {
             "allOf": [
                 { "$ref": "#/$defs/block_base" },
@@ -1735,6 +1757,7 @@
                 { "$ref": "#/$defs/block_metric_grid" },
                 { "$ref": "#/$defs/block_sparkline" },
                 { "$ref": "#/$defs/block_gauge" },
+                { "$ref": "#/$defs/block_progress" },
                 { "$ref": "#/$defs/block_heatmap" },
                 { "$ref": "#/$defs/block_timeline" },
                 { "$ref": "#/$defs/block_funnel" },

@@ -21,6 +21,7 @@ const BlockImage = defineAsyncComponent(() => import('./blocks/BlockImage.vue'))
 const BlockMetricGrid = defineAsyncComponent(() => import('./blocks/BlockMetricGrid.vue'));
 const BlockSparkline = defineAsyncComponent(() => import('./blocks/BlockSparkline.vue'));
 const BlockGauge = defineAsyncComponent(() => import('./blocks/BlockGauge.vue'));
+const BlockProgress = defineAsyncComponent(() => import('./blocks/BlockProgress.vue'));
 const BlockHeatmap = defineAsyncComponent(() => import('./blocks/BlockHeatmap.vue'));
 const BlockTimeline = defineAsyncComponent(() => import('./blocks/BlockTimeline.vue'));
 const BlockFunnel = defineAsyncComponent(() => import('./blocks/BlockFunnel.vue'));
@@ -60,6 +61,7 @@ const componentForType = {
     metric_grid: BlockMetricGrid,
     sparkline: BlockSparkline,
     gauge: BlockGauge,
+    progress: BlockProgress,
     heatmap: BlockHeatmap,
     timeline: BlockTimeline,
     funnel: BlockFunnel,

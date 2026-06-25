@@ -107,7 +107,7 @@ class BlockDataResolver
             return ['rows' => $this->queryRows($app, $block['data_source'], $manifest, $context)];
         }
 
-        if ($block['type'] === 'stat' || $block['type'] === 'gauge') {
+        if ($block['type'] === 'stat' || $block['type'] === 'gauge' || $block['type'] === 'progress') {
             $value = $this->records->aggregate(
                 $app,
                 $block['query'],

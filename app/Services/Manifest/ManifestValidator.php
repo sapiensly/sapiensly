@@ -1511,10 +1511,13 @@ class ManifestValidator
                 $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
             }
 
-            if ($block['type'] === 'gauge') {
+            // gauge (half-circle) and progress (linear bar) share the same
+            // single-aggregate-against-max_value contract, so validate them alike.
+            if ($block['type'] === 'gauge' || $block['type'] === 'progress') {
+                $type = $block['type'];
                 $fields = $this->resolveBlockObjectFields(
                     $block['query'] ?? [], 'object_id',
-                    "{$blockPath}/query/object_id", 'gauge',
+                    "{$blockPath}/query/object_id", $type,
                     $objectsById, $fieldsByObjectId, $errors,
                 );
                 if ($fields === null) {
@@ -1524,11 +1527,11 @@ class ManifestValidator
                 if ($aggregation !== 'count' && ! isset($block['field_id'])) {
                     $errors[] = new ManifestValidationError(
                         "{$blockPath}/field_id",
-                        "gauge aggregation '{$aggregation}' requires field_id",
+                        "{$type} aggregation '{$aggregation}' requires field_id",
                         'missing_required',
                     );
                 }
-                $this->checkFieldRef($fields, $block['field_id'] ?? null, "{$blockPath}/field_id", 'gauge.field_id', $errors,
+                $this->checkFieldRef($fields, $block['field_id'] ?? null, "{$blockPath}/field_id", "{$type}.field_id", $errors,
                     in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
                 $this->validateFilterExpression($block['query']['filter'] ?? null, "{$blockPath}/query/filter", $fields, $errors);
             }

@@ -329,6 +329,60 @@ it('rejects stat block sum aggregation without field_id', function () {
     expect(collect($result->errors)->pluck('code'))->toContain('missing_required');
 });
 
+it('accepts a valid progress block (count against a max_value)', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'progress',
+            'label' => 'Onboarded',
+            'query' => ['object_id' => $manifest['objects'][0]['id']],
+            'aggregation' => 'count',
+            'max_value' => 100,
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a progress block sum aggregation without field_id', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'progress',
+            'label' => 'Revenue',
+            'query' => ['object_id' => $manifest['objects'][0]['id']],
+            'aggregation' => 'sum',
+            'max_value' => 1000,
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('missing_required');
+});
+
+it('rejects a progress block sum aggregation over a non-numeric field', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'progress',
+            'label' => 'Revenue',
+            'query' => ['object_id' => $manifest['objects'][0]['id']],
+            'aggregation' => 'sum',
+            'field_id' => $manifest['objects'][0]['fields'][0]['id'], // string field
+            'max_value' => 1000,
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('incompatible_type');
+});
+
 it('accepts stat block count aggregation without field_id', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[
