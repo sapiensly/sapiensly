@@ -36,13 +36,19 @@ it('propose_change tells the model exactly what failed, not just a count', funct
         'steps' => [['id' => 'stp_'.strtolower((string) Str::ulid()), 'type' => 'ai.complete', 'output_variable' => 'idea']],
     ]]]];
 
+    // A rejected change comes back as the SAME structured result validate_manifest
+    // returns — {applied:false, valid:false, errors:[{path, message, code, ...}]} —
+    // not a flattened, truncated string. The validator's authoring hint survives.
     SapiensServer::actingAs($this->user)
         ->tool(ProposeChangeTool::class, [
             'app_slug' => 'content_engine',
             'ops' => $ops,
             'change_summary' => 'Add CMO Idea workflow',
         ])
-        ->assertHasErrors()
+        ->assertOk()
+        ->assertSee('"applied"')
+        ->assertSee('"valid"')
+        ->assertSee('"code"')
         ->assertSee('list_available_steps');
 });
 

@@ -34,7 +34,7 @@ class ManifestValidationResult
     }
 
     /**
-     * @return list<array{path: string, message: string, code: string}>
+     * @return list<array{path: string, message: string, code: string, expected?: mixed, value?: mixed}>
      */
     public function errorsArray(): array
     {
@@ -42,7 +42,7 @@ class ManifestValidationResult
     }
 
     /**
-     * @return list<array{path: string, message: string, code: string}>
+     * @return list<array{path: string, message: string, code: string, expected?: mixed, value?: mixed}>
      */
     public function warningsArray(): array
     {

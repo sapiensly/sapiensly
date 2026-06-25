@@ -22,6 +22,9 @@ class ManifestValidator
 
     private const SCHEMA_PATH = 'app/schemas/app-manifest/v1.json';
 
+    /** Upper bound on schema errors collected per validation (a runaway guard). */
+    private const MAX_SCHEMA_ERRORS = 100;
+
     private ?OpisValidator $opis = null;
 
     private ?Lexer $lexer = null;
@@ -178,17 +181,103 @@ class ManifestValidator
         // self-corrects from one error instead of wading through every branch.
         $this->collectCompositeHints($rootError, $errors);
 
+        // Machine-readable expectation + offending value per data path, so each
+        // schema error carries {expected, value} the model can diff — not just prose.
+        $argsByPath = [];
+        $this->collectLeafArgs($rootError, $argsByPath);
+
         foreach ($formatted as $path => $messages) {
+            $normPath = $path === '' ? '/' : $path;
             foreach ((array) $messages as $message) {
                 $errors[] = new ManifestValidationError(
-                    path: $path === '' ? '/' : $path,
+                    path: $normPath,
                     message: $message,
                     code: 'schema',
+                    expected: $argsByPath[$normPath]['expected'] ?? null,
+                    value: $argsByPath[$normPath]['value'] ?? null,
                 );
             }
         }
 
         return $errors;
+    }
+
+    /**
+     * Walk the error tree and record, per leaf error's data path, the structured
+     * expected value (allowed enum values, required type, pattern) and the
+     * offending scalar value. Leaves only — composite (oneOf/anyOf) nodes are
+     * covered separately by collectCompositeHints().
+     *
+     * @param  array<string, array{expected?: mixed, value?: mixed}>  $map
+     */
+    private function collectLeafArgs(ValidationError $error, array &$map): void
+    {
+        $subErrors = $error->subErrors();
+        if ($subErrors === []) {
+            $path = '/'.implode('/', $error->data()->fullPath());
+            $path = $path === '/' ? '/' : rtrim($path, '/');
+
+            $entry = [];
+            $expected = $this->expectedFor($error);
+            if ($expected !== null) {
+                $entry['expected'] = $expected;
+            }
+            $value = $this->actualValueFor($error);
+            if ($value !== null) {
+                $entry['value'] = $value;
+            }
+            if ($entry !== [] && ! isset($map[$path])) {
+                $map[$path] = $entry;
+            }
+
+            return;
+        }
+
+        foreach ($subErrors as $subError) {
+            $this->collectLeafArgs($subError, $map);
+        }
+    }
+
+    /**
+     * The structured expectation for a leaf schema error: the keyword's own
+     * `expected` arg (type/const), the allowed `enum` values from the schema node,
+     * or the required `pattern`. Null when the keyword carries nothing useful.
+     */
+    private function expectedFor(ValidationError $error): mixed
+    {
+        $args = $error->args();
+        if (array_key_exists('expected', $args)) {
+            return $args['expected'];
+        }
+
+        if ($error->keyword() === 'enum') {
+            $node = $error->schema()->info()->data();
+            $enum = is_object($node) ? ($node->enum ?? null) : null;
+
+            return is_array($enum) ? $enum : null;
+        }
+
+        if ($error->keyword() === 'pattern' && array_key_exists('pattern', $args)) {
+            return $args['pattern'];
+        }
+
+        return null;
+    }
+
+    /**
+     * The offending value at the error's data path, but only when it's a scalar
+     * (strings capped) — dumping a whole nested object/array back at the model is
+     * noise, and the path already locates it.
+     */
+    private function actualValueFor(ValidationError $error): mixed
+    {
+        $value = $error->data()->value();
+
+        if (is_string($value)) {
+            return mb_strlen($value) > 120 ? mb_substr($value, 0, 120).'…' : $value;
+        }
+
+        return is_scalar($value) ? $value : null;
     }
 
     /**
@@ -1864,6 +1953,11 @@ class ManifestValidator
     {
         if ($this->opis === null) {
             $validator = new OpisValidator;
+            // Report ALL schema violations in one pass instead of stopping at the
+            // first. A model authoring a manifest can then fix every structural
+            // error in a single edit rather than rediscovering them one round-trip
+            // at a time. (Opis defaults to maxErrors=1 / stopAtFirstError=true.)
+            $validator->setMaxErrors(self::MAX_SCHEMA_ERRORS)->setStopAtFirstError(false);
             $resolver = $validator->resolver();
             if ($resolver !== null) {
                 $resolver->registerFile(self::SCHEMA_URI, $this->resolveSchemaPath());
@@ -1872,6 +1966,22 @@ class ManifestValidator
         }
 
         return $this->opis;
+    }
+
+    /**
+     * The raw App-manifest JSON Schema as an associative array — the authoritative
+     * contract (required keys, enums, per-type props, descriptions). Exposed so a
+     * tool can hand it to a model to author against, instead of guessing from prose.
+     *
+     * @return array<string, mixed>
+     */
+    public function schemaArray(): array
+    {
+        return json_decode(
+            (string) file_get_contents($this->resolveSchemaPath()),
+            associative: true,
+            flags: JSON_THROW_ON_ERROR,
+        );
     }
 
     private function resolveSchemaPath(): string

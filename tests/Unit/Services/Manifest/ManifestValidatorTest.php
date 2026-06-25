@@ -1936,3 +1936,27 @@ it('rejects an action column with a malformed record_id_expression', function ()
     $r = (new ManifestValidator)->validate($manifest);
     expect(collect($r->errors)->pluck('code'))->toContain('malformed_expression');
 });
+
+it('attaches machine-readable expected + value to schema errors', function () {
+    $manifest = baseManifest();
+    $manifest['schema_version'] = 'not-semver';
+
+    $result = (new ManifestValidator)->validate($manifest);
+    $error = collect($result->errors)->firstWhere('path', '/schema_version');
+
+    expect($error)->not->toBeNull()
+        ->and($error->value)->toBe('not-semver')
+        ->and($error->expected)->not->toBeNull();
+});
+
+it('reports all schema errors in one pass, not just the first', function () {
+    $manifest = baseManifest();
+    $manifest['schema_version'] = 'bad';   // pattern violation
+    $manifest['version'] = 'one';          // type violation (expects integer)
+    unset($manifest['name']);              // required property missing
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(count($result->errors))->toBeGreaterThan(1);
+});

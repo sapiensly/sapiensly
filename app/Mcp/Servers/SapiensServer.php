@@ -94,6 +94,7 @@ class SapiensServer extends Server
         Tools\Build\CreateAppTool::class,
         Tools\Build\ScaffoldAppTool::class,
         Tools\Build\ReadManifestTool::class,
+        Tools\Build\GetManifestSchemaTool::class,
         Tools\Build\AddObjectTool::class,
         Tools\Build\AddFieldTool::class,
         Tools\Build\AddRelationTool::class,
