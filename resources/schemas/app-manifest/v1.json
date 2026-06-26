@@ -1101,6 +1101,8 @@
                         "x_field_id": { "$ref": "#/$defs/id" },
                         "y_field_id": { "$ref": "#/$defs/id" },
                         "group_by_field_id": { "$ref": "#/$defs/id" },
+                        "series_field_id": { "$ref": "#/$defs/id" },
+                        "stacked": { "type": "boolean" },
                         "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] }
                     },
                     "required": ["type", "chart_type", "data_source", "aggregation"]

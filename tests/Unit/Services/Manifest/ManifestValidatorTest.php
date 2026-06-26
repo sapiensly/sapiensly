@@ -811,6 +811,40 @@ it('accepts dashboard blocks: insight card, stat with compare/trend, radar & sca
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
 
+it('accepts a stacked bar chart with a series_field_id', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'dash', 'name' => 'Dash', 'path' => '/dash',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'chart', 'chart_type' => 'bar',
+            'data_source' => ['object_id' => $obj['id']], 'aggregation' => 'count',
+            'group_by_field_id' => $obj['fields'][0]['id'],
+            'series_field_id' => $obj['fields'][0]['id'],
+            'stacked' => true,
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a chart series_field_id that does not belong to the object', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'dash', 'name' => 'Dash', 'path' => '/dash',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'chart', 'chart_type' => 'bar',
+            'data_source' => ['object_id' => $obj['id']], 'aggregation' => 'count',
+            'group_by_field_id' => $obj['fields'][0]['id'],
+            'series_field_id' => id('fld'),
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('unresolved_ref');
+});
+
 it('accepts treemap chart, word_cloud and flow blocks', function () {
     $manifest = baseManifest();
     $obj = $manifest['objects'][0];

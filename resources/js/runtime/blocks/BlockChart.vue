@@ -13,6 +13,8 @@ interface ChartBlock {
     x_field_id?: string;
     y_field_id?: string;
     group_by_field_id?: string;
+    series_field_id?: string;
+    stacked?: boolean;
     aggregation: 'count' | 'sum' | 'avg' | 'min' | 'max';
 }
 
@@ -106,6 +108,72 @@ function colorFor(label: string, index: number): string {
 
 const maxValue = computed(() => Math.max(1, ...series.value.map((s) => s.value)));
 const totalValue = computed(() => series.value.reduce((a, s) => a + s.value, 0));
+
+// Pick a colour for a value of an arbitrary field (honours single_select option
+// colours), used for the series legend in stacked/grouped charts.
+function paletteColorFor(field: FieldDef | undefined, label: string, index: number): string {
+    if (field?.type === 'single_select') {
+        const opt = field.options?.find((o) => o.label === label || o.value === label);
+        if (opt?.color) return opt.color;
+    }
+    const palette = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#06B6D4', '#F97316', '#84CC16'];
+    return palette[index % palette.length];
+}
+
+const seriesField = computed(() => fieldOf(props.block.series_field_id));
+
+// Multi-series bar: split each category (group_by/x) into segments by a SECOND
+// field (series_field_id), then stack or group them. Two-dimensional aggregation
+// over the raw rows — only meaningful for bar charts.
+const isMultiSeries = computed(() => !!seriesField.value && props.block.chart_type === 'bar');
+
+const multi = computed(() => {
+    if (!isMultiSeries.value) return null;
+    const rows = props.data?.rows ?? [];
+    const catField = groupField.value;
+    const serField = seriesField.value;
+    if (!catField || !serField) return null;
+    const catSlug = catField.slug;
+    const serSlug = serField.slug;
+    const ySlug = yField.value?.slug;
+    const agg = props.block.aggregation;
+
+    const cats: string[] = [];
+    const sers: string[] = [];
+    const catIndex = new Map<string, number>();
+    const serIndex = new Map<string, number>();
+    const bucket: number[][][] = []; // [catIdx][serIdx] = numeric values
+    for (const r of rows) {
+        const ck = formatGroupKey(r.data[catSlug], catField);
+        const sk = formatGroupKey(r.data[serSlug], serField);
+        let ci = catIndex.get(ck);
+        if (ci === undefined) { ci = cats.length; cats.push(ck); catIndex.set(ck, ci); }
+        let si = serIndex.get(sk);
+        if (si === undefined) { si = sers.length; sers.push(sk); serIndex.set(sk, si); }
+        (bucket[ci] ??= [])[si] ??= [];
+        const yRaw = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
+        bucket[ci][si].push(Number.isFinite(yRaw) ? yRaw : 0);
+    }
+
+    const aggregate = (vals: number[] | undefined): number => {
+        if (!vals || vals.length === 0) return 0;
+        switch (agg) {
+            case 'sum': return vals.reduce((a, b) => a + b, 0);
+            case 'avg': return vals.reduce((a, b) => a + b, 0) / vals.length;
+            case 'min': return Math.min(...vals);
+            case 'max': return Math.max(...vals);
+            default: return vals.length; // count
+        }
+    };
+
+    const data = cats.map((_, ci) => sers.map((_, si) => aggregate(bucket[ci]?.[si])));
+    const stacked = !!props.block.stacked;
+    const max = stacked
+        ? Math.max(1, ...data.map((row) => row.reduce((a, b) => a + b, 0)))
+        : Math.max(1, ...data.flat());
+    const series = sers.map((label, i) => ({ label, color: paletteColorFor(serField, label, i) }));
+    return { cats, series, data, max, stacked };
+});
 
 function formatNumber(value: number): string {
     return new Intl.NumberFormat(props.locale).format(Math.round(value * 100) / 100);
@@ -421,6 +489,54 @@ const scatter = computed(() => {
                     :style="{ fill: 'var(--sp-accent, #3B82F6)' }"
                 />
             </svg>
+        </template>
+
+        <template v-else-if="isMultiSeries && multi">
+            <!-- multi-series bar: stacked or grouped segments per category -->
+            <ul class="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                <li v-for="(s, i) in multi.series" :key="i" class="flex items-center gap-1.5">
+                    <span class="size-2.5 shrink-0 rounded-xs" :style="{ background: s.color }" />
+                    <span class="truncate" :class="t.text">{{ s.label }}</span>
+                </li>
+            </ul>
+            <div class="flex h-48 items-end gap-3 px-2 pt-2">
+                <div
+                    v-for="(cat, ci) in multi.cats"
+                    :key="cat"
+                    class="flex h-full min-w-0 flex-1 items-end justify-center"
+                >
+                    <!-- stacked: one column of stacked segments -->
+                    <div v-if="multi.stacked" class="flex h-full w-full flex-col-reverse">
+                        <div
+                            v-for="(val, si) in multi.data[ci]"
+                            :key="si"
+                            class="w-full first:rounded-t-xs transition-all"
+                            :style="{ height: (val / multi.max) * 100 + '%', background: multi.series[si].color }"
+                            :title="multi.series[si].label + ': ' + formatNumber(val)"
+                        />
+                    </div>
+                    <!-- grouped: thin bars side by side -->
+                    <div v-else class="flex h-full w-full items-end justify-center gap-0.5">
+                        <div
+                            v-for="(val, si) in multi.data[ci]"
+                            :key="si"
+                            class="min-w-0 flex-1 rounded-t-xs transition-all"
+                            :style="{ height: Math.max(2, (val / multi.max) * 100) + '%', background: multi.series[si].color }"
+                            :title="multi.series[si].label + ': ' + formatNumber(val)"
+                        />
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-3 px-2 pt-1">
+                <div
+                    v-for="cat in multi.cats"
+                    :key="cat"
+                    :class="['min-w-0 flex-1 truncate text-center text-[11px]', t.text]"
+                    :title="cat"
+                >
+                    {{ cat }}
+                </div>
+            </div>
         </template>
 
         <template v-else>

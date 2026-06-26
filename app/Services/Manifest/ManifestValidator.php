@@ -1453,6 +1453,8 @@ class ManifestValidator
                     in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
                 $this->checkFieldRef($fields, $block['x_field_id'] ?? null, "{$blockPath}/x_field_id", 'chart.x_field_id', $errors);
                 $this->checkFieldRef($fields, $block['group_by_field_id'] ?? null, "{$blockPath}/group_by_field_id", 'chart.group_by_field_id', $errors);
+                // series_field_id splits each category into stacked/grouped segments (bar charts).
+                $this->checkFieldRef($fields, $block['series_field_id'] ?? null, "{$blockPath}/series_field_id", 'chart.series_field_id', $errors);
                 $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
             }
 
