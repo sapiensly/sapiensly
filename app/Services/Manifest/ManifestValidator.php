@@ -1615,6 +1615,21 @@ class ManifestValidator
                 $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
             }
 
+            if ($block['type'] === 'data_grid') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'data_grid',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                foreach ($block['columns'] ?? [] as $j => $column) {
+                    $this->checkFieldRef($fields, $column['field_id'] ?? null, "{$blockPath}/columns/{$j}/field_id", 'data_grid.field_id', $errors);
+                }
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
             if ($block['type'] === 'map') {
                 $fields = $this->resolveBlockObjectFields(
                     $block['data_source'] ?? [], 'object_id',

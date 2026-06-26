@@ -1858,6 +1858,37 @@ it('rejects a filter_bar control with an invalid param name', function () {
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
 });
 
+it('accepts a valid data_grid block', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'data_grid', 'label' => 'Editable',
+            'data_source' => ['object_id' => $obj['id']],
+            'columns' => [['field_id' => $obj['fields'][0]['id'], 'editable' => true]],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a data_grid column field_id that does not belong to the object', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'data_grid',
+            'data_source' => ['object_id' => $obj['id']],
+            'columns' => [['field_id' => id('fld')]],
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('unresolved_ref');
+});
+
 it('accepts a valid gantt block over two date fields', function () {
     $manifest = baseManifest();
     $obj = $manifest['objects'][0];

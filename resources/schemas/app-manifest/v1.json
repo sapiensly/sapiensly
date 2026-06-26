@@ -1147,6 +1147,37 @@
                 }
             ]
         },
+        "block_data_grid": {
+            "description": "An editable table: record rows whose cells can be edited inline and saved (update_record) without leaving the page. Requires data_source ({object_id, filter?, sort?}) and columns[] ({field_id, label_override?, editable?}). Editable cells render a type-appropriate input (text, number, select, checkbox, date); computed fields (formula/lookup/rollup), relations and files are always read-only. Like `table` but writable — use `table` for read-only lists with row actions.",
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "data_grid" },
+                        "label": { "type": "string", "maxLength": 120 },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "columns": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["field_id"],
+                                "properties": {
+                                    "field_id": { "$ref": "#/$defs/id" },
+                                    "label_override": { "type": "string", "maxLength": 80 },
+                                    "editable": { "type": "boolean" }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["type", "data_source", "columns"]
+                }
+            ]
+        },
         "block_filter_bar": {
             "description": "A row of page-level filter controls that drive {{params.*}}. Each control writes the user's input to a named URL query param; data blocks then react via a data_source.filter condition whose value_expression is \"{{params.<name>}}\" (an empty value is ignored, so the unfiltered set shows). Requires controls[] each {param (URL param name, snake_case), type (search|select), label?, placeholder? (search), options? (select: [{value,label}])}.",
             "allOf": [
@@ -1865,6 +1896,7 @@
                 { "$ref": "#/$defs/block_table" },
                 { "$ref": "#/$defs/block_record_detail" },
                 { "$ref": "#/$defs/block_related_list" },
+                { "$ref": "#/$defs/block_data_grid" },
                 { "$ref": "#/$defs/block_filter_bar" },
                 { "$ref": "#/$defs/block_stat" },
                 { "$ref": "#/$defs/block_form" },
