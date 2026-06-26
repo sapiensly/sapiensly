@@ -1458,6 +1458,38 @@ class ManifestValidator
                 $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
             }
 
+            if ($block['type'] === 'record_detail') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block, 'object_id',
+                    "{$blockPath}/object_id", 'record_detail',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                foreach ($block['fields'] ?? [] as $j => $detailField) {
+                    $this->checkFieldRef($fields, $detailField['field_id'] ?? null, "{$blockPath}/fields/{$j}/field_id", 'record_detail.field_id', $errors);
+                }
+                $this->validateExpression((string) ($block['record_id_expression'] ?? ''), "{$blockPath}/record_id_expression", 'record_id_expression', $errors);
+            }
+
+            if ($block['type'] === 'related_list') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block, 'object_id',
+                    "{$blockPath}/object_id", 'related_list',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                // via_relation_field_id must be a relation field ON the child object.
+                $this->checkFieldRef($fields, $block['via_relation_field_id'] ?? null, "{$blockPath}/via_relation_field_id", 'related_list.via_relation_field_id', $errors, ['relation']);
+                foreach ($block['columns'] ?? [] as $j => $column) {
+                    $this->checkFieldRef($fields, $column['field_id'] ?? null, "{$blockPath}/columns/{$j}/field_id", 'related_list.field_id', $errors);
+                }
+                $this->validateExpression((string) ($block['parent_id_expression'] ?? ''), "{$blockPath}/parent_id_expression", 'parent_id_expression', $errors);
+            }
+
             if ($block['type'] === 'kanban') {
                 $fields = $this->resolveBlockObjectFields(
                     $block['data_source'] ?? [], 'object_id',

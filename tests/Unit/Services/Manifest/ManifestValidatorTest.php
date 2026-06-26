@@ -895,6 +895,46 @@ it('rejects a record_detail referencing an unknown object', function () {
         ->toContain('unresolved_ref');
 });
 
+it('accepts a valid related_list block over a relation field', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $rel = id('fld');
+    $manifest['objects'][0]['fields'][] = [
+        'id' => $rel, 'slug' => 'parent', 'name' => 'Parent',
+        'type' => 'relation', 'target_object_id' => $obj['id'], 'cardinality' => 'many_to_one',
+    ];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'related_list', 'label' => 'Children',
+            'object_id' => $obj['id'],
+            'via_relation_field_id' => $rel,
+            'parent_id_expression' => '{{params.id}}',
+            'columns' => [['field_id' => $obj['fields'][0]['id']]],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a related_list whose via_relation_field_id is not a relation', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'related_list',
+            'object_id' => $obj['id'],
+            'via_relation_field_id' => $obj['fields'][0]['id'], // string, not a relation
+            'parent_id_expression' => '{{params.id}}',
+            'columns' => [['field_id' => $obj['fields'][0]['id']]],
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('incompatible_type');
+});
+
 it('accepts treemap chart, word_cloud and flow blocks', function () {
     $manifest = baseManifest();
     $obj = $manifest['objects'][0];

@@ -1116,6 +1116,37 @@
                 }
             ]
         },
+        "block_related_list": {
+            "description": "A record's children: lists the records of another object that point back to THIS record via a relation. Requires object_id (the CHILD object to list), via_relation_field_id (a relation field ON the child object that points to the parent) and parent_id_expression (resolves to the parent id — e.g. {{params.id}} or {{row.id}}) plus columns[] ({field_id, label_override?}). Pair it with record_detail on a detail page (e.g. an Order's line items beneath the order).",
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "related_list" },
+                        "label": { "type": "string", "maxLength": 120 },
+                        "object_id": { "$ref": "#/$defs/id" },
+                        "via_relation_field_id": { "$ref": "#/$defs/id" },
+                        "parent_id_expression": { "type": "string", "minLength": 1, "maxLength": 500 },
+                        "columns": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "field_id": { "$ref": "#/$defs/id" },
+                                    "label_override": { "type": "string", "maxLength": 80 }
+                                },
+                                "required": ["field_id"]
+                            }
+                        }
+                    },
+                    "required": ["type", "object_id", "via_relation_field_id", "parent_id_expression", "columns"]
+                }
+            ]
+        },
         "block_chart": {
             "allOf": [
                 { "$ref": "#/$defs/block_base" },
@@ -1769,6 +1800,7 @@
                 { "$ref": "#/$defs/block_spacer" },
                 { "$ref": "#/$defs/block_table" },
                 { "$ref": "#/$defs/block_record_detail" },
+                { "$ref": "#/$defs/block_related_list" },
                 { "$ref": "#/$defs/block_stat" },
                 { "$ref": "#/$defs/block_form" },
                 { "$ref": "#/$defs/block_button" },

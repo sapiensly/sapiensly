@@ -186,6 +186,21 @@ class BlockDataResolver
             return ['record' => $record === null ? null : $this->mapRows([$record])[0]];
         }
 
+        if ($block['type'] === 'related_list') {
+            $parentId = $this->expressions->resolve($block['parent_id_expression'] ?? '', $context);
+            if (! is_string($parentId) || $parentId === '') {
+                return ['rows' => []];
+            }
+
+            // The children are the records whose relation field points at the parent.
+            $dataSource = [
+                'object_id' => $block['object_id'],
+                'filter' => ['op' => 'eq', 'field_id' => $block['via_relation_field_id'], 'value' => $parentId],
+            ];
+
+            return ['rows' => $this->queryRows($app, $dataSource, $manifest, $context)];
+        }
+
         if ($block['type'] === 'funnel') {
             $stages = [];
             foreach ($block['stages'] ?? [] as $stage) {
