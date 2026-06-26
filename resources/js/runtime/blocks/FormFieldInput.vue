@@ -224,7 +224,7 @@ function isInMulti(value: string): boolean {
                     'inline-flex items-center rounded-pill border px-2.5 py-0.5 text-[11px] transition-colors',
                     isInMulti(opt.value)
                         ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
-                        : 'border-medium bg-white/5 text-ink-muted hover:border-strong',
+                        : 'border-medium bg-surface text-ink-muted hover:border-strong',
                 ]"
             >
                 {{ opt.label }}

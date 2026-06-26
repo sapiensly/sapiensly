@@ -107,7 +107,7 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleBold"
-                :class="['rounded p-1.5 transition-colors hover:bg-white/10', isActive('bold') ? 'bg-white/10 text-accent-blue' : '']"
+                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('bold') ? 'bg-surface-hover text-accent-blue' : '']"
                 title="Bold (⌘B)"
             >
                 <Bold class="size-3.5" />
@@ -115,7 +115,7 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleItalic"
-                :class="['rounded p-1.5 transition-colors hover:bg-white/10', isActive('italic') ? 'bg-white/10 text-accent-blue' : '']"
+                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('italic') ? 'bg-surface-hover text-accent-blue' : '']"
                 title="Italic (⌘I)"
             >
                 <Italic class="size-3.5" />
@@ -123,7 +123,7 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleUnderline"
-                :class="['rounded p-1.5 transition-colors hover:bg-white/10', isActive('underline') ? 'bg-white/10 text-accent-blue' : '']"
+                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('underline') ? 'bg-surface-hover text-accent-blue' : '']"
                 title="Underline (⌘U)"
             >
                 <UnderlineIcon class="size-3.5" />
@@ -132,7 +132,7 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleH2"
-                :class="['rounded p-1.5 transition-colors hover:bg-white/10', isActive('heading', { level: 2 }) ? 'bg-white/10 text-accent-blue' : '']"
+                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('heading', { level: 2 }) ? 'bg-surface-hover text-accent-blue' : '']"
                 title="Heading 2"
             >
                 <Heading2 class="size-3.5" />
@@ -140,7 +140,7 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleH3"
-                :class="['rounded p-1.5 transition-colors hover:bg-white/10', isActive('heading', { level: 3 }) ? 'bg-white/10 text-accent-blue' : '']"
+                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('heading', { level: 3 }) ? 'bg-surface-hover text-accent-blue' : '']"
                 title="Heading 3"
             >
                 <Heading3 class="size-3.5" />
@@ -149,7 +149,7 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleBullet"
-                :class="['rounded p-1.5 transition-colors hover:bg-white/10', isActive('bulletList') ? 'bg-white/10 text-accent-blue' : '']"
+                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('bulletList') ? 'bg-surface-hover text-accent-blue' : '']"
                 title="Bullet list"
             >
                 <List class="size-3.5" />
@@ -157,7 +157,7 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleOrdered"
-                :class="['rounded p-1.5 transition-colors hover:bg-white/10', isActive('orderedList') ? 'bg-white/10 text-accent-blue' : '']"
+                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('orderedList') ? 'bg-surface-hover text-accent-blue' : '']"
                 title="Numbered list"
             >
                 <ListOrdered class="size-3.5" />
@@ -166,7 +166,7 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="setLink"
-                :class="['rounded p-1.5 transition-colors hover:bg-white/10', isActive('link') ? 'bg-white/10 text-accent-blue' : '']"
+                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('link') ? 'bg-surface-hover text-accent-blue' : '']"
                 title="Add / edit link"
             >
                 <LinkIcon class="size-3.5" />
@@ -175,7 +175,7 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
                 v-if="isActive('link')"
                 type="button"
                 @click="unsetLink"
-                class="rounded p-1.5 transition-colors hover:bg-white/10"
+                class="rounded p-1.5 transition-colors hover:bg-surface-hover"
                 title="Remove link"
             >
                 <Unlink class="size-3.5" />

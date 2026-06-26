@@ -126,9 +126,9 @@ async function runRowAction(col: ActionColumn, row: { id: string; data: Record<s
 
 const variantClass: Record<ActionColumn['variant'], string> = {
     primary: 'bg-accent-blue text-white hover:bg-accent-blue-hover',
-    secondary: 'border border-medium bg-white/5 text-ink hover:bg-white/10',
+    secondary: 'border border-medium bg-surface text-ink hover:bg-surface-hover',
     danger: 'bg-red-500/15 text-red-400 hover:bg-red-500/25',
-    ghost: 'text-ink-muted hover:bg-white/5 hover:text-ink',
+    ghost: 'text-ink-muted hover:bg-surface hover:text-ink',
 };
 
 const rows = computed(() => props.data?.rows ?? []);

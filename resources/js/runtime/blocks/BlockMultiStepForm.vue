@@ -273,7 +273,7 @@ async function cancel() {
                                 ? 'bg-accent-blue text-white'
                                 : idx < currentStepIndex
                                     ? 'bg-accent-blue/20 text-accent-blue'
-                                    : 'bg-white/10 text-ink-subtle',
+                                    : 'bg-surface-hover text-ink-subtle',
                         ]"
                     >
                         <Check v-if="idx < currentStepIndex" class="size-3" />
@@ -325,7 +325,7 @@ async function cancel() {
                 v-if="!isFirstStep"
                 type="button"
                 @click="back"
-                :class="['inline-flex items-center gap-1 rounded-pill border border-medium bg-white/5 px-3 py-1.5 text-xs transition-colors hover:bg-white/10', t.text]"
+                :class="['inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs transition-colors hover:bg-surface-hover', t.text]"
             >
                 <ChevronLeft class="size-3" />
                 Back
@@ -337,7 +337,7 @@ async function cancel() {
                     v-if="block.on_cancel && block.on_cancel.length > 0"
                     type="button"
                     @click="cancel"
-                    :class="['inline-flex items-center rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs transition-colors hover:bg-white/10', t.text]"
+                    :class="['inline-flex items-center rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs transition-colors hover:bg-surface-hover', t.text]"
                 >
                     {{ block.cancel_label ?? 'Cancel' }}
                 </button>

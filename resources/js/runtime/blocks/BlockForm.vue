@@ -225,7 +225,7 @@ async function cancel() {
                 v-if="block.on_cancel && block.on_cancel.length > 0"
                 type="button"
                 @click="cancel"
-                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-white/5 px-3.5 py-1.5 text-xs transition-colors hover:bg-white/10"
+                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs transition-colors hover:bg-surface-hover"
                 :class="t.text"
             >
                 {{ block.cancel_label ?? 'Cancel' }}

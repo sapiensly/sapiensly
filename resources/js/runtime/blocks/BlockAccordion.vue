@@ -53,7 +53,7 @@ function toggle(id: string) {
             <button
                 type="button"
                 @click="toggle(section.id)"
-                :class="['flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5', t.text]"
+                :class="['flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-surface', t.text]"
                 :aria-expanded="!!open[section.id]"
             >
                 <span class="text-sm font-medium">{{ section.title }}</span>

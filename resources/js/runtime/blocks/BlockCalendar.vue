@@ -147,21 +147,21 @@ const weekdayHeaders = computed(() => {
                 <button
                     type="button"
                     @click="shiftMonth(-1)"
-                    :class="['inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-white/5 transition-colors hover:border-strong', t.textMuted]"
+                    :class="['inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-surface transition-colors hover:border-strong', t.textMuted]"
                 >
                     <ChevronLeft class="size-3.5" />
                 </button>
                 <button
                     type="button"
                     @click="anchor = startOfMonth(new Date())"
-                    :class="['inline-flex items-center rounded-xs border border-medium bg-white/5 px-2 text-[11px] transition-colors hover:border-strong', t.textMuted]"
+                    :class="['inline-flex items-center rounded-xs border border-medium bg-surface px-2 text-[11px] transition-colors hover:border-strong', t.textMuted]"
                 >
                     Today
                 </button>
                 <button
                     type="button"
                     @click="shiftMonth(1)"
-                    :class="['inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-white/5 transition-colors hover:border-strong', t.textMuted]"
+                    :class="['inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-surface transition-colors hover:border-strong', t.textMuted]"
                 >
                     <ChevronRight class="size-3.5" />
                 </button>

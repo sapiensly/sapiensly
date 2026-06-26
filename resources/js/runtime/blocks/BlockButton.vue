@@ -29,9 +29,9 @@ const variantClass = computed(() => {
         case 'danger':
             return 'border border-red-500/40 bg-red-500/5 text-red-400 hover:border-red-500/70 hover:bg-red-500/10';
         case 'ghost':
-            return 'text-ink-muted hover:bg-white/5 hover:text-ink';
+            return 'text-ink-muted hover:bg-surface hover:text-ink';
         default:
-            return 'border border-medium bg-white/5 text-ink transition-colors hover:border-strong hover:bg-white/10';
+            return 'border border-medium bg-surface text-ink transition-colors hover:border-strong hover:bg-surface-hover';
     }
 });
 

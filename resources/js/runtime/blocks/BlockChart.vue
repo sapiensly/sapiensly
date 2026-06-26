@@ -433,7 +433,7 @@ const scatter = computed(() => {
                         <span :class="t.text">{{ s.label }}</span>
                         <span :class="['tabular-nums', t.textMuted]">{{ formatNumber(s.value) }}</span>
                     </div>
-                    <div class="h-2 w-full overflow-hidden rounded-pill bg-white/5">
+                    <div class="h-2 w-full overflow-hidden rounded-pill bg-surface">
                         <div
                             class="h-full rounded-pill transition-all"
                             :style="{

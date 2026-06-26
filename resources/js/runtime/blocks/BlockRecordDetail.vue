@@ -95,7 +95,7 @@ function format(field: FieldDef, value: unknown): string {
 
         <p v-if="!record" :class="['py-6 text-center text-xs', t.textMuted]">No record selected.</p>
 
-        <dl v-else class="divide-y divide-white/5">
+        <dl v-else class="divide-y divide-soft">
             <div v-for="row in rows" :key="row.key" class="flex justify-between gap-4 py-2">
                 <dt :class="['text-xs', t.textMuted]">{{ row.label }}</dt>
                 <dd :class="['text-right text-sm font-medium', t.text]">{{ row.value }}</dd>
