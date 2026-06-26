@@ -67,6 +67,38 @@ hold no matter who authors.
   ⚠️ A whole-string single token returns a **typed** value; a string mixing literal text
   with tokens is **interpolated** (don't assume mixed strings come back raw).
 
+### UI blocks (page components)
+
+Pages are trees of **blocks**. The runtime maps each `type` to a Vue component in
+`resources/js/runtime/blocks/Block*.vue` via the `componentForType` registry in
+`AppRenderer.vue`; the server data each block needs is pre-resolved by `BlockDataResolver`
+(one round-trip), and layout-only blocks need none.
+
+Families:
+- **Layout:** container, tabs, accordion, split_view, spacer, divider.
+- **Content/marketing:** heading, text, markdown, image, hero, feature_grid, cta, stat_band, testimonials, faq, pricing.
+- **Data display:** table, card_grid, **record_detail** (one record's fields), **related_list** (a record's children via a relation), kanban (now **editable** — drag a card to write its group_by field), calendar, **gantt** (start→end bars).
+- **Data entry:** form, multi_step_form, button, modal, **data_grid** (inline-editable table; cells save via update_record), **filter_bar** (page-level search/select driving `{{params.*}}`).
+- **Viz / KPIs:** stat, metric_grid, **progress** (linear gauge), gauge, chart (bar/hbar/line/area/pie/donut/radar/scatter/treemap; bar takes `series_field_id` + `stacked`), sparkline, funnel, heatmap, timeline, word_cloud, map, insight, flow.
+
+Two composition patterns: **master-detail** — a `table`/`filter_bar` navigates with the
+record id as a param, a `record_detail` (+ `related_list`) reads `{{params.id}}`;
+**page filtering** — a `filter_bar` writes `{{params.x}}` that a data block's
+`data_source.filter` consumes via `value_expression` (an empty value is a no-op, so a
+blank filter shows everything).
+
+### Theming
+
+Colours are `--sp-*` custom properties (`resources/css/tokens.css`), exposed as Tailwind
+utilities through the `--color-*` map (`bg-navy`, `text-ink`, `bg-surface`, `border-soft`…).
+- **Light/dark follows the user:** blocks use these adaptive tokens, which flip with the
+  `.dark` class the platform sets on `<html>`. `themeTokens()` returns ONE bundle (no
+  per-theme branching); `.theme-light`/`.theme-dark` force a scope (the builder preview uses
+  this to preview either theme). Don't reintroduce hardcoded `bg-white`/`text-zinc`/`shadow-*`.
+- **Brand accent:** `settings.accent` (set via the builder's accent control →
+  `POST /apps/{app}/builder/design`) drives `--sp-accent` **and** `--sp-accent-blue` through
+  `runtimeSettingsStyle`, so `bg-accent-blue` buttons/links adopt the brand colour.
+
 ### Workflow engine (`app/Services/Workflows/WorkflowEngine.php`)
 
 Triggers: `manual`, `record.created/updated/deleted`, `schedule` (cron), `webhook.inbound`.
@@ -94,6 +126,29 @@ Tests are the contract — the builder surface is well covered:
 - `tests/Feature/Builder/` — connected-objects read/write, runtime-agent autonomy, integrations.
 
 Tests require **PostgreSQL** (RLS is part of the contract; sqlite won't do).
+
+## Adding a UI block — the pipeline
+
+A new block touches the same places every time (copy a simple existing one like
+`progress` as a template):
+
+1. **Schema:** add a `block_<type>` def in `resources/schemas/app-manifest/v1.json` **and**
+   a `$ref` to the `block` oneOf. The def's `description` powers the catalog.
+2. **Server data (if any):** a branch in `BlockDataResolver::resolveDataBlock` — return
+   `null` for layout-only blocks; reuse `queryRows` for row-backed ones (add the type to the
+   shared rows list); aggregates go through `RecordQueryService::aggregate`.
+3. **Validator:** a `if ($block['type'] === '<type>')` branch in `ManifestValidator` that
+   resolves the object and `checkFieldRef`s each field (the last arg enforces type, e.g.
+   `['date','datetime']`).
+4. **Frontend:** `resources/js/runtime/blocks/Block<Type>.vue` + register it in
+   `AppRenderer.vue`'s `componentForType`. Writes go through `useActionExecutor`
+   (`update_record` with `row={{id}}`); be optimistic and revert on failure.
+5. **Catalog:** an entry in `app/Ai/Tools/Builder/ListAvailableComponentsTool.php` (the MCP
+   `list_available_components` tool delegates to it).
+6. **Tests:** an accept + a reject case in `ManifestValidatorTest`. (Pure interaction —
+   drag, inline edit — is verified by review + reusing the proven write path, not a browser test.)
+
+Run `vendor/bin/pint --dirty` and `npx eslint <changed .vue>` before finishing.
 
 ## Gotchas (learned the hard way)
 
