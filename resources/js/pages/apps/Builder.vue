@@ -2437,6 +2437,7 @@ function statusTone(status: Message['status']): string {
                         ref="previewPane"
                         :class="[
                             'flex-1 overflow-auto p-5 transition-colors',
+                            preview ? (previewTheme === 'dark' ? 'theme-dark' : 'theme-light') : '',
                             preview
                                 ? previewTheme === 'light'
                                     ? 'bg-white'

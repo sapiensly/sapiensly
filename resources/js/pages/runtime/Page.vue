@@ -39,6 +39,7 @@ useScrollReveal(sectionsEl);
         <div
             :class="[
                 'overflow-hidden rounded-sp-sm transition-colors',
+                theme === 'dark' ? 'theme-dark' : 'theme-light',
                 theme === 'light' ? 'bg-white' : 'bg-slate-950',
             ]"
             :style="surfaceStyle"

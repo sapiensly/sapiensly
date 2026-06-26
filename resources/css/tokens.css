@@ -19,7 +19,14 @@
  * tokens and will NOT flip — that cleanup is Phase 2.
  */
 
-:root {
+/*
+ * `.theme-light` / `.theme-dark` are explicit, ancestor-independent scopes: an
+ * app runtime sets one on its container from `settings.theme` so its palette is
+ * authoritative regardless of the platform `.dark` on <html> (a dark app stays
+ * dark on a light platform, and vice-versa).
+ */
+:root,
+.theme-light {
     /* ── surfaces (light) ─────────────────────────────────────────── */
     --sp-bg-primary: #f3f5fb; /* page */
     --sp-bg-secondary: #ffffff; /* cards */
@@ -78,7 +85,8 @@
     --sp-shadow-image: 0 20px 60px rgba(11, 15, 41, 0.18);
 }
 
-.dark {
+.dark,
+.theme-dark {
     /* ── surfaces ─────────────────────────────────────────────────── */
     --sp-bg-primary: #00031c; /* page */
     --sp-bg-secondary: #0b0f29; /* cards */
