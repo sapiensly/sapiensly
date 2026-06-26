@@ -41,7 +41,7 @@ async function click() {
             <button
                 type="button"
                 @click="click"
-                class="mt-1 inline-flex items-center gap-1.5 rounded-pill px-5 py-2.5 text-sm font-semibold text-white shadow-btn-primary transition-transform hover:scale-[1.03]"
+                class="mt-1 inline-flex items-center gap-1.5 rounded-pill px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:scale-[1.03]"
                 :style="{ backgroundColor: 'var(--sp-accent, #3b82f6)' }"
             >
                 {{ block.button.label }}

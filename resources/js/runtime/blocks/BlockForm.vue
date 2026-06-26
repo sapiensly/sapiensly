@@ -233,7 +233,7 @@ async function cancel() {
             <button
                 type="submit"
                 :disabled="submitting"
-                class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
             >
                 {{ block.submit_label ?? 'Save' }}
             </button>

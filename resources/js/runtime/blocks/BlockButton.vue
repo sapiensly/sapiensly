@@ -25,7 +25,7 @@ function deriveSlugFromUrl(): string {
 const variantClass = computed(() => {
     switch (props.block.variant ?? 'secondary') {
         case 'primary':
-            return 'bg-accent-blue text-white shadow-btn-primary hover:bg-accent-blue-hover';
+            return 'bg-accent-blue text-white hover:bg-accent-blue-hover';
         case 'danger':
             return 'border border-red-500/40 bg-red-500/5 text-red-400 hover:border-red-500/70 hover:bg-red-500/10';
         case 'ghost':
