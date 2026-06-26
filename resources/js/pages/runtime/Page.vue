@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteFooter from '@/runtime/SiteFooter.vue';
@@ -37,36 +36,41 @@ useScrollReveal(sectionsEl);
 <template>
     <Head :title="`${app.name} · ${page.name}`" />
 
-    <AppLayoutV2 :title="app.name">
-        <div
-            :class="[
-                'overflow-hidden rounded-sp-sm bg-navy-deep transition-colors',
-            ]"
-            :style="surfaceStyle"
-        >
-            <div class="px-5">
-                <SiteHeader
-                    :brand="brand"
-                    :pages="manifest.pages"
-                    :current-slug="page.slug"
-                    :href-for="hrefFor"
-                />
-            </div>
+    <!-- Runtime is full-screen (no platform shell), so the app owns the viewport. -->
+    <div class="flex min-h-screen flex-col bg-navy-deep" :style="surfaceStyle">
+        <!-- Platform bar: always present so the user can leave the app and go back to Sapiensly. -->
+        <div class="flex items-center justify-between gap-3 border-b border-soft px-4 py-2">
+            <Link
+                href="/apps"
+                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
+            >
+                <span aria-hidden="true">←</span> Salir a Sapiensly
+            </Link>
+            <span class="truncate text-xs text-ink-muted">{{ app.name }}</span>
+        </div>
 
-            <div ref="sectionsEl" class="space-y-4 px-5 py-6">
-                <AppRenderer
-                    :blocks="page.blocks"
-                    :block-data="blockData"
-                    :objects="manifest.objects"
-                    :locale="locale"
-                    :default-currency="defaultCurrency"
-                    :theme="theme"
-                />
-            </div>
+        <div class="px-5">
+            <SiteHeader
+                :brand="brand"
+                :pages="manifest.pages"
+                :current-slug="page.slug"
+                :href-for="hrefFor"
+            />
+        </div>
 
-            <div class="px-5">
-                <SiteFooter :footer="footer" :brand-name="brand.name" />
-            </div>
+        <div ref="sectionsEl" class="flex-1 space-y-4 px-5 py-6">
+            <AppRenderer
+                :blocks="page.blocks"
+                :block-data="blockData"
+                :objects="manifest.objects"
+                :locale="locale"
+                :default-currency="defaultCurrency"
+                :theme="theme"
+            />
+        </div>
+
+        <div class="px-5">
+            <SiteFooter :footer="footer" :brand-name="brand.name" />
         </div>
 
         <RuntimeChatPanel
@@ -75,5 +79,5 @@ useScrollReveal(sectionsEl);
             :agent-name="manifest.agent.name"
             :theme="theme"
         />
-    </AppLayoutV2>
+    </div>
 </template>
