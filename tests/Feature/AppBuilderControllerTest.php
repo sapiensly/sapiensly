@@ -842,3 +842,40 @@ it('falls back to sys_created_at desc when sort_field_id is invalid', function (
     expect($r['sort_field_id'])->toBe('sys_created_at')
         ->and($r['sort_dir'])->toBe('asc'); // direction is preserved even when the field falls back
 });
+
+it('updates the accent colour via the design endpoint', function () {
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/design", ['accent' => '#FF8800'])
+        ->assertOk()
+        ->assertJsonPath('settings.accent', '#FF8800');
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect($manifest['settings']['accent'])->toBe('#FF8800');
+});
+
+it('accepts theme and font on the design endpoint', function () {
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/design", ['theme' => 'dark', 'font' => 'serif'])
+        ->assertOk()
+        ->assertJsonPath('settings.theme', 'dark')
+        ->assertJsonPath('settings.font', 'serif');
+});
+
+it('rejects an invalid accent hex on the design endpoint', function () {
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/design", ['accent' => 'blue'])
+        ->assertStatus(422);
+});
+
+it('rejects a design update with no fields', function () {
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/design", [])
+        ->assertStatus(422);
+});
+
+it('blocks design updates from users who cannot see the App', function () {
+    $other = User::factory()->create(['email_verified_at' => now()]);
+    $this->actingAs($other)
+        ->postJson("/apps/{$this->testApp->id}/builder/design", ['accent' => '#FF8800'])
+        ->assertForbidden();
+});

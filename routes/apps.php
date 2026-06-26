@@ -24,6 +24,7 @@ Route::middleware([
     Route::post('/apps/{app}/builder/messages', [AppBuilderController::class, 'sendMessage'])->middleware('throttle:builder-ai')->name('apps.builder.messages');
     Route::post('/apps/{app}/builder/visual-review', [AppBuilderController::class, 'visualReview'])->middleware('throttle:builder-ai')->name('apps.builder.visual-review');
     Route::post('/apps/{app}/builder/wireframe-import', [AppBuilderController::class, 'wireframeImport'])->middleware('throttle:builder-ai')->name('apps.builder.wireframe-import');
+    Route::post('/apps/{app}/builder/design', [AppBuilderController::class, 'updateDesign'])->name('apps.builder.design');
     Route::post('/apps/{app}/builder/messages/{message}/approve', [AppBuilderController::class, 'approve'])->name('apps.builder.approve');
     Route::post('/apps/{app}/builder/messages/{message}/reject', [AppBuilderController::class, 'reject'])->name('apps.builder.reject');
     Route::post('/apps/{app}/builder/messages/{message}/revert', [AppBuilderController::class, 'revert'])->name('apps.builder.revert');

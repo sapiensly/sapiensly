@@ -12,6 +12,7 @@ use App\Services\AiProviderService;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\InvalidManifestException;
 use App\Services\Records\BlockDataResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Storage\TenantStorage;
@@ -839,6 +840,63 @@ class AppBuilderController extends Controller
             'q' => $q,
             'sort_field_id' => $sortFieldId,
             'sort_dir' => $sortDir,
+        ]);
+    }
+
+    /**
+     * Apply a design change (accent colour, theme, font) from the builder's
+     * design controls. Each provided key is patched onto the manifest's
+     * `settings`, saved as a reversible version. Only these cosmetic keys are
+     * touched — the data model and pages are never affected.
+     */
+    public function updateDesign(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'accent' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'theme' => ['nullable', 'string', Rule::in(['light', 'dark'])],
+            'font' => ['nullable', 'string', Rule::in(['sans', 'serif', 'rounded', 'mono'])],
+        ]);
+
+        $provided = array_filter(
+            ['accent' => $data['accent'] ?? null, 'theme' => $data['theme'] ?? null, 'font' => $data['font'] ?? null],
+            fn ($value) => $value !== null,
+        );
+        if ($provided === []) {
+            abort(422, 'Provide at least one of: accent, theme, font.');
+        }
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        // RFC 6902 won't auto-create the parent container, so add an empty
+        // `settings` object first when the manifest somehow lacks one.
+        $ops = [];
+        if (! array_key_exists('settings', $manifest)) {
+            $ops[] = ['op' => 'add', 'path' => '/settings', 'value' => (object) []];
+        }
+        foreach ($provided as $key => $value) {
+            // `add` on an object member replaces it when present, adds it otherwise.
+            $ops[] = ['op' => 'add', 'path' => '/settings/'.$key, 'value' => $value];
+        }
+
+        try {
+            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Design updated (accent/theme/font) from the builder.');
+        } catch (InvalidManifestException $e) {
+            return response()->json([
+                'error' => 'invalid_manifest',
+                'message' => 'The design change did not pass validation.',
+                'errors' => $e->result->errorsArray(),
+            ], 422);
+        }
+
+        return response()->json([
+            'version_id' => $version->id,
+            'version_number' => $version->version_number,
+            'settings' => $version->manifest['settings'] ?? [],
         ]);
     }
 

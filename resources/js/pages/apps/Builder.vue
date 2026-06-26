@@ -47,6 +47,7 @@ import type {
 } from '@/runtime/types/manifest';
 import { Head, Link, router } from '@inertiajs/vue3';
 import axios from 'axios';
+import { toast } from 'vue-sonner';
 // html2canvas-pro is a maintained fork that handles modern CSS color
 // functions (oklch, color-mix) that Tailwind v4 emits. The vanilla
 // html2canvas chokes with "Attempting to parse an unsupported color
@@ -1032,12 +1033,34 @@ const previewFooter = computed(
             | { text?: string; links?: { label: string; href: string }[] }
             | undefined,
 );
+// Live accent override from the design control — applied to the preview
+// immediately and debounce-persisted to settings.accent.
+const accentOverride = ref<string | null>(null);
+const effectiveAccent = computed(
+    () => accentOverride.value ?? (previewSettings.value.accent as string | undefined) ?? null,
+);
 const previewSurfaceStyle = computed(() => ({
     '--sp-bleed': '1.25rem',
-    ...runtimeSettingsStyle(
-        previewSettings.value as { accent?: string; font?: string },
-    ),
+    ...runtimeSettingsStyle({
+        accent: effectiveAccent.value ?? undefined,
+        font: previewSettings.value.font as string | undefined,
+    }),
 }));
+
+const ACCENT_PRESETS = ['#0096ff', '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f59e0b', '#10b981', '#14b8a6'];
+let accentSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function setAccent(hex: string) {
+    accentOverride.value = hex; // instant preview
+    if (accentSaveTimer) {
+        clearTimeout(accentSaveTimer);
+    }
+    // Debounce: dragging the colour picker would otherwise save a version per tick.
+    accentSaveTimer = setTimeout(() => {
+        axios
+            .post(`/apps/${props.app.id}/builder/design`, { accent: hex })
+            .catch(() => toast.error('No se pudo guardar el color de acento.'));
+    }, 500);
+}
 
 // Provide the App slug for BlockForm/BlockButton inside the preview so any
 // action they fire goes to /r/{slug}/actions just like in the real runtime.
@@ -1658,6 +1681,37 @@ function statusTone(status: Message['status']): string {
                 </div>
 
                 <div class="flex items-center gap-2">
+                    <!-- Accent colour: brand colour for buttons / links / highlights. -->
+                    <div
+                        v-if="viewMode === 'preview'"
+                        class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2 py-1"
+                        title="Accent colour — drives buttons, links and highlights"
+                    >
+                        <span class="mr-0.5 text-[11px] text-ink-muted">Accent</span>
+                        <button
+                            v-for="c in ACCENT_PRESETS"
+                            :key="c"
+                            type="button"
+                            class="size-4 rounded-full border border-soft transition-transform hover:scale-110"
+                            :class="effectiveAccent?.toLowerCase() === c ? 'ring-2 ring-ink ring-offset-1 ring-offset-navy' : ''"
+                            :style="{ background: c }"
+                            :title="c"
+                            @click="setAccent(c)"
+                        />
+                        <label
+                            class="ml-0.5 size-5 cursor-pointer rounded-full border border-soft"
+                            :style="{ background: effectiveAccent ?? '#0096ff' }"
+                            :title="'Custom: ' + (effectiveAccent ?? '#0096ff')"
+                        >
+                            <input
+                                type="color"
+                                class="size-0 opacity-0"
+                                :value="effectiveAccent ?? '#0096ff'"
+                                @input="setAccent(($event.target as HTMLInputElement).value)"
+                            />
+                        </label>
+                    </div>
+
                     <!-- Layers: every part of the app, one click away for consultation. -->
                     <button
                         type="button"

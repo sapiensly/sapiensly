@@ -11,9 +11,29 @@ const FONT_STACKS: Record<string, string> = {
     mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
 };
 
+/** Darken a #RRGGBB hex by `amount` (0-1) for a button hover/active shade. */
+function darken(hex: string, amount: number): string {
+    const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    const f = Math.max(0, 1 - amount);
+    const r = Math.round(((n >> 16) & 0xff) * f);
+    const g = Math.round(((n >> 8) & 0xff) * f);
+    const b = Math.round((n & 0xff) * f);
+    return '#' + [r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('');
+}
+
 export function runtimeSettingsStyle(settings: { accent?: string; font?: string } | null | undefined): Record<string, string> {
     const out: Record<string, string> = {};
-    if (settings?.accent) out['--sp-accent'] = settings.accent;
+    if (settings?.accent) {
+        // Point both the generic accent AND the button/link accent
+        // (--sp-accent-blue, which `bg-accent-blue` resolves) at the brand
+        // colour, scoped to the app surface — so primary buttons, links and
+        // highlights all adopt it.
+        out['--sp-accent'] = settings.accent;
+        out['--sp-accent-blue'] = settings.accent;
+        out['--sp-accent-blue-hover'] = darken(settings.accent, 0.12);
+    }
     if (settings?.font && settings.font !== 'sans' && FONT_STACKS[settings.font]) {
         out.fontFamily = FONT_STACKS[settings.font];
     }
