@@ -27,6 +27,8 @@ const hrefFor = (slug: string) => `/r/${props.app.slug}/${slug}`;
 
 // Provide the App slug so BlockForm/BlockButton can POST to /r/{slug}/actions.
 provide('appSlug', props.app.slug);
+// Provide current filter params so a filter_bar block renders pre-filled.
+provide('pageParams', props.params ?? {});
 
 const sectionsEl = ref<HTMLElement | null>(null);
 useScrollReveal(sectionsEl);

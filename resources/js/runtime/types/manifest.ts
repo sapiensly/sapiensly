@@ -176,4 +176,6 @@ export interface RuntimePageProps {
     };
     page: PageDef;
     blockData: BlockData;
+    /** Current URL filter params, so a filter_bar renders pre-filled. */
+    params?: Record<string, string | string[]>;
 }

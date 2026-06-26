@@ -1826,6 +1826,38 @@ it('accepts an editable kanban (drag-and-drop) over a single_select', function (
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
 
+it('accepts a filter_bar block with search and select controls', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'filter_bar', 'label' => 'Filters',
+            'controls' => [
+                ['param' => 'q', 'type' => 'search', 'label' => 'Search', 'placeholder' => 'Name…'],
+                ['param' => 'status', 'type' => 'select', 'label' => 'Status', 'options' => [
+                    ['value' => 'open', 'label' => 'Open'],
+                    ['value' => 'closed', 'label' => 'Closed'],
+                ]],
+            ],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a filter_bar control with an invalid param name', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'filter_bar',
+            'controls' => [['param' => 'Bad Param', 'type' => 'search']],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
 it('accepts a valid gantt block over two date fields', function () {
     $manifest = baseManifest();
     $obj = $manifest['objects'][0];

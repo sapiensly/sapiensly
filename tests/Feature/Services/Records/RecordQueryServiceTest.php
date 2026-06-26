@@ -98,6 +98,32 @@ it('filters by eq on a string field', function () {
         ->and($results->first()->data['nombre'])->toBe('Ana');
 });
 
+it('skips a value condition whose expression resolves to empty (page filter no-op)', function () {
+    makeRecord($this->testApp, $this->object, ['nombre' => 'Ana']);
+    makeRecord($this->testApp, $this->object, ['nombre' => 'Beto']);
+
+    $filter = ['op' => 'contains', 'field_id' => $this->nameField['id'], 'value_expression' => '{{params.q}}'];
+
+    // Unset/empty param → condition skipped → the unfiltered set shows.
+    $all = $this->service->query(
+        $this->testApp,
+        ['object_id' => $this->object['id'], 'filter' => $filter],
+        $this->manifest,
+        ['params' => ['q' => '']],
+    );
+    expect($all)->toHaveCount(2);
+
+    // Filled param → condition applies.
+    $filtered = $this->service->query(
+        $this->testApp,
+        ['object_id' => $this->object['id'], 'filter' => $filter],
+        $this->manifest,
+        ['params' => ['q' => 'Ana']],
+    );
+    expect($filtered)->toHaveCount(1)
+        ->and($filtered->first()->data['nombre'])->toBe('Ana');
+});
+
 it('filters with gt/gte/lt/lte on a numeric field', function () {
     makeRecord($this->testApp, $this->object, ['edad' => 20]);
     makeRecord($this->testApp, $this->object, ['edad' => 30]);

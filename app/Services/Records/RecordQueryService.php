@@ -196,6 +196,15 @@ class RecordQueryService
         $value = $this->resolveValue($expr, $context);
         $columnSql = $this->jsonExtract('data', $field);
 
+        // A value-based condition whose value resolved to empty (e.g. an unset
+        // {{params.x}} from a page filter the user hasn't filled) is a no-op —
+        // skip it so the unfiltered set shows instead of matching `field = ''`.
+        $valueOps = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'not_in', 'contains', 'starts_with', 'ends_with', 'between'];
+        if (in_array($op, $valueOps, true)
+            && ($value === null || $value === '' || (is_array($value) && $value === []))) {
+            return;
+        }
+
         match ($op) {
             'eq' => $builder->whereRaw("{$columnSql} = ?", [$this->castParam($value, $field)]),
             'neq' => $builder->whereRaw("{$columnSql} <> ?", [$this->castParam($value, $field)]),

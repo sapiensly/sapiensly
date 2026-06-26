@@ -57,9 +57,17 @@ class AppRuntimeController extends Controller
             throw new NotFoundHttpException("Page '{$pageSlug}' not found in app '{$appSlug}'.");
         }
 
+        // URL query params drive page-level filters: a block's data_source.filter
+        // can read {{params.<name>}} and a filter_bar block writes them. Keep only
+        // the string/array query values — they're safely bound in SQL downstream.
+        $params = array_filter(
+            $request->query(),
+            fn ($v) => is_string($v) || is_array($v),
+        );
+
         $context = [
             'current_user' => ['id' => $user->id, 'email' => $user->email],
-            'params' => [],
+            'params' => $params,
         ];
 
         $blockData = $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context);
@@ -91,6 +99,9 @@ class AppRuntimeController extends Controller
             ],
             'page' => $page,
             'blockData' => $blockData,
+            // Current filter values, so a filter_bar renders pre-filled with the
+            // active query (deep-link / back-button friendly).
+            'params' => (object) $params,
         ]);
     }
 
