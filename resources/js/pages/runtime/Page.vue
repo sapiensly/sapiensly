@@ -38,9 +38,7 @@ useScrollReveal(sectionsEl);
     <AppLayoutV2 :title="app.name">
         <div
             :class="[
-                'overflow-hidden rounded-sp-sm transition-colors',
-                theme === 'dark' ? 'theme-dark' : 'theme-light',
-                theme === 'light' ? 'bg-white' : 'bg-slate-950',
+                'overflow-hidden rounded-sp-sm bg-navy-deep transition-colors',
             ]"
             :style="surfaceStyle"
         >

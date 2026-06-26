@@ -13,26 +13,19 @@ export function useRuntimeTheme(): RuntimeTheme {
 }
 
 /**
- * Token bundles per theme. Centralised so every block component can pick the
- * right classes without duplicating ternaries.
+ * Token classes for block components. Every class is backed by a `--sp-*`
+ * custom property (through the `--color-*` theme map), so the whole bundle
+ * flips automatically with the `.dark` class the platform sets on <html> — the
+ * app runtime follows the user's light/dark preference, no per-theme branching.
+ *
+ * The `theme` arg is accepted for backwards compatibility but is no longer used:
+ * the palette is driven entirely by the ambient `.dark` class.
  */
-export function themeTokens(theme: RuntimeTheme) {
-    if (theme === 'light') {
-        return {
-            surface: 'bg-white border-zinc-200',
-            surfaceMuted: 'bg-zinc-50 border-zinc-200',
-            text: 'text-zinc-900',
-            textMuted: 'text-zinc-500',
-            textSubtle: 'text-zinc-400',
-            headerRow: 'bg-zinc-50 text-zinc-500',
-            rowBorder: 'divide-zinc-200',
-            statTint: 'text-zinc-900',
-            divider: 'border-zinc-200',
-        };
-    }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function themeTokens(theme?: RuntimeTheme) {
     return {
         surface: 'bg-navy border-soft',
-        surfaceMuted: 'bg-white/5 border-soft',
+        surfaceMuted: 'bg-surface border-soft',
         text: 'text-ink',
         textMuted: 'text-ink-muted',
         textSubtle: 'text-ink-subtle',

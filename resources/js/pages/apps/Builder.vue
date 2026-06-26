@@ -2437,12 +2437,10 @@ function statusTone(status: Message['status']): string {
                         ref="previewPane"
                         :class="[
                             'flex-1 overflow-auto p-5 transition-colors',
+                            // Force the previewed app's own theme here (independent of the
+                            // builder chrome's mode) so the author can check light AND dark.
                             preview ? (previewTheme === 'dark' ? 'theme-dark' : 'theme-light') : '',
-                            preview
-                                ? previewTheme === 'light'
-                                    ? 'bg-white'
-                                    : 'bg-slate-950'
-                                : '',
+                            preview ? 'bg-navy-deep' : '',
                         ]"
                     >
                         <div
