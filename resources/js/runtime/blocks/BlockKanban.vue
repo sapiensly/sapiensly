@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, inject, reactive, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
+import { useActionExecutor } from '../useActionExecutor';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 
 interface KanbanBlock {
@@ -10,6 +11,7 @@ interface KanbanBlock {
     group_by_field_id: string;
     card_title_field_id: string;
     card_meta_fields?: Array<{ field_id: string }>;
+    editable?: boolean;
 }
 
 interface RowData {
@@ -44,6 +46,18 @@ const metaFields = computed<FieldDef[]>(() =>
         .filter((f): f is FieldDef => f !== undefined),
 );
 
+const { execute } = useActionExecutor();
+const appSlug = inject<string>('appSlug', '');
+
+// Drag-and-drop is opt-in (editable) and only meaningful when the grouping field
+// is a single_select — its option values are the target columns.
+const canDrag = computed(() => !!props.block.editable && groupField.value?.type === 'single_select');
+
+// Optimistic moves: id → new group value, applied to the columns immediately on
+// drop so the card jumps without waiting for the round-trip; reverted on failure.
+const overrides = reactive<Record<string, string>>({});
+const draggingId = ref<string | null>(null);
+
 interface Column {
     value: string;
     label: string;
@@ -70,7 +84,7 @@ const columns = computed<Column[]>(() => {
     }
 
     for (const r of rows) {
-        const raw = gf ? r.data[gf.slug] : null;
+        const raw = gf ? (overrides[r.id] ?? r.data[gf.slug]) : null;
         const key = raw === null || raw === undefined || raw === '' ? '__none__' : String(raw);
         if (!cols.has(key)) {
             const opt = gf?.options?.find((o) => o.value === key);
@@ -86,6 +100,51 @@ const columns = computed<Column[]>(() => {
 
     return Array.from(cols.values());
 });
+
+function onDragStart(row: RowData) {
+    if (!canDrag.value) return;
+    draggingId.value = row.id;
+}
+
+function onDragEnd() {
+    draggingId.value = null;
+}
+
+async function onDrop(col: Column) {
+    const id = draggingId.value;
+    draggingId.value = null;
+    const gf = groupField.value;
+    // Can't drop into the catch-all "no value" column — it isn't a real option.
+    if (!canDrag.value || !id || !gf || col.value === '__none__') return;
+
+    const row = (props.data?.rows ?? []).find((r) => r.id === id);
+    const current = overrides[id] ?? (row ? String(row.data[gf.slug] ?? '') : '');
+    if (current === col.value) return;
+
+    const prev = overrides[id];
+    overrides[id] = col.value; // optimistic
+
+    const res = await execute(
+        [
+            {
+                type: 'update_record',
+                object_id: props.block.data_source.object_id,
+                record_id_expression: '{{row.id}}',
+                values: { [gf.slug]: col.value },
+            },
+            { type: 'refresh' },
+        ],
+        { appSlug, row: { id, data: {} } },
+    );
+
+    if (!res.ok) {
+        if (prev === undefined) {
+            delete overrides[id];
+        } else {
+            overrides[id] = prev;
+        }
+    }
+}
 
 function formatMeta(field: FieldDef, value: unknown): string {
     if (value === null || value === undefined || value === '') return '—';
@@ -129,7 +188,9 @@ function titleFor(row: RowData): string {
             <div
                 v-for="col in columns"
                 :key="col.value"
-                :class="['flex w-72 shrink-0 flex-col rounded-sp-sm border', t.surface]"
+                :class="['flex w-72 shrink-0 flex-col rounded-sp-sm border', t.surface, canDrag && draggingId ? 'ring-1 ring-inset ring-white/10' : '']"
+                @dragover.prevent
+                @drop="onDrop(col)"
             >
                 <header class="flex items-center justify-between gap-2 border-b border-soft px-3 py-2">
                     <div class="flex items-center gap-2 min-w-0">
@@ -151,7 +212,10 @@ function titleFor(row: RowData): string {
                     <li
                         v-for="row in col.rows"
                         :key="row.id"
-                        :class="['rounded-xs border p-2', t.surfaceMuted]"
+                        :draggable="canDrag"
+                        :class="['rounded-xs border p-2', t.surfaceMuted, canDrag ? 'cursor-grab active:cursor-grabbing' : '', draggingId === row.id ? 'opacity-50' : '']"
+                        @dragstart="onDragStart(row)"
+                        @dragend="onDragEnd"
                     >
                         <p :class="['text-xs font-medium', t.text]">
                             {{ titleFor(row) }}

@@ -1760,6 +1760,32 @@ it('rejects a kanban whose group_by_field_id is not a single_select', function (
     expect(collect($result->errors)->pluck('code'))->toContain('incompatible_type');
 });
 
+it('accepts an editable kanban (drag-and-drop) over a single_select', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $stage = id('fld');
+    $manifest['objects'][0]['fields'][] = [
+        'id' => $stage, 'slug' => 'stage', 'name' => 'Stage', 'type' => 'single_select',
+        'options' => [
+            ['id' => id('opt'), 'value' => 'todo', 'label' => 'To do'],
+            ['id' => id('opt'), 'value' => 'done', 'label' => 'Done'],
+        ],
+    ];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'kanban',
+            'data_source' => ['object_id' => $obj['id']],
+            'group_by_field_id' => $stage,
+            'card_title_field_id' => $obj['fields'][0]['id'],
+            'editable' => true,
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
 it('rejects a map whose lat_field_id is not numeric', function () {
     [$manifest, $fldNombre, $fldMonto] = manifestWithNumericObject();
     $manifest['pages'] = [[

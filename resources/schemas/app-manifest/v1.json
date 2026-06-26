@@ -1151,6 +1151,7 @@
                         "data_source": { "$ref": "#/$defs/query" },
                         "group_by_field_id": { "$ref": "#/$defs/id" },
                         "card_title_field_id": { "$ref": "#/$defs/id" },
+                        "editable": { "type": "boolean" },
                         "card_meta_fields": {
                             "type": "array",
                             "items": {
