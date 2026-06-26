@@ -176,6 +176,16 @@ class BlockDataResolver
             return $this->resolveFormBlock($block, $manifest, $context);
         }
 
+        if ($block['type'] === 'record_detail') {
+            $recordId = $this->expressions->resolve($block['record_id_expression'] ?? '', $context);
+            if (! is_string($recordId) || $recordId === '') {
+                return ['record' => null];
+            }
+            $record = $this->records->find($app, $block['object_id'], $recordId, $manifest);
+
+            return ['record' => $record === null ? null : $this->mapRows([$record])[0]];
+        }
+
         if ($block['type'] === 'funnel') {
             $stages = [];
             foreach ($block['stages'] ?? [] as $stage) {

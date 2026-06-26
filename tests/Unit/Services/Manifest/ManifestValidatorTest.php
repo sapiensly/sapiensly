@@ -845,6 +845,56 @@ it('rejects a chart series_field_id that does not belong to the object', functio
         ->toContain('unresolved_ref');
 });
 
+it('accepts a valid record_detail block', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'record_detail',
+            'label' => 'Cliente',
+            'object_id' => $obj['id'],
+            'record_id_expression' => '{{params.id}}',
+            'fields' => [['field_id' => $obj['fields'][0]['id']]],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a record_detail field_id that does not belong to the object', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'record_detail',
+            'object_id' => $obj['id'],
+            'record_id_expression' => '{{params.id}}',
+            'fields' => [['field_id' => id('fld')]],
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('unresolved_ref');
+});
+
+it('rejects a record_detail referencing an unknown object', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'record_detail',
+            'object_id' => id('obj'),
+            'record_id_expression' => '{{params.id}}',
+            'fields' => [],
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('unresolved_ref');
+});
+
 it('accepts treemap chart, word_cloud and flow blocks', function () {
     $manifest = baseManifest();
     $obj = $manifest['objects'][0];

@@ -1086,6 +1086,36 @@
                 }
             ]
         },
+        "block_record_detail": {
+            "description": "Read-only view of ONE record's fields. Requires object_id, record_id_expression (resolves to the record id — e.g. {{params.id}} on a detail page, or {{row.id}}) and fields[] ({field_id, label_override?}). The detail half of a master-detail layout: pair it (e.g. in a split_view) with a table whose row action navigates with the id as a param.",
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "record_detail" },
+                        "label": { "type": "string", "maxLength": 120 },
+                        "object_id": { "$ref": "#/$defs/id" },
+                        "record_id_expression": { "type": "string", "minLength": 1, "maxLength": 500 },
+                        "fields": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "field_id": { "$ref": "#/$defs/id" },
+                                    "label_override": { "type": "string", "maxLength": 80 }
+                                },
+                                "required": ["field_id"]
+                            }
+                        }
+                    },
+                    "required": ["type", "object_id", "record_id_expression", "fields"]
+                }
+            ]
+        },
         "block_chart": {
             "allOf": [
                 { "$ref": "#/$defs/block_base" },
@@ -1737,6 +1767,7 @@
                 { "$ref": "#/$defs/block_divider" },
                 { "$ref": "#/$defs/block_spacer" },
                 { "$ref": "#/$defs/block_table" },
+                { "$ref": "#/$defs/block_record_detail" },
                 { "$ref": "#/$defs/block_stat" },
                 { "$ref": "#/$defs/block_form" },
                 { "$ref": "#/$defs/block_button" },

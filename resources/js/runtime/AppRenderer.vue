@@ -9,6 +9,7 @@ const BlockHeading = defineAsyncComponent(() => import('./blocks/BlockHeading.vu
 const BlockDivider = defineAsyncComponent(() => import('./blocks/BlockDivider.vue'));
 const BlockSpacer = defineAsyncComponent(() => import('./blocks/BlockSpacer.vue'));
 const BlockTable = defineAsyncComponent(() => import('./blocks/BlockTable.vue'));
+const BlockRecordDetail = defineAsyncComponent(() => import('./blocks/BlockRecordDetail.vue'));
 const BlockStat = defineAsyncComponent(() => import('./blocks/BlockStat.vue'));
 const BlockForm = defineAsyncComponent(() => import('./blocks/BlockForm.vue'));
 const BlockButton = defineAsyncComponent(() => import('./blocks/BlockButton.vue'));
@@ -49,6 +50,7 @@ const componentForType = {
     divider: BlockDivider,
     spacer: BlockSpacer,
     table: BlockTable,
+    record_detail: BlockRecordDetail,
     stat: BlockStat,
     form: BlockForm,
     button: BlockButton,

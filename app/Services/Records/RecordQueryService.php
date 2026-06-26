@@ -126,6 +126,26 @@ class RecordQueryService
         return $result === null ? 0 : (float) $result;
     }
 
+    /**
+     * Fetch a single record by id, scoped to the app + object (RLS applies),
+     * with derived (formula/lookup/rollup) fields enriched. Null if not found.
+     *
+     * @param  array<string, mixed>  $manifest
+     */
+    public function find(App $app, string $objectId, string $recordId, array $manifest): ?Record
+    {
+        $object = $this->findObject($manifest, $objectId);
+
+        $record = $this->scopeForObject($app, $objectId)->whereKey($recordId)->first();
+        if ($record === null) {
+            return null;
+        }
+
+        $this->derived->enrich($app, $object, collect([$record]), $manifest);
+
+        return $record;
+    }
+
     private function scopeForObject(App $app, string $objectId): Builder
     {
         return Record::query()
