@@ -26,6 +26,7 @@ const BlockGauge = defineAsyncComponent(() => import('./blocks/BlockGauge.vue'))
 const BlockProgress = defineAsyncComponent(() => import('./blocks/BlockProgress.vue'));
 const BlockHeatmap = defineAsyncComponent(() => import('./blocks/BlockHeatmap.vue'));
 const BlockTimeline = defineAsyncComponent(() => import('./blocks/BlockTimeline.vue'));
+const BlockGantt = defineAsyncComponent(() => import('./blocks/BlockGantt.vue'));
 const BlockFunnel = defineAsyncComponent(() => import('./blocks/BlockFunnel.vue'));
 const BlockMap = defineAsyncComponent(() => import('./blocks/BlockMap.vue'));
 const BlockTabs = defineAsyncComponent(() => import('./blocks/BlockTabs.vue'));
@@ -68,6 +69,7 @@ const componentForType = {
     progress: BlockProgress,
     heatmap: BlockHeatmap,
     timeline: BlockTimeline,
+    gantt: BlockGantt,
     funnel: BlockFunnel,
     map: BlockMap,
     tabs: BlockTabs,

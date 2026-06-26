@@ -1632,6 +1632,27 @@
                 }
             ]
         },
+        "block_gantt": {
+            "description": "Horizontal schedule: one bar per record spanning start_field_id → end_field_id (both date/datetime), laid out on a shared time axis. Requires data_source, start_field_id, end_field_id and title_field_id (the bar label). Optional: label, color_field_id (single_select — colours each bar). Good for projects, leases, bookings — anything with a start and an end. Use calendar for single-date events and timeline for a chronological list.",
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "gantt" },
+                        "label": { "type": "string", "maxLength": 80 },
+                        "data_source": { "$ref": "#/$defs/query" },
+                        "start_field_id": { "$ref": "#/$defs/id" },
+                        "end_field_id": { "$ref": "#/$defs/id" },
+                        "title_field_id": { "$ref": "#/$defs/id" },
+                        "color_field_id": { "$ref": "#/$defs/id" }
+                    },
+                    "required": ["type", "data_source", "start_field_id", "end_field_id", "title_field_id"]
+                }
+            ]
+        },
         "block_funnel": {
             "allOf": [
                 { "$ref": "#/$defs/block_base" },
@@ -1826,6 +1847,7 @@
                 { "$ref": "#/$defs/block_progress" },
                 { "$ref": "#/$defs/block_heatmap" },
                 { "$ref": "#/$defs/block_timeline" },
+                { "$ref": "#/$defs/block_gantt" },
                 { "$ref": "#/$defs/block_funnel" },
                 { "$ref": "#/$defs/block_map" },
                 { "$ref": "#/$defs/block_tabs" },

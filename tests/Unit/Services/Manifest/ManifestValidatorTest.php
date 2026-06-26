@@ -1826,6 +1826,47 @@ it('accepts an editable kanban (drag-and-drop) over a single_select', function (
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
 
+it('accepts a valid gantt block over two date fields', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $start = id('fld');
+    $end = id('fld');
+    $manifest['objects'][0]['fields'][] = ['id' => $start, 'slug' => 'start_date', 'name' => 'Start', 'type' => 'date'];
+    $manifest['objects'][0]['fields'][] = ['id' => $end, 'slug' => 'end_date', 'name' => 'End', 'type' => 'date'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'gantt', 'label' => 'Schedule',
+            'data_source' => ['object_id' => $obj['id']],
+            'start_field_id' => $start,
+            'end_field_id' => $end,
+            'title_field_id' => $obj['fields'][0]['id'],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a gantt whose start_field_id is not a date', function () {
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $end = id('fld');
+    $manifest['objects'][0]['fields'][] = ['id' => $end, 'slug' => 'end_date', 'name' => 'End', 'type' => 'date'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'p', 'name' => 'P', 'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'gantt',
+            'data_source' => ['object_id' => $obj['id']],
+            'start_field_id' => $obj['fields'][0]['id'], // string, not a date
+            'end_field_id' => $end,
+            'title_field_id' => $obj['fields'][0]['id'],
+        ]],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('incompatible_type');
+});
+
 it('rejects a map whose lat_field_id is not numeric', function () {
     [$manifest, $fldNombre, $fldMonto] = manifestWithNumericObject();
     $manifest['pages'] = [[

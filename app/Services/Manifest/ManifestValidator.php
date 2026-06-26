@@ -1599,6 +1599,22 @@ class ManifestValidator
                 $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
             }
 
+            if ($block['type'] === 'gantt') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'gantt',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $this->checkFieldRef($fields, $block['start_field_id'] ?? null, "{$blockPath}/start_field_id", 'gantt.start_field_id', $errors, ['date', 'datetime']);
+                $this->checkFieldRef($fields, $block['end_field_id'] ?? null, "{$blockPath}/end_field_id", 'gantt.end_field_id', $errors, ['date', 'datetime']);
+                $this->checkFieldRef($fields, $block['title_field_id'] ?? null, "{$blockPath}/title_field_id", 'gantt.title_field_id', $errors);
+                $this->checkFieldRef($fields, $block['color_field_id'] ?? null, "{$blockPath}/color_field_id", 'gantt.color_field_id', $errors, ['single_select']);
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
             if ($block['type'] === 'map') {
                 $fields = $this->resolveBlockObjectFields(
                     $block['data_source'] ?? [], 'object_id',

@@ -135,7 +135,7 @@ class BlockDataResolver
             return $payload;
         }
 
-        if (in_array($block['type'], ['chart', 'kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'map', 'card_grid', 'word_cloud'], true)) {
+        if (in_array($block['type'], ['chart', 'kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'gantt', 'map', 'card_grid', 'word_cloud'], true)) {
             return ['rows' => $this->queryRows($app, $block['data_source'], $manifest, $context)];
         }
 
