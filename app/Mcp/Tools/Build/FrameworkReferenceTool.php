@@ -7,7 +7,7 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Detailed authoring reference for building apps. Call with no topic to list topics (forms, workflows, derived_fields, expressions, design, verification, connected_objects, example), then call again with a topic.')]
+#[Description('Detailed authoring reference for building apps. Call with no topic to list topics (forms, workflows, derived_fields, expressions, design, permissions, verification, connected_objects, example), then call again with a topic. The `permissions` topic covers the enforced access layer: roles, object/page policies, row/field restrictions, and access_mode.')]
 class FrameworkReferenceTool extends BuilderCatalogTool
 {
     protected const BUILDER_TOOL = BuilderTool::class;

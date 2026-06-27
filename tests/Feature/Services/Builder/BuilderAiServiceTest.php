@@ -366,7 +366,60 @@ it('ReadManifestTool stays on the active manifest after a failed propose_change'
 it('FrameworkReferenceTool lists its topics when called with no topic', function () {
     $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest([])), true);
 
-    expect($result['topics'])->toContain('forms', 'workflows', 'derived_fields', 'expressions', 'design', 'verification', 'visual_review', 'connected_objects', 'example');
+    expect($result['topics'])->toContain('forms', 'workflows', 'derived_fields', 'expressions', 'design', 'permissions', 'verification', 'visual_review', 'connected_objects', 'example');
+});
+
+it('FrameworkReferenceTool documents the enforced access layer under permissions', function () {
+    $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'permissions'])), true);
+
+    expect($result['topic'])->toBe('permissions')
+        ->and($result['reference'])->toContain('access_mode')
+        ->and($result['reference'])->toContain('allowlist')
+        ->and($result['reference'])->toContain('row_filter')
+        ->and($result['reference'])->toContain('field_restrictions')
+        ->and($result['reference'])->toContain('page_policies')
+        ->and($result['reference'])->toContain('is_default')
+        ->and($result['reference'])->toContain('ENFORCED');
+});
+
+it('FrameworkReferenceTool permissions snippet validates inside a manifest', function () {
+    $reference = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'permissions'])), true)['reference'];
+
+    // The topic ends with one JSON object: {\n  "permissions": {…}\n}. Anchor on
+    // that block's opening brace (prose above contains other braces like
+    // {{current_user.id}}), then take everything through the final brace.
+    $start = strpos($reference, "{\n  \"permissions\"");
+    $end = strrpos($reference, '}');
+    $snippet = json_decode(substr($reference, $start, $end - $start + 1), true);
+
+    expect($snippet)->toHaveKey('permissions');
+
+    // Wrap the documented permissions block in a manifest whose objects/fields/
+    // pages match the ids it references, so referential validation runs for real.
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_referencepermissions',
+        'slug' => 'perm_demo',
+        'name' => 'Permissions Demo',
+        'version' => 1,
+        'objects' => [[
+            'id' => 'obj_ticketsobject',
+            'slug' => 'tickets',
+            'name' => 'Ticket',
+            'fields' => [
+                ['id' => 'fld_ownerfield01', 'slug' => 'owner', 'name' => 'Owner', 'type' => 'string'],
+                ['id' => 'fld_internalnotes01', 'slug' => 'internal_notes', 'name' => 'Internal notes', 'type' => 'long_text'],
+            ],
+        ]],
+        'pages' => [
+            ['id' => 'pag_adminpage01', 'slug' => 'admin', 'name' => 'Admin', 'path' => '/admin', 'blocks' => []],
+        ],
+        'permissions' => $snippet['permissions'],
+    ];
+
+    $result = app(ManifestValidator::class)->validate($manifest);
+
+    expect($result->valid)->toBeTrue(collect($result->errors)->pluck('message')->implode("\n"));
 });
 
 it('FrameworkReferenceTool returns the requested topic section', function () {

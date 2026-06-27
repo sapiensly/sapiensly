@@ -121,7 +121,8 @@ class GuideTool extends SapiensTool
                     '3. list_app_versions / rollback_app to manage history (every change is a reversible version).',
                     '4. Workflows: verify_workflow (dry-run, writes simulated) then run_workflow; approve_workflow_proposal for gated writes.',
                     '5. Records (data:read/write): query_records / create_record / update_record once objects exist.',
-                    '6. Demo data is OPT-IN: a fresh app opens empty. OFFER to add sample data and only call generate_demo_data after the user agrees — never seed automatically.',
+                    '6. Access & roles (when the app is for a whole org): the manifest\'s `permissions` block is ENFORCED at runtime — author roles (exactly one is_default when 2+), `access_mode` (open|allowlist), and object/page policies + row_filter + field_restrictions to scope what each role sees and does (the embedded agent is governed by the same policies). Read framework_reference topic=permissions for the exact shape. Assigning individual members to roles is done in the builder\'s "Access" panel, not the manifest.',
+                    '7. Demo data is OPT-IN: a fresh app opens empty. OFFER to add sample data and only call generate_demo_data after the user agrees — never seed automatically.',
                 ],
             ],
             [

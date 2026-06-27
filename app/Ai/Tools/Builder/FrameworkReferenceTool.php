@@ -122,6 +122,45 @@ CONNECTING EXTERNAL SYSTEMS (integrations):
   - The sample call IS the verification that the mapping is real; confirm the mapping with the user before proposing if unsure. Data stays in the external system (passthrough) — you are NOT copying it in.
 TXT,
 
+        'permissions' => <<<'TXT'
+PERMISSIONS & ACCESS (roles, policies, access mode — ENFORCED at runtime):
+- The manifest's `permissions` block is now ENFORCED server-side on EVERY surface: page access, block visibility, record reads, record writes, AND the app's embedded agent. (It used to be validated-but-ignored — that is no longer true.) Authoring it wrong locks users out or leaks data, so be deliberate. An app with NO object/page policies stays open-within-visibility (the zero-config default) — add policies to RESTRICT, not to grant.
+- ADMINS BYPASS EVERYTHING: the app owner, organization owners, and sysadmins skip all policies. Never write a policy just to "let the admin in" — they already have full access.
+- ROLES (`permissions.roles[]` = `{id, slug, name, is_default}`): the `slug` is the stable handle that policies, visibility rules and assignments reference (it survives manifest edits; the regenerated `id` does not — but object/page POLICIES reference the role by `id`). EXACTLY ONE role must have `is_default:true` when there are 2+ roles — zero or several is rejected by validation. A single-role app needs no flag (that role is the implicit default). Scaffolded apps ship `admin` (not default) + `user` (default).
+- ACCESS MODE (`permissions.access_mode`, enum, default `open`):
+  - `open`: every org member who can see the app gets the DEFAULT role; explicit assignments only ELEVATE (e.g. to admin).
+  - `allowlist`: ONLY members with an explicit role assignment may enter — everyone else is denied (403). Use for sensitive/internal apps.
+- OBJECT POLICIES (`permissions.object_policies[]` = `{object_id, role_id, actions, row_filter?, field_restrictions?}`, one entry per object×role):
+  - `actions`: subset of `["create","read","update","delete"]` the role may perform. Omit create/update/delete to make a role read-only. An object with NO policy at all is fully open within visibility.
+  - `row_filter`: a filter_expression (SAME shape as a data_source filter — see `expressions`) that scopes BOTH reads and writes for that role. Classic "own rows only": `{"op":"eq","field_id":"fld_owner","value_expression":"{{current_user.id}}"}`. A record outside the filter is invisible AND cannot be updated/deleted (resolves to not-found — this closes the escalation hole).
+  - `field_restrictions.hidden`: FIELD IDS stripped from every read for that role. `field_restrictions.readonly`: FIELD IDS that role may not write (rejected). Both are arrays of field IDs, NOT slugs.
+  - Multiple policies for one role combine most-permissively: actions union, row_filters OR, readonly union, hidden intersection.
+- PAGE POLICIES (`permissions.page_policies[]` = `{page_id, role_id, can_view}`): when a page has ANY page_policy, only roles granted `can_view:true` may open it (hidden from nav + 403 on direct visit). A page with no policy is visible to all (still subject to its own visibility rule).
+- VISIBILITY RULES (optional `visibility` object on a page, block, or nav item = `{roles:[slug,...], expression?}`): the element shows ONLY to users holding one of the listed role SLUGS. Blocks failing the rule are stripped server-side BEFORE their data is resolved — perfect for an admin-only section inside an otherwise shared page. (Reference roles here by SLUG; object/page policies reference roles by ID.)
+- AGENT PARITY: the embedded runtime agent acts AS the requesting user and can never exceed their role — its tools omit objects the role can't reach, its reads honour row_filter + hidden fields, and proposed writes are re-authorized at execution. You do NOT configure this separately; authoring the policies above governs the agent automatically.
+- ASSIGNING ROLES TO PEOPLE is RUNTIME DATA, not the manifest. The manifest only DEFINES roles + policies; it never lists individual users. Who-gets-which-role is managed in the builder's "Access" panel (or the access endpoints), stored per (app, user). So your job when "add roles/permissions" is asked: author the roles, access_mode, and policies — then tell the user to assign members in the Access panel.
+- WORKED SNIPPET (admin full; member read-only on their OWN rows with an internal field hidden; an admin-only page):
+(ids follow the same `<prefix>_<8-60 token>` rule as everywhere else — short labels like "rol_admin" are too short and fail validation)
+{
+  "permissions": {
+    "access_mode": "open",
+    "roles": [
+      { "id": "rol_adminrole01", "slug": "admin", "name": "Admin", "is_default": false },
+      { "id": "rol_memberrole01", "slug": "member", "name": "Member", "is_default": true }
+    ],
+    "object_policies": [
+      { "object_id": "obj_ticketsobject", "role_id": "rol_adminrole01", "actions": ["create","read","update","delete"] },
+      { "object_id": "obj_ticketsobject", "role_id": "rol_memberrole01", "actions": ["read"],
+        "row_filter": { "op": "eq", "field_id": "fld_ownerfield01", "value_expression": "{{current_user.id}}" },
+        "field_restrictions": { "hidden": ["fld_internalnotes01"] } }
+    ],
+    "page_policies": [
+      { "page_id": "pag_adminpage01", "role_id": "rol_adminrole01", "can_view": true }
+    ]
+  }
+}
+TXT,
+
         'example' => <<<'TXT'
 WORKED EXAMPLE — a COMPLETE valid "Mini CRM" manifest (this exact thing passes validation). The placeholder ids are valid; generate your own `<prefix>_<token>` ids — a 2-5 lowercase-letter prefix, an underscore, then 8-60 chars of [a-z0-9_] (a lowercased ULID is one easy choice, but ANY opaque lowercase token in that range is accepted; it does NOT need to be exactly 26 chars or valid base32). Pattern-match this SHAPE instead of reasoning the schema from scratch. Note the EXACT keys that trip people up: `schema_version` is a string "1.0.0" (not a number); top level REQUIRES id, version and permissions; single_select options use `value`+`label` (NOT slug); a `heading` block uses `content` (not text); a `page` requires `path` (starts with "/"). There is no `email` or `text` field type — use `string`.
 
@@ -187,7 +226,7 @@ TXT,
     {
         $topics = implode(', ', array_keys(self::TOPICS));
 
-        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
+        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
     }
 
     public function schema(JsonSchema $schema): array
