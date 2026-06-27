@@ -1,6 +1,15 @@
 <script setup lang="ts">
-interface Brand { name?: string; logo?: string; cta?: { label: string; href: string } }
-interface PageLink { slug: string; name: string }
+import RuntimeUserMenu from '@/runtime/RuntimeUserMenu.vue';
+
+interface Brand {
+    name?: string;
+    logo?: string;
+    cta?: { label: string; href: string };
+}
+interface PageLink {
+    slug: string;
+    name: string;
+}
 
 defineProps<{
     brand?: Brand;
@@ -18,12 +27,25 @@ defineProps<{
             backgroundColor: 'color-mix(in srgb, currentColor 4%, transparent)',
         }"
     >
-        <a class="flex items-center gap-2 font-semibold" :href="hrefFor ? hrefFor(pages?.[0]?.slug ?? '') : '#'">
-            <img v-if="brand?.logo" :src="brand.logo" alt="" class="h-7 w-auto" />
-            <span v-if="brand?.name" class="text-base tracking-tight">{{ brand.name }}</span>
+        <a
+            class="flex items-center gap-2 font-semibold"
+            :href="hrefFor ? hrefFor(pages?.[0]?.slug ?? '') : '#'"
+        >
+            <img
+                v-if="brand?.logo"
+                :src="brand.logo"
+                alt=""
+                class="h-7 w-auto"
+            />
+            <span v-if="brand?.name" class="text-base tracking-tight">{{
+                brand.name
+            }}</span>
         </a>
 
-        <nav v-if="pages && pages.length > 1" class="hidden items-center gap-1 sm:flex">
+        <nav
+            v-if="pages && pages.length > 1"
+            class="hidden items-center gap-1 sm:flex"
+        >
             <a
                 v-for="p in pages"
                 :key="p.slug"
@@ -35,13 +57,18 @@ defineProps<{
             </a>
         </nav>
 
-        <a
-            v-if="brand?.cta"
-            :href="brand.cta.href"
-            class="inline-flex items-center rounded-pill px-4 py-2 text-sm font-semibold text-white"
-            :style="{ backgroundColor: 'var(--sp-accent, #3b82f6)' }"
-        >
-            {{ brand.cta.label }}
-        </a>
+        <div class="flex items-center gap-2">
+            <a
+                v-if="brand?.cta"
+                :href="brand.cta.href"
+                class="inline-flex items-center rounded-pill px-4 py-2 text-sm font-semibold text-white"
+                :style="{ backgroundColor: 'var(--sp-accent, #3b82f6)' }"
+            >
+                {{ brand.cta.label }}
+            </a>
+
+            <!-- Default user widget: identity + "exit to Sapiensly". -->
+            <RuntimeUserMenu />
+        </div>
     </header>
 </template>
