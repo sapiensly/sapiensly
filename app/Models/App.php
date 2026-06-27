@@ -57,4 +57,10 @@ class App extends Model
     {
         return $this->hasMany(AppVersion::class, 'app_id')->orderByDesc('version_number');
     }
+
+    /** Per-user app-role grants (runtime access control). Tenant-scoped. */
+    public function userRoles(): HasMany
+    {
+        return $this->hasMany(AppUserRole::class, 'app_id');
+    }
 }

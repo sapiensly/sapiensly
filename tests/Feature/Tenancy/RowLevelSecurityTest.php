@@ -41,7 +41,7 @@ afterEach(function () {
 function truncateTenantFixtures(): void
 {
     DB::connection('owner_commit')->statement(
-        'truncate tenant.records, tenant.knowledge_bases, tenant.chat_agents, tenant.ai_usage_events, platform.apps, platform.organizations, platform.users restart identity cascade'
+        'truncate tenant.records, tenant.app_user_roles, tenant.knowledge_bases, tenant.chat_agents, tenant.ai_usage_events, platform.apps, platform.organizations, platform.users restart identity cascade'
     );
 }
 
@@ -276,4 +276,53 @@ it('exposes the tenant scope through TenantContext', function () {
     expect($context->organizationId())->toBe('org_abc')
         ->and($context->userId())->toBe(42)
         ->and($context->hasContext())->toBeTrue();
+});
+
+/* ---------------- app_user_roles (app-role grants) ---------------- */
+
+function seedAppUserRole(?string $orgId, ?int $userId, string $appId, int $assignedUserId, string $roleSlug = 'user'): void
+{
+    DB::connection('owner_commit')->table('tenant.app_user_roles')->insert([
+        'id' => 'aur_'.uniqid(),
+        'organization_id' => $orgId,
+        'user_id' => $userId,
+        'app_id' => $appId,
+        'assigned_user_id' => $assignedUserId,
+        'role_slug' => $roleSlug,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+}
+
+function tenantAppUserRoleCount(): int
+{
+    return DB::connection('tenant_app_real')->table('tenant.app_user_roles')->count();
+}
+
+it('isolates app_user_roles by organization', function () {
+    $owner = makeOwner();
+    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
+    $orgB = Organization::on('owner_commit')->create(['name' => 'B', 'slug' => 'b-'.uniqid()]);
+    $appA = makeApp($orgA->id, $owner->id);
+    $appB = makeApp($orgB->id, $owner->id);
+    $member = makeOwner();
+
+    seedAppUserRole($orgA->id, null, $appA->id, $member->id, 'admin');
+    seedAppUserRole($orgA->id, null, $appA->id, $owner->id, 'user');
+    seedAppUserRole($orgB->id, null, $appB->id, $member->id, 'user');
+
+    scopeTenant($orgA->id, null);
+    expect(tenantAppUserRoleCount())->toBe(2);
+
+    scopeTenant($orgB->id, null);
+    expect(tenantAppUserRoleCount())->toBe(1);
+});
+
+it('is fail-closed for app_user_roles when no tenant scope is set', function () {
+    $owner = makeOwner();
+    $org = Organization::on('owner_commit')->create(['name' => 'O', 'slug' => 'o-'.uniqid()]);
+    seedAppUserRole($org->id, null, makeApp($org->id, $owner->id)->id, $owner->id);
+
+    scopeTenant(null, null);
+    expect(tenantAppUserRoleCount())->toBe(0);
 });

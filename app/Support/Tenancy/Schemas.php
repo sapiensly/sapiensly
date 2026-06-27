@@ -33,6 +33,7 @@ final class Schemas
         // App-builder data
         'records',
         'record_relations',
+        'app_user_roles',
         // Documents & RAG content
         'folders',
         'documents',

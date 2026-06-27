@@ -112,6 +112,12 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
         return $this->hasMany(OrganizationMembership::class);
     }
 
+    /** App-role grants this user holds (the runtime role per app). */
+    public function appRoles(): HasMany
+    {
+        return $this->hasMany(AppUserRole::class, 'assigned_user_id');
+    }
+
     public function isBlocked(): bool
     {
         return $this->blocked_at !== null;
