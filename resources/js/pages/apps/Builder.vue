@@ -1002,6 +1002,10 @@ const currentViewMeta = computed(() => {
             icon: WorkflowIcon,
             heading: t('apps.builder.workflows_heading'),
         },
+        access: {
+            icon: ShieldCheck,
+            heading: t('apps.builder.access_heading'),
+        },
         manifest: { icon: Code, heading: t('apps.builder.manifest_heading') },
     } as const;
     return map[viewMode.value];

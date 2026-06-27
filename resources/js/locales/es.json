@@ -335,6 +335,7 @@
     "apps.builder.exit_fullscreen": "Salir de pantalla completa (Esc)",
     "apps.builder.resize_panels": "Arrastra para ajustar los paneles (doble clic para restablecer)",
     "apps.builder.workflows_heading": "Workflows del app",
+    "apps.builder.access_heading": "Control de acceso",
     "apps.builder.workflows.list_heading": "Workflows",
     "apps.builder.workflows.new": "Nuevo workflow",
     "apps.builder.workflows.empty_state": "Todavía no hay workflows. Crea uno o pídele a Claude que lo arme.",
