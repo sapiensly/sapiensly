@@ -5,7 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { ImagePlus, Loader2, Palette, Sparkles, Type } from '@lucide/vue';
+import {
+    ImagePlus,
+    Loader2,
+    Palette,
+    Plus,
+    Sparkles,
+    Type,
+    X,
+} from '@lucide/vue';
 import axios from 'axios';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -249,16 +257,35 @@ const accent = computed(() => form.primary_color || '#3b82f6');
                     >
                         <Label>{{ c.label }}</Label>
                         <div class="flex items-center gap-2">
-                            <input
-                                type="color"
-                                :value="(form as any)[c.key] || '#000000'"
-                                class="size-9 shrink-0 cursor-pointer rounded-xs border border-soft bg-transparent"
-                                @input="
-                                    (form as any)[c.key] = (
-                                        $event.target as HTMLInputElement
-                                    ).value
+                            <label
+                                class="relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-xs border bg-surface"
+                                :class="
+                                    (form as any)[c.key]
+                                        ? 'border-soft'
+                                        : 'border-dashed border-medium'
                                 "
-                            />
+                                :style="
+                                    (form as any)[c.key]
+                                        ? { background: (form as any)[c.key] }
+                                        : {}
+                                "
+                                :title="t('settings.brand.pick_color')"
+                            >
+                                <Plus
+                                    v-if="!(form as any)[c.key]"
+                                    class="size-3.5 text-ink-muted"
+                                />
+                                <input
+                                    type="color"
+                                    :value="(form as any)[c.key] || '#3b82f6'"
+                                    class="absolute inset-0 size-full cursor-pointer opacity-0"
+                                    @input="
+                                        (form as any)[c.key] = (
+                                            $event.target as HTMLInputElement
+                                        ).value
+                                    "
+                                />
+                            </label>
                             <Input
                                 :model-value="(form as any)[c.key]"
                                 class="h-9"
@@ -267,6 +294,15 @@ const accent = computed(() => form.primary_color || '#3b82f6');
                                     (form as any)[c.key] = $event
                                 "
                             />
+                            <button
+                                v-if="(form as any)[c.key]"
+                                type="button"
+                                class="inline-flex size-9 shrink-0 items-center justify-center rounded-xs border border-soft text-ink-muted transition-colors hover:text-ink"
+                                :title="t('settings.brand.clear')"
+                                @click="(form as any)[c.key] = ''"
+                            >
+                                <X class="size-3.5" />
+                            </button>
                         </div>
                         <InputError :message="(form.errors as any)[c.key]" />
                     </div>

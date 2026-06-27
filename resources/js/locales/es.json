@@ -84,6 +84,8 @@
     "settings.brand.upload": "Subir",
     "settings.brand.colors": "Colores",
     "settings.brand.colors_hint": "El color primario impulsa botones, enlaces y acentos en todas tus superficies.",
+    "settings.brand.pick_color": "Elegir color",
+    "settings.brand.clear": "Limpiar",
     "settings.brand.primary": "Primario",
     "settings.brand.background": "Fondo",
     "settings.brand.text": "Texto",

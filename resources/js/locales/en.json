@@ -84,6 +84,8 @@
     "settings.brand.upload": "Upload",
     "settings.brand.colors": "Colours",
     "settings.brand.colors_hint": "The primary colour drives buttons, links and accents across your surfaces.",
+    "settings.brand.pick_color": "Pick a colour",
+    "settings.brand.clear": "Clear",
     "settings.brand.primary": "Primary",
     "settings.brand.background": "Background",
     "settings.brand.text": "Text",
