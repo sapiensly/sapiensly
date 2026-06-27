@@ -122,6 +122,27 @@ CONNECTING EXTERNAL SYSTEMS (integrations):
   - The sample call IS the verification that the mapping is real; confirm the mapping with the user before proposing if unsure. Data stays in the external system (passthrough) — you are NOT copying it in.
 TXT,
 
+        'custom_css' => <<<'TXT'
+CUSTOM CSS (settings.custom_css — the scoped escape hatch):
+- WHAT IT IS: raw CSS for fine visual touches the structured options can't express (hover/transition effects, ::before/::after accents, gradients on a specific block, custom shadows, a bespoke card look). Set it at `settings.custom_css` via propose_change (path "/settings/custom_css").
+- ISOLATION (automatic): the runtime WRAPS your CSS in `.sp-app-surface { … }` using CSS nesting, so every selector only matches INSIDE this app — it can never touch the Sapiensly platform chrome or another app. Write PLAIN selectors; do NOT prefix them with `.sp-app-surface` yourself. To style the surface itself, write bare declarations or `& { … }` at the top level.
+- USE THE LADDER (don't reach for CSS first): 1) `settings.accent`/`font`/`theme` for global brand; 2) a block's `style` object (padding/margin/background/color/max_width/full_bleed/gradient) for per-block spacing & colour; 3) custom_css ONLY for what those can't do. The org Brandbook + accent should carry most of the look.
+- TARGETING (stable hooks the runtime emits): every block renders with `data-block-type="<type>"` and `data-block-id="<id>"`. Prefer these:
+  - by type: `[data-block-type="table"] { … }`, `[data-block-type="stat"] { … }`
+  - one specific block: `[data-block-id="blk_…"] { … }`
+  - element-level inside the app: `h2 { … }`, `button { … }`, `a { … }`.
+- USE THE TOKENS, don't hardcode brand colours: `var(--sp-accent)` (the brand accent), `var(--sp-accent-blue)` / `var(--sp-accent-blue-hover)` (primary button). This keeps custom CSS in sync with the brand/accent the user picks.
+- DON'Ts (some are rejected at save): no `@import`, no `<style>`/`<script>`, no `javascript:` URLs, no `expression(...)`. Don't `display:none` the header/nav (it holds the "exit to Sapiensly" widget). Avoid `position: fixed` overlays that cover the page. Keep text vs background contrast readable — if you set a background, set a matching text colour.
+- EXAMPLE (rounded, lifted cards with an accent top border + smooth hover):
+  [data-block-type="card_grid"] .card, [data-block-id="blk_kpis"] {
+    border-radius: 14px;
+    border-top: 3px solid var(--sp-accent);
+    box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.06);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  [data-block-type="card_grid"] .card:hover { transform: translateY(-2px); }
+TXT,
+
         'permissions' => <<<'TXT'
 PERMISSIONS & ACCESS (roles, policies, access mode — ENFORCED at runtime):
 - The manifest's `permissions` block is now ENFORCED server-side on EVERY surface: page access, block visibility, record reads, record writes, AND the app's embedded agent. (It used to be validated-but-ignored — that is no longer true.) Authoring it wrong locks users out or leaks data, so be deliberate. An app with NO object/page policies stays open-within-visibility (the zero-config default) — add policies to RESTRICT, not to grant.
@@ -226,7 +247,7 @@ TXT,
     {
         $topics = implode(', ', array_keys(self::TOPICS));
 
-        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
+        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `custom_css` (the scoped raw-CSS escape hatch + targeting hooks), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
     }
 
     public function schema(JsonSchema $schema): array

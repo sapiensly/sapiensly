@@ -16,6 +16,7 @@ use App\Services\Manifest\InvalidManifestException;
 use App\Services\Records\BlockDataResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Storage\TenantStorage;
+use App\Support\Css\ScopedAppCss;
 use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -245,6 +246,11 @@ class AppBuilderController extends Controller
             'params' => [],
         ];
 
+        // Org Brandbook fills unset brand values (live fallback); the app wins.
+        $settings = $app->organization !== null
+            ? $app->organization->brandbook()->applyToAppSettings($manifest['settings'] ?? [])
+            : ($manifest['settings'] ?? []);
+
         return [
             'page' => $page,
             'pages' => array_map(
@@ -255,9 +261,9 @@ class AppBuilderController extends Controller
             'objects' => $manifest['objects'] ?? [],
             // Apply the org Brandbook as a live fallback so the preview matches
             // what the runtime renders (AppRuntimeController does the same).
-            'settings' => $app->organization !== null
-                ? $app->organization->brandbook()->applyToAppSettings($manifest['settings'] ?? [])
-                : ($manifest['settings'] ?? []),
+            'settings' => $settings,
+            // Author CSS scoped to the app surface — preview mirrors the runtime.
+            'custom_css' => ScopedAppCss::compile($settings['custom_css'] ?? null),
         ];
     }
 

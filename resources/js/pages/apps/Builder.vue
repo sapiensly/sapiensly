@@ -137,6 +137,7 @@ interface Preview {
     block_data: BlockData;
     objects: ObjectDef[];
     settings: { default_locale?: string; default_currency?: string };
+    custom_css?: string;
 }
 
 interface SchemaPayload {
@@ -2591,8 +2592,15 @@ function statusTone(status: Message['status']): string {
                         <div
                             v-if="preview"
                             data-preview-content
+                            class="sp-app-surface"
                             :style="previewSurfaceStyle"
                         >
+                            <!-- Author CSS, pre-scoped server-side to .sp-app-surface. -->
+                            <component
+                                :is="'style'"
+                                v-if="preview.custom_css"
+                                :text-content="preview.custom_css"
+                            />
                             <SiteHeader
                                 :brand="previewBrand"
                                 :pages="preview.pages"

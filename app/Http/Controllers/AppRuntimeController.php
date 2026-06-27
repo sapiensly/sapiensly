@@ -7,6 +7,7 @@ use App\Services\Apps\AppAccessContext;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\BlockDataResolver;
+use App\Support\Css\ScopedAppCss;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -100,6 +101,12 @@ class AppRuntimeController extends Controller
 
         $blockData = $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context);
 
+        // Effective settings = manifest settings with the org Brandbook filling any
+        // unset brand value (live fallback); the app's own choices win.
+        $settings = $app->organization !== null
+            ? $app->organization->brandbook()->applyToAppSettings($manifest['settings'] ?? [])
+            : ($manifest['settings'] ?? []);
+
         return Inertia::render('runtime/Page', [
             'app' => [
                 'id' => $app->id,
@@ -114,12 +121,7 @@ class AppRuntimeController extends Controller
                     fn (array $p) => ['id' => $p['id'], 'slug' => $p['slug'], 'name' => $p['name'], 'icon' => $p['icon'] ?? null],
                     $viewablePages,
                 ),
-                // The org Brandbook fills any brand value the app left unset (live
-                // fallback) — accent/font/theme/logo — so a brand change reaches
-                // apps that never overrode it. The app's own choices still win.
-                'settings' => $app->organization !== null
-                    ? $app->organization->brandbook()->applyToAppSettings($manifest['settings'] ?? [])
-                    : ($manifest['settings'] ?? []),
+                'settings' => $settings,
                 // Objects ship to the client so block components can resolve
                 // field_id → name/type for header labels and value formatting.
                 'objects' => $manifest['objects'] ?? [],
@@ -135,6 +137,8 @@ class AppRuntimeController extends Controller
             // Current filter values, so a filter_bar renders pre-filled with the
             // active query (deep-link / back-button friendly).
             'params' => (object) $params,
+            // Author CSS, compiled + scoped to the app surface (never leaks out).
+            'customCss' => ScopedAppCss::compile($settings['custom_css'] ?? null),
         ]);
     }
 

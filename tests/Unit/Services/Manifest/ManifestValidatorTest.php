@@ -2464,6 +2464,26 @@ it('requires a default role when more than one role is defined', function () {
         ->and(collect($result->errors)->pluck('code'))->toContain('missing_default_role');
 });
 
+// --- settings.custom_css (scoped escape hatch) ---
+
+it('accepts safe custom_css', function () {
+    $manifest = baseManifest();
+    $manifest['settings']['custom_css'] = '[data-block-type="table"] { border-radius: 12px; }';
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects custom_css with a forbidden construct', function () {
+    $manifest = baseManifest();
+    $manifest['settings']['custom_css'] = '@import url(http://evil.test/x.css);';
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('code'))->toContain('unsafe_css')
+        ->and(collect($result->errors)->pluck('path'))->toContain('/settings/custom_css');
+});
+
 it('accepts two roles with exactly one default', function () {
     $manifest = baseManifest();
     $manifest['permissions']['roles'] = [

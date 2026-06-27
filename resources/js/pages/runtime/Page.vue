@@ -47,7 +47,13 @@ useScrollReveal(sectionsEl);
     <!-- Runtime is full-screen (no platform shell), so the app owns the viewport.
          The main nav (SiteHeader) carries the user widget, which holds the
          "exit to Sapiensly" action — no separate platform bar. -->
-    <div class="flex min-h-screen flex-col bg-navy-deep" :style="surfaceStyle">
+    <div
+        class="sp-app-surface flex min-h-screen flex-col bg-navy-deep"
+        :style="surfaceStyle"
+    >
+        <!-- Author CSS, pre-scoped to .sp-app-surface server-side (can't leak out). -->
+        <component :is="'style'" v-if="customCss" :text-content="customCss" />
+
         <div class="px-5">
             <SiteHeader
                 :brand="brand"

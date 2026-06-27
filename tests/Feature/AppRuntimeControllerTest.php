@@ -156,3 +156,23 @@ it('sorts table rows according to the data_source sort directive', function () {
             ->where('blockData.'.$this->tableId.'.rows.2.data.nombre', 'Beto')
         );
 });
+
+it('compiles author custom_css scoped to the app surface', function () {
+    $app = App::create([
+        'user_id' => $this->user->id,
+        'slug' => 'styled',
+        'name' => 'Styled',
+        'visibility' => 'private',
+    ]);
+    $manifest = buildManifest($app->id, 'styled', [
+        'settings' => ['custom_css' => '[data-block-type="stat"] { border-radius: 12px; }'],
+    ]);
+    app(AppManifestService::class)->createVersion($app, $manifest, $this->user);
+
+    $this->actingAs($this->user)
+        ->get('/r/styled')
+        ->assertInertia(fn ($page) => $page
+            ->where('customCss', fn ($css) => str_starts_with($css, '.sp-app-surface {')
+                && str_contains($css, '[data-block-type="stat"]'))
+        );
+});

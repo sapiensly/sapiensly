@@ -366,7 +366,16 @@ it('ReadManifestTool stays on the active manifest after a failed propose_change'
 it('FrameworkReferenceTool lists its topics when called with no topic', function () {
     $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest([])), true);
 
-    expect($result['topics'])->toContain('forms', 'workflows', 'derived_fields', 'expressions', 'design', 'permissions', 'verification', 'visual_review', 'connected_objects', 'example');
+    expect($result['topics'])->toContain('forms', 'workflows', 'derived_fields', 'expressions', 'design', 'custom_css', 'permissions', 'verification', 'visual_review', 'connected_objects', 'example');
+});
+
+it('FrameworkReferenceTool documents the scoped custom_css escape hatch', function () {
+    $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'custom_css'])), true);
+
+    expect($result['topic'])->toBe('custom_css')
+        ->and($result['reference'])->toContain('.sp-app-surface')
+        ->and($result['reference'])->toContain('data-block-type')
+        ->and($result['reference'])->toContain('var(--sp-accent');
 });
 
 it('FrameworkReferenceTool documents the enforced access layer under permissions', function () {

@@ -4,6 +4,7 @@ namespace App\Services\Manifest;
 
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\SafeExpressionEvaluator;
+use App\Support\Css\ScopedAppCss;
 use Cron\CronExpression;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Errors\ValidationError;
@@ -460,6 +461,12 @@ class ManifestValidator
         $permissions = $manifest['permissions'] ?? [];
         $navigation = $manifest['navigation'] ?? null;
         $workflows = $manifest['workflows'] ?? [];
+
+        // settings.custom_css is a scoped escape hatch; reject the constructs that
+        // would break the <style> sandbox or the per-app isolation, at save time.
+        foreach (ScopedAppCss::issues($manifest['settings']['custom_css'] ?? null) as $issue) {
+            $errors[] = new ManifestValidationError('/settings/custom_css', $issue, 'unsafe_css');
+        }
 
         $objectsById = [];
         $objectsBySlug = [];

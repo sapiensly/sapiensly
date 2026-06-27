@@ -178,4 +178,6 @@ export interface RuntimePageProps {
     blockData: BlockData;
     /** Current URL filter params, so a filter_bar renders pre-filled. */
     params?: Record<string, string | string[]>;
+    /** Author CSS, already compiled + scoped to `.sp-app-surface` (may be ''). */
+    customCss?: string;
 }
