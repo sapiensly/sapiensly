@@ -61,7 +61,7 @@ class ChatbotController extends Controller
         $user = $request->user();
 
         return Inertia::render('chatbots/Create', [
-            'defaultConfig' => Chatbot::getDefaultConfig(),
+            'defaultConfig' => Chatbot::defaultConfigForOrganization($user->organization),
             'visibilityOptions' => collect(Visibility::cases())->map(fn ($v) => [
                 'value' => $v->value,
                 'label' => $v->label(),
@@ -96,7 +96,7 @@ class ChatbotController extends Controller
             'channel_id' => $channel->id,
             'name' => $request->name,
             'description' => $request->description,
-            'config' => $request->config ?? Chatbot::getDefaultConfig(),
+            'config' => $request->config ?? Chatbot::defaultConfigForOrganization($user->organization),
             'allowed_origins' => $request->allowed_origins,
             'status' => ChatbotStatus::Draft,
         ]);

@@ -48,6 +48,11 @@ class App extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
+    }
+
     public function currentVersion(): BelongsTo
     {
         return $this->belongsTo(AppVersion::class, 'current_version_id');

@@ -114,7 +114,12 @@ class AppRuntimeController extends Controller
                     fn (array $p) => ['id' => $p['id'], 'slug' => $p['slug'], 'name' => $p['name'], 'icon' => $p['icon'] ?? null],
                     $viewablePages,
                 ),
-                'settings' => $manifest['settings'] ?? [],
+                // The org Brandbook fills any brand value the app left unset (live
+                // fallback) — accent/font/theme/logo — so a brand change reaches
+                // apps that never overrode it. The app's own choices still win.
+                'settings' => $app->organization !== null
+                    ? $app->organization->brandbook()->applyToAppSettings($manifest['settings'] ?? [])
+                    : ($manifest['settings'] ?? []),
                 // Objects ship to the client so block components can resolve
                 // field_id → name/type for header labels and value formatting.
                 'objects' => $manifest['objects'] ?? [],

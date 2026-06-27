@@ -82,6 +82,11 @@ class Chatbot extends Model
         return $this->belongsTo(Channel::class);
     }
 
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
+    }
+
     // Helper Methods
     public function isActive(): bool
     {
@@ -106,9 +111,24 @@ class Chatbot extends Model
         return false;
     }
 
+    /**
+     * The widget appearance, with the organization Brandbook applied as a LIVE
+     * fallback: any value the bot left at its built-in default adopts the current
+     * org brand at serve time, so a brand change propagates to bots that never
+     * customized that value. A bot's own customization always wins.
+     *
+     * @return array<string, mixed>
+     */
     public function getAppearanceConfig(): array
     {
-        return $this->config['appearance'] ?? $this->getDefaultAppearance();
+        $appearance = $this->config['appearance'] ?? self::getDefaultAppearance();
+
+        $organization = $this->organization;
+        if ($organization !== null) {
+            $appearance = $organization->brandbook()->applyToChatbotAppearance($appearance, self::getDefaultAppearance());
+        }
+
+        return $appearance;
     }
 
     public function getBehaviorConfig(): array
@@ -119,6 +139,27 @@ class Chatbot extends Model
     public function getAdvancedConfig(): array
     {
         return $this->config['advanced'] ?? $this->getDefaultAdvanced();
+    }
+
+    /**
+     * The default widget config SEEDED with an organization's Brandbook, used when
+     * a new bot is created without an explicit config — so a fresh widget starts
+     * on-brand. Org-less (personal) bots just get the plain defaults.
+     *
+     * @return array<string, mixed>
+     */
+    public static function defaultConfigForOrganization(?Organization $organization): array
+    {
+        $config = self::getDefaultConfig();
+
+        if ($organization !== null) {
+            $config['appearance'] = $organization->brandbook()->applyToChatbotAppearance(
+                $config['appearance'],
+                self::getDefaultAppearance(),
+            );
+        }
+
+        return $config;
     }
 
     public static function getDefaultConfig(): array

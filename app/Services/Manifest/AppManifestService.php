@@ -93,6 +93,14 @@ class AppManifestService
             $manifest['description'] = rtrim(mb_substr($manifest['description'], 0, self::MAX_DESCRIPTION_LENGTH - 1)).'…';
         }
 
+        // Seed the brand: a new app starts on the org's Brandbook (accent/font/
+        // theme/logo) where it hasn't chosen otherwise. The runtime applies the
+        // same brand as a live fallback, so this only persists the initial look.
+        $organization = $app->organization;
+        if ($organization !== null) {
+            $manifest['settings'] = $organization->brandbook()->applyToAppSettings($manifest['settings']);
+        }
+
         return $manifest;
     }
 

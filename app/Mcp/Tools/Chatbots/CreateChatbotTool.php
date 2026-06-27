@@ -57,7 +57,7 @@ class CreateChatbotTool extends ChatbotTool
                 'channel_id' => $channel->id,
                 'name' => $validated['name'],
                 'description' => $validated['description'] ?? null,
-                'config' => $validated['config'] ?? Chatbot::getDefaultConfig(),
+                'config' => $validated['config'] ?? Chatbot::defaultConfigForOrganization($user->organization),
                 'allowed_origins' => $validated['allowed_origins'] ?? null,
                 'status' => ChatbotStatus::Draft,
             ]);
