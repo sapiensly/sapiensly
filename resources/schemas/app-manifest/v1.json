@@ -2406,6 +2406,11 @@
             "required": ["roles"],
             "additionalProperties": false,
             "properties": {
+                "access_mode": {
+                    "enum": ["open", "allowlist"],
+                    "default": "open",
+                    "description": "How org members reach this app. 'open' (default): every member who can see the app gets the default role; assignments only elevate. 'allowlist': only members with an explicit role assignment may use the app; everyone else is denied entry."
+                },
                 "roles": {
                     "type": "array",
                     "minItems": 1,

@@ -33,6 +33,7 @@ interface Roster {
 
 const loading = ref(true);
 const savingUserId = ref<number | null>(null);
+const savingMode = ref(false);
 const roster = ref<Roster>({ access_mode: 'open', roles: [], members: [] });
 
 async function load() {
@@ -78,6 +79,31 @@ async function onRoleChange(member: Member, slug: string) {
     }
 }
 
+/**
+ * Switch the app's access mode. Persists as a manifest patch (a new version)
+ * server-side; the response carries the refreshed roster.
+ */
+async function onModeChange(mode: 'open' | 'allowlist') {
+    if (mode === roster.value.access_mode || savingMode.value) {
+        return;
+    }
+    savingMode.value = true;
+    try {
+        const { data } = await axios.post<Roster>(
+            `/apps/${props.appId}/access/mode`,
+            {
+                access_mode: mode,
+            },
+        );
+        roster.value = data;
+        toast.success(t('apps.access.saved'));
+    } catch {
+        toast.error(t('apps.access.save_failed'));
+    } finally {
+        savingMode.value = false;
+    }
+}
+
 onMounted(load);
 </script>
 
@@ -96,13 +122,34 @@ onMounted(load);
                 <p class="mt-1 text-xs leading-relaxed text-ink-muted">
                     {{ t('apps.access.description') }}
                 </p>
-                <p class="mt-2 text-xs text-ink-muted">
-                    {{
-                        roster.access_mode === 'allowlist'
-                            ? t('apps.access.mode_allowlist')
-                            : t('apps.access.mode_open')
-                    }}
-                </p>
+                <div class="mt-3">
+                    <div
+                        class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5"
+                    >
+                        <button
+                            v-for="mode in ['open', 'allowlist'] as const"
+                            :key="mode"
+                            type="button"
+                            :disabled="savingMode"
+                            class="inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-xs transition-colors disabled:opacity-50"
+                            :class="
+                                roster.access_mode === mode
+                                    ? 'bg-accent-blue/15 text-accent-blue'
+                                    : 'text-ink-muted hover:text-ink'
+                            "
+                            @click="onModeChange(mode)"
+                        >
+                            {{ mode === 'allowlist' ? 'Allowlist' : 'Open' }}
+                        </button>
+                    </div>
+                    <p class="mt-2 text-xs text-ink-muted">
+                        {{
+                            roster.access_mode === 'allowlist'
+                                ? t('apps.access.mode_allowlist')
+                                : t('apps.access.mode_open')
+                        }}
+                    </p>
+                </div>
             </div>
         </header>
 

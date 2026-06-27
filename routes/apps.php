@@ -65,6 +65,7 @@ Route::middleware([
     // on the app/org-admin set inside the controller, not just app visibility.
     Route::get('/apps/{app}/access', [AppAccessController::class, 'index'])->name('apps.access.index');
     Route::post('/apps/{app}/access', [AppAccessController::class, 'store'])->name('apps.access.store');
+    Route::post('/apps/{app}/access/mode', [AppAccessController::class, 'updateMode'])->name('apps.access.mode');
     Route::delete('/apps/{app}/access/{assignment}', [AppAccessController::class, 'destroy'])
         ->where('assignment', 'aur_[a-z0-9_]+')
         ->name('apps.access.destroy');

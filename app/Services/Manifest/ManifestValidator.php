@@ -806,6 +806,31 @@ class ManifestValidator
             $rolesBySlug[$role['slug']] = $role;
         }
 
+        // A deterministic default role is what an open-mode member falls back to.
+        // More than one is ambiguous; with 2+ roles, none is too (which one wins?).
+        // A single-role app needs no flag — that role is unambiguously the default.
+        $defaultRoleIndexes = [];
+        foreach ($roles as $i => $role) {
+            if (($role['is_default'] ?? false) === true) {
+                $defaultRoleIndexes[] = $i;
+            }
+        }
+        if (count($defaultRoleIndexes) > 1) {
+            foreach (array_slice($defaultRoleIndexes, 1) as $i) {
+                $errors[] = new ManifestValidationError(
+                    "/permissions/roles/{$i}/is_default",
+                    'Only one role may be marked is_default',
+                    'duplicate_default_role',
+                );
+            }
+        } elseif ($defaultRoleIndexes === [] && count($roles) > 1) {
+            $errors[] = new ManifestValidationError(
+                '/permissions/roles',
+                'Exactly one role must be marked is_default when more than one role is defined',
+                'missing_default_role',
+            );
+        }
+
         foreach ($permissions['object_policies'] ?? [] as $i => $policy) {
             if (! isset($objectsById[$policy['object_id']])) {
                 $errors[] = new ManifestValidationError(

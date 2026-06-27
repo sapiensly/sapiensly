@@ -2409,3 +2409,67 @@ it('reports all schema errors in one pass, not just the first', function () {
     expect($result->valid)->toBeFalse()
         ->and(count($result->errors))->toBeGreaterThan(1);
 });
+
+// --- permissions.access_mode + default role (Phase 5) ---
+
+it('accepts an explicit allowlist access_mode', function () {
+    $manifest = baseManifest();
+    $manifest['permissions']['access_mode'] = 'allowlist';
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects an unknown access_mode (schema enum)', function () {
+    $manifest = baseManifest();
+    $manifest['permissions']['access_mode'] = 'public';
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and($result->errors[0]->code)->toBe('schema');
+});
+
+it('accepts a single role without an explicit default (backward compatible)', function () {
+    $manifest = baseManifest();
+    $manifest['permissions']['roles'] = [
+        ['id' => id('rol'), 'slug' => 'admin', 'name' => 'Admin'],
+    ];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects more than one default role', function () {
+    $manifest = baseManifest();
+    $manifest['permissions']['roles'] = [
+        ['id' => id('rol'), 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true],
+        ['id' => id('rol'), 'slug' => 'user', 'name' => 'User', 'is_default' => true],
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('code'))->toContain('duplicate_default_role');
+});
+
+it('requires a default role when more than one role is defined', function () {
+    $manifest = baseManifest();
+    $manifest['permissions']['roles'] = [
+        ['id' => id('rol'), 'slug' => 'admin', 'name' => 'Admin'],
+        ['id' => id('rol'), 'slug' => 'user', 'name' => 'User'],
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('code'))->toContain('missing_default_role');
+});
+
+it('accepts two roles with exactly one default', function () {
+    $manifest = baseManifest();
+    $manifest['permissions']['roles'] = [
+        ['id' => id('rol'), 'slug' => 'admin', 'name' => 'Admin', 'is_default' => false],
+        ['id' => id('rol'), 'slug' => 'user', 'name' => 'User', 'is_default' => true],
+    ];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});

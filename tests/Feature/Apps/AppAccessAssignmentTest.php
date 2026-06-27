@@ -131,6 +131,31 @@ it('rejects assigning a user outside the app organization', function () {
         ->assertJsonValidationErrorFor('assigned_user_id');
 });
 
+it('switches the access mode via a manifest patch', function () {
+    $this->actingAs($this->owner)
+        ->postJson("/apps/{$this->testApp->id}/access/mode", ['access_mode' => 'allowlist'])
+        ->assertOk()
+        ->assertJsonPath('access_mode', 'allowlist');
+
+    // A new reversible version captured the change; the roster reflects it.
+    $this->actingAs($this->owner)
+        ->getJson("/apps/{$this->testApp->id}/access")
+        ->assertJsonPath('access_mode', 'allowlist');
+});
+
+it('rejects an unknown access mode', function () {
+    $this->actingAs($this->owner)
+        ->postJson("/apps/{$this->testApp->id}/access/mode", ['access_mode' => 'public'])
+        ->assertStatus(422)
+        ->assertJsonValidationErrorFor('access_mode');
+});
+
+it('forbids a non-admin from switching the access mode', function () {
+    $this->actingAs($this->member)
+        ->postJson("/apps/{$this->testApp->id}/access/mode", ['access_mode' => 'allowlist'])
+        ->assertForbidden();
+});
+
 it('revokes an assignment, dropping the member back to the default role', function () {
     $assignment = AppUserRole::factory()->create([
         'app_id' => $this->testApp->id, 'assigned_user_id' => $this->member->id, 'role_slug' => 'admin',

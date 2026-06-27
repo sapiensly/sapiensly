@@ -6,8 +6,10 @@ use App\Models\App;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\AppRoleAssignmentService;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\InvalidManifestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -60,6 +62,39 @@ class AppAccessController extends Controller
         $this->assignments->revoke($app, $assignment);
 
         return response()->json($this->assignments->roster($app, $manifest));
+    }
+
+    /**
+     * Switch the app's access_mode (open ↔ allowlist). It lives in the manifest,
+     * so the change is an RFC 6902 patch that creates a new reversible version.
+     */
+    public function updateMode(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanManage($request, $app);
+
+        $data = $request->validate([
+            'access_mode' => ['required', 'string', Rule::in(['open', 'allowlist'])],
+        ]);
+
+        // `permissions` is a required top-level object, so `add` on its member
+        // replaces the mode when present and adds it otherwise.
+        $ops = [['op' => 'add', 'path' => '/permissions/access_mode', 'value' => $data['access_mode']]];
+
+        try {
+            $this->manifestService->applyPatch($app, $ops, $request->user(), "Access mode set to {$data['access_mode']} from the builder.");
+        } catch (InvalidManifestException $e) {
+            return response()->json([
+                'error' => 'invalid_manifest',
+                'message' => 'The access-mode change did not pass validation.',
+                'errors' => $e->result->errorsArray(),
+            ], 422);
+        }
+
+        // applyPatch points current_version_id at the new version on a freshly
+        // locked model, so reload $app before reading back the active manifest.
+        $manifest = $this->manifestService->getActiveManifest($app->refresh());
+
+        return response()->json($this->assignments->roster($app, $manifest ?? []));
     }
 
     /**
