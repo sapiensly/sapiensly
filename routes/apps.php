@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AppAccessController;
 use App\Http\Controllers\AppActionController;
 use App\Http\Controllers\AppBuilderController;
 use App\Http\Controllers\AppController;
@@ -59,6 +60,14 @@ Route::middleware([
         ->name('apps.builder.workflow-proposals.dismiss');
     Route::get('/apps/{app}/builder/objects/{objectId}/records', [AppBuilderController::class, 'objectRecords'])
         ->name('apps.builder.object-records');
+
+    // Access management (Phase 4): who can use the app and in which role. Gated
+    // on the app/org-admin set inside the controller, not just app visibility.
+    Route::get('/apps/{app}/access', [AppAccessController::class, 'index'])->name('apps.access.index');
+    Route::post('/apps/{app}/access', [AppAccessController::class, 'store'])->name('apps.access.store');
+    Route::delete('/apps/{app}/access/{assignment}', [AppAccessController::class, 'destroy'])
+        ->where('assignment', 'aur_[a-z0-9_]+')
+        ->name('apps.access.destroy');
 
     // Serve image attachments uploaded with builder chat messages. Auth + the
     // controller re-checks that the requesting user owns the conversation.
