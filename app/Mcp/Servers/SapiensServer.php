@@ -28,6 +28,10 @@ Build & debug apps (apps:build):
     list_available_field_types, list_available_actions, list_available_triggers,
     list_available_steps, and framework_reference for deeper guidance.
   - Versions: list_app_versions, rollback_app.
+  - Access (who can use the app and in which role): list_app_roles, then
+    assign_app_role / revoke_app_role (member by email). The manifest DEFINES the
+    roles + policies (see framework_reference topic=permissions); these tools
+    assign people to them at runtime. Admin-gated (app/org owner).
   - Workflows: verify_workflow (safe dry-run), run_workflow (real), and
     list_workflow_runs / get_workflow_run to debug; gated writes surface via
     list_workflow_proposals → approve_workflow_proposal / dismiss_workflow_proposal.
@@ -104,6 +108,10 @@ class SapiensServer extends Server
         Tools\Build\RollbackAppTool::class,
         Tools\Build\DeleteAppTool::class,
         Tools\Build\VerifyWorkflowTool::class,
+        // App access (who can use an app and in which role).
+        Tools\Build\ListAppRolesTool::class,
+        Tools\Build\AssignAppRoleTool::class,
+        Tools\Build\RevokeAppRoleTool::class,
         // Build catalogs.
         Tools\Build\ListAvailableComponentsTool::class,
         Tools\Build\ListAvailableFieldTypesTool::class,

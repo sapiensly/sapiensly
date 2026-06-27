@@ -82,6 +82,9 @@ and listing conversations is `agents:invoke`.
 | `list_app_versions` | The app's version history, newest first. |
 | `rollback_app` | Roll the app back to a previous version (append-only). |
 | `delete_app` | **Permanently delete** an app and its versions/records. |
+| `list_app_roles` | The app's access_mode + manifest roles + each org member's current app role. Admin-gated. |
+| `assign_app_role` | Grant/replace an org member's app role (member by email; role must be a manifest role). Admin-gated. |
+| `revoke_app_role` | Remove a member's explicit role, dropping them to the default (open) or no access (allowlist). Admin-gated. |
 
 ### Build catalogs (`apps:build`)
 
