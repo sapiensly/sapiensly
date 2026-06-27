@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
+import AppAccessPanel from '@/components/apps/AppAccessPanel.vue';
 import LayersExplorer from '@/components/apps/LayersExplorer.vue';
 import SchemaView from '@/components/apps/SchemaView.vue';
 import SlashCommandMenu from '@/components/apps/SlashCommandMenu.vue';
@@ -90,6 +91,7 @@ import {
     RotateCcw,
     Send,
     Settings2,
+    ShieldCheck,
     Sparkles,
     Wand2,
     Workflow as WorkflowIcon,
@@ -590,7 +592,7 @@ function onWireframeImported(payload: {
 }) {
     messages.value = payload.messages as Message[];
 }
-type ViewMode = 'preview' | 'schema' | 'workflows' | 'manifest';
+type ViewMode = 'preview' | 'schema' | 'workflows' | 'access' | 'manifest';
 const viewMode = ref<ViewMode>('preview');
 
 // ---------- Chat attachments ----------
@@ -1037,7 +1039,10 @@ const previewFooter = computed(
 // immediately and debounce-persisted to settings.accent.
 const accentOverride = ref<string | null>(null);
 const effectiveAccent = computed(
-    () => accentOverride.value ?? (previewSettings.value.accent as string | undefined) ?? null,
+    () =>
+        accentOverride.value ??
+        (previewSettings.value.accent as string | undefined) ??
+        null,
 );
 const previewSurfaceStyle = computed(() => ({
     '--sp-bleed': '1.25rem',
@@ -1047,7 +1052,16 @@ const previewSurfaceStyle = computed(() => ({
     }),
 }));
 
-const ACCENT_PRESETS = ['#0096ff', '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f59e0b', '#10b981', '#14b8a6'];
+const ACCENT_PRESETS = [
+    '#0096ff',
+    '#6366f1',
+    '#8b5cf6',
+    '#ec4899',
+    '#ef4444',
+    '#f59e0b',
+    '#10b981',
+    '#14b8a6',
+];
 let accentSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function setAccent(hex: string) {
     accentOverride.value = hex; // instant preview
@@ -1687,27 +1701,40 @@ function statusTone(status: Message['status']): string {
                         class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2 py-1"
                         title="Accent colour — drives buttons, links and highlights"
                     >
-                        <span class="mr-0.5 text-[11px] text-ink-muted">Accent</span>
+                        <span class="mr-0.5 text-[11px] text-ink-muted"
+                            >Accent</span
+                        >
                         <button
                             v-for="c in ACCENT_PRESETS"
                             :key="c"
                             type="button"
                             class="size-4 rounded-full border border-soft transition-transform hover:scale-110"
-                            :class="effectiveAccent?.toLowerCase() === c ? 'ring-2 ring-ink ring-offset-1 ring-offset-navy' : ''"
+                            :class="
+                                effectiveAccent?.toLowerCase() === c
+                                    ? 'ring-2 ring-ink ring-offset-1 ring-offset-navy'
+                                    : ''
+                            "
                             :style="{ background: c }"
                             :title="c"
                             @click="setAccent(c)"
                         />
                         <label
                             class="ml-0.5 size-5 cursor-pointer rounded-full border border-soft"
-                            :style="{ background: effectiveAccent ?? '#0096ff' }"
+                            :style="{
+                                background: effectiveAccent ?? '#0096ff',
+                            }"
                             :title="'Custom: ' + (effectiveAccent ?? '#0096ff')"
                         >
                             <input
                                 type="color"
                                 class="size-0 opacity-0"
                                 :value="effectiveAccent ?? '#0096ff'"
-                                @input="setAccent(($event.target as HTMLInputElement).value)"
+                                @input="
+                                    setAccent(
+                                        ($event.target as HTMLInputElement)
+                                            .value,
+                                    )
+                                "
                             />
                         </label>
                     </div>
@@ -1741,6 +1768,11 @@ function statusTone(status: Message['status']): string {
                                     id: 'workflows',
                                     label: t('apps.builder.tab_workflows'),
                                     icon: WorkflowIcon,
+                                },
+                                {
+                                    id: 'access',
+                                    label: t('apps.builder.tab_access'),
+                                    icon: ShieldCheck,
                                 },
                                 {
                                     id: 'manifest',
@@ -2493,7 +2525,11 @@ function statusTone(status: Message['status']): string {
                             'flex-1 overflow-auto p-5 transition-colors',
                             // Force the previewed app's own theme here (independent of the
                             // builder chrome's mode) so the author can check light AND dark.
-                            preview ? (previewTheme === 'dark' ? 'theme-dark' : 'theme-light') : '',
+                            preview
+                                ? previewTheme === 'dark'
+                                    ? 'theme-dark'
+                                    : 'theme-light'
+                                : '',
                             preview ? 'bg-navy-deep' : '',
                         ]"
                     >
@@ -2561,6 +2597,13 @@ function statusTone(status: Message['status']): string {
                         "
                         class="min-h-0 flex-1"
                     />
+
+                    <div
+                        v-else-if="viewMode === 'access'"
+                        class="min-h-0 flex-1 overflow-auto"
+                    >
+                        <AppAccessPanel :app-id="app.id" />
+                    </div>
 
                     <pre
                         v-else
