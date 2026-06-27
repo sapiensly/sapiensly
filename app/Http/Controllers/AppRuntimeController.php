@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\App;
+use App\Services\Apps\AppAccessContext;
+use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\BlockDataResolver;
 use Illuminate\Http\Request;
@@ -24,6 +26,7 @@ class AppRuntimeController extends Controller
     public function __construct(
         private AppManifestService $manifestService,
         private BlockDataResolver $blockData,
+        private AppAccessResolver $accessResolver,
     ) {}
 
     public function __invoke(Request $request, string $appSlug, ?string $pageSlug = null): Response
@@ -49,13 +52,37 @@ class AppRuntimeController extends Controller
             throw new NotFoundHttpException("App '{$appSlug}' has no pages yet.");
         }
 
+        // Resolve the user's app-role capabilities once; every gate below reads it.
+        $access = $this->accessResolver->resolve($app, $manifest, $user);
+        if (! $access->hasAccess) {
+            abort(403, 'You do not have access to this app.');
+        }
+
+        // Pages the role may view drive both the default landing page and the
+        // navigation list sent to the client (a hidden page never appears).
+        $viewablePages = array_values(array_filter(
+            $pages,
+            fn (array $p): bool => $access->canViewPage($p['id']),
+        ));
+        if ($viewablePages === []) {
+            abort(403, 'You do not have access to any page in this app.');
+        }
+
         $page = $pageSlug === null
-            ? $pages[0]
+            ? $viewablePages[0]
             : $this->findPageBySlug($pages, $pageSlug);
 
         if ($page === null) {
             throw new NotFoundHttpException("Page '{$pageSlug}' not found in app '{$appSlug}'.");
         }
+
+        if (! $access->canViewPage($page['id'])) {
+            abort(403, "You do not have access to page '{$pageSlug}'.");
+        }
+
+        // Drop blocks whose visibility rule excludes the role BEFORE resolving
+        // their data — a hidden block's data must never reach the wire.
+        $page['blocks'] = $this->stripInvisibleBlocks($page['blocks'] ?? [], $access);
 
         // URL query params drive page-level filters: a block's data_source.filter
         // can read {{params.<name>}} and a filter_bar block writes them. Keep only
@@ -68,6 +95,7 @@ class AppRuntimeController extends Controller
         $context = [
             'current_user' => ['id' => $user->id, 'email' => $user->email],
             'params' => $params,
+            '__access' => $access,
         ];
 
         $blockData = $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context);
@@ -84,7 +112,7 @@ class AppRuntimeController extends Controller
                 'navigation' => $manifest['navigation'] ?? null,
                 'pages' => array_map(
                     fn (array $p) => ['id' => $p['id'], 'slug' => $p['slug'], 'name' => $p['name'], 'icon' => $p['icon'] ?? null],
-                    $pages,
+                    $viewablePages,
                 ),
                 'settings' => $manifest['settings'] ?? [],
                 // Objects ship to the client so block components can resolve
@@ -118,5 +146,52 @@ class AppRuntimeController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Recursively drop blocks whose `visibility` rule excludes the user's role,
+     * descending into every layout container (container/modal, tabs, accordion,
+     * split_view) so a nested block is gated the same as a top-level one.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return list<array<string, mixed>>
+     */
+    private function stripInvisibleBlocks(array $blocks, AppAccessContext $access): array
+    {
+        $kept = [];
+
+        foreach ($blocks as $block) {
+            if (! $access->isBlockVisible($block['visibility'] ?? null)) {
+                continue;
+            }
+
+            if (isset($block['blocks'])) {
+                $block['blocks'] = $this->stripInvisibleBlocks($block['blocks'], $access);
+            }
+            if (isset($block['left_blocks'])) {
+                $block['left_blocks'] = $this->stripInvisibleBlocks($block['left_blocks'], $access);
+            }
+            if (isset($block['right_blocks'])) {
+                $block['right_blocks'] = $this->stripInvisibleBlocks($block['right_blocks'], $access);
+            }
+            if (isset($block['tabs'])) {
+                $block['tabs'] = array_map(function (array $tab) use ($access): array {
+                    $tab['blocks'] = $this->stripInvisibleBlocks($tab['blocks'] ?? [], $access);
+
+                    return $tab;
+                }, $block['tabs']);
+            }
+            if (isset($block['sections'])) {
+                $block['sections'] = array_map(function (array $section) use ($access): array {
+                    $section['blocks'] = $this->stripInvisibleBlocks($section['blocks'] ?? [], $access);
+
+                    return $section;
+                }, $block['sections']);
+            }
+
+            $kept[] = $block;
+        }
+
+        return $kept;
     }
 }

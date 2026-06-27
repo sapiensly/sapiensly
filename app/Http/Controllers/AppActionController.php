@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\App;
+use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\AppActionExecutor;
 use App\Services\Records\RecordValidationException;
@@ -30,6 +31,7 @@ class AppActionController extends Controller
     public function __construct(
         private AppManifestService $manifestService,
         private AppActionExecutor $executor,
+        private AppAccessResolver $accessResolver,
     ) {}
 
     public function __invoke(Request $request, string $appSlug): JsonResponse
@@ -61,6 +63,14 @@ class AppActionController extends Controller
             'row' => ['nullable', 'array'],
         ]);
 
+        // Resolve the user's app-role capabilities once and carry them in the
+        // context under __access; AppActionExecutor and RecordQueryService read
+        // it to gate CRUD, strip read-only writes, and re-check row_filter.
+        $access = $this->accessResolver->resolve($app, $manifest, $user);
+        if (! $access->hasAccess) {
+            abort(403, 'You do not have access to this app.');
+        }
+
         // Use input() so we keep nested fields the validator didn't enumerate
         // (object_id, values, record_id_expression — they vary per action).
         $actions = $request->input('actions', []);
@@ -69,6 +79,7 @@ class AppActionController extends Controller
             'params' => $request->input('params', []) ?? [],
             'form' => $request->input('form', []) ?? [],
             'row' => $request->input('row', []) ?? [],
+            '__access' => $access,
         ];
 
         $results = [];

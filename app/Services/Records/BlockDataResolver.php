@@ -4,6 +4,7 @@ namespace App\Services\Records;
 
 use App\Models\App;
 use App\Models\Record;
+use App\Services\Apps\AppAccessContext;
 use App\Services\Connected\ConnectedIntegrationResolver;
 use App\Services\Connected\ConnectedObjectReader;
 use Illuminate\Support\Facades\Log;
@@ -181,9 +182,11 @@ class BlockDataResolver
             if (! is_string($recordId) || $recordId === '') {
                 return ['record' => null];
             }
-            $record = $this->records->find($app, $block['object_id'], $recordId, $manifest);
+            $record = $this->records->find($app, $block['object_id'], $recordId, $manifest, $context);
 
-            return ['record' => $record === null ? null : $this->mapRows([$record])[0]];
+            return ['record' => $record === null
+                ? null
+                : $this->mapRows([$record], $this->hiddenSlugsFor($context, $block['object_id']))[0]];
         }
 
         if ($block['type'] === 'related_list') {
@@ -364,7 +367,28 @@ class BlockDataResolver
             return $this->connectedRows($app, $object, $dataSource);
         }
 
-        return $this->mapRows($this->records->query($app, $dataSource, $manifest, $context));
+        return $this->mapRows(
+            $this->records->query($app, $dataSource, $manifest, $context),
+            $this->hiddenSlugsFor($context, $dataSource['object_id'] ?? null),
+        );
+    }
+
+    /**
+     * Field slugs the current user's role may not read on an object, pulled from
+     * the AppAccessContext in $context['__access']. Empty when no access context
+     * is threaded or the object has no field restrictions.
+     *
+     * @param  array<string, mixed>  $context
+     * @return list<string>
+     */
+    private function hiddenSlugsFor(array $context, ?string $objectId): array
+    {
+        $access = $context['__access'] ?? null;
+        if ($objectId === null || ! $access instanceof AppAccessContext) {
+            return [];
+        }
+
+        return $access->hiddenFieldSlugs($objectId);
     }
 
     /**
@@ -403,13 +427,17 @@ class BlockDataResolver
      * blocks can reference them by id like any other field.
      *
      * @param  iterable<int, Record>  $records
+     * @param  list<string>  $hiddenSlugs  field slugs to strip from every row (field_restrictions.hidden)
      * @return list<array{id: string, data: array<string, mixed>}>
      */
-    private function mapRows(iterable $records): array
+    private function mapRows(iterable $records, array $hiddenSlugs = []): array
     {
         $out = [];
         foreach ($records as $r) {
             $data = $r->data ?? [];
+            foreach ($hiddenSlugs as $slug) {
+                unset($data[$slug]);
+            }
             $data['sys_created_at'] = optional($r->created_at)->toIso8601String();
             $data['sys_updated_at'] = optional($r->updated_at)->toIso8601String();
             $out[] = ['id' => $r->id, 'data' => $data];

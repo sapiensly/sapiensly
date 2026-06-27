@@ -3,8 +3,8 @@
 namespace App\Services\Records;
 
 use App\Models\App;
-use App\Models\Record;
 use App\Models\User;
+use App\Services\Apps\AppAccessContext;
 use App\Services\Connected\ConnectedIntegrationResolver;
 use App\Services\Connected\ConnectedObjectWriter;
 use App\Services\Workflows\WorkflowEngine;
@@ -27,6 +27,7 @@ class AppActionExecutor
         private ExpressionResolver $expressions,
         private ConnectedObjectWriter $connectedWrites,
         private ConnectedIntegrationResolver $integrations,
+        private RecordQueryService $records,
     ) {}
 
     /**
@@ -38,9 +39,13 @@ class AppActionExecutor
     public function execute(App $app, array $manifest, array $action, array $context, ?User $user): array
     {
         $resolvedValues = $this->resolveValues($action['values'] ?? [], $context);
+        $access = $context['__access'] ?? null;
 
         if (in_array($action['type'], ['create_record', 'update_record', 'delete_record'], true)) {
-            $object = $this->findObject($manifest, $action['object_id']);
+            $objectId = $action['object_id'];
+            $this->authorize($access, $objectId, $action['type'], $resolvedValues);
+
+            $object = $this->findObject($manifest, $objectId);
             if (($object['source']['type'] ?? 'internal') === 'connected') {
                 return $this->executeConnectedAction($app, $object, $action, $context, $resolvedValues);
             }
@@ -53,11 +58,11 @@ class AppActionExecutor
         }
 
         if ($action['type'] === 'update_record') {
+            // Re-fetch through the row_filter-aware finder: a record outside the
+            // user's role-scoped rows resolves to null (not-found), closing the
+            // update privilege-escalation hole.
             $recordId = (string) $this->expressions->resolve($action['record_id_expression'], $context);
-            $record = Record::query()
-                ->where('app_id', $app->id)
-                ->where('object_definition_id', $action['object_id'])
-                ->find($recordId);
+            $record = $this->records->find($app, $action['object_id'], $recordId, $manifest, $context);
             if ($record === null) {
                 throw new RuntimeException("Record '{$recordId}' not found.");
             }
@@ -68,10 +73,7 @@ class AppActionExecutor
 
         if ($action['type'] === 'delete_record') {
             $recordId = (string) $this->expressions->resolve($action['record_id_expression'], $context);
-            $record = Record::query()
-                ->where('app_id', $app->id)
-                ->where('object_definition_id', $action['object_id'])
-                ->find($recordId);
+            $record = $this->records->find($app, $action['object_id'], $recordId, $manifest, $context);
             if ($record === null) {
                 throw new RuntimeException("Record '{$recordId}' not found.");
             }
@@ -93,6 +95,39 @@ class AppActionExecutor
         }
 
         throw new \LogicException("AppActionExecutor called with non-server type '{$action['type']}'.");
+    }
+
+    /**
+     * Gate a record write against the user's AppAccessContext (null ⇒ no policy
+     * layer, allowed). Enforces the object's CRUD action grant and rejects writes
+     * that target a read-only field. Same gate for the UI and the runtime agent.
+     *
+     * @param  array<string, mixed>  $resolvedValues
+     */
+    private function authorize(mixed $access, string $objectId, string $actionType, array $resolvedValues): void
+    {
+        if (! $access instanceof AppAccessContext) {
+            return;
+        }
+
+        $crud = match ($actionType) {
+            'create_record' => 'create',
+            'update_record' => 'update',
+            'delete_record' => 'delete',
+        };
+
+        if (! $access->can($objectId, $crud)) {
+            throw new RuntimeException("You are not allowed to {$crud} records of this type.");
+        }
+
+        if ($crud === 'delete') {
+            return;
+        }
+
+        $readonly = array_values(array_intersect(array_keys($resolvedValues), $access->readonlyFieldSlugs($objectId)));
+        if ($readonly !== []) {
+            throw new RuntimeException('These fields are read-only: '.implode(', ', $readonly).'.');
+        }
     }
 
     /**

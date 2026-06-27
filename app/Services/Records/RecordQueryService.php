@@ -4,6 +4,7 @@ namespace App\Services\Records;
 
 use App\Models\App;
 use App\Models\Record;
+use App\Services\Apps\AppAccessContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use InvalidArgumentException;
@@ -52,6 +53,8 @@ class RecordQueryService
             $this->applyFilter($builder, $query['filter'], $object, $context);
         }
 
+        $this->applyAccessFilter($builder, $object, $objectId, $context);
+
         foreach ($query['sort'] ?? [] as $sort) {
             $field = $this->findField($object, $sort['field_id']);
             $builder->orderByRaw(
@@ -97,6 +100,8 @@ class RecordQueryService
             $this->applyFilter($builder, $query['filter'], $object, $context);
         }
 
+        $this->applyAccessFilter($builder, $object, $objectId, $context);
+
         if ($aggregation === 'count') {
             return $builder->count();
         }
@@ -130,18 +135,26 @@ class RecordQueryService
      * Fetch a single record by id, scoped to the app + object (RLS applies),
      * with derived (formula/lookup/rollup) fields enriched. Null if not found.
      *
+     * The access row_filter (from $context['__access']) is ANDed in, so a record
+     * the user's role may not see resolves to null — this is the write-path
+     * re-check that closes the update/delete privilege-escalation hole.
+     *
      * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
      */
-    public function find(App $app, string $objectId, string $recordId, array $manifest): ?Record
+    public function find(App $app, string $objectId, string $recordId, array $manifest, array $context = []): ?Record
     {
         $object = $this->findObject($manifest, $objectId);
 
-        $record = $this->scopeForObject($app, $objectId)->whereKey($recordId)->first();
+        $builder = $this->scopeForObject($app, $objectId)->whereKey($recordId);
+        $this->applyAccessFilter($builder, $object, $objectId, $context);
+
+        $record = $builder->first();
         if ($record === null) {
             return null;
         }
 
-        $this->derived->enrich($app, $object, collect([$record]), $manifest);
+        $this->derived->enrich($app, $object, $record->newCollection([$record]), $manifest);
 
         return $record;
     }
@@ -151,6 +164,28 @@ class RecordQueryService
         return Record::query()
             ->where('app_id', $app->id)
             ->where('object_definition_id', $objectId);
+    }
+
+    /**
+     * AND the user's role-scoped row_filter (a manifest filter_expression carried
+     * on the AppAccessContext in $context['__access']) onto a query. A no-op when
+     * no access context is present (callers that don't enforce policy) or the
+     * user's role is unrestricted on this object.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $context
+     */
+    private function applyAccessFilter(Builder $builder, array $object, string $objectId, array $context): void
+    {
+        $access = $context['__access'] ?? null;
+        if (! $access instanceof AppAccessContext) {
+            return;
+        }
+
+        $rowFilter = $access->rowFilter($objectId);
+        if ($rowFilter !== null) {
+            $this->applyFilter($builder, $rowFilter, $object, $context);
+        }
     }
 
     /**
