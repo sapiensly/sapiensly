@@ -11,6 +11,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * Manages the organization Brandbook (logo, icon, colours, font) — the central
@@ -24,6 +26,15 @@ class OrganizationBrandController extends Controller
         'logo_url', 'icon_url', 'icon_emoji',
         'primary_color', 'background_color', 'text_color', 'font', 'theme',
     ];
+
+    public function show(Request $request): Response
+    {
+        $organization = $this->authorizeOrganization($request);
+
+        return Inertia::render('settings/OrganizationBrand', [
+            'brand' => $organization->brandbook()->toArray(),
+        ]);
+    }
 
     public function update(Request $request): RedirectResponse
     {

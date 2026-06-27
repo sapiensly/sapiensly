@@ -98,6 +98,8 @@ class AppBuilderController extends Controller
             'manifest' => $manifest,
             'preview' => $preview,
             'schema' => $schema,
+            // The org Brandbook, so the design panel can offer "use brand".
+            'brand' => $app->organization?->brandbook()->toArray(),
             'versions' => $this->buildVersions($app),
             'conversation' => [
                 'id' => $conversation->id,
@@ -251,7 +253,11 @@ class AppBuilderController extends Controller
             ),
             'block_data' => $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context),
             'objects' => $manifest['objects'] ?? [],
-            'settings' => $manifest['settings'] ?? [],
+            // Apply the org Brandbook as a live fallback so the preview matches
+            // what the runtime renders (AppRuntimeController does the same).
+            'settings' => $app->organization !== null
+                ? $app->organization->brandbook()->applyToAppSettings($manifest['settings'] ?? [])
+                : ($manifest['settings'] ?? []),
         ];
     }
 

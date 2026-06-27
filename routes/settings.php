@@ -29,6 +29,7 @@ Route::middleware([
 
     // Organization Brandbook: the central logo/icon/colours/font every
     // customizable surface inherits. Admin-gated inside the controller.
+    Route::get('settings/organization/brand', [OrganizationBrandController::class, 'show'])->name('organization.brand.show');
     Route::put('settings/organization/brand', [OrganizationBrandController::class, 'update'])->name('organization.brand.update');
     Route::post('settings/organization/brand/asset', [OrganizationBrandController::class, 'uploadAsset'])->name('organization.brand.asset');
 

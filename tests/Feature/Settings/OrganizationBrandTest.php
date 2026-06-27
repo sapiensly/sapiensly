@@ -30,6 +30,24 @@ beforeEach(function () {
     ]);
 });
 
+it('renders the brandbook page for an org admin with the current brand', function () {
+    $this->org->update(['brand' => ['primary_color' => '#123456', 'font' => 'serif']]);
+
+    $this->actingAs($this->owner)
+        ->get('/settings/organization/brand')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('settings/OrganizationBrand')
+            ->where('brand.primary_color', '#123456')
+            ->where('brand.font', 'serif'));
+});
+
+it('forbids a non-admin from viewing the brandbook page', function () {
+    $this->actingAs($this->member)
+        ->get('/settings/organization/brand')
+        ->assertForbidden();
+});
+
 it('lets an org owner save the brandbook (normalized)', function () {
     $this->actingAs($this->owner)
         ->put('/settings/organization/brand', [

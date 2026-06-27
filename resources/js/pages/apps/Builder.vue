@@ -163,6 +163,12 @@ interface Props {
     preview: Preview | null;
     schema: SchemaPayload | null;
     conversation: { id: string; messages: Message[] };
+    brand?: {
+        primary_color: string | null;
+        font: string | null;
+        theme: string | null;
+        logo_url: string | null;
+    } | null;
     models?: Array<{ id: string; label: string }>;
     defaultModel?: string;
     versions?: Array<{
@@ -1080,6 +1086,39 @@ function setAccent(hex: string) {
     }, 500);
 }
 
+// "Use organization brand": apply the org Brandbook's accent/font/theme to this
+// app via the design endpoint (a new version), so the design panel can adopt the
+// central brand in one click. Disabled when the org has no brand to apply.
+const hasOrgBrand = computed(
+    () =>
+        !!props.brand &&
+        !!(
+            props.brand.primary_color ||
+            props.brand.font ||
+            props.brand.theme ||
+            props.brand.logo_url
+        ),
+);
+function useOrgBrand() {
+    if (!props.brand) return;
+    const payload: Record<string, string> = {};
+    if (props.brand.primary_color) payload.accent = props.brand.primary_color;
+    if (props.brand.font) payload.font = props.brand.font;
+    if (props.brand.theme) payload.theme = props.brand.theme;
+    if (Object.keys(payload).length === 0) return;
+
+    if (payload.accent) accentOverride.value = payload.accent; // instant preview
+    axios
+        .post(`/apps/${props.app.id}/builder/design`, payload)
+        .then(() =>
+            router.reload({
+                only: ['preview', 'manifest'],
+                preserveScroll: true,
+            }),
+        )
+        .catch(() => toast.error(t('apps.builder.brand_apply_failed')));
+}
+
 // Provide the App slug for BlockForm/BlockButton inside the preview so any
 // action they fire goes to /r/{slug}/actions just like in the real runtime.
 provide('appSlug', props.app.slug);
@@ -1742,6 +1781,18 @@ function statusTone(status: Message['status']): string {
                             />
                         </label>
                     </div>
+
+                    <!-- Adopt the organization Brandbook in one click. -->
+                    <button
+                        v-if="viewMode === 'preview' && hasOrgBrand"
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue"
+                        :title="t('apps.builder.use_brand_hint')"
+                        @click="useOrgBrand"
+                    >
+                        <Sparkles class="size-3.5" />
+                        {{ t('apps.builder.use_brand') }}
+                    </button>
 
                     <!-- Layers: every part of the app, one click away for consultation. -->
                     <button

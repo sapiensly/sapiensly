@@ -40,6 +40,10 @@ const sidebarNavItems = computed<NavItem[]>(() => {
 
     if (hasOrganization.value && isOwner.value) {
         items.push({
+            title: t('settings.nav.brand'),
+            href: '/settings/organization/brand',
+        });
+        items.push({
             title: t('settings.nav.sso'),
             href: '/settings/sso',
         });
