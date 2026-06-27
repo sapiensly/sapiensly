@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import { toUrl, urlIsActive } from '@/lib/utils';
+import { toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editProfile } from '@/routes/profile';
 import { type NavItem } from '@/types';
@@ -53,6 +53,12 @@ const sidebarNavItems = computed<NavItem[]>(() => {
 });
 
 const currentPath = typeof window !== undefined ? window.location.pathname : '';
+
+// Settings items are flat siblings (not nested), so match the path EXACTLY —
+// otherwise /settings/organization/brand would also light up /settings/organization.
+function isActive(href: NavItem['href']): boolean {
+    return currentPath === (toUrl(href) ?? '').split('?')[0];
+}
 </script>
 
 <template>
@@ -73,7 +79,7 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
                             :href="item.href"
                             :class="[
                                 'relative flex h-9 items-center gap-2 rounded-xs px-3 text-[13px] font-medium transition-colors',
-                                urlIsActive(item.href, currentPath)
+                                isActive(item.href)
                                     ? 'bg-accent-blue/10 text-ink before:absolute before:top-2 before:bottom-2 before:left-0 before:w-0.5 before:bg-accent-blue before:content-[\'\']'
                                     : 'text-ink-muted hover:bg-surface hover:text-ink',
                             ]"
