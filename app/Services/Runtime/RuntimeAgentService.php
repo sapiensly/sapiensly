@@ -14,6 +14,8 @@ use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
+use App\Services\Apps\AppAccessContext;
+use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\AppActionExecutor;
 use Illuminate\Support\Facades\Log;
@@ -44,6 +46,7 @@ class RuntimeAgentService
         private AiDefaults $aiDefaults,
         private AutonomyPolicy $autonomy,
         private AppActionExecutor $executor,
+        private AppAccessResolver $accessResolver,
     ) {}
 
     public function startConversation(App $app, User $user): RuntimeAgentConversation
@@ -73,12 +76,26 @@ class RuntimeAgentService
             return $this->fail($placeholder, 'This app has no active agent.');
         }
 
+        // Resolve the user's app-role capabilities; the agent acts AS this user
+        // and can never exceed their reach (parity with the runtime UI).
+        $access = $this->accessResolver->resolve($app, $manifest, $conversation->user);
+        if (! $access->hasAccess) {
+            return $this->fail($placeholder, 'You do not have access to this app.');
+        }
+
+        $baseContext = [
+            'current_user' => $conversation->user !== null
+                ? ['id' => $conversation->user->id, 'email' => $conversation->user->email]
+                : [],
+        ];
+
         $proposals = new ProposedActions;
         // App runtime agents are intentionally NOT granted the platform tools:
         // RuntimeAgentToolset is a deliberate sandbox scoped to what the app
-        // manifest grants ("an agent can never exceed its manifest"), and the
-        // platform catalogue would widen that to the whole tenant.
-        $tools = $this->toolset->tools($app, $manifest, $proposals);
+        // manifest grants ("an agent can never exceed its manifest"), narrowed
+        // further to the requesting user's app role. The platform catalogue would
+        // widen that to the whole tenant.
+        $tools = $this->toolset->tools($app, $manifest, $proposals, $access, $baseContext);
 
         $history = $this->buildHistory($conversation, $placeholder->id);
         $promptText = $this->popLastUserPrompt($history, $userText);
@@ -131,7 +148,7 @@ class RuntimeAgentService
                 'runtime_agent', $resolvedModel, $conversation->user, $app->organization_id, $stream->usage ?? null,
             );
 
-            $outcome = $this->finalizeProposals($app, $manifest, $proposals, $conversation->user);
+            $outcome = $this->finalizeProposals($app, $manifest, $proposals, $conversation->user, $access);
             $update = ['content' => $buffer, 'status' => 'none', 'message_type' => $outcome['message_type']];
             if ($outcome['action_payload'] !== null) {
                 $update['action_payload'] = $outcome['action_payload'];
@@ -164,7 +181,7 @@ class RuntimeAgentService
      * @param  array<string, mixed>  $manifest
      * @return array{message_type: string, action_payload: array<string, mixed>|null}
      */
-    public function finalizeProposals(App $app, array $manifest, ProposedActions $proposals, ?User $user): array
+    public function finalizeProposals(App $app, array $manifest, ProposedActions $proposals, ?User $user, ?AppAccessContext $access = null): array
     {
         if ($proposals->isEmpty()) {
             return ['message_type' => 'text', 'action_payload' => null];
@@ -175,6 +192,8 @@ class RuntimeAgentService
             'params' => [],
             'form' => [],
             'row' => [],
+            // Re-authorize each auto-executed write at execution time (double gate).
+            '__access' => $access ?? AppAccessContext::bypass(),
         ];
 
         $autoPreviews = [];

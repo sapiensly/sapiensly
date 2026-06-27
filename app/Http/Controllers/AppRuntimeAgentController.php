@@ -6,6 +6,7 @@ use App\Jobs\RunRuntimeAgentJob;
 use App\Models\App;
 use App\Models\RuntimeAgentConversation;
 use App\Models\RuntimeAgentMessage;
+use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\AppActionExecutor;
 use App\Services\Records\RecordValidationException;
@@ -27,6 +28,7 @@ class AppRuntimeAgentController extends Controller
         private AppManifestService $manifestService,
         private RuntimeAgentService $agent,
         private AppActionExecutor $executor,
+        private AppAccessResolver $accessResolver,
     ) {}
 
     public function startConversation(Request $request, string $appSlug): JsonResponse
@@ -95,11 +97,21 @@ class AppRuntimeAgentController extends Controller
         $message = $this->loadPendingProposal($app, $request->user()->id, $messageId);
 
         $manifest = $this->manifestService->getActiveManifest($app);
+
+        // Re-authorize the proposed writes as the approving user (double gate):
+        // the executor reads __access to enforce CRUD/readonly/row_filter, so a
+        // proposal can never execute beyond the approver's app role.
+        $access = $this->accessResolver->resolve($app, $manifest, $request->user());
+        if (! $access->hasAccess) {
+            abort(403, 'You do not have access to this app.');
+        }
+
         $context = [
             'current_user' => ['id' => $request->user()->id, 'email' => $request->user()->email],
             'params' => [],
             'form' => [],
             'row' => [],
+            '__access' => $access,
         ];
 
         $payload = (array) $message->action_payload;

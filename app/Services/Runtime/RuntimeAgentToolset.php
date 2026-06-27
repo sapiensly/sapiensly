@@ -11,6 +11,7 @@ use App\Ai\Tools\Runtime\Agent\ProposeUpdateRecordTool;
 use App\Ai\Tools\Runtime\Agent\QueryObjectTool;
 use App\Ai\Tools\RuntimeToolFactory;
 use App\Models\App;
+use App\Services\Apps\AppAccessContext;
 use App\Services\Records\BlockDataResolver;
 use App\Services\Records\RecordQueryService;
 use Laravel\Ai\Contracts\Tool;
@@ -38,36 +39,54 @@ class RuntimeAgentToolset
      * tools. The write tools never execute — they record into $proposals, which
      * the service turns into an action_proposal awaiting approval (Rule 2).
      *
+     * $access narrows the manifest grant to the requesting user's app role: an
+     * object the role can't read/write drops out of the toolset entirely (the
+     * agent can never exceed the user it acts for). Defaults to bypass so callers
+     * that don't enforce policy (and the existing tests) see the full grant.
+     *
      * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context  base render context threaded into reads (current_user, __access)
      * @return list<Tool>
      */
-    public function tools(App $app, array $manifest, ProposedActions $proposals): array
+    public function tools(App $app, array $manifest, ProposedActions $proposals, ?AppAccessContext $access = null, array $context = []): array
     {
-        return [...$this->readTools($app, $manifest), ...$this->writeTools($manifest, $proposals)];
+        $access ??= AppAccessContext::bypass();
+
+        return [...$this->readTools($app, $manifest, $access, $context), ...$this->writeTools($manifest, $proposals, $access)];
     }
 
     /**
      * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
      * @return list<Tool>
      */
-    public function readTools(App $app, array $manifest): array
+    public function readTools(App $app, array $manifest, ?AppAccessContext $access = null, array $context = []): array
     {
+        $access ??= AppAccessContext::bypass();
+
         $agent = $manifest['agent'] ?? null;
         if (! is_array($agent) || ($agent['enabled'] ?? false) !== true) {
             return [];
         }
 
-        $readableObjectIds = $this->resolveObjectIds($manifest, $agent['capabilities']['read'] ?? []);
+        $readableObjectIds = array_values(array_filter(
+            $this->resolveObjectIds($manifest, $agent['capabilities']['read'] ?? []),
+            fn (string $id): bool => $access->can($id, 'read'),
+        ));
 
         $tools = [
             RuntimeToolFactory::named('describe_capabilities', new DescribeCapabilitiesTool($manifest, $readableObjectIds)),
         ];
 
+        // The read tools carry the access context so row_filter and hidden-field
+        // restrictions apply to the agent's reads exactly as they do to the UI.
+        $readContext = $context + ['__access' => $access];
+
         // No readable objects ⇒ only describe_capabilities (which reports an
         // empty list) — there is nothing to query or aggregate.
         if ($readableObjectIds !== []) {
-            $tools[] = RuntimeToolFactory::named('query_object', new QueryObjectTool($app, $manifest, $readableObjectIds, $this->blockData));
-            $tools[] = RuntimeToolFactory::named('aggregate_object', new AggregateObjectTool($app, $manifest, $readableObjectIds, $this->records, $this->blockData));
+            $tools[] = RuntimeToolFactory::named('query_object', new QueryObjectTool($app, $manifest, $readableObjectIds, $this->blockData, $readContext));
+            $tools[] = RuntimeToolFactory::named('aggregate_object', new AggregateObjectTool($app, $manifest, $readableObjectIds, $this->records, $this->blockData, $readContext));
         }
 
         return $tools;
@@ -81,14 +100,19 @@ class RuntimeAgentToolset
      * @param  array<string, mixed>  $manifest
      * @return list<Tool>
      */
-    public function writeTools(array $manifest, ProposedActions $proposals): array
+    public function writeTools(array $manifest, ProposedActions $proposals, ?AppAccessContext $access = null): array
     {
+        $access ??= AppAccessContext::bypass();
+
         $agent = $manifest['agent'] ?? null;
         if (! is_array($agent) || ($agent['enabled'] ?? false) !== true) {
             return [];
         }
 
-        $writableObjectIds = $this->resolveObjectIds($manifest, $agent['capabilities']['write'] ?? []);
+        $writableObjectIds = array_values(array_filter(
+            $this->resolveObjectIds($manifest, $agent['capabilities']['write'] ?? []),
+            fn (string $id): bool => $access->can($id, 'create') || $access->can($id, 'update') || $access->can($id, 'delete'),
+        ));
         if ($writableObjectIds === []) {
             return [];
         }

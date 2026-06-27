@@ -24,6 +24,7 @@ class AggregateObjectTool implements Tool
     /**
      * @param  array<string, mixed>  $manifest
      * @param  list<string>  $readableObjectIds
+     * @param  array<string, mixed>  $context  carries __access so reads honour row_filter + hidden fields
      */
     public function __construct(
         private App $appModel,
@@ -31,6 +32,7 @@ class AggregateObjectTool implements Tool
         private array $readableObjectIds,
         private RecordQueryService $records,
         private BlockDataResolver $blockData,
+        private array $context = [],
     ) {}
 
     public function name(): string
@@ -90,7 +92,7 @@ DESC;
         try {
             $value = (($object['source']['type'] ?? 'internal') === 'connected')
                 ? $this->aggregateConnected($object, $query, $aggregation, $fieldId)
-                : $this->records->aggregate($this->appModel, $query, $aggregation, $fieldId, $this->manifest);
+                : $this->records->aggregate($this->appModel, $query, $aggregation, $fieldId, $this->manifest, $this->context);
         } catch (\Throwable $e) {
             return json_encode(['error' => $e->getMessage()], JSON_THROW_ON_ERROR);
         }
@@ -107,7 +109,7 @@ DESC;
      */
     private function aggregateConnected(array $object, array $query, string $aggregation, ?string $fieldId): int|float
     {
-        $rows = $this->blockData->queryObject($this->appModel, $query, $this->manifest);
+        $rows = $this->blockData->queryObject($this->appModel, $query, $this->manifest, $this->context);
 
         if ($aggregation === 'count') {
             return count($rows);

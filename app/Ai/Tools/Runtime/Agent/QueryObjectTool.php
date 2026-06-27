@@ -25,12 +25,14 @@ class QueryObjectTool implements Tool
     /**
      * @param  array<string, mixed>  $manifest
      * @param  list<string>  $readableObjectIds
+     * @param  array<string, mixed>  $context  carries __access so reads honour row_filter + hidden fields
      */
     public function __construct(
         private App $appModel,
         private array $manifest,
         private array $readableObjectIds,
         private BlockDataResolver $blockData,
+        private array $context = [],
     ) {}
 
     public function name(): string
@@ -86,7 +88,7 @@ DESC;
         $dataSource['limit'] = min((int) ($args['limit'] ?? self::MAX_ROWS), self::MAX_ROWS);
 
         try {
-            $rows = $this->blockData->queryObject($this->appModel, $dataSource, $this->manifest);
+            $rows = $this->blockData->queryObject($this->appModel, $dataSource, $this->manifest, $this->context);
         } catch (\Throwable $e) {
             return json_encode(['error' => $e->getMessage()], JSON_THROW_ON_ERROR);
         }
