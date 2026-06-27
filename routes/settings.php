@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\OrganizationBrandController;
 use App\Http\Controllers\Settings\OrganizationController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SsoConnectionController;
@@ -25,6 +26,11 @@ Route::middleware([
     Route::post('settings/organization', [OrganizationController::class, 'store'])->name('organization.store');
     Route::delete('settings/organization', [OrganizationController::class, 'destroy'])->name('organization.destroy');
     Route::post('settings/organization/invite', [OrganizationController::class, 'invite'])->name('organization.invite');
+
+    // Organization Brandbook: the central logo/icon/colours/font every
+    // customizable surface inherits. Admin-gated inside the controller.
+    Route::put('settings/organization/brand', [OrganizationBrandController::class, 'update'])->name('organization.brand.update');
+    Route::post('settings/organization/brand/asset', [OrganizationBrandController::class, 'uploadAsset'])->name('organization.brand.asset');
 
     Route::get('settings/sso', [SsoConnectionController::class, 'show'])->name('sso.show');
     Route::put('settings/sso', [SsoConnectionController::class, 'update'])->name('sso.update');

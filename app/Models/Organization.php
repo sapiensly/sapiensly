@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasPrefixedUlid;
 use App\Models\Concerns\UsesPlatformConnection;
+use App\Support\Branding\OrganizationBrand;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -19,13 +20,24 @@ class Organization extends Model
         'name',
         'slug',
         'metadata',
+        'brand',
     ];
 
     protected function casts(): array
     {
         return [
             'metadata' => 'array',
+            'brand' => 'array',
         ];
+    }
+
+    /**
+     * The organization's Brandbook as a normalized value object (empty when
+     * unset). The single source of truth every customizable surface inherits.
+     */
+    public function brandbook(): OrganizationBrand
+    {
+        return OrganizationBrand::fromArray($this->brand);
     }
 
     public static function getIdPrefix(): string
