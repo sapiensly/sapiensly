@@ -27,6 +27,9 @@ Build & debug apps (apps:build):
   - Catalogs (call before authoring): list_available_components,
     list_available_field_types, list_available_actions, list_available_triggers,
     list_available_steps, and framework_reference for deeper guidance.
+  - Theming: get_organization_brand reads the org Brandbook (logo/colours/font);
+    new apps inherit it automatically, so build on-brand. set_organization_brand
+    changes it org-wide (owner/sysadmin).
   - Versions: list_app_versions, rollback_app.
   - Access (who can use the app and in which role): list_app_roles, then
     assign_app_role / revoke_app_role (member by email). The manifest DEFINES the
@@ -93,6 +96,8 @@ class SapiensServer extends Server
         Tools\Account\GuideTool::class,
         Tools\Account\ListTeamMembersTool::class,
         Tools\Account\GetAiSpendTool::class,
+        Tools\Account\GetOrganizationBrandTool::class,
+        Tools\Account\SetOrganizationBrandTool::class,
         // Build & debug apps.
         Tools\Build\ListAppsTool::class,
         Tools\Build\CreateAppTool::class,

@@ -69,6 +69,8 @@ and listing conversations is `agents:invoke`.
 | `guide` | — | Orientation + cross-tool task playbooks (deploy a support squad, build an app, RAG, …), the abilities map and conventions. Call with a `topic` for full steps. |
 | `list_team_members` | — | The org's members with name, email, role and status. |
 | `get_ai_spend` | owner | The org's AI spend over 7/30/90 days: cost, calls, tokens, own-vs-system split, per-model breakdown, daily series, and budgets/caps. |
+| `get_organization_brand` | — | The org Brandbook (logo, icon, colours, font, theme) that apps & chatbots inherit — read it to build on-brand. |
+| `set_organization_brand` | owner | Set the org Brandbook (partial; pass null to clear a field). Owner/sysadmin only. |
 
 ### Build & debug apps (`apps:build`)
 
