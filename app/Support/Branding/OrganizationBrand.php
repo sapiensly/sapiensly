@@ -99,13 +99,17 @@ final class OrganizationBrand
         if ($this->theme !== null && empty($settings['theme'])) {
             $settings['theme'] = $this->theme;
         }
-        if ($this->logoUrl !== null || $this->logoBgColor !== null) {
+        $brandIcon = $this->iconEmoji ?? $this->iconUrl;
+        if ($this->logoUrl !== null || $this->logoBgColor !== null || $brandIcon !== null) {
             $brand = $settings['brand'] ?? [];
             if ($this->logoUrl !== null && empty($brand['logo'])) {
                 $brand['logo'] = $this->logoUrl;
             }
             if ($this->logoBgColor !== null && empty($brand['header_bg'])) {
                 $brand['header_bg'] = $this->logoBgColor;
+            }
+            if ($brandIcon !== null && empty($brand['icon'])) {
+                $brand['icon'] = $brandIcon;
             }
             $settings['brand'] = $brand;
         }

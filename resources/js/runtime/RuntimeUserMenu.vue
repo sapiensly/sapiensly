@@ -20,12 +20,16 @@ import { computed } from 'vue';
 const page = usePage();
 const user = computed(() => page.props.auth?.user ?? null);
 const initials = computed(() => getInitials(user.value?.name ?? '') || '·');
+
+// Compact = avatar only (no name/chevron), for a collapsed sidebar rail.
+defineProps<{ compact?: boolean }>();
 </script>
 
 <template>
     <DropdownMenu v-if="user">
         <DropdownMenuTrigger
-            class="inline-flex items-center gap-1.5 rounded-pill border py-1 pr-2 pl-1 text-sm transition-colors outline-none"
+            class="inline-flex items-center gap-1.5 rounded-pill border text-sm transition-colors outline-none"
+            :class="compact ? 'p-1' : 'py-1 pr-2 pl-1'"
             :style="{
                 borderColor:
                     'color-mix(in srgb, currentColor 14%, transparent)',
@@ -39,10 +43,12 @@ const initials = computed(() => getInitials(user.value?.name ?? '') || '·');
             >
                 {{ initials }}
             </span>
-            <span class="hidden max-w-[10rem] truncate sm:inline">{{
-                user.name
-            }}</span>
-            <ChevronDown class="size-3.5 opacity-60" />
+            <span
+                v-if="!compact"
+                class="hidden max-w-[10rem] truncate sm:inline"
+                >{{ user.name }}</span
+            >
+            <ChevronDown v-if="!compact" class="size-3.5 opacity-60" />
         </DropdownMenuTrigger>
 
         <DropdownMenuContent align="end" class="w-56">
