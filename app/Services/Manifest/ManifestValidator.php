@@ -636,9 +636,11 @@ class ManifestValidator
                     continue;
                 }
 
+                $numericTypes = ['number', 'currency', 'rating', 'slider'];
                 if ($field['type'] === 'rollup'
                     && in_array($field['aggregator'] ?? '', ['sum', 'avg', 'min', 'max'], true)
-                    && ! in_array($targetObjectFields[$targetFieldId]['type'], ['number', 'currency', 'rating', 'slider'], true)) {
+                    && ! in_array($targetObjectFields[$targetFieldId]['type'], $numericTypes, true)
+                    && ! $this->derivedSatisfiesNumeric($targetObjectFields[$targetFieldId], $numericTypes)) {
                     $errors[] = new ManifestValidationError(
                         "/objects/{$i}/fields/{$j}/target_field_id",
                         "rollup aggregator '{$field['aggregator']}' requires a numeric target field, got '{$targetObjectFields[$targetFieldId]['type']}'",
@@ -1822,12 +1824,14 @@ class ManifestValidator
     /**
      * A derived field can stand in where a numeric field is required when its
      * computed value is numeric: a `formula` with return_type number, or any
-     * `rollup` (count/sum/avg/min/max all fold to a number). The runtime
-     * aggregates these in PHP (see RecordQueryService::aggregateDerived), so the
-     * dashboard can sum/avg/chart a rollup total or a formula. Only applies when
-     * the requirement set is the numeric one — never relaxes e.g. a single_select
-     * group_by. Lookups are excluded: their numeric-ness depends on the target
-     * object's field, which this local check can't resolve.
+     * `rollup` (count/sum/avg/min/max all fold to a number). Used both for block
+     * aggregation refs (metric_grid/chart/…, aggregated in PHP by
+     * RecordQueryService::aggregateDerived) and for a rollup's target field (the
+     * children's derived values are resolved before folding — so a parent rollup
+     * can sum a per-child formula). Only applies when the requirement set is the
+     * numeric one — never relaxes e.g. a single_select group_by. Lookups are
+     * excluded: their numeric-ness depends on the target object's field, which
+     * this local check can't resolve.
      *
      * @param  array<string, mixed>  $field
      * @param  list<string>  $allowedTypes
