@@ -1101,18 +1101,62 @@ class AppScaffolder
             $lineDef['fields'][] = $precio;
             $built[$lineIndex]['pageFields'][] = $precioIdx;
 
-            // Subtotal: qty × unit price, formatted as money.
-            $subSlug = $this->uniqueSlug('subtotal', $taken, 'subtotal');
-            [$subtotal, $subIdx] = $this->buildField(['name' => $labels['subtotal'], 'slug' => $subSlug, 'type' => 'formula', 'options' => null, 'config' => ['expression' => '{{'.$qty['slug'].' * '.$priceSlug.'}}', 'return_type' => 'number', 'currency_code' => $currency]], $currency);
-            $lineDef['fields'][] = $subtotal;
-            $built[$lineIndex]['pageFields'][] = $subIdx;
+            // Subtotal: qty × unit price. Reuse an amount field the model already
+            // put on the line (convert it to the formula in place, keeping its
+            // id/slug/name) instead of adding a duplicate; else synthesise one.
+            $expression = '{{'.$qty['slug'].' * '.$priceSlug.'}}';
+            $existingAmount = $this->subtotalFieldOf($lineDef);
+            if ($existingAmount !== null) {
+                $subtotal = [
+                    'id' => $existingAmount['id'],
+                    'slug' => $existingAmount['slug'],
+                    'name' => $existingAmount['name'] ?? $labels['subtotal'],
+                    'type' => 'formula',
+                    'readonly' => true,
+                    'expression' => $expression,
+                    'return_type' => 'number',
+                    'currency_code' => $currency,
+                ];
+                foreach ($lineDef['fields'] as $fi => $f) {
+                    if (($f['id'] ?? null) === $existingAmount['id']) {
+                        $lineDef['fields'][$fi] = $subtotal;
+                        break;
+                    }
+                }
+                // Reflect the type change in the page index so the now-computed
+                // field is dropped from create forms but stays in tables.
+                foreach ($built[$lineIndex]['pageFields'] as $pi => $idx) {
+                    if (($idx['id'] ?? null) === $existingAmount['id']) {
+                        $built[$lineIndex]['pageFields'][$pi]['type'] = 'formula';
+                        break;
+                    }
+                }
+            } else {
+                $subSlug = $this->uniqueSlug('subtotal', $taken, 'subtotal');
+                [$subtotal, $subIdx] = $this->buildField(['name' => $labels['subtotal'], 'slug' => $subSlug, 'type' => 'formula', 'options' => null, 'config' => ['expression' => $expression, 'return_type' => 'number', 'currency_code' => $currency]], $currency);
+                $lineDef['fields'][] = $subtotal;
+                $built[$lineIndex]['pageFields'][] = $subIdx;
+            }
 
-            // Order total: rollup SUM of the line subtotals.
+            // Order total: rollup SUM of the line subtotals. Reuse the sum rollup
+            // buildRelation already added over this field (the common case when the
+            // model gave the line an amount) instead of adding a second total.
             $orderDefRef = &$built[$orderRel['targetIndex']]['def'];
-            $totalSlug = $this->uniqueSlug('total', array_column($orderDefRef['fields'], 'slug'), 'total');
-            [$total, $totalIdx] = $this->buildField(['name' => $labels['total'], 'slug' => $totalSlug, 'type' => 'rollup', 'options' => null, 'config' => ['via_relation_field_id' => $orderRel['parentFieldId'], 'aggregator' => 'sum', 'target_field_id' => $subtotal['id']]], $currency);
-            $orderDefRef['fields'][] = $total;
-            $built[$orderRel['targetIndex']]['pageFields'][] = $totalIdx;
+            $total = null;
+            foreach ($orderDefRef['fields'] as $f) {
+                if (($f['type'] ?? null) === 'rollup'
+                    && ($f['aggregator'] ?? null) === 'sum'
+                    && ($f['target_field_id'] ?? null) === $subtotal['id']) {
+                    $total = $f;
+                    break;
+                }
+            }
+            if ($total === null) {
+                $totalSlug = $this->uniqueSlug('total', array_column($orderDefRef['fields'], 'slug'), 'total');
+                [$total, $totalIdx] = $this->buildField(['name' => $labels['total'], 'slug' => $totalSlug, 'type' => 'rollup', 'options' => null, 'config' => ['via_relation_field_id' => $orderRel['parentFieldId'], 'aggregator' => 'sum', 'target_field_id' => $subtotal['id']]], $currency);
+                $orderDefRef['fields'][] = $total;
+                $built[$orderRel['targetIndex']]['pageFields'][] = $totalIdx;
+            }
 
             $productDef = $built[$productRel['targetIndex']]['def'];
             $specs[] = [
@@ -1310,6 +1354,29 @@ class AppScaffolder
         foreach ($def['fields'] as $field) {
             if (($field['type'] ?? '') === 'number'
                 && preg_match('/cant|qty|quantity|unidad|piezas|count/i', ($field['slug'] ?? '').' '.($field['name'] ?? '')) === 1) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A currency field on the line that reads like a line amount/subtotal (to be
+     * reused as the computed subtotal) — NOT a unit price, which the lookup owns.
+     *
+     * @param  array<string, mixed>  $def
+     * @return array<string, mixed>|null
+     */
+    private function subtotalFieldOf(array $def): ?array
+    {
+        foreach ($def['fields'] as $field) {
+            if (($field['type'] ?? '') !== 'currency') {
+                continue;
+            }
+            $haystack = ($field['slug'] ?? '').' '.($field['name'] ?? '');
+            if (preg_match('/subtotal|sub_total|importe|monto|amount|total/i', $haystack) === 1
+                && preg_match('/unit|unitario|precio|price/i', $haystack) === 0) {
                 return $field;
             }
         }

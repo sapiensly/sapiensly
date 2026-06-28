@@ -111,6 +111,9 @@ function scaffoldPos(string $locale): array
             ]],
             ['name' => 'Renglones', 'slug' => 'renglones', 'fields' => [
                 ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+                // The model often emits a manual subtotal — the recipe should
+                // REUSE it (convert to the computed formula), not duplicate it.
+                ['name' => 'Subtotal', 'slug' => 'subtotal', 'type' => 'currency', 'options' => null],
             ]],
         ],
         'links' => [
@@ -298,6 +301,27 @@ it('synthesizes the POS line economics and order total', function () {
     $total = collect($comandas['fields'])
         ->first(fn ($f) => ($f['type'] ?? null) === 'rollup' && ($f['aggregator'] ?? null) === 'sum');
     expect($total['target_field_id'])->toBe($subtotal['id']);
+});
+
+it('reuses an existing line subtotal instead of duplicating it', function () {
+    $manifest = scaffoldPos('es-MX');
+    $renglones = collect($manifest['objects'])->firstWhere('slug', 'renglones');
+
+    // The model's "subtotal" currency field was converted to the formula in place
+    // (same slug), and no duplicate "subtotal_2" was added.
+    $subtotal = collect($renglones['fields'])->firstWhere('slug', 'subtotal');
+    expect($subtotal['type'])->toBe('formula');
+    expect(collect($renglones['fields'])->firstWhere('slug', 'subtotal_2'))->toBeNull();
+
+    // It's gone from the create form (computed) but still a column in tables.
+    $createForm = blockByType(pageBySlug($manifest, 'renglones'), 'modal')['blocks'][0];
+    expect(collect($createForm['fields'])->pluck('field_id'))->not->toContain($subtotal['id']);
+
+    // The order has exactly ONE sum rollup over that subtotal (no duplicate total).
+    $comandas = collect($manifest['objects'])->firstWhere('slug', 'comandas');
+    $sumOverSubtotal = collect($comandas['fields'])
+        ->filter(fn ($f) => ($f['type'] ?? null) === 'rollup' && ($f['aggregator'] ?? null) === 'sum' && ($f['target_field_id'] ?? null) === $subtotal['id']);
+    expect($sumOverSubtotal)->toHaveCount(1);
 });
 
 it('produces a schema-valid manifest with the POS screen', function () {
