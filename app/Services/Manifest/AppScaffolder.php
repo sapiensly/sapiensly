@@ -99,9 +99,12 @@ class AppScaffolder
         Rules:
         - objects: the main entities the app tracks (e.g. for a content engine: Ideas, Drafts, Published). At most 6. Each needs a human `name` and a snake_case `slug`.
         - fields: the columns of each object. At most 12 per object. Each needs a `name`, a snake_case `slug`, and a `type`. Give every object a short text title/name field FIRST.
-        - type: use "string" for short text, "long_text" for paragraphs, "number" for quantities, "currency" for money, "boolean" for yes/no, "date"/"datetime" for dates, "single_select"/"multi_select" for a fixed set of choices, "rating" for 1-5 stars. There is NO email or url type — use "string".
-        - options: REQUIRED and non-empty ONLY for single_select / multi_select (each option a short `value` slug + a human `label`); use null for every other type. Use status/stage fields (single_select) where the workflow implies them.
-        - links: "belongs-to" relationships between objects. Each link means "a <from> belongs to one <to>" (e.g. {"from":"drafts","to":"ideas","name":"idea"} = each Draft belongs to one Idea). `from`/`to` are object slugs; `name` is the human label of the link on the <from> side. Use null when there are no relationships. At most 8. Do NOT model a link as a plain field — use this array.
+        - STAY GROUNDED: only include fields the description actually implies or that are obviously essential to the entity. Do NOT pad objects with invented or generic extra fields — fewer, relevant fields beat a long speculative list.
+        - type: use "string" for short text, "long_text" for paragraphs, "number" for quantities/counts, "currency" for money/prices/amounts, "boolean" for yes/no, "date"/"datetime" for dates, "single_select"/"multi_select" for a fixed set of choices, "rating" for 1-5 stars. There is NO email or url type — use "string". There is NO id/foreign-key type — never add a field to hold another object's id or name; express that as a link.
+        - options: REQUIRED and non-empty ONLY for single_select / multi_select (each option a short `value` slug + a human `label`); use null for every other type. Add a status/stage single_select whenever the entity moves through states (it becomes a board) — e.g. order: pending/preparing/served/paid.
+        - links: "belongs-to" relationships between objects. Each link means "a <from> belongs to one <to>" (e.g. {"from":"drafts","to":"ideas","name":"idea"} = each Draft belongs to one Idea). `from`/`to` are object slugs; `name` is the human label of the link on the <from> side. Use null when there are no relationships. At most 8.
+        - NEVER restate a relationship as a field: do not add a string/number field that holds a related record's name or id (e.g. on a line item do NOT add a "product"/"category" text field) — model it with a link instead. The relation, its picker, child counts and totals are generated for you.
+        - Model line-item / amount structures as a parent with a child linked to it (e.g. an order/ticket with its line items, each line a currency field): the child's amount then rolls up to a total on the parent automatically. Do not add a manual "total" field to the parent — it is derived.
         - Write names/labels in the SAME language as the description.
         SYS;
 
@@ -414,7 +417,7 @@ class AppScaffolder
             if ($fromIndex === null || $toIndex === null || $fromIndex === $toIndex) {
                 continue;
             }
-            $pair = $this->buildRelation($built[$fromIndex]['def'], $built[$toIndex]['def'], $link['name']);
+            $pair = $this->buildRelation($built[$fromIndex]['def'], $built[$toIndex]['def'], $link['name'], $lang);
             $built[$fromIndex]['def']['fields'][] = $pair['child_field'];
             $built[$fromIndex]['pageFields'][] = $pair['child_index'];
             // The one_to_many inverse is structural (not on the page); the rollup
@@ -422,6 +425,11 @@ class AppScaffolder
             $built[$toIndex]['def']['fields'][] = $pair['parent_field'];
             $built[$toIndex]['def']['fields'][] = $pair['parent_rollup_field'];
             $built[$toIndex]['pageFields'][] = $pair['parent_rollup_index'];
+            // A derived total of the child's money field, when it has one.
+            if ($pair['parent_sum_field'] !== null) {
+                $built[$toIndex]['def']['fields'][] = $pair['parent_sum_field'];
+                $built[$toIndex]['pageFields'][] = $pair['parent_sum_index'];
+            }
 
             $childrenByParent[$toIndex][] = [
                 'childIndex' => $fromIndex,
@@ -558,13 +566,16 @@ class AppScaffolder
      * definitions and the from-side index entry (so the page can show it).
      *
      * Also creates a rollup on the `to` side that counts its children, so the
-     * relationship pays off immediately (e.g. a "Drafts" count on each Idea).
+     * relationship pays off immediately (e.g. a "Drafts" count on each Idea), and
+     * — when the child has a money field — a second rollup that SUMS it, so a
+     * parent total (e.g. an order's total from its line amounts) is derived rather
+     * than entered by hand.
      *
      * @param  array{id: string, name: string, slug: string, fields: array<int, array<string, mixed>>}  $from  the "many" side (a $from belongs to one $to)
      * @param  array{id: string, name: string, slug: string, fields: array<int, array<string, mixed>>}  $to  the "one" side
-     * @return array{child_field: array<string, mixed>, parent_field: array<string, mixed>, child_index: array{id: string, slug: string, type: string}, parent_rollup_field: array<string, mixed>, parent_rollup_index: array{id: string, slug: string, type: string}}
+     * @return array{child_field: array<string, mixed>, parent_field: array<string, mixed>, child_index: array{id: string, slug: string, type: string}, parent_rollup_field: array<string, mixed>, parent_rollup_index: array{id: string, slug: string, type: string}, parent_sum_field: array<string, mixed>|null, parent_sum_index: array{id: string, slug: string, type: string}|null}
      */
-    public function buildRelation(array $from, array $to, ?string $name = null): array
+    public function buildRelation(array $from, array $to, ?string $name = null, string $lang = 'en'): array
     {
         $childFieldId = $this->id('fld');
         $parentFieldId = $this->id('fld');
@@ -615,13 +626,55 @@ class AppScaffolder
             'readonly' => true,
         ];
 
+        // If the child carries a money field, also sum it onto the parent so a
+        // total is derived (e.g. an order total from its line amounts).
+        $sumField = null;
+        $sumIndex = null;
+        $amount = $this->firstCurrencyField($from['fields']);
+        if ($amount !== null) {
+            $parentTaken[] = $rollupSlug;
+            $sumFieldId = $this->id('fld');
+            $sumSlug = $this->uniqueSlug($from['slug'].'_'.$amount['slug'].'_total', $parentTaken, 'total');
+            $sumField = [
+                'id' => $sumFieldId,
+                'slug' => $sumSlug,
+                'name' => $this->labelTotal($lang, $amount['name']),
+                'type' => 'rollup',
+                'via_relation_field_id' => $parentFieldId,
+                'aggregator' => 'sum',
+                'target_field_id' => $amount['id'],
+                'readonly' => true,
+            ];
+            $sumIndex = ['id' => $sumFieldId, 'slug' => $sumSlug, 'type' => 'rollup'];
+        }
+
         return [
             'child_field' => $childField,
             'parent_field' => $parentField,
             'child_index' => ['id' => $childFieldId, 'slug' => $relSlug, 'type' => 'relation'],
             'parent_rollup_field' => $rollupField,
             'parent_rollup_index' => ['id' => $rollupFieldId, 'slug' => $rollupSlug, 'type' => 'rollup'],
+            'parent_sum_field' => $sumField,
+            'parent_sum_index' => $sumIndex,
         ];
+    }
+
+    /**
+     * The first currency field in a field list (used to derive a parent total
+     * from a child's amount), or null when the object tracks no money.
+     *
+     * @param  array<int, array<string, mixed>>  $fields
+     * @return array<string, mixed>|null
+     */
+    private function firstCurrencyField(array $fields): ?array
+    {
+        foreach ($fields as $field) {
+            if (($field['type'] ?? null) === 'currency') {
+                return $field;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -117,11 +117,15 @@ class ManifestEditor
             $manifest['objects'][$fromIndex],
             $manifest['objects'][$toIndex],
             $name,
+            AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null),
         );
 
         $manifest['objects'][$fromIndex]['fields'][] = $pair['child_field'];
         $manifest['objects'][$toIndex]['fields'][] = $pair['parent_field'];
         $manifest['objects'][$toIndex]['fields'][] = $pair['parent_rollup_field'];
+        if ($pair['parent_sum_field'] !== null) {
+            $manifest['objects'][$toIndex]['fields'][] = $pair['parent_sum_field'];
+        }
 
         if ($addToPage) {
             $fromObjectId = $manifest['objects'][$fromIndex]['id'];
@@ -134,6 +138,9 @@ class ManifestEditor
                 // rollup count is a column on the parent's table only.
                 $this->injectFieldIntoBlocks($page['blocks'], $fromObjectId, $pair['child_index']['id'], $pair['child_index']['slug']);
                 $this->injectFieldIntoBlocks($page['blocks'], $toObjectId, $pair['parent_rollup_index']['id'], $pair['parent_rollup_index']['slug'], formToo: false);
+                if ($pair['parent_sum_index'] !== null) {
+                    $this->injectFieldIntoBlocks($page['blocks'], $toObjectId, $pair['parent_sum_index']['id'], $pair['parent_sum_index']['slug'], formToo: false);
+                }
             }
             unset($page);
         }

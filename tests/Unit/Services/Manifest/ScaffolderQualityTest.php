@@ -67,6 +67,7 @@ function scaffoldWithChild(string $locale): array
             ['name' => 'Renglones', 'slug' => 'renglones', 'fields' => [
                 ['name' => 'Concepto', 'slug' => 'concepto', 'type' => 'string', 'options' => null],
                 ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+                ['name' => 'Subtotal', 'slug' => 'subtotal', 'type' => 'currency', 'options' => null],
             ]],
         ],
         'links' => [['from' => 'renglones', 'to' => 'comandas', 'name' => 'comanda']],
@@ -166,6 +167,21 @@ it('builds a master-detail page for a parent with children', function () {
     expect($createValues[$relField['slug']])->toBe('{{params.id}}');
     // …and it does NOT ask the user to pick the parent again.
     expect(collect($form['fields'])->pluck('field_id'))->not->toContain($relField['id']);
+});
+
+it('derives a parent total from a child money field', function () {
+    $manifest = scaffoldWithChild('es-MX');
+
+    $comandas = collect($manifest['objects'])->firstWhere('slug', 'comandas');
+    $sumRollup = collect($comandas['fields'])
+        ->first(fn ($f) => ($f['type'] ?? null) === 'rollup' && ($f['aggregator'] ?? null) === 'sum');
+
+    expect($sumRollup)->not->toBeNull();
+    expect($sumRollup['name'])->toBe('Total Subtotal');
+
+    $renglones = collect($manifest['objects'])->firstWhere('slug', 'renglones');
+    $subtotal = collect($renglones['fields'])->firstWhere('slug', 'subtotal');
+    expect($sumRollup['target_field_id'])->toBe($subtotal['id']);
 });
 
 it('links the parent list table to its detail page', function () {
