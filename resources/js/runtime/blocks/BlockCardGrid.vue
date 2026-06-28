@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue';
+import { computed, inject, reactive } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
@@ -47,9 +47,47 @@ function deriveSlugFromUrl(): string {
 
 const clickable = computed(() => (props.block.on_click?.length ?? 0) > 0);
 
+// Per-card interaction state so a tap is acknowledged INSTANTLY (✓ + ring) while
+// the real cart update lands a moment later via the action's block_data patch —
+// optimistic feedback, so there's no dead time between click and a response.
+type CardState = 'adding' | 'added' | 'error';
+const flash = reactive<Record<string, CardState>>({});
+
 async function runCardAction(row: RowData) {
-    if (!clickable.value) return;
-    await execute(props.block.on_click!, { appSlug, row, params: pageParams });
+    if (!clickable.value || flash[row.id] === 'adding') return;
+
+    flash[row.id] = 'adding';
+    const result = await execute(props.block.on_click!, {
+        appSlug,
+        row,
+        params: pageParams,
+    });
+    flash[row.id] = result.ok ? 'added' : 'error';
+    window.setTimeout(() => delete flash[row.id], 1000);
+}
+
+function cardRingClass(row: RowData): string {
+    return (
+        {
+            adding: 'ring-2 ring-accent-blue',
+            added: 'ring-2 ring-green-500',
+            error: 'ring-2 ring-red-500',
+        }[flash[row.id] ?? ''] ?? ''
+    );
+}
+
+function actionIconName(row: RowData): string {
+    const s = flash[row.id];
+    if (s === 'added') return 'check';
+    if (s === 'error') return 'alert-circle';
+    return props.block.action_icon ?? 'plus';
+}
+
+function actionBtnClass(row: RowData): string {
+    const s = flash[row.id];
+    if (s === 'added') return 'bg-green-500 text-white';
+    if (s === 'error') return 'bg-red-500 text-white';
+    return 'bg-accent-blue text-white hover:bg-accent-blue-hover';
 }
 
 const object = computed<ObjectDef | undefined>(() =>
@@ -144,6 +182,7 @@ function imageSrc(row: RowData): string | null {
                 clickable
                     ? 'cursor-pointer hover:border-accent-blue hover:shadow-sm'
                     : '',
+                cardRingClass(row),
             ]"
             @click="runCardAction(row)"
         >
@@ -159,10 +198,15 @@ function imageSrc(row: RowData): string | null {
                     v-if="clickable"
                     type="button"
                     aria-label="add"
-                    class="absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-full bg-accent-blue text-white shadow-md hover:bg-accent-blue-hover"
+                    :disabled="flash[row.id] === 'adding'"
+                    :class="[
+                        'absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-full shadow-md transition',
+                        actionBtnClass(row),
+                        flash[row.id] === 'adding' ? 'opacity-70' : '',
+                    ]"
                     @click.stop="runCardAction(row)"
                 >
-                    <RuntimeIcon :name="block.action_icon ?? 'plus'" :size="16" />
+                    <RuntimeIcon :name="actionIconName(row)" :size="16" />
                 </button>
             </div>
             <div class="flex flex-1 flex-col gap-1.5 p-4">
@@ -201,13 +245,15 @@ function imageSrc(row: RowData): string | null {
                     <button
                         type="button"
                         aria-label="add"
-                        class="flex h-8 w-8 items-center justify-center rounded-full bg-accent-blue text-white shadow-sm hover:bg-accent-blue-hover"
+                        :disabled="flash[row.id] === 'adding'"
+                        :class="[
+                            'flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition',
+                            actionBtnClass(row),
+                            flash[row.id] === 'adding' ? 'opacity-70' : '',
+                        ]"
                         @click.stop="runCardAction(row)"
                     >
-                        <RuntimeIcon
-                            :name="block.action_icon ?? 'plus'"
-                            :size="16"
-                        />
+                        <RuntimeIcon :name="actionIconName(row)" :size="16" />
                     </button>
                 </div>
             </div>
