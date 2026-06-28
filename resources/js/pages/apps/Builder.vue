@@ -39,6 +39,7 @@ import {
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
+import SiteSidebar from '@/runtime/SiteSidebar.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import type {
     BlockData,
@@ -1040,6 +1041,17 @@ const previewBrand = computed(() => ({
     name: props.app.name,
     ...((previewSettings.value.brand as object) ?? {}),
 }));
+// Mirror the runtime's chrome layout in the preview.
+const previewSidebar = computed(
+    () =>
+        (previewSettings.value as { navigation_layout?: string })
+            .navigation_layout === 'sidebar',
+);
+const previewNavItems = computed(
+    () =>
+        (props.manifest?.navigation as { items?: unknown[] } | null)?.items ??
+        undefined,
+);
 const previewFooter = computed(
     () =>
         previewSettings.value.footer as
@@ -2601,25 +2613,59 @@ function statusTone(status: Message['status']): string {
                                 v-if="preview.custom_css"
                                 :text-content="preview.custom_css"
                             />
-                            <SiteHeader
-                                :brand="previewBrand"
-                                :pages="preview.pages"
-                                :current-slug="preview.page.slug"
-                            />
-                            <div class="space-y-4 py-6">
-                                <AppRenderer
-                                    :blocks="preview.page.blocks"
-                                    :block-data="preview.block_data"
-                                    :objects="preview.objects"
-                                    :locale="previewLocale"
-                                    :default-currency="previewCurrency"
-                                    :theme="previewTheme"
+
+                            <!-- Sidebar layout mirrors the runtime. -->
+                            <div
+                                v-if="previewSidebar"
+                                class="flex min-h-[400px]"
+                            >
+                                <SiteSidebar
+                                    embedded
+                                    :brand="previewBrand"
+                                    :nav-items="previewNavItems"
+                                    :pages="preview.pages"
+                                    :current-slug="preview.page.slug"
                                 />
+                                <div class="min-w-0 flex-1 px-5">
+                                    <div class="space-y-4 py-6">
+                                        <AppRenderer
+                                            :blocks="preview.page.blocks"
+                                            :block-data="preview.block_data"
+                                            :objects="preview.objects"
+                                            :locale="previewLocale"
+                                            :default-currency="previewCurrency"
+                                            :theme="previewTheme"
+                                        />
+                                    </div>
+                                    <SiteFooter
+                                        :footer="previewFooter"
+                                        :brand-name="previewBrand.name"
+                                    />
+                                </div>
                             </div>
-                            <SiteFooter
-                                :footer="previewFooter"
-                                :brand-name="previewBrand.name"
-                            />
+
+                            <!-- Top-header layout (default). -->
+                            <template v-else>
+                                <SiteHeader
+                                    :brand="previewBrand"
+                                    :pages="preview.pages"
+                                    :current-slug="preview.page.slug"
+                                />
+                                <div class="space-y-4 py-6">
+                                    <AppRenderer
+                                        :blocks="preview.page.blocks"
+                                        :block-data="preview.block_data"
+                                        :objects="preview.objects"
+                                        :locale="previewLocale"
+                                        :default-currency="previewCurrency"
+                                        :theme="previewTheme"
+                                    />
+                                </div>
+                                <SiteFooter
+                                    :footer="previewFooter"
+                                    :brand-name="previewBrand.name"
+                                />
+                            </template>
                         </div>
                         <div
                             v-else

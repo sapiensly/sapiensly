@@ -37,6 +37,8 @@ const props = defineProps<{
     pages?: PageLink[];
     currentSlug?: string;
     hrefFor?: (slug: string) => string;
+    /** Embedded in the builder preview pane (fills its container instead of the viewport). */
+    embedded?: boolean;
 }>();
 
 const slugById = computed<Record<string, string>>(() =>
@@ -94,7 +96,10 @@ const headerStyle = computed(() =>
 
 <template>
     <aside
-        class="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r"
+        :class="[
+            'flex w-60 shrink-0 flex-col border-r',
+            embedded ? 'self-stretch' : 'sticky top-0 h-screen',
+        ]"
         :style="{
             borderColor: 'color-mix(in srgb, currentColor 12%, transparent)',
             backgroundColor: 'color-mix(in srgb, currentColor 4%, transparent)',
