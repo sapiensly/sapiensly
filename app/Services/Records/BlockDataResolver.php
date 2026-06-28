@@ -423,8 +423,8 @@ class BlockDataResolver
 
     /**
      * Project a record collection to the shape the frontend expects, merging
-     * system fields (sys_created_at, sys_updated_at) into `data` so visualisation
-     * blocks can reference them by id like any other field.
+     * system fields (id, sys_created_at, sys_updated_at) into `data` so
+     * visualisation blocks can reference them by id like any other field.
      *
      * @param  iterable<int, Record>  $records
      * @param  list<string>  $hiddenSlugs  field slugs to strip from every row (field_restrictions.hidden)
@@ -438,6 +438,7 @@ class BlockDataResolver
             foreach ($hiddenSlugs as $slug) {
                 unset($data[$slug]);
             }
+            $data['id'] = $r->id;
             $data['sys_created_at'] = optional($r->created_at)->toIso8601String();
             $data['sys_updated_at'] = optional($r->updated_at)->toIso8601String();
             $out[] = ['id' => $r->id, 'data' => $data];

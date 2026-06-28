@@ -455,6 +455,14 @@ class RecordQueryService
     public static function systemField(string $fieldId): ?array
     {
         return match ($fieldId) {
+            'id' => [
+                'id' => 'id',
+                'slug' => 'id',
+                'name' => 'Record ID',
+                'type' => 'string',
+                'system' => true,
+                '_system_column' => 'id',
+            ],
             'sys_created_at' => [
                 'id' => 'sys_created_at',
                 'slug' => 'sys_created_at',

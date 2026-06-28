@@ -54,12 +54,13 @@ class ListAvailableFieldTypesTool implements Tool
             'field_types' => $this->withSchema('field', $catalog),
             'common_props' => 'All fields must have: id (prefix `fld_` then 8-60 chars of [a-z0-9_] — a lowercased ULID works but is not required), slug (^[a-z][a-z0-9_]*$), name, type. Optional: description, required, unique, indexed, readonly, hidden, help_text.',
             'system_fields' => [
-                'note' => 'Every object also has TWO virtual datetime fields you can reference without declaring them. Always prefer these over inventing a manual datetime field for "when was the record created/updated".',
+                'note' => 'Every object also has THREE virtual fields you can reference without declaring them. Always prefer these over inventing a manual field for the record id or "when was the record created/updated".',
                 'available' => [
+                    ['id' => 'id', 'type' => 'string', 'description' => 'The record\'s primary id. Use it to fetch/scope a specific record — e.g. a filter {op:"eq", field_id:"id", value_expression:"{{trigger.record.data.<relation_slug>}}"} reads the one related record by id (the get-by-id you would otherwise lack).'],
                     ['id' => 'sys_created_at', 'type' => 'datetime', 'description' => 'When the record was first inserted. Backfilled automatically — works on existing records.'],
                     ['id' => 'sys_updated_at', 'type' => 'datetime', 'description' => 'Last time the record was modified.'],
                 ],
-                'usage' => 'Reference them as any other field_id in table.columns[].field_id, table.data_source.sort[].field_id, filter conditions, sparkline.x_field_id / sparkline.data_source.filter, heatmap.date_field_id, calendar.date_field_id, timeline.date_field_id, etc. They are READ-ONLY — do NOT use them in form blocks.',
+                'usage' => 'Reference them as any other field_id in table.columns[].field_id, table.data_source.sort[].field_id, filter conditions (incl. record.query in workflows — `id` with op eq/in fetches specific records), sparkline.x_field_id / sparkline.data_source.filter, heatmap.date_field_id, calendar.date_field_id, timeline.date_field_id, etc. They are READ-ONLY — do NOT use them in form blocks.',
             ],
         ], JSON_THROW_ON_ERROR);
     }

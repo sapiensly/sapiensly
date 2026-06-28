@@ -55,7 +55,8 @@ DERIVED FIELDS (formula / lookup / rollup):
 - See the `expressions` topic for the formula syntax and function catalog.
 
 SYSTEM FIELDS (every object has them automatically):
-- Every object exposes two implicit datetime fields you can reference without declaring them: `sys_created_at` (insert time) and `sys_updated_at` (last modification). Backfilled, work on all existing records, zero setup.
+- Every object exposes three implicit fields you can reference without declaring them: `id` (the record's primary id, string), `sys_created_at` (insert time) and `sys_updated_at` (last modification). Backfilled, work on all existing records, zero setup.
+- `id` is the get-by-id handle: filter `{op:"eq", field_id:"id", value_expression:"…"}` (or `in` with an array) fetches a specific record — including inside a workflow `record.query` step to read the one record a relation points at, e.g. `value_expression:"{{trigger.record.data.<relation_slug>}}"`.
 - ALWAYS prefer these over inventing a manual datetime field for "X created in the last N days", "newest records", "activity over time", heatmaps, timelines, sparklines of growth. Good: `x_field_id: "sys_created_at"` or a filter `{op:"gte", field_id:"sys_created_at", value_expression:"..."}`.
 - READ-ONLY — do NOT use them in form blocks or set them via action.values. Valid in: table.columns, table sort, filter conditions, sparkline.x_field_id, heatmap.date_field_id, calendar.date_field_id, timeline.date_field_id, gauge/stat (with count aggregation only — they're datetime, so sum/avg make no sense).
 TXT,
