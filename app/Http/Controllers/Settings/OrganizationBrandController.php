@@ -23,8 +23,7 @@ class OrganizationBrandController extends Controller
 {
     /** The brand fields accepted from the form, in canonical (stored) vocabulary. */
     private const FIELDS = [
-        'logo_url', 'icon_url', 'icon_emoji',
-        'primary_color', 'background_color', 'text_color', 'font', 'theme',
+        'logo_url', 'icon_url', 'icon_emoji', 'accent_color', 'font', 'theme',
     ];
 
     public function show(Request $request): Response
@@ -40,14 +39,11 @@ class OrganizationBrandController extends Controller
     {
         $organization = $this->authorizeOrganization($request);
 
-        $hex = ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'];
         $validated = $request->validate([
             'logo_url' => ['nullable', 'string', 'max:2000'],
             'icon_url' => ['nullable', 'string', 'max:2000'],
             'icon_emoji' => ['nullable', 'string', 'max:16'],
-            'primary_color' => $hex,
-            'background_color' => $hex,
-            'text_color' => $hex,
+            'accent_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'font' => ['nullable', Rule::in(OrganizationBrand::FONTS)],
             'theme' => ['nullable', Rule::in(OrganizationBrand::THEMES)],
         ]);

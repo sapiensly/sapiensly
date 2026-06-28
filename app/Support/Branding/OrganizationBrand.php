@@ -3,11 +3,12 @@
 namespace App\Support\Branding;
 
 /**
- * The organization Brandbook as an immutable value object: logo, icon, colours
- * and font centralized on the organization. It is the single source of truth that
- * every customizable surface inherits, and it owns the mapping from the canonical
- * brand vocabulary to each surface's own (an App's `settings.accent`, a Chatbot's
- * `appearance.primary_color`, …) so that mapping lives in ONE place.
+ * The organization Brandbook as an immutable value object: logo, icon, a single
+ * brand accent colour, and a font/theme centralized on the organization. It is the
+ * single source of truth every customizable surface inherits, and it owns the
+ * mapping from the canonical brand vocabulary to each surface's own (an App's
+ * `settings.accent`, a Chatbot's `appearance.primary_color`, …) so that mapping
+ * lives in ONE place.
  *
  * Inheritance is "fill the gaps": each apply* method only sets a surface value the
  * surface left unset, so a per-view override always wins over the brand default.
@@ -18,13 +19,14 @@ final class OrganizationBrand
 
     public const THEMES = ['light', 'dark'];
 
+    /** The platform's default accent (the `--sp-accent-blue` token) — the brand's accent falls back to this. */
+    public const DEFAULT_ACCENT = '#0096ff';
+
     public function __construct(
         public readonly ?string $logoUrl = null,
         public readonly ?string $iconUrl = null,
         public readonly ?string $iconEmoji = null,
-        public readonly ?string $primaryColor = null,
-        public readonly ?string $backgroundColor = null,
-        public readonly ?string $textColor = null,
+        public readonly ?string $accentColor = null,
         public readonly ?string $font = null,
         public readonly ?string $theme = null,
     ) {}
@@ -40,9 +42,7 @@ final class OrganizationBrand
             logoUrl: self::str($data['logo_url'] ?? null),
             iconUrl: self::str($data['icon_url'] ?? null),
             iconEmoji: self::str($data['icon_emoji'] ?? null),
-            primaryColor: self::hex($data['primary_color'] ?? null),
-            backgroundColor: self::hex($data['background_color'] ?? null),
-            textColor: self::hex($data['text_color'] ?? null),
+            accentColor: self::hex($data['accent_color'] ?? null),
             font: in_array($data['font'] ?? null, self::FONTS, true) ? $data['font'] : null,
             theme: in_array($data['theme'] ?? null, self::THEMES, true) ? $data['theme'] : null,
         );
@@ -60,9 +60,7 @@ final class OrganizationBrand
             'logo_url' => $this->logoUrl,
             'icon_url' => $this->iconUrl,
             'icon_emoji' => $this->iconEmoji,
-            'primary_color' => $this->primaryColor,
-            'background_color' => $this->backgroundColor,
-            'text_color' => $this->textColor,
+            'accent_color' => $this->accentColor,
             'font' => $this->font,
             'theme' => $this->theme,
         ];
@@ -73,18 +71,24 @@ final class OrganizationBrand
         return array_filter($this->toArray(), fn ($v) => $v !== null) === [];
     }
 
+    /** The accent the brand resolves to, falling back to the platform default. */
+    public function effectiveAccent(): string
+    {
+        return $this->accentColor ?? self::DEFAULT_ACCENT;
+    }
+
     /**
      * Fill an App manifest `settings` block with the brand where the app left a
      * value unset (the app's own choices win). Maps brand → app vocabulary:
-     * primaryColor → accent, logoUrl → brand.logo.
+     * accentColor → accent, logoUrl → brand.logo.
      *
      * @param  array<string, mixed>  $settings
      * @return array<string, mixed>
      */
     public function applyToAppSettings(array $settings): array
     {
-        if ($this->primaryColor !== null && empty($settings['accent'])) {
-            $settings['accent'] = $this->primaryColor;
+        if ($this->accentColor !== null && empty($settings['accent'])) {
+            $settings['accent'] = $this->accentColor;
         }
         if ($this->font !== null && empty($settings['font'])) {
             $settings['font'] = $this->font;
@@ -105,7 +109,9 @@ final class OrganizationBrand
 
     /**
      * Fill a Chatbot widget `appearance` block with the brand where it left a
-     * value at its built-in default. Maps brand → widget vocabulary.
+     * value at its built-in default. The brand owns only the accent (→ the
+     * widget's primary_color) and the logo; the widget keeps its own
+     * background/text colours.
      *
      * @param  array<string, mixed>  $appearance
      * @param  array<string, mixed>  $defaults  the widget's built-in defaults, so we only override values still at default
@@ -123,9 +129,7 @@ final class OrganizationBrand
             }
         };
 
-        $fill('primary_color', $this->primaryColor);
-        $fill('background_color', $this->backgroundColor);
-        $fill('text_color', $this->textColor);
+        $fill('primary_color', $this->accentColor);
         $fill('logo_url', $this->logoUrl);
 
         return $appearance;

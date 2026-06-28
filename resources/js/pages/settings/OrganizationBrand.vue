@@ -5,15 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import {
-    ImagePlus,
-    Loader2,
-    Palette,
-    Plus,
-    Sparkles,
-    Type,
-    X,
-} from '@lucide/vue';
+import { ImagePlus, Loader2, Palette, Sparkles, Type } from '@lucide/vue';
 import axios from 'axios';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -23,9 +15,7 @@ interface Brand {
     logo_url: string | null;
     icon_url: string | null;
     icon_emoji: string | null;
-    primary_color: string | null;
-    background_color: string | null;
-    text_color: string | null;
+    accent_color: string | null;
     font: string | null;
     theme: string | null;
 }
@@ -34,13 +24,15 @@ const props = defineProps<{ brand: Brand }>();
 
 const { t } = useI18n();
 
+// The platform default accent (the --sp-accent-blue token); the accent picker
+// starts here so the brand colour defaults to the standard blue.
+const DEFAULT_ACCENT = '#0096ff';
+
 const form = useForm({
     logo_url: props.brand.logo_url ?? '',
     icon_url: props.brand.icon_url ?? '',
     icon_emoji: props.brand.icon_emoji ?? '',
-    primary_color: props.brand.primary_color ?? '',
-    background_color: props.brand.background_color ?? '',
-    text_color: props.brand.text_color ?? '',
+    accent_color: props.brand.accent_color ?? DEFAULT_ACCENT,
     font: props.brand.font ?? '',
     theme: props.brand.theme ?? '',
 });
@@ -92,14 +84,14 @@ function submit(): void {
     });
 }
 
-// Live preview tokens.
+// Live preview tokens — background/text follow the light/dark theme; the brand
+// owns the accent only.
 const previewStyle = computed(() => ({
-    background:
-        form.theme === 'dark' ? '#0b1220' : form.background_color || '#ffffff',
-    color: form.theme === 'dark' ? '#e5e7eb' : form.text_color || '#1f2937',
+    background: form.theme === 'dark' ? '#0b1220' : '#ffffff',
+    color: form.theme === 'dark' ? '#e5e7eb' : '#1f2937',
     fontFamily: form.font ? FONT_STACKS[form.font] : 'inherit',
 }));
-const accent = computed(() => form.primary_color || '#3b82f6');
+const accent = computed(() => form.accent_color || DEFAULT_ACCENT);
 </script>
 
 <template>
@@ -229,83 +221,41 @@ const accent = computed(() => form.primary_color || '#3b82f6');
                 </div>
             </SettingsCard>
 
-            <!-- Colours. -->
+            <!-- Accent colour (the single brand colour). -->
             <SettingsCard
                 :icon="Palette"
                 :title="t('settings.brand.colors')"
                 :description="t('settings.brand.colors_hint')"
                 tint="var(--sp-accent-violet)"
             >
-                <div class="grid gap-3 sm:grid-cols-3">
-                    <div
-                        v-for="c in [
-                            {
-                                key: 'primary_color',
-                                label: t('settings.brand.primary'),
-                            },
-                            {
-                                key: 'background_color',
-                                label: t('settings.brand.background'),
-                            },
-                            {
-                                key: 'text_color',
-                                label: t('settings.brand.text'),
-                            },
-                        ]"
-                        :key="c.key"
-                        class="space-y-1.5"
-                    >
-                        <Label>{{ c.label }}</Label>
-                        <div class="flex items-center gap-2">
-                            <label
-                                class="relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-xs border bg-surface"
-                                :class="
-                                    (form as any)[c.key]
-                                        ? 'border-soft'
-                                        : 'border-dashed border-medium'
-                                "
-                                :style="
-                                    (form as any)[c.key]
-                                        ? { background: (form as any)[c.key] }
-                                        : {}
-                                "
-                                :title="t('settings.brand.pick_color')"
-                            >
-                                <Plus
-                                    v-if="!(form as any)[c.key]"
-                                    class="size-3.5 text-ink-muted"
-                                />
-                                <input
-                                    type="color"
-                                    :value="(form as any)[c.key] || '#3b82f6'"
-                                    class="absolute inset-0 size-full cursor-pointer opacity-0"
-                                    @input="
-                                        (form as any)[c.key] = (
-                                            $event.target as HTMLInputElement
-                                        ).value
-                                    "
-                                />
-                            </label>
-                            <Input
-                                :model-value="(form as any)[c.key]"
-                                class="h-9"
-                                placeholder="#RRGGBB"
-                                @update:model-value="
-                                    (form as any)[c.key] = $event
+                <div class="space-y-1.5 sm:max-w-xs">
+                    <Label>{{ t('settings.brand.accent') }}</Label>
+                    <div class="flex items-center gap-2">
+                        <label
+                            class="size-9 shrink-0 cursor-pointer rounded-xs border border-soft"
+                            :style="{
+                                background: form.accent_color || DEFAULT_ACCENT,
+                            }"
+                            :title="t('settings.brand.pick_color')"
+                        >
+                            <input
+                                type="color"
+                                :value="form.accent_color || DEFAULT_ACCENT"
+                                class="size-0 opacity-0"
+                                @input="
+                                    form.accent_color = (
+                                        $event.target as HTMLInputElement
+                                    ).value
                                 "
                             />
-                            <button
-                                v-if="(form as any)[c.key]"
-                                type="button"
-                                class="inline-flex size-9 shrink-0 items-center justify-center rounded-xs border border-soft text-ink-muted transition-colors hover:text-ink"
-                                :title="t('settings.brand.clear')"
-                                @click="(form as any)[c.key] = ''"
-                            >
-                                <X class="size-3.5" />
-                            </button>
-                        </div>
-                        <InputError :message="(form.errors as any)[c.key]" />
+                        </label>
+                        <Input
+                            v-model="form.accent_color"
+                            class="h-9"
+                            placeholder="#RRGGBB"
+                        />
                     </div>
+                    <InputError :message="form.errors.accent_color" />
                 </div>
             </SettingsCard>
 

@@ -31,14 +31,14 @@ beforeEach(function () {
 });
 
 it('renders the brandbook page for an org admin with the current brand', function () {
-    $this->org->update(['brand' => ['primary_color' => '#123456', 'font' => 'serif']]);
+    $this->org->update(['brand' => ['accent_color' => '#123456', 'font' => 'serif']]);
 
     $this->actingAs($this->owner)
         ->get('/settings/organization/brand')
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('settings/OrganizationBrand')
-            ->where('brand.primary_color', '#123456')
+            ->where('brand.accent_color', '#123456')
             ->where('brand.font', 'serif'));
 });
 
@@ -51,7 +51,7 @@ it('forbids a non-admin from viewing the brandbook page', function () {
 it('lets an org owner save the brandbook (normalized)', function () {
     $this->actingAs($this->owner)
         ->put('/settings/organization/brand', [
-            'primary_color' => '#1A2B3C',
+            'accent_color' => '#1A2B3C',
             'font' => 'serif',
             'theme' => 'dark',
             'logo_url' => 'https://cdn.example.com/logo.png',
@@ -60,7 +60,7 @@ it('lets an org owner save the brandbook (normalized)', function () {
         ->assertSessionHasNoErrors();
 
     $brand = $this->org->refresh()->brandbook();
-    expect($brand->primaryColor)->toBe('#1A2B3C')
+    expect($brand->accentColor)->toBe('#1A2B3C')
         ->and($brand->font)->toBe('serif')
         ->and($brand->theme)->toBe('dark')
         ->and($brand->logoUrl)->toBe('https://cdn.example.com/logo.png');
@@ -68,13 +68,13 @@ it('lets an org owner save the brandbook (normalized)', function () {
 
 it('rejects an invalid colour', function () {
     $this->actingAs($this->owner)
-        ->put('/settings/organization/brand', ['primary_color' => 'blue'])
-        ->assertSessionHasErrors('primary_color');
+        ->put('/settings/organization/brand', ['accent_color' => 'blue'])
+        ->assertSessionHasErrors('accent_color');
 });
 
 it('forbids a non-admin member from editing the brand', function () {
     $this->actingAs($this->member)
-        ->put('/settings/organization/brand', ['primary_color' => '#000000'])
+        ->put('/settings/organization/brand', ['accent_color' => '#000000'])
         ->assertForbidden();
 
     expect($this->org->refresh()->brand)->toBeNull();

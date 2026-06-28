@@ -23,7 +23,7 @@ beforeEach(function () {
 });
 
 it('reads the organization brand', function () {
-    $this->org->update(['brand' => ['primary_color' => '#123456', 'font' => 'serif']]);
+    $this->org->update(['brand' => ['accent_color' => '#123456', 'font' => 'serif']]);
 
     SapiensServer::actingAs($this->owner)
         ->tool(GetOrganizationBrandTool::class, [])
@@ -33,7 +33,7 @@ it('reads the organization brand', function () {
 });
 
 it('lets an owner set the brand (partial, normalized)', function () {
-    $this->org->update(['brand' => ['primary_color' => '#000000']]);
+    $this->org->update(['brand' => ['accent_color' => '#000000']]);
 
     SapiensServer::actingAs($this->owner)
         ->tool(SetOrganizationBrandTool::class, ['font' => 'rounded', 'theme' => 'dark'])
@@ -41,20 +41,20 @@ it('lets an owner set the brand (partial, normalized)', function () {
         ->assertSee('updated');
 
     $brand = Organization::find($this->org->id)->brandbook();
-    expect($brand->primaryColor)->toBe('#000000')  // untouched key preserved
+    expect($brand->accentColor)->toBe('#000000')  // untouched key preserved
         ->and($brand->font)->toBe('rounded')        // merged
         ->and($brand->theme)->toBe('dark');
 });
 
 it('rejects an invalid colour', function () {
     SapiensServer::actingAs($this->owner)
-        ->tool(SetOrganizationBrandTool::class, ['primary_color' => 'blue'])
+        ->tool(SetOrganizationBrandTool::class, ['accent_color' => 'blue'])
         ->assertHasErrors();
 });
 
 it('forbids a non-admin member from setting the brand', function () {
     SapiensServer::actingAs($this->member)
-        ->tool(SetOrganizationBrandTool::class, ['primary_color' => '#abcdef'])
+        ->tool(SetOrganizationBrandTool::class, ['accent_color' => '#abcdef'])
         ->assertHasErrors();
 
     expect(Organization::find($this->org->id)->brand)->toBeNull();

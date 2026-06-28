@@ -30,7 +30,7 @@ beforeEach(function () {
     $this->org = Organization::create([
         'name' => 'Acme',
         'slug' => 'acme-'.Str::lower(Str::random(6)),
-        'brand' => ['primary_color' => '#AB12CD', 'font' => 'serif', 'logo_url' => 'https://cdn.example.com/brand.png'],
+        'brand' => ['accent_color' => '#AB12CD', 'font' => 'serif', 'logo_url' => 'https://cdn.example.com/brand.png'],
     ]);
     $this->owner = User::factory()->create(['email_verified_at' => now(), 'organization_id' => $this->org->id]);
     OrganizationMembership::create([
