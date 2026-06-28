@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppRenderer from '@/runtime/AppRenderer.vue';
+import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import SiteFooter from '@/runtime/SiteFooter.vue';
@@ -45,13 +46,28 @@ const navItems = computed(
         undefined,
 );
 
-// In the sidebar layout the page title lives in a top bar that aligns with the
-// sidebar header band — so drop a leading heading block that just repeats the
-// page name (avoids showing the title twice).
-const contentBlocks = computed(() => {
+// In the sidebar layout the top band hosts the breadcrumb (above the page
+// title). If the page authors a breadcrumb block it moves up there; otherwise
+// the band falls back to the page name as the title.
+const breadcrumbBlock = computed(() => {
+    if (!useSidebar.value) {
+        return null;
+    }
     const blocks = (props.page.blocks ?? []) as Array<Record<string, unknown>>;
+    return blocks.find((b) => b.type === 'breadcrumb') ?? null;
+});
+
+// Sidebar body: lift the breadcrumb out (it lives in the band). When the band
+// shows the page name as title instead, drop a leading heading that repeats it
+// so the title never appears twice.
+const contentBlocks = computed(() => {
+    let blocks = (props.page.blocks ?? []) as Array<Record<string, unknown>>;
+    if (!useSidebar.value) {
+        return blocks;
+    }
+    blocks = blocks.filter((b) => b.type !== 'breadcrumb');
     if (
-        useSidebar.value &&
+        !breadcrumbBlock.value &&
         blocks[0]?.type === 'heading' &&
         String(blocks[0].content ?? '')
             .trim()
@@ -118,7 +134,14 @@ useScrollReveal(sectionsEl);
                         <PanelLeftOpen v-if="sidebarCollapsed" class="size-5" />
                         <PanelLeftClose v-else class="size-5" />
                     </button>
-                    <h1 class="truncate text-xl font-semibold tracking-tight">
+                    <BlockBreadcrumb
+                        v-if="breadcrumbBlock"
+                        :block="(breadcrumbBlock as any)"
+                    />
+                    <h1
+                        v-else
+                        class="truncate text-xl font-semibold tracking-tight"
+                    >
                         {{ page.name }}
                     </h1>
                 </header>

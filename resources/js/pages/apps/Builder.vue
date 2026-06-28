@@ -37,6 +37,7 @@ import {
     type SlashCommand,
 } from '@/lib/builderSlashCommands';
 import AppRenderer from '@/runtime/AppRenderer.vue';
+import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
@@ -1058,14 +1059,30 @@ const previewNavItems = computed(
         (props.manifest?.navigation as { items?: unknown[] } | null)?.items ??
         undefined,
 );
-// Drop a leading heading that repeats the page name (the title bar shows it).
-const previewContentBlocks = computed(() => {
+// The breadcrumb lifts into the title band (above the page title); only in the
+// sidebar layout, mirroring the runtime.
+const previewBreadcrumbBlock = computed(() => {
+    if (!previewSidebar.value) {
+        return null;
+    }
     const blocks = (props.preview?.page?.blocks ?? []) as Array<
+        Record<string, unknown>
+    >;
+    return blocks.find((b) => b.type === 'breadcrumb') ?? null;
+});
+// Lift the breadcrumb out; when the band shows the page name, drop a leading
+// heading that repeats it so the title never appears twice.
+const previewContentBlocks = computed(() => {
+    let blocks = (props.preview?.page?.blocks ?? []) as Array<
         Record<string, unknown>
     >;
     const name =
         (props.preview?.page as { name?: string } | undefined)?.name ?? '';
+    if (previewSidebar.value) {
+        blocks = blocks.filter((b) => b.type !== 'breadcrumb');
+    }
     if (
+        !(previewSidebar.value && previewBreadcrumbBlock.value) &&
         blocks[0]?.type === 'heading' &&
         String(blocks[0].content ?? '')
             .trim()
@@ -2679,7 +2696,12 @@ function statusTone(status: Message['status']): string {
                                                 class="size-5"
                                             />
                                         </button>
+                                        <BlockBreadcrumb
+                                            v-if="previewBreadcrumbBlock"
+                                            :block="(previewBreadcrumbBlock as any)"
+                                        />
                                         <h1
+                                            v-else
                                             class="truncate text-xl font-semibold tracking-tight"
                                         >
                                             {{ preview.page.name }}

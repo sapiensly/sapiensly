@@ -131,7 +131,7 @@ const activeStyle = {
             :class="
                 collapsed
                     ? 'items-center justify-center'
-                    : 'flex-col justify-center gap-1'
+                    : 'flex-col items-start justify-center gap-1'
             "
             :style="{
                 borderColor:
