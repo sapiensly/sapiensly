@@ -2485,6 +2485,7 @@
                     "properties": {
                         "name": { "type": "string", "maxLength": 80 },
                         "logo": { "type": "string", "maxLength": 2000, "description": "Optional logo image URL." },
+                        "header_bg": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "description": "Optional background colour (hex) for the site header bar that holds the logo + main menu. Header text auto-picks a readable contrast. Inherited from the org Brandbook's 'Logo bg color' when unset." },
                         "cta": {
                             "type": "object",
                             "additionalProperties": false,

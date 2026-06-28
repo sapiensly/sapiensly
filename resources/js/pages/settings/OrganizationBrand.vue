@@ -16,6 +16,7 @@ interface Brand {
     icon_url: string | null;
     icon_emoji: string | null;
     accent_color: string | null;
+    logo_bg_color: string | null;
     font: string | null;
     theme: string | null;
 }
@@ -33,6 +34,7 @@ const form = useForm({
     icon_url: props.brand.icon_url ?? '',
     icon_emoji: props.brand.icon_emoji ?? '',
     accent_color: props.brand.accent_color ?? DEFAULT_ACCENT,
+    logo_bg_color: props.brand.logo_bg_color ?? '',
     font: props.brand.font ?? '',
     theme: props.brand.theme ?? '',
 });
@@ -92,6 +94,26 @@ const previewStyle = computed(() => ({
     fontFamily: form.font ? FONT_STACKS[form.font] : 'inherit',
 }));
 const accent = computed(() => form.accent_color || DEFAULT_ACCENT);
+
+// The preview header strip adopts the logo bg colour with a readable text colour.
+function readableText(hex: string): string {
+    const c = hex.replace('#', '');
+    if (c.length !== 6) return '';
+    const r = parseInt(c.slice(0, 2), 16);
+    const g = parseInt(c.slice(2, 4), 16);
+    const b = parseInt(c.slice(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6
+        ? '#0f172a'
+        : '#f8fafc';
+}
+const previewHeaderStyle = computed(() =>
+    form.logo_bg_color
+        ? {
+              background: form.logo_bg_color,
+              color: readableText(form.logo_bg_color),
+          }
+        : {},
+);
 </script>
 
 <template>
@@ -111,6 +133,7 @@ const accent = computed(() => form.accent_color || DEFAULT_ACCENT);
                 >
                     <div
                         class="flex items-center gap-2 border-b border-black/10 px-4 py-3"
+                        :style="previewHeaderStyle"
                     >
                         <img
                             v-if="form.logo_url"
@@ -256,6 +279,47 @@ const accent = computed(() => form.accent_color || DEFAULT_ACCENT);
                         />
                     </div>
                     <InputError :message="form.errors.accent_color" />
+                </div>
+
+                <div class="mt-4 space-y-1.5 sm:max-w-xs">
+                    <Label>{{ t('settings.brand.logo_bg') }}</Label>
+                    <div class="flex items-center gap-2">
+                        <label
+                            class="size-9 shrink-0 cursor-pointer rounded-xs border border-soft"
+                            :style="{
+                                background: form.logo_bg_color || '#ffffff',
+                            }"
+                            :title="t('settings.brand.pick_color')"
+                        >
+                            <input
+                                type="color"
+                                :value="form.logo_bg_color || '#ffffff'"
+                                class="size-0 opacity-0"
+                                @input="
+                                    form.logo_bg_color = (
+                                        $event.target as HTMLInputElement
+                                    ).value
+                                "
+                            />
+                        </label>
+                        <Input
+                            v-model="form.logo_bg_color"
+                            class="h-9"
+                            placeholder="#RRGGBB"
+                        />
+                        <button
+                            v-if="form.logo_bg_color"
+                            type="button"
+                            class="shrink-0 text-xs text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+                            @click="form.logo_bg_color = ''"
+                        >
+                            {{ t('settings.brand.clear') }}
+                        </button>
+                    </div>
+                    <p class="text-xs text-ink-muted">
+                        {{ t('settings.brand.logo_bg_hint') }}
+                    </p>
+                    <InputError :message="form.errors.logo_bg_color" />
                 </div>
             </SettingsCard>
 

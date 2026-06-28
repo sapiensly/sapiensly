@@ -27,6 +27,7 @@ final class OrganizationBrand
         public readonly ?string $iconUrl = null,
         public readonly ?string $iconEmoji = null,
         public readonly ?string $accentColor = null,
+        public readonly ?string $logoBgColor = null,
         public readonly ?string $font = null,
         public readonly ?string $theme = null,
     ) {}
@@ -43,6 +44,7 @@ final class OrganizationBrand
             iconUrl: self::str($data['icon_url'] ?? null),
             iconEmoji: self::str($data['icon_emoji'] ?? null),
             accentColor: self::hex($data['accent_color'] ?? null),
+            logoBgColor: self::hex($data['logo_bg_color'] ?? null),
             font: in_array($data['font'] ?? null, self::FONTS, true) ? $data['font'] : null,
             theme: in_array($data['theme'] ?? null, self::THEMES, true) ? $data['theme'] : null,
         );
@@ -61,6 +63,7 @@ final class OrganizationBrand
             'icon_url' => $this->iconUrl,
             'icon_emoji' => $this->iconEmoji,
             'accent_color' => $this->accentColor,
+            'logo_bg_color' => $this->logoBgColor,
             'font' => $this->font,
             'theme' => $this->theme,
         ];
@@ -96,12 +99,15 @@ final class OrganizationBrand
         if ($this->theme !== null && empty($settings['theme'])) {
             $settings['theme'] = $this->theme;
         }
-        if ($this->logoUrl !== null) {
+        if ($this->logoUrl !== null || $this->logoBgColor !== null) {
             $brand = $settings['brand'] ?? [];
-            if (empty($brand['logo'])) {
+            if ($this->logoUrl !== null && empty($brand['logo'])) {
                 $brand['logo'] = $this->logoUrl;
-                $settings['brand'] = $brand;
             }
+            if ($this->logoBgColor !== null && empty($brand['header_bg'])) {
+                $brand['header_bg'] = $this->logoBgColor;
+            }
+            $settings['brand'] = $brand;
         }
 
         return $settings;

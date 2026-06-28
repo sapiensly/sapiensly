@@ -61,6 +61,17 @@ it('fills app accent and logo when the app left them unset', function () {
         ->and($settings['brand']['logo'])->toBe('https://cdn/logo.png');
 });
 
+it('maps the logo bg colour to the app header background', function () {
+    $brand = OrganizationBrand::fromArray(['logo_bg_color' => '#102030']);
+
+    // Fills when unset.
+    expect($brand->applyToAppSettings([])['brand']['header_bg'])->toBe('#102030');
+
+    // App's own header_bg wins.
+    $kept = $brand->applyToAppSettings(['brand' => ['header_bg' => '#ABCDEF']]);
+    expect($kept['brand']['header_bg'])->toBe('#ABCDEF');
+});
+
 it('maps the brand accent to the chatbot primary_color, leaving bg/text alone', function () {
     $brand = OrganizationBrand::fromArray([
         'accent_color' => '#FF0000',

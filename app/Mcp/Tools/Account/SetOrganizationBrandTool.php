@@ -19,7 +19,7 @@ class SetOrganizationBrandTool extends SapiensTool
 
     /** Canonical brand fields this tool accepts. */
     private const FIELDS = [
-        'logo_url', 'icon_url', 'icon_emoji', 'accent_color', 'font', 'theme',
+        'logo_url', 'icon_url', 'icon_emoji', 'accent_color', 'logo_bg_color', 'font', 'theme',
     ];
 
     public function handle(Request $request): Response
@@ -39,6 +39,7 @@ class SetOrganizationBrandTool extends SapiensTool
             'icon_url' => ['nullable', 'string', 'max:2000'],
             'icon_emoji' => ['nullable', 'string', 'max:16'],
             'accent_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'logo_bg_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'font' => ['nullable', Rule::in(OrganizationBrand::FONTS)],
             'theme' => ['nullable', Rule::in(OrganizationBrand::THEMES)],
         ]);
@@ -71,6 +72,7 @@ class SetOrganizationBrandTool extends SapiensTool
             'icon_url' => $schema->string()->description('Square icon image URL. Pass null to clear.'),
             'icon_emoji' => $schema->string()->description('Emoji used as the icon when no icon image is set.'),
             'accent_color' => $schema->string()->description('Brand accent colour as #RRGGBB (defaults to the platform blue '.OrganizationBrand::DEFAULT_ACCENT.' when unset).'),
+            'logo_bg_color' => $schema->string()->description('Background colour (#RRGGBB) for an app\'s header bar (logo + main menu). Header text auto-contrasts. Unset → the subtle default header.'),
             'font' => $schema->string()->enum(OrganizationBrand::FONTS)->description('Default font family.'),
             'theme' => $schema->string()->enum(OrganizationBrand::THEMES)->description('Default colour palette (light/dark).'),
         ];

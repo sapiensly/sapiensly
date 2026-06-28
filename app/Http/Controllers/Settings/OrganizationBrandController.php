@@ -23,7 +23,7 @@ class OrganizationBrandController extends Controller
 {
     /** The brand fields accepted from the form, in canonical (stored) vocabulary. */
     private const FIELDS = [
-        'logo_url', 'icon_url', 'icon_emoji', 'accent_color', 'font', 'theme',
+        'logo_url', 'icon_url', 'icon_emoji', 'accent_color', 'logo_bg_color', 'font', 'theme',
     ];
 
     public function show(Request $request): Response
@@ -44,6 +44,7 @@ class OrganizationBrandController extends Controller
             'icon_url' => ['nullable', 'string', 'max:2000'],
             'icon_emoji' => ['nullable', 'string', 'max:16'],
             'accent_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'logo_bg_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'font' => ['nullable', Rule::in(OrganizationBrand::FONTS)],
             'theme' => ['nullable', Rule::in(OrganizationBrand::THEMES)],
         ]);
