@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue';
+import RuntimeIcon from '../RuntimeIcon.vue';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
 
 interface ButtonBlock {
@@ -37,15 +38,18 @@ const variantClass = computed(() => {
 
 const sizeClass = computed(() => {
     switch (props.block.size ?? 'md') {
-        case 'sm': return 'px-2.5 py-1 text-[11px]';
-        case 'lg': return 'px-4 py-2 text-sm';
-        default: return 'px-3.5 py-1.5 text-xs';
+        case 'sm':
+            return 'px-2.5 py-1 text-[11px]';
+        case 'lg':
+            return 'px-4 py-2 text-sm';
+        default:
+            return 'px-3.5 py-1.5 text-xs';
     }
 });
 
 async function click() {
     if (props.block.confirm?.message) {
-        if (! window.confirm(props.block.confirm.message)) return;
+        if (!window.confirm(props.block.confirm.message)) return;
     }
     await execute(props.block.on_click ?? [], { appSlug });
 }
@@ -55,8 +59,13 @@ async function click() {
     <button
         type="button"
         @click="click"
-        :class="['inline-flex items-center gap-1.5 rounded-pill font-medium transition-colors', variantClass, sizeClass]"
+        :class="[
+            'inline-flex items-center gap-1.5 rounded-pill font-medium transition-colors',
+            variantClass,
+            sizeClass,
+        ]"
     >
+        <RuntimeIcon v-if="block.icon" :name="block.icon" :size="15" />
         {{ block.label }}
     </button>
 </template>

@@ -366,7 +366,15 @@ it('ReadManifestTool stays on the active manifest after a failed propose_change'
 it('FrameworkReferenceTool lists its topics when called with no topic', function () {
     $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest([])), true);
 
-    expect($result['topics'])->toContain('forms', 'workflows', 'derived_fields', 'expressions', 'design', 'custom_css', 'permissions', 'verification', 'visual_review', 'connected_objects', 'example');
+    expect($result['topics'])->toContain('forms', 'workflows', 'derived_fields', 'expressions', 'design', 'icons', 'custom_css', 'permissions', 'verification', 'visual_review', 'connected_objects', 'example');
+});
+
+it('FrameworkReferenceTool documents named icons + emoji for any block icon', function () {
+    $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'icons'])), true);
+
+    expect($result['topic'])->toBe('icons')
+        ->and($result['reference'])->toContain('list_available_icons')
+        ->and($result['reference'])->toContain('button.icon');
 });
 
 it('FrameworkReferenceTool documents the scoped custom_css escape hatch', function () {

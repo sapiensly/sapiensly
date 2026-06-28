@@ -122,6 +122,16 @@ CONNECTING EXTERNAL SYSTEMS (integrations):
   - The sample call IS the verification that the mapping is real; confirm the mapping with the user before proposing if unsure. Data stays in the external system (passthrough) — you are NOT copying it in.
 TXT,
 
+        'icons' => <<<'TXT'
+ICONS (use them liberally for clear, scannable UIs):
+- Almost every chrome element takes an `icon`: button.icon, feature_grid items, stat/metric_grid items, insight, flow steps, table action columns (columns[type=action].icon), page.icon (shown in nav), nav items, card_grid items. Add icons by default — a button labelled "Add" reads better with a `plus`, a revenue stat with a `dollar`, a delete action with a `trash`.
+- TWO kinds of value, both valid:
+  - a NAMED icon (preferred for UI chrome): a kebab-case Lucide name like `shopping-cart`, `user`, `calendar`, `trending-up`, `trash`. Renders as a crisp vector icon that inherits the surrounding text/accent colour and sizes to the context. Call `list_available_icons` for the full set — use a name verbatim; an unknown name silently falls back to plain text, so pick from the list.
+  - an EMOJI (fine for playful/marketing accents): "🚀", "📦". Renders as-is.
+- Guidance: prefer NAMED icons for app chrome (buttons, table actions, stats, nav) — they stay monochrome and on-brand. Reach for emoji on landing/feature sections when you want colour and personality. Don't mix both styles within one toolbar/row. Match the icon to meaning (a `check` for confirm, `x`/`trash` for destructive, `pencil`/`edit` to edit).
+- Example action column: {"type":"action","label":"Edit","icon":"pencil","on_click":[…]} ; KPI stat: {"type":"stat","label":"Revenue","icon":"dollar",…} ; feature card: {"icon":"shield-check","title":"Secure",…}.
+TXT,
+
         'custom_css' => <<<'TXT'
 CUSTOM CSS (settings.custom_css — the scoped escape hatch):
 - WHAT IT IS: raw CSS for fine visual touches the structured options can't express (hover/transition effects, ::before/::after accents, gradients on a specific block, custom shadows, a bespoke card look). Set it at `settings.custom_css` via propose_change (path "/settings/custom_css").
@@ -247,7 +257,7 @@ TXT,
     {
         $topics = implode(', ', array_keys(self::TOPICS));
 
-        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `custom_css` (the scoped raw-CSS escape hatch + targeting hooks), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
+        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `icons` (named icons + emoji for any block icon), `custom_css` (the scoped raw-CSS escape hatch + targeting hooks), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
     }
 
     public function schema(JsonSchema $schema): array

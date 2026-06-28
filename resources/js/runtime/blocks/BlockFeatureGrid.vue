@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import RuntimeIcon from '../RuntimeIcon.vue';
 
 interface FeatureItem {
     id?: string;
@@ -38,13 +39,21 @@ const colsClass = computed(
             :key="item.id ?? i"
             class="rounded-xl border p-5"
             :style="{
-                borderColor: 'color-mix(in srgb, currentColor 16%, transparent)',
-                backgroundColor: 'color-mix(in srgb, currentColor 5%, transparent)',
+                borderColor:
+                    'color-mix(in srgb, currentColor 16%, transparent)',
+                backgroundColor:
+                    'color-mix(in srgb, currentColor 5%, transparent)',
             }"
         >
-            <div v-if="item.icon" class="mb-3 text-3xl leading-none">{{ item.icon }}</div>
+            <div v-if="item.icon" class="mb-3">
+                <RuntimeIcon :name="item.icon" :size="30" />
+            </div>
             <h3 class="text-base font-semibold">{{ item.title }}</h3>
-            <p v-if="item.description" class="mt-1.5 text-sm" :style="{ opacity: 0.75 }">
+            <p
+                v-if="item.description"
+                class="mt-1.5 text-sm"
+                :style="{ opacity: 0.75 }"
+            >
                 {{ item.description }}
             </p>
         </div>

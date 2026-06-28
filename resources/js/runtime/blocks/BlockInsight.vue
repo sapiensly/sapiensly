@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import RuntimeIcon from '../RuntimeIcon.vue';
 
-type Variant = 'insight' | 'recommendation' | 'conclusion' | 'positive' | 'warning' | 'risk';
+type Variant =
+    | 'insight'
+    | 'recommendation'
+    | 'conclusion'
+    | 'positive'
+    | 'warning'
+    | 'risk';
 interface InsightBlock {
     id: string;
     type: 'insight';
@@ -19,7 +26,10 @@ const props = defineProps<{ block: InsightBlock }>();
 // Each variant carries an accent colour + default emoji. Colours are applied
 // as a left border + tinted background derived from the accent, so the card
 // reads on light or dark sections.
-const VARIANTS: Record<Variant, { color: string; icon: string; label: string }> = {
+const VARIANTS: Record<
+    Variant,
+    { color: string; icon: string; label: string }
+> = {
     insight: { color: '#3B82F6', icon: '💡', label: 'Insight' },
     recommendation: { color: '#8B5CF6', icon: '🎯', label: 'Recomendación' },
     conclusion: { color: '#0EA5E9', icon: '📌', label: 'Conclusión' },
@@ -40,13 +50,30 @@ const v = computed(() => VARIANTS[props.block.variant ?? 'insight']);
             backgroundColor: `color-mix(in srgb, ${v.color} 7%, transparent)`,
         }"
     >
-        <div class="text-2xl leading-none">{{ block.icon || v.icon }}</div>
+        <div><RuntimeIcon :name="block.icon || v.icon" :size="24" /></div>
         <div class="min-w-0 flex-1">
-            <div class="text-[11px] font-semibold uppercase tracking-wider" :style="{ color: v.color }">{{ v.label }}</div>
-            <h3 class="mt-0.5 text-base font-semibold leading-snug">{{ block.title }}</h3>
-            <p v-if="block.body" class="mt-1.5 text-sm leading-relaxed" :style="{ opacity: 0.8 }">{{ block.body }}</p>
+            <div
+                class="text-[11px] font-semibold tracking-wider uppercase"
+                :style="{ color: v.color }"
+            >
+                {{ v.label }}
+            </div>
+            <h3 class="mt-0.5 text-base leading-snug font-semibold">
+                {{ block.title }}
+            </h3>
+            <p
+                v-if="block.body"
+                class="mt-1.5 text-sm leading-relaxed"
+                :style="{ opacity: 0.8 }"
+            >
+                {{ block.body }}
+            </p>
         </div>
-        <div v-if="block.metric" class="shrink-0 self-center text-2xl font-bold tracking-tight" :style="{ color: v.color }">
+        <div
+            v-if="block.metric"
+            class="shrink-0 self-center text-2xl font-bold tracking-tight"
+            :style="{ color: v.color }"
+        >
             {{ block.metric }}
         </div>
     </div>

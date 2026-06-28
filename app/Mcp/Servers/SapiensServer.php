@@ -119,6 +119,7 @@ class SapiensServer extends Server
         Tools\Build\RevokeAppRoleTool::class,
         // Build catalogs.
         Tools\Build\ListAvailableComponentsTool::class,
+        Tools\Build\ListAvailableIconsTool::class,
         Tools\Build\ListAvailableFieldTypesTool::class,
         Tools\Build\ListAvailableActionsTool::class,
         Tools\Build\ListAvailableTriggersTool::class,
