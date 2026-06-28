@@ -7,10 +7,12 @@ use App\Ai\Tools\Builder\CreateIntegrationTool;
 use App\Ai\Tools\Builder\DeleteBlockByIdTool;
 use App\Ai\Tools\Builder\DiscoverIntegrationTool;
 use App\Ai\Tools\Builder\FrameworkReferenceTool;
+use App\Ai\Tools\Builder\GeneratePaletteTool;
 use App\Ai\Tools\Builder\InspectRecordsTool;
 use App\Ai\Tools\Builder\ListAvailableActionsTool;
 use App\Ai\Tools\Builder\ListAvailableComponentsTool;
 use App\Ai\Tools\Builder\ListAvailableFieldTypesTool;
+use App\Ai\Tools\Builder\ListAvailableIconsTool;
 use App\Ai\Tools\Builder\ListAvailableIntegrationsTool;
 use App\Ai\Tools\Builder\ListAvailableStepsTool;
 use App\Ai\Tools\Builder\ListAvailableTriggersTool;
@@ -143,6 +145,8 @@ class BuilderAiService
             new ReadManifestTool($app, $this->manifestService, $proposeTool),
             new FrameworkReferenceTool,
             new ListAvailableComponentsTool,
+            new ListAvailableIconsTool,
+            new GeneratePaletteTool,
             new ListAvailableFieldTypesTool,
             new ListAvailableActionsTool,
             new ListAvailableTriggersTool,
@@ -285,6 +289,8 @@ class BuilderAiService
             new ReadManifestTool($app, $this->manifestService, $proposeTool),
             new FrameworkReferenceTool,
             new ListAvailableComponentsTool,
+            new ListAvailableIconsTool,
+            new GeneratePaletteTool,
             new ListAvailableFieldTypesTool,
             new ListAvailableActionsTool,
             new ListAvailableTriggersTool,
@@ -995,11 +1001,16 @@ On-demand reference (do NOT guess — pull the relevant section first):
    - `derived_fields` — formula / lookup / rollup fields + the implicit sys_created_at / sys_updated_at system fields.
    - `expressions` — formula syntax + the EXHAUSTIVE function catalog (don't invent functions).
    - `design` — theme, per-block style, websites/landing pages, dashboards/reports, chart/kanban/calendar blocks.
+   - `palette` — the brand-derived colour palette (CSS vars --sp-accent-50…900 / --sp-chart-*) for richer-but-executive UIs; `generate_palette` returns the hexes.
+   - `icons` — named icons (list_available_icons) + emoji for ANY block `icon` (buttons, stats, feature cards, table actions, nav).
+   - `custom_css` — the scoped raw-CSS escape hatch (auto-isolated per app) + the data-block-* targeting hooks.
+   - `permissions` — the enforced access layer: roles, object/page policies, row/field restrictions, access_mode.
    - `verification` — when to call simulate_query / inspect_records / seed_records.
    - `visual_review` — how to respond when the user attaches a screenshot.
    - `connected_objects` — integrations: discover/create/test a connection, connected (live external) objects.
    - `example` — a complete minimal valid manifest to pattern-match.
-8. ALSO pull the relevant catalog before inventing values: `list_available_components`/`list_available_field_types` for block/field types, `list_available_actions` for on_click/on_submit, `list_available_triggers`/`list_available_steps` for workflows. NEVER invent block/field/action/trigger/step types — the runtime refuses unknown ones.
+8. ALSO pull the relevant catalog before inventing values: `list_available_components`/`list_available_field_types` for block/field types, `list_available_actions` for on_click/on_submit, `list_available_triggers`/`list_available_steps` for workflows, `list_available_icons` for any block `icon`. NEVER invent block/field/action/trigger/step types — the runtime refuses unknown ones.
+8b. POLISH the look by default: give buttons/stats/feature cards a fitting `icon` (named, from list_available_icons), lean on the brand palette CSS vars (soft tints for section backgrounds, the accent for primary actions, --sp-chart-* for series), and reach for `custom_css` only for touches the structured options can't express. Keep it executive — restrained, consistent, on-brand — not loud. See the `design`, `palette`, `icons` topics.
 
 Completion & honesty (read before ending any turn):
 9. You build apps ONLY from the catalogs: the block types, field types, actions, triggers, workflow steps and expression functions exposed by the list_available_* tools. If the user asks for something NONE of these can express, you CANNOT build it — do not fake it with decorative UI.
