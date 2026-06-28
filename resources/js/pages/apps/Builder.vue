@@ -41,6 +41,7 @@ import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
+import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
 import type {
     BlockData,
     ObjectDef,
@@ -87,6 +88,8 @@ import {
     Minimize2,
     MoreVertical,
     MousePointerClick,
+    PanelLeftClose,
+    PanelLeftOpen,
     Paperclip,
     Plus,
     RotateCcw,
@@ -1041,6 +1044,9 @@ const previewBrand = computed(() => ({
     name: props.app.name,
     ...((previewSettings.value.brand as object) ?? {}),
 }));
+// Shared with the embedded SiteSidebar so the title-bar toggle collapses it.
+const previewSidebarCollapsed = useSidebarCollapsed();
+
 // Mirror the runtime's chrome layout in the preview.
 const previewSidebar = computed(
     () =>
@@ -2645,12 +2651,34 @@ function statusTone(status: Message['status']): string {
                                 />
                                 <div class="min-w-0 flex-1">
                                     <header
-                                        class="flex h-16 shrink-0 items-center border-b px-6"
+                                        class="flex h-16 shrink-0 items-center gap-2 border-b px-6"
                                         :style="{
                                             borderColor:
                                                 'color-mix(in srgb, currentColor 12%, transparent)',
                                         }"
                                     >
+                                        <button
+                                            type="button"
+                                            class="-ml-2 grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                                            :title="
+                                                previewSidebarCollapsed
+                                                    ? 'Expandir menú'
+                                                    : 'Colapsar menú'
+                                            "
+                                            @click="
+                                                previewSidebarCollapsed =
+                                                    !previewSidebarCollapsed
+                                            "
+                                        >
+                                            <PanelLeftOpen
+                                                v-if="previewSidebarCollapsed"
+                                                class="size-5"
+                                            />
+                                            <PanelLeftClose
+                                                v-else
+                                                class="size-5"
+                                            />
+                                        </button>
                                         <h1
                                             class="truncate text-xl font-semibold tracking-tight"
                                         >

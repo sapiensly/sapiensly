@@ -7,7 +7,9 @@ import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
 import type { RuntimePageProps } from '@/runtime/types/manifest';
 import { useScrollReveal } from '@/runtime/useReveal';
+import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
 import { Head } from '@inertiajs/vue3';
+import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
 import { computed, provide, ref } from 'vue';
 
 const props = defineProps<RuntimePageProps>();
@@ -70,6 +72,9 @@ provide('appSlug', props.app.slug);
 // Provide current filter params so a filter_bar block renders pre-filled.
 provide('pageParams', props.params ?? {});
 
+// Shared with SiteSidebar — the toggle lives here, at the start of the title bar.
+const sidebarCollapsed = useSidebarCollapsed();
+
 const sectionsEl = ref<HTMLElement | null>(null);
 useScrollReveal(sectionsEl);
 </script>
@@ -95,14 +100,24 @@ useScrollReveal(sectionsEl);
                 :href-for="hrefFor"
             />
             <div class="flex min-h-screen min-w-0 flex-1 flex-col">
-                <!-- Page-title bar, same height as the sidebar header band. -->
+                <!-- Page-title bar, same height as the sidebar header band.
+                     The sidebar collapse toggle sits at its start (standard spot). -->
                 <header
-                    class="flex h-16 shrink-0 items-center border-b px-6"
+                    class="flex h-16 shrink-0 items-center gap-2 border-b px-6"
                     :style="{
                         borderColor:
                             'color-mix(in srgb, currentColor 12%, transparent)',
                     }"
                 >
+                    <button
+                        type="button"
+                        class="-ml-2 grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                        :title="sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'"
+                        @click="sidebarCollapsed = !sidebarCollapsed"
+                    >
+                        <PanelLeftOpen v-if="sidebarCollapsed" class="size-5" />
+                        <PanelLeftClose v-else class="size-5" />
+                    </button>
                     <h1 class="truncate text-xl font-semibold tracking-tight">
                         {{ page.name }}
                     </h1>

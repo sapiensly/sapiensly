@@ -145,7 +145,7 @@ async function onDeleted(workflowId: string) {
         // exist yet so this will 404. The catch block surfaces it.
     } catch {
         // Friendly fallback — Claude can delete it via the chat.
-        // eslint-disable-next-line no-alert
+         
         window.alert(
             'El borrado directo desde el editor aún no está disponible — pídele a Claude: "borra el workflow ' + workflowId + '".',
         );

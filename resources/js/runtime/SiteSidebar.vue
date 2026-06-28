@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import RuntimeIcon from '@/runtime/RuntimeIcon.vue';
 import RuntimeUserMenu from '@/runtime/RuntimeUserMenu.vue';
-import { ChevronDown, PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
+import { ChevronDown } from '@lucide/vue';
+import { computed, reactive } from 'vue';
 
 interface Brand {
     name?: string;
@@ -89,23 +90,9 @@ function isOpen(n: Node): boolean {
     return groupCollapsed[n.key] === undefined ? true : !groupCollapsed[n.key];
 }
 
-// --- Collapse the whole rail to an icons-only strip (persisted per browser). ---
-const STORAGE_KEY = 'sp-sidebar-collapsed';
-const collapsed = ref(false);
-onMounted(() => {
-    try {
-        collapsed.value = localStorage.getItem(STORAGE_KEY) === '1';
-    } catch {
-        /* ignore (SSR / blocked storage) */
-    }
-});
-watch(collapsed, (v) => {
-    try {
-        localStorage.setItem(STORAGE_KEY, v ? '1' : '0');
-    } catch {
-        /* ignore */
-    }
-});
+// Collapse state is shared with the content panel's title-bar toggle (the
+// standard location for it), so it lives in a module-level singleton.
+const collapsed = useSidebarCollapsed();
 
 const brandIcon = computed(() => props.brand?.icon ?? null);
 function isUrl(s: string): boolean {
@@ -287,25 +274,16 @@ const activeStyle = {
             </template>
         </nav>
 
-        <!-- Footer: collapse toggle + user widget. -->
+        <!-- Footer: user widget (the collapse toggle lives in the page title bar). -->
         <div
-            class="flex items-center gap-2 border-t p-2"
-            :class="collapsed ? 'flex-col' : 'justify-between'"
+            class="flex border-t p-2"
+            :class="collapsed ? 'justify-center' : 'items-center'"
             :style="{
                 borderColor:
                     'color-mix(in srgb, currentColor 12%, transparent)',
             }"
         >
             <RuntimeUserMenu :compact="collapsed" />
-            <button
-                type="button"
-                class="grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                :title="collapsed ? 'Expandir' : 'Colapsar'"
-                @click="collapsed = !collapsed"
-            >
-                <PanelLeftOpen v-if="collapsed" class="size-4" />
-                <PanelLeftClose v-else class="size-4" />
-            </button>
         </div>
     </aside>
 </template>

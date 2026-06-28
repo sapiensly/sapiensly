@@ -79,7 +79,7 @@ async function copyStepId() {
     } catch {
         // Clipboard API can be disabled (HTTP, permission policy); fall
         // back to a manual prompt so the user can still grab the id.
-        // eslint-disable-next-line no-alert
+         
         window.prompt(
             t('apps.builder.workflows.panel.copy_id'),
             stepData.value.id,

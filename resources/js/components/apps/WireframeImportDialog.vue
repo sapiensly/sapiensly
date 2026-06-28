@@ -152,7 +152,7 @@ async function submit() {
         const status = err.response?.status;
         const body = err.response?.data?.message ?? err.response?.data?.error;
         errorText.value = status ? `HTTP ${status}${body ? ' — ' + body : ''}` : (err.message ?? 'Network error');
-        // eslint-disable-next-line no-console
+         
         console.error('Wireframe import failed:', e);
     } finally {
         submitting.value = false;

@@ -254,7 +254,7 @@ async function save() {
         } else {
             errorText.value = body?.message ?? err.message ?? 'Save failed';
         }
-        // eslint-disable-next-line no-console
+         
         console.error(
             'Workflow save failed:',
             e,
@@ -292,7 +292,7 @@ async function run() {
         };
         errorText.value =
             err.response?.data?.message ?? err.message ?? 'Run failed';
-        // eslint-disable-next-line no-console
+         
         console.error('Workflow run failed:', e);
     } finally {
         running.value = false;
