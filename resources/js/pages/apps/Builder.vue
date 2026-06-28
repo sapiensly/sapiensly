@@ -1070,8 +1070,8 @@ const previewBreadcrumbBlock = computed(() => {
     >;
     return blocks.find((b) => b.type === 'breadcrumb') ?? null;
 });
-// Lift the breadcrumb out; when the band shows the page name, drop a leading
-// heading that repeats it so the title never appears twice.
+// The band owns both the breadcrumb and the page title; lift the breadcrumb out
+// and drop a leading heading that repeats the page name so it never doubles.
 const previewContentBlocks = computed(() => {
     let blocks = (props.preview?.page?.blocks ?? []) as Array<
         Record<string, unknown>
@@ -1082,7 +1082,6 @@ const previewContentBlocks = computed(() => {
         blocks = blocks.filter((b) => b.type !== 'breadcrumb');
     }
     if (
-        !(previewSidebar.value && previewBreadcrumbBlock.value) &&
         blocks[0]?.type === 'heading' &&
         String(blocks[0].content ?? '')
             .trim()
@@ -2668,41 +2667,56 @@ function statusTone(status: Message['status']): string {
                                 />
                                 <div class="min-w-0 flex-1">
                                     <header
-                                        class="flex h-16 shrink-0 items-center gap-2 border-b px-6"
+                                        class="flex shrink-0 flex-col justify-center border-b px-6"
+                                        :class="
+                                            previewBreadcrumbBlock
+                                                ? 'gap-1.5 py-3.5'
+                                                : 'h-16'
+                                        "
                                         :style="{
                                             borderColor:
                                                 'color-mix(in srgb, currentColor 12%, transparent)',
                                         }"
                                     >
-                                        <button
-                                            type="button"
-                                            class="-ml-2 grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                                            :title="
-                                                previewSidebarCollapsed
-                                                    ? 'Expandir menú'
-                                                    : 'Colapsar menú'
-                                            "
-                                            @click="
-                                                previewSidebarCollapsed =
-                                                    !previewSidebarCollapsed
-                                            "
-                                        >
-                                            <PanelLeftOpen
-                                                v-if="previewSidebarCollapsed"
-                                                class="size-5"
+                                        <div class="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                class="grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                                                :title="
+                                                    previewSidebarCollapsed
+                                                        ? 'Expandir menú'
+                                                        : 'Colapsar menú'
+                                                "
+                                                @click="
+                                                    previewSidebarCollapsed =
+                                                        !previewSidebarCollapsed
+                                                "
+                                            >
+                                                <PanelLeftOpen
+                                                    v-if="
+                                                        previewSidebarCollapsed
+                                                    "
+                                                    class="size-5"
+                                                />
+                                                <PanelLeftClose
+                                                    v-else
+                                                    class="size-5"
+                                                />
+                                            </button>
+                                            <BlockBreadcrumb
+                                                v-if="previewBreadcrumbBlock"
+                                                :block="(previewBreadcrumbBlock as any)"
                                             />
-                                            <PanelLeftClose
+                                            <h1
                                                 v-else
-                                                class="size-5"
-                                            />
-                                        </button>
-                                        <BlockBreadcrumb
-                                            v-if="previewBreadcrumbBlock"
-                                            :block="(previewBreadcrumbBlock as any)"
-                                        />
+                                                class="truncate text-xl font-semibold tracking-tight"
+                                            >
+                                                {{ preview.page.name }}
+                                            </h1>
+                                        </div>
                                         <h1
-                                            v-else
-                                            class="truncate text-xl font-semibold tracking-tight"
+                                            v-if="previewBreadcrumbBlock"
+                                            class="truncate text-2xl font-bold tracking-tight sm:text-3xl"
                                         >
                                             {{ preview.page.name }}
                                         </h1>

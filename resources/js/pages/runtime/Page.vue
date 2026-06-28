@@ -57,9 +57,9 @@ const breadcrumbBlock = computed(() => {
     return blocks.find((b) => b.type === 'breadcrumb') ?? null;
 });
 
-// Sidebar body: lift the breadcrumb out (it lives in the band). When the band
-// shows the page name as title instead, drop a leading heading that repeats it
-// so the title never appears twice.
+// Sidebar body: the band owns both the breadcrumb and the page title, so lift
+// the breadcrumb out and drop a leading heading that just repeats the page name
+// (the title never appears twice).
 const contentBlocks = computed(() => {
     let blocks = (props.page.blocks ?? []) as Array<Record<string, unknown>>;
     if (!useSidebar.value) {
@@ -67,7 +67,6 @@ const contentBlocks = computed(() => {
     }
     blocks = blocks.filter((b) => b.type !== 'breadcrumb');
     if (
-        !breadcrumbBlock.value &&
         blocks[0]?.type === 'heading' &&
         String(blocks[0].content ?? '')
             .trim()
@@ -116,31 +115,49 @@ useScrollReveal(sectionsEl);
                 :href-for="hrefFor"
             />
             <div class="flex min-h-screen min-w-0 flex-1 flex-col">
-                <!-- Page-title bar, same height as the sidebar header band.
-                     The sidebar collapse toggle sits at its start (standard spot). -->
+                <!-- Top header. With a breadcrumb it carries both the breadcrumb
+                     (top row, beside the collapse toggle) and the page title
+                     beneath it; otherwise a single h-16 row aligned with the
+                     sidebar header band. -->
                 <header
-                    class="flex h-16 shrink-0 items-center gap-2 border-b px-6"
+                    class="flex shrink-0 flex-col justify-center border-b px-6"
+                    :class="breadcrumbBlock ? 'gap-1.5 py-3.5' : 'h-16'"
                     :style="{
                         borderColor:
                             'color-mix(in srgb, currentColor 12%, transparent)',
                     }"
                 >
-                    <button
-                        type="button"
-                        class="-ml-2 grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                        :title="sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'"
-                        @click="sidebarCollapsed = !sidebarCollapsed"
-                    >
-                        <PanelLeftOpen v-if="sidebarCollapsed" class="size-5" />
-                        <PanelLeftClose v-else class="size-5" />
-                    </button>
-                    <BlockBreadcrumb
-                        v-if="breadcrumbBlock"
-                        :block="(breadcrumbBlock as any)"
-                    />
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            class="grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                            :title="
+                                sidebarCollapsed
+                                    ? 'Expandir menú'
+                                    : 'Colapsar menú'
+                            "
+                            @click="sidebarCollapsed = !sidebarCollapsed"
+                        >
+                            <PanelLeftOpen
+                                v-if="sidebarCollapsed"
+                                class="size-5"
+                            />
+                            <PanelLeftClose v-else class="size-5" />
+                        </button>
+                        <BlockBreadcrumb
+                            v-if="breadcrumbBlock"
+                            :block="(breadcrumbBlock as any)"
+                        />
+                        <h1
+                            v-else
+                            class="truncate text-xl font-semibold tracking-tight"
+                        >
+                            {{ page.name }}
+                        </h1>
+                    </div>
                     <h1
-                        v-else
-                        class="truncate text-xl font-semibold tracking-tight"
+                        v-if="breadcrumbBlock"
+                        class="truncate text-2xl font-bold tracking-tight sm:text-3xl"
                     >
                         {{ page.name }}
                     </h1>
