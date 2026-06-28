@@ -19,15 +19,27 @@ use Illuminate\Support\Facades\Log;
  */
 class DerivedFieldsResolver
 {
+    /**
+     * How many relation hops a derived field may chain through (a lookup of a
+     * lookup of a lookup …). Bounds multi-hop resolution and stops a cyclic
+     * lookup/rollup graph from recursing forever.
+     */
+    private const MAX_DEPTH = 5;
+
     public function __construct(private SafeExpressionEvaluator $safe) {}
 
     /**
      * @param  array<string, mixed>  $object  ObjectDef from the manifest
      * @param  array<string, mixed>  $manifest
      * @param  Collection<int, Record>  $records
+     * @param  int  $depth  current relation-hop depth (multi-hop guard)
      */
-    public function enrich(App $app, array $object, Collection $records, array $manifest): void
+    public function enrich(App $app, array $object, Collection $records, array $manifest, int $depth = 0): void
     {
+        if ($depth >= self::MAX_DEPTH) {
+            return;
+        }
+
         $derived = array_values(array_filter(
             $object['fields'],
             fn (array $f) => in_array($f['type'], ['formula', 'lookup', 'rollup'], true),
@@ -40,8 +52,8 @@ class DerivedFieldsResolver
         foreach ($derived as $field) {
             try {
                 match ($field['type']) {
-                    'lookup' => $this->resolveLookup($app, $object, $field, $records, $manifest),
-                    'rollup' => $this->resolveRollup($app, $object, $field, $records, $manifest),
+                    'lookup' => $this->resolveLookup($app, $object, $field, $records, $manifest, $depth),
+                    'rollup' => $this->resolveRollup($app, $object, $field, $records, $manifest, $depth),
                     'formula' => $this->resolveFormula($object, $field, $records),
                 };
             } catch (\Throwable $e) {
@@ -60,7 +72,7 @@ class DerivedFieldsResolver
      * @param  Collection<int, Record>  $records
      * @param  array<string, mixed>  $manifest
      */
-    private function resolveLookup(App $app, array $object, array $field, Collection $records, array $manifest): void
+    private function resolveLookup(App $app, array $object, array $field, Collection $records, array $manifest, int $depth = 0): void
     {
         $viaRelation = $this->findField($object, $field['via_relation_field_id']);
         if ($viaRelation === null || $viaRelation['type'] !== 'relation') {
@@ -89,12 +101,21 @@ class DerivedFieldsResolver
             return;
         }
 
-        $related = Record::query()
+        $relatedRecords = Record::query()
             ->where('app_id', $app->id)
             ->where('object_definition_id', $targetObject['id'])
             ->whereIn('id', array_keys($ids))
-            ->get(['id', 'data'])
-            ->keyBy('id');
+            ->get(['id', 'data']);
+
+        // Multi-hop: when the looked-up field is itself derived (a lookup/formula/
+        // rollup), resolve it on the related records first so the value is present
+        // before we read it — this is what lets a lookup chain across relations
+        // (e.g. line → product → category name).
+        if (in_array($targetField['type'], ['formula', 'lookup', 'rollup'], true)) {
+            $this->enrich($app, $targetObject, $relatedRecords, $manifest, $depth + 1);
+        }
+
+        $related = $relatedRecords->keyBy('id');
 
         foreach ($records as $record) {
             $foreign = $record->data[$viaRelation['slug']] ?? null;
@@ -109,7 +130,7 @@ class DerivedFieldsResolver
      * @param  Collection<int, Record>  $records
      * @param  array<string, mixed>  $manifest
      */
-    private function resolveRollup(App $app, array $object, array $field, Collection $records, array $manifest): void
+    private function resolveRollup(App $app, array $object, array $field, Collection $records, array $manifest, int $depth = 0): void
     {
         $viaRelation = $this->findField($object, $field['via_relation_field_id']);
         if ($viaRelation === null || $viaRelation['type'] !== 'relation') {
@@ -142,6 +163,7 @@ class DerivedFieldsResolver
 
         $aggregator = $field['aggregator'];
         $targetSlug = null;
+        $targetField = null;
         if (isset($field['target_field_id'])) {
             $targetField = $this->findField($targetObject, $field['target_field_id']);
             $targetSlug = $targetField['slug'] ?? null;
@@ -149,12 +171,19 @@ class DerivedFieldsResolver
 
         // Fetch ALL children that reference any of the parents in one go,
         // then group locally — avoids N+1 over the parent list.
-        $childrenByParent = Record::query()
+        $children = Record::query()
             ->where('app_id', $app->id)
             ->where('object_definition_id', $targetObject['id'])
             ->whereRaw('data->>? = ANY(?)', [$inverseField['slug'], '{'.implode(',', array_map(fn ($id) => '"'.$id.'"', $parentIds)).'}'])
-            ->get(['id', 'data'])
-            ->groupBy(fn (Record $r) => $r->data[$inverseField['slug']] ?? null);
+            ->get(['id', 'data']);
+
+        // When aggregating a derived child field (e.g. sum a per-line formula),
+        // resolve the children's derived values before folding them.
+        if ($targetField !== null && in_array($targetField['type'], ['formula', 'lookup', 'rollup'], true)) {
+            $this->enrich($app, $targetObject, $children, $manifest, $depth + 1);
+        }
+
+        $childrenByParent = $children->groupBy(fn (Record $r) => $r->data[$inverseField['slug']] ?? null);
 
         foreach ($records as $record) {
             $children = $childrenByParent[$record->id] ?? collect();
