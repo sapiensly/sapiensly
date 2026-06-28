@@ -85,6 +85,13 @@ class AppScaffolder
     /** Read-only computed types — shown in tables, never in create forms. */
     private const DERIVED_TYPES = ['rollup', 'lookup', 'formula'];
 
+    /**
+     * A restrained, readable palette assigned (by position) to single/multi-select
+     * options so status chips and kanban columns are colour-coded out of the box
+     * instead of all-grey.
+     */
+    private const OPTION_COLORS = ['#0ea5e9', '#f59e0b', '#16a34a', '#8b5cf6', '#ef4444', '#14b8a6', '#ec4899', '#64748b'];
+
     private const SYSTEM = <<<'SYS'
         You design simple internal business apps as a set of data objects (like database tables) with fields, and the links between them.
         Given a description, respond with ONLY a single minified JSON object — no markdown, no code fences, no commentary — using exactly this schema:
@@ -383,6 +390,7 @@ class AppScaffolder
     public function assemble(array $base, array $spec): array
     {
         $currency = (string) ($base['settings']['default_currency'] ?? 'MXN');
+        $lang = self::langForLocale($base['settings']['default_locale'] ?? null);
 
         // Pass 1: build every object so all ids exist before relations wire them.
         $built = [];
@@ -419,7 +427,7 @@ class AppScaffolder
         $forDashboard = [];
         foreach ($built as $entry) {
             $objects[] = $entry['def'];
-            $pages[] = $this->buildPage(['name' => $entry['def']['name'], 'slug' => $entry['def']['slug']], $entry['def']['id'], $entry['pageFields']);
+            $pages[] = $this->buildPage(['name' => $entry['def']['name'], 'slug' => $entry['def']['slug']], $entry['def']['id'], $entry['pageFields'], $lang);
             $forDashboard[] = ['name' => $entry['def']['name'], 'id' => $entry['def']['id'], 'fieldIndex' => $entry['pageFields']];
         }
 
@@ -427,7 +435,7 @@ class AppScaffolder
         // the app's home. Only worth it once there is something to summarise.
         if ($forDashboard !== []) {
             $dashboardSlug = $this->uniqueSlug('dashboard', array_column($pages, 'slug'), 'dashboard');
-            array_unshift($pages, $this->buildDashboard($base['name'] ?? 'Dashboard', $dashboardSlug, $forDashboard));
+            array_unshift($pages, $this->buildDashboard($base['name'] ?? 'Dashboard', $dashboardSlug, $forDashboard, $lang));
         }
 
         $base['objects'] = $objects;
@@ -492,11 +500,14 @@ class AppScaffolder
         }
 
         if (in_array($type, ['single_select', 'multi_select'], true)) {
-            $definition['options'] = array_map(fn (array $opt): array => [
+            $colors = self::OPTION_COLORS;
+            $definition['options'] = array_values(array_map(fn (int $i, array $opt): array => [
                 'id' => $this->id('opt'),
                 'value' => $opt['value'],
                 'label' => $opt['label'],
-            ], $field['options'] ?? []);
+                // Colour-code chips/kanban columns by position unless one was given.
+                'color' => $opt['color'] ?? $colors[$i % count($colors)],
+            ], array_keys($field['options'] ?? []), array_values($field['options'] ?? [])));
         }
 
         // Computed fields (formula/lookup/rollup) must be read-only per the schema.
@@ -587,9 +598,10 @@ class AppScaffolder
      * @param  array<int, array{id: string, slug: string}>  $fieldIndex
      * @return array<string, mixed>
      */
-    public function buildPage(array $object, string $objectId, array $fieldIndex): array
+    public function buildPage(array $object, string $objectId, array $fieldIndex, string $lang = 'en'): array
     {
         $modalId = $this->id('blk');
+        $singular = (string) Str::singular($object['name']);
 
         // Derived/read-only fields (rollup/lookup/formula) are computed, not
         // entered — they belong in the table but never in the create form.
@@ -606,18 +618,18 @@ class AppScaffolder
         $modal = [
             'id' => $modalId,
             'type' => 'modal',
-            'title' => 'New '.Str::singular($object['name']),
+            'title' => $this->labelNew($lang, $singular),
             'blocks' => [[
                 'id' => $this->id('blk'),
                 'type' => 'form',
                 'object_id' => $objectId,
                 'mode' => 'create',
                 'fields' => $formFields,
-                'submit_label' => 'Create',
+                'submit_label' => $this->labelSubmit($lang),
                 'on_submit' => [
                     ['type' => 'create_record', 'object_id' => $objectId, 'values' => $createValues],
                     ['type' => 'close_modal'],
-                    ['type' => 'show_toast', 'level' => 'success', 'message' => Str::singular($object['name']).' created'],
+                    ['type' => 'show_toast', 'level' => 'success', 'message' => $this->toastSaved($lang, $singular)],
                     ['type' => 'refresh'],
                 ],
             ]],
@@ -626,7 +638,7 @@ class AppScaffolder
         $button = [
             'id' => $this->id('blk'),
             'type' => 'button',
-            'label' => 'New '.Str::singular($object['name']),
+            'label' => $this->labelNew($lang, $singular),
             'variant' => 'primary',
             'on_click' => [['type' => 'open_modal', 'modal_block_id' => $modalId]],
         ];
@@ -635,7 +647,7 @@ class AppScaffolder
             'id' => $this->id('col'),
             'field_id' => $f['id'],
         ], $fieldIndex);
-        $columns[] = ['id' => $this->id('col'), 'field_id' => 'sys_created_at', 'label_override' => 'Created'];
+        $columns[] = ['id' => $this->id('col'), 'field_id' => 'sys_created_at', 'label_override' => $this->labelCreatedColumn($lang)];
 
         $table = [
             'id' => $this->id('blk'),
@@ -700,6 +712,8 @@ class AppScaffolder
             'data_source' => ['object_id' => $objectId],
             'group_by_field_id' => $status['id'],
             'card_title_field_id' => $title['id'],
+            // Drag a card between columns to change its status (writes group_by).
+            'editable' => true,
         ];
         if ($meta !== []) {
             $kanban['card_meta_fields'] = $meta;
@@ -715,14 +729,31 @@ class AppScaffolder
      * @param  array<int, array{name: string, id: string, fieldIndex: array<int, array{id: string, slug: string, type: string}>}>  $objects
      * @return array<string, mixed>
      */
-    private function buildDashboard(string $appName, string $slug, array $objects): array
+    private function buildDashboard(string $appName, string $slug, array $objects, string $lang = 'en'): array
     {
+        // One record-count KPI per object …
         $items = array_map(fn (array $o): array => [
             'id' => $this->id('itm'),
             'label' => $o['name'],
             'query' => ['object_id' => $o['id']],
             'aggregation' => 'count',
         ], $objects);
+
+        // … plus a money KPI (sum of the first currency field) for objects that
+        // track an amount, so the dashboard leads with totals, not just counts.
+        foreach ($objects as $object) {
+            $currencyField = $this->firstFieldOfType($object['fieldIndex'], 'currency');
+            if ($currencyField !== null) {
+                $items[] = [
+                    'id' => $this->id('itm'),
+                    'label' => $this->labelTotal($lang, $object['name']),
+                    'query' => ['object_id' => $object['id']],
+                    'aggregation' => 'sum',
+                    'field_id' => $currencyField['id'],
+                    'format' => 'currency',
+                ];
+            }
+        }
 
         $blocks = [
             ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $appName],
@@ -741,7 +772,7 @@ class AppScaffolder
             $blocks[] = [
                 'id' => $this->id('blk'),
                 'type' => 'chart',
-                'label' => $object['name'].' by status',
+                'label' => $this->labelByStatus($lang, $object['name']),
                 'chart_type' => 'bar',
                 'data_source' => ['object_id' => $object['id']],
                 'aggregation' => 'count',
@@ -793,5 +824,45 @@ class AppScaffolder
     public function id(string $prefix): string
     {
         return $prefix.'_'.strtolower((string) Str::ulid());
+    }
+
+    /**
+     * Map a manifest locale (e.g. "es-MX", "en") to the chrome language the
+     * scaffold should generate its built-in UI strings in. Public so the
+     * manifest editor (add_object) can localise the same way.
+     */
+    public static function langForLocale(?string $locale): string
+    {
+        return str_starts_with(strtolower((string) $locale), 'es') ? 'es' : 'en';
+    }
+
+    private function labelNew(string $lang, string $singular): string
+    {
+        return $lang === 'es' ? "Agregar {$singular}" : "New {$singular}";
+    }
+
+    private function labelSubmit(string $lang): string
+    {
+        return $lang === 'es' ? 'Guardar' : 'Create';
+    }
+
+    private function toastSaved(string $lang, string $singular): string
+    {
+        return $lang === 'es' ? 'Guardado' : "{$singular} created";
+    }
+
+    private function labelCreatedColumn(string $lang): string
+    {
+        return $lang === 'es' ? 'Creado' : 'Created';
+    }
+
+    private function labelByStatus(string $lang, string $name): string
+    {
+        return $lang === 'es' ? "{$name} por estado" : "{$name} by status";
+    }
+
+    private function labelTotal(string $lang, string $name): string
+    {
+        return $lang === 'es' ? "Total {$name}" : "{$name} total";
     }
 }

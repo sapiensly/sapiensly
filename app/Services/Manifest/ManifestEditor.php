@@ -54,6 +54,7 @@ class ManifestEditor
                 ['name' => $name, 'slug' => $pageSlug],
                 $objectDef['id'],
                 $fieldIndex,
+                AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null),
             );
         }
 
