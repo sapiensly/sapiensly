@@ -72,6 +72,7 @@ TXT,
         'design' => <<<'TXT'
 VISUAL / THEME:
 - GLOBAL theme: set `settings.theme` to "light" or "dark" via propose_change (path "/settings/theme"). Default "light" (clean white page), right for most sites; only "dark" if asked.
+- NAV LAYOUT: `settings.navigation_layout` is "top" (default horizontal header) or "sidebar" (left rail). Switch to "sidebar" when the app has many pages or needs GROUPED/NESTED menus. The sidebar renders the manifest's `navigation` (root: {items:[{id,label,icon?,page_id?,children?[]}]}) — a nested item with `children` becomes a collapsible group; an item with `page_id` is a link. Without a `navigation`, both layouts just list the pages. So for a grouped menu: author `navigation` with nested items AND set navigation_layout="sidebar". Item `icon` accepts a named icon or emoji (see `icons`).
 - PER-BLOCK style: every block accepts an optional `style` object `{padding: none|sm|md|lg, margin: none|sm|md|lg, background:"#RRGGBB", color:"#RRGGBB", max_width: sm|md|lg|full}`. Use `style.background` + `style.padding="lg"` to make a `container` a coloured section. CONTRAST IS AUTOMATIC: when you set `background`, the runtime auto-picks readable text colour — do NOT set `color` yourself and do NOT put a `background` on the inner heading/markdown. Set `max_width:"md"` on text sections so lines stay readable and centre on wide screens.
 - To recolor a `single_select` field's options, replace each `options[i].color` hex (the chip shown in tables/badges).
 

@@ -492,6 +492,33 @@ it('ListAvailableFieldTypesTool includes the color field type', function () {
     expect(collect($result['field_types'])->pluck('type'))->toContain('color');
 });
 
+it('validates a sidebar layout with nested navigation', function () {
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_sidebarnav01',
+        'slug' => 'sidebarnav',
+        'name' => 'Sidebar Nav',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [
+            ['id' => 'pag_dashboard01', 'slug' => 'dashboard', 'name' => 'Dashboard', 'path' => '/dashboard', 'blocks' => []],
+            ['id' => 'pag_reportspg01', 'slug' => 'reports', 'name' => 'Reports', 'path' => '/reports', 'blocks' => []],
+        ],
+        'permissions' => ['roles' => [['id' => 'rol_adminrole01', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['navigation_layout' => 'sidebar'],
+        'navigation' => ['items' => [
+            ['id' => 'nav_dashboard01', 'label' => 'Dashboard', 'icon' => 'dashboard', 'page_id' => 'pag_dashboard01'],
+            ['id' => 'nav_analyticsg', 'label' => 'Analytics', 'icon' => 'bar-chart', 'children' => [
+                ['id' => 'nav_reportsitm', 'label' => 'Reports', 'page_id' => 'pag_reportspg01'],
+            ]],
+        ]],
+    ];
+
+    $result = app(ManifestValidator::class)->validate($manifest);
+
+    expect($result->valid)->toBeTrue(collect($result->errors)->pluck('message')->implode("\n"));
+});
+
 it('validates a manifest using the new UI blocks + table pagination', function () {
     $manifest = [
         'schema_version' => '1.0.0',
