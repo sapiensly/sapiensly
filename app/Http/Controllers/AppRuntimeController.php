@@ -3,11 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\App;
-use App\Services\Apps\AppAccessContext;
 use App\Services\Apps\AppAccessResolver;
+use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\BlockDataResolver;
-use App\Services\Records\ExpressionResolver;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
@@ -31,7 +30,7 @@ class AppRuntimeController extends Controller
         private AppManifestService $manifestService,
         private BlockDataResolver $blockData,
         private AppAccessResolver $accessResolver,
-        private ExpressionResolver $expressions,
+        private BlockVisibilityFilter $visibility,
     ) {}
 
     public function __invoke(Request $request, string $appSlug, ?string $pageSlug = null): Response
@@ -103,7 +102,7 @@ class AppRuntimeController extends Controller
         // data — a hidden block's data must never reach the wire. Gated on the
         // role AND, when set, the `expression` evaluated against this context
         // (e.g. show the cart only when {{params.order}} is set).
-        $page['blocks'] = $this->stripInvisibleBlocks($page['blocks'] ?? [], $access, $context);
+        $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context);
 
         $blockData = $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context);
 
@@ -165,78 +164,5 @@ class AppRuntimeController extends Controller
         }
 
         return null;
-    }
-
-    /**
-     * Recursively drop blocks whose `visibility` rule excludes them — by the
-     * user's role and/or its `expression` (evaluated against $context, so a block
-     * can show only when e.g. {{params.order}} is set) — descending into every
-     * layout container (container/modal, tabs, accordion, split_view) so a nested
-     * block is gated the same as a top-level one.
-     *
-     * @param  list<array<string, mixed>>  $blocks
-     * @param  array<string, mixed>  $context
-     * @return list<array<string, mixed>>
-     */
-    private function stripInvisibleBlocks(array $blocks, AppAccessContext $access, array $context): array
-    {
-        $kept = [];
-
-        foreach ($blocks as $block) {
-            if (! $access->isBlockVisible($block['visibility'] ?? null)) {
-                continue;
-            }
-            if (! $this->passesVisibilityExpression($block['visibility'] ?? null, $context)) {
-                continue;
-            }
-
-            if (isset($block['blocks'])) {
-                $block['blocks'] = $this->stripInvisibleBlocks($block['blocks'], $access, $context);
-            }
-            if (isset($block['left_blocks'])) {
-                $block['left_blocks'] = $this->stripInvisibleBlocks($block['left_blocks'], $access, $context);
-            }
-            if (isset($block['right_blocks'])) {
-                $block['right_blocks'] = $this->stripInvisibleBlocks($block['right_blocks'], $access, $context);
-            }
-            if (isset($block['tabs'])) {
-                $block['tabs'] = array_map(function (array $tab) use ($access, $context): array {
-                    $tab['blocks'] = $this->stripInvisibleBlocks($tab['blocks'] ?? [], $access, $context);
-
-                    return $tab;
-                }, $block['tabs']);
-            }
-            if (isset($block['sections'])) {
-                $block['sections'] = array_map(function (array $section) use ($access, $context): array {
-                    $section['blocks'] = $this->stripInvisibleBlocks($section['blocks'] ?? [], $access, $context);
-
-                    return $section;
-                }, $block['sections']);
-            }
-
-            $kept[] = $block;
-        }
-
-        return $kept;
-    }
-
-    /**
-     * Evaluate a visibility rule's optional `expression` against the runtime
-     * context. No expression ⇒ visible. A truthy result (non-empty string,
-     * true, non-zero) keeps the block; null/false/empty hides it.
-     *
-     * @param  array<string, mixed>|null  $rule
-     * @param  array<string, mixed>  $context
-     */
-    private function passesVisibilityExpression(?array $rule, array $context): bool
-    {
-        $expression = $rule['expression'] ?? null;
-        if (! is_string($expression) || trim($expression) === '') {
-            return true;
-        }
-
-        $value = $this->expressions->resolve($expression, $context);
-
-        return ! in_array($value, [null, false, '', 0, '0'], true);
     }
 }

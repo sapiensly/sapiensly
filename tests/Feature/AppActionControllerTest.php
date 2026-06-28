@@ -336,3 +336,37 @@ it('hides apps the user cannot see', function () {
         ->postJson('/r/actions_app/actions', ['actions' => []])
         ->assertNotFound();
 });
+
+it('returns fresh block_data for a refresh in the same response (single round-trip)', function () {
+    $objId = ac_id('obj');
+    $nombre = ac_id('fld');
+    $pageId = ac_id('pag');
+    $tableId = ac_id('blk');
+    $app = App::factory()->create(['user_id' => $this->user->id, 'slug' => 'rt_app', 'visibility' => 'private']);
+    $manifest = [
+        'schema_version' => '1.0.0', 'id' => $app->id, 'slug' => 'rt_app', 'name' => 'RT', 'version' => 1,
+        'objects' => [['id' => $objId, 'slug' => 'items', 'name' => 'Items', 'fields' => [
+            ['id' => $nombre, 'slug' => 'nombre', 'name' => 'Nombre', 'type' => 'string', 'required' => true],
+        ]]],
+        'pages' => [['id' => $pageId, 'slug' => 'items', 'name' => 'Items', 'path' => '/items', 'blocks' => [
+            ['id' => $tableId, 'type' => 'table', 'data_source' => ['object_id' => $objId], 'columns' => [['id' => ac_id('col'), 'field_id' => $nombre]]],
+        ]]],
+        'permissions' => ['roles' => [['id' => ac_id('rol'), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    app(AppManifestService::class)->createVersion($app, $manifest, $this->user);
+
+    $response = $this->actingAs($this->user)->postJson('/r/rt_app/actions', [
+        'actions' => [
+            ['type' => 'create_record', 'object_id' => $objId, 'values' => ['nombre' => '{{form.nombre}}']],
+            ['type' => 'refresh'],
+        ],
+        'form' => ['nombre' => 'Nuevo'],
+        'page' => 'items',
+    ]);
+
+    $response->assertOk()->assertJsonPath('ok', true);
+    // The cart/table block's fresh rows come back in the SAME response — no reload.
+    $rows = $response->json("block_data.{$tableId}.rows");
+    expect($rows)->toHaveCount(1);
+    expect($rows[0]['data']['nombre'])->toBe('Nuevo');
+});

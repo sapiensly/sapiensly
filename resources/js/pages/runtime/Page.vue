@@ -7,13 +7,33 @@ import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
 import type { RuntimePageProps } from '@/runtime/types/manifest';
+import { blockDataBus } from '@/runtime/useActionExecutor';
 import { useScrollReveal } from '@/runtime/useReveal';
 import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
 import { Head } from '@inertiajs/vue3';
 import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
-import { computed, provide, ref } from 'vue';
+import { computed, onUnmounted, provide, ref, watch } from 'vue';
 
 const props = defineProps<RuntimePageProps>();
+
+// Live block data: seeded from the server prop, re-synced on every Inertia
+// navigation, and patched in place when an action returns fresh data (so adding
+// to a cart updates instantly without a second request / full remount).
+type BlockDataMap = RuntimePageProps['blockData'];
+const liveBlockData = ref<BlockDataMap>({ ...props.blockData });
+watch(
+    () => props.blockData,
+    (next) => {
+        liveBlockData.value = { ...next };
+    },
+);
+const stopBlockData = blockDataBus.on((patch) => {
+    liveBlockData.value = {
+        ...liveBlockData.value,
+        ...(patch as BlockDataMap),
+    };
+});
+onUnmounted(stopBlockData);
 
 const settings = computed(() => props.manifest.settings ?? {});
 const locale = computed(() => settings.value.default_locale ?? 'es-MX');
@@ -140,7 +160,7 @@ useScrollReveal(sectionsEl);
                         v-if="breadcrumbBlock"
                         class="flex min-w-0 flex-col justify-center gap-0.5"
                     >
-                        <BlockBreadcrumb :block="(breadcrumbBlock as any)" />
+                        <BlockBreadcrumb :block="breadcrumbBlock as any" />
                         <h1
                             class="truncate text-lg leading-tight font-bold tracking-tight"
                         >
@@ -157,7 +177,7 @@ useScrollReveal(sectionsEl);
                 <div ref="sectionsEl" class="flex-1 space-y-4 px-6 py-6">
                     <AppRenderer
                         :blocks="contentBlocks"
-                        :block-data="blockData"
+                        :block-data="liveBlockData"
                         :objects="manifest.objects"
                         :locale="locale"
                         :default-currency="defaultCurrency"
@@ -184,7 +204,7 @@ useScrollReveal(sectionsEl);
             <div ref="sectionsEl" class="flex-1 space-y-4 px-5 py-6">
                 <AppRenderer
                     :blocks="page.blocks"
-                    :block-data="blockData"
+                    :block-data="liveBlockData"
                     :objects="manifest.objects"
                     :locale="locale"
                     :default-currency="defaultCurrency"

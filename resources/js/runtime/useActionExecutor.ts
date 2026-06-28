@@ -6,6 +6,8 @@ export type RuntimeAction = Record<string, unknown> & { type: string };
 
 export interface ExecutionContext {
     appSlug: string;
+    /** Current page slug — lets the server return fresh block data for a refresh. */
+    page?: string;
     params?: Record<string, unknown>;
     form?: Record<string, unknown>;
     /**
@@ -55,6 +57,36 @@ class ModalBus {
 }
 
 export const modalBus = new ModalBus();
+
+/**
+ * Carries fresh block data the action endpoint returns alongside a `refresh`, so
+ * the page patches the changed blocks in place — no second full page reload.
+ * Page.vue subscribes and merges the payload into its reactive blockData.
+ */
+type BlockDataListener = (data: Record<string, unknown>) => void;
+
+class BlockDataBus {
+    private listeners = new Set<BlockDataListener>();
+
+    on(fn: BlockDataListener): () => void {
+        this.listeners.add(fn);
+        return () => this.listeners.delete(fn);
+    }
+
+    emit(data: Record<string, unknown>) {
+        this.listeners.forEach((fn) => fn(data));
+    }
+}
+
+export const blockDataBus = new BlockDataBus();
+
+/** The current page slug from the runtime URL (/r/{app}/{page}), or undefined. */
+function currentPageSlug(): string | undefined {
+    const m = window.location.pathname.match(
+        /^\/r\/[a-z][a-z0-9_]*\/([a-z][a-z0-9_]*)/,
+    );
+    return m?.[1];
+}
 
 /** Walk a dotted path (e.g. "row.data.title") against the execution context. */
 function digPath(ctx: ExecutionContext, path: string): unknown {
@@ -131,12 +163,29 @@ export function useActionExecutor() {
                     params: ctx.params ?? {},
                     form: ctx.form ?? {},
                     row: ctx.row ?? {},
+                    page: ctx.page ?? currentPageSlug(),
                 },
                 { timeout: 30_000 },
             );
 
-            (data.client_actions as RuntimeAction[] | undefined)?.forEach((a) =>
-                runClientAction(a, ctx),
+            // Single round-trip refresh: when the server returned fresh block
+            // data, patch it in place and skip the `refresh` reload — the second
+            // request (and full remount) is what made adding to a cart feel slow.
+            const patch = data.block_data as
+                | Record<string, unknown>
+                | undefined;
+            const patched = patch != null && typeof patch === 'object';
+            if (patched) {
+                blockDataBus.emit(patch);
+            }
+
+            (data.client_actions as RuntimeAction[] | undefined)?.forEach(
+                (a) => {
+                    if (patched && a.type === 'refresh') {
+                        return; // data already applied reactively
+                    }
+                    runClientAction(a, ctx);
+                },
             );
 
             return { ok: data.ok === true };

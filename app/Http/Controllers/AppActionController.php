@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\App;
 use App\Services\Apps\AppAccessResolver;
+use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\AppActionExecutor;
+use App\Services\Records\BlockDataResolver;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordValidationException;
 use Illuminate\Http\JsonResponse;
@@ -34,6 +36,8 @@ class AppActionController extends Controller
         private AppActionExecutor $executor,
         private AppAccessResolver $accessResolver,
         private ExpressionResolver $expressions,
+        private BlockDataResolver $blockData,
+        private BlockVisibilityFilter $visibility,
     ) {}
 
     public function __invoke(Request $request, string $appSlug): JsonResponse
@@ -63,6 +67,9 @@ class AppActionController extends Controller
             // {id: rec_..., data: {<slug>: <value>}} — drives {{row.id}} /
             // {{row.data.<slug>}} expressions in the on_click action sequence.
             'row' => ['nullable', 'array'],
+            // The page the action was fired from — lets us return fresh block
+            // data for a `refresh` in the SAME response (no second round-trip).
+            'page' => ['nullable', 'string'],
         ]);
 
         // Resolve the user's app-role capabilities once and carry them in the
@@ -129,12 +136,55 @@ class AppActionController extends Controller
             }
         }
 
-        return response()->json([
+        // Single round-trip refresh: when the sequence asks to refresh and we know
+        // the page, resolve its (visible) blocks' data NOW and ship it back, so the
+        // client patches in place instead of firing a second full page reload.
+        $blockData = null;
+        $wantsRefresh = collect($clientActions)->contains(fn ($a) => ($a['type'] ?? null) === 'refresh');
+        if ($ok && $wantsRefresh) {
+            $page = $this->findPage($manifest, $request->input('page'));
+            if ($page !== null) {
+                $blocks = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context);
+                $blockData = $this->blockData->resolve($app, $blocks, $manifest, $context);
+            }
+        }
+
+        $payload = [
             'ok' => $ok,
             'results' => $results,
             'client_actions' => $clientActions,
             'errors' => $errors,
-        ], $ok ? 200 : 422);
+        ];
+        if ($blockData !== null) {
+            $payload['block_data'] = $blockData;
+        }
+
+        return response()->json($payload, $ok ? 200 : 422);
+    }
+
+    /**
+     * Resolve the page the action came from (by slug; the first page when no slug
+     * was sent), or null if it can't be found.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>|null
+     */
+    private function findPage(array $manifest, ?string $slug): ?array
+    {
+        $pages = $manifest['pages'] ?? [];
+        if ($pages === []) {
+            return null;
+        }
+        if ($slug === null || $slug === '') {
+            return $pages[0];
+        }
+        foreach ($pages as $page) {
+            if (($page['slug'] ?? null) === $slug) {
+                return $page;
+            }
+        }
+
+        return null;
     }
 
     /**
