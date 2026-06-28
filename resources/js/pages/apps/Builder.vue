@@ -1100,6 +1100,8 @@ const previewFooter = computed(
 // Live accent override from the design control — applied to the preview
 // immediately and debounce-persisted to settings.accent.
 const accentOverride = ref<string | null>(null);
+// The swatch row is collapsed by default; clicking the "Accent" label toggles it.
+const accentOpen = ref(false);
 const effectiveAccent = computed(
     () =>
         accentOverride.value ??
@@ -1790,48 +1792,69 @@ function statusTone(status: Message['status']): string {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <!-- Accent colour: brand colour for buttons / links / highlights. -->
+                    <!-- Accent colour: brand colour for buttons / links / highlights.
+                         Collapsed to just the label until clicked; clicking it
+                         again closes the swatch row. -->
                     <div
                         v-if="viewMode === 'preview'"
                         class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2 py-1"
-                        title="Accent colour — drives buttons, links and highlights"
                     >
-                        <span class="mr-0.5 text-[11px] text-ink-muted"
-                            >Accent</span
-                        >
                         <button
-                            v-for="c in ACCENT_PRESETS"
-                            :key="c"
                             type="button"
-                            class="size-4 rounded-full border border-soft transition-transform hover:scale-110"
-                            :class="
-                                effectiveAccent?.toLowerCase() === c
-                                    ? 'ring-2 ring-ink ring-offset-1 ring-offset-navy'
-                                    : ''
+                            class="flex items-center gap-1.5 rounded-pill px-0.5 text-[11px] text-ink-muted transition-colors hover:text-ink"
+                            :title="
+                                accentOpen
+                                    ? 'Close accent colours'
+                                    : 'Accent colour — drives buttons, links and highlights'
                             "
-                            :style="{ background: c }"
-                            :title="c"
-                            @click="setAccent(c)"
-                        />
-                        <label
-                            class="ml-0.5 size-5 cursor-pointer rounded-full border border-soft"
-                            :style="{
-                                background: effectiveAccent ?? '#0096ff',
-                            }"
-                            :title="'Custom: ' + (effectiveAccent ?? '#0096ff')"
+                            :aria-expanded="accentOpen"
+                            @click="accentOpen = !accentOpen"
                         >
-                            <input
-                                type="color"
-                                class="size-0 opacity-0"
-                                :value="effectiveAccent ?? '#0096ff'"
-                                @input="
-                                    setAccent(
-                                        ($event.target as HTMLInputElement)
-                                            .value,
-                                    )
-                                "
+                            <span
+                                class="size-3 rounded-full border border-soft"
+                                :style="{
+                                    background: effectiveAccent ?? '#0096ff',
+                                }"
                             />
-                        </label>
+                            Accent
+                        </button>
+                        <template v-if="accentOpen">
+                            <button
+                                v-for="c in ACCENT_PRESETS"
+                                :key="c"
+                                type="button"
+                                class="size-4 rounded-full border border-soft transition-transform hover:scale-110"
+                                :class="
+                                    effectiveAccent?.toLowerCase() === c
+                                        ? 'ring-2 ring-ink ring-offset-1 ring-offset-navy'
+                                        : ''
+                                "
+                                :style="{ background: c }"
+                                :title="c"
+                                @click="setAccent(c)"
+                            />
+                            <label
+                                class="ml-0.5 size-5 cursor-pointer rounded-full border border-soft"
+                                :style="{
+                                    background: effectiveAccent ?? '#0096ff',
+                                }"
+                                :title="
+                                    'Custom: ' + (effectiveAccent ?? '#0096ff')
+                                "
+                            >
+                                <input
+                                    type="color"
+                                    class="size-0 opacity-0"
+                                    :value="effectiveAccent ?? '#0096ff'"
+                                    @input="
+                                        setAccent(
+                                            ($event.target as HTMLInputElement)
+                                                .value,
+                                        )
+                                    "
+                                />
+                            </label>
+                        </template>
                     </div>
 
                     <!-- Adopt the organization Brandbook in one click. -->
