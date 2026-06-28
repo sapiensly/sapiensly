@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify';
-import { computed, inject } from 'vue';
+import { computed, inject, ref } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type {
     BlockTable,
@@ -109,6 +109,29 @@ const variantClass: Record<ActionColumn['variant'], string> = {
 };
 
 const rows = computed(() => props.data?.rows ?? []);
+
+// Client-side pagination over the loaded rows, active only when the block opts in
+// via `pagination.page_size`. (The data_source.limit caps how many rows are
+// loaded in total; page through those.)
+const pageSize = computed(
+    () =>
+        (props.block as { pagination?: { page_size?: number } }).pagination
+            ?.page_size ?? 0,
+);
+const page = ref(1);
+const pageCount = computed(() =>
+    pageSize.value > 0
+        ? Math.max(1, Math.ceil(rows.value.length / pageSize.value))
+        : 1,
+);
+const pagedRows = computed(() => {
+    if (pageSize.value <= 0) return rows.value;
+    const start = (Math.min(page.value, pageCount.value) - 1) * pageSize.value;
+    return rows.value.slice(start, start + pageSize.value);
+});
+function goToPage(p: number) {
+    page.value = Math.min(Math.max(1, p), pageCount.value);
+}
 
 function formatCell(field: FieldDef, value: unknown): string {
     if (value === null || value === undefined) return '—';
@@ -223,7 +246,7 @@ function richTextCell(value: unknown): string {
                 </tr>
             </thead>
             <tbody :class="['divide-y', t.rowBorder]">
-                <tr v-for="row in rows" :key="row.id">
+                <tr v-for="row in pagedRows" :key="row.id">
                     <td
                         v-for="col in columns"
                         :key="col.id"
@@ -268,5 +291,40 @@ function richTextCell(value: unknown): string {
                 </tr>
             </tbody>
         </table>
+
+        <!-- Pager (only when pagination is enabled and there's more than one page). -->
+        <div
+            v-if="pageCount > 1"
+            :class="[
+                'flex items-center justify-between gap-3 px-3 py-2 text-xs',
+                t.textMuted,
+            ]"
+        >
+            <span
+                >{{ (page - 1) * pageSize + 1 }}–{{
+                    Math.min(page * pageSize, rows.length)
+                }}
+                / {{ rows.length }}</span
+            >
+            <div class="flex items-center gap-1">
+                <button
+                    type="button"
+                    class="rounded-md border border-medium px-2 py-1 transition-colors hover:bg-surface-hover disabled:opacity-40"
+                    :disabled="page <= 1"
+                    @click="goToPage(page - 1)"
+                >
+                    ‹
+                </button>
+                <span class="px-1">{{ page }} / {{ pageCount }}</span>
+                <button
+                    type="button"
+                    class="rounded-md border border-medium px-2 py-1 transition-colors hover:bg-surface-hover disabled:opacity-40"
+                    :disabled="page >= pageCount"
+                    @click="goToPage(page + 1)"
+                >
+                    ›
+                </button>
+            </div>
+        </div>
     </div>
 </template>

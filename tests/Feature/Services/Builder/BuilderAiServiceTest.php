@@ -482,7 +482,42 @@ it('ListAvailableComponentsTool returns the closed component catalog', function 
     $result = json_decode((new ListAvailableComponentsTool)->handle(new ToolRequest([])), true);
     $types = collect($result['components'])->pluck('type');
 
-    expect($types)->toContain('container', 'text', 'heading', 'divider', 'spacer', 'table', 'stat', 'form', 'button', 'modal', 'chart', 'kanban', 'calendar');
+    expect($types)->toContain('container', 'text', 'heading', 'divider', 'spacer', 'table', 'stat', 'form', 'button', 'modal', 'chart', 'kanban', 'calendar')
+        ->and($types)->toContain('alert', 'avatar', 'breadcrumb', 'carousel'); // newer UI blocks
+});
+
+it('validates a manifest using the new UI blocks + table pagination', function () {
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_newblocks01',
+        'slug' => 'newblocks',
+        'name' => 'New Blocks',
+        'version' => 1,
+        'objects' => [[
+            'id' => 'obj_itemsobject', 'slug' => 'items', 'name' => 'Item',
+            'fields' => [['id' => 'fld_namefield01', 'slug' => 'name', 'name' => 'Name', 'type' => 'string']],
+        ]],
+        'pages' => [[
+            'id' => 'pag_homepage01', 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+            'blocks' => [
+                ['id' => 'blk_breadcrumb1', 'type' => 'breadcrumb', 'items' => [['label' => 'Home', 'href' => '/r/newblocks/home'], ['label' => 'Items']]],
+                ['id' => 'blk_alertblock1', 'type' => 'alert', 'variant' => 'warning', 'title' => 'Heads up', 'body' => 'Read this.', 'icon' => 'alert-triangle', 'dismissible' => true],
+                ['id' => 'blk_avatarblock', 'type' => 'avatar', 'name' => 'Ana López', 'label' => 'Ana López', 'caption' => 'Owner', 'size' => 'lg'],
+                ['id' => 'blk_carouselbk', 'type' => 'carousel', 'autoplay' => true, 'interval_ms' => 4000, 'items' => [
+                    ['image' => 'https://picsum.photos/seed/a/1200/600', 'title' => 'One'],
+                    ['image' => 'https://picsum.photos/seed/b/1200/600', 'title' => 'Two'],
+                ]],
+                ['id' => 'blk_tableblock', 'type' => 'table', 'data_source' => ['object_id' => 'obj_itemsobject', 'limit' => 200],
+                    'pagination' => ['page_size' => 25],
+                    'columns' => [['id' => 'col_namecol01', 'field_id' => 'fld_namefield01']]],
+            ],
+        ]],
+        'permissions' => ['roles' => [['id' => 'rol_adminrole01', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+    ];
+
+    $result = app(ManifestValidator::class)->validate($manifest);
+
+    expect($result->valid)->toBeTrue(collect($result->errors)->pluck('message')->implode("\n"));
 });
 
 it('ListAvailableFieldTypesTool returns the MVP field type catalog', function () {

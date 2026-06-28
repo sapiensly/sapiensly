@@ -108,6 +108,18 @@ const BlockStatBand = defineAsyncComponent(
 const BlockInsight = defineAsyncComponent(
     () => import('./blocks/BlockInsight.vue'),
 );
+const BlockAlert = defineAsyncComponent(
+    () => import('./blocks/BlockAlert.vue'),
+);
+const BlockAvatar = defineAsyncComponent(
+    () => import('./blocks/BlockAvatar.vue'),
+);
+const BlockBreadcrumb = defineAsyncComponent(
+    () => import('./blocks/BlockBreadcrumb.vue'),
+);
+const BlockCarousel = defineAsyncComponent(
+    () => import('./blocks/BlockCarousel.vue'),
+);
 const BlockWordCloud = defineAsyncComponent(
     () => import('./blocks/BlockWordCloud.vue'),
 );
@@ -159,6 +171,10 @@ const componentForType = {
     cta: BlockCta,
     stat_band: BlockStatBand,
     insight: BlockInsight,
+    alert: BlockAlert,
+    avatar: BlockAvatar,
+    breadcrumb: BlockBreadcrumb,
+    carousel: BlockCarousel,
     word_cloud: BlockWordCloud,
     flow: BlockFlow,
     testimonials: BlockTestimonials,
