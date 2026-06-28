@@ -94,8 +94,8 @@ class DemoDataGenerator
         return match ($field['type'] ?? 'string') {
             'string' => $this->stringValue($slug, $index, $field),
             'long_text', 'rich_text' => ucfirst($this->words(random_int(8, 16))).'.',
-            'number' => random_int((int) ($field['min'] ?? 1), max((int) ($field['min'] ?? 1), (int) ($field['max'] ?? 1000))),
-            'currency' => round(random_int(1000, 1_000_000) / 100, 2),
+            'number' => $this->numericInRange($field, defaultMin: 1, defaultMax: 100, decimals: 0),
+            'currency' => $this->numericInRange($field, defaultMin: 50, defaultMax: 500, decimals: 2),
             'boolean' => (bool) random_int(0, 1),
             'date' => $this->dateValue(withTime: false),
             'datetime' => $this->dateValue(withTime: true),
@@ -107,6 +107,32 @@ class DemoDataGenerator
             'color' => sprintf('#%06x', random_int(0, 0xFFFFFF)),
             default => null,
         };
+    }
+
+    /**
+     * Generate a numeric sample that honours the field's declared `min`/`max`,
+     * falling back to plausible defaults when they're unset. This keeps seeded
+     * values in a believable range (e.g. a price stays modest instead of being
+     * a six-figure random number) and respects an author-set ceiling like a
+     * line-item quantity max.
+     *
+     * @param  array<string, mixed>  $field
+     */
+    private function numericInRange(array $field, float $defaultMin, float $defaultMax, int $decimals): int|float
+    {
+        $min = isset($field['min']) ? (float) $field['min'] : $defaultMin;
+        $max = isset($field['max']) ? (float) $field['max'] : $defaultMax;
+        if ($max < $min) {
+            $max = $min;
+        }
+
+        if ($decimals <= 0) {
+            return random_int((int) ceil($min), (int) max(ceil($min), floor($max)));
+        }
+
+        $scale = 10 ** $decimals;
+
+        return round(random_int((int) round($min * $scale), (int) max(round($min * $scale), round($max * $scale))) / $scale, $decimals);
     }
 
     /**

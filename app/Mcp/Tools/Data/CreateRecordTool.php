@@ -5,6 +5,7 @@ namespace App\Mcp\Tools\Data;
 use App\Mcp\Tools\SapiensTool;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\RecordValidationException;
 use App\Services\Records\RecordWriteService;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -13,7 +14,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Create a record for an object in an app. Values are validated against the object\'s fields. Use read_manifest first to learn the field ids.')]
+#[Description('Create a record for an object in an app. The `values` map is keyed by field slug or field id (both work); values are validated against the object\'s fields. Use read_manifest first to learn the object\'s fields.')]
 class CreateRecordTool extends SapiensTool
 {
     protected const ABILITY = 'data:write';
@@ -50,6 +51,8 @@ class CreateRecordTool extends SapiensTool
                     $user,
                 ),
             );
+        } catch (RecordValidationException $e) {
+            return Response::error('Validation failed: '.json_encode($e->errors));
         } catch (\Throwable $e) {
             return Response::error('Create failed: '.$e->getMessage());
         }
@@ -69,7 +72,7 @@ class CreateRecordTool extends SapiensTool
         return [
             'app_slug' => $schema->string()->description('The slug of the app.')->required(),
             'object_id' => $schema->string()->description('The object id to create a record for.')->required(),
-            'values' => $schema->object()->description('Field id => value map for the new record.')->required(),
+            'values' => $schema->object()->description('Map of field (slug or id) => value for the new record.')->required(),
         ];
     }
 }

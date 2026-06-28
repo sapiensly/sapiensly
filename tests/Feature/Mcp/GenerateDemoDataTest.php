@@ -7,6 +7,7 @@ use App\Models\Record;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
+use App\Services\Records\DemoDataGenerator;
 
 beforeEach(function () {
     $this->user = User::factory()->create(['email_verified_at' => now()]);
@@ -80,6 +81,37 @@ it('generate_demo_data can target a subset of objects', function () {
 
     expect(Record::query()->where('object_definition_id', objectId($this->manifest, 'ideas'))->count())->toBe(3);
     expect(Record::query()->where('object_definition_id', objectId($this->manifest, 'drafts'))->count())->toBe(0);
+});
+
+it('generate_demo_data honours numeric min/max constraints', function () {
+    $app = App::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'slug' => 'pos_app',
+    ]);
+
+    // Hand-built manifest so the currency/number min+max survive (the scaffold
+    // helper's normalizeFields drops type-specific props).
+    $manifest = [
+        'objects' => [[
+            'id' => 'obj_demo_lines_0001',
+            'slug' => 'lines',
+            'name' => 'Lines',
+            'fields' => [
+                ['id' => 'fld_demo_qty_000001', 'slug' => 'qty', 'name' => 'Qty', 'type' => 'number', 'min' => 1, 'max' => 6],
+                ['id' => 'fld_demo_price_00001', 'slug' => 'price', 'name' => 'Price', 'type' => 'currency', 'currency_code' => 'MXN', 'min' => 10, 'max' => 200],
+            ],
+        ]],
+    ];
+
+    app(DemoDataGenerator::class)->generate($app, $manifest, 12, null, $this->user);
+
+    $lines = Record::query()->where('object_definition_id', 'obj_demo_lines_0001')->get();
+    expect($lines)->not->toBeEmpty();
+    foreach ($lines as $line) {
+        expect((float) $line->data['qty'])->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(6);
+        expect((float) $line->data['price'])->toBeGreaterThanOrEqual(10)->toBeLessThanOrEqual(200);
+    }
 });
 
 it('generate_demo_data errors on an app with no objects', function () {

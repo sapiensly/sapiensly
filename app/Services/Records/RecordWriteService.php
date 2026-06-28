@@ -39,6 +39,7 @@ class RecordWriteService
     public function create(App $app, array $manifest, string $objectId, array $values, ?User $user = null): Record
     {
         $object = $this->findObject($manifest, $objectId);
+        $values = $this->normalizeKeys($object, $values);
         $clean = $this->validate($object, $values, mode: 'create');
 
         $record = Record::create([
@@ -68,6 +69,7 @@ class RecordWriteService
         }
 
         $object = $this->findObject($manifest, $record->object_definition_id);
+        $values = $this->normalizeKeys($object, $values);
         $clean = $this->validate($object, $values, mode: 'update');
 
         $before = $record->data ?? [];
@@ -112,6 +114,32 @@ class RecordWriteService
             'created_at' => $record->created_at?->toIso8601String(),
             'updated_at' => $record->updated_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Accept values keyed by EITHER a field slug or a field id, and return them
+     * keyed by slug (the form the rest of the service expects). Callers that
+     * learned field ids from the manifest (e.g. the MCP create/update tools) can
+     * pass ids directly; slugs and unknown keys pass through untouched so the
+     * "unknown field" validation still fires.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $values
+     * @return array<string, mixed>
+     */
+    private function normalizeKeys(array $object, array $values): array
+    {
+        $idToSlug = [];
+        foreach ($object['fields'] as $field) {
+            $idToSlug[$field['id']] = $field['slug'];
+        }
+
+        $normalized = [];
+        foreach ($values as $key => $value) {
+            $normalized[$idToSlug[$key] ?? $key] = $value;
+        }
+
+        return $normalized;
     }
 
     /**

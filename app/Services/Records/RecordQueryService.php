@@ -111,6 +111,17 @@ class RecordQueryService
         }
 
         $field = $this->findField($object, $fieldId);
+
+        // Derived fields (formula/lookup/rollup) have no SQL column to aggregate
+        // over — their values are computed in PHP after the rows load. So we run
+        // the (already filter+access-scoped) query, enrich the derived values,
+        // then fold them in memory. This is what lets a dashboard sum/avg/chart a
+        // rollup or formula field (e.g. a comanda total) instead of only stored
+        // number/currency columns.
+        if (in_array($field['type'], ['formula', 'lookup', 'rollup'], true)) {
+            return $this->aggregateDerived($app, $object, $builder, $aggregation, $field, $manifest);
+        }
+
         if (! in_array($field['type'], ['number', 'currency', 'rating', 'slider'], true)) {
             throw new InvalidArgumentException(
                 "Aggregation '{$aggregation}' requires a numeric field, got '{$field['type']}'.",
@@ -129,6 +140,47 @@ class RecordQueryService
         $result = $builder->selectRaw("{$sqlAgg} as agg")->value('agg');
 
         return $result === null ? 0 : (float) $result;
+    }
+
+    /**
+     * Aggregate a derived (formula/lookup/rollup) field in PHP: materialize the
+     * scoped rows, enrich their derived values, then fold the numeric results.
+     * `count` never reaches here (it's handled before field resolution).
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $field
+     * @param  array<string, mixed>  $manifest
+     */
+    private function aggregateDerived(
+        App $app,
+        array $object,
+        Builder $builder,
+        string $aggregation,
+        array $field,
+        array $manifest,
+    ): int|float {
+        /** @var Collection<int, Record> $rows */
+        $rows = $builder->get();
+        $this->derived->enrich($app, $object, $rows, $manifest);
+
+        $slug = $field['slug'];
+        $values = $rows
+            ->map(fn (Record $r) => $r->data[$slug] ?? null)
+            ->filter(fn ($v) => is_numeric($v))
+            ->map(fn ($v) => (float) $v)
+            ->values();
+
+        if ($values->isEmpty()) {
+            return $aggregation === 'avg' ? 0 : 0;
+        }
+
+        return match ($aggregation) {
+            'sum' => (float) $values->sum(),
+            'avg' => (float) $values->avg(),
+            'min' => (float) $values->min(),
+            'max' => (float) $values->max(),
+            default => throw new InvalidArgumentException("Unknown aggregation '{$aggregation}'."),
+        };
     }
 
     /**

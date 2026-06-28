@@ -71,7 +71,7 @@ class UpdateRecordTool extends SapiensTool
             'app_slug' => $schema->string()->description('The slug of the app.')->required(),
             'object_id' => $schema->string()->description('The object id the record belongs to.')->required(),
             'record_id' => $schema->string()->description('The record id to update.')->required(),
-            'values' => $schema->object()->description('Field id => new value map (partial; only these change).')->required(),
+            'values' => $schema->object()->description('Map of field (slug or id) => new value (partial; only these change).')->required(),
         ];
     }
 }

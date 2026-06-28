@@ -1808,7 +1808,8 @@ class ManifestValidator
 
         if ($allowedTypes !== null) {
             $fieldType = $resolved['type'] ?? null;
-            if (! in_array($fieldType, $allowedTypes, true)) {
+            if (! in_array($fieldType, $allowedTypes, true)
+                && ! $this->derivedSatisfiesNumeric($resolved, $allowedTypes)) {
                 $errors[] = new ManifestValidationError(
                     $errorPath,
                     "{$label} requires a field of type ".implode('|', $allowedTypes).", got '{$fieldType}'",
@@ -1816,6 +1817,32 @@ class ManifestValidator
                 );
             }
         }
+    }
+
+    /**
+     * A derived field can stand in where a numeric field is required when its
+     * computed value is numeric: a `formula` with return_type number, or any
+     * `rollup` (count/sum/avg/min/max all fold to a number). The runtime
+     * aggregates these in PHP (see RecordQueryService::aggregateDerived), so the
+     * dashboard can sum/avg/chart a rollup total or a formula. Only applies when
+     * the requirement set is the numeric one — never relaxes e.g. a single_select
+     * group_by. Lookups are excluded: their numeric-ness depends on the target
+     * object's field, which this local check can't resolve.
+     *
+     * @param  array<string, mixed>  $field
+     * @param  list<string>  $allowedTypes
+     */
+    private function derivedSatisfiesNumeric(array $field, array $allowedTypes): bool
+    {
+        if (! in_array('number', $allowedTypes, true)) {
+            return false;
+        }
+
+        return match ($field['type'] ?? null) {
+            'formula' => ($field['return_type'] ?? null) === 'number',
+            'rollup' => true,
+            default => false,
+        };
     }
 
     /**
