@@ -2690,56 +2690,50 @@ function statusTone(status: Message['status']): string {
                                 />
                                 <div class="min-w-0 flex-1">
                                     <header
-                                        class="flex shrink-0 flex-col justify-center border-b px-6"
-                                        :class="
-                                            previewBreadcrumbBlock
-                                                ? 'gap-1.5 py-3.5'
-                                                : 'h-16'
-                                        "
+                                        class="flex h-16 shrink-0 items-center gap-2 border-b px-6"
                                         :style="{
                                             borderColor:
                                                 'color-mix(in srgb, currentColor 12%, transparent)',
                                         }"
                                     >
-                                        <div class="flex items-center gap-2">
-                                            <button
-                                                type="button"
-                                                class="grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                                                :title="
-                                                    previewSidebarCollapsed
-                                                        ? 'Expandir menú'
-                                                        : 'Colapsar menú'
-                                                "
-                                                @click="
-                                                    previewSidebarCollapsed =
-                                                        !previewSidebarCollapsed
-                                                "
-                                            >
-                                                <PanelLeftOpen
-                                                    v-if="
-                                                        previewSidebarCollapsed
-                                                    "
-                                                    class="size-5"
-                                                />
-                                                <PanelLeftClose
-                                                    v-else
-                                                    class="size-5"
-                                                />
-                                            </button>
+                                        <button
+                                            type="button"
+                                            class="grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                                            :title="
+                                                previewSidebarCollapsed
+                                                    ? 'Expandir menú'
+                                                    : 'Colapsar menú'
+                                            "
+                                            @click="
+                                                previewSidebarCollapsed =
+                                                    !previewSidebarCollapsed
+                                            "
+                                        >
+                                            <PanelLeftOpen
+                                                v-if="previewSidebarCollapsed"
+                                                class="size-5"
+                                            />
+                                            <PanelLeftClose
+                                                v-else
+                                                class="size-5"
+                                            />
+                                        </button>
+                                        <div
+                                            v-if="previewBreadcrumbBlock"
+                                            class="flex min-w-0 flex-col justify-center gap-0.5"
+                                        >
                                             <BlockBreadcrumb
-                                                v-if="previewBreadcrumbBlock"
                                                 :block="(previewBreadcrumbBlock as any)"
                                             />
                                             <h1
-                                                v-else
-                                                class="truncate text-xl font-semibold tracking-tight"
+                                                class="truncate text-lg leading-tight font-bold tracking-tight"
                                             >
                                                 {{ preview.page.name }}
                                             </h1>
                                         </div>
                                         <h1
-                                            v-if="previewBreadcrumbBlock"
-                                            class="truncate text-2xl font-bold tracking-tight sm:text-3xl"
+                                            v-else
+                                            class="truncate text-xl font-semibold tracking-tight"
                                         >
                                             {{ preview.page.name }}
                                         </h1>

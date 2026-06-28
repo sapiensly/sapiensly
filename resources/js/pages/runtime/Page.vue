@@ -115,49 +115,41 @@ useScrollReveal(sectionsEl);
                 :href-for="hrefFor"
             />
             <div class="flex min-h-screen min-w-0 flex-1 flex-col">
-                <!-- Top header. With a breadcrumb it carries both the breadcrumb
-                     (top row, beside the collapse toggle) and the page title
-                     beneath it; otherwise a single h-16 row aligned with the
-                     sidebar header band. -->
+                <!-- Top header, exactly the height of the sidebar header band
+                     (h-16). The collapse toggle sits at the left of both the
+                     breadcrumb and the title, which stack compactly within. -->
                 <header
-                    class="flex shrink-0 flex-col justify-center border-b px-6"
-                    :class="breadcrumbBlock ? 'gap-1.5 py-3.5' : 'h-16'"
+                    class="flex h-16 shrink-0 items-center gap-2 border-b px-6"
                     :style="{
                         borderColor:
                             'color-mix(in srgb, currentColor 12%, transparent)',
                     }"
                 >
-                    <div class="flex items-center gap-2">
-                        <button
-                            type="button"
-                            class="grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                            :title="
-                                sidebarCollapsed
-                                    ? 'Expandir menú'
-                                    : 'Colapsar menú'
-                            "
-                            @click="sidebarCollapsed = !sidebarCollapsed"
-                        >
-                            <PanelLeftOpen
-                                v-if="sidebarCollapsed"
-                                class="size-5"
-                            />
-                            <PanelLeftClose v-else class="size-5" />
-                        </button>
-                        <BlockBreadcrumb
-                            v-if="breadcrumbBlock"
-                            :block="(breadcrumbBlock as any)"
-                        />
+                    <button
+                        type="button"
+                        class="grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                        :title="
+                            sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'
+                        "
+                        @click="sidebarCollapsed = !sidebarCollapsed"
+                    >
+                        <PanelLeftOpen v-if="sidebarCollapsed" class="size-5" />
+                        <PanelLeftClose v-else class="size-5" />
+                    </button>
+                    <div
+                        v-if="breadcrumbBlock"
+                        class="flex min-w-0 flex-col justify-center gap-0.5"
+                    >
+                        <BlockBreadcrumb :block="(breadcrumbBlock as any)" />
                         <h1
-                            v-else
-                            class="truncate text-xl font-semibold tracking-tight"
+                            class="truncate text-lg leading-tight font-bold tracking-tight"
                         >
                             {{ page.name }}
                         </h1>
                     </div>
                     <h1
-                        v-if="breadcrumbBlock"
-                        class="truncate text-2xl font-bold tracking-tight sm:text-3xl"
+                        v-else
+                        class="truncate text-xl font-semibold tracking-tight"
                     >
                         {{ page.name }}
                     </h1>
