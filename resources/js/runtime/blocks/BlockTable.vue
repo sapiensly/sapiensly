@@ -276,6 +276,23 @@ function richTextCell(value: unknown): string {
                             class="prose prose-sm max-w-none [&_a]:text-accent-blue [&_a]:underline"
                             v-html="richTextCell(row.data[col.field.slug])"
                         />
+                        <span
+                            v-else-if="
+                                col.field.type === 'color' &&
+                                row.data[col.field.slug]
+                            "
+                            class="inline-flex items-center gap-1.5"
+                        >
+                            <span
+                                class="size-3.5 shrink-0 rounded-full border border-black/10"
+                                :style="{
+                                    background: String(
+                                        row.data[col.field.slug],
+                                    ),
+                                }"
+                            />
+                            {{ row.data[col.field.slug] }}
+                        </span>
                         <template v-else>{{
                             formatCell(col.field, row.data[col.field.slug])
                         }}</template>

@@ -111,6 +111,9 @@ const BlockInsight = defineAsyncComponent(
 const BlockAlert = defineAsyncComponent(
     () => import('./blocks/BlockAlert.vue'),
 );
+const BlockBadge = defineAsyncComponent(
+    () => import('./blocks/BlockBadge.vue'),
+);
 const BlockAvatar = defineAsyncComponent(
     () => import('./blocks/BlockAvatar.vue'),
 );
@@ -171,6 +174,7 @@ const componentForType = {
     cta: BlockCta,
     stat_band: BlockStatBand,
     insight: BlockInsight,
+    badge: BlockBadge,
     alert: BlockAlert,
     avatar: BlockAvatar,
     breadcrumb: BlockBreadcrumb,

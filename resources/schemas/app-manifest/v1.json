@@ -617,9 +617,26 @@
                 }
             ]
         },
+        "field_color": {
+            "allOf": [
+                { "$ref": "#/$defs/field_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "slug": true, "name": true, "description": true,
+                        "required": true, "unique": true, "indexed": true, "readonly": true, "hidden": true, "help_text": true,
+                        "type": { "const": "color" },
+                        "default": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
         "field_definition": {
-            "description": "An object field. Its `type` must be one of the catalog types (string, long_text, number, currency, boolean, date, datetime, single_select, multi_select, relation, formula, lookup, rollup, rating, slider, rich_text, file, date_range). If this failed, the `type` is unknown or required props for that type are missing — call list_available_field_types. Derived types (formula/lookup/rollup) require readonly:true.",
+            "description": "An object field. Its `type` must be one of the catalog types (string, long_text, number, currency, boolean, date, datetime, single_select, multi_select, relation, formula, lookup, rollup, rating, slider, rich_text, file, date_range, color). If this failed, the `type` is unknown or required props for that type are missing — call list_available_field_types. Derived types (formula/lookup/rollup) require readonly:true.",
             "oneOf": [
+                { "$ref": "#/$defs/field_color" },
                 { "$ref": "#/$defs/field_string" },
                 { "$ref": "#/$defs/field_long_text" },
                 { "$ref": "#/$defs/field_number" },
@@ -1983,8 +2000,26 @@
                 }
             ]
         },
+        "block_badge": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "badge" },
+                        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+                        "variant": { "enum": ["neutral", "accent", "info", "success", "warning", "danger"], "default": "neutral", "description": "Colour preset. Use `color` for a custom hex instead." },
+                        "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "description": "Optional custom colour (hex); overrides variant." },
+                        "icon": { "type": "string", "maxLength": 40, "description": "Optional emoji or named icon (list_available_icons)." }
+                    },
+                    "required": ["type", "label"]
+                }
+            ]
+        },
         "block": {
-            "description": "A page block. Its `type` must be one of the catalog types (container, text, heading, divider, spacer, table, stat, form, button, modal, chart, kanban, calendar, markdown, image, hero, feature_grid, cta, stat_band, insight, alert, avatar, breadcrumb, carousel, testimonials, faq, pricing, word_cloud, flow, metric_grid, sparkline, gauge, heatmap, timeline, funnel, map, tabs, accordion, split_view, card_grid, multi_step_form). If this failed, the `type` is unknown or the block is missing a required prop for that type — call list_available_components for the catalog and each type's required props.",
+            "description": "A page block. Its `type` must be one of the catalog types (container, text, heading, divider, spacer, table, stat, form, button, modal, chart, kanban, calendar, markdown, image, hero, feature_grid, cta, stat_band, insight, badge, alert, avatar, breadcrumb, carousel, testimonials, faq, pricing, word_cloud, flow, metric_grid, sparkline, gauge, heatmap, timeline, funnel, map, tabs, accordion, split_view, card_grid, multi_step_form). If this failed, the `type` is unknown or the block is missing a required prop for that type — call list_available_components for the catalog and each type's required props.",
             "oneOf": [
                 { "$ref": "#/$defs/block_container" },
                 { "$ref": "#/$defs/block_text" },
@@ -2010,6 +2045,7 @@
                 { "$ref": "#/$defs/block_cta" },
                 { "$ref": "#/$defs/block_stat_band" },
                 { "$ref": "#/$defs/block_insight" },
+                { "$ref": "#/$defs/block_badge" },
                 { "$ref": "#/$defs/block_alert" },
                 { "$ref": "#/$defs/block_avatar" },
                 { "$ref": "#/$defs/block_breadcrumb" },

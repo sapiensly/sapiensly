@@ -483,7 +483,13 @@ it('ListAvailableComponentsTool returns the closed component catalog', function 
     $types = collect($result['components'])->pluck('type');
 
     expect($types)->toContain('container', 'text', 'heading', 'divider', 'spacer', 'table', 'stat', 'form', 'button', 'modal', 'chart', 'kanban', 'calendar')
-        ->and($types)->toContain('alert', 'avatar', 'breadcrumb', 'carousel'); // newer UI blocks
+        ->and($types)->toContain('alert', 'avatar', 'breadcrumb', 'carousel', 'badge'); // newer UI blocks
+});
+
+it('ListAvailableFieldTypesTool includes the color field type', function () {
+    $result = json_decode((new ListAvailableFieldTypesTool)->handle(new ToolRequest([])), true);
+
+    expect(collect($result['field_types'])->pluck('type'))->toContain('color');
 });
 
 it('validates a manifest using the new UI blocks + table pagination', function () {
@@ -495,7 +501,10 @@ it('validates a manifest using the new UI blocks + table pagination', function (
         'version' => 1,
         'objects' => [[
             'id' => 'obj_itemsobject', 'slug' => 'items', 'name' => 'Item',
-            'fields' => [['id' => 'fld_namefield01', 'slug' => 'name', 'name' => 'Name', 'type' => 'string']],
+            'fields' => [
+                ['id' => 'fld_namefield01', 'slug' => 'name', 'name' => 'Name', 'type' => 'string'],
+                ['id' => 'fld_colorfield1', 'slug' => 'color', 'name' => 'Colour', 'type' => 'color', 'default' => '#0096ff'],
+            ],
         ]],
         'pages' => [[
             'id' => 'pag_homepage01', 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
@@ -503,6 +512,7 @@ it('validates a manifest using the new UI blocks + table pagination', function (
                 ['id' => 'blk_breadcrumb1', 'type' => 'breadcrumb', 'items' => [['label' => 'Home', 'href' => '/r/newblocks/home'], ['label' => 'Items']]],
                 ['id' => 'blk_alertblock1', 'type' => 'alert', 'variant' => 'warning', 'title' => 'Heads up', 'body' => 'Read this.', 'icon' => 'alert-triangle', 'dismissible' => true],
                 ['id' => 'blk_avatarblock', 'type' => 'avatar', 'name' => 'Ana López', 'label' => 'Ana López', 'caption' => 'Owner', 'size' => 'lg'],
+                ['id' => 'blk_badgeblock1', 'type' => 'badge', 'label' => 'Activo', 'variant' => 'success', 'icon' => 'check'],
                 ['id' => 'blk_carouselbk', 'type' => 'carousel', 'autoplay' => true, 'interval_ms' => 4000, 'items' => [
                     ['image' => 'https://picsum.photos/seed/a/1200/600', 'title' => 'One'],
                     ['image' => 'https://picsum.photos/seed/b/1200/600', 'title' => 'Two'],

@@ -76,7 +76,10 @@ function formatSliderValue(value: number): string {
 // date_range — model is an object {from, to}. Patch one side at a time.
 function patchRange(side: 'from' | 'to', ev: Event) {
     const v = (ev.target as HTMLInputElement).value;
-    const current = (props.modelValue as { from?: string; to?: string }) ?? { from: '', to: '' };
+    const current = (props.modelValue as { from?: string; to?: string }) ?? {
+        from: '',
+        to: '',
+    };
     update({ ...current, [side]: v });
 }
 
@@ -99,15 +102,22 @@ async function onFileSelected(ev: Event) {
             {
                 headers: { 'Content-Type': 'multipart/form-data' },
                 onUploadProgress: (e) => {
-                    if (e.total) uploadProgress.value = Math.round((e.loaded / e.total) * 100);
+                    if (e.total)
+                        uploadProgress.value = Math.round(
+                            (e.loaded / e.total) * 100,
+                        );
                 },
             },
         );
         update(data);
         uploadProgress.value = 100;
     } catch (e) {
-        const err = e as { response?: { data?: { message?: string } }; message?: string };
-        uploadError.value = err.response?.data?.message ?? err.message ?? 'Upload failed.';
+        const err = e as {
+            response?: { data?: { message?: string } };
+            message?: string;
+        };
+        uploadError.value =
+            err.response?.data?.message ?? err.message ?? 'Upload failed.';
     } finally {
         input.value = '';
     }
@@ -131,7 +141,9 @@ function humanSize(bytes: number): string {
 
 // Multi-select handler: convert from CheckboxList to array.
 function toggleMultiSelect(value: string) {
-    const arr = Array.isArray(props.modelValue) ? [...(props.modelValue as string[])] : [];
+    const arr = Array.isArray(props.modelValue)
+        ? [...(props.modelValue as string[])]
+        : [];
     const i = arr.indexOf(value);
     if (i >= 0) arr.splice(i, 1);
     else arr.push(value);
@@ -139,7 +151,10 @@ function toggleMultiSelect(value: string) {
 }
 
 function isInMulti(value: string): boolean {
-    return Array.isArray(props.modelValue) && (props.modelValue as string[]).includes(value);
+    return (
+        Array.isArray(props.modelValue) &&
+        (props.modelValue as string[]).includes(value)
+    );
 }
 </script>
 
@@ -150,7 +165,11 @@ function isInMulti(value: string): boolean {
             :value="(modelValue as string) ?? ''"
             @input="onInput"
             rows="3"
-            :class="['w-full rounded-md border px-3 py-2 text-sm', t.surfaceMuted, t.text]"
+            :class="[
+                'w-full rounded-md border px-3 py-2 text-sm',
+                t.surfaceMuted,
+                t.text,
+            ]"
         />
     </template>
 
@@ -161,7 +180,11 @@ function isInMulti(value: string): boolean {
             @input="onNumber"
             type="number"
             :step="field.type === 'currency' ? '0.01' : 'any'"
-            :class="['h-9 w-full rounded-md border px-3 text-sm', t.surfaceMuted, t.text]"
+            :class="[
+                'h-9 w-full rounded-md border px-3 text-sm',
+                t.surfaceMuted,
+                t.text,
+            ]"
         />
     </template>
 
@@ -175,13 +198,43 @@ function isInMulti(value: string): boolean {
         />
     </template>
 
+    <template v-else-if="field.type === 'color'">
+        <div class="flex items-center gap-2">
+            <input
+                :value="(modelValue as string) || '#3b82f6'"
+                @input="onInput"
+                type="color"
+                :class="[
+                    'h-9 w-12 shrink-0 cursor-pointer rounded-md border',
+                    t.surfaceMuted,
+                ]"
+            />
+            <input
+                :id="inputId"
+                :value="(modelValue as string) ?? ''"
+                @input="onInput"
+                type="text"
+                placeholder="#RRGGBB"
+                :class="[
+                    'h-9 w-full rounded-md border px-3 text-sm',
+                    t.surfaceMuted,
+                    t.text,
+                ]"
+            />
+        </div>
+    </template>
+
     <template v-else-if="field.type === 'date'">
         <input
             :id="inputId"
             :value="(modelValue as string) ?? ''"
             @input="onInput"
             type="date"
-            :class="['h-9 w-full rounded-md border px-3 text-sm', t.surfaceMuted, t.text]"
+            :class="[
+                'h-9 w-full rounded-md border px-3 text-sm',
+                t.surfaceMuted,
+                t.text,
+            ]"
         />
     </template>
 
@@ -191,7 +244,11 @@ function isInMulti(value: string): boolean {
             :value="(modelValue as string) ?? ''"
             @input="onInput"
             type="datetime-local"
-            :class="['h-9 w-full rounded-md border px-3 text-sm', t.surfaceMuted, t.text]"
+            :class="[
+                'h-9 w-full rounded-md border px-3 text-sm',
+                t.surfaceMuted,
+                t.text,
+            ]"
         />
     </template>
 
@@ -200,7 +257,11 @@ function isInMulti(value: string): boolean {
             :id="inputId"
             :value="(modelValue as string) ?? ''"
             @change="onInput"
-            :class="['h-9 w-full rounded-md border px-3 text-sm', t.surfaceMuted, t.text]"
+            :class="[
+                'h-9 w-full rounded-md border px-3 text-sm',
+                t.surfaceMuted,
+                t.text,
+            ]"
         >
             <option value="">—</option>
             <option
@@ -241,14 +302,24 @@ function isInMulti(value: string): boolean {
                 @click="toggleRating(n)"
                 :class="[
                     'text-xl leading-none transition-colors',
-                    (modelValue as number) >= n ? 'text-amber-400' : 'text-ink-subtle hover:text-amber-400/60',
+                    (modelValue as number) >= n
+                        ? 'text-amber-400'
+                        : 'text-ink-subtle hover:text-amber-400/60',
                 ]"
                 :title="`${n} of ${(field as unknown as { max?: number }).max ?? 5}`"
             >
-                {{ (field as unknown as { icon?: string }).icon === 'heart' ? '♥' : (field as unknown as { icon?: string }).icon === 'thumb' ? '👍' : '★' }}
+                {{
+                    (field as unknown as { icon?: string }).icon === 'heart'
+                        ? '♥'
+                        : (field as unknown as { icon?: string }).icon ===
+                            'thumb'
+                          ? '👍'
+                          : '★'
+                }}
             </button>
             <span :class="['ml-2 text-xs', t.textMuted]">
-                {{ modelValue }} / {{ (field as unknown as { max?: number }).max ?? 5 }}
+                {{ modelValue }} /
+                {{ (field as unknown as { max?: number }).max ?? 5 }}
             </span>
         </div>
     </template>
@@ -266,11 +337,19 @@ function isInMulti(value: string): boolean {
                 class="w-full accent-accent-blue"
             />
             <div :class="['flex justify-between text-[10px]', t.textSubtle]">
-                <span>{{ formatSliderValue((field as unknown as { min?: number }).min ?? 0) }}</span>
+                <span>{{
+                    formatSliderValue(
+                        (field as unknown as { min?: number }).min ?? 0,
+                    )
+                }}</span>
                 <span :class="['font-semibold', t.text]">
                     {{ formatSliderValue((modelValue as number) ?? 0) }}
                 </span>
-                <span>{{ formatSliderValue((field as unknown as { max?: number }).max ?? 100) }}</span>
+                <span>{{
+                    formatSliderValue(
+                        (field as unknown as { max?: number }).max ?? 100,
+                    )
+                }}</span>
             </div>
         </div>
     </template>
@@ -281,16 +360,34 @@ function isInMulti(value: string): boolean {
                 :id="`${inputId}_from`"
                 :value="(modelValue as { from?: string })?.from ?? ''"
                 @input="patchRange('from', $event)"
-                :type="(field as unknown as { include_time?: boolean }).include_time ? 'datetime-local' : 'date'"
-                :class="['h-9 flex-1 rounded-md border px-3 text-sm', t.surfaceMuted, t.text]"
+                :type="
+                    (field as unknown as { include_time?: boolean })
+                        .include_time
+                        ? 'datetime-local'
+                        : 'date'
+                "
+                :class="[
+                    'h-9 flex-1 rounded-md border px-3 text-sm',
+                    t.surfaceMuted,
+                    t.text,
+                ]"
             />
             <span :class="['text-xs', t.textSubtle]">→</span>
             <input
                 :id="`${inputId}_to`"
                 :value="(modelValue as { to?: string })?.to ?? ''"
                 @input="patchRange('to', $event)"
-                :type="(field as unknown as { include_time?: boolean }).include_time ? 'datetime-local' : 'date'"
-                :class="['h-9 flex-1 rounded-md border px-3 text-sm', t.surfaceMuted, t.text]"
+                :type="
+                    (field as unknown as { include_time?: boolean })
+                        .include_time
+                        ? 'datetime-local'
+                        : 'date'
+                "
+                :class="[
+                    'h-9 flex-1 rounded-md border px-3 text-sm',
+                    t.surfaceMuted,
+                    t.text,
+                ]"
             />
         </div>
     </template>
@@ -300,7 +397,12 @@ function isInMulti(value: string): boolean {
             <template v-if="!modelValue">
                 <label
                     :for="inputId"
-                    :class="['flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed text-xs transition-colors', t.surfaceMuted, t.textMuted, 'hover:border-accent-blue/40 hover:text-ink']"
+                    :class="[
+                        'flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed text-xs transition-colors',
+                        t.surfaceMuted,
+                        t.textMuted,
+                        'hover:border-accent-blue/40 hover:text-ink',
+                    ]"
                 >
                     <span v-if="uploadProgress > 0 && uploadProgress < 100">
                         Uploading {{ uploadProgress }}%…
@@ -308,9 +410,30 @@ function isInMulti(value: string): boolean {
                     <template v-else>
                         <span>Click to upload</span>
                         <span class="text-[10px] opacity-60">
-                            Max {{ (field as unknown as { max_size_mb?: number }).max_size_mb ?? 10 }}MB
-                            <template v-if="(field as unknown as { mime_types?: string[] }).mime_types?.length">
-                                · {{ ((field as unknown as { mime_types?: string[] }).mime_types ?? []).join(', ') }}
+                            Max
+                            {{
+                                (field as unknown as { max_size_mb?: number })
+                                    .max_size_mb ?? 10
+                            }}MB
+                            <template
+                                v-if="
+                                    (
+                                        field as unknown as {
+                                            mime_types?: string[];
+                                        }
+                                    ).mime_types?.length
+                                "
+                            >
+                                ·
+                                {{
+                                    (
+                                        (
+                                            field as unknown as {
+                                                mime_types?: string[];
+                                            }
+                                        ).mime_types ?? []
+                                    ).join(', ')
+                                }}
                             </template>
                         </span>
                     </template>
@@ -318,47 +441,81 @@ function isInMulti(value: string): boolean {
                         :id="inputId"
                         type="file"
                         class="hidden"
-                        :accept="((field as unknown as { mime_types?: string[] }).mime_types ?? []).join(',') || undefined"
+                        :accept="
+                            (
+                                (field as unknown as { mime_types?: string[] })
+                                    .mime_types ?? []
+                            ).join(',') || undefined
+                        "
                         @change="onFileSelected"
                     />
                 </label>
             </template>
             <template v-else>
-                <div :class="['flex items-center gap-3 rounded-md border p-2', t.surfaceMuted]">
+                <div
+                    :class="[
+                        'flex items-center gap-3 rounded-md border p-2',
+                        t.surfaceMuted,
+                    ]"
+                >
                     <img
                         v-if="isImageMime((modelValue as UploadedFile).mime)"
                         :src="(modelValue as UploadedFile).url"
                         :alt="(modelValue as UploadedFile).original_name"
                         class="size-12 rounded object-cover"
                     />
-                    <div v-else :class="['flex size-12 items-center justify-center rounded text-[10px] font-mono uppercase', t.surface, t.textMuted]">
-                        {{ (modelValue as UploadedFile).mime.split('/')[1]?.slice(0, 4) ?? 'FILE' }}
+                    <div
+                        v-else
+                        :class="[
+                            'flex size-12 items-center justify-center rounded font-mono text-[10px] uppercase',
+                            t.surface,
+                            t.textMuted,
+                        ]"
+                    >
+                        {{
+                            (modelValue as UploadedFile).mime
+                                .split('/')[1]
+                                ?.slice(0, 4) ?? 'FILE'
+                        }}
                     </div>
-                    <div class="flex-1 min-w-0">
+                    <div class="min-w-0 flex-1">
                         <a
                             :href="(modelValue as UploadedFile).url"
                             target="_blank"
                             rel="noopener"
-                            :class="['block truncate text-xs font-medium underline', t.text]"
+                            :class="[
+                                'block truncate text-xs font-medium underline',
+                                t.text,
+                            ]"
                         >
                             {{ (modelValue as UploadedFile).original_name }}
                         </a>
                         <p :class="['text-[10px]', t.textSubtle]">
-                            {{ humanSize((modelValue as UploadedFile).size_bytes) }}
+                            {{
+                                humanSize(
+                                    (modelValue as UploadedFile).size_bytes,
+                                )
+                            }}
                             · {{ (modelValue as UploadedFile).mime }}
                         </p>
                     </div>
                     <button
                         type="button"
                         @click="clearFile"
-                        :class="['rounded p-1 text-xs', t.textMuted, 'hover:text-red-400']"
+                        :class="[
+                            'rounded p-1 text-xs',
+                            t.textMuted,
+                            'hover:text-red-400',
+                        ]"
                         title="Remove file"
                     >
                         ✕
                     </button>
                 </div>
             </template>
-            <p v-if="uploadError" class="text-[11px] text-red-400">{{ uploadError }}</p>
+            <p v-if="uploadError" class="text-[11px] text-red-400">
+                {{ uploadError }}
+            </p>
         </div>
     </template>
 
@@ -376,7 +533,11 @@ function isInMulti(value: string): boolean {
             :value="(modelValue as string) ?? ''"
             @input="onInput"
             type="text"
-            :class="['h-9 w-full rounded-md border px-3 text-sm', t.surfaceMuted, t.text]"
+            :class="[
+                'h-9 w-full rounded-md border px-3 text-sm',
+                t.surfaceMuted,
+                t.text,
+            ]"
         />
     </template>
 </template>

@@ -34,6 +34,7 @@ class ListAvailableFieldTypesTool implements Tool
             ['type' => 'number', 'props' => 'default?, min?, max?, precision?, format?'],
             ['type' => 'currency', 'props' => 'currency_code (3-letter ISO, required), default?, min?, max?'],
             ['type' => 'boolean', 'props' => 'default?'],
+            ['type' => 'color', 'props' => 'default? (#RRGGBB). Stored as a hex string; the form shows a colour picker + hex input, and tables render a swatch. Good for category/tag/label colours.'],
             ['type' => 'date', 'props' => 'default? (ISO date)'],
             ['type' => 'datetime', 'props' => 'default? (ISO datetime)'],
             ['type' => 'single_select', 'props' => 'options (required, array of {id, value, label, color?}), default?'],
