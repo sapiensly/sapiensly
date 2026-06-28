@@ -43,6 +43,26 @@ const navItems = computed(
         undefined,
 );
 
+// In the sidebar layout the page title lives in a top bar that aligns with the
+// sidebar header band — so drop a leading heading block that just repeats the
+// page name (avoids showing the title twice).
+const contentBlocks = computed(() => {
+    const blocks = (props.page.blocks ?? []) as Array<Record<string, unknown>>;
+    if (
+        useSidebar.value &&
+        blocks[0]?.type === 'heading' &&
+        String(blocks[0].content ?? '')
+            .trim()
+            .toLowerCase() ===
+            String(props.page.name ?? '')
+                .trim()
+                .toLowerCase()
+    ) {
+        return blocks.slice(1);
+    }
+    return blocks;
+});
+
 const hrefFor = (slug: string) => `/r/${props.app.slug}/${slug}`;
 
 // Provide the App slug so BlockForm/BlockButton can POST to /r/{slug}/actions.
@@ -75,9 +95,21 @@ useScrollReveal(sectionsEl);
                 :href-for="hrefFor"
             />
             <div class="flex min-h-screen min-w-0 flex-1 flex-col">
-                <div ref="sectionsEl" class="flex-1 space-y-4 px-5 py-6">
+                <!-- Page-title bar, same height as the sidebar header band. -->
+                <header
+                    class="flex h-16 shrink-0 items-center border-b px-6"
+                    :style="{
+                        borderColor:
+                            'color-mix(in srgb, currentColor 12%, transparent)',
+                    }"
+                >
+                    <h1 class="truncate text-xl font-semibold tracking-tight">
+                        {{ page.name }}
+                    </h1>
+                </header>
+                <div ref="sectionsEl" class="flex-1 space-y-4 px-6 py-6">
                     <AppRenderer
-                        :blocks="page.blocks"
+                        :blocks="contentBlocks"
                         :block-data="blockData"
                         :objects="manifest.objects"
                         :locale="locale"
@@ -85,7 +117,7 @@ useScrollReveal(sectionsEl);
                         :theme="theme"
                     />
                 </div>
-                <div class="px-5">
+                <div class="px-6">
                     <SiteFooter :footer="footer" :brand-name="brand.name" />
                 </div>
             </div>

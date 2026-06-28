@@ -140,11 +140,11 @@ const activeStyle = {
         <!-- Brand header. Collapsed: just the brand icon (nothing if there is none). -->
         <a
             v-if="!collapsed || brandIcon"
-            class="flex border-b px-3 py-3.5 font-semibold"
+            class="flex h-16 shrink-0 border-b px-3 font-semibold"
             :class="
                 collapsed
                     ? 'items-center justify-center'
-                    : 'flex-col items-start gap-2'
+                    : 'flex-col justify-center gap-1'
             "
             :style="{
                 borderColor:

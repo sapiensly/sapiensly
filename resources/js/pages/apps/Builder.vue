@@ -1052,6 +1052,23 @@ const previewNavItems = computed(
         (props.manifest?.navigation as { items?: unknown[] } | null)?.items ??
         undefined,
 );
+// Drop a leading heading that repeats the page name (the title bar shows it).
+const previewContentBlocks = computed(() => {
+    const blocks = (props.preview?.page?.blocks ?? []) as Array<
+        Record<string, unknown>
+    >;
+    const name =
+        (props.preview?.page as { name?: string } | undefined)?.name ?? '';
+    if (
+        blocks[0]?.type === 'heading' &&
+        String(blocks[0].content ?? '')
+            .trim()
+            .toLowerCase() === String(name).trim().toLowerCase()
+    ) {
+        return blocks.slice(1);
+    }
+    return blocks;
+});
 const previewFooter = computed(
     () =>
         previewSettings.value.footer as
@@ -2626,10 +2643,23 @@ function statusTone(status: Message['status']): string {
                                     :pages="preview.pages"
                                     :current-slug="preview.page.slug"
                                 />
-                                <div class="min-w-0 flex-1 px-5">
-                                    <div class="space-y-4 py-6">
+                                <div class="min-w-0 flex-1">
+                                    <header
+                                        class="flex h-16 shrink-0 items-center border-b px-6"
+                                        :style="{
+                                            borderColor:
+                                                'color-mix(in srgb, currentColor 12%, transparent)',
+                                        }"
+                                    >
+                                        <h1
+                                            class="truncate text-xl font-semibold tracking-tight"
+                                        >
+                                            {{ preview.page.name }}
+                                        </h1>
+                                    </header>
+                                    <div class="space-y-4 px-6 py-6">
                                         <AppRenderer
-                                            :blocks="preview.page.blocks"
+                                            :blocks="previewContentBlocks"
                                             :block-data="preview.block_data"
                                             :objects="preview.objects"
                                             :locale="previewLocale"
