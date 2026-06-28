@@ -122,6 +122,19 @@ CONNECTING EXTERNAL SYSTEMS (integrations):
   - The sample call IS the verification that the mapping is real; confirm the mapping with the user before proposing if unsure. Data stays in the external system (passthrough) — you are NOT copying it in.
 TXT,
 
+        'palette' => <<<'TXT'
+COLOUR PALETTE (richer UIs from the brand accent, kept executive):
+- The runtime DERIVES a full professional palette from the app's effective accent (the app's `settings.accent`, else the org Brandbook accent, else the platform blue) and exposes it as CSS variables on every app surface — you don't generate or store it, just USE the variables:
+  - `var(--sp-accent)` — the brand accent (primary actions, links).
+  - `var(--sp-accent-50 … --sp-accent-900)` — a tint→shade ramp. 50/100 = very light tints for section/card backgrounds and chips; 700–900 = deep shades for text-on-light or borders.
+  - `var(--sp-accent-soft)` — the lightest tint, a one-call section background.
+  - `var(--sp-accent-contrast)` — readable text colour to put ON the accent.
+  - `var(--sp-chart-1 … --sp-chart-6)` — a cohesive categorical series. Charts already use it automatically; reference it if you colour anything series-like yourself.
+- Call `generate_palette` (optionally with a base hex) to SEE the concrete hexes + variable names — useful when you want to reason about specific colours. But prefer the CSS variables over hard-coded hexes in block `style` / `custom_css`, so the palette tracks whatever accent the org/app picks.
+- HOW TO USE IT TASTEFULLY (executive, not loud): tint SECTIONS not whole pages — e.g. a dashboard KPI row or a feature section with `style.background` = a 50/100 tint; primary buttons on `--sp-accent` with `--sp-accent-contrast` text; alternate plain and soft-tinted sections for rhythm. Don't paint large areas in the full-strength accent, don't use more than ~2 palette steps on one screen, and keep body text on the theme's default colours. Status colours (success/danger) stay green/red — the brand palette is for brand accents, not semantics.
+- Example (soft section via custom_css): [data-block-type="metric_grid"] .card { background: var(--sp-accent-50); border-color: var(--sp-accent-100); }
+TXT,
+
         'icons' => <<<'TXT'
 ICONS (use them liberally for clear, scannable UIs):
 - Almost every chrome element takes an `icon`: button.icon, feature_grid items, stat/metric_grid items, insight, flow steps, table action columns (columns[type=action].icon), page.icon (shown in nav), nav items, card_grid items. Add icons by default — a button labelled "Add" reads better with a `plus`, a revenue stat with a `dollar`, a delete action with a `trash`.
@@ -257,7 +270,7 @@ TXT,
     {
         $topics = implode(', ', array_keys(self::TOPICS));
 
-        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `icons` (named icons + emoji for any block icon), `custom_css` (the scoped raw-CSS escape hatch + targeting hooks), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
+        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `palette` (brand-derived colour palette + CSS vars), `icons` (named icons + emoji for any block icon), `custom_css` (the scoped raw-CSS escape hatch + targeting hooks), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
     }
 
     public function schema(JsonSchema $schema): array

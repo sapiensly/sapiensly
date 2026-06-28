@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\Tools\Builder\FrameworkReferenceTool;
+use App\Ai\Tools\Builder\GeneratePaletteTool;
 use App\Ai\Tools\Builder\InspectRecordsTool;
 use App\Ai\Tools\Builder\ListAvailableComponentsTool;
 use App\Ai\Tools\Builder\ListAvailableFieldTypesTool;
@@ -366,7 +367,16 @@ it('ReadManifestTool stays on the active manifest after a failed propose_change'
 it('FrameworkReferenceTool lists its topics when called with no topic', function () {
     $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest([])), true);
 
-    expect($result['topics'])->toContain('forms', 'workflows', 'derived_fields', 'expressions', 'design', 'icons', 'custom_css', 'permissions', 'verification', 'visual_review', 'connected_objects', 'example');
+    expect($result['topics'])->toContain('forms', 'workflows', 'derived_fields', 'expressions', 'design', 'palette', 'icons', 'custom_css', 'permissions', 'verification', 'visual_review', 'connected_objects', 'example');
+});
+
+it('generate_palette derives a palette from a base accent', function () {
+    $result = json_decode((new GeneratePaletteTool)->handle(new ToolRequest(['base' => '#0096ff'])), true);
+
+    expect($result['base'])->toBe('#0096ff')
+        ->and($result['ramp']['500'])->toBe('#0096ff')
+        ->and($result['chart'])->toHaveCount(6)
+        ->and($result['css_variables']['chart'])->toContain('--sp-chart');
 });
 
 it('FrameworkReferenceTool documents named icons + emoji for any block icon', function () {

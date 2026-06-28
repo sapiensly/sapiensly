@@ -120,6 +120,7 @@ class SapiensServer extends Server
         // Build catalogs.
         Tools\Build\ListAvailableComponentsTool::class,
         Tools\Build\ListAvailableIconsTool::class,
+        Tools\Build\GeneratePaletteTool::class,
         Tools\Build\ListAvailableFieldTypesTool::class,
         Tools\Build\ListAvailableActionsTool::class,
         Tools\Build\ListAvailableTriggersTool::class,

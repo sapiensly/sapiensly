@@ -16,6 +16,8 @@ use App\Services\Manifest\InvalidManifestException;
 use App\Services\Records\BlockDataResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Storage\TenantStorage;
+use App\Support\Branding\ColorPalette;
+use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
 use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
@@ -250,6 +252,9 @@ class AppBuilderController extends Controller
         $settings = $app->organization !== null
             ? $app->organization->brandbook()->applyToAppSettings($manifest['settings'] ?? [])
             : ($manifest['settings'] ?? []);
+        $settings['palette'] = ColorPalette::fromAccent(
+            $settings['accent'] ?? OrganizationBrand::DEFAULT_ACCENT,
+        );
 
         return [
             'page' => $page,

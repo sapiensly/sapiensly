@@ -7,6 +7,8 @@ use App\Services\Apps\AppAccessContext;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\BlockDataResolver;
+use App\Support\Branding\ColorPalette;
+use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -106,6 +108,10 @@ class AppRuntimeController extends Controller
         $settings = $app->organization !== null
             ? $app->organization->brandbook()->applyToAppSettings($manifest['settings'] ?? [])
             : ($manifest['settings'] ?? []);
+
+        // Derive a professional palette from the effective accent and ship it so
+        // the surface exposes it as CSS vars (--sp-accent-50…900, chart series).
+        $settings['palette'] = ColorPalette::fromAccent($settings['accent'] ?? OrganizationBrand::DEFAULT_ACCENT);
 
         return Inertia::render('runtime/Page', [
             'app' => [
