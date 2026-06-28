@@ -76,9 +76,60 @@ function scaffoldWithChild(string $locale): array
     return app(AppScaffolder::class)->assemble($base, $spec);
 }
 
+/**
+ * A POS-shaped model: an order (comandas) ← line (renglones) → priced product
+ * (platillos). The scaffolder should detect this and generate a POS screen.
+ *
+ * @return array<string, mixed>
+ */
+function scaffoldPos(string $locale): array
+{
+    $base = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_p1',
+        'slug' => 'pos3',
+        'name' => 'POS',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => $locale, 'default_currency' => 'MXN'],
+    ];
+
+    $spec = [
+        'objects' => [
+            ['name' => 'Comandas', 'slug' => 'comandas', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'abierta', 'label' => 'Abierta'],
+                    ['value' => 'pagada', 'label' => 'Pagada'],
+                ]],
+            ]],
+            ['name' => 'Platillos', 'slug' => 'platillos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+                ['name' => 'Precio', 'slug' => 'precio', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Renglones', 'slug' => 'renglones', 'fields' => [
+                ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+            ]],
+        ],
+        'links' => [
+            ['from' => 'renglones', 'to' => 'comandas', 'name' => 'comanda'],
+            ['from' => 'renglones', 'to' => 'platillos', 'name' => 'platillo'],
+        ],
+    ];
+
+    return app(AppScaffolder::class)->assemble($base, $spec);
+}
+
 function pageBySlug(array $manifest, string $slug): ?array
 {
     return collect($manifest['pages'])->firstWhere('slug', $slug);
+}
+
+function blocksByType(array $page, string $type): array
+{
+    return collect($page['blocks'])->where('type', $type)->values()->all();
 }
 
 function blockByType(array $page, string $type): ?array
@@ -202,4 +253,62 @@ it('produces a schema-valid manifest with the master-detail page', function () {
 
     expect($result->errors)->toBe([]);
     expect($result->valid)->toBeTrue();
+});
+
+it('generates a POS screen for an order/line/product triad', function () {
+    $manifest = scaffoldPos('es-MX');
+
+    $pos = pageBySlug($manifest, 'pos');
+    expect($pos)->not->toBeNull();
+
+    // Product grid that adds a line to the open order on tap.
+    $split = blockByType($pos, 'split_view');
+    expect($split)->not->toBeNull();
+    $grid = collect($split['left_blocks'])->firstWhere('type', 'card_grid');
+    $platillos = collect($manifest['objects'])->firstWhere('slug', 'platillos');
+    expect($grid['data_source']['object_id'])->toBe($platillos['id']);
+    $create = collect($grid['on_click'])->firstWhere('type', 'create_record');
+    $renglones = collect($manifest['objects'])->firstWhere('slug', 'renglones');
+    expect($create['object_id'])->toBe($renglones['id']);
+    expect($create['values']['comanda'])->toBe('{{params.order}}');
+    expect($create['values']['platillo'])->toBe('{{row.id}}');
+
+    // The cart: a table over lines filtered by the open order, with -/+ and remove.
+    $cartTable = collect($split['right_blocks'])->firstWhere('type', 'table');
+    expect($cartTable['data_source']['filter']['value_expression'])->toBe('{{params.order}}');
+    $actions = collect($cartTable['columns'])->where('type', 'action')->pluck('label')->all();
+    expect($actions)->toContain('−')->toContain('+')->toContain('×');
+
+    // New-order button opens an order and routes to it as the page context.
+    $btn = blockByType($pos, 'button');
+    $nav = collect($btn['on_click'])->firstWhere('type', 'navigate');
+    expect($nav['to'])->toBe('/pos?order={{record.id}}');
+});
+
+it('synthesizes the POS line economics and order total', function () {
+    $manifest = scaffoldPos('es-MX');
+
+    $renglones = collect($manifest['objects'])->firstWhere('slug', 'renglones');
+    $precio = collect($renglones['fields'])->firstWhere('type', 'lookup');
+    $subtotal = collect($renglones['fields'])->firstWhere('type', 'formula');
+    expect($precio)->not->toBeNull();
+    expect($subtotal['expression'])->toBe('{{cantidad * '.$precio['slug'].'}}');
+
+    $comandas = collect($manifest['objects'])->firstWhere('slug', 'comandas');
+    $total = collect($comandas['fields'])
+        ->first(fn ($f) => ($f['type'] ?? null) === 'rollup' && ($f['aggregator'] ?? null) === 'sum');
+    expect($total['target_field_id'])->toBe($subtotal['id']);
+});
+
+it('produces a schema-valid manifest with the POS screen', function () {
+    $result = (new ManifestValidator)->validate(scaffoldPos('es-MX'));
+
+    expect($result->errors)->toBe([]);
+    expect($result->valid)->toBeTrue();
+});
+
+it('does not generate a POS screen without a priced product triad', function () {
+    // The earlier parent/child (no priced product on the child's other side).
+    $manifest = scaffoldWithChild('es-MX');
+    expect(pageBySlug($manifest, 'pos'))->toBeNull();
 });

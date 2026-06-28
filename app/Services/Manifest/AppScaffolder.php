@@ -411,6 +411,7 @@ class AppScaffolder
         // record, per parent, the child relationships so pass 4 can build a
         // master-detail page (the parent record + its children) for it.
         $childrenByParent = [];
+        $relationsByChild = [];
         foreach ($spec['links'] ?? [] as $link) {
             $fromIndex = $indexBySlug[$link['from']] ?? null;
             $toIndex = $indexBySlug[$link['to']] ?? null;
@@ -436,7 +437,20 @@ class AppScaffolder
                 'childFieldId' => $pair['child_field']['id'],
                 'childFieldSlug' => $pair['child_field']['slug'],
             ];
+            // For POS detection: every belongs-to the `from` (line) object owns,
+            // with the FK field on it and the inverse one_to_many on the target.
+            $relationsByChild[$fromIndex][] = [
+                'targetIndex' => $toIndex,
+                'childFieldId' => $pair['child_field']['id'],
+                'childFieldSlug' => $pair['child_field']['slug'],
+                'parentFieldId' => $pair['parent_field']['id'],
+            ];
         }
+
+        // Pass 2.5: detect a POS-shaped triad (an order ← line → priced product)
+        // and synthesise the line economics (unit price lookup, subtotal formula)
+        // + the order total rollup so a generated POS screen actually computes.
+        $posSpecs = $this->detectAndBuildPosEconomics($built, $relationsByChild, $currency, $lang);
 
         // Pass 3: a list page per object (now that relation fields exist).
         $objects = [];
@@ -470,7 +484,14 @@ class AppScaffolder
             $this->addRowActionToTable($objectPages[$parentIndex], $detailSlug, $lang);
         }
 
-        $pages = [...array_values($objectPages), ...$detailPages];
+        // Pass 5: a POS-style screen (product grid + live cart) for each triad.
+        $posPages = [];
+        foreach ($posSpecs as $spec) {
+            $posPages[] = $this->buildPosPage($spec, $lang, $usedSlugs);
+            $usedSlugs[] = end($posPages)['slug'];
+        }
+
+        $pages = [...$posPages, ...array_values($objectPages), ...$detailPages];
 
         // A dashboard landing page summarising every object goes first so it is
         // the app's home. Only worth it once there is something to summarise.
@@ -1003,6 +1024,318 @@ class AppScaffolder
     }
 
     /**
+     * Detect a POS-shaped triad — an order object linked from a line object that
+     * also links to a priced product — and synthesise the line economics so a
+     * generated POS screen computes: a unit-price LOOKUP of the product price, a
+     * SUBTOTAL formula (qty × price) and an order TOTAL rollup (sum of subtotals).
+     * Mutates $built (adds the fields) and returns a spec per triad for the page.
+     *
+     * @param  array<int, array{def: array<string, mixed>, pageFields: array<int, array<string, mixed>>}>  $built
+     * @param  array<int, array<int, array{targetIndex: int, childFieldId: string, childFieldSlug: string, parentFieldId: string}>>  $relationsByChild
+     * @return array<int, array<string, mixed>>
+     */
+    private function detectAndBuildPosEconomics(array &$built, array $relationsByChild, string $currency, string $lang): array
+    {
+        $labels = $this->posLabels($lang);
+        $specs = [];
+
+        foreach ($relationsByChild as $lineIndex => $rels) {
+            if (count($rels) < 2) {
+                continue;
+            }
+
+            // Product = a related object that has a price (currency) field + a title.
+            $productRel = $productPrice = $productTitle = null;
+            foreach ($rels as $rel) {
+                $def = $built[$rel['targetIndex']]['def'];
+                $price = $this->firstDefFieldOfType($def, ['currency']);
+                $title = $this->firstDefFieldOfType($def, ['string']);
+                if ($price !== null && $title !== null) {
+                    $productRel = $rel;
+                    $productPrice = $price;
+                    $productTitle = $title;
+                    break;
+                }
+            }
+            if ($productRel === null) {
+                continue;
+            }
+
+            // Order = the first OTHER belongs-to (the parent that isn't the product).
+            $orderRel = null;
+            foreach ($rels as $rel) {
+                if ($rel['targetIndex'] !== $productRel['targetIndex']) {
+                    $orderRel = $rel;
+                    break;
+                }
+            }
+            if ($orderRel === null) {
+                continue;
+            }
+
+            $orderDef = $built[$orderRel['targetIndex']]['def'];
+            $orderStatus = $this->firstDefFieldOfType($orderDef, ['single_select']);
+            $newOrderValues = $this->posNewOrderValues($orderDef, $orderStatus);
+            if ($newOrderValues === []) {
+                // No seedable field to open an order with → can't drive a POS flow.
+                continue;
+            }
+
+            $lineDef = &$built[$lineIndex]['def'];
+            $taken = array_column($lineDef['fields'], 'slug');
+
+            // Quantity: reuse a number field that reads like a quantity, else add one.
+            $qty = $this->quantityFieldOf($lineDef);
+            if ($qty === null) {
+                $slug = $this->uniqueSlug('cantidad', $taken, 'cantidad');
+                $taken[] = $slug;
+                [$qty, $qtyIdx] = $this->buildField(['name' => $labels['qty'], 'slug' => $slug, 'type' => 'number', 'options' => null, 'config' => ['default' => 1, 'min' => 1]], $currency);
+                $lineDef['fields'][] = $qty;
+                $built[$lineIndex]['pageFields'][] = $qtyIdx;
+            }
+
+            // Unit price: a lookup of the product price across the line→product rel.
+            $priceSlug = $this->uniqueSlug('precio_unitario', $taken, 'precio');
+            $taken[] = $priceSlug;
+            [$precio, $precioIdx] = $this->buildField(['name' => $labels['unit_price'], 'slug' => $priceSlug, 'type' => 'lookup', 'options' => null, 'config' => ['via_relation_field_id' => $productRel['childFieldId'], 'target_field_id' => $productPrice['id']]], $currency);
+            $lineDef['fields'][] = $precio;
+            $built[$lineIndex]['pageFields'][] = $precioIdx;
+
+            // Subtotal: qty × unit price, formatted as money.
+            $subSlug = $this->uniqueSlug('subtotal', $taken, 'subtotal');
+            [$subtotal, $subIdx] = $this->buildField(['name' => $labels['subtotal'], 'slug' => $subSlug, 'type' => 'formula', 'options' => null, 'config' => ['expression' => '{{'.$qty['slug'].' * '.$priceSlug.'}}', 'return_type' => 'number', 'currency_code' => $currency]], $currency);
+            $lineDef['fields'][] = $subtotal;
+            $built[$lineIndex]['pageFields'][] = $subIdx;
+
+            // Order total: rollup SUM of the line subtotals.
+            $orderDefRef = &$built[$orderRel['targetIndex']]['def'];
+            $totalSlug = $this->uniqueSlug('total', array_column($orderDefRef['fields'], 'slug'), 'total');
+            [$total, $totalIdx] = $this->buildField(['name' => $labels['total'], 'slug' => $totalSlug, 'type' => 'rollup', 'options' => null, 'config' => ['via_relation_field_id' => $orderRel['parentFieldId'], 'aggregator' => 'sum', 'target_field_id' => $subtotal['id']]], $currency);
+            $orderDefRef['fields'][] = $total;
+            $built[$orderRel['targetIndex']]['pageFields'][] = $totalIdx;
+
+            $productDef = $built[$productRel['targetIndex']]['def'];
+            $specs[] = [
+                'order_object_id' => $orderDefRef['id'],
+                'line_object_id' => $lineDef['id'],
+                'product_object_id' => $productDef['id'],
+                'product_title_field_id' => $productTitle['id'],
+                'product_price_field_id' => $productPrice['id'],
+                'product_image_field_id' => $this->imageFieldOf($productDef)['id'] ?? null,
+                'line_order_rel_field_id' => $orderRel['childFieldId'],
+                'line_order_rel_slug' => $orderRel['childFieldSlug'],
+                'line_product_rel_field_id' => $productRel['childFieldId'],
+                'line_product_rel_slug' => $productRel['childFieldSlug'],
+                'qty_field_id' => $qty['id'],
+                'qty_slug' => $qty['slug'],
+                'subtotal_field_id' => $subtotal['id'],
+                'order_total_field_id' => $total['id'],
+                'order_status_field_id' => $orderStatus['id'] ?? null,
+                'new_order_values' => $newOrderValues,
+            ];
+        }
+
+        return $specs;
+    }
+
+    /**
+     * Seed values for the "new order" button so create_record gets a non-empty
+     * object: the status' first option when there is a status, else the first
+     * scalar field (blank). Empty ⇒ caller skips POS generation.
+     *
+     * @param  array<string, mixed>  $orderDef
+     * @param  array<string, mixed>|null  $status
+     * @return array<string, mixed>
+     */
+    private function posNewOrderValues(array $orderDef, ?array $status): array
+    {
+        if ($status !== null && ! empty($status['options'])) {
+            return [$status['slug'] => $status['options'][0]['value']];
+        }
+        $seed = $this->firstDefFieldOfType($orderDef, ['string', 'number', 'currency', 'boolean']);
+        if ($seed === null) {
+            return [];
+        }
+
+        return [$seed['slug'] => ($seed['type'] === 'boolean' ? false : '')];
+    }
+
+    /**
+     * Build the POS screen: a "new order" button (opens an order and routes to
+     * ?order=<id>), then a split view — a product card_grid whose on_click adds a
+     * line to the open order, beside a live cart (the order record + its lines
+     * with −/+ and remove, totalled).
+     *
+     * @param  array<string, mixed>  $spec
+     * @param  array<int, string>  $usedSlugs
+     * @return array<string, mixed>
+     */
+    private function buildPosPage(array $spec, string $lang, array $usedSlugs): array
+    {
+        $labels = $this->posLabels($lang);
+        $posSlug = $this->uniqueSlug('pos', $usedSlugs, 'pos');
+        $path = '/'.$posSlug;
+
+        $cardGrid = [
+            'id' => $this->id('blk'),
+            'type' => 'card_grid',
+            'data_source' => ['object_id' => $spec['product_object_id']],
+            'columns' => 3,
+            'title_field_id' => $spec['product_title_field_id'],
+            'meta_fields' => [['field_id' => $spec['product_price_field_id']]],
+            'action_icon' => 'plus',
+            'on_click' => [
+                ['type' => 'create_record', 'object_id' => $spec['line_object_id'], 'values' => [
+                    $spec['line_order_rel_slug'] => '{{params.order}}',
+                    $spec['line_product_rel_slug'] => '{{row.id}}',
+                    $spec['qty_slug'] => 1,
+                ]],
+                ['type' => 'refresh'],
+            ],
+        ];
+        if ($spec['product_image_field_id'] !== null) {
+            $cardGrid['image_field_id'] = $spec['product_image_field_id'];
+        }
+
+        $detailFields = [];
+        if ($spec['order_status_field_id'] !== null) {
+            $detailFields[] = ['field_id' => $spec['order_status_field_id']];
+        }
+        $detailFields[] = ['field_id' => $spec['order_total_field_id']];
+
+        $qtyExpr = fn (string $op): string => '{{row.data.'.$spec['qty_slug'].' '.$op.' 1}}';
+        $stepAction = fn (string $glyph, string $op): array => [
+            'id' => $this->id('col'),
+            'type' => 'action',
+            'label' => $glyph,
+            'variant' => 'secondary',
+            'on_click' => [
+                ['type' => 'update_record', 'object_id' => $spec['line_object_id'], 'record_id_expression' => '{{row.id}}', 'values' => [$spec['qty_slug'] => $qtyExpr($op)]],
+                ['type' => 'refresh'],
+            ],
+        ];
+
+        $cart = [
+            ['id' => $this->id('blk'), 'type' => 'heading', 'level' => 3, 'content' => $labels['order']],
+            [
+                'id' => $this->id('blk'),
+                'type' => 'record_detail',
+                'object_id' => $spec['order_object_id'],
+                'record_id_expression' => '{{params.order}}',
+                'fields' => $detailFields,
+            ],
+            [
+                'id' => $this->id('blk'),
+                'type' => 'table',
+                'empty_state_message' => $labels['empty'],
+                'data_source' => [
+                    'object_id' => $spec['line_object_id'],
+                    'filter' => ['op' => 'eq', 'field_id' => $spec['line_order_rel_field_id'], 'value_expression' => '{{params.order}}'],
+                ],
+                'columns' => [
+                    ['id' => $this->id('col'), 'field_id' => $spec['line_product_rel_field_id']],
+                    ['id' => $this->id('col'), 'field_id' => $spec['qty_field_id']],
+                    ['id' => $this->id('col'), 'field_id' => $spec['subtotal_field_id']],
+                    $stepAction('−', '-'),
+                    $stepAction('+', '+'),
+                    [
+                        'id' => $this->id('col'),
+                        'type' => 'action',
+                        'label' => '×',
+                        'variant' => 'danger',
+                        'on_click' => [
+                            ['type' => 'delete_record', 'object_id' => $spec['line_object_id'], 'record_id_expression' => '{{row.id}}'],
+                            ['type' => 'refresh'],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        return [
+            'id' => $this->id('pag'),
+            'slug' => $posSlug,
+            'name' => $labels['pos'],
+            'path' => $path,
+            'blocks' => [
+                ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $labels['pos']],
+                [
+                    'id' => $this->id('blk'),
+                    'type' => 'button',
+                    'label' => $labels['new_order'],
+                    'variant' => 'primary',
+                    'icon' => 'plus',
+                    'on_click' => [
+                        ['type' => 'create_record', 'object_id' => $spec['order_object_id'], 'values' => $spec['new_order_values']],
+                        ['type' => 'navigate', 'to' => $path.'?order={{record.id}}'],
+                    ],
+                ],
+                [
+                    'id' => $this->id('blk'),
+                    'type' => 'split_view',
+                    'left_fraction' => 7,
+                    'left_blocks' => [$cardGrid],
+                    'right_blocks' => $cart,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * First field of any of the given base types in a built object def.
+     *
+     * @param  array<string, mixed>  $def
+     * @param  list<string>  $types
+     * @return array<string, mixed>|null
+     */
+    private function firstDefFieldOfType(array $def, array $types): ?array
+    {
+        foreach ($def['fields'] as $field) {
+            if (in_array($field['type'] ?? '', $types, true)) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A number field that reads like a quantity (by slug/name), or null.
+     *
+     * @param  array<string, mixed>  $def
+     * @return array<string, mixed>|null
+     */
+    private function quantityFieldOf(array $def): ?array
+    {
+        foreach ($def['fields'] as $field) {
+            if (($field['type'] ?? '') === 'number'
+                && preg_match('/cant|qty|quantity|unidad|piezas|count/i', ($field['slug'] ?? '').' '.($field['name'] ?? '')) === 1) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A string field that looks like it holds an image/photo URL, or null.
+     *
+     * @param  array<string, mixed>  $def
+     * @return array<string, mixed>|null
+     */
+    private function imageFieldOf(array $def): ?array
+    {
+        foreach ($def['fields'] as $field) {
+            if (($field['type'] ?? '') === 'string'
+                && preg_match('/image|imagen|photo|foto|picture|thumbnail|avatar|url/i', ($field['slug'] ?? '').' '.($field['name'] ?? '')) === 1) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
      * @return array{id: string, slug: string, type: string}|null
      */
@@ -1076,5 +1409,15 @@ class AppScaffolder
     private function labelTotal(string $lang, string $name): string
     {
         return $lang === 'es' ? "Total {$name}" : "{$name} total";
+    }
+
+    /**
+     * @return array{pos: string, new_order: string, order: string, qty: string, unit_price: string, subtotal: string, total: string, empty: string}
+     */
+    private function posLabels(string $lang): array
+    {
+        return $lang === 'es'
+            ? ['pos' => 'Punto de venta', 'new_order' => 'Nueva orden', 'order' => 'Pedido', 'qty' => 'Cantidad', 'unit_price' => 'Precio unitario', 'subtotal' => 'Subtotal', 'total' => 'Total', 'empty' => 'Abre una orden y agrega productos.']
+            : ['pos' => 'Point of Sale', 'new_order' => 'New order', 'order' => 'Order', 'qty' => 'Quantity', 'unit_price' => 'Unit price', 'subtotal' => 'Subtotal', 'total' => 'Total', 'empty' => 'Open an order and add products.'];
     }
 }
