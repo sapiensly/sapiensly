@@ -46,8 +46,8 @@ class DemoDataGenerator
 
             $created = [];
             for ($i = 0; $i < $perObject; $i++) {
-                $values = $this->valuesFor($object, $i, $idsByObject);
                 try {
+                    $values = $this->valuesFor($object, $i, $idsByObject);
                     $record = $this->writer->create($app, $manifest, $object['id'], $values, $user);
                     $created[] = $record->id;
                 } catch (Throwable) {
@@ -93,17 +93,18 @@ class DemoDataGenerator
 
         return match ($field['type'] ?? 'string') {
             'string' => $this->stringValue($slug, $index, $field),
-            'long_text', 'rich_text' => fake()->paragraph(),
-            'number' => fake()->numberBetween((int) ($field['min'] ?? 1), (int) ($field['max'] ?? 1000)),
-            'currency' => fake()->randomFloat(2, 10, 10000),
-            'boolean' => fake()->boolean(),
-            'date' => fake()->dateTimeBetween('-30 days', '+15 days')->format('Y-m-d'),
-            'datetime' => fake()->dateTimeBetween('-30 days', 'now')->format('Y-m-d H:i:s'),
+            'long_text', 'rich_text' => ucfirst($this->words(random_int(8, 16))).'.',
+            'number' => random_int((int) ($field['min'] ?? 1), max((int) ($field['min'] ?? 1), (int) ($field['max'] ?? 1000))),
+            'currency' => round(random_int(1000, 1_000_000) / 100, 2),
+            'boolean' => (bool) random_int(0, 1),
+            'date' => $this->dateValue(withTime: false),
+            'datetime' => $this->dateValue(withTime: true),
             'single_select' => $this->randomOption($field),
-            'multi_select' => array_values(array_unique([$this->randomOption($field)])),
-            'rating' => fake()->numberBetween(1, (int) ($field['max'] ?? 5)),
-            'slider' => fake()->numberBetween((int) ($field['min'] ?? 0), (int) ($field['max'] ?? 100)),
+            'multi_select' => ($o = $this->randomOption($field)) === null ? [] : [$o],
+            'rating' => random_int(1, max(1, (int) ($field['max'] ?? 5))),
+            'slider' => random_int((int) ($field['min'] ?? 0), max((int) ($field['min'] ?? 0), (int) ($field['max'] ?? 100))),
             'relation' => $this->randomParentId($field, $idsByObject),
+            'color' => sprintf('#%06x', random_int(0, 0xFFFFFF)),
             default => null,
         };
     }
@@ -114,17 +115,79 @@ class DemoDataGenerator
     private function stringValue(string $slug, int $index, array $field): string
     {
         $value = match (true) {
-            str_contains($slug, 'email') => fake()->safeEmail(),
-            str_contains($slug, 'phone') => fake()->phoneNumber(),
-            str_contains($slug, 'name') || str_contains($slug, 'title') => fake()->sentence(3),
-            str_contains($slug, 'url') || str_contains($slug, 'link') => fake()->url(),
-            default => fake()->words(2, true),
+            str_contains($slug, 'email') => $this->emailValue(),
+            str_contains($slug, 'phone') => $this->phoneValue(),
+            str_contains($slug, 'name') || str_contains($slug, 'title') => $this->nameValue(),
+            str_contains($slug, 'url') || str_contains($slug, 'link') => $this->urlValue(),
+            default => ucfirst($this->words(2)),
         };
-        $value = rtrim($value, '.');
 
         $max = $field['max_length'] ?? null;
 
         return $max !== null ? mb_substr($value, 0, (int) $max) : $value;
+    }
+
+    // --- Built-in value generators (no Faker; runs in production, not dev-only). ---
+
+    private const WORDS = [
+        'alfa', 'beta', 'gamma', 'delta', 'orbita', 'nova', 'prisma', 'vertex',
+        'pulso', 'aura', 'zenit', 'lumen', 'cobalto', 'iris', 'atlas', 'quantum',
+        'flux', 'eco', 'vela', 'duna', 'cresta', 'faro', 'sol', 'cima',
+    ];
+
+    private const FIRST_NAMES = [
+        'Ana', 'Luis', 'María', 'Carlos', 'Sofía', 'Diego', 'Valeria', 'Jorge',
+        'Lucía', 'Pablo', 'Elena', 'Mateo', 'Carmen', 'Andrés',
+    ];
+
+    private const LAST_NAMES = [
+        'García', 'López', 'Martínez', 'Ramírez', 'Torres', 'Flores', 'Rivera',
+        'Cruz', 'Reyes', 'Morales', 'Ortiz', 'Castillo',
+    ];
+
+    /**
+     * @param  list<string>  $list
+     */
+    private function pick(array $list): string
+    {
+        return $list[array_rand($list)];
+    }
+
+    private function words(int $count): string
+    {
+        $out = [];
+        for ($i = 0; $i < max(1, $count); $i++) {
+            $out[] = self::WORDS[array_rand(self::WORDS)];
+        }
+
+        return implode(' ', $out);
+    }
+
+    private function nameValue(): string
+    {
+        return $this->pick(self::FIRST_NAMES).' '.$this->pick(self::LAST_NAMES);
+    }
+
+    private function emailValue(): string
+    {
+        return strtolower($this->pick(self::WORDS)).random_int(1, 999).'@example.com';
+    }
+
+    private function phoneValue(): string
+    {
+        return '+52 55 '.random_int(1000, 9999).' '.random_int(1000, 9999);
+    }
+
+    private function urlValue(): string
+    {
+        return 'https://'.$this->pick(self::WORDS).'.example.com';
+    }
+
+    private function dateValue(bool $withTime): string
+    {
+        $timestamp = time() + random_int(-30, 15) * 86400;
+
+        return $withTime ? date('Y-m-d H:i:s', $timestamp) : date('Y-m-d', $timestamp);
     }
 
     /**
