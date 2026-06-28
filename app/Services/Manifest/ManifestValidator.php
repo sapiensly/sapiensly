@@ -1484,7 +1484,7 @@ class ManifestValidator
                     );
                 }
                 $this->checkFieldRef($fields, $block['y_field_id'] ?? null, "{$blockPath}/y_field_id", 'chart.y_field_id', $errors,
-                    in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                    in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null, $fieldsByObjectId);
                 $this->checkFieldRef($fields, $block['x_field_id'] ?? null, "{$blockPath}/x_field_id", 'chart.x_field_id', $errors);
                 $this->checkFieldRef($fields, $block['group_by_field_id'] ?? null, "{$blockPath}/group_by_field_id", 'chart.group_by_field_id', $errors);
                 // series_field_id splits each category into stacked/grouped segments (bar charts).
@@ -1568,7 +1568,7 @@ class ManifestValidator
                 $aggregation = $block['aggregation'] ?? 'count';
                 $this->checkFieldRef($fields, $block['x_field_id'] ?? null, "{$blockPath}/x_field_id", 'sparkline.x_field_id', $errors);
                 $this->checkFieldRef($fields, $block['y_field_id'] ?? null, "{$blockPath}/y_field_id", 'sparkline.y_field_id', $errors,
-                    in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                    in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null, $fieldsByObjectId);
                 if ($aggregation !== 'count' && ! isset($block['y_field_id'])) {
                     $errors[] = new ManifestValidationError(
                         "{$blockPath}/y_field_id",
@@ -1600,7 +1600,7 @@ class ManifestValidator
                     );
                 }
                 $this->checkFieldRef($fields, $block['field_id'] ?? null, "{$blockPath}/field_id", "{$type}.field_id", $errors,
-                    in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                    in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null, $fieldsByObjectId);
                 $this->validateFilterExpression($block['query']['filter'] ?? null, "{$blockPath}/query/filter", $fields, $errors);
             }
 
@@ -1718,7 +1718,7 @@ class ManifestValidator
                         );
                     }
                     $this->checkFieldRef($fields, $item['field_id'] ?? null, "{$itemPath}/field_id", 'metric_grid.item.field_id', $errors,
-                        in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                        in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null, $fieldsByObjectId);
                     $this->validateFilterExpression($item['query']['filter'] ?? null, "{$itemPath}/query/filter", $fields, $errors);
                 }
             }
@@ -1743,7 +1743,7 @@ class ManifestValidator
                         );
                     }
                     $this->checkFieldRef($fields, $stage['field_id'] ?? null, "{$stagePath}/field_id", 'funnel.stage.field_id', $errors,
-                        in_array($aggregation, ['sum', 'avg'], true) ? ['number', 'currency', 'rating', 'slider'] : null);
+                        in_array($aggregation, ['sum', 'avg'], true) ? ['number', 'currency', 'rating', 'slider'] : null, $fieldsByObjectId);
                     $this->validateFilterExpression($stage['query']['filter'] ?? null, "{$stagePath}/query/filter", $fields, $errors);
                 }
             }
@@ -1787,7 +1787,7 @@ class ManifestValidator
      * @param  list<string>|null  $allowedTypes
      * @param  ManifestValidationError[]  $errors
      */
-    private function checkFieldRef(array $fields, ?string $fieldId, string $errorPath, string $label, array &$errors, ?array $allowedTypes = null): void
+    private function checkFieldRef(array $fields, ?string $fieldId, string $errorPath, string $label, array &$errors, ?array $allowedTypes = null, ?array $fieldsByObjectId = null): void
     {
         if ($fieldId === null) {
             return;
@@ -1810,8 +1810,15 @@ class ManifestValidator
 
         if ($allowedTypes !== null) {
             $fieldType = $resolved['type'] ?? null;
-            if (! in_array($fieldType, $allowedTypes, true)
-                && ! $this->derivedSatisfiesNumeric($resolved, $allowedTypes)) {
+            $ok = in_array($fieldType, $allowedTypes, true)
+                || $this->derivedSatisfiesNumeric($resolved, $allowedTypes)
+                // A lookup is numeric when the field it ultimately points at is —
+                // needs the cross-object map to follow the (possibly chained) hop.
+                || ($fieldType === 'lookup'
+                    && in_array('number', $allowedTypes, true)
+                    && $fieldsByObjectId !== null
+                    && $this->lookupResolvesToNumeric($resolved, $fields, $fieldsByObjectId, 0));
+            if (! $ok) {
                 $errors[] = new ManifestValidationError(
                     $errorPath,
                     "{$label} requires a field of type ".implode('|', $allowedTypes).", got '{$fieldType}'",
@@ -1819,6 +1826,42 @@ class ManifestValidator
                 );
             }
         }
+    }
+
+    /**
+     * Whether a lookup field ultimately resolves to a numeric value: follow its
+     * relation to the target object's field; if that target is itself a lookup,
+     * recurse (chained lookups), bounded by a small depth guard against cycles.
+     * Mirrors how DerivedFieldsResolver enriches chained lookups at runtime.
+     *
+     * @param  array<string, mixed>  $lookup
+     * @param  array<string, array<string, mixed>>  $fields  the lookup's own object's fields by id
+     * @param  array<string, array<string, array<string, mixed>>>  $fieldsByObjectId
+     */
+    private function lookupResolvesToNumeric(array $lookup, array $fields, array $fieldsByObjectId, int $depth): bool
+    {
+        if ($depth >= 5) {
+            return false;
+        }
+
+        $via = $fields[$lookup['via_relation_field_id'] ?? ''] ?? null;
+        if (($via['type'] ?? null) !== 'relation') {
+            return false;
+        }
+
+        $targetFields = $fieldsByObjectId[$via['target_object_id'] ?? ''] ?? [];
+        $target = $targetFields[$lookup['target_field_id'] ?? ''] ?? null;
+        if ($target === null) {
+            return false;
+        }
+
+        return match ($target['type'] ?? null) {
+            'number', 'currency', 'rating', 'slider' => true,
+            'formula' => ($target['return_type'] ?? null) === 'number',
+            'rollup' => true,
+            'lookup' => $this->lookupResolvesToNumeric($target, $targetFields, $fieldsByObjectId, $depth + 1),
+            default => false,
+        };
     }
 
     /**
