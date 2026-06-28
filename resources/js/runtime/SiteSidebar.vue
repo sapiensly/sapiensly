@@ -105,9 +105,9 @@ const headerStyle = computed(() =>
             backgroundColor: 'color-mix(in srgb, currentColor 4%, transparent)',
         }"
     >
-        <!-- Brand header. -->
+        <!-- Brand header: logo on top, app name below (stacked, no truncation). -->
         <a
-            class="flex items-center gap-2 border-b px-4 py-3.5 font-semibold"
+            class="flex flex-col items-start gap-2 border-b px-4 py-3.5 font-semibold"
             :style="{
                 borderColor:
                     'color-mix(in srgb, currentColor 12%, transparent)',
@@ -119,11 +119,11 @@ const headerStyle = computed(() =>
                 v-if="brand?.logo"
                 :src="brand.logo"
                 alt=""
-                class="h-7 w-auto"
+                class="h-7 w-auto max-w-full object-contain"
             />
             <span
                 v-if="brand?.name"
-                class="truncate text-base tracking-tight"
+                class="text-base leading-tight tracking-tight"
                 >{{ brand.name }}</span
             >
         </a>
