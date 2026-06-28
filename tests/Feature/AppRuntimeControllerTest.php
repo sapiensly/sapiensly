@@ -176,3 +176,44 @@ it('compiles author custom_css scoped to the app surface', function () {
                 && str_contains($css, '[data-block-type="stat"]'))
         );
 });
+
+it('honors a visibility expression against page params', function () {
+    $app = App::create([
+        'user_id' => $this->user->id,
+        'slug' => 'visapp',
+        'name' => 'Vis',
+        'visibility' => 'private',
+    ]);
+    $objId = rid('obj');
+    $fld = rid('fld');
+    $whenFlag = rid('blk');
+    $whenNoFlag = rid('blk');
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => $app->id,
+        'slug' => 'visapp',
+        'name' => 'Vis',
+        'version' => 1,
+        'objects' => [['id' => $objId, 'slug' => 'items', 'name' => 'Items', 'fields' => [
+            ['id' => $fld, 'slug' => 'monto', 'name' => 'Monto', 'type' => 'currency', 'currency_code' => 'MXN'],
+        ]]],
+        'pages' => [['id' => rid('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/', 'blocks' => [
+            ['id' => $whenFlag, 'type' => 'stat', 'label' => 'With flag', 'query' => ['object_id' => $objId], 'aggregation' => 'count', 'visibility' => ['expression' => '{{params.flag}}']],
+            ['id' => $whenNoFlag, 'type' => 'stat', 'label' => 'No flag', 'query' => ['object_id' => $objId], 'aggregation' => 'count', 'visibility' => ['expression' => '{{not params.flag}}']],
+        ]]],
+        'permissions' => ['roles' => [['id' => rid('rol'), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    app(AppManifestService::class)->createVersion($app, $manifest, $this->user);
+
+    // No flag → only the "no flag" block survives.
+    $this->actingAs($this->user)->get('/r/visapp/home')->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->missing('blockData.'.$whenFlag)
+            ->has('blockData.'.$whenNoFlag));
+
+    // Flag set → only the "with flag" block survives.
+    $this->actingAs($this->user)->get('/r/visapp/home?flag=1')->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('blockData.'.$whenFlag)
+            ->missing('blockData.'.$whenNoFlag));
+});

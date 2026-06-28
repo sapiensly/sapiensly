@@ -1261,17 +1261,28 @@ class AppScaffolder
 
         $cart = [
             ['id' => $this->id('blk'), 'type' => 'heading', 'level' => 3, 'content' => $labels['order']],
+            // Shown only until an order is open — a guide instead of an empty card.
+            [
+                'id' => $this->id('blk'),
+                'type' => 'alert',
+                'variant' => 'info',
+                'title' => $labels['order'],
+                'body' => $labels['empty'],
+                'visibility' => ['expression' => '{{not params.order}}'],
+            ],
             [
                 'id' => $this->id('blk'),
                 'type' => 'record_detail',
                 'object_id' => $spec['order_object_id'],
                 'record_id_expression' => '{{params.order}}',
                 'fields' => $detailFields,
+                'visibility' => ['expression' => '{{params.order}}'],
             ],
             [
                 'id' => $this->id('blk'),
                 'type' => 'table',
                 'empty_state_message' => $labels['empty'],
+                'visibility' => ['expression' => '{{params.order}}'],
                 'data_source' => [
                     'object_id' => $spec['line_object_id'],
                     'filter' => ['op' => 'eq', 'field_id' => $spec['line_order_rel_field_id'], 'value_expression' => '{{params.order}}'],

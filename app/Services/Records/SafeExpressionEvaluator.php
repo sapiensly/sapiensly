@@ -67,7 +67,11 @@ class SafeExpressionEvaluator
     {
         $variables = [];
         foreach ($context as $key => $value) {
-            $variables[$key] = $this->objectify($value);
+            // Context roots (params, form, row, …) are maps: an EMPTY one must
+            // still be an object so `params.x` reads as null instead of throwing
+            // (an empty array would objectify to a list, and member access on it
+            // fails — breaking e.g. `{{not params.flag}}` when no params are set).
+            $variables[$key] = $value === [] ? new \stdClass : $this->objectify($value);
         }
 
         // EL emits an E_WARNING when a property is missing before it throws on

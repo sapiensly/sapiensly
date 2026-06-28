@@ -139,7 +139,7 @@ function imageSrc(row: RowData): string | null {
             v-for="row in rows"
             :key="row.id"
             :class="[
-                'relative overflow-hidden rounded-sp-sm border transition',
+                'flex flex-col overflow-hidden rounded-sp-sm border transition',
                 t.surface,
                 clickable
                     ? 'cursor-pointer hover:border-accent-blue hover:shadow-sm'
@@ -147,14 +147,25 @@ function imageSrc(row: RowData): string | null {
             ]"
             @click="runCardAction(row)"
         >
-            <img
-                v-if="imageSrc(row)"
-                :src="imageSrc(row)!"
-                :alt="titleOf(row)"
-                class="h-32 w-full object-cover"
-                loading="lazy"
-            />
-            <div class="space-y-1.5 p-4">
+            <!-- Image with the action button floated on it (when there is one). -->
+            <div v-if="imageSrc(row)" class="relative">
+                <img
+                    :src="imageSrc(row)!"
+                    :alt="titleOf(row)"
+                    class="h-32 w-full object-cover"
+                    loading="lazy"
+                />
+                <button
+                    v-if="clickable"
+                    type="button"
+                    aria-label="add"
+                    class="absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-full bg-accent-blue text-white shadow-md hover:bg-accent-blue-hover"
+                    @click.stop="runCardAction(row)"
+                >
+                    <RuntimeIcon :name="block.action_icon ?? 'plus'" :size="16" />
+                </button>
+            </div>
+            <div class="flex flex-1 flex-col gap-1.5 p-4">
                 <p :class="['text-sm font-semibold', t.text]">
                     {{ titleOf(row) }}
                 </p>
@@ -168,7 +179,7 @@ function imageSrc(row: RowData): string | null {
                 </p>
                 <dl
                     v-if="metaFields.length"
-                    :class="['mt-2 space-y-0.5 text-[11px]', t.textMuted]"
+                    :class="['mt-1 space-y-0.5 text-[11px]', t.textMuted]"
                 >
                     <div
                         v-for="f in metaFields"
@@ -181,16 +192,25 @@ function imageSrc(row: RowData): string | null {
                         </dd>
                     </div>
                 </dl>
+                <!-- No image: the action button gets its own row so it never
+                     overlaps the card content (e.g. the price). -->
+                <div
+                    v-if="clickable && !imageSrc(row)"
+                    class="mt-1 flex justify-end"
+                >
+                    <button
+                        type="button"
+                        aria-label="add"
+                        class="flex h-8 w-8 items-center justify-center rounded-full bg-accent-blue text-white shadow-sm hover:bg-accent-blue-hover"
+                        @click.stop="runCardAction(row)"
+                    >
+                        <RuntimeIcon
+                            :name="block.action_icon ?? 'plus'"
+                            :size="16"
+                        />
+                    </button>
+                </div>
             </div>
-            <button
-                v-if="clickable"
-                type="button"
-                class="absolute right-2 bottom-2 flex h-7 w-7 items-center justify-center rounded-full bg-accent-blue text-white shadow hover:bg-accent-blue-hover"
-                :aria-label="'add'"
-                @click.stop="runCardAction(row)"
-            >
-                <RuntimeIcon :name="block.action_icon ?? 'plus'" :size="16" />
-            </button>
         </article>
     </div>
 </template>

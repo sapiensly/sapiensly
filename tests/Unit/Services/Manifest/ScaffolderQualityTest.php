@@ -286,6 +286,12 @@ it('generates a POS screen for an order/line/product triad', function () {
     $btn = blockByType($pos, 'button');
     $nav = collect($btn['on_click'])->firstWhere('type', 'navigate');
     expect($nav['to'])->toBe('/pos?order={{record.id}}');
+
+    // The cart guides when no order is open and only renders once one is.
+    $hint = collect($split['right_blocks'])->firstWhere('type', 'alert');
+    expect($hint['visibility']['expression'])->toBe('{{not params.order}}');
+    expect($cartTable['visibility']['expression'])->toBe('{{params.order}}');
+    expect(collect($split['right_blocks'])->firstWhere('type', 'record_detail')['visibility']['expression'])->toBe('{{params.order}}');
 });
 
 it('synthesizes the POS line economics and order total', function () {
