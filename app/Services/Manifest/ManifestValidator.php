@@ -1696,6 +1696,9 @@ class ManifestValidator
                     $this->checkFieldRef($fields, $meta['field_id'] ?? null, "{$blockPath}/meta_fields/{$j}/field_id", 'card_grid.meta_fields', $errors);
                 }
                 $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+                if (isset($block['on_click'])) {
+                    $this->validateActionSequence($block['on_click'], "{$blockPath}/on_click", $objectsById, $modalIdsInPage, $errors);
+                }
             }
 
             if ($block['type'] === 'metric_grid') {

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, inject } from 'vue';
+import RuntimeIcon from '../RuntimeIcon.vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
+import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 
 interface CardGridBlock {
@@ -13,6 +15,10 @@ interface CardGridBlock {
     subtitle_field_id?: string;
     image_field_id?: string;
     meta_fields?: Array<{ field_id: string }>;
+    /** When set, a card is clickable and fires this sequence with {{row.*}}. */
+    on_click?: RuntimeAction[];
+    /** Icon for the per-card action affordance (defaults to a plus). */
+    action_icon?: string;
 }
 
 interface RowData {
@@ -29,6 +35,22 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+const { execute } = useActionExecutor();
+
+const appSlug = inject<string>('appSlug', deriveSlugFromUrl());
+const pageParams = inject<Record<string, unknown>>('pageParams', {});
+
+function deriveSlugFromUrl(): string {
+    const m = window.location.pathname.match(/^\/r\/([a-z][a-z0-9_]*)/);
+    return m?.[1] ?? '';
+}
+
+const clickable = computed(() => (props.block.on_click?.length ?? 0) > 0);
+
+async function runCardAction(row: RowData) {
+    if (!clickable.value) return;
+    await execute(props.block.on_click!, { appSlug, row, params: pageParams });
+}
 
 const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.data_source.object_id),
@@ -49,14 +71,16 @@ const metaFields = computed<FieldDef[]>(() =>
 
 const gridClass = computed(() => {
     const cols = props.block.columns ?? 3;
-    return {
-        1: 'grid-cols-1',
-        2: 'grid-cols-1 sm:grid-cols-2',
-        3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-        4: 'grid-cols-2 lg:grid-cols-4',
-        5: 'grid-cols-2 lg:grid-cols-5',
-        6: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6',
-    }[cols] ?? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+    return (
+        {
+            1: 'grid-cols-1',
+            2: 'grid-cols-1 sm:grid-cols-2',
+            3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+            4: 'grid-cols-2 lg:grid-cols-4',
+            5: 'grid-cols-2 lg:grid-cols-5',
+            6: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6',
+        }[cols] ?? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+    );
 });
 
 const rows = computed(() => props.data?.rows ?? []);
@@ -105,13 +129,23 @@ function imageSrc(row: RowData): string | null {
 
 <template>
     <div :class="['grid gap-3', gridClass]">
-        <p v-if="rows.length === 0" :class="['col-span-full py-8 text-center text-xs', t.textMuted]">
+        <p
+            v-if="rows.length === 0"
+            :class="['col-span-full py-8 text-center text-xs', t.textMuted]"
+        >
             No records.
         </p>
         <article
             v-for="row in rows"
             :key="row.id"
-            :class="['overflow-hidden rounded-sp-sm border', t.surface]"
+            :class="[
+                'relative overflow-hidden rounded-sp-sm border transition',
+                t.surface,
+                clickable
+                    ? 'cursor-pointer hover:border-accent-blue hover:shadow-sm'
+                    : '',
+            ]"
+            @click="runCardAction(row)"
         >
             <img
                 v-if="imageSrc(row)"
@@ -121,23 +155,42 @@ function imageSrc(row: RowData): string | null {
                 loading="lazy"
             />
             <div class="space-y-1.5 p-4">
-                <p :class="['text-sm font-semibold', t.text]">{{ titleOf(row) }}</p>
+                <p :class="['text-sm font-semibold', t.text]">
+                    {{ titleOf(row) }}
+                </p>
                 <p
                     v-if="subtitleField && row.data[subtitleField.slug]"
                     :class="['truncate text-xs', t.textMuted]"
                 >
-                    {{ formatValue(subtitleField, row.data[subtitleField.slug]) }}
+                    {{
+                        formatValue(subtitleField, row.data[subtitleField.slug])
+                    }}
                 </p>
                 <dl
                     v-if="metaFields.length"
                     :class="['mt-2 space-y-0.5 text-[11px]', t.textMuted]"
                 >
-                    <div v-for="f in metaFields" :key="f.id" class="flex items-center justify-between gap-2">
+                    <div
+                        v-for="f in metaFields"
+                        :key="f.id"
+                        class="flex items-center justify-between gap-2"
+                    >
                         <dt class="truncate">{{ f.name }}</dt>
-                        <dd :class="['truncate', t.text]">{{ formatValue(f, row.data[f.slug]) }}</dd>
+                        <dd :class="['truncate', t.text]">
+                            {{ formatValue(f, row.data[f.slug]) }}
+                        </dd>
                     </div>
                 </dl>
             </div>
+            <button
+                v-if="clickable"
+                type="button"
+                class="absolute right-2 bottom-2 flex h-7 w-7 items-center justify-center rounded-full bg-accent-blue text-white shadow hover:bg-accent-blue-hover"
+                :aria-label="'add'"
+                @click.stop="runCardAction(row)"
+            >
+                <RuntimeIcon :name="block.action_icon ?? 'plus'" :size="16" />
+            </button>
         </article>
     </div>
 </template>

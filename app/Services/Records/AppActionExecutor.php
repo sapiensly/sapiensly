@@ -54,7 +54,7 @@ class AppActionExecutor
         if ($action['type'] === 'create_record') {
             $record = $this->writes->create($app, $manifest, $action['object_id'], $resolvedValues, $user);
 
-            return ['record_id' => $record->id];
+            return ['record_id' => $record->id, 'data' => $record->data];
         }
 
         if ($action['type'] === 'update_record') {
@@ -68,7 +68,7 @@ class AppActionExecutor
             }
             $updated = $this->writes->update($app, $manifest, $record, $resolvedValues, $user);
 
-            return ['record_id' => $updated->id];
+            return ['record_id' => $updated->id, 'data' => $updated->data];
         }
 
         if ($action['type'] === 'delete_record') {

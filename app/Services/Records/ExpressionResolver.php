@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Log;
  *   {{vars.<X>}}                    workflow-scoped variable
  *   {{steps.<id>.output.<path>}}    output of a previous workflow step
  *   {{row.<path>}}                  per-row context (table action columns)
+ *   {{record.id}} / {{record.data.<slug>}}  the record just created/updated
+ *                                   earlier in the same action sequence
  *
  * Functions (callable at the head of an expression, with optional
  * trailing dot access):
@@ -46,7 +48,7 @@ class ExpressionResolver
      * Roots that map onto top-level context keys. Listed once so we don't
      * duplicate the name list inline.
      */
-    private const CONTEXT_ROOTS = ['current_user', 'params', 'form', 'trigger', 'vars', 'row'];
+    private const CONTEXT_ROOTS = ['current_user', 'params', 'form', 'trigger', 'vars', 'row', 'record'];
 
     public function __construct(private SafeExpressionEvaluator $safe) {}
 

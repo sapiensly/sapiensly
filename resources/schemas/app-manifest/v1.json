@@ -1877,7 +1877,9 @@
                                 "additionalProperties": false,
                                 "properties": { "field_id": { "$ref": "#/$defs/id" } }
                             }
-                        }
+                        },
+                        "on_click": { "$ref": "#/$defs/action_sequence" },
+                        "action_icon": { "type": "string", "maxLength": 50 }
                     },
                     "required": ["type", "data_source", "title_field_id"]
                 }

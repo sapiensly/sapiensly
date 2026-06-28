@@ -6,6 +6,7 @@ use App\Models\App;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\AppActionExecutor;
+use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordValidationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,6 +33,7 @@ class AppActionController extends Controller
         private AppManifestService $manifestService,
         private AppActionExecutor $executor,
         private AppAccessResolver $accessResolver,
+        private ExpressionResolver $expressions,
     ) {}
 
     public function __invoke(Request $request, string $appSlug): JsonResponse
@@ -91,7 +93,11 @@ class AppActionController extends Controller
             $type = $action['type'];
 
             if (in_array($type, self::CLIENT_SIDE, true)) {
-                $clientActions[] = $action;
+                // Resolve the client action's expression-bearing fields server-side
+                // so a navigate/toast/open_modal can reference {{record.id}} (the id
+                // a prior create/update minted — the client never sees it) as well
+                // as {{params.*}} / {{row.*}}. They reach the client already concrete.
+                $clientActions[] = $this->resolveClientAction($action, $context);
                 $results[] = ['index' => $i, 'type' => $type, 'ok' => true];
 
                 continue;
@@ -107,6 +113,13 @@ class AppActionController extends Controller
             try {
                 $result = $this->executor->execute($app, $manifest, $action, $context, $user);
                 $results[] = ['index' => $i, 'type' => $type, 'ok' => true] + $result;
+                // Expose the record a create/update just produced to the rest of the
+                // sequence as {{record.id}} / {{record.data.<slug>}}: a later action
+                // (a child create, or a navigate to the new record's detail page)
+                // can bind to it. This is the "current record" handoff.
+                if (isset($result['record_id']) && $result['record_id'] !== null) {
+                    $context['record'] = ['id' => $result['record_id'], 'data' => $result['data'] ?? []];
+                }
             } catch (RecordValidationException $e) {
                 $errors[$i] = ['type' => 'validation', 'fields' => $e->errors];
                 $ok = false;
@@ -122,5 +135,33 @@ class AppActionController extends Controller
             'client_actions' => $clientActions,
             'errors' => $errors,
         ], $ok ? 200 : 422);
+    }
+
+    /**
+     * Resolve the expression-bearing string fields of a client action against the
+     * running context (navigate `to`, show_toast `message`, open_modal `params`)
+     * so tokens like {{record.id}} / {{params.x}} / {{row.id}} arrive concrete.
+     *
+     * @param  array<string, mixed>  $action
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function resolveClientAction(array $action, array $context): array
+    {
+        foreach (['to', 'message'] as $key) {
+            if (isset($action[$key]) && is_string($action[$key])) {
+                $action[$key] = $this->expressions->resolve($action[$key], $context);
+            }
+        }
+
+        if (isset($action['params']) && is_array($action['params'])) {
+            foreach ($action['params'] as $key => $value) {
+                if (is_string($value)) {
+                    $action['params'][$key] = $this->expressions->resolve($value, $context);
+                }
+            }
+        }
+
+        return $action;
     }
 }

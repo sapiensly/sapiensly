@@ -83,6 +83,40 @@ it('executes a create_record action and stores the record', function () {
         ->and((float) $record->data['monto'])->toBe(1500.0);
 });
 
+it('exposes the created record id to a later navigate as {{record.id}}', function () {
+    $response = $this->actingAs($this->user)->postJson('/r/actions_app/actions', [
+        'actions' => [
+            ['type' => 'create_record', 'object_id' => $this->objectId, 'values' => ['nombre' => 'Nueva']],
+            ['type' => 'navigate', 'to' => '/order?id={{record.id}}'],
+        ],
+    ]);
+
+    $response->assertOk()->assertJsonPath('ok', true);
+    $record = Record::query()->where('app_id', $this->testApp->id)->first();
+
+    $client = $response->json('client_actions');
+    expect($client)->toHaveCount(1);
+    expect($client[0]['type'])->toBe('navigate');
+    expect($client[0]['to'])->toBe('/order?id='.$record->id);
+});
+
+it('resolves {{row.id}} and {{params.*}} in a card-grid-style add', function () {
+    $response = $this->actingAs($this->user)->postJson('/r/actions_app/actions', [
+        'actions' => [[
+            'type' => 'create_record',
+            'object_id' => $this->objectId,
+            'values' => ['nombre' => '{{row.data.label}}', 'monto' => '{{params.amount}}'],
+        ]],
+        'row' => ['id' => 'rec_fromrow0001', 'data' => ['label' => 'From Row']],
+        'params' => ['amount' => 99],
+    ]);
+
+    $response->assertOk()->assertJsonPath('ok', true);
+    $record = Record::query()->where('app_id', $this->testApp->id)->first();
+    expect($record->data['nombre'])->toBe('From Row')
+        ->and((float) $record->data['monto'])->toBe(99.0);
+});
+
 it('returns 422 with field-level errors when validation fails', function () {
     $response = $this->actingAs($this->user)->postJson('/r/actions_app/actions', [
         'actions' => [[

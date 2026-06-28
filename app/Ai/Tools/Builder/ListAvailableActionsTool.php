@@ -34,10 +34,10 @@ class ListAvailableActionsTool implements Tool
     public function handle(Request $request): string
     {
         $catalog = [
-            ['type' => 'navigate', 'props' => 'to (string URL or relative path)'],
+            ['type' => 'navigate', 'props' => 'to (string URL or relative path; interpolates {{row.*}}/{{params.*}}/{{record.*}} — e.g. to:"/order?id={{record.id}}" right after a create_record opens the new record).'],
             ['type' => 'open_modal', 'props' => 'modal_block_id (must reference a modal block in the same page); optional `params` ({key: value_or_expression}) — values can be expression strings like "{{row.id}}" or literals. Each becomes available inside the modal as {{params.<key>}}. CANONICAL EDIT-FROM-TABLE PATTERN: action column → open_modal {modal_block_id, params:{record_id:"{{row.id}}"}} → modal contains form mode=edit with record_id_expression="{{params.record_id}}".'],
             ['type' => 'close_modal', 'props' => 'modal_block_id (optional — omit to close any open modal)'],
-            ['type' => 'create_record', 'props' => 'object_id, values ({field_slug: value_or_expression}). Use {{form.<slug>}} to read submitted form fields, {{params.<X>}} for page params, {{current_user.id}} for the user.'],
+            ['type' => 'create_record', 'props' => 'object_id, values ({field_slug: value_or_expression}). Use {{form.<slug>}} to read submitted form fields, {{params.<X>}} for page params, {{current_user.id}} for the user. The created record is exposed to LATER actions in the same sequence as {{record.id}} / {{record.data.<slug>}} (e.g. create an order, then navigate to "/pos?order={{record.id}}").'],
             ['type' => 'update_record', 'props' => 'object_id, record_id_expression, values ({field_slug: value_or_expression}). Only sent fields are touched.'],
             ['type' => 'delete_record', 'props' => 'object_id, record_id_expression'],
             ['type' => 'show_toast', 'props' => 'message, level? (info|success|warning|error)'],
@@ -52,6 +52,8 @@ class ListAvailableActionsTool implements Tool
                 'delete_row' => 'table row buttons → button[on_click: delete_record, refresh] with confirm dialog',
                 'inline_toggle_in_table' => 'action column → on_click:[update_record {object_id, record_id_expression:"{{row.id}}", values:{<bool_slug>:true}}, refresh]. Used for "Marcar completada" in a tasks/todos list.',
                 'edit_via_modal_from_table' => 'action column → on_click:[open_modal {modal_block_id, params:{record_id:"{{row.id}}"}}] → modal contains form[mode:"edit", record_id_expression:"{{params.record_id}}", on_submit:[update_record, close_modal, refresh]]. The modal\'s edit form picks up the row id from the params injected by open_modal.',
+                'open_new_record' => 'button → on_click:[create_record {object_id, values:{…}}, navigate {to:"/<detail_page>?id={{record.id}}"}]. Creates the record then opens its detail page as the current context — {{record.id}} is the just-created id.',
+                'pos_add_to_cart' => 'A POS screen: page param ?order=<id> is the open order (set via open_new_record). A card_grid of products with on_click:[create_record {object_id:<line>, values:{<order_rel>:"{{params.order}}", <product_rel>:"{{row.id}}", cantidad:1}}, refresh] adds the tapped product as a line. The cart is a table over the line object filtered by {{params.order}} with −/+ action columns (update_record cantidad) + delete; the order total is a rollup sum the cart shows.',
             ],
         ], JSON_THROW_ON_ERROR);
     }

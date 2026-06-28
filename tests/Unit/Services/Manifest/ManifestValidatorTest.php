@@ -2493,3 +2493,44 @@ it('accepts two roles with exactly one default', function () {
 
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
+
+it('accepts a card_grid with an on_click action sequence', function () {
+    $manifest = baseManifest();
+    $objId = $manifest['objects'][0]['id'];
+    $fldId = $manifest['objects'][0]['fields'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'menu', 'name' => 'Menu', 'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'card_grid',
+            'data_source' => ['object_id' => $objId],
+            'title_field_id' => $fldId,
+            'on_click' => [
+                ['type' => 'create_record', 'object_id' => $objId, 'values' => ['nombre' => '{{row.data.nombre}}']],
+                ['type' => 'refresh'],
+            ],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a card_grid on_click that creates an unknown object', function () {
+    $manifest = baseManifest();
+    $objId = $manifest['objects'][0]['id'];
+    $fldId = $manifest['objects'][0]['fields'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'menu', 'name' => 'Menu', 'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'card_grid',
+            'data_source' => ['object_id' => $objId],
+            'title_field_id' => $fldId,
+            'on_click' => [
+                ['type' => 'create_record', 'object_id' => 'obj_doesnotexist01', 'values' => ['x' => '1']],
+            ],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('code'))->toContain('unresolved_ref');
+});

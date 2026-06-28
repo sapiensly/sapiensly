@@ -18,7 +18,10 @@ export interface ExecutionContext {
 
 export interface ExecutionResult {
     ok: boolean;
-    errors?: Record<number, { type: string; fields?: Record<string, string[]>; message?: string }>;
+    errors?: Record<
+        number,
+        { type: string; fields?: Record<string, string[]>; message?: string }
+    >;
     fieldErrors?: Record<string, string[]>;
 }
 
@@ -28,7 +31,10 @@ export interface ExecutionResult {
  * Vanilla EventTarget-backed — no third-party dep needed.
  */
 type ModalEvent = 'open' | 'close';
-type ModalListener = (modalId: string | undefined, params?: Record<string, unknown>) => void;
+type ModalListener = (
+    modalId: string | undefined,
+    params?: Record<string, unknown>,
+) => void;
 
 class ModalBus {
     private listeners = new Map<ModalEvent, Set<ModalListener>>();
@@ -39,31 +45,53 @@ class ModalBus {
         return () => this.listeners.get(event)?.delete(fn);
     }
 
-    emit(event: ModalEvent, modalId?: string, params?: Record<string, unknown>) {
+    emit(
+        event: ModalEvent,
+        modalId?: string,
+        params?: Record<string, unknown>,
+    ) {
         this.listeners.get(event)?.forEach((fn) => fn(modalId, params));
     }
 }
 
 export const modalBus = new ModalBus();
 
-/**
- * Client-side mini resolver for expression strings inside open_modal params.
- * Only supports the exact `{{path.to.value}}` form against the execution
- * context — for anything fancier (functions, arithmetic, multiple tokens in
- * one string) the action sequence should route through the server.
- */
-function resolveClientValue(raw: unknown, ctx: ExecutionContext): unknown {
-    if (typeof raw !== 'string') return raw;
-    const m = raw.match(/^\{\{\s*([\w.]+)\s*\}\}$/);
-    if (!m) return raw;
-    const path = m[1].split('.');
+/** Walk a dotted path (e.g. "row.data.title") against the execution context. */
+function digPath(ctx: ExecutionContext, path: string): unknown {
     let value: unknown = ctx;
-    for (const key of path) {
+    for (const key of path.split('.')) {
         if (value === null || value === undefined) return null;
         if (typeof value !== 'object') return null;
         value = (value as Record<string, unknown>)[key];
     }
     return value;
+}
+
+/**
+ * Client-side mini resolver for expression strings inside open_modal params.
+ * Only supports the exact `{{path.to.value}}` form against the execution
+ * context — returns the TYPED value (so an id stays a string, a number a number).
+ */
+function resolveClientValue(raw: unknown, ctx: ExecutionContext): unknown {
+    if (typeof raw !== 'string') return raw;
+    const m = raw.match(/^\{\{\s*([\w.]+)\s*\}\}$/);
+    if (!m) return raw;
+    return digPath(ctx, m[1]);
+}
+
+/**
+ * Interpolate {{path}} tokens embedded in a string against the context (e.g.
+ * "/orders?id={{row.id}}"). Used for navigate `to` and toast messages so a
+ * purely client-side sequence still resolves {{row.*}}/{{params.*}}. Tokens the
+ * client can't know (notably {{record.*}}, the just-created id) are resolved
+ * server-side before they ever reach here, so an unresolved one becomes ''.
+ */
+function interpolateTemplate(raw: unknown, ctx: ExecutionContext): unknown {
+    if (typeof raw !== 'string' || !raw.includes('{{')) return raw;
+    return raw.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, path: string) => {
+        const v = digPath(ctx, path);
+        return v === null || v === undefined ? '' : String(v);
+    });
 }
 
 /**
@@ -83,7 +111,13 @@ export function useActionExecutor() {
 
         // Fast path: every action is purely client-side — skip the round trip.
         const isClientSide = (t: string) =>
-            ['navigate', 'open_modal', 'close_modal', 'show_toast', 'refresh'].includes(t);
+            [
+                'navigate',
+                'open_modal',
+                'close_modal',
+                'show_toast',
+                'refresh',
+            ].includes(t);
         if (actions.every((a) => isClientSide(a.type))) {
             actions.forEach((a) => runClientAction(a, ctx));
             return { ok: true };
@@ -101,18 +135,36 @@ export function useActionExecutor() {
                 { timeout: 30_000 },
             );
 
-            (data.client_actions as RuntimeAction[] | undefined)?.forEach((a) => runClientAction(a, ctx));
+            (data.client_actions as RuntimeAction[] | undefined)?.forEach((a) =>
+                runClientAction(a, ctx),
+            );
 
             return { ok: data.ok === true };
         } catch (e) {
             const err = e as {
-                response?: { status?: number; headers?: Record<string, string>; data?: ExecutionResult & { errors?: Record<string, { type?: string; fields?: Record<string, string[]>; message?: string }> } };
+                response?: {
+                    status?: number;
+                    headers?: Record<string, string>;
+                    data?: ExecutionResult & {
+                        errors?: Record<
+                            string,
+                            {
+                                type?: string;
+                                fields?: Record<string, string[]>;
+                                message?: string;
+                            }
+                        >;
+                    };
+                };
             };
             // Rate limited (429): surface a clear, retry-aware toast rather than
             // a generic failure. Retry-After is seconds.
             if (err.response?.status === 429) {
                 const retry = Number(err.response.headers?.['retry-after']);
-                const wait = Number.isFinite(retry) && retry > 0 ? ` Retry in ${retry}s.` : '';
+                const wait =
+                    Number.isFinite(retry) && retry > 0
+                        ? ` Retry in ${retry}s.`
+                        : '';
                 toast.error(`Too many requests.${wait}`);
                 return { ok: false };
             }
@@ -127,10 +179,15 @@ export function useActionExecutor() {
             const toastMessages: string[] = [];
             for (const entry of Object.values(validationErrors)) {
                 if (entry?.fields) {
-                    for (const [slug, messages] of Object.entries(entry.fields)) {
+                    for (const [slug, messages] of Object.entries(
+                        entry.fields,
+                    )) {
                         fieldErrors[slug] = messages;
                     }
-                } else if (typeof entry?.message === 'string' && entry.message !== '') {
+                } else if (
+                    typeof entry?.message === 'string' &&
+                    entry.message !== ''
+                ) {
                     toastMessages.push(entry.message);
                 }
             }
@@ -145,18 +202,24 @@ export function useActionExecutor() {
 
     function runClientAction(action: RuntimeAction, ctx: ExecutionContext) {
         switch (action.type) {
-            case 'navigate':
-                if (typeof action.to === 'string') router.visit(action.to);
+            case 'navigate': {
+                const to = interpolateTemplate(action.to, ctx);
+                if (typeof to === 'string' && to !== '') router.visit(to);
                 break;
+            }
             case 'refresh':
                 router.reload({ preserveScroll: true });
                 break;
             case 'show_toast': {
-                const message = typeof action.message === 'string' ? action.message : '';
+                const message =
+                    typeof action.message === 'string'
+                        ? (interpolateTemplate(action.message, ctx) as string)
+                        : '';
                 if (message === '') {
                     break;
                 }
-                const level = typeof action.level === 'string' ? action.level : 'info';
+                const level =
+                    typeof action.level === 'string' ? action.level : 'info';
                 switch (level) {
                     case 'success':
                         toast.success(message);
@@ -177,7 +240,9 @@ export function useActionExecutor() {
                     // Resolve any {{row.id}}, {{form.x}} expressions inside
                     // the params payload against the calling execution
                     // context. Modal-side blocks read these as {{params.X}}.
-                    const rawParams = action.params as Record<string, unknown> | undefined;
+                    const rawParams = action.params as
+                        | Record<string, unknown>
+                        | undefined;
                     const resolved: Record<string, unknown> = {};
                     if (rawParams && typeof rawParams === 'object') {
                         for (const [k, v] of Object.entries(rawParams)) {
@@ -188,7 +253,10 @@ export function useActionExecutor() {
                 }
                 break;
             case 'close_modal': {
-                const id = typeof action.modal_block_id === 'string' ? action.modal_block_id : undefined;
+                const id =
+                    typeof action.modal_block_id === 'string'
+                        ? action.modal_block_id
+                        : undefined;
                 modalBus.emit('close', id);
                 break;
             }
