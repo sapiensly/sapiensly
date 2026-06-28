@@ -320,6 +320,7 @@
                         "required": true, "unique": true, "indexed": true,
                         "readonly": true, "hidden": true, "help_text": true,
                         "type": { "const": "boolean" },
+                        "display": { "enum": ["checkbox", "switch"], "default": "checkbox", "description": "How the form renders it: a checkbox (default) or a toggle switch." },
                         "default": { "type": "boolean" }
                     },
                     "required": ["type"]
@@ -371,6 +372,7 @@
                         "required": true, "unique": true, "indexed": true,
                         "readonly": true, "hidden": true, "help_text": true,
                         "type": { "const": "single_select" },
+                        "display": { "enum": ["select", "radio"], "default": "select", "description": "How the form renders it: a dropdown (default) or a radio group — radio is nicer for 2-5 always-visible options." },
                         "options": {
                             "type": "array",
                             "minItems": 1,
@@ -2000,6 +2002,35 @@
                 }
             ]
         },
+        "block_stepper": {
+            "allOf": [
+                { "$ref": "#/$defs/block_base" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true, "visibility": true, "style": true,
+                        "type": { "const": "stepper" },
+                        "steps": {
+                            "type": "array", "minItems": 2, "maxItems": 12,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["label"],
+                                "properties": {
+                                    "id": { "$ref": "#/$defs/id" },
+                                    "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+                                    "description": { "type": "string", "maxLength": 160 }
+                                }
+                            }
+                        },
+                        "current_step": { "type": "integer", "minimum": 0, "description": "0-based index of the active step; earlier steps render as done, later as upcoming." },
+                        "orientation": { "enum": ["horizontal", "vertical"], "default": "horizontal" }
+                    },
+                    "required": ["type", "steps"]
+                }
+            ]
+        },
         "block_badge": {
             "allOf": [
                 { "$ref": "#/$defs/block_base" },
@@ -2019,7 +2050,7 @@
             ]
         },
         "block": {
-            "description": "A page block. Its `type` must be one of the catalog types (container, text, heading, divider, spacer, table, stat, form, button, modal, chart, kanban, calendar, markdown, image, hero, feature_grid, cta, stat_band, insight, badge, alert, avatar, breadcrumb, carousel, testimonials, faq, pricing, word_cloud, flow, metric_grid, sparkline, gauge, heatmap, timeline, funnel, map, tabs, accordion, split_view, card_grid, multi_step_form). If this failed, the `type` is unknown or the block is missing a required prop for that type — call list_available_components for the catalog and each type's required props.",
+            "description": "A page block. Its `type` must be one of the catalog types (container, text, heading, divider, spacer, table, stat, form, button, modal, chart, kanban, calendar, markdown, image, hero, feature_grid, cta, stat_band, insight, stepper, badge, alert, avatar, breadcrumb, carousel, testimonials, faq, pricing, word_cloud, flow, metric_grid, sparkline, gauge, heatmap, timeline, funnel, map, tabs, accordion, split_view, card_grid, multi_step_form). If this failed, the `type` is unknown or the block is missing a required prop for that type — call list_available_components for the catalog and each type's required props.",
             "oneOf": [
                 { "$ref": "#/$defs/block_container" },
                 { "$ref": "#/$defs/block_text" },
@@ -2045,6 +2076,7 @@
                 { "$ref": "#/$defs/block_cta" },
                 { "$ref": "#/$defs/block_stat_band" },
                 { "$ref": "#/$defs/block_insight" },
+                { "$ref": "#/$defs/block_stepper" },
                 { "$ref": "#/$defs/block_badge" },
                 { "$ref": "#/$defs/block_alert" },
                 { "$ref": "#/$defs/block_avatar" },

@@ -189,7 +189,27 @@ function isInMulti(value: string): boolean {
     </template>
 
     <template v-else-if="field.type === 'boolean'">
+        <button
+            v-if="(field as { display?: string }).display === 'switch'"
+            :id="inputId"
+            type="button"
+            role="switch"
+            :aria-checked="!!modelValue"
+            class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
+            :style="{
+                background: modelValue
+                    ? 'var(--sp-accent, #3b82f6)'
+                    : 'color-mix(in srgb, currentColor 25%, transparent)',
+            }"
+            @click="update(!modelValue)"
+        >
+            <span
+                class="inline-block size-4 rounded-full bg-white transition-transform"
+                :class="modelValue ? 'translate-x-4' : 'translate-x-0.5'"
+            />
+        </button>
         <input
+            v-else
             :id="inputId"
             :checked="!!modelValue"
             @change="onChecked"
@@ -253,7 +273,28 @@ function isInMulti(value: string): boolean {
     </template>
 
     <template v-else-if="field.type === 'single_select'">
+        <div
+            v-if="(field as { display?: string }).display === 'radio'"
+            class="flex flex-col gap-1.5"
+        >
+            <label
+                v-for="opt in field.options ?? []"
+                :key="opt.id"
+                class="inline-flex cursor-pointer items-center gap-2 text-sm"
+            >
+                <input
+                    type="radio"
+                    :name="inputId"
+                    :value="opt.value"
+                    :checked="modelValue === opt.value"
+                    class="size-4"
+                    @change="update(opt.value)"
+                />
+                {{ opt.label }}
+            </label>
+        </div>
         <select
+            v-else
             :id="inputId"
             :value="(modelValue as string) ?? ''"
             @change="onInput"

@@ -483,7 +483,7 @@ it('ListAvailableComponentsTool returns the closed component catalog', function 
     $types = collect($result['components'])->pluck('type');
 
     expect($types)->toContain('container', 'text', 'heading', 'divider', 'spacer', 'table', 'stat', 'form', 'button', 'modal', 'chart', 'kanban', 'calendar')
-        ->and($types)->toContain('alert', 'avatar', 'breadcrumb', 'carousel', 'badge'); // newer UI blocks
+        ->and($types)->toContain('alert', 'avatar', 'breadcrumb', 'carousel', 'badge', 'stepper'); // newer UI blocks
 });
 
 it('ListAvailableFieldTypesTool includes the color field type', function () {
@@ -504,6 +504,11 @@ it('validates a manifest using the new UI blocks + table pagination', function (
             'fields' => [
                 ['id' => 'fld_namefield01', 'slug' => 'name', 'name' => 'Name', 'type' => 'string'],
                 ['id' => 'fld_colorfield1', 'slug' => 'color', 'name' => 'Colour', 'type' => 'color', 'default' => '#0096ff'],
+                ['id' => 'fld_activefield', 'slug' => 'active', 'name' => 'Active', 'type' => 'boolean', 'display' => 'switch'],
+                ['id' => 'fld_statusfield', 'slug' => 'status', 'name' => 'Status', 'type' => 'single_select', 'display' => 'radio', 'options' => [
+                    ['id' => 'opt_newoption01', 'value' => 'new', 'label' => 'New'],
+                    ['id' => 'opt_doneoption1', 'value' => 'done', 'label' => 'Done'],
+                ]],
             ],
         ]],
         'pages' => [[
@@ -513,6 +518,9 @@ it('validates a manifest using the new UI blocks + table pagination', function (
                 ['id' => 'blk_alertblock1', 'type' => 'alert', 'variant' => 'warning', 'title' => 'Heads up', 'body' => 'Read this.', 'icon' => 'alert-triangle', 'dismissible' => true],
                 ['id' => 'blk_avatarblock', 'type' => 'avatar', 'name' => 'Ana López', 'label' => 'Ana López', 'caption' => 'Owner', 'size' => 'lg'],
                 ['id' => 'blk_badgeblock1', 'type' => 'badge', 'label' => 'Activo', 'variant' => 'success', 'icon' => 'check'],
+                ['id' => 'blk_stepperblk', 'type' => 'stepper', 'current_step' => 1, 'steps' => [
+                    ['label' => 'Cart'], ['label' => 'Payment'], ['label' => 'Done'],
+                ]],
                 ['id' => 'blk_carouselbk', 'type' => 'carousel', 'autoplay' => true, 'interval_ms' => 4000, 'items' => [
                     ['image' => 'https://picsum.photos/seed/a/1200/600', 'title' => 'One'],
                     ['image' => 'https://picsum.photos/seed/b/1200/600', 'title' => 'Two'],
