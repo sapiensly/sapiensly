@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\ManifestValidator;
 
 /**
  * @return array<string, mixed>
@@ -15,7 +16,7 @@ function scaffoldFor(string $locale): array
         'version' => 1,
         'objects' => [],
         'pages' => [],
-        'permissions' => ['roles' => [['id' => 'rol_a', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
         'settings' => ['default_locale' => $locale, 'default_currency' => 'MXN'],
     ];
 
@@ -38,7 +39,43 @@ function scaffoldFor(string $locale): array
     return app(AppScaffolder::class)->assemble($base, $spec);
 }
 
-function pageBySlug(array $manifest, string $slug): array
+/**
+ * A parent (comandas) with a child (renglones) so the scaffold builds a
+ * master-detail page. Link: a renglón belongs to one comanda.
+ *
+ * @return array<string, mixed>
+ */
+function scaffoldWithChild(string $locale): array
+{
+    $base = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_q2',
+        'slug' => 'pos2',
+        'name' => 'POS',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => $locale, 'default_currency' => 'MXN'],
+    ];
+
+    $spec = [
+        'objects' => [
+            ['name' => 'Comandas', 'slug' => 'comandas', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Renglones', 'slug' => 'renglones', 'fields' => [
+                ['name' => 'Concepto', 'slug' => 'concepto', 'type' => 'string', 'options' => null],
+                ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+            ]],
+        ],
+        'links' => [['from' => 'renglones', 'to' => 'comandas', 'name' => 'comanda']],
+    ];
+
+    return app(AppScaffolder::class)->assemble($base, $spec);
+}
+
+function pageBySlug(array $manifest, string $slug): ?array
 {
     return collect($manifest['pages'])->firstWhere('slug', $slug);
 }
@@ -101,4 +138,52 @@ it('adds a currency sum KPI to the dashboard', function () {
 
     $totalField = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'total');
     expect($sumKpi['field_id'])->toBe($totalField['id']);
+});
+
+it('builds a master-detail page for a parent with children', function () {
+    $manifest = scaffoldWithChild('es-MX');
+
+    $detail = pageBySlug($manifest, 'comandas_detail');
+    expect($detail)->not->toBeNull();
+
+    // The parent record itself.
+    $recordDetail = blockByType($detail, 'record_detail');
+    expect($recordDetail['record_id_expression'])->toBe('{{params.id}}');
+    $comandas = collect($manifest['objects'])->firstWhere('slug', 'comandas');
+    expect($recordDetail['object_id'])->toBe($comandas['id']);
+
+    // Its children, scoped to this parent.
+    $renglones = collect($manifest['objects'])->firstWhere('slug', 'renglones');
+    $relatedList = blockByType($detail, 'related_list');
+    expect($relatedList['object_id'])->toBe($renglones['id']);
+    expect($relatedList['parent_id_expression'])->toBe('{{params.id}}');
+
+    // The add-child form presets the relation back to this parent from the page id.
+    $relField = collect($renglones['fields'])->firstWhere('type', 'relation');
+    $form = blockByType($detail, 'modal')['blocks'][0];
+    expect($form['object_id'])->toBe($renglones['id']);
+    $createValues = collect($form['on_submit'])->firstWhere('type', 'create_record')['values'];
+    expect($createValues[$relField['slug']])->toBe('{{params.id}}');
+    // …and it does NOT ask the user to pick the parent again.
+    expect(collect($form['fields'])->pluck('field_id'))->not->toContain($relField['id']);
+});
+
+it('links the parent list table to its detail page', function () {
+    $manifest = scaffoldWithChild('es-MX');
+
+    $table = blockByType(pageBySlug($manifest, 'comandas'), 'table');
+    $action = collect($table['columns'])->firstWhere('type', 'action');
+    expect($action)->not->toBeNull();
+    expect($action['label'])->toBe('Abrir');
+    expect($action['on_click'][0]['type'])->toBe('navigate');
+    expect($action['on_click'][0]['to'])->toBe('/comandas_detail?id={{row.id}}');
+});
+
+it('produces a schema-valid manifest with the master-detail page', function () {
+    $manifest = scaffoldWithChild('es-MX');
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->errors)->toBe([]);
+    expect($result->valid)->toBeTrue();
 });

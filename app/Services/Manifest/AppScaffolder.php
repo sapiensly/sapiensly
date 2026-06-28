@@ -404,7 +404,10 @@ class AppScaffolder
         }
 
         // Pass 2: each link becomes a bidirectional relation pair (many_to_one on
-        // the `from` object + its one_to_many inverse on the `to` object).
+        // the `from` object + its one_to_many inverse on the `to` object). We also
+        // record, per parent, the child relationships so pass 4 can build a
+        // master-detail page (the parent record + its children) for it.
+        $childrenByParent = [];
         foreach ($spec['links'] ?? [] as $link) {
             $fromIndex = $indexBySlug[$link['from']] ?? null;
             $toIndex = $indexBySlug[$link['to']] ?? null;
@@ -419,17 +422,47 @@ class AppScaffolder
             $built[$toIndex]['def']['fields'][] = $pair['parent_field'];
             $built[$toIndex]['def']['fields'][] = $pair['parent_rollup_field'];
             $built[$toIndex]['pageFields'][] = $pair['parent_rollup_index'];
+
+            $childrenByParent[$toIndex][] = [
+                'childIndex' => $fromIndex,
+                'childFieldId' => $pair['child_field']['id'],
+                'childFieldSlug' => $pair['child_field']['slug'],
+            ];
         }
 
-        // Pass 3: pages (now that relation fields exist on the objects).
+        // Pass 3: a list page per object (now that relation fields exist).
         $objects = [];
-        $pages = [];
+        $objectPages = [];
         $forDashboard = [];
-        foreach ($built as $entry) {
+        foreach ($built as $i => $entry) {
             $objects[] = $entry['def'];
-            $pages[] = $this->buildPage(['name' => $entry['def']['name'], 'slug' => $entry['def']['slug']], $entry['def']['id'], $entry['pageFields'], $lang);
+            $objectPages[$i] = $this->buildPage(['name' => $entry['def']['name'], 'slug' => $entry['def']['slug']], $entry['def']['id'], $entry['pageFields'], $lang);
             $forDashboard[] = ['name' => $entry['def']['name'], 'id' => $entry['def']['id'], 'fieldIndex' => $entry['pageFields']];
         }
+
+        // Pass 4: a master-detail page for every parent that has children — the
+        // parent record (record_detail) plus, per child relationship, an inline
+        // "add child" form and a related_list of its children. The parent's list
+        // table gets an "open" row action that navigates to it.
+        $detailPages = [];
+        $usedSlugs = array_column($objectPages, 'slug');
+        foreach ($childrenByParent as $parentIndex => $rels) {
+            $parent = $built[$parentIndex];
+            $detailSlug = $this->uniqueSlug($parent['def']['slug'].'_detail', $usedSlugs, 'detail');
+            $usedSlugs[] = $detailSlug;
+
+            $children = array_map(fn (array $rel): array => [
+                'def' => $built[$rel['childIndex']]['def'],
+                'pageFields' => $built[$rel['childIndex']]['pageFields'],
+                'childFieldId' => $rel['childFieldId'],
+                'childFieldSlug' => $rel['childFieldSlug'],
+            ], $rels);
+
+            $detailPages[] = $this->buildDetailPage($parent['def'], $parent['pageFields'], $detailSlug, $children, $lang);
+            $this->addRowActionToTable($objectPages[$parentIndex], $detailSlug, $lang);
+        }
+
+        $pages = [...array_values($objectPages), ...$detailPages];
 
         // A dashboard landing page summarising every object goes first so it is
         // the app's home. Only worth it once there is something to summarise.
@@ -788,6 +821,132 @@ class AppScaffolder
             'path' => '/',
             'blocks' => $blocks,
         ];
+    }
+
+    /**
+     * A master-detail page for a parent record: a breadcrumb back to the list, the
+     * parent's fields (record_detail), then per child relationship an inline
+     * "add child" form (with the link back to this parent preset from the page id)
+     * and a related_list of that parent's children.
+     *
+     * @param  array{id: string, name: string, slug: string}  $parentDef
+     * @param  array<int, array{id: string, slug: string, type: string}>  $parentPageFields
+     * @param  array<int, array{def: array<string, mixed>, pageFields: array<int, array{id: string, slug: string, type: string}>, childFieldId: string, childFieldSlug: string}>  $children
+     * @return array<string, mixed>
+     */
+    private function buildDetailPage(array $parentDef, array $parentPageFields, string $detailSlug, array $children, string $lang): array
+    {
+        $singular = (string) Str::singular($parentDef['name']);
+
+        $blocks = [
+            [
+                'id' => $this->id('blk'),
+                'type' => 'breadcrumb',
+                'items' => [
+                    ['label' => $parentDef['name'], 'href' => '/'.$parentDef['slug']],
+                    ['label' => $singular],
+                ],
+            ],
+            [
+                'id' => $this->id('blk'),
+                'type' => 'record_detail',
+                'label' => $singular,
+                'object_id' => $parentDef['id'],
+                'record_id_expression' => '{{params.id}}',
+                'fields' => array_map(fn (array $f): array => ['field_id' => $f['id']], $parentPageFields),
+            ],
+        ];
+
+        foreach ($children as $child) {
+            $childDef = $child['def'];
+            $childFieldId = $child['childFieldId'];
+            $childSingular = (string) Str::singular($childDef['name']);
+
+            // The add-child form: the child's enterable fields minus the relation
+            // back to this parent (preset from the page id) and computed fields.
+            $formIndex = array_values(array_filter(
+                $child['pageFields'],
+                fn (array $f): bool => $f['id'] !== $childFieldId && ! in_array($f['type'] ?? 'string', self::DERIVED_TYPES, true),
+            ));
+            $formFields = array_map(fn (array $f): array => ['field_id' => $f['id']], $formIndex);
+            $createValues = [$child['childFieldSlug'] => '{{params.id}}'];
+            foreach ($formIndex as $f) {
+                $createValues[$f['slug']] = '{{form.'.$f['slug'].'}}';
+            }
+
+            $modalId = $this->id('blk');
+
+            $blocks[] = ['id' => $this->id('blk'), 'type' => 'heading', 'level' => 3, 'content' => $childDef['name']];
+            $blocks[] = [
+                'id' => $modalId,
+                'type' => 'modal',
+                'title' => $this->labelNew($lang, $childSingular),
+                'blocks' => [[
+                    'id' => $this->id('blk'),
+                    'type' => 'form',
+                    'object_id' => $childDef['id'],
+                    'mode' => 'create',
+                    'fields' => $formFields,
+                    'submit_label' => $this->labelSubmit($lang),
+                    'on_submit' => [
+                        ['type' => 'create_record', 'object_id' => $childDef['id'], 'values' => $createValues],
+                        ['type' => 'close_modal'],
+                        ['type' => 'show_toast', 'level' => 'success', 'message' => $this->toastSaved($lang, $childSingular)],
+                        ['type' => 'refresh'],
+                    ],
+                ]],
+            ];
+            $blocks[] = [
+                'id' => $this->id('blk'),
+                'type' => 'button',
+                'label' => $this->labelNew($lang, $childSingular),
+                'variant' => 'primary',
+                'on_click' => [['type' => 'open_modal', 'modal_block_id' => $modalId]],
+            ];
+            $blocks[] = [
+                'id' => $this->id('blk'),
+                'type' => 'related_list',
+                'object_id' => $childDef['id'],
+                'via_relation_field_id' => $childFieldId,
+                'parent_id_expression' => '{{params.id}}',
+                'columns' => array_map(fn (array $f): array => ['field_id' => $f['id']], array_values(array_filter(
+                    $child['pageFields'],
+                    fn (array $f): bool => $f['id'] !== $childFieldId,
+                ))),
+            ];
+        }
+
+        return [
+            'id' => $this->id('pag'),
+            'slug' => $detailSlug,
+            'name' => $singular,
+            'path' => '/'.$detailSlug,
+            'blocks' => $blocks,
+        ];
+    }
+
+    /**
+     * Append an "open" row action to a list page's table block so each row links
+     * to its detail page, passing the row id via the URL (read as {{params.id}}).
+     *
+     * @param  array<string, mixed>  $page
+     */
+    private function addRowActionToTable(array &$page, string $detailSlug, string $lang): void
+    {
+        foreach ($page['blocks'] as &$block) {
+            if (($block['type'] ?? null) === 'table') {
+                $block['columns'][] = [
+                    'id' => $this->id('col'),
+                    'type' => 'action',
+                    'label' => $lang === 'es' ? 'Abrir' : 'Open',
+                    'icon' => 'arrow-right',
+                    'variant' => 'ghost',
+                    'on_click' => [['type' => 'navigate', 'to' => '/'.$detailSlug.'?id={{row.id}}']],
+                ];
+                break;
+            }
+        }
+        unset($block);
     }
 
     /**
