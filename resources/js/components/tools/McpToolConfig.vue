@@ -203,7 +203,7 @@ const selectedIntegration = computed<OAuth2IntegrationOption | undefined>(() =>
                     {{ t('tools.config.mcp.oauth_no_integrations') }}
                 </p>
                 <a
-                    href="/system/integrations/create"
+                    href="/system/integrations/create?kind=mcp"
                     class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-accent-blue hover:underline"
                 >
                     <ExternalLink class="size-3.5" />

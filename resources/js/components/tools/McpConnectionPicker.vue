@@ -34,7 +34,7 @@ const notConnected = computed(() => props.connections.filter((c) => !c.connected
                 {{ t('tools.config.mcp.no_connections') }}
             </p>
             <a
-                href="/system/integrations/create"
+                href="/system/integrations/create?kind=mcp"
                 class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent-blue hover:underline"
             >
                 <ExternalLink class="size-3.5" />
