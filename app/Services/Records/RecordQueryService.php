@@ -26,9 +26,10 @@ use RuntimeException;
  *
  * A query block may also carry `search` (a string): a case-insensitive match
  * across the object's text fields, ANDed across whitespace-separated terms; and
- * `expand` (a list of belongs_to relation field ids): resolves each related
- * record inline onto the result rows' transient `expanded` map (batched, no
- * N+1; access- and field-hiding-safe).
+ * `expand` (a list of relation field ids): resolves each relation inline onto the
+ * result rows' transient `expanded` map (batched, no N+1; access- and
+ * field-hiding-safe). belongs_to → `{id, data}`|null; has_many → `{items, count,
+ * truncated}`.
  *
  * Supported field types for filtering: string, long_text, number, currency,
  * boolean, date, datetime, single_select. multi_select and relation are
@@ -86,16 +87,16 @@ class RecordQueryService
     }
 
     /**
-     * Resolve belongs_to relations inline on a result set: for each requested
-     * relation field, batch-load the related records (one query per target
-     * object, no N+1) and attach them to each row's transient `expanded` map as
-     * `{id, data}` (or null when the FK is empty / the related record is not
-     * visible). Honours the target object's row_filter (inaccessible relateds
-     * resolve to null) and strips its hidden fields, so expansion never leaks
-     * what a direct read would hide.
+     * Resolve relations inline on a result set, attaching each to the rows'
+     * transient `expanded` map. One batch query per relation field (no N+1).
+     * Honours the target object's row_filter and strips its hidden fields, so
+     * expansion never leaks what a direct read would hide.
      *
-     * has_many relations are skipped — a flat row can't carry a child list; query
-     * the child object directly (optionally with a `related` filter) instead.
+     *   belongs_to (many_to_one): `{id, data}` (or null when the FK is empty /
+     *     the related record is not visible).
+     *   has_many (one_to_many): `{items: [{id, data}], count, truncated}` —
+     *     `count` is the true child count; `items` is capped at
+     *     CHILDREN_PER_PARENT (truncated=true when it exceeds the cap).
      *
      * @param  Collection<int, Record>  $records
      * @param  list<string>  $expandFieldIds
@@ -105,17 +106,15 @@ class RecordQueryService
      */
     private function expandRelations(App $app, Collection $records, array $expandFieldIds, array $object, array $manifest, array $context): void
     {
-        $access = $context['__access'] ?? null;
-
         foreach ($expandFieldIds as $fieldId) {
             if (! is_string($fieldId)) {
                 continue;
             }
 
             $field = $this->findField($object, $fieldId);
-            if (($field['type'] ?? null) !== 'relation' || ($field['cardinality'] ?? 'many_to_one') !== 'many_to_one') {
-                // Only belongs_to expands inline; mark others null so the caller
-                // gets a consistent shape rather than a missing key.
+            if (($field['type'] ?? null) !== 'relation' || ($field['target_object_id'] ?? null) === null) {
+                // Not an expandable relation — mark null so the caller gets a
+                // consistent shape rather than a missing key.
                 foreach ($records as $r) {
                     $r->expanded[$fieldId] = null;
                 }
@@ -123,54 +122,171 @@ class RecordQueryService
                 continue;
             }
 
-            $targetId = $field['target_object_id'] ?? null;
-            if ($targetId === null) {
-                continue;
-            }
-
-            $slug = $field['slug'];
-            $ids = $records
-                ->map(fn (Record $r) => $r->data[$slug] ?? null)
-                ->filter(fn ($v) => $v !== null && $v !== '')
-                ->map(fn ($v) => (string) $v)
-                ->unique()
-                ->values()
-                ->all();
-
-            if ($ids === []) {
-                foreach ($records as $r) {
-                    $r->expanded[$fieldId] = null;
-                }
-
-                continue;
-            }
-
-            $targetObject = $this->findObject($manifest, $targetId);
-            $builder = $this->scopeForObject($app, $targetId)->whereIn('id', $ids);
-            $this->applyAccessFilter($builder, $targetObject, $targetId, $app, $manifest, $context);
-
-            /** @var Collection<int, Record> $related */
-            $related = $builder->get();
-            $this->derived->enrich($app, $targetObject, $related, $manifest);
-
-            $hidden = $access instanceof AppAccessContext ? $access->hiddenFieldSlugs($targetId) : [];
-            $byId = $related->keyBy('id');
-
-            foreach ($records as $r) {
-                $fk = $r->data[$slug] ?? null;
-                $rel = ($fk !== null && $fk !== '') ? $byId->get((string) $fk) : null;
-                if ($rel === null) {
-                    $r->expanded[$fieldId] = null;
-
-                    continue;
-                }
-                $data = $rel->data;
-                foreach ($hidden as $h) {
-                    unset($data[$h]);
-                }
-                $r->expanded[$fieldId] = ['id' => $rel->id, 'data' => $data];
+            if (($field['cardinality'] ?? 'many_to_one') === 'one_to_many') {
+                $this->expandHasMany($app, $records, $field, $manifest, $context);
+            } else {
+                $this->expandBelongsTo($app, $records, $field, $manifest, $context);
             }
         }
+    }
+
+    /**
+     * Inline-resolve a belongs_to (many_to_one) relation: one record per FK.
+     *
+     * @param  Collection<int, Record>  $records
+     * @param  array<string, mixed>  $field
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    private function expandBelongsTo(App $app, Collection $records, array $field, array $manifest, array $context): void
+    {
+        $fieldId = $field['id'];
+        $targetId = $field['target_object_id'];
+        $slug = $field['slug'];
+
+        $ids = $records
+            ->map(fn (Record $r) => $r->data[$slug] ?? null)
+            ->filter(fn ($v) => $v !== null && $v !== '')
+            ->map(fn ($v) => (string) $v)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === []) {
+            foreach ($records as $r) {
+                $r->expanded[$fieldId] = null;
+            }
+
+            return;
+        }
+
+        $targetObject = $this->findObject($manifest, $targetId);
+        $builder = $this->scopeForObject($app, $targetId)->whereIn('id', $ids);
+        $this->applyAccessFilter($builder, $targetObject, $targetId, $app, $manifest, $context);
+
+        /** @var Collection<int, Record> $related */
+        $related = $builder->get();
+        $this->derived->enrich($app, $targetObject, $related, $manifest);
+
+        $hidden = $this->hiddenSlugsFor($context, $targetId);
+        $byId = $related->keyBy('id');
+
+        foreach ($records as $r) {
+            $fk = $r->data[$slug] ?? null;
+            $rel = ($fk !== null && $fk !== '') ? $byId->get((string) $fk) : null;
+            $r->expanded[$fieldId] = $rel !== null
+                ? ['id' => $rel->id, 'data' => $this->stripHidden($rel->data, $hidden)]
+                : null;
+        }
+    }
+
+    /**
+     * Inline-resolve a has_many (one_to_many) relation: the children that point
+     * back via the inverse belongs_to field. Two batch queries — a grouped count
+     * for the true per-parent total, and a capped row load for the sample items.
+     *
+     * @param  Collection<int, Record>  $records
+     * @param  array<string, mixed>  $field
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    private function expandHasMany(App $app, Collection $records, array $field, array $manifest, array $context): void
+    {
+        $fieldId = $field['id'];
+        $targetId = $field['target_object_id'];
+        $targetObject = $this->findObject($manifest, $targetId);
+
+        $inverseId = $field['inverse_field_id'] ?? null;
+        $inverseField = $inverseId !== null ? $this->findField($targetObject, $inverseId) : null;
+        if ($inverseField === null) {
+            // No inverse FK to traverse — empty, consistent shape.
+            foreach ($records as $r) {
+                $r->expanded[$fieldId] = ['items' => [], 'count' => 0, 'truncated' => false];
+            }
+
+            return;
+        }
+
+        $parentIds = $records->map(fn (Record $r) => (string) $r->id)->unique()->values()->all();
+        if ($parentIds === []) {
+            return;
+        }
+
+        $inverseSlug = $inverseField['slug'];
+        $expr = $this->jsonExtract('data', $inverseField);
+        $placeholders = implode(',', array_fill(0, count($parentIds), '?'));
+
+        // True child count per parent (cheap grouped count, access-scoped).
+        $countBuilder = $this->scopeForObject($app, $targetId)->whereRaw("{$expr} in ({$placeholders})", $parentIds);
+        $this->applyAccessFilter($countBuilder, $targetObject, $targetId, $app, $manifest, $context);
+        $counts = $countBuilder->toBase()
+            ->selectRaw("{$expr} as pid, count(*) as c")
+            ->groupByRaw($expr)
+            ->get()
+            ->mapWithKeys(fn ($row) => [(string) $row->pid => (int) $row->c])
+            ->all();
+
+        // Sample rows (newest first), capped overall; sliced per parent below.
+        $rowBuilder = $this->scopeForObject($app, $targetId)->whereRaw("{$expr} in ({$placeholders})", $parentIds);
+        $this->applyAccessFilter($rowBuilder, $targetObject, $targetId, $app, $manifest, $context);
+        /** @var Collection<int, Record> $children */
+        $children = $rowBuilder->orderBy('created_at', 'desc')->limit(self::RELATED_MATCH_CAP)->get();
+        $this->derived->enrich($app, $targetObject, $children, $manifest);
+
+        $hidden = $this->hiddenSlugsFor($context, $targetId);
+
+        $byParent = [];
+        foreach ($children as $child) {
+            $pid = (string) ($child->data[$inverseSlug] ?? '');
+            if ($pid === '') {
+                continue;
+            }
+            $byParent[$pid][] = $child;
+        }
+
+        foreach ($records as $r) {
+            $kids = $byParent[(string) $r->id] ?? [];
+            $items = [];
+            foreach (array_slice($kids, 0, self::CHILDREN_PER_PARENT) as $child) {
+                $items[] = ['id' => $child->id, 'data' => $this->stripHidden($child->data, $hidden)];
+            }
+            $count = $counts[(string) $r->id] ?? count($items);
+            $r->expanded[$fieldId] = [
+                'items' => $items,
+                'count' => $count,
+                'truncated' => $count > count($items),
+            ];
+        }
+    }
+
+    /**
+     * The role-hidden field slugs for an object (from the access context), or []
+     * when no access context is threaded.
+     *
+     * @param  array<string, mixed>  $context
+     * @return list<string>
+     */
+    private function hiddenSlugsFor(array $context, string $objectId): array
+    {
+        $access = $context['__access'] ?? null;
+
+        return $access instanceof AppAccessContext ? $access->hiddenFieldSlugs($objectId) : [];
+    }
+
+    /**
+     * Drop hidden field slugs from a record's data array.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<string>  $hidden
+     * @return array<string, mixed>
+     */
+    private function stripHidden(array $data, array $hidden): array
+    {
+        foreach ($hidden as $h) {
+            unset($data[$h]);
+        }
+
+        return $data;
     }
 
     /**
@@ -564,6 +680,9 @@ class RecordQueryService
 
     /** Cap on related-record ids resolved for one relation hop (cost guard). */
     private const RELATED_MATCH_CAP = 5000;
+
+    /** Max child rows returned per parent when expanding a has_many relation. */
+    private const CHILDREN_PER_PARENT = 50;
 
     /**
      * Apply the full constraint set of a query block to a builder: the filter

@@ -12,7 +12,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Query records of an object in an app. Returns matching records plus the total count and a has_more flag for paging (tenant-scoped). Pass `expand` to resolve belongs_to relations inline. Call describe_app_data first to learn the object and field ids.')]
+#[Description('Query records of an object in an app. Returns matching records plus the total count and a has_more flag for paging (tenant-scoped). Pass `expand` to resolve relations inline (belongs_to → the related record; has_many → a capped child list with a true count). Call describe_app_data first to learn the object and field ids.')]
 class QueryRecordsTool extends SapiensTool
 {
     protected const ABILITY = 'data:read';
@@ -86,7 +86,7 @@ class QueryRecordsTool extends SapiensTool
             'filter' => $schema->object()->description('Optional filter block: {op, ...}. Leaf ops: eq/neq/gt/gte/lt/lte/in/not_in/contains/starts_with/ends_with/between/is_null/is_not_null referencing field_ids. Logical: and/or/not. Relation traversal: {op: related, field_id: <relation field>, condition: <filter on the related object>} (belongs_to and has_many; nestable).'),
             'search' => $schema->string()->description('Optional free-text search across the object\'s text fields (case-insensitive; terms ANDed).'),
             'sort' => $schema->array()->description('Optional [{field_id, direction: asc|desc}].'),
-            'expand' => $schema->array()->description('Optional list of belongs_to relation field ids to resolve inline. Each returned record gains expanded: { [field_id]: { id, data } | null } with the related record (access-respecting; null if empty/not visible).'),
+            'expand' => $schema->array()->description('Optional list of relation field ids to resolve inline. Each record gains expanded[field_id]: belongs_to → { id, data } | null; has_many → { items: [{ id, data }], count, truncated } (items capped per parent). Access-respecting.'),
             'limit' => $schema->integer()->description('Max records to return (default 50, max 200).'),
             'offset' => $schema->integer()->description('Rows to skip, for paging (default 0).'),
         ];

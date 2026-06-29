@@ -48,9 +48,10 @@ first to learn the object ids and field ids. Returns { count, total, has_more,
 rows: [{ id, data: { field_slug: value } }] } (capped at 50 rows; total is the
 full match count for paging, null for connected objects). filter/sort use the
 same shape as the app's data blocks. Pass expand: [relation_field_id] to resolve
-belongs_to relations inline — each row then carries expanded: { [field_id]: { id,
-data } | null }, sparing a second lookup. Works the same for internal and
-connected (external) objects.
+relations inline — each row then carries expanded[field_id]: belongs_to → { id,
+data } | null; has_many → { items, count, truncated } (capped child list with the
+true count) — sparing a second lookup. Works the same for internal and connected
+(external) objects.
 DESC;
     }
 
@@ -65,7 +66,7 @@ DESC;
             'search' => $schema->string()
                 ->description('Optional free-text search across the object\'s text fields (case-insensitive).'),
             'expand' => $schema->array()
-                ->description('Optional belongs_to relation field ids to resolve inline; each row gains expanded: { [field_id]: { id, data } | null }.'),
+                ->description('Optional relation field ids to resolve inline; each row gains expanded[field_id]: belongs_to → { id, data } | null; has_many → { items, count, truncated }.'),
             'sort' => $schema->array()
                 ->description('Optional [{field_id, direction: asc|desc}].'),
             'limit' => $schema->integer()

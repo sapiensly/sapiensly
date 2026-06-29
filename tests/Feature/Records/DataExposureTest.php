@@ -263,8 +263,27 @@ it('expands to null when the relation is unset', function () {
     expect($records->first()->expanded['fld_customer'])->toBeNull();
 });
 
-it('does not expand a has_many relation inline (null)', function () {
-    $ids = seedSales($this->salesApp);
+it('expands a has_many relation inline with items + true count', function () {
+    seedSales($this->salesApp);
+
+    $records = app(RecordQueryService::class)->query(
+        $this->salesApp,
+        ['object_id' => 'obj_customers', 'sort' => [['field_id' => 'fld_cname', 'direction' => 'asc']], 'expand' => ['fld_orders']],
+        overviewManifest(),
+    );
+
+    // Acme has Apple + Banana (2), Beta has Cherry (1).
+    $acme = $records->firstWhere('data.name', 'Acme');
+    $beta = $records->firstWhere('data.name', 'Beta');
+
+    expect($acme->expanded['fld_orders']['count'])->toBe(2)
+        ->and($acme->expanded['fld_orders']['truncated'])->toBeFalse()
+        ->and(collect($acme->expanded['fld_orders']['items'])->pluck('data.name')->sort()->values()->all())->toBe(['Apple', 'Banana'])
+        ->and($beta->expanded['fld_orders']['count'])->toBe(1);
+});
+
+it('expands a has_many relation to an empty list when there are no children', function () {
+    Record::create(['app_id' => $this->salesApp->id, 'object_definition_id' => 'obj_customers', 'organization_id' => null, 'data' => ['name' => 'Loner']]);
 
     $records = app(RecordQueryService::class)->query(
         $this->salesApp,
@@ -272,7 +291,10 @@ it('does not expand a has_many relation inline (null)', function () {
         overviewManifest(),
     );
 
-    expect($records->first()->expanded['fld_orders'])->toBeNull();
+    $loner = $records->firstWhere('data.name', 'Loner');
+    expect($loner->expanded['fld_orders']['count'])->toBe(0)
+        ->and($loner->expanded['fld_orders']['items'])->toBe([])
+        ->and($loner->expanded['fld_orders']['truncated'])->toBeFalse();
 });
 
 it('counts respect search and relation filters', function () {
