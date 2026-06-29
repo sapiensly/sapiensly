@@ -119,6 +119,7 @@ class AppBuilderController extends Controller
             'versions' => $this->buildVersions($app),
             'conversation' => [
                 'id' => $conversation->id,
+                'build_plan' => $conversation->build_plan,
                 'messages' => $conversation->messages->map(fn (BuilderMessage $m) => $this->messageDto($m)),
             ],
         ]);
@@ -1001,6 +1002,7 @@ class AppBuilderController extends Controller
             'integration_proposal' => $m->integration_proposal,
             'status' => $m->status,
             'applied_version_id' => $m->applied_version_id,
+            'plan_step_ids' => $m->plan_step_ids,
             'attachment_url' => $attachmentUrl,
             'attachment_mime' => $m->attachment_mime,
             'created_at' => $m->created_at?->toIso8601String(),

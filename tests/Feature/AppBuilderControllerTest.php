@@ -232,6 +232,29 @@ it('returns a schema payload with objects, record counts, workflows and system f
         );
 });
 
+it('exposes the conversation build_plan to the builder page', function () {
+    BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+        'build_plan' => [
+            'schema' => 1, 'goal' => 'POS', 'status' => 'active', 'steps' => [
+                ['id' => 'stp_a', 'title' => 'Objetos', 'detail' => null, 'status' => 'done', 'applied_version_id' => null, 'version_number' => 2, 'closed_by_summary' => null, 'error' => null],
+                ['id' => 'stp_b', 'title' => 'Páginas', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+            ],
+        ],
+    ]);
+
+    $this->actingAs($this->user)
+        ->get("/apps/{$this->testApp->id}/builder")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('conversation.build_plan.goal', 'POS')
+            ->has('conversation.build_plan.steps', 2)
+            ->where('conversation.build_plan.steps.0.title', 'Objetos')
+        );
+});
+
 it('returns null schema when the app has no manifest yet', function () {
     $bareApp = App::factory()->create(['user_id' => $this->user->id, 'visibility' => 'private']);
 

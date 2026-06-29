@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import AppAccessPanel from '@/components/apps/AppAccessPanel.vue';
+import BuildPlanCard from '@/components/apps/BuildPlanCard.vue';
 import LayersExplorer from '@/components/apps/LayersExplorer.vue';
 import SchemaView from '@/components/apps/SchemaView.vue';
 import SlashCommandMenu from '@/components/apps/SlashCommandMenu.vue';
@@ -163,12 +164,30 @@ interface SchemaPayload {
     >;
 }
 
+interface BuildPlanStep {
+    id: string;
+    title: string;
+    detail: string | null;
+    status: 'pending' | 'in_progress' | 'done' | 'skipped' | 'failed';
+    version_number: number | null;
+}
+
+interface BuildPlanData {
+    goal: string | null;
+    status: 'active' | 'done' | 'abandoned';
+    steps: BuildPlanStep[];
+}
+
 interface Props {
     app: { id: string; slug: string; name: string; description: string | null };
     manifest: Record<string, unknown> | null;
     preview: Preview | null;
     schema: SchemaPayload | null;
-    conversation: { id: string; messages: Message[] };
+    conversation: {
+        id: string;
+        messages: Message[];
+        build_plan?: BuildPlanData | null;
+    };
     brand?: {
         primary_color: string | null;
         font: string | null;
@@ -207,6 +226,11 @@ const selectedModelLabel = computed(
 const { t, messages: i18nMessages, locale: uiLocale } = useI18n();
 
 const messages = ref<Message[]>(props.conversation.messages);
+// The persistent build plan (cross-turn step tracker). Reads straight from the
+// prop, so a partial reload of `conversation` after a turn refreshes it.
+const buildPlan = computed<BuildPlanData | null>(
+    () => props.conversation.build_plan ?? null,
+);
 const input = ref('');
 const inputEl = ref<HTMLTextAreaElement | null>(null);
 const sending = ref(false);
@@ -992,6 +1016,17 @@ const hasSuggestions = computed(
         !slashMenuOpen.value,
 );
 
+// Clicking a pending/failed plan step pre-fills the composer with its title —
+// the "next step" suggestion. The user can tweak or just send.
+function onPickStep(title: string) {
+    input.value = title;
+    nextTick(() => {
+        inputEl.value?.focus();
+        const len = inputEl.value?.value.length ?? 0;
+        inputEl.value?.setSelectionRange(len, len);
+    });
+}
+
 function applyChip(suggestion: ChipSuggestion) {
     input.value = suggestion.prompt;
     // Focus the textarea so the user can tweak or just hit Enter to send.
@@ -1497,9 +1532,10 @@ function subscribe() {
                 m.id === payload.message.id ? payload.message : m,
             );
             // Server already created a new AppVersion if the user pre-approved
-            // — partial reload to refresh the preview.
+            // — partial reload to refresh the preview and the build plan
+            // (its step statuses advanced this turn).
             router.reload({
-                only: ['preview', 'manifest'],
+                only: ['preview', 'manifest', 'conversation'],
                 preserveScroll: true,
             });
         },
@@ -1996,6 +2032,15 @@ function statusTone(status: Message['status']): string {
                         ref="transcript"
                         class="flex-1 space-y-4 overflow-y-auto px-4 py-4"
                     >
+                        <!-- Persistent build plan: steps the builder works
+                             through across turns. Pending/failed steps are
+                             clickable and pre-fill the composer. -->
+                        <BuildPlanCard
+                            v-if="buildPlan && buildPlan.steps.length"
+                            :plan="buildPlan"
+                            @pick="onPickStep"
+                        />
+
                         <div
                             v-if="messages.length === 0"
                             class="rounded-sp-sm border border-dashed border-soft bg-surface p-5"
