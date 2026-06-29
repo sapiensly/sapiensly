@@ -887,6 +887,8 @@
     "tools.index.description": "The actions your agents can take — standalone, or running through a connection.",
     "tools.index.new_tool": "New Tool",
     "tools.index.no_tools": "No tools yet",
+    "tools.index.starter_title": "Create your first tool",
+    "tools.index.starter_description": "Pick a type to get started — each gives your agents a different capability.",
     "tools.index.no_tools_description": "Create your first tool to enable action capabilities for your agents.",
     "tools.index.create_tool": "Create Tool",
     "tools.index.no_tools_filtered": "No tools",

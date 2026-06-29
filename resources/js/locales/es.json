@@ -887,6 +887,8 @@
     "tools.index.description": "Las acciones que tus agentes pueden ejecutar — por sí solas o a través de una conexión.",
     "tools.index.new_tool": "Nueva herramienta",
     "tools.index.no_tools": "Aún no hay herramientas",
+    "tools.index.starter_title": "Crea tu primera herramienta",
+    "tools.index.starter_description": "Elige un tipo para empezar — cada uno le da a tus agentes una capacidad distinta.",
     "tools.index.no_tools_description": "Crea tu primera herramienta para habilitar capacidades de acción para tus agentes.",
     "tools.index.create_tool": "Crear herramienta",
     "tools.index.no_tools_filtered": "Sin herramientas",

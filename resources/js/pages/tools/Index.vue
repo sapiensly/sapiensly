@@ -4,7 +4,7 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { PaginatedTools, ToolType, ToolTypeOption } from '@/types/tools';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Code, Layers, Plus, Server, Wrench } from '@lucide/vue';
+import { Braces, Code, Database, Globe, Layers, Plus, Server, Wrench } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -28,8 +28,34 @@ function toolIcon(type: ToolType): Component {
             return Server;
         case 'group':
             return Layers;
+        case 'rest_api':
+            return Globe;
+        case 'graphql':
+            return Braces;
+        case 'database':
+            return Database;
         default:
             return Wrench;
+    }
+}
+
+// Per-type tint, mirrored from ToolTypeSelector so the type reads consistently.
+function toolTint(type: ToolType): string {
+    switch (type) {
+        case 'function':
+            return 'var(--sp-accent-blue)';
+        case 'mcp':
+            return 'var(--sp-success)';
+        case 'group':
+            return 'var(--sp-spectrum-magenta)';
+        case 'rest_api':
+            return 'var(--sp-warning)';
+        case 'graphql':
+            return 'var(--sp-spectrum-indigo)';
+        case 'database':
+            return 'var(--sp-accent-cyan)';
+        default:
+            return 'var(--sp-accent-blue)';
     }
 }
 
@@ -108,8 +134,42 @@ const totalTools = computed(() =>
                 </button>
             </div>
 
+            <!-- Empty: a guided starter grid of types, mirroring the
+                 Integrations index so both modules onboard the same way. -->
+            <div v-if="tools.data.length === 0 && !currentType" class="space-y-5">
+                <div class="space-y-1">
+                    <h3 class="text-sm font-semibold text-ink">
+                        {{ t('tools.index.starter_title') }}
+                    </h3>
+                    <p class="max-w-xl text-xs text-ink-muted">
+                        {{ t('tools.index.starter_description') }}
+                    </p>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <Link
+                        v-for="type in toolTypes"
+                        :key="type.value"
+                        :href="`${ToolController.create().url}?type=${type.value}`"
+                        class="flex cursor-pointer flex-col items-start gap-2 rounded-sp-sm border border-soft bg-white/[0.03] p-5 text-left transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
+                    >
+                        <div
+                            class="flex size-9 items-center justify-center rounded-xs"
+                            :style="{
+                                backgroundColor: `color-mix(in oklab, ${toolTint(type.value)} 15%, transparent)`,
+                                color: toolTint(type.value),
+                            }"
+                        >
+                            <component :is="toolIcon(type.value)" class="size-4" />
+                        </div>
+                        <h3 class="text-sm font-semibold text-ink">{{ type.label }}</h3>
+                        <p class="text-xs text-ink-muted">{{ type.description }}</p>
+                    </Link>
+                </div>
+            </div>
+
+            <!-- Filtered: no tools of the selected type. -->
             <div
-                v-if="tools.data.length === 0"
+                v-else-if="tools.data.length === 0"
                 class="rounded-sp-sm border border-dashed border-soft bg-navy/40 px-6 py-12 text-center"
             >
                 <div
@@ -118,13 +178,13 @@ const totalTools = computed(() =>
                     <Wrench class="size-5" />
                 </div>
                 <h3 class="mt-4 text-sm font-semibold text-ink">
-                    {{ currentType ? t('tools.index.no_tools_filtered') : t('tools.index.no_tools') }}
+                    {{ t('tools.index.no_tools_filtered') }}
                 </h3>
                 <p class="mt-1 text-xs text-ink-muted">
-                    {{ currentType ? t('tools.index.no_tools_type') : t('tools.index.no_tools_description') }}
+                    {{ t('tools.index.no_tools_type') }}
                 </p>
                 <Link
-                    :href="currentType ? `${ToolController.create().url}?type=${currentType}` : ToolController.create().url"
+                    :href="`${ToolController.create().url}?type=${currentType}`"
                     class="mt-4 inline-block"
                 >
                     <button
@@ -147,7 +207,11 @@ const totalTools = computed(() =>
                     <div class="flex items-start justify-between gap-3">
                         <div class="flex items-start gap-3">
                             <div
-                                class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue"
+                                class="flex size-9 shrink-0 items-center justify-center rounded-xs"
+                                :style="{
+                                    backgroundColor: `color-mix(in oklab, ${toolTint(tool.type)} 15%, transparent)`,
+                                    color: toolTint(tool.type),
+                                }"
                             >
                                 <component :is="toolIcon(tool.type)" class="size-4" />
                             </div>
