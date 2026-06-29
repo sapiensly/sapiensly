@@ -774,11 +774,12 @@ class AppBuilderController extends Controller
             $queryArgs['search'] = $q;
         }
 
-        // Resolve belongs_to relations inline so the table can show a readable
-        // label for each link instead of the raw foreign-key id.
+        // Resolve relations inline so the table can show a readable label for a
+        // belongs_to link (instead of the raw foreign-key id) and a child-list
+        // summary for a has_many.
         $relationFieldIds = [];
         foreach ($object['fields'] as $f) {
-            if (($f['type'] ?? null) === 'relation' && ($f['cardinality'] ?? 'many_to_one') === 'many_to_one') {
+            if (($f['type'] ?? null) === 'relation') {
                 $relationFieldIds[] = $f['id'];
             }
         }

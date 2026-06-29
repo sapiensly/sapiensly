@@ -360,29 +360,73 @@ function formatGroupKey(g: unknown): string {
     return String(g);
 }
 
+type ExpandedRecord = { id: string; data: Record<string, unknown> };
+type ExpandedHasMany = {
+    items: ExpandedRecord[];
+    count: number;
+    truncated: boolean;
+};
 type DrillRow = {
     id: string;
     data: Record<string, unknown>;
-    expanded?: Record<
-        string,
-        { id: string; data: Record<string, unknown> } | null
-    >;
+    expanded?: Record<string, ExpandedRecord | ExpandedHasMany | null>;
 };
 
-// Human label for a belongs_to cell: prefer the related record's name/title/
-// label field, else its first non-empty string value, else its id. Falls back
-// to the raw stored value when the relation wasn't expanded.
-function relationDisplay(row: DrillRow, f: FieldDef): string {
-    const exp = row.expanded?.[f.id];
-    if (exp === undefined) return formatCell(row.data[f.slug], f.type);
-    if (exp === null) return '—';
-    const d = exp.data;
+// Human label for a related record: prefer its name/title/label field, else its
+// first non-empty string value, else its id.
+function recordLabel(rec: ExpandedRecord): string {
+    const d = rec.data;
     const label =
         (d.name as string) ??
         (d.title as string) ??
         (d.label as string) ??
         Object.values(d).find((v) => typeof v === 'string' && v !== '');
-    return label != null && label !== '' ? String(label) : exp.id;
+    return label != null && label !== '' ? String(label) : rec.id;
+}
+
+// belongs_to cell label. Falls back to the raw stored value when the relation
+// wasn't expanded.
+function relationDisplay(row: DrillRow, f: FieldDef): string {
+    const exp = row.expanded?.[f.id];
+    if (exp === undefined) return formatCell(row.data[f.slug], f.type);
+    if (exp === null) return '—';
+    return recordLabel(exp as ExpandedRecord);
+}
+
+// has_many cell summary: the true child count + the labels of the loaded sample.
+function childList(
+    row: DrillRow,
+    f: FieldDef,
+): { count: number; labels: string[]; truncated: boolean } {
+    const exp = row.expanded?.[f.id] as ExpandedHasMany | null | undefined;
+    if (!exp || !Array.isArray(exp.items)) {
+        return { count: 0, labels: [], truncated: false };
+    }
+    return {
+        count: exp.count,
+        labels: exp.items.map(recordLabel),
+        truncated: exp.truncated,
+    };
+}
+
+// Compact inline summary for a has_many cell: a couple of child labels + "+N".
+function childSummary(row: DrillRow, f: FieldDef): string {
+    const { labels, count } = childList(row, f);
+    if (labels.length === 0) return '';
+    const shown = labels.slice(0, 2);
+    const extra = count - shown.length;
+    return shown.join(', ') + (extra > 0 ? ` +${extra}` : '');
+}
+
+// Full-text tooltip for a relation cell.
+function cellTitle(row: DrillRow, f: FieldDef): string {
+    if (f.type !== 'relation') return formatCell(row.data[f.slug], f.type);
+    if (f.cardinality === 'one_to_many') {
+        const { count, labels, truncated } = childList(row, f);
+        if (count === 0) return '—';
+        return `${count}: ${labels.join(', ')}${truncated ? ', …' : ''}`;
+    }
+    return relationDisplay(row, f);
 }
 
 function formatCell(value: unknown, type: string): string {
@@ -866,14 +910,32 @@ function triggerLabel(t: string | null): string {
                             v-for="f in detail.object.fields"
                             :key="f.id"
                             class="max-w-xs truncate px-3 py-2 align-top text-ink"
-                            :title="
-                                f.type === 'relation'
-                                    ? relationDisplay(row, f)
-                                    : formatCell(row.data[f.slug], f.type)
-                            "
+                            :title="cellTitle(row, f)"
                         >
-                            <span
+                            <!-- has_many: child-count chip + a couple of labels -->
+                            <template
                                 v-if="
+                                    f.type === 'relation' &&
+                                    f.cardinality === 'one_to_many'
+                                "
+                            >
+                                <span
+                                    v-if="childList(row, f).count > 0"
+                                    class="inline-flex items-center gap-1 rounded-pill bg-emerald-400/10 px-1.5 py-0.5 text-[11px] text-emerald-300"
+                                >
+                                    <GitBranch class="size-2.5" />
+                                    {{ childList(row, f).count }}
+                                    <span
+                                        v-if="childSummary(row, f)"
+                                        class="text-ink-muted"
+                                        >· {{ childSummary(row, f) }}</span
+                                    >
+                                </span>
+                                <template v-else>—</template>
+                            </template>
+                            <!-- belongs_to: readable label chip -->
+                            <span
+                                v-else-if="
                                     f.type === 'relation' &&
                                     row.expanded?.[f.id]
                                 "
@@ -883,6 +945,7 @@ function triggerLabel(t: string | null): string {
                                     relationDisplay(row, f)
                                 }}
                             </span>
+                            <!-- scalar / unexpanded -->
                             <template v-else>{{
                                 f.type === 'relation'
                                     ? relationDisplay(row, f)

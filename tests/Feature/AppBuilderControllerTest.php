@@ -594,6 +594,48 @@ it('blocks objectAggregate for users who cannot see the App', function () {
         ->assertForbidden();
 });
 
+it('expands a has_many relation inline in objectRecords', function () {
+    $custId = 'obj_'.strtolower((string) Str::ulid());
+    $ordId = 'obj_'.strtolower((string) Str::ulid());
+    $fldCustName = 'fld_'.strtolower((string) Str::ulid());
+    $fldOrders = 'fld_'.strtolower((string) Str::ulid());
+    $fldOrdName = 'fld_'.strtolower((string) Str::ulid());
+    $fldOrdCust = 'fld_'.strtolower((string) Str::ulid());
+
+    $manifest = bldcm($this->testApp->id);
+    $manifest['objects'] = [
+        [
+            'id' => $custId, 'slug' => 'customers', 'name' => 'Customer', 'primary_display_field_id' => $fldCustName,
+            'fields' => [
+                ['id' => $fldCustName, 'slug' => 'name', 'name' => 'Name', 'type' => 'string'],
+                ['id' => $fldOrders, 'slug' => 'orders', 'name' => 'Orders', 'type' => 'relation', 'target_object_id' => $ordId, 'cardinality' => 'one_to_many', 'inverse_field_id' => $fldOrdCust],
+            ],
+        ],
+        [
+            'id' => $ordId, 'slug' => 'orders', 'name' => 'Order', 'primary_display_field_id' => $fldOrdName,
+            'fields' => [
+                ['id' => $fldOrdName, 'slug' => 'name', 'name' => 'Name', 'type' => 'string'],
+                ['id' => $fldOrdCust, 'slug' => 'customer', 'name' => 'Customer', 'type' => 'relation', 'target_object_id' => $custId, 'cardinality' => 'many_to_one', 'inverse_field_id' => $fldOrders],
+            ],
+        ],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    $acme = Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $custId, 'data' => ['name' => 'Acme']]);
+    Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $ordId, 'data' => ['name' => 'A1', 'customer' => $acme->id]]);
+    Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $ordId, 'data' => ['name' => 'A2', 'customer' => $acme->id]]);
+
+    $r = $this->actingAs($this->user)
+        ->getJson("/apps/{$this->testApp->id}/builder/objects/{$custId}/records")
+        ->assertOk()
+        ->json();
+
+    $row = collect($r['rows'])->firstWhere('data.name', 'Acme');
+    expect($row['expanded'][$fldOrders]['count'])->toBe(2)
+        ->and($row['expanded'][$fldOrders]['truncated'])->toBeFalse()
+        ->and(collect($row['expanded'][$fldOrders]['items'])->pluck('data.name')->sort()->values()->all())->toBe(['A1', 'A2']);
+});
+
 it('persists chat image attachments to the tenant S3 disk', function () {
     Queue::fake();
     fakeTenantS3();
