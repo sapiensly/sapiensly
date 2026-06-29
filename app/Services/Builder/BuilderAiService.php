@@ -1289,6 +1289,7 @@ On-demand reference (do NOT guess — pull the relevant section first):
    - `custom_css` — the scoped raw-CSS escape hatch (auto-isolated per app) + the data-block-* targeting hooks.
    - `permissions` — the enforced access layer: roles, object/page policies, row/field restrictions, access_mode.
    - `verification` — when to call simulate_query / inspect_records / seed_records.
+   - `data` — what a block data_source may query (filter/sort/aggregation) vs the runtime-only powers (relation traversal, search, expand, grouped aggregation); use lookup/rollup to author related/aggregated data.
    - `visual_review` — how to respond when the user attaches a screenshot.
    - `connected_objects` — integrations: discover/create/test a connection, connected (live external) objects.
    - `example` — a complete minimal valid manifest to pattern-match.

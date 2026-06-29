@@ -717,6 +717,20 @@ it('FrameworkReferenceTool documents the enforced access layer under permissions
         ->and($result['reference'])->toContain('ENFORCED');
 });
 
+it('FrameworkReferenceTool documents the data/query model and the authoring limit', function () {
+    $result = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'data'])), true);
+
+    expect($result['topic'])->toBe('data')
+        // Runtime query powers are named…
+        ->and($result['reference'])->toContain('describe_app_data')
+        ->and($result['reference'])->toContain('related')
+        ->and($result['reference'])->toContain('expand')
+        ->and($result['reference'])->toContain('group_by')
+        // …and the authoring limit steers to derived fields instead.
+        ->and($result['reference'])->toContain('lookup')
+        ->and($result['reference'])->toContain('rollup');
+});
+
 it('FrameworkReferenceTool permissions snippet validates inside a manifest', function () {
     $reference = json_decode((new FrameworkReferenceTool)->handle(new ToolRequest(['topic' => 'permissions'])), true)['reference'];
 

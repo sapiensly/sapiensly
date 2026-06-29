@@ -7,7 +7,7 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Detailed authoring reference for building apps. Call with no topic to list topics (forms, workflows, derived_fields, expressions, design, palette, icons, custom_css, permissions, verification, connected_objects, example), then call again with a topic. `custom_css` covers the scoped raw-CSS escape hatch (auto-isolated per app) + the data-block-* targeting hooks; `permissions` covers the enforced access layer.')]
+#[Description('Detailed authoring reference for building apps. Call with no topic to list topics (forms, workflows, derived_fields, expressions, design, palette, icons, custom_css, permissions, verification, data, connected_objects, example), then call again with a topic. `data` covers what a block data_source may query vs the runtime-only powers (relation traversal, search, expand, grouped aggregation); `custom_css` covers the scoped raw-CSS escape hatch + data-block-* hooks; `permissions` covers the enforced access layer.')]
 class FrameworkReferenceTool extends BuilderCatalogTool
 {
     protected const BUILDER_TOOL = BuilderTool::class;

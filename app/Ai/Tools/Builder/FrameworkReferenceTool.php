@@ -100,6 +100,18 @@ VERIFICATION (on demand — use judgment, skip for trivial edits):
 - SKIP verification for rename-only changes, layout tweaks, or pure structural patches that don't query data.
 TXT,
 
+        'data' => <<<'TXT'
+DATA & QUERYING (one shared query engine — RLS + role policies apply on every read):
+- Every object's records go through the same engine whether read by a page block, the app's embedded agent, or an external MCP client. Tenant isolation and the manifest `permissions` (row_filter / field_restrictions) are always enforced — reads never bypass them.
+- WHAT A BLOCK data_source MAY CONTAIN (authoring): `filter` (logical and/or/not over leaf ops eq, neq, gt, gte, lt, lte, in, not_in, contains, starts_with, ends_with, between, is_null, is_not_null referencing field_ids), `sort` [{field_id, direction}], and limit/offset. stat/gauge/metric_grid take an `aggregation` (count|sum|avg|min|max) + field_id; chart/kanban/calendar group by a field. Verify with `simulate_query` before proposing (see `verification`).
+- AUTHORING LIMIT (important — avoids a validation failure): relation traversal, cross-field text search, inline relation expansion and grouped/bucketed aggregation are RUNTIME powers (below). They are NOT valid inside an authored block filter and WILL fail validation. So to author pages over related/aggregated data, use DERIVED FIELDS instead: a `lookup` to pull a related record's value onto this object (then filter/show that lookup), a `rollup` to count/sum children (see `derived_fields`). There is no `related`/`search`/`expand` key in a manifest data_source.
+- RUNTIME QUERY POWERS — available to the app's embedded AGENT (query_object / aggregate_object / describe_capabilities) and to external MCP clients (query_records / aggregate_records / describe_app_data), NOT for manifest authoring:
+  - describe_app_data / describe_capabilities — the big picture: objects, fields, live record counts, the relation graph. Read first to learn what's queryable.
+  - query_records / query_object — filter (including {op:"related", field_id, condition} to traverse a belongs_to/has_many in one query), `search` (case-insensitive across text fields), `sort`, `expand` (resolve belongs_to relations inline), and total/has_more paging.
+  - aggregate_records / aggregate_object — count/sum/avg/min/max, optionally `group_by` a field with a date `bucket` (day|week|month|quarter|year) → "sum revenue by month" in one call.
+- Bottom line: a running app's agent already has these powers at query time, so you rarely need to pre-bake everything into blocks. When YOU author a page, reach for lookup/rollup + block aggregations — not the runtime-only operators.
+TXT,
+
         'visual_review' => <<<'TXT'
 VISUAL REVIEW (the user attached a screenshot of the rendered runtime):
 - Look carefully and report what you SEE — empty tables, overflow, clashing colours, broken layout, missing labels, charts with no data, awkward spacing, blocks rendering "—" everywhere. Be specific ("the chart on the right has no bars because field_id points at a non-numeric field"), not vague. Keep it SHORT: one concrete clause per issue, no narration of how you inspected it.
