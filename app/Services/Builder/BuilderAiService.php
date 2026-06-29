@@ -65,9 +65,11 @@ use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Files\StoredImage;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\UserMessage;
+use Laravel\Ai\Streaming\Events\Error as StreamingError;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\TextStart;
 use Laravel\Ai\Streaming\Events\ToolCall;
+use RuntimeException;
 
 /**
  * Orchestrates a Claude conversation that edits an App manifest via tool use.
@@ -250,7 +252,7 @@ class BuilderAiService
             return BuilderMessage::create([
                 'conversation_id' => $conversation->id,
                 'role' => 'assistant',
-                'content' => 'Sorry — the AI request failed: '.$e->getMessage(),
+                'content' => 'Sorry — the AI request failed: '.(trim($e->getMessage()) !== '' ? $e->getMessage() : $e::class),
                 'status' => 'none',
             ]);
         }
@@ -504,6 +506,18 @@ class BuilderAiService
 
             $sawText = false;
             foreach ($stream as $event) {
+                // Provider/stream errors arrive as an Error EVENT, not an
+                // exception — OpenRouter (unlike Anthropic) reports SSE-level and
+                // upstream-provider failures this way. Without handling it the
+                // turn would end silently with an empty reply, or surface as an
+                // opaque blank "request failed". Throw with the code + message so
+                // the catch logs and shows the real reason.
+                if ($event instanceof StreamingError) {
+                    throw new RuntimeException(
+                        trim(($event->type ?? '').': '.($event->message ?? '')) ?: 'Provider returned a stream error.'
+                    );
+                }
+
                 // Surface each tool the model invokes so the user sees what it is
                 // doing (reading the manifest, simulating a query, proposing a
                 // change…) instead of an opaque pause before a patch appears.
@@ -651,8 +665,13 @@ class BuilderAiService
 
             // Cap the error string so we don't try to persist a 5KB SQL trace
             // (which can recursively trigger the very error we're handling
-            // when the original error was a column-length overflow).
+            // when the original error was a column-length overflow). Fall back to
+            // the exception class when there's no message, so the bubble is never
+            // a blank "request failed:" with no clue.
             $errMsg = mb_substr($providerError ?? $e->getMessage(), 0, 1500);
+            if (trim($errMsg) === '') {
+                $errMsg = $e::class;
+            }
             $placeholder->update([
                 'content' => 'Sorry — the AI request failed: '.$errMsg,
                 'status' => 'none',
