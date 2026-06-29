@@ -4,6 +4,7 @@ namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\ManifestIdFiller;
 use App\Services\Manifest\ManifestPatch;
 use App\Services\Manifest\ManifestValidator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -143,6 +144,11 @@ DESC;
      */
     public function recordProposal(array $ops, string $summary): array
     {
+        // Let the model omit the `id` on nodes it adds — fill the ones the schema
+        // requires (objects/fields/blocks/options/…) server-side, so patches are
+        // smaller and never fail on a missing or mis-shaped id.
+        $ops = ManifestIdFiller::fill(array_values($ops));
+
         // Each successful proposal in a turn stacks on top of the previous one.
         // We validate THIS call's ops against the running draft (or the live
         // manifest, if this is the first call), so the model can build up an

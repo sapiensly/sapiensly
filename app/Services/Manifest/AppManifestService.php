@@ -161,6 +161,10 @@ class AppManifestService
             throw new \RuntimeException("App {$app->id} has no active manifest to patch.");
         }
 
+        // Fill the ids the schema requires on added nodes when the caller omitted
+        // them, so a patch can be written without hand-minting every id.
+        $jsonPatchOps = ManifestIdFiller::fill(array_values($jsonPatchOps));
+
         $patched = $this->applyJsonPatch($current, $jsonPatchOps);
 
         return $this->createVersion($app, $patched, $user, $summary);

@@ -1018,3 +1018,26 @@ it('ProposeChangeTool: a failed second call leaves the first draft intact', func
         ->and($proposal['draft_manifest']['name'])->toBe('Good Rename')
         ->and($proposal['summary'])->toBe('rename');
 });
+
+it('ProposeChangeTool accepts ops whose added nodes omit their ids', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+
+    // No ids anywhere — the server should mint object/field/option ids.
+    $result = $propose->recordProposal([
+        ['op' => 'add', 'path' => '/objects/-', 'value' => [
+            'slug' => 'tareas', 'name' => 'Tareas',
+            'fields' => [
+                ['slug' => 'titulo', 'name' => 'Título', 'type' => 'string'],
+                ['slug' => 'estado', 'name' => 'Estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'abierta', 'label' => 'Abierta'],
+                ]],
+            ],
+        ]],
+    ], 'Agregué Tareas');
+
+    expect($result['ok'])->toBeTrue();
+    $tareas = collect($propose->runningDraft()['objects'])->firstWhere('slug', 'tareas');
+    expect($tareas['id'])->toStartWith('obj_');
+    expect($tareas['fields'][0]['id'])->toStartWith('fld_');
+    expect($tareas['fields'][1]['options'][0]['id'])->toStartWith('opt_');
+});
