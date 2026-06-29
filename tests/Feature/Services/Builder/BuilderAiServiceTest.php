@@ -21,6 +21,7 @@ use App\Services\AiProviderService;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
@@ -135,7 +136,7 @@ it('ReadManifestTool surfaces the running draft after a successful propose_chang
 
 it('ScaffoldAppTool builds a valid object + list page from a high-level spec', function () {
     $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
-    $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose);
+    $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
 
     $result = json_decode($tool->handle(new ToolRequest([
         'objects' => [
@@ -174,7 +175,7 @@ it('ScaffoldAppTool builds a valid object + list page from a high-level spec', f
 
 it('ScaffoldAppTool gives an object with no fields a default field, and coerces unsupported types', function () {
     $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
-    $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose);
+    $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
 
     $result = json_decode($tool->handle(new ToolRequest([
         'objects' => [
@@ -198,9 +199,58 @@ it('ScaffoldAppTool gives an object with no fields a default field, and coerces 
     expect($this->validator->validate($draft)->valid)->toBeTrue();
 });
 
+it('ScaffoldAppTool cold-starts a full app (relations + derived + POS) from objects and links', function () {
+    // A brand-new EMPTY app: the tool should assemble the WHOLE thing in one shot.
+    $emptyApp = App::factory()->create();
+    $this->manifestService->createVersion($emptyApp, [
+        'schema_version' => '1.0.0', 'id' => $emptyApp->id, 'slug' => 'pos_cold', 'name' => 'POS', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => bld_id('rol'), 'slug' => 'admin', 'name' => 'Admin']]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ], $this->user);
+
+    $propose = new ProposeChangeTool($emptyApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new ScaffoldAppTool($emptyApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
+
+    $result = json_decode($tool->handle(new ToolRequest([
+        'objects' => [
+            ['name' => 'Comandas', 'slug' => 'comandas', 'fields' => [
+                ['name' => 'Folio', 'type' => 'string'],
+                ['name' => 'Estado', 'type' => 'single_select', 'options' => ['Abierta', 'Pagada']],
+            ]],
+            ['name' => 'Platillos', 'slug' => 'platillos', 'fields' => [
+                ['name' => 'Nombre', 'type' => 'string'],
+                ['name' => 'Precio', 'type' => 'currency'],
+                ['name' => 'Imagen', 'type' => 'string'],
+            ]],
+            ['name' => 'Renglones', 'slug' => 'renglones', 'fields' => [
+                ['name' => 'Cantidad', 'type' => 'number'],
+            ]],
+        ],
+        'links' => [
+            ['from' => 'renglones', 'to' => 'comandas', 'name' => 'comanda'],
+            ['from' => 'renglones', 'to' => 'platillos', 'name' => 'platillo'],
+        ],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue();
+    $draft = $propose->runningDraft();
+
+    // The POS screen was generated from the order→line→priced-product shape.
+    expect(collect($draft['pages'])->firstWhere('slug', 'pos'))->not->toBeNull();
+
+    // The line got its derived economics: a unit-price lookup + a subtotal formula.
+    $renglones = collect($draft['objects'])->firstWhere('slug', 'renglones');
+    expect(collect($renglones['fields'])->firstWhere('type', 'lookup'))->not->toBeNull();
+    expect(collect($renglones['fields'])->firstWhere('type', 'formula'))->not->toBeNull();
+
+    // …and the whole assembled manifest is valid.
+    expect($this->validator->validate($draft)->valid)->toBeTrue();
+});
+
 it('ScaffoldAppTool rejects an empty objects list', function () {
     $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
-    $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose);
+    $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
 
     $result = json_decode($tool->handle(new ToolRequest(['objects' => []])), true);
 

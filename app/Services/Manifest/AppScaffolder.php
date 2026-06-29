@@ -165,10 +165,16 @@ class AppScaffolder
     }
 
     /**
+     * Coerce a loose {objects, links} spec (from the model, or the in-app
+     * scaffold tool) into the normalized shape `assemble()` consumes — slugs
+     * derived + unique, types coerced, options normalized, links validated.
+     * Public so the in-app builder tool can scaffold a full app (relations +
+     * derived economics + recipe screens) from the same pipeline as MCP.
+     *
      * @param  array<string, mixed>|null  $decoded
      * @return array{objects: array<int, array{name: string, slug: string, fields: array<int, array<string, mixed>>}>, links: array<int, array{from: string, to: string, name: ?string}>}
      */
-    private function normalizeSpec(?array $decoded): array
+    public function normalizeSpec(?array $decoded): array
     {
         $rawObjects = is_array($decoded['objects'] ?? null) ? $decoded['objects'] : [];
 
@@ -334,6 +340,10 @@ class AppScaffolder
         $normalized = [];
         $usedValues = [];
         foreach (array_slice($options, 0, self::MAX_OPTIONS) as $i => $option) {
+            // Accept a plain string ("Activo") or a {value,label} object.
+            if (is_string($option)) {
+                $option = ['label' => $option, 'value' => $option];
+            }
             if (! is_array($option)) {
                 continue;
             }

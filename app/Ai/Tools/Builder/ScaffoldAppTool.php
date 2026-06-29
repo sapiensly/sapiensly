@@ -4,6 +4,7 @@ namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\AppScaffolder;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool;
@@ -66,6 +67,7 @@ class ScaffoldAppTool implements Tool
         private App $appModel,
         private AppManifestService $manifestService,
         private ProposeChangeTool $proposeTool,
+        private AppScaffolder $scaffolder,
     ) {}
 
     public function name(): string
@@ -76,28 +78,35 @@ class ScaffoldAppTool implements Tool
     public function description(): string
     {
         return <<<'DESC'
-Generate a complete, valid app skeleton in ONE step. Use this FIRST for any
-"create an app for X" / "build me an app that …" request instead of hand-building
-objects and pages op-by-op — it produces correct ids, slugs, required props and
-a list page (heading + table) per object for you, then submits it through the
-normal gate (it auto-applies at turn end like any change).
+Generate a complete, valid app in ONE step — THE first move for any "create an
+app for X" / "build me an app that …" request, instead of hand-building objects,
+relations and pages op-by-op (which is slow and fragile). On an EMPTY app it
+assembles the whole thing: objects with correct ids/slugs, the belongs-to
+RELATIONS from `links`, derived fields (a parent count + money total, and for an
+order→line→priced-product shape a unit-price lookup + line subtotal), a list
+page per object, master-detail pages, a dashboard, and — when the data looks like
+a point of sale — a ready POS screen (product grid + live cart). It submits
+through the normal gate (auto-applies at turn end). You send a COMPACT spec; the
+big manifest is built server-side, so nothing huge crosses the wire.
 
-Pass `objects`: an array where each object is
-  {"name": "Leads", "fields": [ {"name": "Nombre", "type": "string"}, {"name": "Estado", "type": "single_select", "options": ["Nuevo", "Contactado", "Ganado"]} ]}
-- `name` (required) is the human display name; the slug is derived for you.
+Pass `objects`: an array where each is
+  {"name": "Platillos", "slug": "platillos", "fields": [ {"name":"Nombre","type":"string"}, {"name":"Precio","type":"currency"}, {"name":"Estado","type":"single_select","options":["Abierta","Pagada"]} ]}
+- `name` (required) + a short snake_case `slug` (recommended; derived if omitted).
 - `type` defaults to "string". Supported: string, long_text, number, boolean,
-  date, datetime, currency, single_select, multi_select (plus friendly aliases
-  like text/email/phone→string, select→single_select, money→currency). Unknown
-  types fall back to string. Relations / formula / lookup / rollup / file are NOT
-  scaffolded — add those with propose_change afterwards.
-- `options` (array of plain strings) is for single_select / multi_select; the
-  tool turns each into a proper {value,label} option.
+  date, datetime, currency, single_select, multi_select (aliases like
+  text/email→string, select→single_select, money→currency). Unknown → string.
+- `options` (plain strings) for single_select / multi_select.
 
-Optional `include_pages` (default true): also create one list page per object.
+Pass `links` for belongs-to relations: [{"from":"renglones","to":"comandas","name":"comanda"}]
+means "a renglón belongs to one comanda" (from/to are object slugs). Model an
+order with line items, and a line that references a priced product, as links —
+the lookup/subtotal/total/POS screen are then generated for you. Do NOT add a
+field to hold another object's id; use a link.
 
-Returns {ok, created:[{object_id, slug, field_ids, page_id}], notes} on success
-(use those ids to keep building: forms, modals, action columns, workflows), or
-{ok:false, errors} if the assembled manifest failed validation.
+Optional `include_pages` (default true).
+
+Returns {ok, created:[{object_id, slug}], pages:[…], notes} on success (use the
+ids to keep refining with propose_change), or {ok:false, errors}.
 DESC;
     }
 
@@ -106,8 +115,11 @@ DESC;
         return [
             'objects' => $schema
                 ->array()
-                ->description('Array of objects to create. Each: {name: string (required), fields?: [{name: string, type?: string, options?: string[]}]}. If an object has no fields, a single "Nombre" text field is added (every object needs at least one).')
+                ->description('Objects to create. Each: {name: string (required), slug?: string, fields?: [{name: string, type?: string, options?: string[]}]}. An object with no fields gets a "Nombre" text field.')
                 ->required(),
+            'links' => $schema
+                ->array()
+                ->description('Belongs-to relations: [{from: <object slug>, to: <object slug>, name: <label on the from side>}]. A <from> belongs to one <to>. Only applied when scaffolding a fresh (empty) app.'),
             'include_pages' => $schema
                 ->boolean()
                 ->description('Whether to also generate a list page (heading + table) per object. Default true.'),
@@ -127,6 +139,14 @@ DESC;
         $base = $this->proposeTool->runningDraft() ?? $this->manifestService->getActiveManifest($this->appModel);
         if (! is_array($base)) {
             return $this->fail('No active manifest exists for this app yet.');
+        }
+
+        // Cold start (empty app): assemble the WHOLE app — relations from `links`,
+        // derived economics, master-detail and the POS screen — in one step. On an
+        // app that already has objects we fall back to the incremental path below
+        // so we never wipe existing work.
+        if (($base['objects'] ?? []) === []) {
+            return $this->scaffoldFullApp($objectsSpec, $args['links'] ?? [], $base);
         }
 
         $usedObjectSlugs = array_filter(array_map(fn ($o) => $o['slug'] ?? null, $base['objects'] ?? []));
@@ -210,6 +230,50 @@ DESC;
                 $result['notes'] = $notes;
             }
             $result['message'] = 'Skeleton scaffolded and recorded. Continue with propose_change to add forms, action columns, relations, workflows, etc. Use the returned ids.';
+        }
+
+        return json_encode($result, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * Cold-start path: run the full AppScaffolder pipeline (relations from links,
+     * derived economics, master-detail + POS recipe, dashboard) over the empty
+     * base and submit the assembled objects + pages as one proposal. The model
+     * only sent a compact spec; the heavy manifest is built here, server-side.
+     *
+     * @param  list<mixed>  $objectsSpec
+     * @param  array<string, mixed>  $base
+     */
+    private function scaffoldFullApp(array $objectsSpec, mixed $links, array $base): string
+    {
+        $spec = $this->scaffolder->normalizeSpec([
+            'objects' => $objectsSpec,
+            'links' => is_array($links) ? $links : [],
+        ]);
+
+        if (($spec['objects'] ?? []) === []) {
+            return $this->fail('Every object spec was missing a name.');
+        }
+
+        $assembled = $this->scaffolder->assemble($base, $spec);
+
+        $ops = [
+            ['op' => 'replace', 'path' => '/objects', 'value' => $assembled['objects']],
+            ['op' => 'replace', 'path' => '/pages', 'value' => $assembled['pages']],
+        ];
+
+        $count = count($assembled['objects']);
+        $summary = "Generé {$count} ".($count === 1 ? 'objeto' : 'objetos').' con sus relaciones, cálculos y páginas';
+
+        $result = $this->proposeTool->recordProposal($ops, $summary);
+
+        if (($result['ok'] ?? false) === true) {
+            $result['created'] = array_map(
+                fn (array $o): array => ['object_id' => $o['id'], 'slug' => $o['slug']],
+                $assembled['objects'],
+            );
+            $result['pages'] = array_map(fn (array $p): string => $p['slug'], $assembled['pages']);
+            $result['message'] = 'Full app scaffolded: objects, belongs-to relations, derived fields (counts/totals + any lookup/subtotal), a page per object, master-detail pages, a dashboard, and a POS screen when the data fits. Refine details with propose_change using the returned ids.';
         }
 
         return json_encode($result, JSON_THROW_ON_ERROR);

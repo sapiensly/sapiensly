@@ -44,6 +44,7 @@ use App\Services\Builder\Integrations\IntegrationAuthoring;
 use App\Services\Connectors\ConnectorActionResolver;
 use App\Services\Integrations\IntegrationCaller;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
@@ -156,7 +157,7 @@ class BuilderAiService
             new ValidateManifestTool($this->validator),
             $proposeTool,
             $planTool,
-            new ScaffoldAppTool($app, $this->manifestService, $proposeTool),
+            new ScaffoldAppTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
             new ListAvailableIntegrationsTool($conversation->user),
@@ -300,7 +301,7 @@ class BuilderAiService
             new ValidateManifestTool($this->validator),
             $proposeTool,
             $planTool,
-            new ScaffoldAppTool($app, $this->manifestService, $proposeTool),
+            new ScaffoldAppTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
             new ListAvailableIntegrationsTool($conversation->user),
@@ -983,7 +984,7 @@ Rules of engagement:
 1a. BUILD ON WHAT EXISTS — NEVER restart from scratch. If `read_manifest` shows objects/pages already there (e.g. on a "continúa" turn, or after an earlier turn), ADD to them with small incremental patches. Do NOT delete-and-recreate objects/pages you already built, and do NOT re-create an object that already exists — your earlier work is saved (progress is checkpointed even if a previous turn was cut off). Empty or partial is fine; pick up exactly where the manifest left off.
 1b. CONSULT BEFORE YOU BUILD, not after. Before composing ANY block/field/action/workflow you are not 100% sure of, call the relevant catalog FIRST (list_available_components / list_available_field_types / list_available_actions / list_available_triggers / list_available_steps) and, for an area you're unsure of, `framework_reference(topic)`. Guessing a shape and learning it from a validation error wastes a whole round-trip — and there is a hard time budget per turn. Read once, then build it right.
 1c. KEEP PATCHES SMALL. Add a few blocks/fields per `propose_change` call (they accumulate across calls in the turn). Do NOT try to submit an entire page of many blocks + modals in one giant op — very large tool arguments can be truncated in transit and arrive malformed (you'll see "ops must be a non-empty array" or apply errors even though your patch looked complete). Several small valid calls beat one huge fragile one.
-1d. COLD START — use `scaffold_app`. For a "create an app for X" / "build me an app that …" request on an app with no (or few) objects yet, call `scaffold_app` FIRST with the objects + simple fields you need. It generates correct ids/slugs/required-props and a list page per object in one validated step — far more reliable than hand-building objects and pages op-by-op. Then layer on the rest (forms, modals, action columns, relations, derived fields, workflows) with normal `propose_change` calls using the ids it returns.
+1d. COLD START — use `scaffold_app`. For a "create an app for X" / "build me an app that …" request on an EMPTY app, call `scaffold_app` FIRST with ALL the `objects` (name + snake_case slug + simple fields) AND the `links` (the belongs-to relations, e.g. {from:"renglones", to:"comandas", name:"comanda"}). On an empty app it builds the whole thing in ONE validated step: objects, the relations, derived fields (child counts + money totals, and for an order→line→priced-product shape a unit-price lookup + line subtotal + order total), a page per object, master-detail pages, a dashboard, and a POS screen when the data fits. Do NOT hand-build objects/relations/derived fields op-by-op — that is slow and fragile (it thrashes on size limits). After scaffolding, only REFINE with `propose_change` (tweak a form, add a workflow, adjust a page) using the ids it returns. Model an order's line items, and a line that references a priced product, as `links` so the lookup/subtotal/total/POS are generated for you.
 1e. PLAN BEFORE YOU BUILD a workflow. For a request to create a new workflow, automation or multi-step flow — ESPECIALLY one that touches an external system (a connector.call) — call `propose_plan` FIRST with the trigger, the ordered steps, every external system each step touches (read vs write), and your assumptions as defaults the user can change. Then STOP for that turn: present the plan in plain language and do NOT call `propose_change`. The user approves, edits or discards the plan from the card; only on the next turn (after approval) do you build it with `propose_change`. Before composing a connector step, call `list_available_integrations` then `list_connector_actions` so the plan names real systems and effects. Skip `propose_plan` only for a small, unambiguous tweak to an existing flow.
 1f. PROVISION WHAT'S MISSING — by proposal, never by entering secrets. If a flow needs a system that `list_available_integrations` does not return, provision it with `create_integration` (use `discover_integration` first for an OAuth2 API). ALWAYS pass `reason` and the `actions` the flow needs — they render on a provisioning card. The connection is created as a DRAFT: you NEVER enter or request tokens/passwords; the user authorizes it in the provider's own surface from the card. A connector.call that depends on it is composed but stays unauthorized until the user connects — say so plainly ("I added the step; it'll run once you connect Slack"), and never claim it's working before authorization. A read-only connection may be authorized in one step; a write connection is a separate, explicit grant.
 2. ALWAYS call `list_available_components` and `list_available_field_types` if you need to recall what types are supported.
