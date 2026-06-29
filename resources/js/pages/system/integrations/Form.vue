@@ -72,6 +72,7 @@ interface Props {
     authTypes: AuthTypeOption[];
     visibilities: AuthTypeOption[];
     template?: IntegrationTemplate | null;
+    kind?: string | null;
     oauthCallbackUrl?: string;
 }
 
@@ -84,6 +85,9 @@ const { t } = useI18n();
 // render right away; for OAuth2 templates, the preset also carries the
 // provider endpoints (authorize_url, token_url, scope, redirect_uri).
 const creatingFromTemplate = props.mode === 'create' && !!props.template;
+// Starting an MCP connection from the index grid: seed the web-auth flow MCP
+// servers use, so the user lands ready to discover/authorize.
+const startingAsMcp = props.mode === 'create' && props.kind === 'mcp';
 const templateAuthConfigDefaults: Record<string, Record<string, unknown>> = {
     api_key: { location: 'header', name: '', value: '' },
     bearer: { token: '' },
@@ -109,11 +113,15 @@ const form = useForm({
     base_url: creatingFromTemplate
         ? (props.template!.base_url ?? '')
         : (props.integration?.base_url ?? ''),
-    is_mcp: props.integration?.is_mcp ?? false,
+    is_mcp: startingAsMcp ? true : (props.integration?.is_mcp ?? false),
     auth_type: creatingFromTemplate
         ? (props.template!.auth_type ?? 'none')
-        : (props.integration?.auth_type ?? 'none'),
-    auth_config: buildInitialAuthConfig(),
+        : startingAsMcp
+          ? 'oauth2_auth_code'
+          : (props.integration?.auth_type ?? 'none'),
+    auth_config: startingAsMcp
+        ? { redirect_uri: props.oauthCallbackUrl ?? '', pkce: true }
+        : buildInitialAuthConfig(),
     default_headers: creatingFromTemplate
         ? (props.template!.default_headers ?? [])
         : (props.integration?.default_headers ?? []),
