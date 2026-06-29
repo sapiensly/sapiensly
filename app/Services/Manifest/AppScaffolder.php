@@ -918,7 +918,7 @@ class AppScaffolder
      * @param  array<int, array{def: array<string, mixed>, pageFields: array<int, array{id: string, slug: string, type: string}>, childFieldId: string, childFieldSlug: string}>  $children
      * @return array<string, mixed>
      */
-    private function buildDetailPage(array $parentDef, array $parentPageFields, string $detailSlug, array $children, string $lang): array
+    public function buildDetailPage(array $parentDef, array $parentPageFields, string $detailSlug, array $children, string $lang): array
     {
         $singular = (string) Str::singular($parentDef['name']);
 

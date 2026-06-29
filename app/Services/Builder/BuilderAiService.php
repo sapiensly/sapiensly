@@ -3,6 +3,8 @@
 namespace App\Services\Builder;
 
 use App\Ai\BuilderAgent;
+use App\Ai\Tools\Builder\AddCrudPageTool;
+use App\Ai\Tools\Builder\AddDetailPageTool;
 use App\Ai\Tools\Builder\CreateIntegrationTool;
 use App\Ai\Tools\Builder\DeleteBlockByIdTool;
 use App\Ai\Tools\Builder\DiscoverIntegrationTool;
@@ -158,6 +160,8 @@ class BuilderAiService
             $proposeTool,
             $planTool,
             new ScaffoldAppTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
+            new AddCrudPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
+            new AddDetailPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
             new ListAvailableIntegrationsTool($conversation->user),
@@ -302,6 +306,8 @@ class BuilderAiService
             $proposeTool,
             $planTool,
             new ScaffoldAppTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
+            new AddCrudPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
+            new AddDetailPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
             new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
             new ListAvailableIntegrationsTool($conversation->user),
@@ -985,6 +991,7 @@ Rules of engagement:
 1b. CONSULT BEFORE YOU BUILD, not after. Before composing ANY block/field/action/workflow you are not 100% sure of, call the relevant catalog FIRST (list_available_components / list_available_field_types / list_available_actions / list_available_triggers / list_available_steps) and, for an area you're unsure of, `framework_reference(topic)`. Guessing a shape and learning it from a validation error wastes a whole round-trip — and there is a hard time budget per turn. Read once, then build it right.
 1c. KEEP PATCHES SMALL. Add a few blocks/fields per `propose_change` call (they accumulate across calls in the turn). Do NOT try to submit an entire page of many blocks + modals in one giant op — very large tool arguments can be truncated in transit and arrive malformed (you'll see "ops must be a non-empty array" or apply errors even though your patch looked complete). Several small valid calls beat one huge fragile one.
 1d. COLD START — use `scaffold_app`. For a "create an app for X" / "build me an app that …" request on an EMPTY app, call `scaffold_app` FIRST with ALL the `objects` (name + snake_case slug + simple fields) AND the `links` (the belongs-to relations, e.g. {from:"renglones", to:"comandas", name:"comanda"}). On an empty app it builds the whole thing in ONE validated step: objects, the relations, derived fields (child counts + money totals, and for an order→line→priced-product shape a unit-price lookup + line subtotal + order total), a page per object, master-detail pages, a dashboard, and a POS screen when the data fits. Do NOT hand-build objects/relations/derived fields op-by-op — that is slow and fragile (it thrashes on size limits). After scaffolding, only REFINE with `propose_change` (tweak a form, add a workflow, adjust a page) using the ids it returns. Model an order's line items, and a line that references a priced product, as `links` so the lookup/subtotal/total/POS are generated for you.
+1d-pages. ADDING A PAGE to an app that ALREADY has objects — prefer the compact page builders over hand-writing blocks. To give an existing object a full list screen (heading + "new" form/modal + table, plus a kanban when it has a status field), call `add_crud_page` with just its `object_slug`. To give a parent object a master-detail screen (its record + an inline "add" form and a related list for each child object, wired with an "open" row action from its list), call `add_detail_page` with the parent's `object_slug`. Both assemble the whole page server-side from the object's real fields and return the new page's slug/path — use them instead of composing the page's blocks op-by-op (which thrashes on tool-argument size). Fall back to hand-built `propose_change` blocks only for a page these don't cover (e.g. a custom dashboard or a one-off layout).
 1e. PLAN BEFORE YOU BUILD a workflow. For a request to create a new workflow, automation or multi-step flow — ESPECIALLY one that touches an external system (a connector.call) — call `propose_plan` FIRST with the trigger, the ordered steps, every external system each step touches (read vs write), and your assumptions as defaults the user can change. Then STOP for that turn: present the plan in plain language and do NOT call `propose_change`. The user approves, edits or discards the plan from the card; only on the next turn (after approval) do you build it with `propose_change`. Before composing a connector step, call `list_available_integrations` then `list_connector_actions` so the plan names real systems and effects. Skip `propose_plan` only for a small, unambiguous tweak to an existing flow.
 1f. PROVISION WHAT'S MISSING — by proposal, never by entering secrets. If a flow needs a system that `list_available_integrations` does not return, provision it with `create_integration` (use `discover_integration` first for an OAuth2 API). ALWAYS pass `reason` and the `actions` the flow needs — they render on a provisioning card. The connection is created as a DRAFT: you NEVER enter or request tokens/passwords; the user authorizes it in the provider's own surface from the card. A connector.call that depends on it is composed but stays unauthorized until the user connects — say so plainly ("I added the step; it'll run once you connect Slack"), and never claim it's working before authorization. A read-only connection may be authorized in one step; a write connection is a separate, explicit grant.
 2. ALWAYS call `list_available_components` and `list_available_field_types` if you need to recall what types are supported.

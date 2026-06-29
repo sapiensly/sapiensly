@@ -1,5 +1,7 @@
 <?php
 
+use App\Ai\Tools\Builder\AddCrudPageTool;
+use App\Ai\Tools\Builder\AddDetailPageTool;
 use App\Ai\Tools\Builder\FrameworkReferenceTool;
 use App\Ai\Tools\Builder\GeneratePaletteTool;
 use App\Ai\Tools\Builder\InspectRecordsTool;
@@ -253,6 +255,106 @@ it('ScaffoldAppTool rejects an empty objects list', function () {
     $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
 
     $result = json_decode($tool->handle(new ToolRequest(['objects' => []])), true);
+
+    expect($result['ok'])->toBeFalse();
+});
+
+it('add_crud_page builds a full list page for an existing object', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new AddCrudPageTool($this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
+
+    $result = json_decode($tool->handle(new ToolRequest(['object_slug' => 'clientes'])), true);
+
+    expect($result['ok'])->toBeTrue();
+    expect($result['page']['slug'])->toBe('clientes');
+    expect($result['page']['path'])->toBe('/clientes');
+
+    $draft = $propose->runningDraft();
+    $page = collect($draft['pages'])->firstWhere('slug', 'clientes');
+    expect($page)->not->toBeNull();
+
+    $types = collect($page['blocks'])->pluck('type');
+    expect($types)->toContain('table');
+    // The "new" modal carries a create form for the object's fields.
+    expect(json_encode($page))->toContain('"type":"form"');
+
+    expect($this->validator->validate($draft)->valid)->toBeTrue();
+});
+
+it('add_crud_page fails for an unknown object slug', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new AddCrudPageTool($this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
+
+    $result = json_decode($tool->handle(new ToolRequest(['object_slug' => 'nope'])), true);
+
+    expect($result['ok'])->toBeFalse();
+});
+
+it('add_detail_page builds a master-detail page and links the parent list table', function () {
+    // A parent (comandas) with a child (renglones) that belongs to it, plus a
+    // pre-existing list page whose table is over the parent.
+    $comId = bld_id('obj');
+    $renId = bld_id('obj');
+    $comFolio = bld_id('fld');
+    $renCant = bld_id('fld');
+    $renRel = bld_id('fld');
+
+    $detailApp = App::factory()->create();
+    $this->manifestService->createVersion($detailApp, [
+        'schema_version' => '1.0.0', 'id' => $detailApp->id, 'slug' => 'pos_md', 'name' => 'POS', 'version' => 1,
+        'objects' => [
+            ['id' => $comId, 'slug' => 'comandas', 'name' => 'Comandas', 'fields' => [
+                ['id' => $comFolio, 'slug' => 'folio', 'name' => 'Folio', 'type' => 'string'],
+            ]],
+            ['id' => $renId, 'slug' => 'renglones', 'name' => 'Renglones', 'fields' => [
+                ['id' => $renCant, 'slug' => 'cantidad', 'name' => 'Cantidad', 'type' => 'number'],
+                ['id' => $renRel, 'slug' => 'comanda', 'name' => 'Comanda', 'type' => 'relation', 'target_object_id' => $comId, 'cardinality' => 'many_to_one'],
+            ]],
+        ],
+        'pages' => [[
+            'id' => bld_id('pag'), 'slug' => 'comandas', 'name' => 'Comandas', 'path' => '/comandas',
+            'blocks' => [[
+                'id' => bld_id('blk'), 'type' => 'table',
+                'data_source' => ['object_id' => $comId],
+                'columns' => [['id' => bld_id('col'), 'field_id' => $comFolio]],
+            ]],
+        ]],
+        'permissions' => ['roles' => [['id' => bld_id('rol'), 'slug' => 'admin', 'name' => 'Admin']]],
+        'settings' => ['default_locale' => 'es-MX'],
+    ], $this->user);
+
+    $propose = new ProposeChangeTool($detailApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new AddDetailPageTool($detailApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
+
+    $result = json_decode($tool->handle(new ToolRequest(['object_slug' => 'comandas'])), true);
+
+    expect($result['ok'])->toBeTrue();
+    expect($result['page']['slug'])->toBe('comandas_detail');
+
+    $draft = $propose->runningDraft();
+    $detail = collect($draft['pages'])->firstWhere('slug', 'comandas_detail');
+    expect($detail)->not->toBeNull();
+
+    $types = collect($detail['blocks'])->pluck('type');
+    expect($types)->toContain('record_detail');
+    expect($types)->toContain('related_list');
+
+    // The parent's existing list table got an "open" action column linking here.
+    $listPage = collect($draft['pages'])->firstWhere('slug', 'comandas');
+    $table = collect($listPage['blocks'])->firstWhere('type', 'table');
+    $actionCol = collect($table['columns'])->firstWhere('type', 'action');
+    expect($actionCol)->not->toBeNull();
+    expect(json_encode($actionCol))->toContain('comandas_detail?id={{row.id}}');
+
+    expect($this->validator->validate($draft)->valid)->toBeTrue();
+});
+
+it('add_detail_page fails when the object has no children', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new AddDetailPageTool($this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
+
+    // clientes has no object pointing back at it.
+    $result = json_decode($tool->handle(new ToolRequest(['object_slug' => 'clientes'])), true);
 
     expect($result['ok'])->toBeFalse();
 });
