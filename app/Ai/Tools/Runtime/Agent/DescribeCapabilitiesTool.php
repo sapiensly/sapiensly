@@ -2,16 +2,20 @@
 
 namespace App\Ai\Tools\Runtime\Agent;
 
+use App\Models\App;
+use App\Services\Records\AppDataOverview;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 /**
- * Runtime agent read tool (builder power #3). Enumerates the objects this app's
- * agent may read, with their fields, so the model never faces a blank box — it
- * can discover what it can query before querying (vision §8 legibility). Lists
- * only the granted objects; an ungranted object is invisible here. Source-
- * agnostic: internal and connected objects look identical to the agent.
+ * Runtime agent read tool (builder power #3). Gives the model the big picture of
+ * the data it may read before it queries: the objects (with live record counts),
+ * their fields, and the relation graph between them, so it never faces a blank
+ * box (vision §8 legibility). Lists only the granted objects; an ungranted object
+ * is invisible here. Source-agnostic: internal and connected objects look
+ * identical to the agent. Reuses the shared AppDataOverview digest so it never
+ * drifts from the builder schema view or the MCP describe_app_data tool.
  */
 class DescribeCapabilitiesTool implements Tool
 {
@@ -20,8 +24,10 @@ class DescribeCapabilitiesTool implements Tool
      * @param  list<string>  $readableObjectIds
      */
     public function __construct(
+        private App $appModel,
         private array $manifest,
         private array $readableObjectIds,
+        private AppDataOverview $overview,
     ) {}
 
     public function name(): string
@@ -32,11 +38,13 @@ class DescribeCapabilitiesTool implements Tool
     public function description(): string
     {
         return <<<'DESC'
-List the data objects this assistant can read, with their fields. Call this
-first to learn what you can query before calling query_object or
-aggregate_object. Returns { objects: [{ id, slug, name, description?, source,
-fields: [{ id, slug, name, type }] }] }. `source` is "internal" or "connected"
-(an external system) — query them the same way.
+Describe the data this assistant can read — call this first to learn what you can
+query before calling query_object or aggregate_object. Returns { objects: [{ id,
+slug, name, description?, source, record_count, fields: [{ id, slug, name, type,
+derived, target_object_id?, cardinality? }] }], relations: [{ from_object_id,
+to_object_id, kind, cardinality, from_field_slug }], workflows_by_object }.
+`source` is "internal" or "connected" (an external system) — query them the same
+way. `record_count` is null for connected objects.
 DESC;
     }
 
@@ -47,27 +55,8 @@ DESC;
 
     public function handle(Request $request): string
     {
-        $objects = [];
-        foreach ($this->manifest['objects'] ?? [] as $object) {
-            if (! in_array($object['id'] ?? null, $this->readableObjectIds, true)) {
-                continue;
-            }
+        $digest = $this->overview->compact($this->appModel, $this->manifest, $this->readableObjectIds);
 
-            $objects[] = [
-                'id' => $object['id'],
-                'slug' => $object['slug'] ?? null,
-                'name' => $object['name'] ?? null,
-                'description' => $object['description'] ?? null,
-                'source' => $object['source']['type'] ?? 'internal',
-                'fields' => array_map(fn ($f) => [
-                    'id' => $f['id'] ?? null,
-                    'slug' => $f['slug'] ?? null,
-                    'name' => $f['name'] ?? null,
-                    'type' => $f['type'] ?? null,
-                ], $object['fields'] ?? []),
-            ];
-        }
-
-        return json_encode(['objects' => $objects], JSON_THROW_ON_ERROR);
+        return json_encode($digest, JSON_THROW_ON_ERROR);
     }
 }

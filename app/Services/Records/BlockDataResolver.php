@@ -348,6 +348,27 @@ class BlockDataResolver
     }
 
     /**
+     * Total count of an object's rows matching a data-source filter, ignoring
+     * limit/offset — for paging metadata. Returns null for a connected object,
+     * which has no internal store to count cheaply (the caller should page off
+     * the row count instead).
+     *
+     * @param  array<string, mixed>  $dataSource
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    public function countObject(App $app, array $dataSource, array $manifest, array $context = []): ?int
+    {
+        $object = $this->findObject($manifest, $dataSource['object_id'] ?? null);
+
+        if ($object !== null && (($object['source']['type'] ?? 'internal') === 'connected')) {
+            return null;
+        }
+
+        return $this->records->count($app, $dataSource, $manifest, $context);
+    }
+
+    /**
      * Fetch a data-source's rows, routing to the external system for a connected
      * object (source.type === 'connected') or the internal records store
      * otherwise. Both paths return the same {id, data} row shape, so the renderer

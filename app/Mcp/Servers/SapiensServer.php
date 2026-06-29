@@ -168,6 +168,7 @@ class SapiensServer extends Server
         Tools\Integrations\TestToolConnectionTool::class,
         Tools\Integrations\ExecuteToolTool::class,
         // Tenant data.
+        Tools\Data\DescribeAppDataTool::class,
         Tools\Data\QueryRecordsTool::class,
         Tools\Data\GetRecordTool::class,
         Tools\Data\AggregateRecordsTool::class,

@@ -12,6 +12,7 @@ use App\Ai\Tools\Runtime\Agent\QueryObjectTool;
 use App\Ai\Tools\RuntimeToolFactory;
 use App\Models\App;
 use App\Services\Apps\AppAccessContext;
+use App\Services\Records\AppDataOverview;
 use App\Services\Records\BlockDataResolver;
 use App\Services\Records\RecordQueryService;
 use Laravel\Ai\Contracts\Tool;
@@ -32,6 +33,7 @@ class RuntimeAgentToolset
     public function __construct(
         private BlockDataResolver $blockData,
         private RecordQueryService $records,
+        private AppDataOverview $dataOverview,
     ) {}
 
     /**
@@ -75,7 +77,7 @@ class RuntimeAgentToolset
         ));
 
         $tools = [
-            RuntimeToolFactory::named('describe_capabilities', new DescribeCapabilitiesTool($manifest, $readableObjectIds)),
+            RuntimeToolFactory::named('describe_capabilities', new DescribeCapabilitiesTool($app, $manifest, $readableObjectIds, $this->dataOverview)),
         ];
 
         // The read tools carry the access context so row_filter and hidden-field

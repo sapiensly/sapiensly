@@ -15,6 +15,7 @@ use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\InvalidManifestException;
+use App\Services\Records\AppDataOverview;
 use App\Services\Records\BlockDataResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Storage\TenantStorage;
@@ -49,6 +50,7 @@ class AppBuilderController extends Controller
         private AiProviderService $aiProviders,
         private AppAccessResolver $accessResolver,
         private BlockVisibilityFilter $visibility,
+        private AppDataOverview $dataOverview,
     ) {}
 
     /**
@@ -149,82 +151,18 @@ class AppBuilderController extends Controller
     }
 
     /**
-     * Assemble the payload the Schema tab needs: objects with system fields
-     * annotated inline, live record counts per object, and the workflows that
-     * fire on each object's lifecycle hooks. One DB query for the counts
-     * (group-by), one walk of manifest.workflows — cheap.
+     * Assemble the payload the Schema tab needs: objects (system fields annotated
+     * inline), live per-object record counts, the relation graph, and the
+     * workflows that fire on each object's lifecycle hooks. Delegates to the
+     * shared AppDataOverview so the builder, MCP and the in-app agent all read
+     * the same digest.
      *
      * @param  array<string, mixed>|null  $manifest
-     * @return array{objects: list<array<string, mixed>>, record_counts: array<string, int>, workflows_by_object: array<string, list<array<string, mixed>>>}|null
+     * @return array{objects: list<array<string, mixed>>, record_counts: array<string, int>, relations: list<array<string, mixed>>, workflows_by_object: array<string, list<array<string, mixed>>>}|null
      */
     private function buildSchema(App $app, ?array $manifest): ?array
     {
-        if ($manifest === null) {
-            return null;
-        }
-
-        $objects = $manifest['objects'] ?? [];
-        if ($objects === []) {
-            return [
-                'objects' => [],
-                'record_counts' => [],
-                'workflows_by_object' => [],
-            ];
-        }
-
-        // One grouped count for the whole app — beats N COUNT(*) round-trips.
-        $counts = Record::query()
-            ->where('app_id', $app->id)
-            ->selectRaw('object_definition_id, count(*) as c')
-            ->groupBy('object_definition_id')
-            ->pluck('c', 'object_definition_id')
-            ->map(fn ($c) => (int) $c)
-            ->all();
-
-        // Bucket workflows by the object they hook into so the schema card
-        // can show its automation neighbours at a glance.
-        $workflowsByObject = [];
-        foreach ($manifest['workflows'] ?? [] as $wf) {
-            $triggerType = $wf['trigger']['type'] ?? null;
-            $objectId = $wf['trigger']['object_id'] ?? null;
-            if ($objectId === null) {
-                continue;
-            }
-            $workflowsByObject[$objectId] ??= [];
-            $workflowsByObject[$objectId][] = [
-                'id' => $wf['id'],
-                'name' => $wf['name'] ?? $wf['slug'],
-                'trigger_type' => $triggerType,
-            ];
-        }
-
-        return [
-            'objects' => array_map(
-                fn (array $o) => $this->annotateObjectWithSystemFields($o),
-                $objects,
-            ),
-            'record_counts' => $counts,
-            'workflows_by_object' => $workflowsByObject,
-        ];
-    }
-
-    /**
-     * Append the virtual system fields (sys_created_at, sys_updated_at) onto
-     * an object's fields array so the schema viewer can list them alongside
-     * user-declared fields. Marked with `system: true` so the UI can style
-     * them differently.
-     *
-     * @param  array<string, mixed>  $object
-     * @return array<string, mixed>
-     */
-    private function annotateObjectWithSystemFields(array $object): array
-    {
-        $object['system_fields'] = [
-            RecordQueryService::systemField('sys_created_at'),
-            RecordQueryService::systemField('sys_updated_at'),
-        ];
-
-        return $object;
+        return $this->dataOverview->full($app, $manifest);
     }
 
     /**
@@ -808,41 +746,6 @@ class AppBuilderController extends Controller
         $sortFieldId = (string) $request->query('sort_field_id', 'sys_created_at');
         $sortDir = strtolower((string) $request->query('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
 
-        // Search filter: OR over every text-shaped field. Skip when there are
-        // no searchable fields — saves a SQL roundtrip that would have
-        // matched nothing anyway.
-        $textFieldIds = [];
-        foreach ($object['fields'] as $f) {
-            if (in_array($f['type'], ['string', 'long_text'], true)) {
-                $textFieldIds[] = $f['id'];
-            }
-        }
-        $filter = null;
-        if ($q !== '' && $textFieldIds !== []) {
-            $filter = [
-                'op' => 'or',
-                'conditions' => array_map(
-                    fn (string $id) => ['op' => 'contains', 'field_id' => $id, 'value' => $q],
-                    $textFieldIds,
-                ),
-            ];
-        } elseif ($q !== '' && $textFieldIds === []) {
-            // User searched but there's nothing text-shaped to search — return
-            // an explicitly empty result rather than the unfiltered set.
-            return new JsonResponse([
-                'object' => [
-                    'id' => $object['id'],
-                    'slug' => $object['slug'],
-                    'name' => $object['name'],
-                    'fields' => $object['fields'],
-                ],
-                'rows' => [],
-                'total' => 0,
-                'limit' => $limit,
-                'offset' => $offset,
-            ]);
-        }
-
         // Resolve sort: must be either a real field on this object or one of
         // the system fields. Anything else falls back to sys_created_at.
         $validSortIds = array_merge(
@@ -858,25 +761,22 @@ class AppBuilderController extends Controller
             'params' => [],
         ];
 
+        // The engine's native `search` scans every text-shaped field (string,
+        // long_text, single_select, …) and matches nothing when the object has
+        // none — so paging math stays correct without a special-case branch.
         $queryArgs = [
             'object_id' => $objectId,
             'sort' => [['field_id' => $sortFieldId, 'direction' => $sortDir]],
             'limit' => $limit,
             'offset' => $offset,
         ];
-        if ($filter !== null) {
-            $queryArgs['filter'] = $filter;
+        if ($q !== '') {
+            $queryArgs['search'] = $q;
         }
 
-        $records = $this->records->query($app, $queryArgs, $manifest, $context);
-
-        // Count must respect the same filter so paging math (showing X of Y)
-        // matches what the user sees.
-        $countArgs = ['object_id' => $objectId];
-        if ($filter !== null) {
-            $countArgs['filter'] = $filter;
-        }
-        $total = (int) $this->records->aggregate($app, $countArgs, 'count', null, $manifest, $context);
+        $result = $this->records->queryWithMeta($app, $queryArgs, $manifest, $context);
+        $records = $result['records'];
+        $total = $result['total'];
 
         return new JsonResponse([
             'object' => [
@@ -897,6 +797,90 @@ class AppBuilderController extends Controller
             'q' => $q,
             'sort_field_id' => $sortFieldId,
             'sort_dir' => $sortDir,
+        ]);
+    }
+
+    /**
+     * Schema-tab quick aggregation: count / sum / avg / min / max over an
+     * object, optionally grouped by a field (with a date bucket) and narrowed by
+     * the same free-text search as the records view. Routes through
+     * RecordQueryService so the numbers match the runtime exactly.
+     *
+     * Query params:
+     *   `aggregation`  count | sum | avg | min | max (default count)
+     *   `field_id`     required for sum/avg/min/max (the numeric/derived field)
+     *   `group_by`     optional field id to break the result down by
+     *   `bucket`       day | week | month | quarter | year (date group fields)
+     *   `q`            optional free-text search (same as the records view)
+     */
+    public function objectAggregate(Request $request, App $app, string $objectId): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if ($manifest === null) {
+            throw new HttpException(404, 'No manifest for this app yet.');
+        }
+
+        $object = null;
+        foreach ($manifest['objects'] ?? [] as $o) {
+            if ($o['id'] === $objectId) {
+                $object = $o;
+                break;
+            }
+        }
+        if ($object === null) {
+            throw new HttpException(404, "Object '{$objectId}' not found in manifest.");
+        }
+
+        $aggregation = (string) $request->query('aggregation', 'count');
+        if (! in_array($aggregation, ['count', 'sum', 'avg', 'min', 'max'], true)) {
+            throw new HttpException(422, 'Invalid aggregation.');
+        }
+
+        $fieldId = $request->query('field_id');
+        $fieldId = is_string($fieldId) && $fieldId !== '' ? $fieldId : null;
+        $groupBy = $request->query('group_by');
+        $groupBy = is_string($groupBy) && $groupBy !== '' ? $groupBy : null;
+        $bucket = $request->query('bucket');
+        $bucket = is_string($bucket) && $bucket !== '' ? $bucket : null;
+        $q = trim((string) $request->query('q', ''));
+
+        if ($aggregation !== 'count' && $fieldId === null) {
+            throw new HttpException(422, 'field_id is required for sum/avg/min/max.');
+        }
+
+        $context = [
+            'current_user' => ['id' => $request->user()->id, 'email' => $request->user()->email],
+            'params' => [],
+        ];
+        $query = ['object_id' => $objectId];
+        if ($q !== '') {
+            $query['search'] = $q;
+        }
+
+        try {
+            if ($groupBy !== null) {
+                $groups = $this->records->groupedAggregate($app, $query, $aggregation, $fieldId, $groupBy, $bucket, $manifest, $context);
+
+                return new JsonResponse([
+                    'aggregation' => $aggregation,
+                    'field_id' => $fieldId,
+                    'group_by' => $groupBy,
+                    'bucket' => $bucket,
+                    'groups' => $groups,
+                ]);
+            }
+
+            $value = $this->records->aggregate($app, $query, $aggregation, $fieldId, $manifest, $context);
+        } catch (\InvalidArgumentException $e) {
+            throw new HttpException(422, $e->getMessage());
+        }
+
+        return new JsonResponse([
+            'aggregation' => $aggregation,
+            'field_id' => $fieldId,
+            'value' => $value,
         ]);
     }
 

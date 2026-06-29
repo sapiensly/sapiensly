@@ -44,10 +44,11 @@ class QueryObjectTool implements Tool
     {
         return <<<'DESC'
 List rows of a data object this assistant can read. Call describe_capabilities
-first to learn the object ids and field ids. Returns { count, rows: [{ id, data:
-{ field_slug: value } }] } (capped at 50 rows). filter/sort use the same shape as
-the app's data blocks. Works the same for internal and connected (external)
-objects.
+first to learn the object ids and field ids. Returns { count, total, has_more,
+rows: [{ id, data: { field_slug: value } }] } (capped at 50 rows; total is the
+full match count for paging, null for connected objects). filter/sort use the
+same shape as the app's data blocks. Works the same for internal and connected
+(external) objects.
 DESC;
     }
 
@@ -58,7 +59,9 @@ DESC;
                 ->description('The object to list (from describe_capabilities).')
                 ->required(),
             'filter' => $schema->object()
-                ->description('Optional filter_expression: {op, ...} (eq/neq/gt/and/or/...) referencing field_ids.'),
+                ->description('Optional filter_expression: {op, ...} (eq/neq/gt/and/or/not). Relation traversal: {op: related, field_id: <relation field>, condition: <filter on the related object>}.'),
+            'search' => $schema->string()
+                ->description('Optional free-text search across the object\'s text fields (case-insensitive).'),
             'sort' => $schema->array()
                 ->description('Optional [{field_id, direction: asc|desc}].'),
             'limit' => $schema->integer()
@@ -80,7 +83,7 @@ DESC;
         }
 
         $dataSource = ['object_id' => $objectId];
-        foreach (['filter', 'sort', 'offset'] as $key) {
+        foreach (['filter', 'search', 'sort', 'offset'] as $key) {
             if (isset($args[$key])) {
                 $dataSource[$key] = $args[$key];
             }
@@ -89,12 +92,23 @@ DESC;
 
         try {
             $rows = $this->blockData->queryObject($this->appModel, $dataSource, $this->manifest, $this->context);
+            $total = $this->blockData->countObject($this->appModel, $dataSource, $this->manifest, $this->context);
         } catch (\Throwable $e) {
             return json_encode(['error' => $e->getMessage()], JSON_THROW_ON_ERROR);
         }
 
         $rows = array_slice($rows, 0, self::MAX_ROWS);
+        $offset = (int) ($args['offset'] ?? 0);
 
-        return json_encode(['count' => count($rows), 'rows' => $rows], JSON_THROW_ON_ERROR);
+        return json_encode([
+            'count' => count($rows),
+            'total' => $total,
+            // For a connected object (total null) we can't know the true total —
+            // a full page suggests more may follow.
+            'has_more' => $total !== null
+                ? ($offset + count($rows)) < $total
+                : count($rows) >= self::MAX_ROWS,
+            'rows' => $rows,
+        ], JSON_THROW_ON_ERROR);
     }
 }

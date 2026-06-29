@@ -516,6 +516,84 @@ it('returns zero rows (not all rows) when q is set but the object has no text fi
         ->and($r['rows'])->toBe([]);
 });
 
+it('aggregates a scalar sum via objectAggregate', function () {
+    $objId = 'obj_'.strtolower((string) Str::ulid());
+    $fldAmt = 'fld_'.strtolower((string) Str::ulid());
+    $manifest = bldcm($this->testApp->id);
+    $manifest['objects'] = [[
+        'id' => $objId, 'slug' => 'orders', 'name' => 'Order',
+        'fields' => [['id' => $fldAmt, 'slug' => 'amount', 'name' => 'Amount', 'type' => 'currency']],
+    ]];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+    foreach ([100, 200, 500] as $amount) {
+        Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $objId, 'data' => ['amount' => $amount]]);
+    }
+
+    $r = $this->actingAs($this->user)
+        ->getJson("/apps/{$this->testApp->id}/builder/objects/{$objId}/aggregate?aggregation=sum&field_id={$fldAmt}")
+        ->assertOk()
+        ->json();
+
+    expect($r['aggregation'])->toBe('sum')
+        ->and((float) $r['value'])->toBe(800.0);
+});
+
+it('aggregates grouped by a field via objectAggregate', function () {
+    $objId = 'obj_'.strtolower((string) Str::ulid());
+    $fldAmt = 'fld_'.strtolower((string) Str::ulid());
+    $fldStatus = 'fld_'.strtolower((string) Str::ulid());
+    $manifest = bldcm($this->testApp->id);
+    $manifest['objects'] = [[
+        'id' => $objId, 'slug' => 'orders', 'name' => 'Order',
+        'fields' => [
+            ['id' => $fldAmt, 'slug' => 'amount', 'name' => 'Amount', 'type' => 'currency'],
+            ['id' => $fldStatus, 'slug' => 'status', 'name' => 'Status', 'type' => 'string'],
+        ],
+    ]];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+    foreach ([['open', 100], ['open', 200], ['won', 500]] as [$status, $amount]) {
+        Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $objId, 'data' => ['status' => $status, 'amount' => $amount]]);
+    }
+
+    $r = $this->actingAs($this->user)
+        ->getJson("/apps/{$this->testApp->id}/builder/objects/{$objId}/aggregate?aggregation=sum&field_id={$fldAmt}&group_by={$fldStatus}")
+        ->assertOk()
+        ->json();
+
+    $byGroup = collect($r['groups'])->pluck('value', 'group');
+    expect((float) $byGroup['open'])->toBe(300.0)
+        ->and((float) $byGroup['won'])->toBe(500.0);
+});
+
+it('422s objectAggregate when sum has no field_id', function () {
+    $objId = 'obj_'.strtolower((string) Str::ulid());
+    $manifest = bldcm($this->testApp->id);
+    $manifest['objects'] = [[
+        'id' => $objId, 'slug' => 'orders', 'name' => 'Order',
+        'fields' => [['id' => 'fld_'.strtolower((string) Str::ulid()), 'slug' => 'x', 'name' => 'X', 'type' => 'number']],
+    ]];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    $this->actingAs($this->user)
+        ->getJson("/apps/{$this->testApp->id}/builder/objects/{$objId}/aggregate?aggregation=sum")
+        ->assertStatus(422);
+});
+
+it('blocks objectAggregate for users who cannot see the App', function () {
+    $objId = 'obj_'.strtolower((string) Str::ulid());
+    $manifest = bldcm($this->testApp->id);
+    $manifest['objects'] = [[
+        'id' => $objId, 'slug' => 'orders', 'name' => 'Order',
+        'fields' => [['id' => 'fld_'.strtolower((string) Str::ulid()), 'slug' => 'x', 'name' => 'X', 'type' => 'number']],
+    ]];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    $stranger = User::factory()->create();
+    $this->actingAs($stranger)
+        ->getJson("/apps/{$this->testApp->id}/builder/objects/{$objId}/aggregate?aggregation=count")
+        ->assertForbidden();
+});
+
 it('persists chat image attachments to the tenant S3 disk', function () {
     Queue::fake();
     fakeTenantS3();

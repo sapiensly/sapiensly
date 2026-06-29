@@ -160,6 +160,15 @@ interface SchemaPayload {
         }
     >;
     record_counts: Record<string, number>;
+    relations?: Array<{
+        field_id: string;
+        name: string | null;
+        from_object_id: string;
+        from_field_slug: string | null;
+        to_object_id: string;
+        cardinality: string | null;
+        kind: 'belongs_to' | 'has_many';
+    }>;
     workflows_by_object: Record<
         string,
         Array<{ id: string; name: string; trigger_type: string | null }>

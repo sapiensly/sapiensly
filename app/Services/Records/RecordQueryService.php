@@ -20,10 +20,17 @@ use RuntimeException;
  *   and, or, not (logical)
  *   eq, neq, gt, gte, lt, lte, in, not_in, contains, starts_with, ends_with,
  *   is_null, is_not_null, between
+ *   related — traverse a relation: {op: related, field_id: <relation field>,
+ *     condition: <filter_expression on the related object>}. Works for belongs_to
+ *     and has_many; nestable up to MAX_RELATION_DEPTH.
+ *
+ * A query block may also carry `search` (a string): a case-insensitive match
+ * across the object's text fields, ANDed across whitespace-separated terms.
  *
  * Supported field types for filtering: string, long_text, number, currency,
  * boolean, date, datetime, single_select. multi_select and relation are
- * read-only from the JSONB blob for MVP — filtering on them is best-effort.
+ * read-only from the JSONB blob for MVP — filtering on them is best-effort
+ * (relation traversal goes through the `related` operator).
  */
 class RecordQueryService
 {
@@ -49,11 +56,7 @@ class RecordQueryService
 
         $builder = $this->scopeForObject($app, $objectId);
 
-        if (isset($query['filter'])) {
-            $this->applyFilter($builder, $query['filter'], $object, $context);
-        }
-
-        $this->applyAccessFilter($builder, $object, $objectId, $context);
+        $this->applyConstraints($builder, $query, $object, $objectId, $app, $manifest, $context);
 
         foreach ($query['sort'] ?? [] as $sort) {
             $field = $this->findField($object, $sort['field_id']);
@@ -96,11 +99,7 @@ class RecordQueryService
         $object = $this->findObject($manifest, $objectId);
         $builder = $this->scopeForObject($app, $objectId);
 
-        if (isset($query['filter'])) {
-            $this->applyFilter($builder, $query['filter'], $object, $context);
-        }
-
-        $this->applyAccessFilter($builder, $object, $objectId, $context);
+        $this->applyConstraints($builder, $query, $object, $objectId, $app, $manifest, $context);
 
         if ($aggregation === 'count') {
             return $builder->count();
@@ -199,7 +198,7 @@ class RecordQueryService
         $object = $this->findObject($manifest, $objectId);
 
         $builder = $this->scopeForObject($app, $objectId)->whereKey($recordId);
-        $this->applyAccessFilter($builder, $object, $objectId, $context);
+        $this->applyAccessFilter($builder, $object, $objectId, $app, $manifest, $context);
 
         $record = $builder->first();
         if ($record === null) {
@@ -211,11 +210,288 @@ class RecordQueryService
         return $record;
     }
 
+    /**
+     * Count the records matching a query (filter + access scope) without
+     * materialising any rows. Shares the exact scope/filter/access path with
+     * query() and aggregate(), so the total honours RLS and the role row_filter.
+     *
+     * @param  array<string, mixed>  $query  Query block (object_id + optional filter)
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    public function count(App $app, array $query, array $manifest, array $context = []): int
+    {
+        $objectId = $query['object_id'] ?? null;
+        if ($objectId === null) {
+            throw new InvalidArgumentException('query.object_id is required.');
+        }
+
+        $object = $this->findObject($manifest, $objectId);
+        $builder = $this->scopeForObject($app, $objectId);
+
+        $this->applyConstraints($builder, $query, $object, $objectId, $app, $manifest, $context);
+
+        return $builder->count();
+    }
+
+    /**
+     * Like query(), but also returns the total number of matching records (the
+     * full count ignoring limit/offset) and whether more rows follow the page.
+     * Lets a consumer page deterministically instead of guessing from a short
+     * final page.
+     *
+     * @param  array<string, mixed>  $query
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array{records: Collection<int, Record>, total: int, has_more: bool}
+     */
+    public function queryWithMeta(App $app, array $query, array $manifest, array $context = []): array
+    {
+        $total = $this->count($app, $query, $manifest, $context);
+        $records = $this->query($app, $query, $manifest, $context);
+        $offset = (int) ($query['offset'] ?? 0);
+
+        return [
+            'records' => $records,
+            'total' => $total,
+            'has_more' => ($offset + $records->count()) < $total,
+        ];
+    }
+
+    /**
+     * Aggregate a metric broken down by a grouping field — the one query shape
+     * the scalar aggregate() cannot express. Returns one bucket per distinct
+     * group value: `[{group, value}]`. Optionally buckets a date/datetime group
+     * field by day/week/month/quarter/year (date_trunc) so "sum revenue by month"
+     * is a single call instead of N filtered ones.
+     *
+     * Stored numeric metrics (and count) are folded in SQL with GROUP BY; a
+     * derived (formula/lookup/rollup) metric has no SQL column, so those rows are
+     * grouped and folded in PHP after enrichment (mirrors aggregate()).
+     *
+     * @param  array<string, mixed>  $query  Query block (object_id + optional filter)
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return list<array{group: mixed, value: int|float}>
+     */
+    public function groupedAggregate(
+        App $app,
+        array $query,
+        string $aggregation,
+        ?string $fieldId,
+        string $groupFieldId,
+        ?string $bucket,
+        array $manifest,
+        array $context = [],
+        int $limit = 100,
+    ): array {
+        $objectId = $query['object_id'] ?? null;
+        if ($objectId === null) {
+            throw new InvalidArgumentException('query.object_id is required.');
+        }
+
+        $object = $this->findObject($manifest, $objectId);
+        $groupField = $this->findField($object, $groupFieldId);
+
+        if ($bucket !== null && ! in_array($groupField['type'], ['date', 'datetime'], true)) {
+            throw new InvalidArgumentException('bucket is only valid for a date or datetime group field.');
+        }
+
+        $aggField = null;
+        if ($aggregation !== 'count') {
+            if ($fieldId === null) {
+                throw new InvalidArgumentException("Aggregation '{$aggregation}' requires field_id.");
+            }
+            $aggField = $this->findField($object, $fieldId);
+        }
+
+        $builder = $this->scopeForObject($app, $objectId);
+        $this->applyConstraints($builder, $query, $object, $objectId, $app, $manifest, $context);
+
+        // A derived metric has no SQL column to fold — group it in PHP.
+        if ($aggField !== null && in_array($aggField['type'], ['formula', 'lookup', 'rollup'], true)) {
+            return $this->groupedAggregateDerived($app, $object, $builder, $aggregation, $aggField, $groupField, $bucket, $manifest, $limit);
+        }
+
+        if ($aggField !== null && ! in_array($aggField['type'], ['number', 'currency', 'rating', 'slider'], true)) {
+            throw new InvalidArgumentException(
+                "Aggregation '{$aggregation}' requires a numeric field, got '{$aggField['type']}'.",
+            );
+        }
+
+        $groupExpr = $bucket !== null
+            ? $this->dateBucketExpr($groupField, $bucket)
+            : $this->jsonExtract('data', $groupField);
+
+        $aggSql = $aggregation === 'count'
+            ? 'count(*)'
+            : match ($aggregation) {
+                'sum' => 'sum('.$this->jsonExtract('data', $aggField).')',
+                'avg' => 'avg('.$this->jsonExtract('data', $aggField).')',
+                'min' => 'min('.$this->jsonExtract('data', $aggField).')',
+                'max' => 'max('.$this->jsonExtract('data', $aggField).')',
+                default => throw new InvalidArgumentException("Unknown aggregation '{$aggregation}'."),
+            };
+
+        $rows = $builder->toBase()
+            ->selectRaw("{$groupExpr} as grp, {$aggSql} as val")
+            ->groupByRaw($groupExpr)
+            ->orderByRaw($groupExpr)
+            ->limit($limit)
+            ->get();
+
+        return $rows->map(fn ($r) => [
+            'group' => $r->grp,
+            'value' => $aggregation === 'count' ? (int) $r->val : (float) $r->val,
+        ])->all();
+    }
+
+    /**
+     * PHP-side grouped fold for a derived metric: materialise the scoped rows,
+     * enrich derived values, bucket by the group value, then fold each bucket.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $aggField
+     * @param  array<string, mixed>  $groupField
+     * @param  array<string, mixed>  $manifest
+     * @return list<array{group: mixed, value: int|float}>
+     */
+    private function groupedAggregateDerived(
+        App $app,
+        array $object,
+        Builder $builder,
+        string $aggregation,
+        array $aggField,
+        array $groupField,
+        ?string $bucket,
+        array $manifest,
+        int $limit,
+    ): array {
+        /** @var Collection<int, Record> $rows */
+        $rows = $builder->get();
+        $this->derived->enrich($app, $object, $rows, $manifest);
+
+        $aggSlug = $aggField['slug'];
+        $buckets = [];
+        foreach ($rows as $row) {
+            $group = $this->groupValueFor($row, $groupField, $bucket);
+            $value = $row->data[$aggSlug] ?? null;
+            if (! is_numeric($value)) {
+                continue;
+            }
+            $buckets[$group] ??= [];
+            $buckets[$group][] = (float) $value;
+        }
+
+        ksort($buckets);
+        $out = [];
+        foreach ($buckets as $group => $values) {
+            $out[] = [
+                'group' => $group === '' ? null : $group,
+                'value' => match ($aggregation) {
+                    'sum' => array_sum($values),
+                    'avg' => array_sum($values) / count($values),
+                    'min' => min($values),
+                    'max' => max($values),
+                    default => throw new InvalidArgumentException("Unknown aggregation '{$aggregation}'."),
+                },
+            ];
+            if (count($out) >= $limit) {
+                break;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Resolve a record's group key for the PHP-side fold, applying the same
+     * day/week/month/quarter/year truncation that date_trunc applies in SQL.
+     *
+     * @param  array<string, mixed>  $groupField
+     */
+    private function groupValueFor(Record $record, array $groupField, ?string $bucket): string
+    {
+        $raw = isset($groupField['_system_column'])
+            ? (string) ($record->{$groupField['_system_column']} ?? '')
+            : (string) ($record->data[$groupField['slug']] ?? '');
+
+        if ($bucket === null || $raw === '') {
+            return $raw;
+        }
+
+        $ts = strtotime($raw);
+        if ($ts === false) {
+            return $raw;
+        }
+
+        return match ($bucket) {
+            'day' => date('Y-m-d', $ts),
+            'week' => date('o-\WW', $ts),
+            'month' => date('Y-m', $ts),
+            'quarter' => date('Y', $ts).'-Q'.(int) ceil((int) date('n', $ts) / 3),
+            'year' => date('Y', $ts),
+            default => $raw,
+        };
+    }
+
+    /**
+     * SQL date_trunc fragment for bucketing a date/datetime group field. The
+     * bucket keyword comes from a fixed whitelist (never user input inlined raw)
+     * and the slug is re-validated, so the raw fragment is safe.
+     *
+     * @param  array<string, mixed>  $field
+     */
+    private function dateBucketExpr(array $field, string $bucket): string
+    {
+        if (! in_array($bucket, ['day', 'week', 'month', 'quarter', 'year'], true)) {
+            throw new InvalidArgumentException("Unknown bucket '{$bucket}'.");
+        }
+
+        if (isset($field['_system_column'])) {
+            return "date_trunc('{$bucket}', {$field['_system_column']})";
+        }
+
+        $slug = $this->safeSlug($field['slug']);
+
+        return "date_trunc('{$bucket}', (data->>'{$slug}')::timestamptz)";
+    }
+
     private function scopeForObject(App $app, string $objectId): Builder
     {
         return Record::query()
             ->where('app_id', $app->id)
             ->where('object_definition_id', $objectId);
+    }
+
+    /** How deep `related` filters may nest before bailing (cycle/cost guard). */
+    private const MAX_RELATION_DEPTH = 3;
+
+    /** Cap on related-record ids resolved for one relation hop (cost guard). */
+    private const RELATED_MATCH_CAP = 5000;
+
+    /**
+     * Apply the full constraint set of a query block to a builder: the filter
+     * expression, the cross-field text search, and the role-scoped access filter.
+     * The single seam every read path (query/aggregate/count/grouped) routes
+     * through, so they stay consistent.
+     *
+     * @param  array<string, mixed>  $query
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    private function applyConstraints(Builder $builder, array $query, array $object, string $objectId, App $app, array $manifest, array $context): void
+    {
+        if (isset($query['filter'])) {
+            $this->applyFilter($builder, $query['filter'], $object, $app, $manifest, $context);
+        }
+
+        if (isset($query['search']) && is_string($query['search']) && trim($query['search']) !== '') {
+            $this->applySearch($builder, $object, $query['search']);
+        }
+
+        $this->applyAccessFilter($builder, $object, $objectId, $app, $manifest, $context);
     }
 
     /**
@@ -225,9 +501,10 @@ class RecordQueryService
      * user's role is unrestricted on this object.
      *
      * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
      * @param  array<string, mixed>  $context
      */
-    private function applyAccessFilter(Builder $builder, array $object, string $objectId, array $context): void
+    private function applyAccessFilter(Builder $builder, array $object, string $objectId, App $app, array $manifest, array $context): void
     {
         $access = $context['__access'] ?? null;
         if (! $access instanceof AppAccessContext) {
@@ -236,23 +513,75 @@ class RecordQueryService
 
         $rowFilter = $access->rowFilter($objectId);
         if ($rowFilter !== null) {
-            $this->applyFilter($builder, $rowFilter, $object, $context);
+            $this->applyFilter($builder, $rowFilter, $object, $app, $manifest, $context);
         }
+    }
+
+    /**
+     * OR a case-insensitive match of each search term across the object's text
+     * fields onto the builder. Terms are ANDed (every term must hit some field),
+     * each term ORed across the fields — closer to "contains all these words"
+     * than a single blob match. An object with no text fields matches nothing.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function applySearch(Builder $builder, array $object, string $search): void
+    {
+        $fields = $this->textSearchFields($object);
+        if ($fields === []) {
+            $builder->whereRaw('1=0');
+
+            return;
+        }
+
+        $terms = preg_split('/\s+/', trim($search)) ?: [];
+        foreach ($terms as $term) {
+            if ($term === '') {
+                continue;
+            }
+            $builder->where(function (Builder $q) use ($fields, $term) {
+                foreach ($fields as $field) {
+                    $q->orWhereRaw('('.$this->jsonExtract('data', $field).')::text ilike ?', ['%'.$term.'%']);
+                }
+            });
+        }
+    }
+
+    /**
+     * The fields of an object that text search scans: free text and label-ish
+     * fields. Numeric/date/boolean fields are excluded — searching them by
+     * substring is meaningless.
+     *
+     * @param  array<string, mixed>  $object
+     * @return list<array<string, mixed>>
+     */
+    private function textSearchFields(array $object): array
+    {
+        $types = ['string', 'long_text', 'single_select', 'multi_select', 'email', 'url', 'phone'];
+        $out = [];
+        foreach ($object['fields'] ?? [] as $field) {
+            if (in_array($field['type'] ?? null, $types, true)) {
+                $out[] = $field;
+            }
+        }
+
+        return $out;
     }
 
     /**
      * @param  array<string, mixed>  $expr
      * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
      * @param  array<string, mixed>  $context
      */
-    private function applyFilter(Builder $builder, array $expr, array $object, array $context): void
+    private function applyFilter(Builder $builder, array $expr, array $object, App $app, array $manifest, array $context): void
     {
         $op = $expr['op'] ?? null;
 
         if ($op === 'and') {
-            $builder->where(function (Builder $q) use ($expr, $object, $context) {
+            $builder->where(function (Builder $q) use ($expr, $object, $app, $manifest, $context) {
                 foreach ($expr['conditions'] as $cond) {
-                    $this->applyFilter($q, $cond, $object, $context);
+                    $this->applyFilter($q, $cond, $object, $app, $manifest, $context);
                 }
             });
 
@@ -260,10 +589,10 @@ class RecordQueryService
         }
 
         if ($op === 'or') {
-            $builder->where(function (Builder $q) use ($expr, $object, $context) {
+            $builder->where(function (Builder $q) use ($expr, $object, $app, $manifest, $context) {
                 foreach ($expr['conditions'] as $cond) {
-                    $q->orWhere(function (Builder $inner) use ($cond, $object, $context) {
-                        $this->applyFilter($inner, $cond, $object, $context);
+                    $q->orWhere(function (Builder $inner) use ($cond, $object, $app, $manifest, $context) {
+                        $this->applyFilter($inner, $cond, $object, $app, $manifest, $context);
                     });
                 }
             });
@@ -272,9 +601,15 @@ class RecordQueryService
         }
 
         if ($op === 'not') {
-            $builder->whereNot(function (Builder $q) use ($expr, $object, $context) {
-                $this->applyFilter($q, $expr['condition'], $object, $context);
+            $builder->whereNot(function (Builder $q) use ($expr, $object, $app, $manifest, $context) {
+                $this->applyFilter($q, $expr['condition'], $object, $app, $manifest, $context);
             });
+
+            return;
+        }
+
+        if ($op === 'related') {
+            $this->applyRelatedFilter($builder, $expr, $object, $app, $manifest, $context);
 
             return;
         }
@@ -313,6 +648,111 @@ class RecordQueryService
             'between' => $this->applyBetween($builder, $columnSql, $field, $value),
             default => throw new InvalidArgumentException("Unknown filter op '{$op}'."),
         };
+    }
+
+    /**
+     * Traverse a relation in a filter: keep base records whose related record(s)
+     * satisfy a sub-condition. Resolves the matching related ids in one extra
+     * query, then constrains the base set by them — no correlated subquery, and
+     * it reuses applyFilter/access so the sub-condition supports the full operator
+     * set (including nested `related`, bounded by MAX_RELATION_DEPTH).
+     *
+     *   many_to_one (belongs_to): base.data->>'rel' must point at a matching target.
+     *   one_to_many (has_many):   base.id must be referenced by a matching child.
+     *
+     * Wrap in `{op: not, condition: {op: related, ...}}` for "has no matching related".
+     *
+     * @param  array<string, mixed>  $expr
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    private function applyRelatedFilter(Builder $builder, array $expr, array $object, App $app, array $manifest, array $context): void
+    {
+        $depth = (int) ($context['__rel_depth'] ?? 0);
+        if ($depth >= self::MAX_RELATION_DEPTH) {
+            throw new InvalidArgumentException('Relation filters nested too deeply (max '.self::MAX_RELATION_DEPTH.').');
+        }
+
+        $field = $this->findField($object, $expr['field_id']);
+        if (($field['type'] ?? null) !== 'relation') {
+            throw new InvalidArgumentException("Operator 'related' requires a relation field, got '{$field['type']}'.");
+        }
+
+        $condition = $expr['condition'] ?? null;
+        if (! is_array($condition)) {
+            throw new InvalidArgumentException("Operator 'related' requires a 'condition' sub-filter.");
+        }
+
+        $targetId = $field['target_object_id'] ?? null;
+        if ($targetId === null) {
+            throw new InvalidArgumentException("Relation field '{$field['slug']}' has no target_object_id.");
+        }
+
+        $targetObject = $this->findObject($manifest, $targetId);
+        $cardinality = $field['cardinality'] ?? 'many_to_one';
+
+        $childContext = $context;
+        $childContext['__rel_depth'] = $depth + 1;
+
+        $ids = $this->relatedMatchIds($app, $targetObject, $targetId, $cardinality, $field, $condition, $manifest, $childContext);
+
+        if ($cardinality === 'one_to_many') {
+            $idField = self::systemField('id');
+            $this->applyIn($builder, $this->jsonExtract('data', $idField), $idField, $ids, negate: false);
+
+            return;
+        }
+
+        $this->applyIn($builder, $this->jsonExtract('data', $field), $field, $ids, negate: false);
+    }
+
+    /**
+     * Resolve the related-record ids for a relation hop: the ids a base record
+     * must reference (belongs_to) or be referenced by (has_many) for its related
+     * side to satisfy $condition. Bounded by RELATED_MATCH_CAP.
+     *
+     * @param  array<string, mixed>  $targetObject
+     * @param  array<string, mixed>  $relationField
+     * @param  array<string, mixed>  $condition
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return list<string>
+     */
+    private function relatedMatchIds(App $app, array $targetObject, string $targetId, string $cardinality, array $relationField, array $condition, array $manifest, array $context): array
+    {
+        $sub = $this->scopeForObject($app, $targetId);
+        $this->applyFilter($sub, $condition, $targetObject, $app, $manifest, $context);
+        $this->applyAccessFilter($sub, $targetObject, $targetId, $app, $manifest, $context);
+
+        if ($cardinality === 'one_to_many') {
+            // Matching children → the base/parent ids they carry on the inverse FK.
+            $inverseId = $relationField['inverse_field_id'] ?? null;
+            if ($inverseId === null) {
+                throw new InvalidArgumentException("Relation '{$relationField['slug']}' has no inverse_field_id to traverse.");
+            }
+            $inverseField = $this->findField($targetObject, $inverseId);
+            $expr = $this->jsonExtract('data', $inverseField);
+
+            return $sub->toBase()
+                ->selectRaw("{$expr} as v")
+                ->limit(self::RELATED_MATCH_CAP)
+                ->get()
+                ->pluck('v')
+                ->filter(fn ($v) => $v !== null && $v !== '')
+                ->map(fn ($v) => (string) $v)
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        // belongs_to: the matching target records' own ids.
+        return $sub->toBase()
+            ->limit(self::RELATED_MATCH_CAP)
+            ->get(['id'])
+            ->pluck('id')
+            ->map(fn ($v) => (string) $v)
+            ->all();
     }
 
     /**

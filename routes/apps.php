@@ -60,6 +60,8 @@ Route::middleware([
         ->name('apps.builder.workflow-proposals.dismiss');
     Route::get('/apps/{app}/builder/objects/{objectId}/records', [AppBuilderController::class, 'objectRecords'])
         ->name('apps.builder.object-records');
+    Route::get('/apps/{app}/builder/objects/{objectId}/aggregate', [AppBuilderController::class, 'objectAggregate'])
+        ->name('apps.builder.object-aggregate');
 
     // Access management (Phase 4): who can use the app and in which role. Gated
     // on the app/org-admin set inside the controller, not just app visibility.
