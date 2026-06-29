@@ -68,7 +68,8 @@ describe('create', function () {
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('tools/Create')
-                ->has('toolTypes', 6)
+                // 5 selectable types — `group` is no longer offered.
+                ->has('toolTypes', 5)
             );
     });
 

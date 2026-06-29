@@ -49,11 +49,7 @@ class ToolController extends Controller
             'tools' => $tools,
             'toolsByType' => $toolsByType,
             'currentType' => $typeFilter,
-            'toolTypes' => collect(ToolType::cases())->map(fn ($type) => [
-                'value' => $type->value,
-                'label' => $type->label(),
-                'description' => $type->description(),
-            ]),
+            'toolTypes' => $this->selectableToolTypes(),
         ]);
     }
 
@@ -63,11 +59,7 @@ class ToolController extends Controller
 
         return Inertia::render('tools/Create', [
             'selectedType' => $type,
-            'toolTypes' => collect(ToolType::cases())->map(fn ($type) => [
-                'value' => $type->value,
-                'label' => $type->label(),
-                'description' => $type->description(),
-            ]),
+            'toolTypes' => $this->selectableToolTypes(),
             'availableTools' => Tool::forAccountContext($request->user())
                 ->whereIn('type', ['function', 'mcp'])
                 ->where('status', 'active')
@@ -75,6 +67,25 @@ class ToolController extends Controller
             'mcpConnections' => $this->mcpConnectionOptions($request),
             'httpConnections' => $this->httpConnectionOptions($request),
         ]);
+    }
+
+    /**
+     * Tool types offered in the UI. `group` is intentionally excluded — it's
+     * no longer surfaced as a creatable/filterable type.
+     *
+     * @return array<int, array{value: string, label: string, description: string}>
+     */
+    private function selectableToolTypes(): array
+    {
+        return collect(ToolType::cases())
+            ->reject(fn (ToolType $type): bool => $type === ToolType::Group)
+            ->map(fn (ToolType $type): array => [
+                'value' => $type->value,
+                'label' => $type->label(),
+                'description' => $type->description(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -226,11 +237,7 @@ class ToolController extends Controller
 
         return Inertia::render('tools/Edit', [
             'tool' => $toolData,
-            'toolTypes' => collect(ToolType::cases())->map(fn ($type) => [
-                'value' => $type->value,
-                'label' => $type->label(),
-                'description' => $type->description(),
-            ]),
+            'toolTypes' => $this->selectableToolTypes(),
             'availableTools' => Tool::forAccountContext($request->user())
                 ->whereIn('type', ['function', 'mcp'])
                 ->where('status', 'active')
