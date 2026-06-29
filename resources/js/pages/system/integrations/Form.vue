@@ -194,7 +194,8 @@ async function testConnection(): Promise<void> {
 }
 
 // One-URL OAuth 2.0 auto-configuration (MCP discovery + dynamic registration).
-const discoverUrl = ref('');
+// Discovery is an optional assist on the single Server URL field — there's no
+// separate URL to paste.
 type DiscoverState =
     | { status: 'idle' }
     | { status: 'loading' }
@@ -203,12 +204,12 @@ type DiscoverState =
 const discoverState = ref<DiscoverState>({ status: 'idle' });
 
 async function discoverOAuth2(): Promise<void> {
-    if (!discoverUrl.value) return;
+    if (!form.base_url) return;
     discoverState.value = { status: 'loading' };
     try {
         const { data } = await axios.post(
             '/system/integrations/oauth2/discover',
-            { url: discoverUrl.value, name: form.name || undefined },
+            { url: form.base_url, name: form.name || undefined },
         );
 
         form.base_url = data.base_url ?? form.base_url;
@@ -299,57 +300,7 @@ const sectionMeta: Record<string, SectionMeta> = {
             <form class="space-y-4" @submit.prevent="submit">
                 <!-- ================= MCP server: discover → authorize ================= -->
                 <template v-if="isMcp">
-                    <!-- Discovery lead: paste one URL, we configure the rest. -->
-                    <div
-                        class="space-y-2 rounded-sp-sm border border-accent-blue/30 bg-accent-blue/[0.06] p-5"
-                    >
-                        <div class="flex items-center gap-2">
-                            <Sparkles class="size-4 text-accent-blue" />
-                            <p class="text-sm font-medium text-ink">
-                                {{ t('system.integrations.form.mcp_discover_title') }}
-                            </p>
-                        </div>
-                        <p class="text-[11px] text-ink-subtle">
-                            {{ t('system.integrations.form.mcp_discover_hint') }}
-                        </p>
-                        <div class="flex gap-2">
-                            <Input
-                                v-model="discoverUrl"
-                                :placeholder="t('system.integrations.oauth2_discover.placeholder')"
-                                class="h-9 font-mono"
-                                @keydown.enter.prevent="discoverOAuth2"
-                            />
-                            <button
-                                type="button"
-                                :disabled="discoverState.status === 'loading' || !discoverUrl"
-                                class="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-accent-blue px-3 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
-                                @click="discoverOAuth2"
-                            >
-                                <Loader2
-                                    v-if="discoverState.status === 'loading'"
-                                    class="size-3.5 animate-spin"
-                                />
-                                <Sparkles v-else class="size-3.5" />
-                                {{ t('system.integrations.oauth2_discover.action') }}
-                            </button>
-                        </div>
-                        <div
-                            v-if="discoverState.status === 'success'"
-                            class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
-                        >
-                            <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
-                            <span>{{ discoverState.message }}</span>
-                        </div>
-                        <div
-                            v-else-if="discoverState.status === 'error'"
-                            class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
-                        >
-                            <XCircle class="mt-0.5 size-3.5 shrink-0" />
-                            <span>{{ discoverState.message }}</span>
-                        </div>
-                    </div>
-
-                    <!-- Basics. -->
+                    <!-- Basics: one Server URL field, with discovery as an inline assist. -->
                     <div class="rounded-sp-sm border border-soft bg-navy">
                         <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
                             <div
@@ -383,12 +334,45 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 <Label for="mcp_url">
                                     {{ t('system.integrations.form.server_url') }}
                                 </Label>
-                                <Input
-                                    id="mcp_url"
-                                    v-model="form.base_url"
-                                    :placeholder="t('system.integrations.form.server_url_placeholder')"
-                                    class="h-9 font-mono"
-                                />
+                                <div class="flex gap-2">
+                                    <Input
+                                        id="mcp_url"
+                                        v-model="form.base_url"
+                                        :placeholder="t('system.integrations.form.server_url_placeholder')"
+                                        class="h-9 font-mono"
+                                        @keydown.enter.prevent="discoverOAuth2"
+                                    />
+                                    <button
+                                        type="button"
+                                        :disabled="discoverState.status === 'loading' || !form.base_url"
+                                        class="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-accent-blue px-3 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                                        @click="discoverOAuth2"
+                                    >
+                                        <Loader2
+                                            v-if="discoverState.status === 'loading'"
+                                            class="size-3.5 animate-spin"
+                                        />
+                                        <Sparkles v-else class="size-3.5" />
+                                        {{ t('system.integrations.oauth2_discover.action') }}
+                                    </button>
+                                </div>
+                                <p class="text-[11px] text-ink-subtle">
+                                    {{ t('system.integrations.form.mcp_discover_hint') }}
+                                </p>
+                                <div
+                                    v-if="discoverState.status === 'success'"
+                                    class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
+                                >
+                                    <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
+                                    <span>{{ discoverState.message }}</span>
+                                </div>
+                                <div
+                                    v-else-if="discoverState.status === 'error'"
+                                    class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
+                                >
+                                    <XCircle class="mt-0.5 size-3.5 shrink-0" />
+                                    <span>{{ discoverState.message }}</span>
+                                </div>
                                 <InputError :message="form.errors.base_url" />
                             </div>
                         </div>
