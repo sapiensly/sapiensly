@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { computed, onMounted, onUnmounted, provide, ref } from 'vue';
-import type { AnyBlock, BlockData, ObjectDef } from '../types/manifest';
-import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
-import { modalBus } from '../useActionExecutor';
 import AppRenderer from '../AppRenderer.vue';
+import type { AnyBlock, BlockData, ObjectDef } from '../types/manifest';
+import { modalBus } from '../useActionExecutor';
+import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 
 interface ModalBlock {
     id: string;
@@ -61,9 +67,12 @@ onUnmounted(() => {
 
 const widthClass = computed(() => {
     switch (props.block.size ?? 'md') {
-        case 'sm': return 'sm:max-w-md';
-        case 'lg': return 'sm:max-w-3xl';
-        default: return 'sm:max-w-xl';
+        case 'sm':
+            return 'sm:max-w-md';
+        case 'lg':
+            return 'sm:max-w-3xl';
+        default:
+            return 'sm:max-w-xl';
     }
 });
 </script>
@@ -79,8 +88,12 @@ const widthClass = computed(() => {
                 <!-- a screen-reader-only fallback so the underlying Radix       -->
                 <!-- Dialog isn't missing its aria-describedby. Silences the    -->
                 <!-- "Missing Description" console warning without polluting UI. -->
-                <DialogDescription v-if="block.description">{{ block.description }}</DialogDescription>
-                <DialogDescription v-else class="sr-only">{{ block.title }} dialog</DialogDescription>
+                <DialogDescription v-if="block.description">{{
+                    block.description
+                }}</DialogDescription>
+                <DialogDescription v-else class="sr-only"
+                    >{{ block.title }} dialog</DialogDescription
+                >
             </DialogHeader>
             <DialogDescription v-else class="sr-only">Dialog</DialogDescription>
             <div class="space-y-4">
@@ -90,6 +103,7 @@ const widthClass = computed(() => {
                     :objects="objects"
                     :locale="locale"
                     :default-currency="defaultCurrency"
+                    :nested="true"
                 />
             </div>
         </DialogContent>

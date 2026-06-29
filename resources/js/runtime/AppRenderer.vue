@@ -199,6 +199,13 @@ const props = defineProps<{
     locale: string;
     defaultCurrency: string;
     theme?: RuntimeTheme;
+    /**
+     * True when this renderer is nested inside a layout container (split_view,
+     * modal, tabs, accordion, container). `full_bleed` is a PAGE-level escape
+     * (break out of the page's content padding); inside a padded panel its
+     * negative margin just pushes the block out of the panel — so we ignore it.
+     */
+    nested?: boolean;
 }>();
 
 const theme = computed<RuntimeTheme>(() => props.theme ?? 'light');
@@ -279,7 +286,8 @@ function wrapperClass(block: AnyBlock): string {
         MARGIN[s.margin ?? ''] ?? '',
     ];
     if (s.background || s.color || s.gradient) classes.push('sp-styled');
-    if (s.full_bleed) classes.push('sp-bleed');
+    // full_bleed only makes sense at page level; inside a panel it overflows.
+    if (s.full_bleed && !props.nested) classes.push('sp-bleed');
     return classes.filter(Boolean).join(' ');
 }
 

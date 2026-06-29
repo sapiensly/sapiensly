@@ -104,6 +104,11 @@ it('ReadManifestTool returns the active manifest as JSON envelope', function () 
         ->and($result['op_count'])->toBe(0)
         ->and($result['summary']['slug'])->toBe('mini_crm')
         ->and($result['summary']['objects'])->toHaveCount(1);
+
+    // The active-state note must NOT let the model read "active" as "my change
+    // landed" — it has to say nothing is drafted and propose_change is required.
+    expect($result['note'])->toContain('NOT proposed any change')
+        ->and($result['note'])->toContain('propose_change');
 });
 
 it('ReadManifestTool surfaces the running draft after a successful propose_change', function () {

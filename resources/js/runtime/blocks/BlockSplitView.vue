@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { AnyBlock, BlockData, ObjectDef } from '../types/manifest';
 import AppRenderer from '../AppRenderer.vue';
+import type { AnyBlock, BlockData, ObjectDef } from '../types/manifest';
 
 interface SplitViewBlock {
     id: string;
@@ -46,10 +46,7 @@ const fallbackStyle = computed(() => {
 </script>
 
 <template>
-    <div
-        :class="['grid grid-cols-1 gap-4', gridClass]"
-        :style="fallbackStyle"
-    >
+    <div :class="['grid grid-cols-1 gap-4', gridClass]" :style="fallbackStyle">
         <div class="min-w-0 space-y-3">
             <AppRenderer
                 :blocks="block.left_blocks"
@@ -57,6 +54,7 @@ const fallbackStyle = computed(() => {
                 :objects="objects"
                 :locale="locale"
                 :default-currency="defaultCurrency"
+                :nested="true"
             />
         </div>
         <div class="min-w-0 space-y-3">
@@ -66,6 +64,7 @@ const fallbackStyle = computed(() => {
                 :objects="objects"
                 :locale="locale"
                 :default-currency="defaultCurrency"
+                :nested="true"
             />
         </div>
     </div>

@@ -88,6 +88,32 @@ function currentPageSlug(): string | undefined {
     return m?.[1];
 }
 
+/**
+ * Resolve a navigate `to` into a real in-app URL. A manifest authors page links
+ * as a page reference ("pos", "/pos", "pos?order=1"), NOT the full runtime path
+ * — but `router.visit("/pos")` would hit the host root and 404 (the app is
+ * mounted under /r/{appSlug}/). So we rebase any in-app reference onto
+ * /r/{appSlug}/<page>. Genuinely external/absolute URLs and already-rebased
+ * (/r/…) paths pass through untouched.
+ */
+function resolveNavTo(to: string, ctx: ExecutionContext): string {
+    if (to === '') return to;
+    // External (http(s)://, protocol-relative //, mailto:, tel:) — leave alone.
+    if (/^([a-z]+:)?\/\//i.test(to) || /^(mailto:|tel:)/i.test(to)) return to;
+    // Already a runtime path.
+    if (to.startsWith('/r/')) return to;
+    if (!ctx.appSlug) return to;
+
+    const ref = to.replace(/^\/+/, '');
+    // A bare query/hash ("?order=1") means "this page" — keep the current slug.
+    if (ref === '' || ref.startsWith('?') || ref.startsWith('#')) {
+        const page = ctx.page ?? currentPageSlug() ?? '';
+        return `/r/${ctx.appSlug}/${page}${ref}`;
+    }
+
+    return `/r/${ctx.appSlug}/${ref}`;
+}
+
 /** Walk a dotted path (e.g. "row.data.title") against the execution context. */
 function digPath(ctx: ExecutionContext, path: string): unknown {
     let value: unknown = ctx;
@@ -253,7 +279,9 @@ export function useActionExecutor() {
         switch (action.type) {
             case 'navigate': {
                 const to = interpolateTemplate(action.to, ctx);
-                if (typeof to === 'string' && to !== '') router.visit(to);
+                if (typeof to === 'string' && to !== '') {
+                    router.visit(resolveNavTo(to, ctx));
+                }
                 break;
             }
             case 'refresh':

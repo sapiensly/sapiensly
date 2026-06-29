@@ -70,7 +70,7 @@ DESC;
             'op_count' => $isDraft ? ($this->proposeTool?->opCount() ?? 0) : 0,
             'note' => $isDraft
                 ? 'In-progress draft (your successful propose_change ops this turn are already applied; do not re-propose them).'
-                : 'Currently-published manifest.',
+                : 'Published manifest. You have NOT proposed any change this turn yet (0 ops drafted). state:"active" means nothing is drafted — it does NOT mean an edit you described is saved. To change anything you must still call propose_change; if it returns ok:true, state flips to "draft".',
         ];
 
         $expand = (string) ($request->all()['expand'] ?? '');
