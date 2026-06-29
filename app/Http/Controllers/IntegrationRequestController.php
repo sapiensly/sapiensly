@@ -3,12 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\DTOs\IntegrationExecutionResult;
+use App\Enums\AgentStatus;
+use App\Enums\ToolType;
+use App\Enums\Visibility;
 use App\Http\Requests\Integrations\ExecuteIntegrationRequestRequest;
 use App\Http\Requests\Integrations\StoreIntegrationRequestRequest;
 use App\Http\Requests\Integrations\UpdateIntegrationRequestRequest;
 use App\Models\Integration;
 use App\Models\IntegrationEnvironment;
 use App\Models\IntegrationRequest;
+use App\Models\Tool;
 use App\Services\Integrations\IntegrationRequestExecutor;
 use App\Services\Integrations\IntegrationRequestService;
 use Illuminate\Http\JsonResponse;
@@ -81,6 +85,74 @@ class IntegrationRequestController extends Controller
         $copy = $this->service->duplicate($request, $httpRequest->user());
 
         return to_route('system.integrations.requests.show', ['request' => $copy->id]);
+    }
+
+    /**
+     * Promote a saved Postman-style request into an agent-invocable Tool that
+     * runs through this same connection. The request is the human-tested draft;
+     * the tool is its agent-facing twin — one operation, defined once.
+     */
+    public function exposeAsTool(Request $httpRequest, IntegrationRequest $request): RedirectResponse
+    {
+        $this->authorize('update', $request->integration);
+
+        $user = $httpRequest->user();
+        $method = strtoupper((string) $request->method);
+
+        $tool = Tool::create([
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+            'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
+            'type' => ToolType::RestApi,
+            'name' => $request->name,
+            'description' => $request->description,
+            'config' => array_filter([
+                'integration_id' => $request->integration_id,
+                'method' => $method ?: 'GET',
+                'path' => $request->path ?? '',
+                'headers' => $this->enabledHeaderMap($request->headers ?? []),
+                'request_body_template' => $this->bodyTemplate($request, $method),
+            ], fn ($value) => $value !== null && $value !== []),
+            'status' => AgentStatus::Draft,
+        ]);
+
+        return to_route('tools.show', $tool);
+    }
+
+    /**
+     * Flatten a request's header rows ([{key,value,enabled?}]) into the
+     * key=>value map a rest_api tool config expects, keeping enabled rows only.
+     *
+     * @param  array<int, array{key?: string, value?: string, enabled?: bool}>  $headers
+     * @return array<string, string>
+     */
+    private function enabledHeaderMap(array $headers): array
+    {
+        $map = [];
+        foreach ($headers as $header) {
+            $key = $header['key'] ?? '';
+            if ($key === '' || ($header['enabled'] ?? true) === false) {
+                continue;
+            }
+            $map[$key] = (string) ($header['value'] ?? '');
+        }
+
+        return $map;
+    }
+
+    /**
+     * The request body becomes the tool's body template only for methods that
+     * carry one.
+     */
+    private function bodyTemplate(IntegrationRequest $request, string $method): ?string
+    {
+        if (! in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+            return null;
+        }
+
+        $body = $request->body_content;
+
+        return is_string($body) && $body !== '' ? $body : null;
     }
 
     public function execute(ExecuteIntegrationRequestRequest $httpRequest, IntegrationRequest $request): JsonResponse

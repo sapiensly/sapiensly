@@ -107,6 +107,8 @@ Route::middleware([
         ->name('system.integrations.requests.destroy');
     Route::post('integrations/requests/{request}/duplicate', [IntegrationRequestController::class, 'duplicate'])
         ->name('system.integrations.requests.duplicate');
+    Route::post('integrations/requests/{request}/expose-as-tool', [IntegrationRequestController::class, 'exposeAsTool'])
+        ->name('system.integrations.requests.expose-as-tool');
     Route::post('integrations/requests/{request}/execute', [IntegrationRequestController::class, 'execute'])
         ->middleware('throttle:integration-execute')
         ->name('system.integrations.requests.execute');

@@ -1187,6 +1187,7 @@
     "system.integrations.tabs.settings": "Settings",
     "system.integrations.show.actions_hint": "Tools your agents can run through this connection.",
     "system.integrations.show.new_action": "New action",
+    "system.integrations.show.expose_as_tool": "Expose as Tool",
     "system.integrations.show.no_actions": "No tools use this connection yet — create one to let agents act through it.",
     "system.integrations.show.no_requests": "No requests yet — add one to start",
     "system.integrations.show.add_request": "New request",

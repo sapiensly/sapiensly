@@ -148,6 +148,11 @@ function deleteRequest(requestId: string): void {
     router.delete(`/system/integrations/requests/${requestId}`, { preserveScroll: true });
 }
 
+// Promote a saved request into an agent-invocable tool on this connection.
+function exposeAsTool(requestId: string): void {
+    router.post(`/system/integrations/requests/${requestId}/expose-as-tool`);
+}
+
 // ============== Environments ==============
 const newEnvironment = useForm({
     name: '',
@@ -488,6 +493,14 @@ function destroyIntegration(): void {
                                                 {{ req.path }}
                                             </p>
                                         </div>
+                                        <button
+                                            type="button"
+                                            :title="t('system.integrations.show.expose_as_tool')"
+                                            class="inline-flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                                            @click="exposeAsTool(req.id)"
+                                        >
+                                            <Wrench class="size-4" />
+                                        </button>
                                         <Link
                                             :href="`/system/integrations/requests/${req.id}`"
                                             class="inline-flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
