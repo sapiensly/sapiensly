@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\IntegrationAuthType;
+use App\Enums\IntegrationKind;
 use App\Enums\Visibility;
 use App\Models\Concerns\HasPrefixedUlid;
 use App\Models\Concerns\HasVisibility;
@@ -27,6 +28,7 @@ class Integration extends Model
         'description',
         'base_url',
         'is_mcp',
+        'kind',
         'auth_type',
         'auth_config',
         'default_headers',
@@ -50,12 +52,46 @@ class Integration extends Model
             'last_tested_at' => 'datetime',
             'allow_insecure_tls' => 'boolean',
             'is_mcp' => 'boolean',
+            'kind' => IntegrationKind::class,
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Bridge the legacy is_mcp flag and the kind discriminator so both stay
+        // consistent however a row is created (legacy callers set is_mcp; the
+        // new flows set kind).
+        static::saving(function (Integration $integration): void {
+            if ($integration->kind === null) {
+                $integration->kind = $integration->is_mcp
+                    ? IntegrationKind::Mcp
+                    : IntegrationKind::Http;
+            }
+
+            $integration->is_mcp = $integration->kind === IntegrationKind::Mcp;
+        });
     }
 
     public static function getIdPrefix(): string
     {
         return 'integ';
+    }
+
+    public function isDatabase(): bool
+    {
+        return $this->kind === IntegrationKind::Database;
+    }
+
+    /**
+     * The DSN-shaped connection config for a database connection — the same
+     * shape DatabaseConnectionFactory and the legacy database tool config use.
+     * Lives (encrypted) in auth_config.
+     *
+     * @return array<string, mixed>
+     */
+    public function databaseConnectionConfig(): array
+    {
+        return $this->auth_config ?? [];
     }
 
     public function user(): BelongsTo

@@ -36,13 +36,15 @@ class DatabaseExecutor implements ToolExecutor
         'INTO',
     ];
 
+    public function __construct(private DatabaseConnectionFactory $connections) {}
+
     public function execute(Tool $tool, array $parameters, array $config): ToolExecutionResult
     {
         $startTime = microtime(true);
 
         try {
-            // Create a temporary database connection
-            $connectionName = $this->createConnection($config);
+            // Open a temporary connection to the external database.
+            $connectionName = $this->connections->open($config);
 
             $query = $config['query_template'] ?? '';
             $readOnly = $config['read_only'] ?? true;
@@ -77,7 +79,7 @@ class DatabaseExecutor implements ToolExecutor
             $executionTimeMs = (microtime(true) - $startTime) * 1000;
 
             // Clean up temporary connection
-            $this->removeConnection($connectionName);
+            $this->connections->close($connectionName);
 
             return ToolExecutionResult::success(
                 data: $results,
@@ -117,7 +119,7 @@ class DatabaseExecutor implements ToolExecutor
         } finally {
             // Ensure connection is removed
             if (isset($connectionName)) {
-                $this->removeConnection($connectionName);
+                $this->connections->close($connectionName);
             }
         }
     }
@@ -155,61 +157,6 @@ class DatabaseExecutor implements ToolExecutor
         }
 
         return $errors;
-    }
-
-    /**
-     * Create a temporary database connection.
-     */
-    private function createConnection(array $config): string
-    {
-        $connectionName = 'tool_db_'.bin2hex(random_bytes(8));
-
-        $connectionConfig = [
-            'driver' => $config['driver'],
-            'database' => $config['database'],
-            'charset' => 'utf8mb4',
-            'collation' => 'utf8mb4_unicode_ci',
-            'prefix' => '',
-        ];
-
-        if ($config['driver'] !== 'sqlite') {
-            $connectionConfig['host'] = $config['host'];
-            $connectionConfig['port'] = $config['port'] ?? $this->getDefaultPort($config['driver']);
-            $connectionConfig['username'] = $config['username'];
-            $connectionConfig['password'] = $config['password'] ?? '';
-        }
-
-        // PostgreSQL specific settings
-        if ($config['driver'] === 'pgsql') {
-            $connectionConfig['charset'] = 'utf8';
-            unset($connectionConfig['collation']);
-        }
-
-        config(["database.connections.{$connectionName}" => $connectionConfig]);
-
-        return $connectionName;
-    }
-
-    /**
-     * Remove the temporary database connection.
-     */
-    private function removeConnection(string $connectionName): void
-    {
-        DB::purge($connectionName);
-        config(["database.connections.{$connectionName}" => null]);
-    }
-
-    /**
-     * Get the default port for a database driver.
-     */
-    private function getDefaultPort(string $driver): int
-    {
-        return match ($driver) {
-            'pgsql' => 5432,
-            'mysql' => 3306,
-            'sqlsrv' => 1433,
-            default => 3306,
-        };
     }
 
     /**
