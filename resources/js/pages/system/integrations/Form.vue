@@ -35,6 +35,7 @@ import {
     Plug,
     Server,
     Sparkles,
+    Ticket,
     UserCheck,
     XCircle,
 } from '@lucide/vue';
@@ -144,12 +145,20 @@ const openAuth = ref(true);
 const openHeaders = ref(false);
 const openVisibility = ref(false);
 
-// MCP access: Public / OAuth are the fast path; other token schemes hide behind
-// a disclosure so they don't clutter the common case.
+// MCP access: Public / OAuth (web auth) / Token cover the real cases; rarer
+// schemes (api key, basic) hide behind a disclosure.
 const mcpUsesPrimaryAuth = computed(() =>
-    ['none', 'oauth2_auth_code'].includes(form.auth_type),
+    ['none', 'oauth2_auth_code', 'bearer'].includes(form.auth_type),
 );
 const showMoreMcpAuth = ref(!mcpUsesPrimaryAuth.value);
+
+// An OAuth web-auth MCP server needs no manual fields when its client is
+// registered (via Discover / dynamic registration); only servers without it
+// need the endpoints + client id/secret, kept behind "advanced".
+const oauthConfigured = computed(
+    () => !!(form.auth_config.client_id || form.auth_config.authorize_url),
+);
+const showOAuthAdvanced = ref(false);
 
 type TestState =
     | { status: 'idle' }
@@ -248,10 +257,6 @@ function selectAuthMethod(value: string): void {
             pkce: form.auth_config.pkce ?? true,
         };
     }
-}
-
-function setMcpAuth(useOauth: boolean): void {
-    selectAuthMethod(useOauth ? 'oauth2_auth_code' : 'none');
 }
 
 function submit(): void {
@@ -400,7 +405,7 @@ const sectionMeta: Record<string, SectionMeta> = {
                             </div>
                         </div>
                         <div class="space-y-3 px-5 py-4">
-                            <div class="grid gap-2 sm:grid-cols-2">
+                            <div class="grid gap-2 sm:grid-cols-3">
                                 <button
                                     type="button"
                                     :class="[
@@ -409,7 +414,7 @@ const sectionMeta: Record<string, SectionMeta> = {
                                             ? 'border-accent-blue/50 bg-accent-blue/[0.08]'
                                             : 'border-soft bg-white/[0.03] hover:border-accent-blue/30 hover:bg-white/[0.06]',
                                     ]"
-                                    @click="setMcpAuth(false)"
+                                    @click="selectAuthMethod('none')"
                                 >
                                     <Globe class="mt-0.5 size-4 shrink-0 text-ink-muted" />
                                     <div class="min-w-0">
@@ -429,7 +434,7 @@ const sectionMeta: Record<string, SectionMeta> = {
                                             ? 'border-accent-blue/50 bg-accent-blue/[0.08]'
                                             : 'border-soft bg-white/[0.03] hover:border-accent-blue/30 hover:bg-white/[0.06]',
                                     ]"
-                                    @click="setMcpAuth(true)"
+                                    @click="selectAuthMethod('oauth2_auth_code')"
                                 >
                                     <UserCheck class="mt-0.5 size-4 shrink-0 text-ink-muted" />
                                     <div class="min-w-0">
@@ -441,17 +446,81 @@ const sectionMeta: Record<string, SectionMeta> = {
                                         </p>
                                     </div>
                                 </button>
+                                <button
+                                    type="button"
+                                    :class="[
+                                        'flex items-start gap-3 rounded-xs border p-3 text-left transition-colors',
+                                        form.auth_type === 'bearer'
+                                            ? 'border-accent-blue/50 bg-accent-blue/[0.08]'
+                                            : 'border-soft bg-white/[0.03] hover:border-accent-blue/30 hover:bg-white/[0.06]',
+                                    ]"
+                                    @click="selectAuthMethod('bearer')"
+                                >
+                                    <Ticket class="mt-0.5 size-4 shrink-0 text-ink-muted" />
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium text-ink">
+                                            {{ t('system.integrations.mcp_auth.token') }}
+                                        </p>
+                                        <p class="mt-0.5 text-[11px] text-ink-subtle">
+                                            {{ t('system.integrations.mcp_auth.token_hint') }}
+                                        </p>
+                                    </div>
+                                </button>
                             </div>
 
-                            <p
-                                v-if="form.auth_type === 'oauth2_auth_code'"
-                                class="flex items-start gap-2 text-[11px] text-ink-subtle"
-                            >
-                                <Lock class="mt-px size-3 shrink-0" />
-                                <span>{{ t('system.integrations.mcp_auth.per_user_note') }}</span>
-                            </p>
+                            <!-- OAuth web auth: nothing to fill when the client is
+                                 registered; advanced fields cover manual setup. -->
+                            <template v-if="form.auth_type === 'oauth2_auth_code'">
+                                <p class="flex items-start gap-2 text-[11px] text-ink-subtle">
+                                    <Lock class="mt-px size-3 shrink-0" />
+                                    <span>{{ t('system.integrations.mcp_auth.per_user_note') }}</span>
+                                </p>
+                                <p
+                                    v-if="oauthConfigured"
+                                    class="flex items-center gap-1.5 text-[11px] text-sp-success"
+                                >
+                                    <CheckCircle2 class="size-3.5 shrink-0" />
+                                    {{ t('system.integrations.mcp_auth.oauth_configured') }}
+                                </p>
+                                <p v-else class="text-[11px] text-ink-subtle">
+                                    {{ t('system.integrations.mcp_auth.oauth_discover_hint') }}
+                                </p>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 text-[11px] font-medium text-accent-blue hover:underline"
+                                    @click="showOAuthAdvanced = !showOAuthAdvanced"
+                                >
+                                    <ChevronDown
+                                        :class="[
+                                            'size-3 transition-transform',
+                                            showOAuthAdvanced || !oauthConfigured ? 'rotate-180' : '',
+                                        ]"
+                                    />
+                                    {{ t('system.integrations.mcp_auth.advanced') }}
+                                </button>
+                                <AuthConfigField
+                                    v-if="showOAuthAdvanced || !oauthConfigured"
+                                    :auth-type="form.auth_type"
+                                    :model-value="form.auth_config"
+                                    :masked-values="integration?.masked_auth_config"
+                                    :callback-url="oauthCallbackUrl"
+                                    :errors="form.errors"
+                                    @update:model-value="form.auth_config = $event"
+                                />
+                            </template>
 
-                            <!-- Escape hatch: token / api-key MCP servers. -->
+                            <!-- Public note, token field, or a picked api-key/basic. -->
+                            <AuthConfigField
+                                v-else
+                                :auth-type="form.auth_type"
+                                :model-value="form.auth_config"
+                                :masked-values="integration?.masked_auth_config"
+                                :callback-url="oauthCallbackUrl"
+                                :errors="form.errors"
+                                @update:model-value="form.auth_config = $event"
+                            />
+
+                            <!-- Rare schemes: API key, basic. -->
                             <button
                                 type="button"
                                 class="text-[11px] font-medium text-accent-blue hover:underline"
@@ -466,15 +535,6 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     @update:model-value="selectAuthMethod"
                                 />
                             </div>
-
-                            <AuthConfigField
-                                :auth-type="form.auth_type"
-                                :model-value="form.auth_config"
-                                :masked-values="integration?.masked_auth_config"
-                                :callback-url="oauthCallbackUrl"
-                                :errors="form.errors"
-                                @update:model-value="form.auth_config = $event"
-                            />
                         </div>
                     </div>
                 </template>
