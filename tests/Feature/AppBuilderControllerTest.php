@@ -257,6 +257,42 @@ it('returns an empty-but-shaped schema when manifest has zero objects', function
         );
 });
 
+it('preview hides a block gated by a visibility expression until its param is set', function () {
+    // The live runtime drops a block whose visibility.expression is falsy
+    // (e.g. a cart shown only when {{params.order}} is set). The builder's
+    // "Vista en vivo" must do the same, or it diverges from the deployed app.
+    $pageId = 'pag_'.strtolower((string) Str::ulid());
+    $alwaysId = 'blk_'.strtolower((string) Str::ulid());
+    $gatedId = 'blk_'.strtolower((string) Str::ulid());
+
+    $manifest = bldcm($this->testApp->id);
+    $manifest['pages'] = [[
+        'id' => $pageId, 'slug' => 'home', 'name' => 'Home', 'path' => '/home',
+        'blocks' => [
+            ['id' => $alwaysId, 'type' => 'heading', 'content' => 'Siempre'],
+            ['id' => $gatedId, 'type' => 'heading', 'content' => 'Carrito', 'visibility' => ['expression' => '{{params.order}}']],
+        ],
+    ]];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    // No param → the gated block is filtered out, matching the runtime.
+    $this->actingAs($this->user)
+        ->get("/apps/{$this->testApp->id}/builder")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('preview.page.blocks', 1)
+            ->where('preview.page.blocks.0.id', $alwaysId)
+        );
+
+    // With the param present → both blocks render, exactly like the live view.
+    $this->actingAs($this->user)
+        ->get("/apps/{$this->testApp->id}/builder?order=123")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('preview.page.blocks', 2)
+        );
+});
+
 it('returns records for an object via objectRecords endpoint', function () {
     $objId = 'obj_'.strtolower((string) Str::ulid());
     $fldId = 'fld_'.strtolower((string) Str::ulid());

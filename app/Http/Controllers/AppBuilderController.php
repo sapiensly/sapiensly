@@ -9,6 +9,8 @@ use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\Record;
 use App\Services\AiProviderService;
+use App\Services\Apps\AppAccessResolver;
+use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Manifest\AppManifestService;
@@ -45,6 +47,8 @@ class AppBuilderController extends Controller
         private TenantStorage $tenantStorage,
         private WireframeImporter $wireframes,
         private AiProviderService $aiProviders,
+        private AppAccessResolver $accessResolver,
+        private BlockVisibilityFilter $visibility,
     ) {}
 
     /**
@@ -91,7 +95,16 @@ class AppBuilderController extends Controller
         }
 
         $manifest = $this->manifestService->getActiveManifest($app);
-        $preview = $this->buildPreview($app, $request->user(), $manifest, $request->query('page'));
+
+        // Forward the URL query as runtime params so param-driven blocks behave
+        // in the preview exactly as they do live (filter_bar pre-fill, a
+        // {{params.id}} detail page, a cart shown only when {{params.order}} is
+        // set). `page` is the builder's own page selector, not an app param.
+        $previewParams = array_filter(
+            $request->except('page'),
+            fn ($v) => is_string($v) || is_array($v),
+        );
+        $preview = $this->buildPreview($app, $request->user(), $manifest, $request->query('page'), $previewParams);
         $schema = $this->buildSchema($app, $manifest);
 
         return Inertia::render('apps/Builder', [
@@ -218,10 +231,19 @@ class AppBuilderController extends Controller
      * pages, or a query for a page that doesn't exist all return null so the
      * client can show an empty state instead of crashing.
      *
+     * The preview must render what the runtime renders, not the raw manifest:
+     * it resolves the same access context, forwards the same URL params, and
+     * filters blocks through the same {@see BlockVisibilityFilter} BEFORE
+     * resolving their data — exactly like {@see AppRuntimeController}. Otherwise
+     * the "Vista en vivo" shows blocks the runtime hides (role- or
+     * expression-gated) and resolves data without the role's row filters /
+     * hidden fields, so it diverges from the deployed app.
+     *
      * @param  array<string, mixed>|null  $manifest
+     * @param  array<string, mixed>  $params  forwarded URL query (runtime params)
      * @return array{page: array<string, mixed>, pages: list<array<string, mixed>>, block_data: array<string, mixed>, objects: list<array<string, mixed>>, settings: array<string, mixed>}|null
      */
-    private function buildPreview(App $app, $user, ?array $manifest, ?string $pageSlug): ?array
+    private function buildPreview(App $app, $user, ?array $manifest, ?string $pageSlug, array $params = []): ?array
     {
         if ($manifest === null) {
             return null;
@@ -243,10 +265,20 @@ class AppBuilderController extends Controller
         }
         $page ??= $pages[0];
 
+        // Same access context the runtime computes (the builder author is usually
+        // an admin → bypass, so they preview as themselves; a non-admin author's
+        // role filters/hidden fields apply, matching what they'd see live).
+        $access = $this->accessResolver->resolve($app, $manifest, $user);
         $context = [
             'current_user' => ['id' => $user->id, 'email' => $user->email],
-            'params' => [],
+            'params' => $params,
+            '__access' => $access,
         ];
+
+        // Drop blocks the role or a visibility expression hides BEFORE resolving
+        // data — identical to the runtime, so a hidden block never shows in the
+        // preview (and its data never gets resolved either).
+        $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context);
 
         // Org Brandbook fills unset brand values (live fallback); the app wins.
         $settings = $app->organization !== null
