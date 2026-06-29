@@ -219,7 +219,7 @@ class BuilderAiService
             // withFallback re-runs the prompt with the configured fallback.
             $response = $this->aiDefaults->withFallback('builder', function (string $model) use ($sdkAgent, $promptText, $user, $conversation) {
                 $provider = $user !== null
-                    ? $this->providers->resolveProvider($model, $user)
+                    ? ($this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic)
                     : Lab::Anthropic;
 
                 Log::info('Builder AI calling provider', [
@@ -450,7 +450,7 @@ class BuilderAiService
             $user = $conversation->user;
             if ($user !== null) {
                 $this->providers->applyRuntimeConfig($user);
-                $provider = $this->providers->resolveProvider($resolvedModel, $user);
+                $provider = $this->providers->resolveProviderForCatalogModel($resolvedModel, $user) ?? Lab::Anthropic;
             } else {
                 $provider = Lab::Anthropic;
             }
