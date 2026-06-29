@@ -51,6 +51,7 @@ class IntegrationController extends Controller
             'authTypes' => $this->authTypeOptions(),
             'visibilities' => $this->visibilityOptions(),
             'template' => $this->resolveIntegrationTemplate($request->query('template')),
+            'oauthCallbackUrl' => route('integrations.oauth2.callback'),
         ]);
     }
 
@@ -116,6 +117,7 @@ class IntegrationController extends Controller
             'integration' => $this->present($integration),
             'authTypes' => $this->authTypeOptions(),
             'visibilities' => $this->visibilityOptions(),
+            'oauthCallbackUrl' => route('integrations.oauth2.callback'),
         ]);
     }
 

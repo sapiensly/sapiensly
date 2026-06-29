@@ -10,7 +10,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import type { McpConfig, OAuth2IntegrationOption } from '@/types/tools';
-import { CheckCircle2, ExternalLink } from '@lucide/vue';
+import { CheckCircle2, ExternalLink, Info } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -80,6 +80,13 @@ const selectedIntegration = computed<OAuth2IntegrationOption | undefined>(() =>
 
 <template>
     <div class="space-y-4">
+        <p
+            class="flex items-start gap-2 rounded-xs border border-soft bg-white/[0.02] p-2.5 text-[11px] leading-snug text-ink-muted"
+        >
+            <Info class="mt-px size-3.5 shrink-0 text-ink-subtle" />
+            <span>{{ t('tools.config.mcp.guidance') }}</span>
+        </p>
+
         <div class="grid gap-2">
             <Label for="endpoint">{{ t('tools.config.mcp.endpoint') }}</Label>
             <Input
@@ -89,7 +96,7 @@ const selectedIntegration = computed<OAuth2IntegrationOption | undefined>(() =>
                 :placeholder="t('tools.config.mcp.endpoint_placeholder')"
                 class="font-mono"
             />
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-ink-muted">
                 {{ t('tools.config.mcp.endpoint_description') }}
             </p>
             <InputError :message="errors['config.endpoint']" />
@@ -113,7 +120,7 @@ const selectedIntegration = computed<OAuth2IntegrationOption | undefined>(() =>
                     </SelectItem>
                 </SelectContent>
             </Select>
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-ink-muted">
                 {{ t('tools.config.mcp.auth_description') }}
             </p>
             <InputError :message="errors['config.auth_type']" />
@@ -142,7 +149,7 @@ const selectedIntegration = computed<OAuth2IntegrationOption | undefined>(() =>
                         </SelectItem>
                     </SelectContent>
                 </Select>
-                <p class="text-xs text-muted-foreground">
+                <p class="text-xs text-ink-muted">
                     {{ t('tools.config.mcp.oauth_integration_description') }}
                 </p>
                 <InputError :message="errors['config.integration_id']" />
@@ -152,18 +159,18 @@ const selectedIntegration = computed<OAuth2IntegrationOption | undefined>(() =>
                      saved tool — so the link only shows once the tool exists. -->
                 <div
                     v-if="selectedIntegration"
-                    class="mt-1 flex items-center justify-between gap-3 rounded-lg border p-3"
+                    class="mt-1 flex items-center justify-between gap-3 rounded-xs border border-soft p-3"
                 >
                     <div class="flex items-center gap-2 text-sm">
                         <CheckCircle2
                             v-if="selectedIntegration.authorized"
-                            class="size-4 text-emerald-500"
+                            class="size-4 text-sp-success"
                         />
                         <span
                             :class="
                                 selectedIntegration.authorized
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-amber-600 dark:text-amber-400'
+                                    ? 'text-sp-success'
+                                    : 'text-sp-warning'
                             "
                         >
                             {{
@@ -185,19 +192,19 @@ const selectedIntegration = computed<OAuth2IntegrationOption | undefined>(() =>
                                 : t('tools.config.mcp.oauth_authorize')
                         }}
                     </a>
-                    <span v-else class="text-[11px] text-muted-foreground">
+                    <span v-else class="text-[11px] text-ink-subtle">
                         {{ t('tools.config.mcp.oauth_save_first') }}
                     </span>
                 </div>
             </template>
 
-            <div v-else class="rounded-lg border border-dashed p-4">
-                <p class="text-sm text-muted-foreground">
+            <div v-else class="rounded-xs border border-dashed border-soft p-4">
+                <p class="text-sm text-ink-muted">
                     {{ t('tools.config.mcp.oauth_no_integrations') }}
                 </p>
                 <a
                     href="/system/integrations/create"
-                    class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                    class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-accent-blue hover:underline"
                 >
                     <ExternalLink class="size-3.5" />
                     {{ t('tools.config.mcp.oauth_create_integration') }}
@@ -207,9 +214,9 @@ const selectedIntegration = computed<OAuth2IntegrationOption | undefined>(() =>
 
         <div
             v-else-if="authType !== 'none'"
-            class="rounded-lg border border-dashed p-4"
+            class="rounded-xs border border-dashed border-soft p-4"
         >
-            <p class="text-sm text-muted-foreground">
+            <p class="text-sm text-ink-muted">
                 {{ t('tools.config.mcp.auth_credentials_note') }}
             </p>
         </div>

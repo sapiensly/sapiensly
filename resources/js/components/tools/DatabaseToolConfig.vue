@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { DatabaseConfig } from '@/types/tools';
+import { Info } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -111,6 +112,13 @@ WHERE o.id = :order_id`;
 
 <template>
     <div class="space-y-4">
+        <p
+            class="flex items-start gap-2 rounded-xs border border-soft bg-white/[0.02] p-2.5 text-[11px] leading-snug text-ink-muted"
+        >
+            <Info class="mt-px size-3.5 shrink-0 text-ink-subtle" />
+            <span>{{ t('tools.config.database.guidance') }}</span>
+        </p>
+
         <div class="grid gap-2">
             <Label for="driver">Database Driver</Label>
             <Select v-model="driver">
@@ -195,7 +203,7 @@ WHERE o.id = :order_id`;
                         placeholder="********"
                         autocomplete="new-password"
                     />
-                    <p class="text-xs text-muted-foreground">
+                    <p class="text-xs text-ink-muted">
                         Encrypted at rest
                     </p>
                     <InputError :message="errors['config.password']" />
@@ -211,9 +219,9 @@ WHERE o.id = :order_id`;
                 :placeholder="queryPlaceholder"
                 class="min-h-[150px] font-mono text-sm"
             />
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-ink-muted">
                 Use named parameters like
-                <code class="rounded bg-muted px-1">:param_name</code> for safe
+                <code class="rounded bg-white/[0.06] px-1">:param_name</code> for safe
                 value injection
             </p>
             <InputError :message="errors['config.query_template']" />
@@ -225,7 +233,7 @@ WHERE o.id = :order_id`;
                 Read-only mode (recommended for safety)
             </Label>
         </div>
-        <p class="text-xs text-muted-foreground">
+        <p class="text-xs text-ink-muted">
             When enabled, only SELECT queries are allowed. Disable to allow
             INSERT, UPDATE, DELETE operations.
         </p>

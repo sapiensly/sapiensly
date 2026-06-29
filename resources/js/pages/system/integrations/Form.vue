@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AuthConfigField from '@/components/integrations/AuthConfigField.vue';
+import AuthMethodPicker from '@/components/integrations/AuthMethodPicker.vue';
 import HeaderEditor from '@/components/integrations/HeaderEditor.vue';
 import InputError from '@/components/InputError.vue';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -71,6 +72,7 @@ interface Props {
     authTypes: AuthTypeOption[];
     visibilities: AuthTypeOption[];
     template?: IntegrationTemplate | null;
+    oauthCallbackUrl?: string;
 }
 
 const props = defineProps<Props>();
@@ -203,6 +205,23 @@ async function discoverOAuth2(): Promise<void> {
                 ? (error.response.data.message as string)
                 : t('system.integrations.oauth2_discover.failed');
         discoverState.value = { status: 'error', message };
+    }
+}
+
+// Selecting OAuth (web) prefills the redirect URI with this app's callback —
+// the value the user registers in their provider — so they never type it.
+function selectAuthMethod(value: string): void {
+    form.auth_type = value;
+    if (
+        value === 'oauth2_auth_code' &&
+        !form.auth_config.redirect_uri &&
+        props.oauthCallbackUrl
+    ) {
+        form.auth_config = {
+            ...form.auth_config,
+            redirect_uri: props.oauthCallbackUrl,
+            pkce: form.auth_config.pkce ?? true,
+        };
     }
 }
 
@@ -355,24 +374,15 @@ const sectionMeta: Record<string, SectionMeta> = {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                         <div class="space-y-3 border-t border-soft px-5 py-4">
-                            <div class="space-y-1.5">
+                            <div class="space-y-2">
                                 <Label>
                                     {{ t('system.integrations.form.auth_method') }}
                                 </Label>
-                                <Select v-model="form.auth_type">
-                                    <SelectTrigger class="h-9">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem
-                                            v-for="option in authTypes"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <AuthMethodPicker
+                                    :options="authTypes"
+                                    :model-value="form.auth_type"
+                                    @update:model-value="selectAuthMethod"
+                                />
                             </div>
 
                             <!-- One-URL auto-configuration for OAuth 2.0 web auth (MCP). -->
@@ -430,6 +440,7 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 :auth-type="form.auth_type"
                                 :model-value="form.auth_config"
                                 :masked-values="integration?.masked_auth_config"
+                                :callback-url="oauthCallbackUrl"
                                 :errors="form.errors"
                                 @update:model-value="form.auth_config = $event"
                             />

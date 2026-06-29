@@ -27,15 +27,15 @@ const notConnected = computed(() => props.connections.filter((c) => !c.connected
         <!-- Empty state — no MCP connections exist yet. -->
         <div
             v-if="connections.length === 0"
-            class="rounded-lg border border-dashed p-6 text-center"
+            class="rounded-xs border border-dashed border-soft p-6 text-center"
         >
-            <Server class="mx-auto size-6 text-muted-foreground" />
+            <Server class="mx-auto size-6 text-ink-subtle" />
             <p class="mt-2 text-sm text-ink">
                 {{ t('tools.config.mcp.no_connections') }}
             </p>
             <a
                 href="/system/integrations/create"
-                class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent-blue hover:underline"
             >
                 <ExternalLink class="size-3.5" />
                 {{ t('tools.config.mcp.create_connection') }}
@@ -45,7 +45,7 @@ const notConnected = computed(() => props.connections.filter((c) => !c.connected
         <template v-else>
             <!-- Connected. -->
             <div v-if="connected.length > 0" class="space-y-2">
-                <p class="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-sp-success">
                     {{ t('tools.config.mcp.group_connected') }}
                 </p>
                 <button
@@ -53,27 +53,27 @@ const notConnected = computed(() => props.connections.filter((c) => !c.connected
                     :key="c.id"
                     type="button"
                     :class="[
-                        'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+                        'flex w-full items-center gap-3 rounded-xs border p-3 text-left transition-colors',
                         selectedId === c.id
                             ? 'border-accent-blue bg-accent-blue/5'
                             : 'border-medium hover:border-strong hover:bg-surface-hover',
                     ]"
                     @click="emit('select', c)"
                 >
-                    <div class="flex size-8 shrink-0 items-center justify-center rounded-xs bg-emerald-500/15 text-emerald-500">
+                    <div class="flex size-8 shrink-0 items-center justify-center rounded-xs bg-sp-success/15 text-sp-success">
                         <Plug class="size-4" />
                     </div>
                     <div class="min-w-0 flex-1">
                         <p class="truncate text-sm font-medium text-ink">{{ c.name }}</p>
                         <p class="truncate font-mono text-[11px] text-ink-subtle">{{ c.base_url }}</p>
                     </div>
-                    <CheckCircle2 class="size-4 shrink-0 text-emerald-500" />
+                    <CheckCircle2 class="size-4 shrink-0 text-sp-success" />
                 </button>
             </div>
 
             <!-- Not connected. -->
             <div v-if="notConnected.length > 0" class="space-y-2">
-                <p class="text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-sp-warning">
                     {{ t('tools.config.mcp.group_not_connected') }}
                 </p>
                 <button
@@ -81,21 +81,21 @@ const notConnected = computed(() => props.connections.filter((c) => !c.connected
                     :key="c.id"
                     type="button"
                     :class="[
-                        'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+                        'flex w-full items-center gap-3 rounded-xs border p-3 text-left transition-colors',
                         selectedId === c.id
                             ? 'border-accent-blue bg-accent-blue/5'
                             : 'border-medium hover:border-strong hover:bg-surface-hover',
                     ]"
                     @click="emit('select', c)"
                 >
-                    <div class="flex size-8 shrink-0 items-center justify-center rounded-xs bg-amber-500/15 text-amber-500">
+                    <div class="flex size-8 shrink-0 items-center justify-center rounded-xs bg-sp-warning/15 text-sp-warning">
                         <Plug class="size-4" />
                     </div>
                     <div class="min-w-0 flex-1">
                         <p class="truncate text-sm font-medium text-ink">{{ c.name }}</p>
                         <p class="truncate font-mono text-[11px] text-ink-subtle">{{ c.base_url }}</p>
                     </div>
-                    <span class="shrink-0 text-[11px] text-amber-600 dark:text-amber-400">
+                    <span class="shrink-0 text-[11px] text-sp-warning">
                         {{ t('tools.config.mcp.authorize_after_create') }}
                     </span>
                 </button>

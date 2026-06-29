@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { GraphqlConfig, HttpConnectionOption } from '@/types/tools';
-import { ExternalLink, Plug } from '@lucide/vue';
+import { ExternalLink, Info, Plug } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -130,6 +130,13 @@ const placeholder = computed(() =>
 
 <template>
     <div class="space-y-4">
+        <p
+            class="flex items-start gap-2 rounded-xs border border-soft bg-white/[0.02] p-2.5 text-[11px] leading-snug text-ink-muted"
+        >
+            <Info class="mt-px size-3.5 shrink-0 text-ink-subtle" />
+            <span>{{ t('tools.config.graphql.guidance') }}</span>
+        </p>
+
         <!-- Connection: when set, the endpoint + auth come from it. -->
         <div class="grid gap-2">
             <Label for="connection">{{ t('tools.config.connection.label') }}</Label>
@@ -152,20 +159,20 @@ const placeholder = computed(() =>
             </Select>
             <div
                 v-else
-                class="flex items-center justify-between gap-3 rounded-lg border border-dashed p-3"
+                class="flex items-center justify-between gap-3 rounded-xs border border-dashed border-soft p-3"
             >
-                <p class="text-xs text-muted-foreground">
+                <p class="text-xs text-ink-muted">
                     {{ t('tools.config.connection.none') }}
                 </p>
                 <a
                     href="/system/integrations/create"
-                    class="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                    class="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-accent-blue hover:underline"
                 >
                     <ExternalLink class="size-3.5" />
                     {{ t('tools.config.connection.create') }}
                 </a>
             </div>
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-ink-muted">
                 {{ t('tools.config.connection.hint') }}
             </p>
             <InputError :message="errors['config.integration_id']" />
@@ -173,10 +180,10 @@ const placeholder = computed(() =>
 
         <div
             v-if="isConnected"
-            class="flex items-start gap-2 rounded-lg border border-dashed p-3"
+            class="flex items-start gap-2 rounded-xs border border-dashed border-soft p-3"
         >
-            <Plug class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-            <p class="text-xs text-muted-foreground">
+            <Plug class="mt-0.5 size-4 shrink-0 text-ink-subtle" />
+            <p class="text-xs text-ink-muted">
                 {{ t('tools.config.connection.inherits') }}
             </p>
         </div>
@@ -190,7 +197,7 @@ const placeholder = computed(() =>
                 placeholder="https://api.example.com/graphql"
                 class="font-mono"
             />
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-ink-muted">
                 The URL of the GraphQL API endpoint
             </p>
             <InputError :message="errors['config.endpoint']" />
@@ -212,7 +219,7 @@ const placeholder = computed(() =>
                     </SelectItem>
                 </SelectContent>
             </Select>
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-ink-muted">
                 Query for reading data, Mutation for modifying data
             </p>
             <InputError :message="errors['config.operation_type']" />
@@ -226,9 +233,9 @@ const placeholder = computed(() =>
                 :placeholder="placeholder"
                 class="min-h-[200px] font-mono text-sm"
             />
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-ink-muted">
                 The GraphQL query or mutation. Use variables like
-                <code class="rounded bg-muted px-1">$variableName</code>
+                <code class="rounded bg-white/[0.06] px-1">$variableName</code>
             </p>
             <InputError :message="errors['config.operation']" />
         </div>
@@ -249,7 +256,7 @@ const placeholder = computed(() =>
                     </SelectItem>
                 </SelectContent>
             </Select>
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-ink-muted">
                 How to authenticate with the GraphQL API
             </p>
             <InputError :message="errors['config.auth_type']" />
@@ -257,9 +264,9 @@ const placeholder = computed(() =>
 
         <div
             v-if="!isConnected && authType !== 'none'"
-            class="rounded-lg border border-dashed p-4"
+            class="rounded-xs border border-dashed border-soft p-4"
         >
-            <p class="text-sm text-muted-foreground">
+            <p class="text-sm text-ink-muted">
                 Authentication credentials will be configured securely after
                 creating the tool.
             </p>
