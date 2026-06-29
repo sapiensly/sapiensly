@@ -10,16 +10,21 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { RestApiConfig } from '@/types/tools';
+import type { HttpConnectionOption, RestApiConfig } from '@/types/tools';
+import { ExternalLink, Plug } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const props = defineProps<{
-    config: RestApiConfig;
-    errors: Record<string, string>;
-}>();
+const props = withDefaults(
+    defineProps<{
+        config: RestApiConfig;
+        errors: Record<string, string>;
+        connections?: HttpConnectionOption[];
+    }>(),
+    { connections: () => [] },
+);
 
 const emit = defineEmits<{
     'update:config': [config: RestApiConfig];
@@ -34,6 +39,36 @@ const updateField = <K extends keyof RestApiConfig>(
         [field]: value,
     });
 };
+
+// A tool either borrows its base URL + auth from a Connection (the encouraged
+// path) or carries them inline (legacy). This sentinel marks the inline choice
+// in the connection picker since an empty Select value isn't allowed.
+const INLINE = '__inline__';
+
+const isConnected = computed(() => !!props.config.integration_id);
+
+const connectionValue = computed({
+    get: () => props.config.integration_id || INLINE,
+    set: (value: string) => {
+        if (value === INLINE) {
+            // Switch to inline mode: drop the connection, restore inline defaults.
+            const next = { ...props.config };
+            delete next.integration_id;
+            next.base_url = next.base_url ?? '';
+            next.auth_type = next.auth_type ?? 'none';
+            next.auth_config = next.auth_config ?? {};
+            emit('update:config', next);
+        } else {
+            // Connected mode: reference the connection, drop the inline fields it
+            // now supplies (base URL + auth).
+            const next = { ...props.config, integration_id: value };
+            delete next.base_url;
+            delete next.auth_type;
+            delete next.auth_config;
+            emit('update:config', next);
+        }
+    },
+});
 
 const baseUrl = computed({
     get: () => props.config.base_url ?? '',
@@ -90,7 +125,59 @@ const showRequestBody = computed(() =>
 
 <template>
     <div class="space-y-4">
+        <!-- Connection: the encouraged path. When set, base URL + auth come from
+             the connection and their inline fields disappear. -->
         <div class="grid gap-2">
+            <Label for="connection">{{ t('tools.config.connection.label') }}</Label>
+            <Select v-if="connections.length > 0" v-model="connectionValue">
+                <SelectTrigger id="connection">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem
+                        v-for="c in connections"
+                        :key="c.id"
+                        :value="c.id"
+                    >
+                        {{ c.name }} — {{ c.base_url }}
+                    </SelectItem>
+                    <SelectItem :value="INLINE">
+                        {{ t('tools.config.connection.inline') }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            <div
+                v-else
+                class="flex items-center justify-between gap-3 rounded-lg border border-dashed p-3"
+            >
+                <p class="text-xs text-muted-foreground">
+                    {{ t('tools.config.connection.none') }}
+                </p>
+                <a
+                    href="/system/integrations/create"
+                    class="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                >
+                    <ExternalLink class="size-3.5" />
+                    {{ t('tools.config.connection.create') }}
+                </a>
+            </div>
+            <p class="text-xs text-muted-foreground">
+                {{ t('tools.config.connection.hint') }}
+            </p>
+            <InputError :message="errors['config.integration_id']" />
+        </div>
+
+        <div
+            v-if="isConnected"
+            class="flex items-start gap-2 rounded-lg border border-dashed p-3"
+        >
+            <Plug class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <p class="text-xs text-muted-foreground">
+                {{ t('tools.config.connection.inherits') }}
+            </p>
+        </div>
+
+        <div v-if="!isConnected" class="grid gap-2">
             <Label for="base-url">Base URL</Label>
             <Input
                 id="base-url"
@@ -137,7 +224,7 @@ const showRequestBody = computed(() =>
             </div>
         </div>
 
-        <div class="grid gap-2">
+        <div v-if="!isConnected" class="grid gap-2">
             <Label for="auth-type">Authentication Type</Label>
             <Select v-model="authType">
                 <SelectTrigger id="auth-type">
@@ -160,7 +247,7 @@ const showRequestBody = computed(() =>
         </div>
 
         <div
-            v-if="authType !== 'none'"
+            v-if="!isConnected && authType !== 'none'"
             class="rounded-lg border border-dashed p-4"
         >
             <p class="text-sm text-muted-foreground">

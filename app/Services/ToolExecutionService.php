@@ -6,9 +6,11 @@ use App\Contracts\ToolExecutor;
 use App\DTOs\ToolExecutionResult;
 use App\Enums\ToolType;
 use App\Models\Tool;
+use App\Services\Integrations\IntegrationService;
 use App\Services\Tools\DatabaseExecutor;
 use App\Services\Tools\GraphqlExecutor;
 use App\Services\Tools\RestApiExecutor;
+use App\Services\Tools\ToolConnectionResolver;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -18,6 +20,8 @@ class ToolExecutionService
 
     public function __construct(
         private readonly ToolConfigService $configService,
+        private readonly ToolConnectionResolver $connections,
+        private readonly IntegrationService $integrationService,
         RestApiExecutor $restApiExecutor,
         GraphqlExecutor $graphqlExecutor,
         DatabaseExecutor $databaseExecutor,
@@ -139,6 +143,27 @@ class ToolExecutionService
      */
     public function testConnection(Tool $tool): ToolExecutionResult
     {
+        // Connected tools share the integration's reachability check — one
+        // test-connection path for the whole connection, not a per-tool ping.
+        $integration = $this->connections->resolve($tool);
+        if ($integration !== null) {
+            $startTime = microtime(true);
+            $result = $this->integrationService->testConnection($integration);
+
+            if ($result['success'] ?? false) {
+                return ToolExecutionResult::success(
+                    data: ['message' => $result['message'] ?? 'Connection successful'],
+                    metadata: ['integration_id' => $integration->id],
+                    executionTimeMs: (microtime(true) - $startTime) * 1000,
+                );
+            }
+
+            return ToolExecutionResult::failure(
+                error: $result['detail'] ?? $result['message'] ?? 'Connection failed',
+                executionTimeMs: (microtime(true) - $startTime) * 1000,
+            );
+        }
+
         // For database tools, we can test the connection
         if ($tool->type === ToolType::Database) {
             return $this->testDatabaseConnection($tool);

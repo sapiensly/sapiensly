@@ -73,7 +73,29 @@ class ToolController extends Controller
                 ->where('status', 'active')
                 ->get(['id', 'name', 'type']),
             'mcpConnections' => $this->mcpConnectionOptions($request),
+            'httpConnections' => $this->httpConnectionOptions($request),
         ]);
+    }
+
+    /**
+     * Non-MCP connections (HTTP/REST/GraphQL integrations) an http or graphql
+     * tool can borrow its base URL + auth from. A connected tool is the
+     * *action*; the integration is the *connection*.
+     *
+     * @return array<int, array{id: string, name: string, base_url: string, auth_type: string}>
+     */
+    private function httpConnectionOptions(Request $request): array
+    {
+        return $this->integrationService->listForUser($request->user())
+            ->where('is_mcp', false)
+            ->map(fn (Integration $integration): array => [
+                'id' => $integration->id,
+                'name' => $integration->name,
+                'base_url' => $integration->base_url,
+                'auth_type' => $integration->auth_type->value,
+            ])
+            ->values()
+            ->all();
     }
 
     public function store(StoreToolRequest $request): RedirectResponse
@@ -128,7 +150,36 @@ class ToolController extends Controller
         return Inertia::render('tools/Show', [
             'tool' => $toolData,
             'mcpAuthorization' => $this->mcpAuthorizationStatus($request, $tool),
+            'linkedIntegration' => $this->linkedIntegration($tool),
         ]);
+    }
+
+    /**
+     * The Connection (Integration) this tool runs against, when it references
+     * one via `config.integration_id`. A tool is the *action*; the integration
+     * is the *connection* (base URL + auth) it borrows. Returns null for
+     * connectionless tools (function, group) or tools without a linked
+     * integration.
+     *
+     * @return array{id: string, name: string, is_mcp: bool}|null
+     */
+    private function linkedIntegration(Tool $tool): ?array
+    {
+        $integrationId = $tool->config['integration_id'] ?? null;
+        if (empty($integrationId)) {
+            return null;
+        }
+
+        $integration = Integration::find($integrationId);
+        if (! $integration instanceof Integration) {
+            return null;
+        }
+
+        return [
+            'id' => $integration->id,
+            'name' => $integration->name,
+            'is_mcp' => (bool) $integration->is_mcp,
+        ];
     }
 
     /**
@@ -187,6 +238,7 @@ class ToolController extends Controller
                 ->get(['id', 'name', 'type']),
             'oauth2Integrations' => $this->oauth2IntegrationOptions($request),
             'oauth2AuthorizeUrl' => route('tools.oauth2.authorize', $tool),
+            'httpConnections' => $this->httpConnectionOptions($request),
         ]);
     }
 

@@ -21,6 +21,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
+    HttpConnectionOption,
     OAuth2IntegrationOption,
     Tool,
     ToolReference,
@@ -48,6 +49,7 @@ interface Props {
     availableTools: ToolReference[];
     oauth2Integrations: OAuth2IntegrationOption[];
     oauth2AuthorizeUrl: string;
+    httpConnections: HttpConnectionOption[];
 }
 
 const props = defineProps<Props>();
@@ -186,12 +188,14 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
                     <RestApiToolConfig
                         v-else-if="tool.type === 'rest_api'"
                         v-model:config="form.config"
+                        :connections="httpConnections"
                         :errors="form.errors"
                     />
 
                     <GraphqlToolConfig
                         v-else-if="tool.type === 'graphql'"
                         v-model:config="form.config"
+                        :connections="httpConnections"
                         :errors="form.errors"
                     />
 

@@ -4,7 +4,9 @@ namespace App\Services\Tools;
 
 use App\Contracts\ToolExecutor;
 use App\DTOs\ToolExecutionResult;
+use App\Models\Integration;
 use App\Models\Tool;
+use App\Services\Integrations\IntegrationCaller;
 use App\Services\Security\Ssrf\SafeHttpClient;
 use App\Services\Security\Ssrf\SsrfBlockedException;
 use App\Services\Tools\Concerns\SubstitutesParameters;
@@ -17,10 +19,22 @@ class RestApiExecutor implements ToolExecutor
 
     private const TIMEOUT_SECONDS = 30;
 
-    public function __construct(private SafeHttpClient $safeHttp) {}
+    public function __construct(
+        private SafeHttpClient $safeHttp,
+        private ToolConnectionResolver $connections,
+        private IntegrationCaller $caller,
+    ) {}
 
     public function execute(Tool $tool, array $parameters, array $config): ToolExecutionResult
     {
+        // When the tool references a Connection, the integration owns the base
+        // URL + auth + SSRF guard + token refresh — run through it instead of
+        // the legacy self-contained path below.
+        $integration = $this->connections->resolve($tool);
+        if ($integration instanceof Integration) {
+            return $this->executeViaConnection($tool, $integration, $parameters, $config);
+        }
+
         $startTime = microtime(true);
 
         try {
@@ -110,9 +124,84 @@ class RestApiExecutor implements ToolExecutor
         }
     }
 
+    /**
+     * Run the call through a Connection: the integration supplies base URL,
+     * auth, token refresh and the SSRF guard; the tool config supplies only the
+     * operation (method, path, headers, body template, response mapping).
+     */
+    private function executeViaConnection(Tool $tool, Integration $integration, array $parameters, array $config): ToolExecutionResult
+    {
+        $startTime = microtime(true);
+
+        try {
+            $method = strtoupper($config['method'] ?? 'GET');
+            $path = $this->substituteString((string) ($config['path'] ?? ''), $parameters);
+            $headers = ! empty($config['headers'])
+                ? $this->substituteArray($config['headers'], $parameters)
+                : [];
+            $body = $this->buildBody($config, $parameters, $method);
+
+            $options = ['headers' => $headers];
+            if (in_array($method, ['GET', 'HEAD', 'DELETE'], true)) {
+                if ($body !== []) {
+                    $options['query'] = $body;
+                }
+            } else {
+                $options['json'] = $body;
+            }
+
+            $response = $this->caller->send($integration, $method, $path, $options);
+            $executionTimeMs = (microtime(true) - $startTime) * 1000;
+
+            if ($response->successful()) {
+                return ToolExecutionResult::success(
+                    data: $this->mapResponse($response->json() ?? $response->body(), $config),
+                    metadata: [
+                        'status_code' => $response->status(),
+                        'method' => $method,
+                        'integration_id' => $integration->id,
+                    ],
+                    executionTimeMs: $executionTimeMs,
+                );
+            }
+
+            return ToolExecutionResult::failure(
+                error: "HTTP {$response->status()}: ".$this->extractErrorMessage($response),
+                statusCode: $response->status(),
+                metadata: [
+                    'method' => $method,
+                    'integration_id' => $integration->id,
+                    'response_body' => $response->body(),
+                ],
+                executionTimeMs: $executionTimeMs,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('REST API tool (connected) failed', [
+                'tool_id' => $tool->id,
+                'integration_id' => $integration->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ToolExecutionResult::failure(
+                error: 'Execution error: '.$e->getMessage(),
+                executionTimeMs: (microtime(true) - $startTime) * 1000,
+            );
+        }
+    }
+
     public function validate(Tool $tool, array $parameters, array $config): array
     {
         $errors = [];
+
+        // Connected tools borrow base URL + auth from the integration; only the
+        // operation lives on the tool, so just the method is required here.
+        if (! empty($config['integration_id'])) {
+            if (empty($config['method'])) {
+                $errors['method'] = 'HTTP method is required';
+            }
+
+            return $errors;
+        }
 
         if (empty($config['base_url'])) {
             $errors['base_url'] = 'Base URL is required';

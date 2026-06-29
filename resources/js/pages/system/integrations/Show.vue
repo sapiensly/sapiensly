@@ -25,6 +25,7 @@ import {
     Send,
     Star,
     Trash2,
+    Wrench,
     XCircle,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
@@ -54,6 +55,14 @@ interface RequestRow {
     sort_order: number;
 }
 
+interface LinkedTool {
+    id: string;
+    name: string;
+    type: string;
+    effect: string | null;
+    status: string;
+}
+
 interface Integration {
     id: string;
     name: string;
@@ -76,7 +85,10 @@ interface Integration {
     masked_auth_config: Record<string, unknown>;
 }
 
-const props = defineProps<{ integration: Integration }>();
+const props = defineProps<{
+    integration: Integration;
+    linkedTools: LinkedTool[];
+}>();
 
 const { t } = useI18n();
 
@@ -85,8 +97,8 @@ const { t } = useI18n();
 // linking them in an MCP tool, so we hide those tabs for them.
 const isMcp = computed(() => props.integration.is_mcp);
 
-const activeTab = ref<'requests' | 'environments' | 'settings'>(
-    props.integration.is_mcp ? 'settings' : 'requests',
+const activeTab = ref<'requests' | 'environments' | 'actions' | 'settings'>(
+    props.integration.is_mcp ? 'actions' : 'requests',
 );
 
 // OAuth2 Authorization-Code integrations need a browser roundtrip to get
@@ -377,6 +389,12 @@ function destroyIntegration(): void {
                             {{ t('system.integrations.tabs.environments') }}
                         </TabsTrigger>
                         <TabsTrigger
+                            value="actions"
+                            class="rounded-pill px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-accent-blue data-[state=active]:text-white data-[state=active]:shadow-btn-primary"
+                        >
+                            {{ t('system.integrations.tabs.actions') }}
+                        </TabsTrigger>
+                        <TabsTrigger
                             value="settings"
                             class="rounded-pill px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-accent-blue data-[state=active]:text-white data-[state=active]:shadow-btn-primary"
                         >
@@ -639,6 +657,87 @@ function destroyIntegration(): void {
                                         </form>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </TabsContent>
+
+                    <!-- ============================ ACTIONS (TOOLS) ============================ -->
+                    <!-- The integration is the connection; each linked tool is an
+                         agent action that runs through it. This makes the
+                         connection → action relationship visible from this side. -->
+                    <TabsContent value="actions" class="mt-4">
+                        <div class="rounded-sp-sm border border-soft bg-navy">
+                            <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
+                                <div
+                                    class="flex size-8 items-center justify-center rounded-xs"
+                                    :style="{
+                                        backgroundColor: `color-mix(in oklab, var(--sp-accent-cyan) 15%, transparent)`,
+                                        color: 'var(--sp-accent-cyan)',
+                                    }"
+                                >
+                                    <Wrench class="size-4" />
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm font-medium text-ink">
+                                        {{ t('system.integrations.tabs.actions') }}
+                                    </p>
+                                    <p class="text-xs text-ink-muted">
+                                        {{ t('system.integrations.show.actions_hint') }}
+                                    </p>
+                                </div>
+                                <a
+                                    :href="isMcp ? '/tools/create?type=mcp' : '/tools/create'"
+                                    class="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                                >
+                                    <Plus class="size-3.5" />
+                                    {{ t('system.integrations.show.new_action') }}
+                                </a>
+                            </div>
+
+                            <div class="px-5 py-4">
+                                <p
+                                    v-if="linkedTools.length === 0"
+                                    class="rounded-xs border border-dashed border-soft bg-white/[0.02] py-8 text-center text-xs text-ink-subtle"
+                                >
+                                    {{ t('system.integrations.show.no_actions') }}
+                                </p>
+
+                                <ul
+                                    v-else
+                                    class="divide-y divide-soft overflow-hidden rounded-xs border border-soft"
+                                >
+                                    <li
+                                        v-for="action in linkedTools"
+                                        :key="action.id"
+                                        class="flex items-center gap-3 bg-white/[0.03] px-4 py-3 transition-colors hover:bg-white/[0.06]"
+                                    >
+                                        <span
+                                            class="inline-flex w-20 shrink-0 justify-center rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted"
+                                        >
+                                            {{ action.type }}
+                                        </span>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="truncate text-sm font-medium text-ink">{{ action.name }}</p>
+                                        </div>
+                                        <span
+                                            v-if="action.effect"
+                                            class="inline-flex items-center rounded-pill border px-2 py-0.5 text-[10px] font-medium"
+                                            :class="
+                                                action.effect === 'write'
+                                                    ? 'border-sp-warning/30 bg-sp-warning/10 text-sp-warning'
+                                                    : 'border-soft bg-surface text-ink-muted'
+                                            "
+                                        >
+                                            {{ action.effect }}
+                                        </span>
+                                        <Link
+                                            :href="`/tools/${action.id}`"
+                                            class="inline-flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                                        >
+                                            <ChevronRight class="size-4" />
+                                        </Link>
+                                    </li>
+                                </ul>
                             </div>
                         </div>
                     </TabsContent>

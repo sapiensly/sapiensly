@@ -1,7 +1,9 @@
 <?php
 
 use App\Enums\AgentStatus;
+use App\Enums\IntegrationAuthType;
 use App\Enums\ToolType;
+use App\Models\Integration;
 use App\Models\Tool;
 use App\Models\User;
 
@@ -190,6 +192,50 @@ describe('store', function () {
             'name' => 'Order API',
             'type' => ToolType::RestApi->value,
         ]);
+    });
+
+    it('creates a connected REST API tool referencing a connection (no base_url needed)', function () {
+        $connection = Integration::factory()->forUser($this->user)->create([
+            'base_url' => 'https://api.example.com',
+            'auth_type' => IntegrationAuthType::BearerToken,
+            'auth_config' => ['token' => 'secret'],
+        ]);
+
+        $data = [
+            'type' => ToolType::RestApi->value,
+            'name' => 'Connected Order API',
+            'config' => [
+                'integration_id' => $connection->id,
+                'method' => 'GET',
+                'path' => '/orders/{id}',
+            ],
+        ];
+
+        $this->actingAs($this->user)
+            ->post(route('tools.store'), $data)
+            ->assertRedirect();
+
+        $tool = Tool::where('name', 'Connected Order API')->first();
+        expect($tool)->not->toBeNull();
+        expect($tool->config['integration_id'])->toBe($connection->id);
+        expect($tool->config)->not->toHaveKey('base_url');
+    });
+
+    it('rejects a connected tool that references an MCP connection', function () {
+        $mcp = Integration::factory()->forUser($this->user)->create([
+            'base_url' => 'https://mcp.example.com',
+            'is_mcp' => true,
+        ]);
+
+        $data = [
+            'type' => ToolType::RestApi->value,
+            'name' => 'Bad Tool',
+            'config' => ['integration_id' => $mcp->id, 'method' => 'GET'],
+        ];
+
+        $this->actingAs($this->user)
+            ->post(route('tools.store'), $data)
+            ->assertSessionHasErrors('config.integration_id');
     });
 
     it('creates a GraphQL tool', function () {

@@ -2,7 +2,9 @@
 
 use App\DTOs\ToolExecutionResult;
 use App\Enums\AgentStatus;
+use App\Enums\IntegrationAuthType;
 use App\Enums\ToolType;
+use App\Models\Integration;
 use App\Models\Tool;
 use App\Models\User;
 use App\Services\Security\Ssrf\DnsResolver;
@@ -342,6 +344,102 @@ describe('GraphqlExecutor', function () {
         $result = $this->executionService->execute($tool, ['id' => '123']);
 
         expect($result->success)->toBeTrue();
+    });
+});
+
+describe('Connected tools (reference a Connection)', function () {
+    it('runs a REST tool through the integration: base URL + auth come from the connection', function () {
+        $integration = Integration::factory()->forUser($this->user)->create([
+            'base_url' => 'https://connected.example.com',
+            'auth_type' => IntegrationAuthType::BearerToken,
+            'auth_config' => ['token' => 'integration-token'],
+        ]);
+
+        Http::fake(function ($request) {
+            expect($request->url())->toContain('connected.example.com/items/123');
+            expect($request->header('Authorization')[0])->toBe('Bearer integration-token');
+
+            return Http::response(['ok' => true], 200);
+        });
+
+        $tool = Tool::factory()->create([
+            'user_id' => $this->user->id,
+            'type' => ToolType::RestApi,
+            'status' => AgentStatus::Active,
+            'config' => [
+                'integration_id' => $integration->id,
+                'method' => 'GET',
+                'path' => '/items/{{id}}',
+            ],
+        ]);
+
+        $result = $this->executionService->execute($tool, ['id' => '123']);
+
+        expect($result->success)->toBeTrue();
+        expect($result->metadata['integration_id'])->toBe($integration->id);
+    });
+
+    it('validates a connected REST tool without requiring base_url', function () {
+        $integration = Integration::factory()->forUser($this->user)->create();
+
+        $tool = Tool::factory()->create([
+            'user_id' => $this->user->id,
+            'type' => ToolType::RestApi,
+            'status' => AgentStatus::Active,
+            'config' => ['integration_id' => $integration->id, 'method' => 'GET'],
+        ]);
+
+        expect($this->executionService->validate($tool, []))->toBeEmpty();
+    });
+
+    it('runs a GraphQL tool through the integration endpoint', function () {
+        $integration = Integration::factory()->forUser($this->user)->create([
+            'base_url' => 'https://connected.example.com/graphql',
+            'auth_type' => IntegrationAuthType::None,
+        ]);
+
+        Http::fake(function ($request) {
+            expect($request->url())->toBe('https://connected.example.com/graphql');
+
+            return Http::response(['data' => ['order' => ['id' => '123']]], 200);
+        });
+
+        $tool = Tool::factory()->create([
+            'user_id' => $this->user->id,
+            'type' => ToolType::Graphql,
+            'status' => AgentStatus::Active,
+            'config' => [
+                'integration_id' => $integration->id,
+                'operation_type' => 'query',
+                'operation' => 'query GetOrder($id: ID!) { order(id: $id) { id } }',
+            ],
+        ]);
+
+        $result = $this->executionService->execute($tool, ['id' => '123']);
+
+        expect($result->success)->toBeTrue();
+        expect($result->data['order']['id'])->toBe('123');
+    });
+
+    it('routes test-connection through the connection', function () {
+        $integration = Integration::factory()->forUser($this->user)->create([
+            'base_url' => 'https://connected.example.com',
+            'auth_type' => IntegrationAuthType::None,
+        ]);
+
+        Http::fake(['connected.example.com/*' => Http::response(['ok' => true], 200)]);
+
+        $tool = Tool::factory()->create([
+            'user_id' => $this->user->id,
+            'type' => ToolType::RestApi,
+            'status' => AgentStatus::Active,
+            'config' => ['integration_id' => $integration->id, 'method' => 'GET'],
+        ]);
+
+        $result = $this->executionService->testConnection($tool);
+
+        expect($result->success)->toBeTrue();
+        expect($result->metadata['integration_id'])->toBe($integration->id);
     });
 });
 

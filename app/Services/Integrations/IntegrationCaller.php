@@ -28,7 +28,9 @@ class IntegrationCaller
     ) {}
 
     /**
-     * @param  array<string, mixed>  $options  query?, json?
+     * @param  array<string, mixed>  $options  query?, json?, headers? — caller
+     *                                         headers merge on top of the auth
+     *                                         headers the strategy applies.
      */
     public function send(Integration $integration, string $method, string $path, array $options = []): Response
     {
@@ -38,15 +40,20 @@ class IntegrationCaller
         }
 
         $applied = $this->authFactory->make($integration->auth_type)->apply($integration->auth_config ?? []);
-        $url = rtrim((string) $integration->base_url, '/').'/'.ltrim($path, '/');
+
+        // An empty path means "hit the base URL as-is" (e.g. a GraphQL endpoint
+        // that already encodes its full path); don't append a stray slash.
+        $base = rtrim((string) $integration->base_url, '/');
+        $url = $path === '' ? $base : $base.'/'.ltrim($path, '/');
         $this->ssrf->assertHostAllowed($url);
 
+        $headers = array_merge($applied['headers'] ?? [], (array) ($options['headers'] ?? []));
         $guzzle = ['query' => array_merge($applied['query'] ?? [], (array) ($options['query'] ?? []))];
         if (array_key_exists('json', $options)) {
             $guzzle['json'] = $options['json'];
         }
 
-        return Http::withHeaders($applied['headers'] ?? [])
+        return Http::withHeaders($headers)
             ->timeout(self::TIMEOUT)
             ->send(strtoupper($method), $url, $guzzle);
     }

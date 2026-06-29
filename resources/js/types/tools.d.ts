@@ -56,11 +56,23 @@ export interface McpConnectionOption {
     connected: boolean;
 }
 
+/**
+ * A non-MCP Connection (HTTP/REST/GraphQL integration) an http/graphql tool can
+ * borrow its base URL + auth from instead of carrying them inline.
+ */
+export interface HttpConnectionOption {
+    id: string;
+    name: string;
+    base_url: string;
+    auth_type: string;
+}
+
 export interface GroupConfig {
     tool_ids?: string[];
 }
 
 export interface RestApiConfig {
+    integration_id?: string;
     base_url?: string;
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     path?: string;
@@ -73,6 +85,7 @@ export interface RestApiConfig {
 }
 
 export interface GraphqlConfig {
+    integration_id?: string;
     endpoint?: string;
     operation_type?: 'query' | 'mutation';
     operation?: string;

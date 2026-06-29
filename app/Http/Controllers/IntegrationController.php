@@ -7,6 +7,7 @@ use App\Enums\Visibility;
 use App\Http\Requests\Integrations\StoreIntegrationRequest;
 use App\Http\Requests\Integrations\UpdateIntegrationRequest;
 use App\Models\Integration;
+use App\Models\Tool;
 use App\Services\Integrations\IntegrationService;
 use App\Services\Integrations\OAuth2\OAuth2DiscoveryService;
 use Illuminate\Http\JsonResponse;
@@ -69,7 +70,7 @@ class IntegrationController extends Controller
         return to_route('system.integrations.show', ['integration' => $integration->id]);
     }
 
-    public function show(Integration $integration): Response
+    public function show(Request $request, Integration $integration): Response
     {
         $this->authorize('view', $integration);
 
@@ -77,7 +78,33 @@ class IntegrationController extends Controller
 
         return Inertia::render('system/integrations/Show', [
             'integration' => $this->present($integration),
+            'linkedTools' => $this->linkedTools($request, $integration),
         ]);
+    }
+
+    /**
+     * The Tools (agent actions) that run against this connection, i.e. tools
+     * whose `config.integration_id` points at this integration. An integration
+     * is the *connection*; each linked tool is an *action* an agent can take
+     * through it. Scoped to what the viewer can see.
+     *
+     * @return array<int, array{id: string, name: string, type: string, effect: string|null, status: string}>
+     */
+    private function linkedTools(Request $request, Integration $integration): array
+    {
+        return Tool::query()
+            ->forAccountContext($request->user())
+            ->where('config->integration_id', $integration->id)
+            ->orderBy('name')
+            ->get(['id', 'name', 'type', 'effect', 'status'])
+            ->map(fn (Tool $tool): array => [
+                'id' => $tool->id,
+                'name' => $tool->name,
+                'type' => $tool->type->value,
+                'effect' => $tool->effect?->value,
+                'status' => $tool->status->value,
+            ])
+            ->all();
     }
 
     public function edit(Integration $integration): Response

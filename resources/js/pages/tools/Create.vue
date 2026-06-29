@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
+    HttpConnectionOption,
     McpConnectionOption,
     ToolReference,
     ToolType,
@@ -42,6 +43,7 @@ interface Props {
     toolTypes: ToolTypeOption[];
     availableTools: ToolReference[];
     mcpConnections: McpConnectionOption[];
+    httpConnections: HttpConnectionOption[];
 }
 
 const props = defineProps<Props>();
@@ -81,24 +83,41 @@ const getDefaultConfig = (type: ToolType): Record<string, unknown> => {
                 auth_config: {},
             };
         case 'rest_api':
-            return {
-                base_url: '',
-                method: 'GET',
-                path: '',
-                headers: {},
-                auth_type: 'none',
-                auth_config: {},
-                request_body_template: '',
-            };
+            // Default to the connected path when a connection exists; fall back
+            // to inline only when there's nothing to connect to yet.
+            return props.httpConnections.length > 0
+                ? {
+                      integration_id: props.httpConnections[0].id,
+                      method: 'GET',
+                      path: '',
+                      headers: {},
+                      request_body_template: '',
+                  }
+                : {
+                      base_url: '',
+                      method: 'GET',
+                      path: '',
+                      headers: {},
+                      auth_type: 'none',
+                      auth_config: {},
+                      request_body_template: '',
+                  };
         case 'graphql':
-            return {
-                endpoint: '',
-                operation_type: 'query',
-                operation: '',
-                variables_template: {},
-                auth_type: 'none',
-                auth_config: {},
-            };
+            return props.httpConnections.length > 0
+                ? {
+                      integration_id: props.httpConnections[0].id,
+                      operation_type: 'query',
+                      operation: '',
+                      variables_template: {},
+                  }
+                : {
+                      endpoint: '',
+                      operation_type: 'query',
+                      operation: '',
+                      variables_template: {},
+                      auth_type: 'none',
+                      auth_config: {},
+                  };
         case 'database':
             return {
                 driver: 'pgsql',
@@ -262,12 +281,14 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                     <RestApiToolConfig
                         v-else-if="currentType === 'rest_api'"
                         v-model:config="form.config"
+                        :connections="httpConnections"
                         :errors="form.errors"
                     />
 
                     <GraphqlToolConfig
                         v-else-if="currentType === 'graphql'"
                         v-model:config="form.config"
+                        :connections="httpConnections"
                         :errors="form.errors"
                     />
 

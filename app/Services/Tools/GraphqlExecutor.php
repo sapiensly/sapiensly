@@ -4,7 +4,9 @@ namespace App\Services\Tools;
 
 use App\Contracts\ToolExecutor;
 use App\DTOs\ToolExecutionResult;
+use App\Models\Integration;
 use App\Models\Tool;
+use App\Services\Integrations\IntegrationCaller;
 use App\Services\Security\Ssrf\SafeHttpClient;
 use App\Services\Security\Ssrf\SsrfBlockedException;
 use App\Services\Tools\Concerns\SubstitutesParameters;
@@ -17,10 +19,20 @@ class GraphqlExecutor implements ToolExecutor
 
     private const TIMEOUT_SECONDS = 30;
 
-    public function __construct(private SafeHttpClient $safeHttp) {}
+    public function __construct(
+        private SafeHttpClient $safeHttp,
+        private ToolConnectionResolver $connections,
+        private IntegrationCaller $caller,
+    ) {}
 
     public function execute(Tool $tool, array $parameters, array $config): ToolExecutionResult
     {
+        // Connected tools borrow the endpoint + auth from the integration.
+        $integration = $this->connections->resolve($tool);
+        if ($integration instanceof Integration) {
+            return $this->executeViaConnection($tool, $integration, $parameters, $config);
+        }
+
         $startTime = microtime(true);
 
         try {
@@ -118,9 +130,91 @@ class GraphqlExecutor implements ToolExecutor
         }
     }
 
+    /**
+     * Run through a Connection: the integration's base URL is the GraphQL
+     * endpoint and supplies auth + SSRF guard + token refresh; the tool config
+     * supplies only the operation and variables.
+     */
+    private function executeViaConnection(Tool $tool, Integration $integration, array $parameters, array $config): ToolExecutionResult
+    {
+        $startTime = microtime(true);
+
+        try {
+            $operation = $config['operation'] ?? '';
+            $variables = $this->buildVariables($config, $parameters);
+
+            $response = $this->caller->send($integration, 'POST', '', [
+                'headers' => ['Content-Type' => 'application/json', 'Accept' => 'application/json'],
+                'json' => [
+                    'query' => $operation,
+                    'variables' => $variables,
+                ],
+            ]);
+
+            $executionTimeMs = (microtime(true) - $startTime) * 1000;
+            $body = $response->json();
+
+            if (isset($body['errors']) && ! empty($body['errors'])) {
+                $errorMessages = collect($body['errors'])->pluck('message')->implode('; ');
+
+                return ToolExecutionResult::failure(
+                    error: 'GraphQL errors: '.$errorMessages,
+                    statusCode: $response->status(),
+                    metadata: [
+                        'integration_id' => $integration->id,
+                        'operation_type' => $config['operation_type'] ?? 'query',
+                        'errors' => $body['errors'],
+                    ],
+                    executionTimeMs: $executionTimeMs,
+                );
+            }
+
+            if (! $response->successful()) {
+                return ToolExecutionResult::failure(
+                    error: "HTTP {$response->status()}: ".$response->body(),
+                    statusCode: $response->status(),
+                    metadata: ['integration_id' => $integration->id],
+                    executionTimeMs: $executionTimeMs,
+                );
+            }
+
+            $data = $this->mapResponse($body['data'] ?? $body, $config);
+
+            return ToolExecutionResult::success(
+                data: $data,
+                metadata: [
+                    'integration_id' => $integration->id,
+                    'operation_type' => $config['operation_type'] ?? 'query',
+                ],
+                executionTimeMs: $executionTimeMs,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('GraphQL tool (connected) failed', [
+                'tool_id' => $tool->id,
+                'integration_id' => $integration->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ToolExecutionResult::failure(
+                error: 'Execution error: '.$e->getMessage(),
+                executionTimeMs: (microtime(true) - $startTime) * 1000,
+            );
+        }
+    }
+
     public function validate(Tool $tool, array $parameters, array $config): array
     {
         $errors = [];
+
+        // Connected tools borrow the endpoint + auth from the integration; only
+        // the operation lives on the tool.
+        if (! empty($config['integration_id'])) {
+            if (empty($config['operation'])) {
+                $errors['operation'] = 'GraphQL operation is required';
+            }
+
+            return $errors;
+        }
 
         if (empty($config['endpoint'])) {
             $errors['endpoint'] = 'GraphQL endpoint is required';

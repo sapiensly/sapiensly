@@ -34,6 +34,7 @@ import {
     KeyRound,
     Layers,
     Pencil,
+    Plug,
     RefreshCw,
     Search,
     Server,
@@ -51,12 +52,22 @@ interface McpAuthorization {
     integration_name: string;
 }
 
+interface LinkedIntegration {
+    id: string;
+    name: string;
+    is_mcp: boolean;
+}
+
 interface Props {
     tool: Tool;
     mcpAuthorization?: McpAuthorization | null;
+    linkedIntegration?: LinkedIntegration | null;
 }
 
-const props = withDefaults(defineProps<Props>(), { mcpAuthorization: null });
+const props = withDefaults(defineProps<Props>(), {
+    mcpAuthorization: null,
+    linkedIntegration: null,
+});
 
 // MCP server tool catalog — the tools the connected server exposes.
 const initialMcpConfig =
@@ -438,6 +449,22 @@ const databaseConfig = computed(() => {
                                     </dt>
                                     <dd class="mt-1 capitalize">
                                         {{ tool.type }}
+                                    </dd>
+                                </div>
+                                <div v-if="linkedIntegration">
+                                    <dt
+                                        class="text-sm font-medium text-muted-foreground"
+                                    >
+                                        {{ t('tools.show.connection') }}
+                                    </dt>
+                                    <dd class="mt-1">
+                                        <Link
+                                            :href="`/system/integrations/${linkedIntegration.id}`"
+                                            class="inline-flex items-center gap-1.5 text-accent-blue transition-colors hover:underline"
+                                        >
+                                            <Plug class="size-3.5" />
+                                            {{ linkedIntegration.name }}
+                                        </Link>
                                     </dd>
                                 </div>
                                 <div v-if="mcpAuthorization">

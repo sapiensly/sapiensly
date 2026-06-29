@@ -3,6 +3,7 @@
 namespace App\Support\Tools;
 
 use App\Models\User;
+use App\Rules\AccessibleIntegration;
 use App\Rules\AccessibleOAuth2Integration;
 use Illuminate\Validation\Rule;
 
@@ -24,8 +25,8 @@ class ToolConfigRules
         return match ($type) {
             'function' => self::function(),
             'mcp' => self::mcp($user),
-            'rest_api' => self::restApi(),
-            'graphql' => self::graphql(),
+            'rest_api' => self::restApi($user),
+            'graphql' => self::graphql($user),
             'database' => self::database(),
             default => [],
         };
@@ -62,16 +63,21 @@ class ToolConfigRules
     }
 
     /**
+     * A connected tool borrows base URL + auth from its Connection
+     * (integration), so those become optional; a legacy self-contained tool
+     * still supplies them inline. Exactly one mode applies per tool.
+     *
      * @return array<string, mixed>
      */
-    private static function restApi(): array
+    private static function restApi(?User $user): array
     {
         return [
-            'config.base_url' => ['required', 'string', 'url', 'max:500'],
+            'config.integration_id' => ['nullable', 'string', new AccessibleIntegration($user)],
+            'config.base_url' => ['required_without:config.integration_id', 'nullable', 'string', 'url', 'max:500'],
             'config.method' => ['required', 'string', Rule::in(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])],
             'config.path' => ['nullable', 'string', 'max:500'],
             'config.headers' => ['nullable', 'array'],
-            'config.auth_type' => ['required', 'string', Rule::in(['none', 'bearer', 'api_key', 'basic', 'oauth2'])],
+            'config.auth_type' => ['required_without:config.integration_id', 'nullable', 'string', Rule::in(['none', 'bearer', 'api_key', 'basic', 'oauth2'])],
             'config.auth_config' => ['nullable', 'array'],
             'config.request_body_template' => ['nullable', 'string'],
             'config.response_mapping' => ['nullable', 'array'],
@@ -81,10 +87,11 @@ class ToolConfigRules
     /**
      * @return array<string, mixed>
      */
-    private static function graphql(): array
+    private static function graphql(?User $user): array
     {
         return [
-            'config.endpoint' => ['required', 'string', 'url', 'max:500'],
+            'config.integration_id' => ['nullable', 'string', new AccessibleIntegration($user)],
+            'config.endpoint' => ['required_without:config.integration_id', 'nullable', 'string', 'url', 'max:500'],
             'config.operation_type' => ['required', 'string', Rule::in(['query', 'mutation'])],
             'config.operation' => ['required', 'string', 'max:10000'],
             'config.variables_template' => ['nullable', 'array'],
