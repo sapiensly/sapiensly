@@ -319,6 +319,10 @@ class AppBuilderController extends Controller
             // Claude vision accepts. 5 MB matches the model's per-image cap
             // with headroom for multipart overhead.
             'attachment' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp,gif', 'max:5120'],
+            // Autonomous mode: when true, the builder keeps working the build
+            // plan across turns on its own (up to a hard cap) until the plan is
+            // done or a turn stops advancing it.
+            'autonomous' => ['nullable', 'boolean'],
         ]);
 
         $conversation = $this->loadConversation($app, $data['conversation_id'], $request->user()->id);
@@ -367,7 +371,10 @@ class AppBuilderController extends Controller
             'status' => 'streaming',
         ]);
 
-        RunBuilderAiJob::dispatch($placeholder->id, $data['message'], $attachmentPath, $attachmentDisk, $data['model'] ?? null);
+        // Seed the autonomous budget only when asked; a normal turn passes 0.
+        $autonomousRemaining = ($data['autonomous'] ?? false) ? BuilderAiService::AUTONOMOUS_MAX_TURNS : 0;
+
+        RunBuilderAiJob::dispatch($placeholder->id, $data['message'], $attachmentPath, $attachmentDisk, $data['model'] ?? null, $autonomousRemaining);
 
         return response()->json([
             'conversation_id' => $conversation->id,

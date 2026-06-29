@@ -39,17 +39,17 @@ import {
 } from '@/lib/builderSlashCommands';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
+import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
-import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
-import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
 import type {
     BlockData,
     ObjectDef,
     PageDef,
     PageSummary,
 } from '@/runtime/types/manifest';
+import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
 import { Head, Link, router } from '@inertiajs/vue3';
 import axios from 'axios';
 import { toast } from 'vue-sonner';
@@ -102,6 +102,7 @@ import {
     Wand2,
     Workflow as WorkflowIcon,
     X,
+    Zap,
 } from '@lucide/vue';
 import html2canvas from 'html2canvas-pro';
 import { marked } from 'marked';
@@ -232,6 +233,9 @@ const buildPlan = computed<BuildPlanData | null>(
     () => props.conversation.build_plan ?? null,
 );
 const input = ref('');
+// Autonomous mode: when on, a send kicks off a server-driven loop that works the
+// build plan across turns on its own until it's done or stops advancing.
+const autonomous = ref(false);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
 const sending = ref(false);
 const errorText = ref<string | null>(null);
@@ -1306,6 +1310,7 @@ async function send() {
             form.append('message', messageText);
             form.append('attachment', stagedFile);
             if (selectedModel.value) form.append('model', selectedModel.value);
+            if (autonomous.value) form.append('autonomous', '1');
             response = await axios.post(
                 `/apps/${props.app.id}/builder/messages`,
                 form,
@@ -1321,6 +1326,7 @@ async function send() {
                     conversation_id: conversationId.value,
                     message: messageText,
                     model: selectedModel.value || undefined,
+                    autonomous: autonomous.value || undefined,
                 },
                 { timeout: 10_000 },
             );
@@ -2384,6 +2390,27 @@ function statusTone(status: Message['status']): string {
                                 class="mt-2 flex items-center justify-between gap-2"
                             >
                                 <div class="flex items-center gap-1.5">
+                                    <!-- Autonomous mode toggle: when on, a send
+                                         drives the build plan across turns on its
+                                         own until done or it stops advancing. -->
+                                    <button
+                                        type="button"
+                                        :title="
+                                            t('apps.builder.autonomous_hint')
+                                        "
+                                        :aria-pressed="autonomous"
+                                        class="inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors"
+                                        :class="
+                                            autonomous
+                                                ? 'border-accent-blue/40 bg-accent-blue/10 text-accent-blue'
+                                                : 'border-medium bg-surface text-ink-muted hover:text-ink'
+                                        "
+                                        @click="autonomous = !autonomous"
+                                    >
+                                        <Zap class="size-3.5" />
+                                        {{ t('apps.builder.autonomous') }}
+                                    </button>
+
                                     <!-- Contextual suggestions, tucked behind an
                                          icon so they don't crowd the composer.
                                          Each item pre-fills the textarea. -->
@@ -2768,7 +2795,9 @@ function statusTone(status: Message['status']): string {
                                             class="flex min-w-0 flex-col justify-center gap-0.5"
                                         >
                                             <BlockBreadcrumb
-                                                :block="(previewBreadcrumbBlock as any)"
+                                                :block="
+                                                    previewBreadcrumbBlock as any
+                                                "
                                             />
                                             <h1
                                                 class="truncate text-lg leading-tight font-bold tracking-tight"

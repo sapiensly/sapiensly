@@ -580,6 +580,41 @@ it('forwards a chosen model to the builder job', function () {
     );
 });
 
+it('seeds the autonomous budget when autonomous is requested', function () {
+    Queue::fake();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/messages", [
+            'conversation_id' => $conv->id, 'message' => 'construye todo el plan', 'autonomous' => true,
+        ])
+        ->assertOk();
+
+    Queue::assertPushed(
+        RunBuilderAiJob::class,
+        fn (RunBuilderAiJob $job) => $job->autonomousRemaining === BuilderAiService::AUTONOMOUS_MAX_TURNS,
+    );
+});
+
+it('a normal turn carries no autonomous budget', function () {
+    Queue::fake();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/messages", [
+            'conversation_id' => $conv->id, 'message' => 'un cambio chico',
+        ])
+        ->assertOk();
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn (RunBuilderAiJob $job) => $job->autonomousRemaining === 0);
+});
+
 it('rejects a model that is not an enabled chat model', function () {
     Queue::fake();
 

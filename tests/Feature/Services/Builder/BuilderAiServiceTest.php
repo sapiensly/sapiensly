@@ -14,6 +14,7 @@ use App\Ai\Tools\Builder\SetBuildPlanTool;
 use App\Ai\Tools\Builder\SimulateQueryTool;
 use App\Ai\Tools\Builder\TargetPlanStepsTool;
 use App\Ai\Tools\Builder\ValidateManifestTool;
+use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
@@ -30,6 +31,7 @@ use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
 use App\Services\Storage\TenantStorage;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
@@ -439,6 +441,63 @@ it('revertMessage reopens build-plan steps closed by the reverted version', func
     expect($conv->build_plan['steps'][0]['status'])->toBe('pending')
         ->and($conv->build_plan['steps'][0]['applied_version_id'])->toBeNull()
         ->and($conv->build_plan['status'])->toBe('active');
+});
+
+it('autonomousDecision continues only when budget remains, plan is active, and the turn progressed', function () {
+    $activePlan = ['status' => 'active', 'steps' => [['id' => 'stp_a', 'status' => 'pending']]];
+
+    expect($this->service->autonomousDecision($activePlan, 'applied', ['stp_a'], 5)['continue'])->toBeTrue();
+    expect($this->service->autonomousDecision($activePlan, 'applied', ['stp_a'], 0))
+        ->toMatchArray(['continue' => false, 'reason' => 'cap']);
+    expect($this->service->autonomousDecision(['status' => 'done', 'steps' => []], 'applied', ['stp_a'], 5))
+        ->toMatchArray(['continue' => false, 'reason' => 'plan_complete']);
+    expect($this->service->autonomousDecision(null, 'applied', ['stp_a'], 5))
+        ->toMatchArray(['continue' => false, 'reason' => 'plan_complete']);
+    // Applied but closed no step, or no proposal at all → halt (anti-runaway).
+    expect($this->service->autonomousDecision($activePlan, 'applied', [], 5))
+        ->toMatchArray(['continue' => false, 'reason' => 'no_progress']);
+    expect($this->service->autonomousDecision($activePlan, 'none', null, 5))
+        ->toMatchArray(['continue' => false, 'reason' => 'no_progress']);
+});
+
+it('continueAutonomously queues the next turn when the plan advanced', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'detail' => null, 'status' => 'done', 'applied_version_id' => 'apv_1', 'version_number' => 2, 'closed_by_summary' => null, 'error' => null],
+        ['id' => 'stp_b', 'title' => 'B', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+    ]]]);
+
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => 'hecho A',
+        'status' => 'applied', 'applied_version_id' => 'apv_1', 'plan_step_ids' => ['stp_a'],
+    ]);
+
+    $this->service->continueAutonomously($finished, 5, 'claude-haiku-4-5-20251001');
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn (RunBuilderAiJob $job) => $job->autonomousRemaining === 4
+        && $job->modelOverride === 'claude-haiku-4-5-20251001');
+    // A fresh user turn + assistant placeholder were created for the next step.
+    expect($conv->messages()->where('role', 'user')->where('content', 'like', '%autónomo%')->exists())->toBeTrue();
+});
+
+it('continueAutonomously halts and notes when the turn did not advance the plan', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+    ]]]);
+
+    // A phantom turn: applied nothing, closed no step.
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => 'dije que lo hice',
+        'status' => 'none', 'applied_version_id' => null, 'plan_step_ids' => null,
+    ]);
+
+    $this->service->continueAutonomously($finished, 5, null);
+
+    Queue::assertNotPushed(RunBuilderAiJob::class);
+    expect($conv->messages()->where('content', 'like', '%no avanzó%')->exists())->toBeTrue();
 });
 
 it('ProposeChangeTool fires the onProgress checkpoint only on a successful proposal', function () {

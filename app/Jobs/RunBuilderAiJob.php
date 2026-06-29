@@ -51,6 +51,13 @@ class RunBuilderAiJob implements ShouldQueue
          * default chat path leaves this null and falls back to Haiku.
          */
         public ?string $modelOverride = null,
+        /**
+         * Autonomous-mode budget: how many MORE turns may auto-continue after
+         * this one. >0 means that, once this turn finishes, the builder queues
+         * the next step of the build plan itself (down to 0). 0 = a normal,
+         * single user-driven turn. See BuilderAiService::continueAutonomously.
+         */
+        public int $autonomousRemaining = 0,
     ) {}
 
     /**
@@ -76,13 +83,20 @@ class RunBuilderAiJob implements ShouldQueue
             return;
         }
 
-        $service->streamMessage(
+        $finished = $service->streamMessage(
             $message,
             $this->userText,
             $this->attachmentPath,
             $this->attachmentDisk,
             $this->modelOverride,
         );
+
+        // Autonomous mode: let the builder queue the next plan step itself,
+        // until the plan is complete, the turn stops advancing it, or the cap
+        // is hit (see continueAutonomously).
+        if ($this->autonomousRemaining > 0) {
+            $service->continueAutonomously($finished, $this->autonomousRemaining, $this->modelOverride);
+        }
     }
 
     /**

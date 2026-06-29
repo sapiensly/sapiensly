@@ -35,6 +35,7 @@ use App\Events\Builder\BuilderActivity;
 use App\Events\Builder\BuilderStreamChunk;
 use App\Events\Builder\BuilderStreamComplete;
 use App\Events\Builder\BuilderStreamError;
+use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
@@ -88,6 +89,13 @@ class BuilderAiService
     public const VISUAL_REVIEW_MODEL = 'claude-sonnet-4-5-20250929';
 
     private const MAX_HISTORY_MESSAGES = 30;
+
+    /**
+     * Hard ceiling on consecutive auto-continued turns in autonomous mode — a
+     * runaway/token backstop. The loop normally stops earlier (plan complete or
+     * a turn that didn't advance the plan).
+     */
+    public const AUTONOMOUS_MAX_TURNS = 8;
 
     /** The default builder model id, exposed so the UI can pre-select it in the model picker. */
     public static function defaultModel(): string
@@ -778,6 +786,105 @@ class BuilderAiService
         $conversation->update(['build_plan' => $plan]);
 
         return $targeted;
+    }
+
+    /**
+     * Decide whether autonomous mode should run another turn, given the just-
+     * finished turn's outcome and the live plan. Pure (takes primitives) so the
+     * loop's stop conditions are unit-testable. Continue only when budget
+     * remains, the plan is still active, AND the turn actually advanced the plan
+     * (a real version closed ≥1 step) — so a phantom/no-op turn HALTS the loop
+     * instead of spinning.
+     *
+     * @param  array<string, mixed>|null  $plan
+     * @param  list<string>|null  $closedStepIds
+     * @return array{continue: bool, reason: string}
+     */
+    public function autonomousDecision(?array $plan, string $turnStatus, ?array $closedStepIds, int $remaining): array
+    {
+        if ($remaining <= 0) {
+            return ['continue' => false, 'reason' => 'cap'];
+        }
+        if (! is_array($plan) || ($plan['status'] ?? null) !== 'active') {
+            return ['continue' => false, 'reason' => 'plan_complete'];
+        }
+        if ($turnStatus !== 'applied' || empty($closedStepIds)) {
+            return ['continue' => false, 'reason' => 'no_progress'];
+        }
+
+        return ['continue' => true, 'reason' => 'continue'];
+    }
+
+    /**
+     * After an autonomous turn, either queue the next one (one turn per job, so
+     * each respects the per-turn wall-clock) or post a short note explaining why
+     * the loop stopped. Called by RunBuilderAiJob; a no-op when $remaining is 0.
+     */
+    public function continueAutonomously(BuilderMessage $finished, int $remaining, ?string $modelOverride = null): void
+    {
+        if ($remaining <= 0) {
+            return;
+        }
+
+        $conversation = $finished->conversation;
+        $conversation->refresh();
+
+        $decision = $this->autonomousDecision(
+            $conversation->build_plan,
+            (string) $finished->status,
+            $finished->plan_step_ids,
+            $remaining,
+        );
+
+        if (! $decision['continue']) {
+            $this->noteAutonomousStop($conversation, $decision['reason']);
+
+            return;
+        }
+
+        $prompt = '(modo autónomo) Continúa con el siguiente paso pendiente del plan: márcalo con target_plan_steps y aplícalo con propose_change.';
+
+        BuilderMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'user',
+            'content' => $prompt,
+            'status' => 'none',
+        ]);
+
+        $placeholder = BuilderMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'assistant',
+            'content' => '',
+            'status' => 'streaming',
+        ]);
+
+        RunBuilderAiJob::dispatch($placeholder->id, $prompt, null, null, $modelOverride, $remaining - 1);
+    }
+
+    /**
+     * Post a one-line assistant note when the autonomous loop stops, so the user
+     * sees why. Silent for an ordinary completed plan with nothing left to say.
+     */
+    private function noteAutonomousStop(BuilderConversation $conversation, string $reason): void
+    {
+        $text = match ($reason) {
+            'plan_complete' => '✅ Plan completado.',
+            'cap' => 'Pausé el modo autónomo tras varios pasos automáticos. Dime «continúa» para seguir.',
+            'no_progress' => 'Pausé el modo autónomo: el último turno no avanzó el plan. ¿Cómo quieres que siga?',
+            default => null,
+        };
+        if ($text === null) {
+            return;
+        }
+
+        $note = BuilderMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'assistant',
+            'content' => $text,
+            'status' => 'none',
+        ]);
+
+        $this->safeBroadcast(fn () => BuilderStreamComplete::dispatch($note->refresh()));
     }
 
     /**

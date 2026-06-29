@@ -492,6 +492,8 @@
     "apps.builder.visual_review_tooltip": "Send a screenshot of this page to the AI for a visual review.",
     "apps.builder.manifest_heading": "Active manifest",
     "apps.builder.input_placeholder": "Describe what to change…",
+    "apps.builder.autonomous": "Auto",
+    "apps.builder.autonomous_hint": "Autonomous mode: work the build plan step by step on its own until it's done.",
     "apps.builder.model_picker_label": "AI model",
     "apps.builder.panel_options": "Panel options",
     "apps.builder.input_thinking": "Thinking…",
