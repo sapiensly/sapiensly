@@ -47,4 +47,14 @@ class BuilderConversation extends Model
     {
         return $this->hasMany(BuilderMessage::class, 'conversation_id')->orderBy('created_at');
     }
+
+    /**
+     * Conversations whose build plan still has open work — i.e. an operator or a
+     * scheduled loop could resume them (via continue_builder_conversation).
+     * Reads the indexed generated column, not the jsonb.
+     */
+    public function scopeWithActivePlan($query)
+    {
+        return $query->where('build_plan_status', 'active');
+    }
 }

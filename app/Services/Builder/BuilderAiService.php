@@ -35,6 +35,7 @@ use App\Events\Builder\BuilderActivity;
 use App\Events\Builder\BuilderStreamChunk;
 use App\Events\Builder\BuilderStreamComplete;
 use App\Events\Builder\BuilderStreamError;
+use App\Events\Builder\BuilderTurnQueued;
 use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
 use App\Models\AppVersion;
@@ -844,7 +845,7 @@ class BuilderAiService
 
         $prompt = '(modo autónomo) Continúa con el siguiente paso pendiente del plan: márcalo con target_plan_steps y aplícalo con propose_change.';
 
-        BuilderMessage::create([
+        $userTurn = BuilderMessage::create([
             'conversation_id' => $conversation->id,
             'role' => 'user',
             'content' => $prompt,
@@ -857,6 +858,14 @@ class BuilderAiService
             'content' => '',
             'status' => 'streaming',
         ]);
+
+        // No HTTP response carries these (the loop is server-driven), so push
+        // them to the client now — it appends them and streams the placeholder
+        // live, instead of only seeing the turn after it completes + reloads.
+        $this->safeBroadcast(fn () => BuilderTurnQueued::dispatch($conversation->id, [
+            $this->autonomousTurnDto($userTurn),
+            $this->autonomousTurnDto($placeholder),
+        ]));
 
         RunBuilderAiJob::dispatch($placeholder->id, $prompt, null, null, $modelOverride, $remaining - 1);
     }
@@ -884,7 +893,34 @@ class BuilderAiService
             'status' => 'none',
         ]);
 
-        $this->safeBroadcast(fn () => BuilderStreamComplete::dispatch($note->refresh()));
+        $this->safeBroadcast(fn () => BuilderTurnQueued::dispatch($conversation->id, [
+            $this->autonomousTurnDto($note),
+        ]));
+    }
+
+    /**
+     * Serialize a freshly-created message for BuilderTurnQueued — same shape the
+     * frontend's Message uses, so it can append it directly.
+     *
+     * @return array<string, mixed>
+     */
+    private function autonomousTurnDto(BuilderMessage $m): array
+    {
+        return [
+            'id' => $m->id,
+            'role' => $m->role,
+            'content' => $m->content,
+            'proposed_patch' => $m->proposed_patch,
+            'change_summary' => $m->change_summary,
+            'plan' => $m->plan,
+            'integration_proposal' => $m->integration_proposal,
+            'status' => $m->status,
+            'applied_version_id' => $m->applied_version_id,
+            'plan_step_ids' => $m->plan_step_ids,
+            'attachment_url' => null,
+            'attachment_mime' => $m->attachment_mime,
+            'created_at' => $m->created_at?->toIso8601String(),
+        ];
     }
 
     /**

@@ -481,6 +481,21 @@ it('continueAutonomously queues the next turn when the plan advanced', function 
     expect($conv->messages()->where('role', 'user')->where('content', 'like', '%autónomo%')->exists())->toBeTrue();
 });
 
+it('build_plan_status mirrors the plan status and withActivePlan finds open plans', function () {
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'status' => 'pending'],
+    ]]]);
+
+    expect($conv->fresh()->build_plan_status)->toBe('active')
+        ->and(BuilderConversation::withActivePlan()->whereKey($conv->id)->exists())->toBeTrue();
+
+    $conv->update(['build_plan' => ['schema' => 1, 'status' => 'done', 'steps' => []]]);
+
+    expect($conv->fresh()->build_plan_status)->toBe('done')
+        ->and(BuilderConversation::withActivePlan()->whereKey($conv->id)->exists())->toBeFalse();
+});
+
 it('continueAutonomously halts and notes when the turn did not advance the plan', function () {
     Queue::fake();
     $conv = $this->service->startConversation($this->testApp, $this->user);

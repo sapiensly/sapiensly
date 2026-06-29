@@ -134,6 +134,27 @@ it('get_builder_conversation withholds the full patch unless include_patches is 
         ->assertSee('"op":"add"');
 });
 
+it('exposes the build plan: list shows plan_status, get returns the plan', function () {
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+        'build_plan' => ['schema' => 1, 'goal' => 'POS', 'status' => 'active', 'steps' => [
+            ['id' => 'stp_a', 'title' => 'Objetos', 'status' => 'done'],
+            ['id' => 'stp_b', 'title' => 'Páginas', 'status' => 'pending'],
+        ]],
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ListBuilderConversationsTool::class, ['app_slug' => $this->testApp->slug])
+        ->assertOk()
+        ->assertSee('plan_status');
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetBuilderConversationTool::class, ['conversation_id' => $conv->id])
+        ->assertOk()
+        ->assertSee('build_plan')
+        ->assertSee('Páginas');
+});
+
 it('get_builder_conversation rejects an unknown id', function () {
     SapiensServer::actingAs($this->user)
         ->tool(GetBuilderConversationTool::class, ['conversation_id' => 'cnv_nope'])

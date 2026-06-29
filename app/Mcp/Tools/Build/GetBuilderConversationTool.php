@@ -64,6 +64,9 @@ class GetBuilderConversationTool extends SapiensTool
                 'status' => $conversation->status,
                 'user_id' => $conversation->user_id,
                 'created_at' => $conversation->created_at?->toIso8601String(),
+                // The cross-turn build plan (steps + status), so a debugger can
+                // see exactly where a multi-step build stalled or left off.
+                'build_plan' => $conversation->build_plan,
             ],
             'messages' => $messages->map(function (BuilderMessage $m) use ($includePatches): array {
                 $patch = is_array($m->proposed_patch) ? $m->proposed_patch : null;

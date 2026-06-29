@@ -133,6 +133,7 @@ interface Message {
         | 'none'
         | 'streaming';
     applied_version_id: string | null;
+    plan_step_ids: string[] | null;
     attachment_url: string | null;
     attachment_mime: string | null;
     created_at: string | null;
@@ -1020,6 +1021,24 @@ const hasSuggestions = computed(
         !slashMenuOpen.value,
 );
 
+// Titles of the build-plan steps an assistant turn closed (for the "✓ completó"
+// badge). Resolves the message's step ids against the current plan.
+function closedStepTitles(m: Message): string[] {
+    if (
+        m.role !== 'assistant' ||
+        m.status !== 'applied' ||
+        !m.plan_step_ids?.length
+    ) {
+        return [];
+    }
+    const byId = new Map(
+        (buildPlan.value?.steps ?? []).map((s) => [s.id, s.title]),
+    );
+    return m.plan_step_ids
+        .map((id) => byId.get(id))
+        .filter((title): title is string => !!title);
+}
+
 // Clicking a pending/failed plan step pre-fills the composer with its title —
 // the "next step" suggestion. The user can tweak or just send.
 function onPickStep(title: string) {
@@ -1518,6 +1537,17 @@ function subscribe() {
         },
     );
 
+    // Server-driven autonomous continuation: append the new user turn +
+    // assistant placeholder so the next step streams live (no HTTP response
+    // carries them).
+    channel.listen('.BuilderTurnQueued', (data: { messages: Message[] }) => {
+        for (const m of data.messages) {
+            if (!messages.value.some((x) => x.id === m.id)) {
+                messages.value.push(m);
+            }
+        }
+    });
+
     channel.listen(
         '.BuilderStreamChunk',
         (data: { message_id: string; delta: string }) => {
@@ -1583,6 +1613,7 @@ function startNewConversation() {
 
 function unsubscribe() {
     if (channel) {
+        channel.stopListening('.BuilderTurnQueued');
         channel.stopListening('.BuilderStreamChunk');
         channel.stopListening('.BuilderStreamComplete');
         channel.stopListening('.BuilderStreamError');
@@ -2148,6 +2179,25 @@ function statusTone(status: Message['status']): string {
                                     v-if="m.status === 'streaming'"
                                     class="ml-0.5 inline-block h-3 w-1 animate-pulse bg-accent-blue align-middle"
                                 />
+
+                                <!-- Which build-plan steps this turn closed. -->
+                                <div
+                                    v-if="closedStepTitles(m).length"
+                                    class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]"
+                                >
+                                    <Check class="size-3.5 text-emerald-500" />
+                                    <span class="text-ink-muted">{{
+                                        t('apps.builder.completed_steps')
+                                    }}</span>
+                                    <span
+                                        v-for="(title, i) in closedStepTitles(
+                                            m,
+                                        )"
+                                        :key="i"
+                                        class="rounded-pill bg-emerald-500/10 px-2 py-0.5 text-emerald-600"
+                                        >{{ title }}</span
+                                    >
+                                </div>
                             </div>
 
                             <div

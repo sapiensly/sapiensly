@@ -59,6 +59,8 @@ class ListBuilderConversationsTool extends SapiensTool
             'conversations' => $conversations->map(fn (BuilderConversation $c): array => [
                 'conversation_id' => $c->id,
                 'status' => $c->status,
+                // Build-plan status (active = has unfinished steps to resume).
+                'plan_status' => $c->build_plan_status,
                 'user_id' => $c->user_id,
                 'message_count' => $c->messages_count,
                 'created_at' => $c->created_at?->toIso8601String(),
