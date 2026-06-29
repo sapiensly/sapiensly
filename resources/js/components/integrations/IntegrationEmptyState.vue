@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { INTEGRATION_TEMPLATES } from '@/lib/integrations/templates';
 import { Link } from '@inertiajs/vue3';
-import { Globe, Server } from '@lucide/vue';
+import { Database, Globe, Server } from '@lucide/vue';
 import type { Component } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -34,6 +34,14 @@ const kinds: Starter[] = [
         href: '/system/integrations/create?kind=mcp',
         icon: Server,
         tint: 'var(--sp-success)',
+    },
+    {
+        key: 'database',
+        label: t('system.integrations.starter.database_label'),
+        description: t('system.integrations.starter.database_desc'),
+        href: '/system/integrations/create?kind=database',
+        icon: Database,
+        tint: 'var(--sp-accent-cyan)',
     },
 ];
 

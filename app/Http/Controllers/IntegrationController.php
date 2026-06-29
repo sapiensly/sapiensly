@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\IntegrationAuthType;
+use App\Enums\IntegrationKind;
 use App\Enums\Visibility;
 use App\Http\Requests\Integrations\StoreIntegrationRequest;
 use App\Http\Requests\Integrations\UpdateIntegrationRequest;
@@ -166,6 +167,7 @@ class IntegrationController extends Controller
 
         $validated = $request->validate([
             'base_url' => ['required', 'string', 'max:500'],
+            'kind' => ['nullable', 'string'],
             'auth_type' => ['required', 'string'],
             'auth_config' => ['nullable', 'array'],
             'allow_insecure_tls' => ['nullable', 'boolean'],
@@ -175,6 +177,7 @@ class IntegrationController extends Controller
             'name' => 'draft',
             'slug' => 'draft-'.uniqid(),
             'base_url' => $validated['base_url'],
+            'kind' => $validated['kind'] ?? 'http',
             'auth_type' => $validated['auth_type'],
             'auth_config' => $validated['auth_config'] ?? [],
             'allow_insecure_tls' => (bool) ($validated['allow_insecure_tls'] ?? false),
@@ -228,6 +231,9 @@ class IntegrationController extends Controller
             'slug' => $integration->slug,
             'base_url' => $integration->base_url,
             'is_mcp' => (bool) $integration->is_mcp,
+            'kind' => $integration->kind instanceof IntegrationKind
+                ? $integration->kind->value
+                : $integration->kind,
             'auth_type' => $integration->auth_type instanceof IntegrationAuthType
                 ? $integration->auth_type->value
                 : $integration->auth_type,

@@ -26,6 +26,7 @@ import axios from 'axios';
 import {
     CheckCircle2,
     ChevronDown,
+    Database,
     Eye,
     Globe,
     Heading1,
@@ -40,7 +41,7 @@ import {
     XCircle,
 } from '@lucide/vue';
 import type { Component } from 'vue';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface AuthTypeOption {
@@ -65,6 +66,7 @@ interface Props {
         description: string | null;
         base_url: string;
         is_mcp: boolean;
+        kind: string;
         auth_type: string;
         visibility: string;
         status: string;
@@ -93,6 +95,7 @@ const creatingFromTemplate = props.mode === 'create' && !!props.template;
 // Starting an MCP connection from the index grid: seed the web-auth flow MCP
 // servers use, so the user lands ready to discover/authorize.
 const startingAsMcp = props.mode === 'create' && props.kind === 'mcp';
+const startingAsDatabase = props.mode === 'create' && props.kind === 'database';
 const templateAuthConfigDefaults: Record<string, Record<string, unknown>> = {
     api_key: { location: 'header', name: '', value: '' },
     bearer: { token: '' },
@@ -119,14 +122,25 @@ const form = useForm({
         ? (props.template!.base_url ?? '')
         : (props.integration?.base_url ?? ''),
     is_mcp: startingAsMcp ? true : (props.integration?.is_mcp ?? false),
+    kind: startingAsDatabase
+        ? 'database'
+        : startingAsMcp
+          ? 'mcp'
+          : (props.integration?.kind ?? 'http'),
     auth_type: creatingFromTemplate
         ? (props.template!.auth_type ?? 'none')
         : startingAsMcp
           ? 'oauth2_auth_code'
           : (props.integration?.auth_type ?? 'none'),
-    auth_config: startingAsMcp
-        ? { redirect_uri: props.oauthCallbackUrl ?? '', pkce: true }
-        : buildInitialAuthConfig(),
+    auth_config: startingAsDatabase
+        ? { driver: 'pgsql', host: '', port: 5432, database: '', username: '', password: '' }
+        : props.integration?.kind === 'database'
+          ? // Editing a DB connection: the non-secret DSN fields come back
+            // unmasked; only the password is blanked (kept on save if left empty).
+            { ...(props.integration.masked_auth_config ?? {}), password: '' }
+          : startingAsMcp
+            ? { redirect_uri: props.oauthCallbackUrl ?? '', pkce: true }
+            : buildInitialAuthConfig(),
     default_headers: creatingFromTemplate
         ? (props.template!.default_headers ?? [])
         : (props.integration?.default_headers ?? []),
@@ -139,6 +153,47 @@ const form = useForm({
 // a different job (discover → authorize) than wiring up a REST API (base URL +
 // credentials + headers). One reactive flag drives which layout renders.
 const isMcp = computed(() => form.is_mcp);
+const isDatabase = computed(() => form.kind === 'database');
+
+// Database connection fields live in auth_config (encrypted at rest).
+function dbField(key: string) {
+    return computed({
+        get: () => (form.auth_config[key] as string | number | undefined) ?? '',
+        set: (value: string | number) => {
+            form.auth_config = { ...form.auth_config, [key]: value };
+        },
+    });
+}
+const dbDriver = dbField('driver');
+const dbHost = dbField('host');
+const dbPort = dbField('port');
+const dbDatabase = dbField('database');
+const dbUsername = dbField('username');
+const dbPassword = dbField('password');
+
+const dbDriverOptions = [
+    { value: 'pgsql', label: 'PostgreSQL' },
+    { value: 'mysql', label: 'MySQL' },
+    { value: 'sqlsrv', label: 'SQL Server' },
+    { value: 'sqlite', label: 'SQLite' },
+];
+const dbRequiresHost = computed(() => form.auth_config.driver !== 'sqlite');
+
+// Keep base_url a readable DSN (no credentials) so lists and cards show the
+// target at a glance — the executor reads the real fields from auth_config.
+watch(
+    () => form.auth_config,
+    (cfg) => {
+        if (form.kind !== 'database') return;
+        const c = (cfg ?? {}) as Record<string, unknown>;
+        const driver = (c.driver as string) || 'db';
+        const host = (c.host as string) || '';
+        const port = c.port ? `:${c.port}` : '';
+        const database = (c.database as string) || '';
+        form.base_url = `${driver}://${host}${port}/${database}`;
+    },
+    { deep: true, immediate: true },
+);
 
 const openBasics = ref(true);
 const openAuth = ref(true);
@@ -175,6 +230,7 @@ async function testConnection(): Promise<void> {
             '/system/integrations/test-connection',
             {
                 base_url: form.base_url,
+                kind: form.kind,
                 auth_type: form.auth_type,
                 auth_config: form.auth_config,
                 allow_insecure_tls: form.allow_insecure_tls,
@@ -291,20 +347,149 @@ const sectionMeta: Record<string, SectionMeta> = {
                 :title="
                     mode === 'edit'
                         ? (integration?.name ?? '')
-                        : isMcp
-                          ? t('system.integrations.form.mcp_title')
-                          : t('system.integrations.new')
+                        : isDatabase
+                          ? t('system.integrations.form.db_title')
+                          : isMcp
+                            ? t('system.integrations.form.mcp_title')
+                            : t('system.integrations.new')
                 "
                 :description="
-                    isMcp
-                        ? t('system.integrations.form.mcp_description')
-                        : t('system.integrations.description')
+                    isDatabase
+                        ? t('system.integrations.form.db_description')
+                        : isMcp
+                          ? t('system.integrations.form.mcp_description')
+                          : t('system.integrations.description')
                 "
             />
 
             <form class="space-y-4" @submit.prevent="submit">
+                <!-- ================= Database: external data source ================= -->
+                <template v-if="isDatabase">
+                    <!-- Basics. -->
+                    <div class="rounded-sp-sm border border-soft bg-navy">
+                        <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
+                            <div
+                                class="flex size-8 items-center justify-center rounded-xs bg-accent-cyan/15 text-accent-cyan"
+                            >
+                                <Database class="size-4" />
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium text-ink">
+                                    {{ t('system.integrations.form.basics') }}
+                                </p>
+                                <p class="text-xs text-ink-muted">
+                                    {{ t('system.integrations.form.db_basics_hint') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="space-y-3 px-5 py-4">
+                            <div class="space-y-1.5">
+                                <Label for="db_name">{{ t('system.integrations.form.name') }}</Label>
+                                <Input id="db_name" v-model="form.name" :placeholder="t('system.integrations.form.name_placeholder')" class="h-9" />
+                                <InputError :message="form.errors.name" />
+                            </div>
+                            <div class="space-y-1.5">
+                                <Label for="db_description">{{ t('system.integrations.form.description') }}</Label>
+                                <Textarea id="db_description" v-model="form.description" rows="2" />
+                                <InputError :message="form.errors.description" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Connection. -->
+                    <div class="rounded-sp-sm border border-soft bg-navy">
+                        <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
+                            <div
+                                class="flex size-8 items-center justify-center rounded-xs bg-accent-cyan/15 text-accent-cyan"
+                            >
+                                <Key class="size-4" />
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium text-ink">
+                                    {{ t('system.integrations.form.db_connection') }}
+                                </p>
+                                <p class="text-xs text-ink-muted">
+                                    {{ t('system.integrations.form.db_connection_hint') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="space-y-3 px-5 py-4">
+                            <div class="space-y-1.5">
+                                <Label>{{ t('system.integrations.form.db_driver') }}</Label>
+                                <Select v-model="dbDriver">
+                                    <SelectTrigger class="h-9"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem v-for="o in dbDriverOptions" :key="o.value" :value="o.value">
+                                            {{ o.label }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div v-if="dbRequiresHost" class="grid grid-cols-[1fr_120px] gap-3">
+                                <div class="space-y-1.5">
+                                    <Label for="db_host">{{ t('system.integrations.form.db_host') }}</Label>
+                                    <Input id="db_host" v-model="dbHost" placeholder="db.example.com" class="h-9 font-mono" />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <Label for="db_port">{{ t('system.integrations.form.db_port') }}</Label>
+                                    <Input id="db_port" v-model="dbPort" type="number" class="h-9" />
+                                </div>
+                            </div>
+                            <div class="space-y-1.5">
+                                <Label for="db_name_field">{{ t('system.integrations.form.db_database') }}</Label>
+                                <Input id="db_name_field" v-model="dbDatabase" :placeholder="dbRequiresHost ? 'analytics' : '/path/to/db.sqlite'" class="h-9 font-mono" />
+                            </div>
+                            <div v-if="dbRequiresHost" class="grid grid-cols-2 gap-3">
+                                <div class="space-y-1.5">
+                                    <Label for="db_user">{{ t('system.integrations.form.db_username') }}</Label>
+                                    <Input id="db_user" v-model="dbUsername" autocomplete="off" class="h-9" />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <Label for="db_pass">{{ t('system.integrations.form.db_password') }}</Label>
+                                    <Input
+                                        id="db_pass"
+                                        v-model="dbPassword"
+                                        type="password"
+                                        autocomplete="new-password"
+                                        :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : ''"
+                                        class="h-9"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- Test: SELECT 1 against the DSN. -->
+                            <div class="flex flex-col gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    :disabled="testState.status === 'loading' || !form.base_url"
+                                    class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
+                                    @click="testConnection"
+                                >
+                                    <Loader2 v-if="testState.status === 'loading'" class="size-3.5 animate-spin" />
+                                    <Database v-else class="size-3.5" />
+                                    {{ testState.status === 'loading' ? t('system.integrations.testing') : t('system.integrations.test_now') }}
+                                </button>
+                                <div
+                                    v-if="testState.status === 'success'"
+                                    class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
+                                >
+                                    <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
+                                    <span>{{ testState.message }}</span>
+                                </div>
+                                <div
+                                    v-else-if="testState.status === 'error'"
+                                    class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
+                                >
+                                    <XCircle class="mt-0.5 size-3.5 shrink-0" />
+                                    <span>{{ testState.message }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
                 <!-- ================= MCP server: discover → authorize ================= -->
-                <template v-if="isMcp">
+                <template v-else-if="isMcp">
                     <!-- Basics: one Server URL field, with discovery as an inline assist. -->
                     <div class="rounded-sp-sm border border-soft bg-navy">
                         <div class="flex items-center gap-3 border-b border-soft px-5 py-4">

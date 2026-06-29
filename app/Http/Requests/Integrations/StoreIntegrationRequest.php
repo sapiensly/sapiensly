@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Integrations;
 
 use App\Enums\IntegrationAuthType;
+use App\Enums\IntegrationKind;
 use App\Enums\Visibility;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -23,11 +24,19 @@ class StoreIntegrationRequest extends FormRequest
         // bearer's `token` and api_key's `value`. The OAuth-specific
         // requirements are enforced in `withValidator()` instead, which
         // reports errors without narrowing the returned shape.
+        // A database connection's base_url is a DSN, not an http URL, so the
+        // http regex only applies to the http/mcp kinds.
+        $baseUrlRules = ['required', 'string', 'max:500'];
+        if ($this->input('kind') !== IntegrationKind::Database->value) {
+            $baseUrlRules[] = 'regex:/^https?:\/\//i';
+        }
+
         return [
             'name' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:2000'],
-            'base_url' => ['required', 'string', 'max:500', 'regex:/^https?:\/\//i'],
+            'base_url' => $baseUrlRules,
             'is_mcp' => ['nullable', 'boolean'],
+            'kind' => ['nullable', 'string', Rule::in(array_column(IntegrationKind::cases(), 'value'))],
             'auth_type' => ['required', 'string', Rule::in(array_column(IntegrationAuthType::cases(), 'value'))],
             'auth_config' => ['nullable', 'array'],
             'default_headers' => ['nullable', 'array'],

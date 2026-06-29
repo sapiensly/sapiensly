@@ -6,7 +6,8 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Link } from '@inertiajs/vue3';
-import { CheckCircle2, MoreVertical, Plug, XCircle } from '@lucide/vue';
+import { CheckCircle2, Database, MoreVertical, Plug, Server, XCircle } from '@lucide/vue';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface Integration {
@@ -14,6 +15,8 @@ interface Integration {
     name: string;
     slug: string;
     base_url: string;
+    kind?: string;
+    is_mcp?: boolean;
     auth_type: string;
     visibility: string;
     status: string;
@@ -22,7 +25,16 @@ interface Integration {
     request_count: number;
 }
 
-defineProps<{ integration: Integration }>();
+const props = defineProps<{ integration: Integration }>();
+
+// A database connection has no HTTP auth — label it by kind, and pick the icon
+// that matches what's being connected.
+const kindIcon = computed(() => {
+    if (props.integration.kind === 'database') return Database;
+    if (props.integration.kind === 'mcp' || props.integration.is_mcp) return Server;
+    return Plug;
+});
+const isDatabase = computed(() => props.integration.kind === 'database');
 
 defineEmits<{
     duplicate: [id: string];
@@ -43,7 +55,7 @@ const { t } = useI18n();
             <div
                 class="flex size-10 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue"
             >
-                <Plug class="size-5" />
+                <component :is="kindIcon" class="size-5" />
             </div>
             <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
@@ -66,7 +78,7 @@ const { t } = useI18n();
                     <span
                         class="inline-flex items-center rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                     >
-                        {{ integration.auth_type }}
+                        {{ isDatabase ? t('system.integrations.starter.database_label') : integration.auth_type }}
                     </span>
                     <span
                         v-if="integration.visibility !== 'private'"
@@ -75,6 +87,7 @@ const { t } = useI18n();
                         {{ integration.visibility }}
                     </span>
                     <span
+                        v-if="!isDatabase"
                         class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                     >
                         {{ t('system.integrations.requests_count', { count: integration.request_count }) }}

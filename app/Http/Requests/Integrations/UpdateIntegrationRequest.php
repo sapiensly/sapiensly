@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Integrations;
 
 use App\Enums\IntegrationAuthType;
+use App\Enums\IntegrationKind;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -20,11 +21,17 @@ class UpdateIntegrationRequest extends FormRequest
         // StoreIntegrationRequest::rules for why listing nested paths here
         // silently strips other keys from `validated()`. OAuth endpoint
         // shape checks live in `withValidator()` instead.
+        $baseUrlRules = ['sometimes', 'required', 'string', 'max:500'];
+        if ($this->input('kind') !== IntegrationKind::Database->value) {
+            $baseUrlRules[] = 'regex:/^https?:\/\//i';
+        }
+
         return [
             'name' => ['sometimes', 'required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:2000'],
-            'base_url' => ['sometimes', 'required', 'string', 'max:500', 'regex:/^https?:\/\//i'],
+            'base_url' => $baseUrlRules,
             'is_mcp' => ['nullable', 'boolean'],
+            'kind' => ['nullable', 'string', Rule::in(array_column(IntegrationKind::cases(), 'value'))],
             'auth_type' => ['sometimes', 'required', 'string', Rule::in(array_column(IntegrationAuthType::cases(), 'value'))],
             'auth_config' => ['nullable', 'array'],
             'default_headers' => ['nullable', 'array'],

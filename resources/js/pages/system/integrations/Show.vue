@@ -17,6 +17,7 @@ import {
     ArrowLeft,
     CheckCircle2,
     ChevronRight,
+    Database,
     Folders,
     Lock,
     Pencil,
@@ -69,6 +70,7 @@ interface Integration {
     description: string | null;
     base_url: string;
     is_mcp: boolean;
+    kind: string;
     auth_type: string;
     visibility: string;
     status: string;
@@ -92,13 +94,17 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-// MCP integrations are not REST APIs — the HTTP request/environment builder
-// doesn't apply. They expose tools over the MCP protocol and are consumed by
-// linking them in an MCP tool, so we hide those tabs for them.
+// MCP and database connections aren't REST APIs — the HTTP request/environment
+// builder doesn't apply. They're consumed by linking them in a tool, so we hide
+// those tabs and open on the actions list instead.
 const isMcp = computed(() => props.integration.is_mcp);
+const isDatabase = computed(() => props.integration.kind === 'database');
+const hidesHttpTabs = computed(() => isMcp.value || isDatabase.value);
 
 const activeTab = ref<'requests' | 'environments' | 'actions' | 'settings'>(
-    props.integration.is_mcp ? 'actions' : 'requests',
+    props.integration.is_mcp || props.integration.kind === 'database'
+        ? 'actions'
+        : 'requests',
 );
 
 // OAuth2 Authorization-Code integrations need a browser roundtrip to get
@@ -375,19 +381,49 @@ function destroyIntegration(): void {
                     </div>
                 </div>
 
+                <!-- Database connections back agent query tools — no REST
+                     builder here either. -->
+                <div
+                    v-if="isDatabase"
+                    class="rounded-sp-sm border border-soft bg-navy p-5"
+                >
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-cyan/15 text-accent-cyan"
+                        >
+                            <Database class="size-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-ink">
+                                {{ t('system.integrations.db.panel_title') }}
+                            </p>
+                            <p class="mt-0.5 text-xs text-ink-muted">
+                                {{ t('system.integrations.db.panel_hint') }}
+                            </p>
+                            <a
+                                href="/tools/create?type=database"
+                                class="mt-3 inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
+                            >
+                                <Plus class="size-3.5" />
+                                {{ t('system.integrations.db.create_tool') }}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
                 <Tabs v-model="activeTab">
                     <TabsList
                         class="h-auto w-fit gap-1 rounded-pill border border-soft bg-surface p-1 text-ink-muted"
                     >
                         <TabsTrigger
-                            v-if="!isMcp"
+                            v-if="!hidesHttpTabs"
                             value="requests"
                             class="rounded-pill px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-accent-blue data-[state=active]:text-white data-[state=active]:shadow-btn-primary"
                         >
                             {{ t('system.integrations.tabs.requests') }}
                         </TabsTrigger>
                         <TabsTrigger
-                            v-if="!isMcp"
+                            v-if="!hidesHttpTabs"
                             value="environments"
                             class="rounded-pill px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-accent-blue data-[state=active]:text-white data-[state=active]:shadow-btn-primary"
                         >
@@ -408,7 +444,7 @@ function destroyIntegration(): void {
                     </TabsList>
 
                     <!-- ============================ REQUESTS ============================ -->
-                    <TabsContent v-if="!isMcp" value="requests" class="mt-4">
+                    <TabsContent v-if="!hidesHttpTabs" value="requests" class="mt-4">
                         <div class="rounded-sp-sm border border-soft bg-navy">
                             <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
                                 <div
@@ -521,7 +557,7 @@ function destroyIntegration(): void {
                     </TabsContent>
 
                     <!-- ============================ ENVIRONMENTS ============================ -->
-                    <TabsContent v-if="!isMcp" value="environments" class="mt-4">
+                    <TabsContent v-if="!hidesHttpTabs" value="environments" class="mt-4">
                         <div class="rounded-sp-sm border border-soft bg-navy">
                             <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
                                 <div
@@ -699,7 +735,13 @@ function destroyIntegration(): void {
                                     </p>
                                 </div>
                                 <a
-                                    :href="isMcp ? '/tools/create?type=mcp' : '/tools/create'"
+                                    :href="
+                                        isMcp
+                                            ? '/tools/create?type=mcp'
+                                            : isDatabase
+                                              ? '/tools/create?type=database'
+                                              : '/tools/create'
+                                    "
                                     class="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
                                 >
                                     <Plus class="size-3.5" />

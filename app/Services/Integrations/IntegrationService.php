@@ -7,6 +7,7 @@ use App\Enums\Visibility;
 use App\Models\Integration;
 use App\Models\User;
 use App\Services\Integrations\Support\SsrfGuard;
+use App\Services\Tools\DatabaseConnectionFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,7 @@ class IntegrationService
     public function __construct(
         private IntegrationRequestExecutor $executor,
         private SsrfGuard $ssrfGuard,
+        private DatabaseConnectionFactory $dbConnections,
     ) {}
 
     public function listForUser(User $user, ?string $search = null, ?string $authType = null): Collection
@@ -90,6 +92,7 @@ class IntegrationService
                 'description' => $attributes['description'] ?? null,
                 'base_url' => rtrim($attributes['base_url'], '/'),
                 'is_mcp' => $attributes['is_mcp'] ?? false,
+                'kind' => $attributes['kind'] ?? null,
                 'auth_type' => $attributes['auth_type'] ?? IntegrationAuthType::None->value,
                 'auth_config' => $attributes['auth_config'] ?? [],
                 'default_headers' => $attributes['default_headers'] ?? null,
@@ -106,7 +109,7 @@ class IntegrationService
     public function update(Integration $integration, array $attributes): Integration
     {
         $fillable = [
-            'name', 'slug', 'description', 'base_url', 'is_mcp', 'auth_type',
+            'name', 'slug', 'description', 'base_url', 'is_mcp', 'kind', 'auth_type',
             'default_headers', 'status', 'color', 'icon', 'allow_insecure_tls',
             'active_environment_id',
         ];
@@ -184,6 +187,10 @@ class IntegrationService
      */
     public function testConnection(Integration $integration): array
     {
+        if ($integration->isDatabase()) {
+            return $this->testDatabaseConnection($integration);
+        }
+
         try {
             $result = $this->executor->executeAdHoc(
                 integration: $integration,
@@ -225,6 +232,47 @@ class IntegrationService
                 'message' => __('Connection failed.'),
                 'detail' => $e->getMessage(),
             ];
+        }
+    }
+
+    /**
+     * Reachability check for a database connection: open the DSN and run a
+     * trivial SELECT. Drafts (unsaved) are tested without recording.
+     *
+     * @return array<string, mixed>
+     */
+    private function testDatabaseConnection(Integration $integration): array
+    {
+        $name = $this->dbConnections->open($integration->databaseConnectionConfig());
+
+        try {
+            DB::connection($name)->select('SELECT 1');
+
+            if ($integration->exists) {
+                $integration->update([
+                    'last_tested_at' => now(),
+                    'last_test_status' => 'success',
+                    'last_test_message' => __('Connection successful.'),
+                ]);
+            }
+
+            return ['success' => true, 'message' => __('Connection successful.')];
+        } catch (Throwable $e) {
+            if ($integration->exists) {
+                $integration->update([
+                    'last_tested_at' => now(),
+                    'last_test_status' => 'failure',
+                    'last_test_message' => $e->getMessage(),
+                ]);
+            }
+
+            return [
+                'success' => false,
+                'message' => __('Connection failed.'),
+                'detail' => $e->getMessage(),
+            ];
+        } finally {
+            $this->dbConnections->close($name);
         }
     }
 
