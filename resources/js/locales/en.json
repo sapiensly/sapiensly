@@ -2215,6 +2215,8 @@
     "app_v2.playground.capdesc.reranking": "Reorder documents by relevance to a query.",
     "admin.ai.defaults.ocr_engine_label": "OpenRouter PDF engine",
     "admin.ai.defaults.ocr_engine_hint": "How OpenRouter parses the PDF when the OCR model is an OpenRouter model.",
+    "admin.ai.defaults.builder_openrouter_label": "Allow OpenRouter models in the Builder",
+    "admin.ai.defaults.builder_openrouter_hint": "Off by default — the Builder's tool-use loop is tuned for Claude. When on, the Builder model picker also offers enabled OpenRouter chat models. Validate a model with the builder:eval command before relying on it.",
     "admin.ai.defaults.ocr_engine.mistral-ocr": "Mistral OCR — scanned / image PDFs",
     "admin.ai.defaults.ocr_engine.cloudflare-ai": "Cloudflare AI — free, to markdown",
     "admin.ai.defaults.ocr_engine.native": "Native — model file support",

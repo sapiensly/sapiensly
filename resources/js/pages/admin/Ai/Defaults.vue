@@ -2,6 +2,7 @@
 import AiTabs from '@/components/admin/AiTabs.vue';
 import DriverChip from '@/components/admin/DriverChip.vue';
 import SettingsCard from '@/components/admin/SettingsCard.vue';
+import ToggleRow from '@/components/admin/ToggleRow.vue';
 import { Label } from '@/components/ui/label';
 import {
     Select,
@@ -43,6 +44,7 @@ interface Props {
     openRouterActive: boolean;
     pdfEngines: string[];
     ocrPdfEngine: string;
+    builderAllowOpenRouter: boolean;
 }
 
 const props = defineProps<Props>();
@@ -66,6 +68,28 @@ function updateEngine(value: string) {
             },
             onError: () => {
                 ocrPdfEngine.value = prev;
+            },
+        },
+    );
+}
+
+// Builder → OpenRouter opt-in (global, sysadmin). Optimistic with rollback.
+const builderAllowOpenRouter = ref(props.builderAllowOpenRouter);
+function updateBuilderAllowOpenRouter(value: boolean) {
+    const prev = builderAllowOpenRouter.value;
+    builderAllowOpenRouter.value = value;
+    router.patch(
+        '/admin/ai/defaults',
+        { builder_allow_openrouter: value },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['builderAllowOpenRouter'],
+            onSuccess: () => {
+                builderAllowOpenRouter.value = props.builderAllowOpenRouter;
+            },
+            onError: () => {
+                builderAllowOpenRouter.value = prev;
             },
         },
     );
@@ -279,6 +303,29 @@ function updateModel(module: string, slot: Slot, id: string | null) {
                             <p class="text-[10px] text-ink-subtle">
                                 {{ t('admin.ai.defaults.ocr_engine_hint') }}
                             </p>
+                        </div>
+
+                        <!-- Builder: gate the picker into OpenRouter chat models. -->
+                        <div
+                            v-if="m === 'builder'"
+                            class="border-t border-soft pt-3"
+                        >
+                            <ToggleRow
+                                :model-value="builderAllowOpenRouter"
+                                :label="
+                                    t(
+                                        'admin.ai.defaults.builder_openrouter_label',
+                                    )
+                                "
+                                :description="
+                                    t(
+                                        'admin.ai.defaults.builder_openrouter_hint',
+                                    )
+                                "
+                                @update:model-value="
+                                    updateBuilderAllowOpenRouter
+                                "
+                            />
                         </div>
                     </SettingsCard>
                 </div>

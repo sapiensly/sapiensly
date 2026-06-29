@@ -1,7 +1,9 @@
 <?php
 
 use App\Jobs\RunBuilderAiJob;
+use App\Models\AiCatalogModel;
 use App\Models\App;
+use App\Models\AppSetting;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
@@ -753,6 +755,92 @@ it('rejects a model that is not an enabled chat model', function () {
         ->assertStatus(422);
 
     Queue::assertNotPushed(RunBuilderAiJob::class);
+});
+
+/** Create an enabled OpenRouter chat model in the catalog (none is seeded). */
+function enableOpenRouterChatModel(string $id = 'deepseek/deepseek-v4-pro'): void
+{
+    AiCatalogModel::create([
+        'driver' => 'openrouter',
+        'model_id' => $id,
+        'label' => 'DeepSeek V4 Pro',
+        'capability' => 'chat',
+        'is_enabled' => true,
+        'sort_order' => 0,
+    ]);
+}
+
+it('excludes OpenRouter chat models from the Builder picker by default', function () {
+    enableOpenRouterChatModel();
+
+    $response = $this->actingAs($this->user)
+        ->get("/apps/{$this->testApp->id}/builder")
+        ->assertOk();
+
+    $ids = collect($response->viewData('page')['props']['models'])->pluck('id');
+
+    expect($ids)->toContain('claude-haiku-4-5-20251001')
+        ->and($ids)->not->toContain('deepseek/deepseek-v4-pro');
+});
+
+it('includes OpenRouter chat models in the picker when the sysadmin flag is on', function () {
+    enableOpenRouterChatModel();
+    AppSetting::setValue('admin_v2.ai.builder.allow_openrouter', 'true');
+
+    $response = $this->actingAs($this->user)
+        ->get("/apps/{$this->testApp->id}/builder")
+        ->assertOk();
+
+    $ids = collect($response->viewData('page')['props']['models'])->pluck('id');
+
+    expect($ids)->toContain('deepseek/deepseek-v4-pro')
+        ->and($ids)->toContain('claude-haiku-4-5-20251001');
+});
+
+it('rejects an OpenRouter model override while the flag is off', function () {
+    Queue::fake();
+    enableOpenRouterChatModel();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/messages", [
+            'conversation_id' => $conv->id,
+            'message' => 'hola',
+            'model' => 'deepseek/deepseek-v4-pro',
+        ])
+        ->assertStatus(422);
+
+    Queue::assertNotPushed(RunBuilderAiJob::class);
+});
+
+it('accepts an OpenRouter model override once the flag is on', function () {
+    Queue::fake();
+    enableOpenRouterChatModel();
+    AppSetting::setValue('admin_v2.ai.builder.allow_openrouter', 'true');
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/messages", [
+            'conversation_id' => $conv->id,
+            'message' => 'crea un CRM',
+            'model' => 'deepseek/deepseek-v4-pro',
+        ])
+        ->assertOk();
+
+    Queue::assertPushed(
+        RunBuilderAiJob::class,
+        fn (RunBuilderAiJob $job) => $job->modelOverride === 'deepseek/deepseek-v4-pro',
+    );
 });
 
 it('returns 503 when sending a chat attachment with no S3 configured', function () {

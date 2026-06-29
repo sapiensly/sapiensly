@@ -56,6 +56,9 @@ class AdminAiController extends Controller
             'moduleCapability' => AiDefaults::CAPABILITY,
             'defaults' => $this->readDefaults(),
             'modelsByCapability' => $modelsByCapability,
+            // Opt the whole platform's Builder model picker into OpenRouter chat
+            // models (gated; default off — see AppBuilderController::chatModels).
+            'builderAllowOpenRouter' => AppSetting::getValue('admin_v2.ai.builder.allow_openrouter', 'false') === 'true',
             // OCR-PDF via OpenRouter: surface the file-parser engine picker only
             // when OpenRouter is connected globally (env or saved key).
             'openRouterActive' => $this->aiProviderService->driverConfiguredSource('openrouter') !== null,
@@ -166,6 +169,9 @@ class AdminAiController extends Controller
         // The OCR-PDF OpenRouter engine (file-parser plugin) is a separate setting.
         $rules['ocr_pdf_engine'] = ['sometimes', 'nullable', Rule::in(OpenRouterClient::PDF_ENGINES)];
 
+        // Whether the Builder picker may offer OpenRouter chat models.
+        $rules['builder_allow_openrouter'] = ['sometimes', 'boolean'];
+
         $validated = $request->validate($rules);
 
         foreach (AiDefaults::MODULES as $module) {
@@ -184,6 +190,13 @@ class AdminAiController extends Controller
             AppSetting::setValue(
                 'admin_v2.ai.ocr_pdf.engine',
                 (string) ($validated['ocr_pdf_engine'] ?? OpenRouterClient::DEFAULT_PDF_ENGINE),
+            );
+        }
+
+        if ($request->has('builder_allow_openrouter')) {
+            AppSetting::setValue(
+                'admin_v2.ai.builder.allow_openrouter',
+                $request->boolean('builder_allow_openrouter') ? 'true' : 'false',
             );
         }
 

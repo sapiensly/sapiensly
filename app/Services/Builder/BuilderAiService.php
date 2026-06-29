@@ -226,6 +226,8 @@ class BuilderAiService
                     'model' => $model,
                 ]);
 
+                $sdkAgent->forModel($model);
+
                 return $sdkAgent->prompt($promptText, provider: $provider, model: $model);
             });
             $assistantText = $response->text ?? '';
@@ -440,6 +442,7 @@ class BuilderAiService
         // hard scope limit when the screenshot looked incomplete). Default
         // stays at Haiku for the cheap-and-fast common chat path.
         $resolvedModel = $this->aiDefaults->model('builder', $modelOverride);
+        $sdkAgent->forModel($resolvedModel);
 
         try {
             $user = $conversation->user;

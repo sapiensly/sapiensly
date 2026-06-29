@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Ai\BuilderAgent;
 use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
+use App\Models\AppSetting;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
@@ -54,19 +56,32 @@ class AppBuilderController extends Controller
     ) {}
 
     /**
-     * Chat-capable Claude models the tenant has enabled, for the Builder's model
-     * picker. Restricted to Anthropic: the Builder's tool-use loop is designed
-     * and tested against Claude, and the 32k max-tokens cap (BuilderAgent) is
-     * tuned for Claude 4.x. Falls back to the Anthropic catalog when the DB
-     * catalog is empty so the picker is never blank.
+     * Chat-capable models the tenant has enabled, for the Builder's model picker.
+     * The picker also gates the per-turn `model` override validation (see
+     * `sendMessage`), so anything not listed here is rejected at the boundary.
+     *
+     * Anthropic-only by default: the Builder's tool-use loop is designed and
+     * tested against Claude. A sysadmin can opt the whole platform into OpenRouter
+     * chat models by setting `admin_v2.ai.builder.allow_openrouter` to "true"
+     * (admin AI settings) — gated rather than open so a weaker model can't be
+     * picked self-serve until it has been validated (see `builder:eval`). Caching
+     * is automatic for OpenRouter chat models and per-model output caps live in
+     * {@see BuilderAgent::maxTokens()}. Falls back to the static Anthropic
+     * catalog when the DB catalog is empty so the picker is never blank.
      *
      * @return list<array{id: string, label: string}>
      */
     private function chatModels(): array
     {
-        $anthropic = $this->aiProviders->getFullCatalog()['anthropic'] ?? [];
+        $catalog = $this->aiProviders->getFullCatalog();
 
-        $models = collect($anthropic)
+        $drivers = ['anthropic'];
+        if (AppSetting::getValue('admin_v2.ai.builder.allow_openrouter', 'false') === 'true') {
+            $drivers[] = 'openrouter';
+        }
+
+        $models = collect($drivers)
+            ->flatMap(fn (string $driver) => $catalog[$driver] ?? [])
             ->filter(fn (array $m) => in_array('chat', $m['capabilities'] ?? [], true))
             ->map(fn (array $m) => ['id' => $m['id'], 'label' => $m['label']])
             ->values();
