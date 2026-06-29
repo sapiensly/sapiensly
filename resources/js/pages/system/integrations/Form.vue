@@ -27,15 +27,19 @@ import {
     CheckCircle2,
     ChevronDown,
     Eye,
+    Globe,
     Heading1,
     Key,
     Loader2,
+    Lock,
     Plug,
+    Server,
     Sparkles,
+    UserCheck,
     XCircle,
 } from '@lucide/vue';
 import type { Component } from 'vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface AuthTypeOption {
@@ -130,10 +134,22 @@ const form = useForm({
     allow_insecure_tls: props.integration?.allow_insecure_tls ?? false,
 });
 
+// The creation experience is specialized per case: connecting an MCP server is
+// a different job (discover → authorize) than wiring up a REST API (base URL +
+// credentials + headers). One reactive flag drives which layout renders.
+const isMcp = computed(() => form.is_mcp);
+
 const openBasics = ref(true);
 const openAuth = ref(true);
 const openHeaders = ref(false);
 const openVisibility = ref(false);
+
+// MCP access: Public / OAuth are the fast path; other token schemes hide behind
+// a disclosure so they don't clutter the common case.
+const mcpUsesPrimaryAuth = computed(() =>
+    ['none', 'oauth2_auth_code'].includes(form.auth_type),
+);
+const showMoreMcpAuth = ref(!mcpUsesPrimaryAuth.value);
 
 type TestState =
     | { status: 'idle' }
@@ -233,6 +249,10 @@ function selectAuthMethod(value: string): void {
     }
 }
 
+function setMcpAuth(useOauth: boolean): void {
+    selectAuthMethod(useOauth ? 'oauth2_auth_code' : 'none');
+}
+
 function submit(): void {
     if (props.mode === 'create') {
         form.post('/system/integrations');
@@ -263,56 +283,96 @@ const sectionMeta: Record<string, SectionMeta> = {
         <div class="mx-auto max-w-5xl space-y-6">
             <PageHeader
                 :title="
-                    mode === 'create'
-                        ? t('system.integrations.new')
-                        : (integration?.name ?? '')
+                    mode === 'edit'
+                        ? (integration?.name ?? '')
+                        : isMcp
+                          ? t('system.integrations.form.mcp_title')
+                          : t('system.integrations.new')
                 "
-                :description="t('system.integrations.description')"
+                :description="
+                    isMcp
+                        ? t('system.integrations.form.mcp_description')
+                        : t('system.integrations.description')
+                "
             />
 
             <form class="space-y-4" @submit.prevent="submit">
-                <!-- Basics. -->
-                <Collapsible
-                    v-model:open="openBasics"
-                    class="rounded-sp-sm border border-soft bg-navy"
-                >
-                    <CollapsibleTrigger
-                        class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+                <!-- ================= MCP server: discover → authorize ================= -->
+                <template v-if="isMcp">
+                    <!-- Discovery lead: paste one URL, we configure the rest. -->
+                    <div
+                        class="space-y-2 rounded-sp-sm border border-accent-blue/30 bg-accent-blue/[0.06] p-5"
                     >
-                        <div class="flex items-center gap-3">
-                            <div
-                                class="flex size-8 items-center justify-center rounded-xs"
-                                :style="{
-                                    backgroundColor: `color-mix(in oklab, ${sectionMeta.basics.tint} 15%, transparent)`,
-                                    color: sectionMeta.basics.tint,
-                                }"
+                        <div class="flex items-center gap-2">
+                            <Sparkles class="size-4 text-accent-blue" />
+                            <p class="text-sm font-medium text-ink">
+                                {{ t('system.integrations.form.mcp_discover_title') }}
+                            </p>
+                        </div>
+                        <p class="text-[11px] text-ink-subtle">
+                            {{ t('system.integrations.form.mcp_discover_hint') }}
+                        </p>
+                        <div class="flex gap-2">
+                            <Input
+                                v-model="discoverUrl"
+                                :placeholder="t('system.integrations.oauth2_discover.placeholder')"
+                                class="h-9 font-mono"
+                                @keydown.enter.prevent="discoverOAuth2"
+                            />
+                            <button
+                                type="button"
+                                :disabled="discoverState.status === 'loading' || !discoverUrl"
+                                class="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-accent-blue px-3 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                                @click="discoverOAuth2"
                             >
-                                <component :is="sectionMeta.basics.icon" class="size-4" />
+                                <Loader2
+                                    v-if="discoverState.status === 'loading'"
+                                    class="size-3.5 animate-spin"
+                                />
+                                <Sparkles v-else class="size-3.5" />
+                                {{ t('system.integrations.oauth2_discover.action') }}
+                            </button>
+                        </div>
+                        <div
+                            v-if="discoverState.status === 'success'"
+                            class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
+                        >
+                            <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
+                            <span>{{ discoverState.message }}</span>
+                        </div>
+                        <div
+                            v-else-if="discoverState.status === 'error'"
+                            class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
+                        >
+                            <XCircle class="mt-0.5 size-3.5 shrink-0" />
+                            <span>{{ discoverState.message }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Basics. -->
+                    <div class="rounded-sp-sm border border-soft bg-navy">
+                        <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
+                            <div
+                                class="flex size-8 items-center justify-center rounded-xs bg-accent-blue/15 text-accent-blue"
+                            >
+                                <Server class="size-4" />
                             </div>
                             <div class="min-w-0">
                                 <p class="text-sm font-medium text-ink">
                                     {{ t('system.integrations.form.basics') }}
                                 </p>
                                 <p class="text-xs text-ink-muted">
-                                    {{ t('system.integrations.form.basics_hint') }}
+                                    {{ t('system.integrations.form.mcp_basics_hint') }}
                                 </p>
                             </div>
                         </div>
-                        <ChevronDown
-                            :class="[
-                                openBasics ? 'rotate-180' : '',
-                                'size-4 shrink-0 text-ink-subtle transition-transform',
-                            ]"
-                        />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <div class="space-y-3 border-t border-soft px-5 py-4">
+                        <div class="space-y-3 px-5 py-4">
                             <div class="space-y-1.5">
-                                <Label for="name">
+                                <Label for="mcp_name">
                                     {{ t('system.integrations.form.name') }}
                                 </Label>
                                 <Input
-                                    id="name"
+                                    id="mcp_name"
                                     v-model="form.name"
                                     :placeholder="t('system.integrations.form.name_placeholder')"
                                     class="h-9"
@@ -320,41 +380,23 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 <InputError :message="form.errors.name" />
                             </div>
                             <div class="space-y-1.5">
-                                <Label for="description">
-                                    {{ t('system.integrations.form.description') }}
-                                </Label>
-                                <Textarea
-                                    id="description"
-                                    v-model="form.description"
-                                    rows="2"
-                                />
-                                <InputError :message="form.errors.description" />
-                            </div>
-                            <div class="space-y-1.5">
-                                <Label for="base_url">
-                                    {{ t('system.integrations.form.base_url') }}
+                                <Label for="mcp_url">
+                                    {{ t('system.integrations.form.server_url') }}
                                 </Label>
                                 <Input
-                                    id="base_url"
+                                    id="mcp_url"
                                     v-model="form.base_url"
-                                    :placeholder="t('system.integrations.form.base_url_placeholder')"
-                                    class="h-9"
+                                    :placeholder="t('system.integrations.form.server_url_placeholder')"
+                                    class="h-9 font-mono"
                                 />
                                 <InputError :message="form.errors.base_url" />
                             </div>
                         </div>
-                    </CollapsibleContent>
-                </Collapsible>
+                    </div>
 
-                <!-- Authentication. -->
-                <Collapsible
-                    v-model:open="openAuth"
-                    class="rounded-sp-sm border border-soft bg-navy"
-                >
-                    <CollapsibleTrigger
-                        class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
-                    >
-                        <div class="flex items-center gap-3">
+                    <!-- Access (auth). -->
+                    <div class="rounded-sp-sm border border-soft bg-navy">
+                        <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
                             <div
                                 class="flex size-8 items-center justify-center rounded-xs"
                                 :style="{
@@ -362,86 +404,83 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     color: sectionMeta.auth.tint,
                                 }"
                             >
-                                <component :is="sectionMeta.auth.icon" class="size-4" />
+                                <Key class="size-4" />
                             </div>
                             <div class="min-w-0">
                                 <p class="text-sm font-medium text-ink">
-                                    {{ t('system.integrations.form.authentication') }}
+                                    {{ t('system.integrations.mcp_auth.label') }}
                                 </p>
                                 <p class="text-xs text-ink-muted">
-                                    {{ t('system.integrations.form.authentication_hint') }}
+                                    {{ t('system.integrations.mcp_auth.hint') }}
                                 </p>
                             </div>
                         </div>
-                        <ChevronDown
-                            :class="[
-                                openAuth ? 'rotate-180' : '',
-                                'size-4 shrink-0 text-ink-subtle transition-transform',
-                            ]"
-                        />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <div class="space-y-3 border-t border-soft px-5 py-4">
-                            <div class="space-y-2">
-                                <Label>
-                                    {{ t('system.integrations.form.auth_method') }}
-                                </Label>
+                        <div class="space-y-3 px-5 py-4">
+                            <div class="grid gap-2 sm:grid-cols-2">
+                                <button
+                                    type="button"
+                                    :class="[
+                                        'flex items-start gap-3 rounded-xs border p-3 text-left transition-colors',
+                                        form.auth_type === 'none'
+                                            ? 'border-accent-blue/50 bg-accent-blue/[0.08]'
+                                            : 'border-soft bg-white/[0.03] hover:border-accent-blue/30 hover:bg-white/[0.06]',
+                                    ]"
+                                    @click="setMcpAuth(false)"
+                                >
+                                    <Globe class="mt-0.5 size-4 shrink-0 text-ink-muted" />
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium text-ink">
+                                            {{ t('system.integrations.mcp_auth.public') }}
+                                        </p>
+                                        <p class="mt-0.5 text-[11px] text-ink-subtle">
+                                            {{ t('system.integrations.mcp_auth.public_hint') }}
+                                        </p>
+                                    </div>
+                                </button>
+                                <button
+                                    type="button"
+                                    :class="[
+                                        'flex items-start gap-3 rounded-xs border p-3 text-left transition-colors',
+                                        form.auth_type === 'oauth2_auth_code'
+                                            ? 'border-accent-blue/50 bg-accent-blue/[0.08]'
+                                            : 'border-soft bg-white/[0.03] hover:border-accent-blue/30 hover:bg-white/[0.06]',
+                                    ]"
+                                    @click="setMcpAuth(true)"
+                                >
+                                    <UserCheck class="mt-0.5 size-4 shrink-0 text-ink-muted" />
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium text-ink">
+                                            {{ t('system.integrations.mcp_auth.oauth') }}
+                                        </p>
+                                        <p class="mt-0.5 text-[11px] text-ink-subtle">
+                                            {{ t('system.integrations.mcp_auth.oauth_hint') }}
+                                        </p>
+                                    </div>
+                                </button>
+                            </div>
+
+                            <p
+                                v-if="form.auth_type === 'oauth2_auth_code'"
+                                class="flex items-start gap-2 text-[11px] text-ink-subtle"
+                            >
+                                <Lock class="mt-px size-3 shrink-0" />
+                                <span>{{ t('system.integrations.mcp_auth.per_user_note') }}</span>
+                            </p>
+
+                            <!-- Escape hatch: token / api-key MCP servers. -->
+                            <button
+                                type="button"
+                                class="text-[11px] font-medium text-accent-blue hover:underline"
+                                @click="showMoreMcpAuth = !showMoreMcpAuth"
+                            >
+                                {{ t('system.integrations.mcp_auth.more') }}
+                            </button>
+                            <div v-if="showMoreMcpAuth">
                                 <AuthMethodPicker
                                     :options="authTypes"
                                     :model-value="form.auth_type"
                                     @update:model-value="selectAuthMethod"
                                 />
-                            </div>
-
-                            <!-- One-URL auto-configuration for OAuth 2.0 web auth (MCP). -->
-                            <div
-                                v-if="form.auth_type === 'oauth2_auth_code'"
-                                class="space-y-2 rounded-xs border border-accent-blue/30 bg-accent-blue/[0.06] p-3"
-                            >
-                                <div class="flex items-center gap-2">
-                                    <Sparkles class="size-4 text-accent-blue" />
-                                    <p class="text-sm font-medium text-ink">
-                                        {{ t('system.integrations.oauth2_discover.title') }}
-                                    </p>
-                                </div>
-                                <p class="text-[11px] text-ink-subtle">
-                                    {{ t('system.integrations.oauth2_discover.hint') }}
-                                </p>
-                                <div class="flex gap-2">
-                                    <Input
-                                        v-model="discoverUrl"
-                                        :placeholder="t('system.integrations.oauth2_discover.placeholder')"
-                                        class="h-9 font-mono"
-                                        @keydown.enter.prevent="discoverOAuth2"
-                                    />
-                                    <button
-                                        type="button"
-                                        :disabled="discoverState.status === 'loading' || !discoverUrl"
-                                        class="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-accent-blue px-3 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
-                                        @click="discoverOAuth2"
-                                    >
-                                        <Loader2
-                                            v-if="discoverState.status === 'loading'"
-                                            class="size-3.5 animate-spin"
-                                        />
-                                        <Sparkles v-else class="size-3.5" />
-                                        {{ t('system.integrations.oauth2_discover.action') }}
-                                    </button>
-                                </div>
-                                <div
-                                    v-if="discoverState.status === 'success'"
-                                    class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
-                                >
-                                    <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
-                                    <span>{{ discoverState.message }}</span>
-                                </div>
-                                <div
-                                    v-else-if="discoverState.status === 'error'"
-                                    class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
-                                >
-                                    <XCircle class="mt-0.5 size-3.5 shrink-0" />
-                                    <span>{{ discoverState.message }}</span>
-                                </div>
                             </div>
 
                             <AuthConfigField
@@ -452,87 +491,224 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 :errors="form.errors"
                                 @update:model-value="form.auth_config = $event"
                             />
-
-                            <!-- Test connection — pill trigger + semantic banners. -->
-                            <div class="flex flex-col gap-2 pt-1">
-                                <button
-                                    type="button"
-                                    :disabled="testState.status === 'loading' || !form.base_url"
-                                    class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
-                                    @click="testConnection"
-                                >
-                                    <Loader2
-                                        v-if="testState.status === 'loading'"
-                                        class="size-3.5 animate-spin"
-                                    />
-                                    <Plug v-else class="size-3.5" />
-                                    {{
-                                        testState.status === 'loading'
-                                            ? t('system.integrations.testing')
-                                            : t('system.integrations.test_now')
-                                    }}
-                                </button>
-                                <div
-                                    v-if="testState.status === 'success'"
-                                    class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
-                                >
-                                    <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
-                                    <span>{{ testState.message }}</span>
-                                </div>
-                                <div
-                                    v-else-if="testState.status === 'error'"
-                                    class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
-                                >
-                                    <XCircle class="mt-0.5 size-3.5 shrink-0" />
-                                    <span>{{ testState.message }}</span>
-                                </div>
-                            </div>
                         </div>
-                    </CollapsibleContent>
-                </Collapsible>
+                    </div>
+                </template>
 
-                <!-- Default headers. -->
-                <Collapsible
-                    v-model:open="openHeaders"
-                    class="rounded-sp-sm border border-soft bg-navy"
-                >
-                    <CollapsibleTrigger
-                        class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+                <!-- ===================== REST / HTTP API ===================== -->
+                <template v-else>
+                    <!-- Basics. -->
+                    <Collapsible
+                        v-model:open="openBasics"
+                        class="rounded-sp-sm border border-soft bg-navy"
                     >
-                        <div class="flex items-center gap-3">
-                            <div
-                                class="flex size-8 items-center justify-center rounded-xs"
-                                :style="{
-                                    backgroundColor: `color-mix(in oklab, ${sectionMeta.headers.tint} 15%, transparent)`,
-                                    color: sectionMeta.headers.tint,
-                                }"
-                            >
-                                <component :is="sectionMeta.headers.icon" class="size-4" />
+                        <CollapsibleTrigger
+                            class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="flex size-8 items-center justify-center rounded-xs"
+                                    :style="{
+                                        backgroundColor: `color-mix(in oklab, ${sectionMeta.basics.tint} 15%, transparent)`,
+                                        color: sectionMeta.basics.tint,
+                                    }"
+                                >
+                                    <component :is="sectionMeta.basics.icon" class="size-4" />
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium text-ink">
+                                        {{ t('system.integrations.form.basics') }}
+                                    </p>
+                                    <p class="text-xs text-ink-muted">
+                                        {{ t('system.integrations.form.basics_hint') }}
+                                    </p>
+                                </div>
                             </div>
-                            <div class="min-w-0">
-                                <p class="text-sm font-medium text-ink">
-                                    {{ t('system.integrations.form.default_headers') }}
-                                </p>
-                                <p class="text-xs text-ink-muted">
-                                    {{ t('system.integrations.form.default_headers_hint') }}
-                                </p>
+                            <ChevronDown
+                                :class="[
+                                    openBasics ? 'rotate-180' : '',
+                                    'size-4 shrink-0 text-ink-subtle transition-transform',
+                                ]"
+                            />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                            <div class="space-y-3 border-t border-soft px-5 py-4">
+                                <div class="space-y-1.5">
+                                    <Label for="name">
+                                        {{ t('system.integrations.form.name') }}
+                                    </Label>
+                                    <Input
+                                        id="name"
+                                        v-model="form.name"
+                                        :placeholder="t('system.integrations.form.name_placeholder')"
+                                        class="h-9"
+                                    />
+                                    <InputError :message="form.errors.name" />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <Label for="description">
+                                        {{ t('system.integrations.form.description') }}
+                                    </Label>
+                                    <Textarea
+                                        id="description"
+                                        v-model="form.description"
+                                        rows="2"
+                                    />
+                                    <InputError :message="form.errors.description" />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <Label for="base_url">
+                                        {{ t('system.integrations.form.base_url') }}
+                                    </Label>
+                                    <Input
+                                        id="base_url"
+                                        v-model="form.base_url"
+                                        :placeholder="t('system.integrations.form.base_url_placeholder')"
+                                        class="h-9"
+                                    />
+                                    <InputError :message="form.errors.base_url" />
+                                </div>
                             </div>
-                        </div>
-                        <ChevronDown
-                            :class="[
-                                openHeaders ? 'rotate-180' : '',
-                                'size-4 shrink-0 text-ink-subtle transition-transform',
-                            ]"
-                        />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <div class="border-t border-soft px-5 py-4">
-                            <HeaderEditor v-model="form.default_headers" />
-                        </div>
-                    </CollapsibleContent>
-                </Collapsible>
+                        </CollapsibleContent>
+                    </Collapsible>
 
-                <!-- Visibility + advanced. -->
+                    <!-- Authentication. -->
+                    <Collapsible
+                        v-model:open="openAuth"
+                        class="rounded-sp-sm border border-soft bg-navy"
+                    >
+                        <CollapsibleTrigger
+                            class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="flex size-8 items-center justify-center rounded-xs"
+                                    :style="{
+                                        backgroundColor: `color-mix(in oklab, ${sectionMeta.auth.tint} 15%, transparent)`,
+                                        color: sectionMeta.auth.tint,
+                                    }"
+                                >
+                                    <component :is="sectionMeta.auth.icon" class="size-4" />
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium text-ink">
+                                        {{ t('system.integrations.form.authentication') }}
+                                    </p>
+                                    <p class="text-xs text-ink-muted">
+                                        {{ t('system.integrations.form.authentication_hint') }}
+                                    </p>
+                                </div>
+                            </div>
+                            <ChevronDown
+                                :class="[
+                                    openAuth ? 'rotate-180' : '',
+                                    'size-4 shrink-0 text-ink-subtle transition-transform',
+                                ]"
+                            />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                            <div class="space-y-3 border-t border-soft px-5 py-4">
+                                <div class="space-y-2">
+                                    <Label>
+                                        {{ t('system.integrations.form.auth_method') }}
+                                    </Label>
+                                    <AuthMethodPicker
+                                        :options="authTypes"
+                                        :model-value="form.auth_type"
+                                        @update:model-value="selectAuthMethod"
+                                    />
+                                </div>
+
+                                <AuthConfigField
+                                    :auth-type="form.auth_type"
+                                    :model-value="form.auth_config"
+                                    :masked-values="integration?.masked_auth_config"
+                                    :callback-url="oauthCallbackUrl"
+                                    :errors="form.errors"
+                                    @update:model-value="form.auth_config = $event"
+                                />
+
+                                <!-- Test connection — pill trigger + semantic banners. -->
+                                <div class="flex flex-col gap-2 pt-1">
+                                    <button
+                                        type="button"
+                                        :disabled="testState.status === 'loading' || !form.base_url"
+                                        class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
+                                        @click="testConnection"
+                                    >
+                                        <Loader2
+                                            v-if="testState.status === 'loading'"
+                                            class="size-3.5 animate-spin"
+                                        />
+                                        <Plug v-else class="size-3.5" />
+                                        {{
+                                            testState.status === 'loading'
+                                                ? t('system.integrations.testing')
+                                                : t('system.integrations.test_now')
+                                        }}
+                                    </button>
+                                    <div
+                                        v-if="testState.status === 'success'"
+                                        class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
+                                    >
+                                        <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
+                                        <span>{{ testState.message }}</span>
+                                    </div>
+                                    <div
+                                        v-else-if="testState.status === 'error'"
+                                        class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
+                                    >
+                                        <XCircle class="mt-0.5 size-3.5 shrink-0" />
+                                        <span>{{ testState.message }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
+
+                    <!-- Default headers. -->
+                    <Collapsible
+                        v-model:open="openHeaders"
+                        class="rounded-sp-sm border border-soft bg-navy"
+                    >
+                        <CollapsibleTrigger
+                            class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="flex size-8 items-center justify-center rounded-xs"
+                                    :style="{
+                                        backgroundColor: `color-mix(in oklab, ${sectionMeta.headers.tint} 15%, transparent)`,
+                                        color: sectionMeta.headers.tint,
+                                    }"
+                                >
+                                    <component :is="sectionMeta.headers.icon" class="size-4" />
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium text-ink">
+                                        {{ t('system.integrations.form.default_headers') }}
+                                    </p>
+                                    <p class="text-xs text-ink-muted">
+                                        {{ t('system.integrations.form.default_headers_hint') }}
+                                    </p>
+                                </div>
+                            </div>
+                            <ChevronDown
+                                :class="[
+                                    openHeaders ? 'rotate-180' : '',
+                                    'size-4 shrink-0 text-ink-subtle transition-transform',
+                                ]"
+                            />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                            <div class="border-t border-soft px-5 py-4">
+                                <HeaderEditor v-model="form.default_headers" />
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
+                </template>
+
+                <!-- ===================== Shared: visibility + advanced ===================== -->
                 <Collapsible
                     v-model:open="openVisibility"
                     class="rounded-sp-sm border border-soft bg-navy"
@@ -584,25 +760,6 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     </SelectContent>
                                 </Select>
                             </div>
-
-                            <label
-                                for="is_mcp"
-                                class="flex cursor-pointer items-start gap-3 rounded-xs border border-soft bg-white/[0.03] p-3 transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
-                            >
-                                <Checkbox
-                                    id="is_mcp"
-                                    :model-value="form.is_mcp"
-                                    @update:model-value="form.is_mcp = $event === true"
-                                />
-                                <div class="min-w-0">
-                                    <p class="text-sm font-medium text-ink">
-                                        {{ t('system.integrations.form.is_mcp') }}
-                                    </p>
-                                    <p class="mt-0.5 text-[11px] text-ink-subtle">
-                                        {{ t('system.integrations.form.is_mcp_hint') }}
-                                    </p>
-                                </div>
-                            </label>
 
                             <label
                                 for="allow_insecure_tls"
