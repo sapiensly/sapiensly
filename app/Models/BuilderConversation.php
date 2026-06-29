@@ -18,7 +18,15 @@ class BuilderConversation extends Model
         'app_id',
         'user_id',
         'status',
+        'build_plan',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'build_plan' => 'array',
+        ];
+    }
 
     public static function getIdPrefix(): string
     {

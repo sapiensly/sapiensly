@@ -10,7 +10,9 @@ use App\Ai\Tools\Builder\ListAvailableFieldTypesTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
 use App\Ai\Tools\Builder\ScaffoldAppTool;
+use App\Ai\Tools\Builder\SetBuildPlanTool;
 use App\Ai\Tools\Builder\SimulateQueryTool;
+use App\Ai\Tools\Builder\TargetPlanStepsTool;
 use App\Ai\Tools\Builder\ValidateManifestTool;
 use App\Models\App;
 use App\Models\AppVersion;
@@ -362,6 +364,81 @@ it('add_detail_page fails when the object has no children', function () {
     $result = json_decode($tool->handle(new ToolRequest(['object_slug' => 'clientes'])), true);
 
     expect($result['ok'])->toBeFalse();
+});
+
+it('set_build_plan creates a plan on the conversation with minted ids', function () {
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $tool = new SetBuildPlanTool($conv);
+
+    $result = json_decode($tool->handle(new ToolRequest([
+        'goal' => 'Punto de venta',
+        'steps' => [['title' => 'Objetos y relaciones'], ['title' => 'Páginas']],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['plan']['steps'])->toHaveCount(2);
+
+    $conv->refresh();
+    expect($conv->build_plan['goal'])->toBe('Punto de venta')
+        ->and($conv->build_plan['steps'][0]['id'])->toStartWith('stp_')
+        ->and($conv->build_plan['steps'][0]['status'])->toBe('pending');
+});
+
+it('target_plan_steps marks steps in_progress and rejects unknown ids', function () {
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    (new SetBuildPlanTool($conv))->handle(new ToolRequest([
+        'steps' => [['title' => 'A'], ['title' => 'B']],
+    ]));
+    $conv->refresh();
+    $idA = $conv->build_plan['steps'][0]['id'];
+
+    $tool = new TargetPlanStepsTool($conv);
+    $ok = json_decode($tool->handle(new ToolRequest(['step_ids' => [$idA]])), true);
+    expect($ok['ok'])->toBeTrue()
+        ->and($ok['in_progress'])->toContain($idA);
+
+    $bad = json_decode($tool->handle(new ToolRequest(['step_ids' => ['stp_nope']])), true);
+    expect($bad['ok'])->toBeFalse();
+});
+
+it('target_plan_steps fails when there is no plan yet', function () {
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $result = json_decode((new TargetPlanStepsTool($conv))->handle(new ToolRequest(['step_ids' => ['stp_x']])), true);
+
+    expect($result['ok'])->toBeFalse();
+});
+
+it('revertMessage reopens build-plan steps closed by the reverted version', function () {
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+
+    // A real applied version (v2) on top of the beforeEach v1.
+    $v2 = $this->manifestService->applyPatch(
+        $this->testApp->fresh(),
+        [['op' => 'replace', 'path' => '/name', 'value' => 'Renamed']],
+        $this->user,
+        'rename',
+    );
+
+    // A plan step already closed by v2.
+    $conv->update(['build_plan' => [
+        'schema' => 1, 'goal' => null, 'status' => 'done', 'steps' => [[
+            'id' => 'stp_a', 'title' => 'paso', 'detail' => null, 'status' => 'done',
+            'applied_version_id' => $v2->id, 'version_number' => $v2->version_number,
+            'closed_by_summary' => 'rename', 'error' => null,
+        ]],
+    ]]);
+
+    $msg = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => 'ok',
+        'status' => 'applied', 'applied_version_id' => $v2->id,
+    ]);
+
+    $this->service->revertMessage($msg, $this->user);
+
+    $conv->refresh();
+    expect($conv->build_plan['steps'][0]['status'])->toBe('pending')
+        ->and($conv->build_plan['steps'][0]['applied_version_id'])->toBeNull()
+        ->and($conv->build_plan['status'])->toBe('active');
 });
 
 it('ProposeChangeTool fires the onProgress checkpoint only on a successful proposal', function () {
