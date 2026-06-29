@@ -76,7 +76,199 @@ class ManifestValidator
             $this->collectBlockWarnings($page['blocks'] ?? [], "/pages/{$pi}/blocks", $warnings);
         }
 
+        $this->lintDesign($manifest, $warnings);
+
         return $warnings;
+    }
+
+    /**
+     * Design-lint: high-precision, NON-blocking nudges about pages that will look
+     * broken or empty — caught statically, before anything renders.
+     *  R1 stub page: top-level blocks are all structural chrome (no content/function).
+     *  R3 orphan param block: a block needs {{params.X}} but nothing provides X
+     *     (no inbound navigation carries it, no filter_bar on the page, no
+     *     visibility guard) — the "renders empty / No record selected" smell.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintDesign(array $manifest, array &$warnings): void
+    {
+        $inbound = $this->inboundNavParams($manifest);
+
+        foreach ($manifest['pages'] ?? [] as $pi => $page) {
+            $blocks = $page['blocks'] ?? [];
+
+            // R1 — a page whose every top-level block is structural chrome.
+            $structural = ['heading', 'spacer', 'divider', 'breadcrumb'];
+            $nonStructural = array_filter($blocks, fn (array $b): bool => ! in_array($b['type'] ?? '', $structural, true));
+            if ($blocks === [] || $nonStructural === []) {
+                $warnings[] = new ManifestValidationError(
+                    "/pages/{$pi}",
+                    "page '".($page['slug'] ?? $pi)."' has no real content — only headings/spacers. Add a table, form, chart or other functional block, or remove the page.",
+                    'design_smell',
+                );
+            }
+
+            // R3 — param-dependent blocks with no source for the param.
+            $provided = $inbound[$page['path'] ?? ''] ?? [];
+            foreach ($this->filterBarParams($blocks) as $p) {
+                $provided[$p] = true;
+            }
+            $this->lintParamBlocks($blocks, "/pages/{$pi}/blocks", $provided, $warnings);
+        }
+    }
+
+    /**
+     * Map each page path to the set of query params that some in-manifest
+     * `navigate` action routes INTO it with (e.g. /comanda?id=… provides `id`).
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, array<string, bool>>
+     */
+    private function inboundNavParams(array $manifest): array
+    {
+        $map = [];
+        $walk = function (mixed $node) use (&$walk, &$map): void {
+            if (! is_array($node)) {
+                return;
+            }
+            if (($node['type'] ?? null) === 'navigate' && is_string($node['to'] ?? null)) {
+                [$path, $query] = array_pad(explode('?', $node['to'], 2), 2, '');
+                if ($query !== '' && preg_match_all('/([a-z][a-z0-9_]*)=/i', $query, $m)) {
+                    foreach ($m[1] as $param) {
+                        $map[$path][$param] = true;
+                    }
+                }
+            }
+            foreach ($node as $child) {
+                $walk($child);
+            }
+        };
+        $walk($manifest['pages'] ?? []);
+
+        return $map;
+    }
+
+    /**
+     * Param names a page's filter_bar controls write (they satisfy a dependency).
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return list<string>
+     */
+    private function filterBarParams(array $blocks): array
+    {
+        $params = [];
+        $walk = function (mixed $node) use (&$walk, &$params): void {
+            if (! is_array($node)) {
+                return;
+            }
+            if (($node['type'] ?? null) === 'filter_bar') {
+                foreach ($node['controls'] ?? [] as $control) {
+                    if (is_string($control['param'] ?? null)) {
+                        $params[] = $control['param'];
+                    }
+                }
+            }
+            foreach ($node as $child) {
+                $walk($child);
+            }
+        };
+        $walk($blocks);
+
+        return $params;
+    }
+
+    /**
+     * Walk blocks; warn when one reads {{params.X}} (record_detail/related_list
+     * record/parent id, or a data_source filter) for an X that isn't provided and
+     * the block has no visibility guard.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  array<string, bool>  $provided
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintParamBlocks(array $blocks, string $path, array $provided, array &$warnings): void
+    {
+        foreach ($blocks as $i => $block) {
+            $bp = "{$path}/{$i}";
+            $hasGuard = isset($block['visibility']['expression']);
+
+            if (! $hasGuard) {
+                $exprs = [
+                    $block['record_id_expression'] ?? null,
+                    $block['parent_id_expression'] ?? null,
+                ];
+                foreach ($this->filterValueExpressions($block['data_source']['filter'] ?? null) as $e) {
+                    $exprs[] = $e;
+                }
+                foreach (array_filter($exprs, 'is_string') as $expr) {
+                    foreach ($this->paramRefs($expr) as $param) {
+                        if (! isset($provided[$param])) {
+                            $warnings[] = new ManifestValidationError(
+                                $bp,
+                                "this {$block['type']} depends on {{params.{$param}}}, but nothing provides it (no inbound link carries it, no filter_bar, no visibility guard) — it will render empty. Set it via a filter_bar / a link into this page, or guard the block with a visibility expression.",
+                                'design_smell',
+                            );
+                            break 2;
+                        }
+                    }
+                }
+            }
+
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (! empty($block[$key])) {
+                    $this->lintParamBlocks($block[$key], "{$bp}/{$key}", $provided, $warnings);
+                }
+            }
+            foreach ($block['tabs'] ?? [] as $ti => $tab) {
+                $this->lintParamBlocks($tab['blocks'] ?? [], "{$bp}/tabs/{$ti}/blocks", $provided, $warnings);
+            }
+            foreach ($block['sections'] ?? [] as $si => $section) {
+                $this->lintParamBlocks($section['blocks'] ?? [], "{$bp}/sections/{$si}/blocks", $provided, $warnings);
+            }
+        }
+    }
+
+    /**
+     * Collect the value_expression strings inside a filter tree.
+     *
+     * @param  array<string, mixed>|null  $filter
+     * @return list<string>
+     */
+    private function filterValueExpressions(?array $filter): array
+    {
+        if ($filter === null) {
+            return [];
+        }
+        $out = [];
+        if (isset($filter['value_expression']) && is_string($filter['value_expression'])) {
+            $out[] = $filter['value_expression'];
+        }
+        foreach ($filter['conditions'] ?? [] as $cond) {
+            if (is_array($cond)) {
+                $out = array_merge($out, $this->filterValueExpressions($cond));
+            }
+        }
+        if (isset($filter['condition']) && is_array($filter['condition'])) {
+            $out = array_merge($out, $this->filterValueExpressions($filter['condition']));
+        }
+
+        return $out;
+    }
+
+    /**
+     * Param names referenced as {{params.X}} (incl. inside `not params.x`, ternaries).
+     *
+     * @return list<string>
+     */
+    private function paramRefs(string $expr): array
+    {
+        if (preg_match_all('/params\.([a-z][a-z0-9_]*)/i', $expr, $m)) {
+            return array_values(array_unique($m[1]));
+        }
+
+        return [];
     }
 
     /**
@@ -118,6 +310,17 @@ class ManifestValidator
                         );
                     }
                 }
+            }
+
+            // Design-lint R2: a tappable product grid with no image reads as bare.
+            if ($type === 'card_grid'
+                && ($block['on_click'] ?? []) !== []
+                && empty($block['image_field_id'])) {
+                $warnings[] = new ManifestValidationError(
+                    "{$bp}/image_field_id",
+                    'this card_grid is tappable but has no image_field_id — picker cards look bare without a thumbnail. Add an image (a string field with a URL) to the cards.',
+                    'design_smell',
+                );
             }
 
             foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {

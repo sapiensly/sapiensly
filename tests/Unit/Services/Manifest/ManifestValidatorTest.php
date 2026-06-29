@@ -1,6 +1,8 @@
 <?php
 
+use App\Services\Manifest\ManifestValidationResult;
 use App\Services\Manifest\ManifestValidator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 function ulid(): string
@@ -2533,4 +2535,78 @@ it('rejects a card_grid on_click that creates an unknown object', function () {
     $result = (new ManifestValidator)->validate($manifest);
     expect($result->valid)->toBeFalse()
         ->and(collect($result->errors)->pluck('code'))->toContain('unresolved_ref');
+});
+
+function designWarnings(ManifestValidationResult $r): Collection
+{
+    return collect($r->warnings)->filter(fn ($w) => $w->code === 'design_smell')->values();
+}
+
+it('design-lint R1: warns on a page with only structural chrome', function () {
+    $m = baseManifest();
+    $m['pages'] = [[
+        'id' => id('pag'), 'slug' => 'stub', 'name' => 'Stub', 'path' => '/stub',
+        'blocks' => [['id' => id('blk'), 'type' => 'heading', 'content' => 'Hola']],
+    ]];
+
+    $result = (new ManifestValidator)->validate($m);
+    expect($result->valid)->toBeTrue(); // non-blocking
+    expect(designWarnings($result)->pluck('path'))->toContain('/pages/0');
+});
+
+it('design-lint R2: warns on a tappable card_grid with no image', function () {
+    $m = baseManifest();
+    $obj = $m['objects'][0]['id'];
+    $fld = $m['objects'][0]['fields'][0]['id'];
+    $m['pages'] = [[
+        'id' => id('pag'), 'slug' => 'menu', 'name' => 'Menu', 'path' => '/menu',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'card_grid', 'data_source' => ['object_id' => $obj], 'title_field_id' => $fld,
+            'on_click' => [['type' => 'create_record', 'object_id' => $obj, 'values' => ['nombre' => '{{row.data.nombre}}']], ['type' => 'refresh']],
+        ]],
+    ]];
+
+    expect(designWarnings((new ManifestValidator)->validate($m))->isNotEmpty())->toBeTrue();
+});
+
+it('design-lint R3: warns on a param block with no source, but not when guarded', function () {
+    $obj = baseManifest()['objects'][0]['id'];
+    $fld = baseManifest()['objects'][0]['fields'][0]['id'];
+    $detailBlock = fn (array $extra = []) => array_merge([
+        'id' => id('blk'), 'type' => 'record_detail', 'object_id' => $obj,
+        'record_id_expression' => '{{params.id}}', 'fields' => [['field_id' => $fld]],
+    ], $extra);
+
+    // Orphan: nothing provides {{params.id}} → warned.
+    $orphan = baseManifest();
+    $orphan['pages'] = [['id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d', 'blocks' => [$detailBlock()]]];
+    expect(designWarnings((new ManifestValidator)->validate($orphan))->isNotEmpty())->toBeTrue();
+
+    // Guarded by a visibility expression → not warned.
+    $guarded = baseManifest();
+    $guarded['pages'] = [['id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d', 'blocks' => [
+        $detailBlock(['visibility' => ['expression' => '{{params.id}}']]),
+    ]]];
+    expect(designWarnings((new ManifestValidator)->validate($guarded)))->toBeEmpty();
+});
+
+it('design-lint R3: a param block fed by an inbound link is not warned', function () {
+    $obj = baseManifest()['objects'][0]['id'];
+    $fld = baseManifest()['objects'][0]['fields'][0]['id'];
+    $m = baseManifest();
+    $m['pages'] = [
+        ['id' => id('pag'), 'slug' => 'list', 'name' => 'List', 'path' => '/list', 'blocks' => [[
+            'id' => id('blk'), 'type' => 'table', 'data_source' => ['object_id' => $obj],
+            'columns' => [
+                ['id' => id('col'), 'field_id' => $fld],
+                ['id' => id('col'), 'type' => 'action', 'label' => 'Open', 'on_click' => [['type' => 'navigate', 'to' => '/d?id={{row.id}}']]],
+            ],
+        ]]],
+        ['id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d', 'blocks' => [[
+            'id' => id('blk'), 'type' => 'record_detail', 'object_id' => $obj,
+            'record_id_expression' => '{{params.id}}', 'fields' => [['field_id' => $fld]],
+        ]]],
+    ];
+
+    expect(designWarnings((new ManifestValidator)->validate($m)))->toBeEmpty();
 });

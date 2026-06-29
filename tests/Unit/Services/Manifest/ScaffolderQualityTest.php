@@ -108,6 +108,7 @@ function scaffoldPos(string $locale): array
             ['name' => 'Platillos', 'slug' => 'platillos', 'fields' => [
                 ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
                 ['name' => 'Precio', 'slug' => 'precio', 'type' => 'currency', 'options' => null],
+                ['name' => 'Imagen', 'slug' => 'url_imagen', 'type' => 'string', 'options' => null],
             ]],
             ['name' => 'Renglones', 'slug' => 'renglones', 'fields' => [
                 ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
@@ -341,4 +342,20 @@ it('does not generate a POS screen without a priced product triad', function () 
     // The earlier parent/child (no priced product on the child's other side).
     $manifest = scaffoldWithChild('es-MX');
     expect(pageBySlug($manifest, 'pos'))->toBeNull();
+});
+
+it('scaffolded apps produce no design-lint warnings', function () {
+    $manifests = [
+        'crm' => scaffoldFor('es-MX'),
+        'master-detail' => scaffoldWithChild('es-MX'),
+        'pos' => scaffoldPos('es-MX'),
+    ];
+
+    foreach ($manifests as $label => $manifest) {
+        $smells = collect((new ManifestValidator)->validate($manifest)->warnings)
+            ->filter(fn ($w) => $w->code === 'design_smell')
+            ->map(fn ($w) => $w->path.': '.$w->message)
+            ->all();
+        expect($smells)->toBe([], "expected no design smells for {$label}");
+    }
 });
