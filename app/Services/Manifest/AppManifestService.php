@@ -118,6 +118,11 @@ class AppManifestService
             throw new InvalidManifestException($result);
         }
 
+        // Defensive bound: keep a runaway summary from bloating the row. The
+        // column is text (no 255 limit), so a normal descriptive summary is kept
+        // in full; this only trims pathologically long input.
+        $summary = $summary === null ? null : Str::limit($summary, 2000, '');
+
         return DB::transaction(function () use ($app, $manifest, $user, $summary): AppVersion {
             // Re-read inside the transaction with FOR UPDATE so two concurrent
             // creators can't end up with the same version_number.

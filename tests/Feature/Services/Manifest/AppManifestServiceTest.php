@@ -197,3 +197,16 @@ it('applyPatch can append the first workflow with /workflows/- when the key is a
     expect($version->manifest['workflows'])->toHaveCount(1)
         ->and($version->manifest['workflows'][0]['id'])->toBe($wkf);
 });
+
+it('persists a change summary longer than 255 chars (text column, not VARCHAR 255)', function () {
+    $app = App::factory()->create();
+    // Builder agents write long, descriptive summaries; a 255-char VARCHAR used to
+    // abort the whole createVersion transaction so nothing saved.
+    $summary = str_repeat('Agrego relaciones y campos derivados al POS. ', 12); // ~528 chars
+
+    $version = makeService()->createVersion($app, manifest('Long'), null, $summary);
+
+    expect(mb_strlen($summary))->toBeGreaterThan(255);
+    expect($version->fresh()->change_summary)->toBe($summary);
+    expect($app->fresh()->current_version_id)->toBe($version->id);
+});
