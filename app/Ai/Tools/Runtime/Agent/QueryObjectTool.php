@@ -47,8 +47,10 @@ List rows of a data object this assistant can read. Call describe_capabilities
 first to learn the object ids and field ids. Returns { count, total, has_more,
 rows: [{ id, data: { field_slug: value } }] } (capped at 50 rows; total is the
 full match count for paging, null for connected objects). filter/sort use the
-same shape as the app's data blocks. Works the same for internal and connected
-(external) objects.
+same shape as the app's data blocks. Pass expand: [relation_field_id] to resolve
+belongs_to relations inline — each row then carries expanded: { [field_id]: { id,
+data } | null }, sparing a second lookup. Works the same for internal and
+connected (external) objects.
 DESC;
     }
 
@@ -62,6 +64,8 @@ DESC;
                 ->description('Optional filter_expression: {op, ...} (eq/neq/gt/and/or/not). Relation traversal: {op: related, field_id: <relation field>, condition: <filter on the related object>}.'),
             'search' => $schema->string()
                 ->description('Optional free-text search across the object\'s text fields (case-insensitive).'),
+            'expand' => $schema->array()
+                ->description('Optional belongs_to relation field ids to resolve inline; each row gains expanded: { [field_id]: { id, data } | null }.'),
             'sort' => $schema->array()
                 ->description('Optional [{field_id, direction: asc|desc}].'),
             'limit' => $schema->integer()
@@ -83,7 +87,7 @@ DESC;
         }
 
         $dataSource = ['object_id' => $objectId];
-        foreach (['filter', 'search', 'sort', 'offset'] as $key) {
+        foreach (['filter', 'search', 'sort', 'offset', 'expand'] as $key) {
             if (isset($args[$key])) {
                 $dataSource[$key] = $args[$key];
             }

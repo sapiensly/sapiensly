@@ -82,6 +82,10 @@ const detail = ref<{
     rows: Array<{
         id: string;
         data: Record<string, unknown>;
+        expanded?: Record<
+            string,
+            { id: string; data: Record<string, unknown> } | null
+        >;
         sys_created_at: string | null;
         sys_updated_at: string | null;
     }>;
@@ -354,6 +358,31 @@ function formatAggValue(v: unknown): string {
 function formatGroupKey(g: unknown): string {
     if (g === null || g === undefined || g === '') return '(empty)';
     return String(g);
+}
+
+type DrillRow = {
+    id: string;
+    data: Record<string, unknown>;
+    expanded?: Record<
+        string,
+        { id: string; data: Record<string, unknown> } | null
+    >;
+};
+
+// Human label for a belongs_to cell: prefer the related record's name/title/
+// label field, else its first non-empty string value, else its id. Falls back
+// to the raw stored value when the relation wasn't expanded.
+function relationDisplay(row: DrillRow, f: FieldDef): string {
+    const exp = row.expanded?.[f.id];
+    if (exp === undefined) return formatCell(row.data[f.slug], f.type);
+    if (exp === null) return '—';
+    const d = exp.data;
+    const label =
+        (d.name as string) ??
+        (d.title as string) ??
+        (d.label as string) ??
+        Object.values(d).find((v) => typeof v === 'string' && v !== '');
+    return label != null && label !== '' ? String(label) : exp.id;
 }
 
 function formatCell(value: unknown, type: string): string {
@@ -837,9 +866,28 @@ function triggerLabel(t: string | null): string {
                             v-for="f in detail.object.fields"
                             :key="f.id"
                             class="max-w-xs truncate px-3 py-2 align-top text-ink"
-                            :title="formatCell(row.data[f.slug], f.type)"
+                            :title="
+                                f.type === 'relation'
+                                    ? relationDisplay(row, f)
+                                    : formatCell(row.data[f.slug], f.type)
+                            "
                         >
-                            {{ formatCell(row.data[f.slug], f.type) }}
+                            <span
+                                v-if="
+                                    f.type === 'relation' &&
+                                    row.expanded?.[f.id]
+                                "
+                                class="inline-flex items-center gap-1 rounded-pill bg-accent-blue/10 px-1.5 py-0.5 text-[11px] text-accent-blue"
+                            >
+                                <Link2 class="size-2.5" />{{
+                                    relationDisplay(row, f)
+                                }}
+                            </span>
+                            <template v-else>{{
+                                f.type === 'relation'
+                                    ? relationDisplay(row, f)
+                                    : formatCell(row.data[f.slug], f.type)
+                            }}</template>
                         </td>
                         <td
                             class="px-3 py-2 align-top font-mono text-[10px] whitespace-nowrap text-ink-subtle"

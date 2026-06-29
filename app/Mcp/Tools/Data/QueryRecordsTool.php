@@ -12,7 +12,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Query records of an object in an app. Returns matching records plus the total count and a has_more flag for paging (tenant-scoped). Call describe_app_data first to learn the object and field ids.')]
+#[Description('Query records of an object in an app. Returns matching records plus the total count and a has_more flag for paging (tenant-scoped). Pass `expand` to resolve belongs_to relations inline. Call describe_app_data first to learn the object and field ids.')]
 class QueryRecordsTool extends SapiensTool
 {
     protected const ABILITY = 'data:read';
@@ -25,6 +25,8 @@ class QueryRecordsTool extends SapiensTool
             'filter' => ['sometimes', 'array'],
             'search' => ['sometimes', 'string'],
             'sort' => ['sometimes', 'array'],
+            'expand' => ['sometimes', 'array'],
+            'expand.*' => ['string'],
             'limit' => ['sometimes', 'integer', 'min:1', 'max:200'],
             'offset' => ['sometimes', 'integer', 'min:0'],
         ]);
@@ -41,7 +43,7 @@ class QueryRecordsTool extends SapiensTool
         $manifest = app(AppManifestService::class)->getActiveManifest($app);
 
         $query = ['object_id' => $validated['object_id'], 'limit' => $validated['limit'] ?? 50];
-        foreach (['filter', 'search', 'sort', 'offset'] as $key) {
+        foreach (['filter', 'search', 'sort', 'offset', 'expand'] as $key) {
             if (isset($validated[$key])) {
                 $query[$key] = $validated[$key];
             }
@@ -57,11 +59,19 @@ class QueryRecordsTool extends SapiensTool
             'count' => $result['records']->count(),
             'total' => $result['total'],
             'has_more' => $result['has_more'],
-            'records' => $result['records']->map(fn ($r) => [
-                'id' => $r->id,
-                'data' => $r->data,
-                'created_at' => $r->created_at?->toIso8601String(),
-            ])->values(),
+            'records' => $result['records']->map(function ($r) {
+                $row = [
+                    'id' => $r->id,
+                    'data' => $r->data,
+                    'created_at' => $r->created_at?->toIso8601String(),
+                ];
+                // Inline belongs_to relations resolved via `expand`.
+                if ($r->expanded !== []) {
+                    $row['expanded'] = $r->expanded;
+                }
+
+                return $row;
+            })->values(),
         ]);
     }
 
@@ -76,6 +86,7 @@ class QueryRecordsTool extends SapiensTool
             'filter' => $schema->object()->description('Optional filter block: {op, ...}. Leaf ops: eq/neq/gt/gte/lt/lte/in/not_in/contains/starts_with/ends_with/between/is_null/is_not_null referencing field_ids. Logical: and/or/not. Relation traversal: {op: related, field_id: <relation field>, condition: <filter on the related object>} (belongs_to and has_many; nestable).'),
             'search' => $schema->string()->description('Optional free-text search across the object\'s text fields (case-insensitive; terms ANDed).'),
             'sort' => $schema->array()->description('Optional [{field_id, direction: asc|desc}].'),
+            'expand' => $schema->array()->description('Optional list of belongs_to relation field ids to resolve inline. Each returned record gains expanded: { [field_id]: { id, data } | null } with the related record (access-respecting; null if empty/not visible).'),
             'limit' => $schema->integer()->description('Max records to return (default 50, max 200).'),
             'offset' => $schema->integer()->description('Rows to skip, for paging (default 0).'),
         ];

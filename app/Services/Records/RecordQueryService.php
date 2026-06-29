@@ -25,7 +25,10 @@ use RuntimeException;
  *     and has_many; nestable up to MAX_RELATION_DEPTH.
  *
  * A query block may also carry `search` (a string): a case-insensitive match
- * across the object's text fields, ANDed across whitespace-separated terms.
+ * across the object's text fields, ANDed across whitespace-separated terms; and
+ * `expand` (a list of belongs_to relation field ids): resolves each related
+ * record inline onto the result rows' transient `expanded` map (batched, no
+ * N+1; access- and field-hiding-safe).
  *
  * Supported field types for filtering: string, long_text, number, currency,
  * boolean, date, datetime, single_select. multi_select and relation are
@@ -75,7 +78,99 @@ class RecordQueryService
 
         $this->derived->enrich($app, $object, $records, $manifest);
 
+        if (isset($query['expand']) && is_array($query['expand']) && $query['expand'] !== []) {
+            $this->expandRelations($app, $records, $query['expand'], $object, $manifest, $context);
+        }
+
         return $records;
+    }
+
+    /**
+     * Resolve belongs_to relations inline on a result set: for each requested
+     * relation field, batch-load the related records (one query per target
+     * object, no N+1) and attach them to each row's transient `expanded` map as
+     * `{id, data}` (or null when the FK is empty / the related record is not
+     * visible). Honours the target object's row_filter (inaccessible relateds
+     * resolve to null) and strips its hidden fields, so expansion never leaks
+     * what a direct read would hide.
+     *
+     * has_many relations are skipped — a flat row can't carry a child list; query
+     * the child object directly (optionally with a `related` filter) instead.
+     *
+     * @param  Collection<int, Record>  $records
+     * @param  list<string>  $expandFieldIds
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    private function expandRelations(App $app, Collection $records, array $expandFieldIds, array $object, array $manifest, array $context): void
+    {
+        $access = $context['__access'] ?? null;
+
+        foreach ($expandFieldIds as $fieldId) {
+            if (! is_string($fieldId)) {
+                continue;
+            }
+
+            $field = $this->findField($object, $fieldId);
+            if (($field['type'] ?? null) !== 'relation' || ($field['cardinality'] ?? 'many_to_one') !== 'many_to_one') {
+                // Only belongs_to expands inline; mark others null so the caller
+                // gets a consistent shape rather than a missing key.
+                foreach ($records as $r) {
+                    $r->expanded[$fieldId] = null;
+                }
+
+                continue;
+            }
+
+            $targetId = $field['target_object_id'] ?? null;
+            if ($targetId === null) {
+                continue;
+            }
+
+            $slug = $field['slug'];
+            $ids = $records
+                ->map(fn (Record $r) => $r->data[$slug] ?? null)
+                ->filter(fn ($v) => $v !== null && $v !== '')
+                ->map(fn ($v) => (string) $v)
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($ids === []) {
+                foreach ($records as $r) {
+                    $r->expanded[$fieldId] = null;
+                }
+
+                continue;
+            }
+
+            $targetObject = $this->findObject($manifest, $targetId);
+            $builder = $this->scopeForObject($app, $targetId)->whereIn('id', $ids);
+            $this->applyAccessFilter($builder, $targetObject, $targetId, $app, $manifest, $context);
+
+            /** @var Collection<int, Record> $related */
+            $related = $builder->get();
+            $this->derived->enrich($app, $targetObject, $related, $manifest);
+
+            $hidden = $access instanceof AppAccessContext ? $access->hiddenFieldSlugs($targetId) : [];
+            $byId = $related->keyBy('id');
+
+            foreach ($records as $r) {
+                $fk = $r->data[$slug] ?? null;
+                $rel = ($fk !== null && $fk !== '') ? $byId->get((string) $fk) : null;
+                if ($rel === null) {
+                    $r->expanded[$fieldId] = null;
+
+                    continue;
+                }
+                $data = $rel->data;
+                foreach ($hidden as $h) {
+                    unset($data[$h]);
+                }
+                $r->expanded[$fieldId] = ['id' => $rel->id, 'data' => $data];
+            }
+        }
     }
 
     /**

@@ -462,7 +462,13 @@ class BlockDataResolver
             $data['id'] = $r->id;
             $data['sys_created_at'] = optional($r->created_at)->toIso8601String();
             $data['sys_updated_at'] = optional($r->updated_at)->toIso8601String();
-            $out[] = ['id' => $r->id, 'data' => $data];
+            $row = ['id' => $r->id, 'data' => $data];
+            // Inline-expanded belongs_to relations (RecordQueryService::query with
+            // `expand`); already access- and field-hiding-safe at the engine level.
+            if (! empty($r->expanded)) {
+                $row['expanded'] = $r->expanded;
+            }
+            $out[] = $row;
         }
 
         return $out;

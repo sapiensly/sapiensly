@@ -774,6 +774,18 @@ class AppBuilderController extends Controller
             $queryArgs['search'] = $q;
         }
 
+        // Resolve belongs_to relations inline so the table can show a readable
+        // label for each link instead of the raw foreign-key id.
+        $relationFieldIds = [];
+        foreach ($object['fields'] as $f) {
+            if (($f['type'] ?? null) === 'relation' && ($f['cardinality'] ?? 'many_to_one') === 'many_to_one') {
+                $relationFieldIds[] = $f['id'];
+            }
+        }
+        if ($relationFieldIds !== []) {
+            $queryArgs['expand'] = $relationFieldIds;
+        }
+
         $result = $this->records->queryWithMeta($app, $queryArgs, $manifest, $context);
         $records = $result['records'];
         $total = $result['total'];
@@ -788,6 +800,7 @@ class AppBuilderController extends Controller
             'rows' => $records->map(fn (Record $r) => [
                 'id' => $r->id,
                 'data' => $r->data,
+                'expanded' => $r->expanded,
                 'sys_created_at' => optional($r->created_at)->toIso8601String(),
                 'sys_updated_at' => optional($r->updated_at)->toIso8601String(),
             ])->values()->all(),

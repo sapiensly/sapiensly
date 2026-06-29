@@ -233,6 +233,48 @@ it('runs a cross-field text search', function () {
     expect($records->pluck('data')->pluck('name')->all())->toBe(['Banana']);
 });
 
+it('expands a belongs_to relation inline', function () {
+    $ids = seedSales($this->salesApp);
+
+    $records = app(RecordQueryService::class)->query(
+        $this->salesApp,
+        ['object_id' => 'obj_orders', 'sort' => [['field_id' => 'fld_amount', 'direction' => 'asc']], 'expand' => ['fld_customer']],
+        overviewManifest(),
+    );
+
+    // Apple + Banana belong to Acme, Cherry to Beta.
+    $apple = $records->firstWhere('data.name', 'Apple');
+    $cherry = $records->firstWhere('data.name', 'Cherry');
+
+    expect($apple->expanded['fld_customer']['id'])->toBe($ids['acme'])
+        ->and($apple->expanded['fld_customer']['data']['name'])->toBe('Acme')
+        ->and($cherry->expanded['fld_customer']['data']['name'])->toBe('Beta');
+});
+
+it('expands to null when the relation is unset', function () {
+    Record::create(['app_id' => $this->salesApp->id, 'object_definition_id' => 'obj_orders', 'organization_id' => null, 'data' => ['name' => 'Orphan', 'amount' => 10]]);
+
+    $records = app(RecordQueryService::class)->query(
+        $this->salesApp,
+        ['object_id' => 'obj_orders', 'expand' => ['fld_customer']],
+        overviewManifest(),
+    );
+
+    expect($records->first()->expanded['fld_customer'])->toBeNull();
+});
+
+it('does not expand a has_many relation inline (null)', function () {
+    $ids = seedSales($this->salesApp);
+
+    $records = app(RecordQueryService::class)->query(
+        $this->salesApp,
+        ['object_id' => 'obj_customers', 'expand' => ['fld_orders']],
+        overviewManifest(),
+    );
+
+    expect($records->first()->expanded['fld_orders'])->toBeNull();
+});
+
 it('counts respect search and relation filters', function () {
     seedSales($this->salesApp);
 

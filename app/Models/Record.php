@@ -16,6 +16,16 @@ class Record extends Model
 
     use UsesTenantConnection;
 
+    /**
+     * Query-time relation expansion, keyed by relation field id → the resolved
+     * related record ({id, data}) or null. Transient: a declared property (so
+     * Eloquent's attribute magic is bypassed) that is never persisted — populated
+     * by RecordQueryService::query() when the query block requests `expand`.
+     *
+     * @var array<string, array{id: string, data: array<string, mixed>}|null>
+     */
+    public array $expanded = [];
+
     protected $fillable = [
         'organization_id',
         'user_id',
