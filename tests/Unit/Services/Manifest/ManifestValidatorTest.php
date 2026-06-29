@@ -435,6 +435,121 @@ it('rejects filter expression referencing field_id not in scope', function () {
     expect(collect($result->errors)->pluck('code'))->toContain('unresolved_ref');
 });
 
+function relationManifest(): array
+{
+    $ordersId = id('obj');
+    $custId = id('obj');
+    $fldOrderName = id('fld');
+    $fldRel = id('fld');
+    $fldCustName = id('fld');
+
+    $manifest = baseManifest();
+    $manifest['objects'] = [
+        [
+            'id' => $ordersId,
+            'slug' => 'orders',
+            'name' => 'Order',
+            'primary_display_field_id' => $fldOrderName,
+            'fields' => [
+                ['id' => $fldOrderName, 'slug' => 'name', 'name' => 'Name', 'type' => 'string'],
+                ['id' => $fldRel, 'slug' => 'customer', 'name' => 'Customer', 'type' => 'relation', 'target_object_id' => $custId, 'cardinality' => 'many_to_one'],
+            ],
+        ],
+        [
+            'id' => $custId,
+            'slug' => 'customers',
+            'name' => 'Customer',
+            'primary_display_field_id' => $fldCustName,
+            'fields' => [
+                ['id' => $fldCustName, 'slug' => 'cname', 'name' => 'Name', 'type' => 'string'],
+            ],
+        ],
+    ];
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'p',
+        'name' => 'P',
+        'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'table',
+            'data_source' => ['object_id' => $ordersId],
+            'columns' => [['id' => id('col'), 'field_id' => $fldOrderName]],
+        ]],
+    ]];
+
+    return [$manifest, compact('fldRel', 'fldCustName', 'fldOrderName')];
+}
+
+function withFilter(array $manifest, array $filter): array
+{
+    $manifest['pages'][0]['blocks'][0]['data_source']['filter'] = $filter;
+
+    return $manifest;
+}
+
+it('accepts a related filter traversing a relation', function () {
+    [$manifest, $ids] = relationManifest();
+    $manifest = withFilter($manifest, [
+        'op' => 'related',
+        'field_id' => $ids['fldRel'],
+        'condition' => ['op' => 'eq', 'field_id' => $ids['fldCustName'], 'value' => 'Acme'],
+    ]);
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue();
+});
+
+it('rejects a related filter whose field_id is not a relation', function () {
+    [$manifest, $ids] = relationManifest();
+    $manifest = withFilter($manifest, [
+        'op' => 'related',
+        'field_id' => $ids['fldOrderName'], // a string field, not a relation
+        'condition' => ['op' => 'eq', 'field_id' => $ids['fldCustName'], 'value' => 'Acme'],
+    ]);
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('code'))->toContain('unresolved_ref');
+});
+
+it('scopes a related condition to the target object fields', function () {
+    [$manifest, $ids] = relationManifest();
+    // The condition references an ORDERS field, but it's scoped to CUSTOMERS → unresolved.
+    $manifest = withFilter($manifest, [
+        'op' => 'related',
+        'field_id' => $ids['fldRel'],
+        'condition' => ['op' => 'eq', 'field_id' => $ids['fldOrderName'], 'value' => 'x'],
+    ]);
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('code'))->toContain('unresolved_ref');
+});
+
+it('accepts a search string on a data_source', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'p',
+        'name' => 'P',
+        'path' => '/p',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'table',
+            'data_source' => ['object_id' => $manifest['objects'][0]['id'], 'search' => 'acme'],
+            'columns' => [['id' => id('col'), 'field_id' => $manifest['objects'][0]['fields'][0]['id']]],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue();
+});
+
 it('rejects malformed value_expression braces', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[

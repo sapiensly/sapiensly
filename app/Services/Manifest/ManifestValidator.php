@@ -36,6 +36,17 @@ class ManifestValidator
 
     private ?Lexer $lexer = null;
 
+    /**
+     * Field-id → field map, per object id, for the manifest currently being
+     * validated. Populated at the top of validate(); read by the filter
+     * `related` branch to resolve a relation's target-object fields (its
+     * sub-condition is scoped to the RELATED object, not the queried one). Reset
+     * every validate() call.
+     *
+     * @var array<string, array<string, array<string, mixed>>>
+     */
+    private array $fieldsByObjectId = [];
+
     public function __construct(private ?string $schemaPath = null) {}
 
     /**
@@ -690,6 +701,20 @@ class ManifestValidator
             }
             $objectsById[$object['id']] = $object;
             $objectsBySlug[$object['slug']] = $object;
+        }
+
+        // A complete field-id → field map per object, available up-front so the
+        // recursive filter validator can resolve a `related` filter's sub-
+        // condition against the RELATED object's fields (not the queried one).
+        $this->fieldsByObjectId = [];
+        foreach ($objects as $object) {
+            $map = [];
+            foreach ($object['fields'] ?? [] as $field) {
+                if (isset($field['id'])) {
+                    $map[$field['id']] = $field;
+                }
+            }
+            $this->fieldsByObjectId[$object['id'] ?? ''] = $map;
         }
 
         $fieldsByObjectId = [];
@@ -2119,6 +2144,25 @@ class ManifestValidator
 
         if (($expr['op'] ?? null) === 'not') {
             $this->validateFilterExpression($expr['condition'] ?? null, "{$path}/condition", $fields, $errors);
+
+            return;
+        }
+
+        // Relation traversal: field_id must be a relation on THIS object; its
+        // sub-condition is scoped to the RELATED object's fields.
+        if (($expr['op'] ?? null) === 'related') {
+            $relField = $fields[$expr['field_id'] ?? ''] ?? null;
+            if (($relField['type'] ?? null) !== 'relation') {
+                $errors[] = new ManifestValidationError(
+                    "{$path}/field_id",
+                    "related filter field_id '".($expr['field_id'] ?? '')."' is not a relation field on the queried object",
+                    'unresolved_ref',
+                );
+
+                return;
+            }
+            $targetFields = $this->fieldsByObjectId[$relField['target_object_id'] ?? ''] ?? [];
+            $this->validateFilterExpression($expr['condition'] ?? null, "{$path}/condition", $targetFields, $errors);
 
             return;
         }

@@ -661,7 +661,7 @@
         },
 
         "filter_expression": {
-            "description": "A filter is a single OBJECT (not an array). Either a leaf condition {op, field_id, value|value_expression} where op is eq|neq|gt|gte|lt|lte|in|not_in|contains|starts_with|ends_with|is_null|is_not_null|between — e.g. {\"op\":\"eq\",\"field_id\":\"fld_…\",\"value\":\"activo\"}; OR a group {op:\"and\"|\"or\", conditions:[…nested filters…]}; OR {op:\"not\", condition:{…}}. To combine several conditions wrap them in one and/or group, never pass a bare array.",
+            "description": "A filter is a single OBJECT (not an array). Either a leaf condition {op, field_id, value|value_expression} where op is eq|neq|gt|gte|lt|lte|in|not_in|contains|starts_with|ends_with|is_null|is_not_null|between — e.g. {\"op\":\"eq\",\"field_id\":\"fld_…\",\"value\":\"activo\"}; OR a group {op:\"and\"|\"or\", conditions:[…nested filters…]}; OR {op:\"not\", condition:{…}}; OR a relation traversal {op:\"related\", field_id:\"<a relation field>\", condition:{…filter on the RELATED object…}} — keeps rows whose related record(s) match (belongs_to and has_many). To combine several conditions wrap them in one and/or group, never pass a bare array.",
             "oneOf": [
                 {
                     "type": "object",
@@ -691,6 +691,17 @@
                         "value": {},
                         "value_expression": { "type": "string" }
                     }
+                },
+                {
+                    "type": "object",
+                    "required": ["op", "field_id", "condition"],
+                    "additionalProperties": false,
+                    "description": "Relation traversal: keep rows whose related record(s) match the sub-condition. field_id must be a relation field on the queried object; condition is a filter over the RELATED object's fields.",
+                    "properties": {
+                        "op": { "const": "related" },
+                        "field_id": { "$ref": "#/$defs/id" },
+                        "condition": { "$ref": "#/$defs/filter_expression" }
+                    }
                 }
             ]
         },
@@ -714,6 +725,7 @@
             "properties": {
                 "object_id": { "$ref": "#/$defs/id" },
                 "filter": { "$ref": "#/$defs/filter_expression" },
+                "search": { "type": "string", "description": "Case-insensitive free-text match across the object's text fields (string, long_text, single_select, …). ANDed across whitespace-separated terms." },
                 "sort": {
                     "type": "array",
                     "items": {
