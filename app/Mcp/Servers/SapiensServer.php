@@ -35,6 +35,11 @@ Build & debug apps (apps:build):
     (list_available_icons) on buttons/stats/cards and custom_css for fine touches —
     keep it executive, not loud.
   - Versions: list_app_versions, rollback_app.
+  - Builder sessions (the in-app AI app-builder chats): list_builder_conversations
+    (by app_slug) and get_builder_conversation (full transcript: each turn's
+    summary, proposal status, applied version) to debug or see where a build left
+    off; continue_builder_conversation resumes it — posts a message and runs a
+    real builder turn (auto-applies the proposal as a new version by default).
   - Access (who can use the app and in which role): list_app_roles, then
     assign_app_role / revoke_app_role (member by email). The manifest DEFINES the
     roles + policies (see framework_reference topic=permissions); these tools
@@ -108,6 +113,10 @@ class SapiensServer extends Server
         Tools\Build\ScaffoldAppTool::class,
         Tools\Build\ReadManifestTool::class,
         Tools\Build\GetManifestSchemaTool::class,
+        // Builder chat sessions (debug / resume the in-app AI app-builder).
+        Tools\Build\ListBuilderConversationsTool::class,
+        Tools\Build\GetBuilderConversationTool::class,
+        Tools\Build\ContinueBuilderConversationTool::class,
         Tools\Build\AddObjectTool::class,
         Tools\Build\AddFieldTool::class,
         Tools\Build\AddRelationTool::class,

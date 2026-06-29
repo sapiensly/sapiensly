@@ -254,6 +254,39 @@ class BuilderAiService
     }
 
     /**
+     * Run a full synchronous builder turn AND auto-apply its proposal — the same
+     * net effect as the in-app streaming path (streamMessage + commitTurn) but
+     * without WebSocket streaming, for non-interactive callers (the MCP
+     * `continue_builder_conversation` tool). Returns the finalized assistant
+     * message: status 'applied' with applied_version_id when a proposal landed,
+     * 'none' when the turn was pure chat or the apply failed (the proposal is
+     * kept on the message so it can be retried/approved in-app).
+     */
+    public function sendMessageAndApply(BuilderConversation $conversation, string $userText, ?User $user = null): BuilderMessage
+    {
+        $message = $this->sendMessage($conversation, $userText);
+
+        if ($message->status !== 'pending' || empty($message->proposed_patch)) {
+            return $message;
+        }
+
+        $result = $this->commitTurn(
+            $conversation->app,
+            ['patch' => $message->proposed_patch, 'summary' => $message->change_summary],
+            $user,
+            (string) $message->content,
+        );
+
+        $message->update([
+            'content' => $result['content'],
+            'status' => $result['status'],
+            'applied_version_id' => $result['applied_version_id'],
+        ]);
+
+        return $message->refresh();
+    }
+
+    /**
      * Async variant invoked from RunBuilderAiJob. The user message has
      * already been persisted by the controller and a placeholder assistant
      * message is passed in with status='streaming'. We stream Claude's

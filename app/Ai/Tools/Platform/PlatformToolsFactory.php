@@ -41,6 +41,9 @@ class PlatformToolsFactory
         // Spawns a full chat AI turn (token spend + tools); keep it out of
         // agent-initiated runs to avoid recursive/runaway turns.
         'continue_chat',
+        // Spawns a full builder AI turn (token spend + tools, mutates the
+        // manifest); same recursion/runaway risk as continue_chat.
+        'continue_builder_conversation',
     ];
 
     /** @var array<string, list<ToolContract>> */
