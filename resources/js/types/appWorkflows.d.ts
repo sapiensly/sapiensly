@@ -36,12 +36,24 @@ export type DateReachedTrigger = {
     timezone?: string;
     filter?: unknown;
 };
+export type ChannelMessageTrigger = {
+    type: 'channel.message_received';
+    channel_id: string;
+    contains?: string;
+};
+export type IntegrationEventTrigger = {
+    type: 'integration.event';
+    integration_id: string;
+    event?: string;
+};
 export type WorkflowTrigger =
     | ManualTrigger
     | RecordTrigger
     | ScheduleTrigger
     | WebhookTrigger
-    | DateReachedTrigger;
+    | DateReachedTrigger
+    | ChannelMessageTrigger
+    | IntegrationEventTrigger;
 
 export type StepType =
     | 'log'

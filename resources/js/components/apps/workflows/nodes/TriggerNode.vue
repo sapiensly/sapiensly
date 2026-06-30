@@ -14,6 +14,7 @@ import {
     Hand,
     MessageSquare,
     Pencil,
+    Plug,
     Plus,
     Trash2,
     Webhook,
@@ -104,6 +105,15 @@ const meta = computed(() => {
                     'apps.builder.workflows.trigger.channel_message_summary',
                 ),
                 color: '#38bdf8',
+            };
+        case 'integration.event':
+            return {
+                icon: Plug,
+                label: t('apps.builder.workflows.trigger.integration_event'),
+                summary: t(
+                    'apps.builder.workflows.trigger.integration_event_summary',
+                ),
+                color: '#a78bfa',
             };
     }
     return { icon: Hand, label: '?', summary: '—', color: '#94a3b8' };

@@ -306,6 +306,8 @@ const TRIGGER_KEYS = [
     'signature_header',
     'channel_id',
     'contains',
+    'integration_id',
+    'event',
 ];
 
 function changeTriggerType(newType: WorkflowTrigger['type']) {
@@ -330,6 +332,8 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
         };
     } else if (newType === 'channel.message_received') {
         specifics = { type: 'channel.message_received', channel_id: '' };
+    } else if (newType === 'integration.event') {
+        specifics = { type: 'integration.event', integration_id: '' };
     } else {
         specifics = { type: newType, object_id: '' };
     }
@@ -464,6 +468,13 @@ watch(
                     <option value="channel.message_received">
                         {{
                             t('apps.builder.workflows.trigger.channel_message')
+                        }}
+                    </option>
+                    <option value="integration.event">
+                        {{
+                            t(
+                                'apps.builder.workflows.trigger.integration_event',
+                            )
                         }}
                     </option>
                 </select>
@@ -784,6 +795,75 @@ watch(
                         "
                         class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
                     />
+                </label>
+            </template>
+
+            <!-- Integration event trigger: pick an integration + optional event. -->
+            <template v-else-if="triggerData.type === 'integration.event'">
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.integration')
+                    }}</span>
+                    <select
+                        :value="
+                            (triggerData as { integration_id?: string })
+                                .integration_id ?? ''
+                        "
+                        @change="
+                            patchTrigger({
+                                integration_id: (
+                                    $event.target as HTMLSelectElement
+                                ).value,
+                            })
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    >
+                        <option value="" disabled>
+                            {{
+                                t(
+                                    'apps.builder.workflows.panel.integration_placeholder',
+                                )
+                            }}
+                        </option>
+                        <option
+                            v-for="i in connectorIntegrations ?? []"
+                            :key="i.id"
+                            :value="i.id"
+                        >
+                            {{ i.name }}
+                        </option>
+                    </select>
+                    <span
+                        v-if="(connectorIntegrations ?? []).length === 0"
+                        class="text-xs text-ink-subtle"
+                    >
+                        {{ t('apps.builder.workflows.panel.integration_none') }}
+                    </span>
+                </label>
+
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.event')
+                    }}</span>
+                    <input
+                        type="text"
+                        :value="(triggerData as { event?: string }).event ?? ''"
+                        @input="
+                            patchTrigger({
+                                event: ($event.target as HTMLInputElement)
+                                    .value,
+                            })
+                        "
+                        :placeholder="
+                            t('apps.builder.workflows.panel.event_placeholder')
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    />
+                    <span class="text-xs text-ink-subtle">{{
+                        t(
+                            'apps.builder.workflows.panel.integration_secret_hint',
+                        )
+                    }}</span>
                 </label>
             </template>
 

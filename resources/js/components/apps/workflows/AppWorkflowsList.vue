@@ -16,6 +16,7 @@ import {
     Hand,
     MessageSquare,
     Pencil,
+    Plug,
     Plus,
     Power,
     Trash2,
@@ -43,6 +44,7 @@ const triggerIcons: Record<string, unknown> = {
     'webhook.inbound': Webhook,
     'record.date_reached': CalendarClock,
     'channel.message_received': MessageSquare,
+    'integration.event': Plug,
 };
 
 // Explicit type → i18n key map. Can't derive it (webhook.inbound's label key
@@ -56,6 +58,7 @@ const triggerLabelKeys: Record<string, string> = {
     'webhook.inbound': 'webhook',
     'record.date_reached': 'date_reached',
     'channel.message_received': 'channel_message',
+    'integration.event': 'integration_event',
 };
 
 function triggerLabel(type: string): string {
