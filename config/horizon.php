@@ -249,6 +249,19 @@ return [
             'timeout' => 300, // 5 minutes — each agent turn streams a full reply
             'nice' => 0,
         ],
+        'supervisor-workflows' => [
+            'connection' => 'redis',
+            'queue' => ['workflows'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1, // workflows hit the write path; a retry could double side-effects
+            'timeout' => 300, // 5 minutes — a run may chain AI, HTTP and connector steps
+            'nice' => 0,
+        ],
         'supervisor-whatsapp-webhooks' => [
             'connection' => 'redis',
             'queue' => ['whatsapp-webhooks'],
@@ -293,6 +306,11 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-workflows' => [
+                'maxProcesses' => 5,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
             'supervisor-whatsapp-webhooks' => [
                 'maxProcesses' => 5,
                 'balanceMaxShift' => 1,
@@ -317,6 +335,9 @@ return [
             ],
             'supervisor-agent-responses' => [
                 'maxProcesses' => 3,
+            ],
+            'supervisor-workflows' => [
+                'maxProcesses' => 2,
             ],
             'supervisor-whatsapp-webhooks' => [
                 'maxProcesses' => 2,

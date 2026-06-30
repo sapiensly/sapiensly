@@ -1164,6 +1164,7 @@ class ManifestValidator
                         "/workflows/{$i}/trigger/filter",
                         $fieldsByObjectId[$triggerObjectId] ?? [],
                         $errors,
+                        forTrigger: true,
                     );
                 }
             }
@@ -2128,7 +2129,7 @@ class ManifestValidator
      * @param  array<string, array<string, mixed>>  $fields
      * @param  ManifestValidationError[]  $errors
      */
-    private function validateFilterExpression(?array $expr, string $path, array $fields, array &$errors): void
+    private function validateFilterExpression(?array $expr, string $path, array $fields, array &$errors, bool $forTrigger = false): void
     {
         if ($expr === null) {
             return;
@@ -2136,14 +2137,37 @@ class ManifestValidator
 
         if (in_array($expr['op'] ?? null, ['and', 'or'], true)) {
             foreach ($expr['conditions'] ?? [] as $i => $cond) {
-                $this->validateFilterExpression($cond, "{$path}/conditions/{$i}", $fields, $errors);
+                $this->validateFilterExpression($cond, "{$path}/conditions/{$i}", $fields, $errors, $forTrigger);
             }
 
             return;
         }
 
         if (($expr['op'] ?? null) === 'not') {
-            $this->validateFilterExpression($expr['condition'] ?? null, "{$path}/condition", $fields, $errors);
+            $this->validateFilterExpression($expr['condition'] ?? null, "{$path}/condition", $fields, $errors, $forTrigger);
+
+            return;
+        }
+
+        // A trigger filter is matched against the single written record in memory,
+        // so it can't traverse relations or evaluate a dynamic value_expression
+        // (no DB query, no workflow context exists yet). Reject both with a
+        // pointer to the right tool — a record.query + branch/skip_if step.
+        if ($forTrigger && ($expr['op'] ?? null) === 'related') {
+            $errors[] = new ManifestValidationError(
+                "{$path}/op",
+                "trigger filters can't traverse relations ('related'); fire on the record event, then check the relation inside the workflow with a record.query step and a branch/skip_if.",
+                'unsupported_in_trigger',
+            );
+
+            return;
+        }
+        if ($forTrigger && isset($expr['value_expression'])) {
+            $errors[] = new ManifestValidationError(
+                "{$path}/value_expression",
+                'trigger filters compare against a literal `value`, not `value_expression` — there is no workflow context to resolve it against at trigger time.',
+                'unsupported_in_trigger',
+            );
 
             return;
         }

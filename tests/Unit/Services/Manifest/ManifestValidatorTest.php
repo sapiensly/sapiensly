@@ -2725,3 +2725,64 @@ it('design-lint R3: a param block fed by an inbound link is not warned', functio
 
     expect(designWarnings((new ManifestValidator)->validate($m)))->toBeEmpty();
 });
+
+it('accepts a plain literal trigger filter (record.* with a leaf value)', function () {
+    $manifest = baseManifest();
+    $objA = $manifest['objects'][0]['id'];
+    $fld = $manifest['objects'][0]['fields'][0]['id'];
+    $manifest['workflows'] = [[
+        'id' => id('wkf'), 'slug' => 'wf', 'name' => 'WF',
+        'trigger' => ['type' => 'record.created', 'object_id' => $objA, 'filter' => [
+            'op' => 'eq', 'field_id' => $fld, 'value' => 'Acme',
+        ]],
+        'steps' => [['id' => id('stp'), 'type' => 'log', 'message' => 'x']],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->not->toContain('unsupported_in_trigger');
+});
+
+it('rejects a value_expression inside a trigger filter', function () {
+    $manifest = baseManifest();
+    $objA = $manifest['objects'][0]['id'];
+    $fld = $manifest['objects'][0]['fields'][0]['id'];
+    $manifest['workflows'] = [[
+        'id' => id('wkf'), 'slug' => 'wf', 'name' => 'WF',
+        'trigger' => ['type' => 'record.created', 'object_id' => $objA, 'filter' => [
+            'op' => 'eq', 'field_id' => $fld, 'value_expression' => '{{current_user.name}}',
+        ]],
+        'steps' => [['id' => id('stp'), 'type' => 'log', 'message' => 'x']],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('unsupported_in_trigger');
+});
+
+it('rejects a `related` traversal inside a trigger filter', function () {
+    $manifest = baseManifest();
+    $objA = $manifest['objects'][0]['id'];
+    $objB = id('obj');
+    $fldRel = id('fld');
+    $fldTier = id('fld');
+
+    $manifest['objects'][0]['fields'][] = [
+        'id' => $fldRel, 'slug' => 'customer', 'name' => 'Customer',
+        'type' => 'relation', 'target_object_id' => $objB, 'cardinality' => 'many_to_one',
+    ];
+    $manifest['objects'][] = [
+        'id' => $objB, 'slug' => 'customers', 'name' => 'Customer',
+        'primary_display_field_id' => $fldTier,
+        'fields' => [['id' => $fldTier, 'slug' => 'tier', 'name' => 'Tier', 'type' => 'string']],
+    ];
+    $manifest['workflows'] = [[
+        'id' => id('wkf'), 'slug' => 'wf', 'name' => 'WF',
+        'trigger' => ['type' => 'record.created', 'object_id' => $objA, 'filter' => [
+            'op' => 'related', 'field_id' => $fldRel,
+            'condition' => ['op' => 'eq', 'field_id' => $fldTier, 'value' => 'vip'],
+        ]],
+        'steps' => [['id' => id('stp'), 'type' => 'log', 'message' => 'x']],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('unsupported_in_trigger');
+});

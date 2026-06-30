@@ -14,7 +14,10 @@ use Illuminate\Support\Facades\Log;
  */
 class WorkflowTriggerDispatcher
 {
-    public function __construct(private WorkflowEngine $engine) {}
+    public function __construct(
+        private WorkflowEngine $engine,
+        private TriggerFilterMatcher $matcher,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $manifest
@@ -44,6 +47,18 @@ class WorkflowTriggerDispatcher
             }
 
             try {
+                // Only fire when the trigger's filter matches the written record.
+                // Evaluated inside the try so a malformed filter is logged and the
+                // workflow skipped — never blocking the record write.
+                $filter = $trigger['filter'] ?? null;
+                if (is_array($filter) && $filter !== []) {
+                    $object = $this->findObject($manifest, (string) $expectedObjectId);
+                    if ($object === null
+                        || ! $this->matcher->matches($filter, $object, $payload['record'] ?? [])) {
+                        continue;
+                    }
+                }
+
                 $this->engine->run($app, $manifest, $workflow, $eventType, $payload, $user);
             } catch (\Throwable $e) {
                 Log::warning('Workflow trigger failed', [
@@ -53,5 +68,20 @@ class WorkflowTriggerDispatcher
                 ]);
             }
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>|null
+     */
+    private function findObject(array $manifest, string $objectId): ?array
+    {
+        foreach ($manifest['objects'] ?? [] as $object) {
+            if (($object['id'] ?? null) === $objectId) {
+                return $object;
+            }
+        }
+
+        return null;
     }
 }
