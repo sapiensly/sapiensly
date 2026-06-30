@@ -41,6 +41,7 @@ class ListAvailableTriggersTool implements Tool
             ['type' => 'schedule', 'props' => 'cron (required, 5-field e.g. "0 9 * * 1-5"), timezone? (IANA, default UTC) — fires on a recurring schedule. Trigger payload: {scheduled_at: ISO8601}'],
             ['type' => 'webhook.inbound', 'props' => 'dedupe_path? (JSON path to the provider delivery id, e.g. "id"), signature_header? (default X-Sapiensly-Signature) — fires when an external system POSTs to the workflow\'s signed webhook URL. Trigger payload: {webhook: {body, headers}}'],
             ['type' => 'record.date_reached', 'props' => 'object_id (required), field_id (required, a date/datetime field), offset? ({value, unit: minutes|hours|days|weeks, direction: before|after}), at? (HH:MM, default 09:00, for date-only fields), timezone? (IANA, default UTC), filter? — fires when the record\'s date field ± offset reaches now (e.g. 3 days before due_date). Payload: {record: {...}, reached_at: ISO8601}'],
+            ['type' => 'channel.message_received', 'props' => 'channel_id (required, a WhatsApp/widget channel in your org), contains? (case-insensitive substring the message text must contain) — fires when an inbound message arrives on that channel. Payload: {channel: {id, type, name}, message: {text, content_type}, contact: {id, name, identifier}, conversation_id}'],
         ];
 
         return json_encode([

@@ -2319,6 +2319,17 @@
                         "timezone": { "type": "string", "maxLength": 60 },
                         "filter": { "$ref": "#/$defs/filter_expression" }
                     }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "channel_id"],
+                    "additionalProperties": false,
+                    "description": "Fires when an inbound message arrives on a chat channel (WhatsApp or web widget). `channel_id` binds the workflow to a specific channel in your organization. Optional `contains` fires only when the message text contains that substring (case-insensitive). Trigger payload: {channel:{id,type,name}, message:{text,content_type}, contact:{id,name,identifier}, conversation_id}.",
+                    "properties": {
+                        "type": { "const": "channel.message_received" },
+                        "channel_id": { "type": "string", "maxLength": 64 },
+                        "contains": { "type": "string", "maxLength": 200 }
+                    }
                 }
             ]
         },

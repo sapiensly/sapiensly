@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Widget;
 
 use App\Enums\MessageRole;
 use App\Http\Controllers\Controller;
+use App\Jobs\DispatchChannelMessageWorkflows;
 use App\Models\Chatbot;
 use App\Models\WidgetAttachment;
 use App\Models\WidgetConversation;
@@ -191,6 +192,28 @@ class ChatController extends Controller
 
         // Update session activity
         $widgetConversation->session?->update(['last_activity_at' => now()]);
+
+        // Fire any channel.message_received workflows bound to this channel.
+        DispatchChannelMessageWorkflows::dispatch(
+            (string) $chatbot->channel_id,
+            $chatbot->organization_id,
+            $chatbot->user_id,
+            [
+                'channel' => [
+                    'id' => $chatbot->channel_id,
+                    'type' => 'widget',
+                    'name' => $chatbot->name,
+                ],
+                'message' => [
+                    'text' => $message->content ?? '',
+                    'content_type' => 'text',
+                ],
+                'contact' => [
+                    'id' => $widgetConversation->contact_id,
+                ],
+                'conversation_id' => $widgetConversation->id,
+            ],
+        );
 
         return response()->json([
             'message_id' => $message->id,

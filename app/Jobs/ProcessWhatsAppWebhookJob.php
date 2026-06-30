@@ -146,7 +146,42 @@ class ProcessWhatsAppWebhookJob implements ShouldQueue
             return;
         }
 
+        $this->dispatchChannelMessageWorkflows($channel, $contact, $conversation, $stored);
+
         GenerateWhatsAppReplyJob::dispatch($conversation->id);
+    }
+
+    /**
+     * Fire any channel.message_received workflows bound to this channel.
+     */
+    private function dispatchChannelMessageWorkflows(
+        Channel $channel,
+        Contact $contact,
+        WhatsAppConversation $conversation,
+        WhatsAppMessage $message,
+    ): void {
+        DispatchChannelMessageWorkflows::dispatch(
+            $channel->id,
+            $channel->organization_id,
+            $channel->user_id,
+            [
+                'channel' => [
+                    'id' => $channel->id,
+                    'type' => $channel->channel_type->value,
+                    'name' => $channel->name,
+                ],
+                'message' => [
+                    'text' => $message->content ?? '',
+                    'content_type' => $message->content_type?->value,
+                ],
+                'contact' => [
+                    'id' => $contact->id,
+                    'name' => $contact->profile_name,
+                    'identifier' => $contact->identifier,
+                ],
+                'conversation_id' => $conversation->id,
+            ],
+        );
     }
 
     /**
