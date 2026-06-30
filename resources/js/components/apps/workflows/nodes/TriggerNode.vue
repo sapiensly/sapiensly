@@ -12,6 +12,7 @@ import {
     CalendarClock,
     Clock,
     Hand,
+    Mail,
     MessageSquare,
     Pencil,
     Plug,
@@ -124,6 +125,15 @@ const meta = computed(() => {
                     'apps.builder.workflows.trigger.integration_poll_summary',
                 ),
                 color: '#fb923c',
+            };
+        case 'email.inbound':
+            return {
+                icon: Mail,
+                label: t('apps.builder.workflows.trigger.email_inbound'),
+                summary: t(
+                    'apps.builder.workflows.trigger.email_inbound_summary',
+                ),
+                color: '#f472b6',
             };
     }
     return { icon: Hand, label: '?', summary: '—', color: '#94a3b8' };

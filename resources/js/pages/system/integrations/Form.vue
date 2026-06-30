@@ -86,6 +86,8 @@ interface Props {
     oauthCallbackUrl?: string;
     /** Inbound webhook receiver URL for this integration (edit mode only). */
     webhookUrl?: string;
+    /** Inbound email receiver URL for this integration (edit mode only). */
+    webhookEmailUrl?: string;
 }
 
 const props = defineProps<Props>();
@@ -279,14 +281,14 @@ const openAuth = ref(true);
 const openHeaders = ref(false);
 const openWebhook = ref(false);
 
-const webhookUrlCopied = ref(false);
-async function copyWebhookUrl() {
-    if (!props.webhookUrl) return;
+const copiedWebhook = ref<'url' | 'email' | null>(null);
+async function copyWebhook(text: string | undefined, which: 'url' | 'email') {
+    if (!text) return;
     try {
-        await navigator.clipboard.writeText(props.webhookUrl);
-        webhookUrlCopied.value = true;
+        await navigator.clipboard.writeText(text);
+        copiedWebhook.value = which;
         setTimeout(() => {
-            webhookUrlCopied.value = false;
+            copiedWebhook.value = null;
         }, 1500);
     } catch {
         // Clipboard API may be unavailable (HTTP/permission); no-op.
@@ -1547,15 +1549,17 @@ const sectionMeta: Record<string, SectionMeta> = {
                                         <button
                                             type="button"
                                             class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-xs text-ink transition-colors hover:border-strong"
-                                            @click="copyWebhookUrl"
+                                            @click="
+                                                copyWebhook(webhookUrl, 'url')
+                                            "
                                         >
                                             <Check
-                                                v-if="webhookUrlCopied"
+                                                v-if="copiedWebhook === 'url'"
                                                 class="size-3.5 text-sp-success"
                                             />
                                             <Copy v-else class="size-3.5" />
                                             {{
-                                                webhookUrlCopied
+                                                copiedWebhook === 'url'
                                                     ? t(
                                                           'system.integrations.webhook.copied',
                                                       )
@@ -1565,6 +1569,97 @@ const sectionMeta: Record<string, SectionMeta> = {
                                             }}
                                         </button>
                                     </div>
+                                    <p class="text-xs text-ink-muted">
+                                        {{
+                                            t(
+                                                'system.integrations.webhook.url_event_hint',
+                                            )
+                                        }}
+                                    </p>
+                                </div>
+
+                                <!-- Email receiver URL (edit only) — for email.inbound. -->
+                                <div
+                                    v-if="mode === 'edit' && webhookEmailUrl"
+                                    class="space-y-1"
+                                >
+                                    <Label>{{
+                                        t(
+                                            'system.integrations.webhook.email_url',
+                                        )
+                                    }}</Label>
+                                    <div class="flex items-center gap-2">
+                                        <Input
+                                            :model-value="webhookEmailUrl"
+                                            readonly
+                                            class="font-mono text-xs"
+                                        />
+                                        <button
+                                            type="button"
+                                            class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-xs text-ink transition-colors hover:border-strong"
+                                            @click="
+                                                copyWebhook(
+                                                    webhookEmailUrl,
+                                                    'email',
+                                                )
+                                            "
+                                        >
+                                            <Check
+                                                v-if="copiedWebhook === 'email'"
+                                                class="size-3.5 text-sp-success"
+                                            />
+                                            <Copy v-else class="size-3.5" />
+                                            {{
+                                                copiedWebhook === 'email'
+                                                    ? t(
+                                                          'system.integrations.webhook.copied',
+                                                      )
+                                                    : t(
+                                                          'system.integrations.webhook.copy',
+                                                      )
+                                            }}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Email provider preset (for email.inbound normalization). -->
+                                <div class="space-y-1">
+                                    <Label>{{
+                                        t(
+                                            'system.integrations.webhook.email_provider',
+                                        )
+                                    }}</Label>
+                                    <select
+                                        :value="
+                                            (form.auth_config
+                                                .email_provider as string) ??
+                                            'generic'
+                                        "
+                                        @change="
+                                            setAuthConfig(
+                                                'email_provider',
+                                                (
+                                                    $event.target as HTMLSelectElement
+                                                ).value,
+                                            )
+                                        "
+                                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                                    >
+                                        <option value="generic">
+                                            {{
+                                                t(
+                                                    'system.integrations.webhook.provider_generic',
+                                                )
+                                            }}
+                                        </option>
+                                        <option value="postmark">
+                                            Postmark
+                                        </option>
+                                        <option value="mailgun">Mailgun</option>
+                                        <option value="sendgrid">
+                                            SendGrid
+                                        </option>
+                                    </select>
                                 </div>
 
                                 <div class="space-y-1">

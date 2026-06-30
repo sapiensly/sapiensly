@@ -14,6 +14,7 @@ import {
     CalendarClock,
     Clock,
     Hand,
+    Mail,
     MessageSquare,
     Pencil,
     Plug,
@@ -47,6 +48,7 @@ const triggerIcons: Record<string, unknown> = {
     'channel.message_received': MessageSquare,
     'integration.event': Plug,
     'integration.poll': RefreshCw,
+    'email.inbound': Mail,
 };
 
 // Explicit type → i18n key map. Can't derive it (webhook.inbound's label key
@@ -62,6 +64,7 @@ const triggerLabelKeys: Record<string, string> = {
     'channel.message_received': 'channel_message',
     'integration.event': 'integration_event',
     'integration.poll': 'integration_poll',
+    'email.inbound': 'email_inbound',
 };
 
 function triggerLabel(type: string): string {

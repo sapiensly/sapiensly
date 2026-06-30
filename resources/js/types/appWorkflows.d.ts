@@ -53,6 +53,12 @@ export type IntegrationPollTrigger = {
     watermark_path: string;
     interval_minutes?: number;
 };
+export type EmailInboundTrigger = {
+    type: 'email.inbound';
+    integration_id: string;
+    to_contains?: string;
+    subject_contains?: string;
+};
 export type WorkflowTrigger =
     | ManualTrigger
     | RecordTrigger
@@ -61,7 +67,8 @@ export type WorkflowTrigger =
     | DateReachedTrigger
     | ChannelMessageTrigger
     | IntegrationEventTrigger
-    | IntegrationPollTrigger;
+    | IntegrationPollTrigger
+    | EmailInboundTrigger;
 
 export type StepType =
     | 'log'

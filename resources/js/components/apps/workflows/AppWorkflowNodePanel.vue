@@ -323,6 +323,8 @@ const TRIGGER_KEYS = [
     'items_path',
     'watermark_path',
     'interval_minutes',
+    'to_contains',
+    'subject_contains',
 ];
 
 function changeTriggerType(newType: WorkflowTrigger['type']) {
@@ -356,6 +358,8 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
             watermark_path: '',
             interval_minutes: 15,
         };
+    } else if (newType === 'email.inbound') {
+        specifics = { type: 'email.inbound', integration_id: '' };
     } else {
         specifics = { type: newType, object_id: '' };
     }
@@ -503,6 +507,9 @@ watch(
                         {{
                             t('apps.builder.workflows.trigger.integration_poll')
                         }}
+                    </option>
+                    <option value="email.inbound">
+                        {{ t('apps.builder.workflows.trigger.email_inbound') }}
                     </option>
                 </select>
             </label>
@@ -1001,6 +1008,98 @@ watch(
                                     ($event.target as HTMLInputElement).value,
                                 ),
                             })
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    />
+                </label>
+            </template>
+
+            <!-- Email inbound trigger: pick an integration + optional filters. -->
+            <template v-else-if="triggerData.type === 'email.inbound'">
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.integration')
+                    }}</span>
+                    <select
+                        :value="
+                            (triggerData as { integration_id?: string })
+                                .integration_id ?? ''
+                        "
+                        @change="
+                            patchTrigger({
+                                integration_id: (
+                                    $event.target as HTMLSelectElement
+                                ).value,
+                            })
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    >
+                        <option value="" disabled>
+                            {{
+                                t(
+                                    'apps.builder.workflows.panel.integration_placeholder',
+                                )
+                            }}
+                        </option>
+                        <option
+                            v-for="i in connectorIntegrations ?? []"
+                            :key="i.id"
+                            :value="i.id"
+                        >
+                            {{ i.name }}
+                        </option>
+                    </select>
+                    <span class="text-xs text-ink-subtle">{{
+                        t('apps.builder.workflows.panel.email_hint')
+                    }}</span>
+                </label>
+
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.to_contains')
+                    }}</span>
+                    <input
+                        type="text"
+                        :value="
+                            (triggerData as { to_contains?: string })
+                                .to_contains ?? ''
+                        "
+                        @input="
+                            patchTrigger({
+                                to_contains: ($event.target as HTMLInputElement)
+                                    .value,
+                            })
+                        "
+                        :placeholder="
+                            t(
+                                'apps.builder.workflows.panel.to_contains_placeholder',
+                            )
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    />
+                </label>
+
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.subject_contains')
+                    }}</span>
+                    <input
+                        type="text"
+                        :value="
+                            (triggerData as { subject_contains?: string })
+                                .subject_contains ?? ''
+                        "
+                        @input="
+                            patchTrigger({
+                                subject_contains: (
+                                    $event.target as HTMLInputElement
+                                ).value,
+                            })
+                        "
+                        :placeholder="
+                            t(
+                                'apps.builder.workflows.panel.subject_contains_placeholder',
+                            )
                         "
                         class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
                     />
