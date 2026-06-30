@@ -2,13 +2,22 @@
 
 namespace App\Services\Chat\Actions;
 
+use App\Ai\Tools\Chat\ProposeBuildTool;
+use App\Mcp\Tools\Agents\CreateAgentTool;
+use App\Mcp\Tools\Build\CreateAppTool;
+use App\Mcp\Tools\Chatbots\CreateChatbotTool;
+use App\Mcp\Tools\Data\CreateKnowledgeBaseTool;
+use App\Mcp\Tools\Integrations\CreateIntegrationTool;
+
 /**
- * Maps a synthesized `action_type` to the handler that can execute it.
+ * Maps a synthesized / proposed `action_type` to the handler that can execute it.
  *
- * v1 knows only `manual`; every proposal normalizes to it (see
- * {@see self::normalizeType()}). Register real handlers here as they are wired —
- * the synthesizer's validation and the executor both route through this class, so
- * nothing else changes when the registry grows.
+ * Beyond the `manual` fallback (a described, unwired close), it knows the
+ * platform "build" actions that {@see ProposeBuildTool} can
+ * propose — each runs the matching MCP create tool as the chat owner. Register
+ * real handlers here as they are wired — the synthesizer's validation and the
+ * executor both route through this class, so nothing else changes when the
+ * registry grows.
  */
 class ActionRegistry
 {
@@ -18,6 +27,13 @@ class ActionRegistry
     public function __construct()
     {
         $this->register(new ManualAction);
+
+        // Platform build actions — must stay in sync with ProposeBuildTool::BUILD_TYPES.
+        $this->register(new PlatformBuildAction('create_app', CreateAppTool::class));
+        $this->register(new PlatformBuildAction('create_chatbot', CreateChatbotTool::class));
+        $this->register(new PlatformBuildAction('create_integration', CreateIntegrationTool::class));
+        $this->register(new PlatformBuildAction('create_knowledge_base', CreateKnowledgeBaseTool::class));
+        $this->register(new PlatformBuildAction('create_agent', CreateAgentTool::class));
     }
 
     public function register(ActionHandler $handler): void

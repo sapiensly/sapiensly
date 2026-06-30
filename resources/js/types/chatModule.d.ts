@@ -34,6 +34,9 @@ export interface ActionPayloadDto {
     parameters: Record<string, unknown>;
     rationale: string;
     executable?: boolean;
+    // Per-message lifecycle; drives the card's locked/hidden state. Older
+    // proposals (pre per-message status) rely on the chat-level synthesis_status.
+    status?: 'ready' | 'executed' | 'dismissed';
 }
 
 export interface ChatMessageDto {

@@ -166,6 +166,9 @@ class ThreadSynthesizer
             'parameters' => is_array($decoded['parameters'] ?? null) ? $decoded['parameters'] : [],
             'rationale' => Str::limit((string) ($decoded['rationale'] ?? ''), 120, ''),
             'executable' => $this->registry->knows($type) && $type !== ManualAction::KEY,
+            // Per-message lifecycle (mirrors ProposeBuildTool); the ActionCard
+            // reads this so it locks independently of the chat-level status.
+            'status' => 'ready',
         ];
     }
 

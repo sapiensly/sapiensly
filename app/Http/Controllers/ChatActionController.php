@@ -29,7 +29,7 @@ class ChatActionController extends Controller
         }
 
         return new JsonResponse([
-            'synthesis_status' => 'executed',
+            'synthesis_status' => $chat->refresh()->synthesis_status,
             'message' => ChatMessagePresenter::present($result),
         ]);
     }
@@ -47,7 +47,7 @@ class ChatActionController extends Controller
             return new JsonResponse(['message' => $e->getMessage()], 422);
         }
 
-        return new JsonResponse(['synthesis_status' => 'dismissed']);
+        return new JsonResponse(['synthesis_status' => $chat->refresh()->synthesis_status]);
     }
 
     private function ensureOwner(Request $request, Chat $chat, ChatMessage $message): void

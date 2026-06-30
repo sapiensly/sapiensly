@@ -22,7 +22,12 @@ const payload = computed(() => props.message.action_payload);
 const parameters = computed(() =>
     Object.entries(payload.value?.parameters ?? {}),
 );
-const executed = computed(() => props.status === 'executed');
+// A single chat can hold several proposals, so the per-message status drives the
+// card's locked state; fall back to the chat-level status for legacy proposals.
+const executed = computed(
+    () => payload.value?.status === 'executed' || props.status === 'executed',
+);
+const dismissed = computed(() => payload.value?.status === 'dismissed');
 
 // The plain-language answer the user reads first. Older proposals lack it; in
 // that case the action label stands in as the headline.
@@ -48,7 +53,7 @@ function initials(name: string): string {
 
 <template>
     <div
-        v-if="payload"
+        v-if="payload && !dismissed"
         class="overflow-hidden rounded-2xl border border-accent-blue/30 bg-accent-blue/[0.06] shadow-sm"
     >
         <div class="flex items-center justify-between gap-2 px-4 pt-3.5">

@@ -145,6 +145,19 @@ function upsert(message: ChatMessageDto) {
         );
 }
 
+// Flip a proposal card's per-message lifecycle status in place so it locks /
+// hides without waiting for a reload (the ActionCard reads action_payload.status).
+function markProposalStatus(
+    proposalId: string,
+    status: 'executed' | 'dismissed',
+) {
+    messages.value = messages.value.map((m) =>
+        m.id === proposalId && m.action_payload
+            ? { ...m, action_payload: { ...m.action_payload, status } }
+            : m,
+    );
+}
+
 // ----- Echo streaming -----
 type ChannelHandle = ReturnType<typeof echo.private>;
 let channel: ChannelHandle | null = null;
@@ -279,7 +292,10 @@ function subscribe(id: string) {
             synthesis_status: ActiveChatDto['synthesis_status'];
         }) => {
             upsert({ ...payload.message, attachments: [] });
-            synthesisStatus.value = payload.synthesis_status;
+            // Single-turn proposals carry no chat-level status (empty string);
+            // only the multi-agent flow advances it.
+            if (payload.synthesis_status)
+                synthesisStatus.value = payload.synthesis_status;
             router.reload({ only: ['chats'] });
         },
     );
@@ -291,9 +307,19 @@ function subscribe(id: string) {
             synthesis_status: ActiveChatDto['synthesis_status'];
         }) => {
             actionBusy.value = false;
-            synthesisStatus.value = payload.synthesis_status;
-            // An execution appends a result message; a dismissal just flips status.
+            if (payload.synthesis_status)
+                synthesisStatus.value = payload.synthesis_status;
             if (payload.message.message_type === 'action_result') {
+                // An execution appends a result message; lock its source proposal.
+                upsert({ ...payload.message, attachments: [] });
+                const resultPayload = payload.message.action_payload as
+                    | (Record<string, unknown> & { proposal_id?: string })
+                    | null
+                    | undefined;
+                if (resultPayload?.proposal_id)
+                    markProposalStatus(resultPayload.proposal_id, 'executed');
+            } else if (payload.message.message_type === 'action_proposal') {
+                // A dismissal broadcasts the proposal itself (status already flipped).
                 upsert({ ...payload.message, attachments: [] });
             }
         },
@@ -419,7 +445,9 @@ async function executeAction(message: ChatMessageDto) {
         const { data } = await axios.post(
             `/chat/${activeId.value}/actions/${message.id}/execute`,
         );
-        synthesisStatus.value = data.synthesis_status;
+        if (data.synthesis_status)
+            synthesisStatus.value = data.synthesis_status;
+        markProposalStatus(message.id, 'executed');
         if (data.message) upsert({ ...data.message, attachments: [] });
     } catch {
         // leave the card actionable on failure
@@ -431,8 +459,12 @@ async function executeAction(message: ChatMessageDto) {
 async function dismissAction(message: ChatMessageDto) {
     if (!activeId.value) return;
     try {
-        await axios.delete(`/chat/${activeId.value}/actions/${message.id}`);
-        synthesisStatus.value = 'dismissed';
+        const { data } = await axios.delete(
+            `/chat/${activeId.value}/actions/${message.id}`,
+        );
+        if (data?.synthesis_status)
+            synthesisStatus.value = data.synthesis_status;
+        markProposalStatus(message.id, 'dismissed');
     } catch {
         // no-op
     }

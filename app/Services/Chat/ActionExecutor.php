@@ -32,15 +32,27 @@ class ActionExecutor
             throw new RuntimeException('Message is not an action proposal for this chat.');
         }
 
-        if ($chat->synthesis_status === 'executed') {
+        $payload = (array) ($proposal->action_payload ?? []);
+
+        // The card's lifecycle lives per-message (a single chat may hold several
+        // proposals). Legacy synthesis proposals predate the per-message status,
+        // so fall back to the chat-level flag for those.
+        $status = (string) ($payload['status'] ?? '');
+        if ($status === 'executed' || ($status === '' && $chat->synthesis_status === 'executed')) {
             throw new RuntimeException('This action has already been executed.');
         }
+        if ($status === 'dismissed') {
+            throw new RuntimeException('This proposal was dismissed.');
+        }
 
-        $payload = (array) ($proposal->action_payload ?? []);
         $actionType = (string) ($payload['action_type'] ?? ManualAction::KEY);
 
+        // Run the handler FIRST: if it throws (e.g. a build's MCP tool rejects the
+        // params), nothing below mutates, so the card stays actionable.
         $handler = $this->registry->resolve($actionType);
         $result = $handler->execute($chat, $payload);
+
+        $proposal->update(['action_payload' => array_merge($payload, ['status' => 'executed'])]);
 
         $message = ChatMessage::create([
             'chat_id' => $chat->id,
@@ -55,13 +67,16 @@ class ActionExecutor
             ],
         ]);
 
-        $chat->forceFill([
-            'synthesis_status' => 'executed',
-            'last_message_at' => now(),
-        ])->save();
+        // Only advance the chat-level synthesis status for the multi-agent flow
+        // that owns it; a single-turn proposal leaves it null.
+        $attributes = ['last_message_at' => now()];
+        if ($chat->synthesis_status !== null) {
+            $attributes['synthesis_status'] = 'executed';
+        }
+        $chat->forceFill($attributes)->save();
 
         try {
-            ChatActionExecuted::dispatch($message, 'executed');
+            ChatActionExecuted::dispatch($message, (string) ($chat->synthesis_status ?? ''));
         } catch (\Throwable $e) {
             Log::warning('Chat action executed broadcast failed (continuing)', ['error' => $e->getMessage()]);
         }
@@ -84,10 +99,17 @@ class ActionExecutor
             throw new RuntimeException('Message is not an action proposal for this chat.');
         }
 
-        $chat->forceFill(['synthesis_status' => 'dismissed'])->save();
+        $payload = (array) ($proposal->action_payload ?? []);
+        $proposal->update(['action_payload' => array_merge($payload, ['status' => 'dismissed'])]);
+
+        // Only the multi-agent flow owns the chat-level status; leave it null for
+        // a single-turn proposal.
+        if ($chat->synthesis_status !== null) {
+            $chat->forceFill(['synthesis_status' => 'dismissed'])->save();
+        }
 
         try {
-            ChatActionExecuted::dispatch($proposal, 'dismissed');
+            ChatActionExecuted::dispatch($proposal->refresh(), (string) ($chat->synthesis_status ?? 'dismissed'));
         } catch (\Throwable $e) {
             Log::warning('Chat action dismissed broadcast failed (continuing)', ['error' => $e->getMessage()]);
         }

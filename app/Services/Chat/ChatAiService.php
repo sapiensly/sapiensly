@@ -9,6 +9,7 @@ use App\Ai\Tools\Capabilities\RerankTool;
 use App\Ai\Tools\Capabilities\SynthesizeSpeechTool;
 use App\Ai\Tools\Capabilities\TranscribeAudioTool;
 use App\Ai\Tools\Chat\ConsultAgentTool;
+use App\Ai\Tools\Chat\ProposeBuildTool;
 use App\Ai\Tools\DynamicTool;
 use App\Ai\Tools\McpServerTool;
 use App\Ai\Tools\Platform\PlatformToolsFactory;
@@ -19,6 +20,7 @@ use App\Events\Chat\ChatStreamComplete;
 use App\Events\Chat\ChatStreamError;
 use App\Events\Chat\ChatToolCall;
 use App\Jobs\SummarizeChatHistoryJob;
+use App\Mcp\Servers\SapiensServer;
 use App\Models\Agent;
 use App\Models\Chat;
 use App\Models\ChatMessage;
@@ -119,6 +121,39 @@ class ChatAiService
         </artifact>
 
         Rules: use type="html" for standalone web pages, type="svg" for SVG, type="markdown" for long prose/documents, otherwise type="code" with the appropriate language. Put the complete, runnable content inside — never truncate or use placeholders like "rest unchanged". Use at most one artifact per reply unless the user asks for several. Do NOT wrap short snippets, quick examples, or inline answers in an artifact — keep those as normal Markdown. Briefly introduce the artifact in your reply text.
+        PROMPT;
+
+    /**
+     * Capability awareness for the plain model chat: tells the assistant it runs
+     * inside Sapiensly and can build apps/chatbots/integrations/knowledge
+     * bases/agents in the user's workspace (the platform tools merged in by
+     * {@see PlatformToolsFactory}), so it proactively proposes building something
+     * when it detects a need the platform can cover. Only injected for plain
+     * chats — a selected agent governs its own persona via its prompt_template.
+     * Kept high-level (categories, not a tool-by-tool dump) so the cacheable
+     * prefix stays small; depth is pulled on demand via `guide` /
+     * `framework_reference`. The capability categories mirror the non-denylisted
+     * create_* tools in {@see SapiensServer::TOOLS}.
+     */
+    private const PLATFORM_CAPABILITIES_GUIDANCE = <<<'PROMPT'
+        ## Building on the Sapiensly platform
+        You are running inside Sapiensly — a platform where the user can build low-code apps, autonomous agents, chatbots, integrations and knowledge bases. Beyond answering questions, you can create and edit these things directly in the user's own workspace using the platform tools available to you. So when a user describes a need the platform can cover, don't just reply in prose — recognise it and offer to build it.
+
+        What you can build (use the listed tools; pull `guide` or the relevant `framework_reference` topic for depth before building, and `whoami` to confirm what this user may do):
+        - **Apps & dashboards** — low-code data apps with forms, tables, CRUD, dashboards and reports: `create_app`, then `scaffold_app` / `propose_change`.
+        - **Chatbots & bot flows** — conversational flows for a website or WhatsApp: `create_chatbot`, `scaffold_bot_flow`.
+        - **Integrations & tools** — connect external systems and call their actions: `create_integration`, `create_tool` (browse with `list_available_integrations`, `list_connector_actions`).
+        - **Knowledge bases (RAG)** — searchable document collections for grounded answers: `create_knowledge_base`, `add_document`, `search_knowledge`.
+        - **Agents** — triage / knowledge / action agents that resolve tasks autonomously: `create_agent`.
+        - **Data** — query, aggregate and manage records in existing apps: `query_records`, `aggregate_records`, `create_record`.
+
+        When to propose: when you detect a recurring or structural need the platform covers — tracking records, repetitive data entry, a process to automate, a customer-support assistant, connecting an external service, or organising documents for grounded Q&A. Map it to the specific capability above and offer it.
+
+        How to propose:
+        - When you PROACTIVELY spot the need, surface it with the `propose_build` tool — it shows the user an Execute / Dismiss card and runs the build only if they accept. Fill `parameters` with the inputs the matching create_* tool needs (e.g. create_app → name, slug). After calling it, briefly tell the user you've proposed it; do NOT also call the create_* tool yourself.
+        - Build DIRECTLY with the create_* tools only when the user has explicitly asked you to build it now ("create an app called X"). Otherwise prefer the proposal card over silent creation.
+        - Don't derail a simple question, a one-off answer, or casual chat with a build offer. One clear suggestion beats repeated nudges; if the user declines, drop it.
+        - Before proposing or building, lean on the relevant `guide` / `framework_reference` topic and confirm the user is allowed (`whoami`). If a capability isn't available to this user, or the platform genuinely can't express what they need, say so honestly — never promise or fake a feature.
         PROMPT;
 
     public function __construct(
@@ -313,6 +348,18 @@ class ChatAiService
             // model/agent can consult them mid-turn (background or in the front)
             // and is told they exist + how to reach them. Always user-visible.
             if ($user !== null) {
+                // Plain model chat is made aware of the platform's build
+                // capabilities (the tools merged in by PlatformToolsFactory) so it
+                // proactively proposes building something when it detects a need
+                // the platform can cover. A selected agent governs its own persona
+                // via its prompt_template, so we don't override it with this. The
+                // propose_build tool lets it surface an Execute/Dismiss card rather
+                // than building silently.
+                if ($agent === null) {
+                    $instructions .= "\n\n".self::PLATFORM_CAPABILITIES_GUIDANCE;
+                    $tools[] = RuntimeToolFactory::named('propose_build', new ProposeBuildTool($chat, $user));
+                }
+
                 $roster = $this->consultableAgents($user, $agent);
                 if ($roster->isNotEmpty()) {
                     $tools[] = RuntimeToolFactory::named(
