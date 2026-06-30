@@ -2,6 +2,7 @@
 
 use App\Enums\AgentStatus;
 use App\Enums\IntegrationAuthType;
+use App\Enums\IntegrationKind;
 use App\Enums\ToolType;
 use App\Models\Integration;
 use App\Models\Tool;
@@ -43,6 +44,41 @@ function legacyRestTool(User $user, ToolConfigService $config, array $overrides 
         'config' => $config->encryptConfig(ToolType::RestApi, $plain),
     ]);
 }
+
+it('distils a legacy database tool into a database connection', function () {
+    $plain = [
+        'driver' => 'pgsql',
+        'host' => 'db.example.com',
+        'port' => 5432,
+        'database' => 'analytics',
+        'username' => 'reader',
+        'password' => 'secret',
+        'query_template' => 'SELECT * FROM orders WHERE id = :id',
+        'read_only' => true,
+    ];
+    $tool = Tool::factory()->create([
+        'user_id' => $this->user->id,
+        'type' => ToolType::Database,
+        'status' => AgentStatus::Active,
+        'config' => $this->configService->encryptConfig(ToolType::Database, $plain),
+    ]);
+
+    $result = $this->migrator->migrate();
+
+    expect($result['migrated'])->toBe(1);
+    expect($result['integrations_created'])->toBe(1);
+
+    $config = $tool->fresh()->config;
+    expect($config)->toHaveKey('integration_id');
+    expect($config)->not->toHaveKey('host');
+    expect($config['query_template'])->toBe('SELECT * FROM orders WHERE id = :id');
+    expect($config)->toHaveKey('_legacy_connection');
+
+    $integration = Integration::find($config['integration_id']);
+    expect($integration->kind)->toBe(IntegrationKind::Database);
+    expect($integration->auth_config['host'])->toBe('db.example.com');
+    expect($integration->auth_config['database'])->toBe('analytics');
+});
 
 it('distills a legacy tool into a connection and strips inline config', function () {
     $tool = legacyRestTool($this->user, $this->configService);

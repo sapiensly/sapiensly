@@ -29,6 +29,7 @@ class LegacyToolConnectionMigrator
     private const OPERATION_KEYS = [
         'rest_api' => ['method', 'path', 'headers', 'request_body_template', 'response_mapping'],
         'graphql' => ['operation_type', 'operation', 'variables_template', 'response_mapping'],
+        'database' => ['query_template', 'read_only'],
     ];
 
     public function __construct(private readonly ToolConfigService $configService) {}
@@ -44,7 +45,7 @@ class LegacyToolConnectionMigrator
         $details = [];
 
         $tools = Tool::query()
-            ->whereIn('type', ['rest_api', 'graphql'])
+            ->whereIn('type', ['rest_api', 'graphql', 'database'])
             ->get();
 
         foreach ($tools as $tool) {
@@ -53,6 +54,37 @@ class LegacyToolConnectionMigrator
 
             if (! empty($config['integration_id'])) {
                 $skipped++;
+
+                continue;
+            }
+
+            // Database tools distil into a database connection (a DSN), not an
+            // HTTP one.
+            if ($type === 'database') {
+                if (empty($config['driver'])) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                $dsn = $this->databaseDsn($config);
+                $display = $this->databaseDisplayUrl($dsn);
+                $integration = $this->findExistingDatabaseIntegration($tool, $dsn);
+                $reused = $integration instanceof Integration;
+
+                if (! $reused) {
+                    $created++;
+                    if (! $dryRun) {
+                        $integration = $this->createDatabaseIntegration($tool, $display, $dsn);
+                    }
+                }
+
+                $migrated++;
+                $details[] = sprintf('database "%s" → %s connection (%s)', $tool->name, $reused ? 'existing' : 'new', $display);
+
+                if (! $dryRun && $integration instanceof Integration) {
+                    $tool->update(['config' => $this->rewriteConfig('database', $tool->config ?? [], $integration->id)]);
+                }
 
                 continue;
             }
@@ -111,7 +143,7 @@ class LegacyToolConnectionMigrator
         $details = [];
 
         $tools = Tool::query()
-            ->whereIn('type', ['rest_api', 'graphql'])
+            ->whereIn('type', ['rest_api', 'graphql', 'database'])
             ->get();
 
         foreach ($tools as $tool) {
@@ -196,6 +228,68 @@ class LegacyToolConnectionMigrator
             'auth_type' => $authType,
             'auth_config' => $authConfig,
             'is_mcp' => false,
+            'status' => 'active',
+        ]);
+    }
+
+    /**
+     * The DSN dict a legacy database tool embedded — the same shape a database
+     * connection stores in auth_config.
+     *
+     * @param  array<string, mixed>  $config
+     * @return array<string, mixed>
+     */
+    private function databaseDsn(array $config): array
+    {
+        $dsn = ['driver' => $config['driver'] ?? 'pgsql'];
+        foreach (['host', 'port', 'database', 'username', 'password'] as $key) {
+            if (isset($config[$key]) && $config[$key] !== '') {
+                $dsn[$key] = $config[$key];
+            }
+        }
+
+        return $dsn;
+    }
+
+    /**
+     * @param  array<string, mixed>  $dsn
+     */
+    private function databaseDisplayUrl(array $dsn): string
+    {
+        $port = isset($dsn['port']) ? ':'.$dsn['port'] : '';
+
+        return sprintf('%s://%s%s/%s', $dsn['driver'] ?? 'db', $dsn['host'] ?? '', $port, $dsn['database'] ?? '');
+    }
+
+    /**
+     * @param  array<string, mixed>  $dsn
+     */
+    private function findExistingDatabaseIntegration(Tool $tool, array $dsn): ?Integration
+    {
+        return Integration::query()
+            ->where('organization_id', $tool->organization_id)
+            ->where('user_id', $tool->user_id)
+            ->where('kind', 'database')
+            ->get()
+            ->first(fn (Integration $integration): bool => ($integration->auth_config ?? []) === $dsn);
+    }
+
+    /**
+     * @param  array<string, mixed>  $dsn
+     */
+    private function createDatabaseIntegration(Tool $tool, string $display, array $dsn): Integration
+    {
+        return Integration::create([
+            'user_id' => $tool->user_id,
+            'organization_id' => $tool->organization_id,
+            'visibility' => $tool->visibility,
+            'name' => $tool->name.' database',
+            'slug' => Str::slug($tool->name).'-'.Str::lower(Str::random(6)),
+            'description' => 'Auto-created from tool migration.',
+            'base_url' => $display,
+            'auth_type' => IntegrationAuthType::None,
+            'auth_config' => $dsn,
+            'kind' => 'database',
             'status' => 'active',
         ]);
     }
