@@ -37,3 +37,9 @@ Schedule::command('flows:dispatch-date-reached')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Poll integration.poll workflows and fire on newly-seen items.
+Schedule::command('flows:dispatch-polls')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();

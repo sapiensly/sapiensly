@@ -26,6 +26,7 @@ class WorkflowSweepState extends Model
         'app_id',
         'workflow_id',
         'last_swept_at',
+        'watermark',
     ];
 
     public static function getIdPrefix(): string

@@ -2341,6 +2341,19 @@
                         "integration_id": { "$ref": "#/$defs/id" },
                         "event": { "type": "string", "maxLength": 120 }
                     }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "tool_id", "watermark_path"],
+                    "additionalProperties": false,
+                    "description": "Polls a connected tool (a rest_api/graphql action that returns a list) every `interval_minutes` and fires once per item not seen before — for providers without webhooks. `tool_id` is the connected action; `items_path` is the dot-path to the array in the response (omit if the response IS the array); `watermark_path` is a monotonic field on each item (e.g. id or created_at) used to detect new items. Trigger payload: {tool_id, item, watermark}.",
+                    "properties": {
+                        "type": { "const": "integration.poll" },
+                        "tool_id": { "$ref": "#/$defs/id" },
+                        "items_path": { "type": "string", "maxLength": 200 },
+                        "watermark_path": { "type": "string", "maxLength": 200 },
+                        "interval_minutes": { "type": "integer", "minimum": 1, "maximum": 10080 }
+                    }
                 }
             ]
         },
