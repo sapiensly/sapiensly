@@ -373,7 +373,7 @@ const databaseConfig = computed(() => {
                         </div>
                         <div v-if="linkedIntegration">
                             <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
-                                {{ t('tools.show.connection') }}
+                                {{ t('tools.show.integration') }}
                             </dt>
                             <dd class="mt-1">
                                 <Link
