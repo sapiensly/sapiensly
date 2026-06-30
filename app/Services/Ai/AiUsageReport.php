@@ -27,7 +27,7 @@ class AiUsageReport
 
         $rows = AiUsageEvent::query()
             ->where('created_at', '>=', $since)
-            ->selectRaw('date(created_at) as d, source, model, cost, input_tokens, output_tokens')
+            ->selectRaw('date(created_at) as d, source, module, model, cost, input_tokens, output_tokens')
             ->get();
 
         return $this->shape($rows, $since, $days);
@@ -51,12 +51,12 @@ class AiUsageReport
         $ownRows = DB::connection('pgsql')->table(Schemas::qualify('ai_usage_events'))
             ->where('source', 'own')
             ->where('created_at', '>=', $since)
-            ->selectRaw("date(created_at) as d, 'own' as source, model, organization_id, cost, input_tokens, output_tokens")
+            ->selectRaw("date(created_at) as d, 'own' as source, module, model, organization_id, cost, input_tokens, output_tokens")
             ->get();
 
         $systemRows = DB::connection('pgsql')->table('platform.system_ai_usage_events')
             ->where('created_at', '>=', $since)
-            ->selectRaw("date(created_at) as d, 'system' as source, model, organization_id, cost, input_tokens, output_tokens")
+            ->selectRaw("date(created_at) as d, 'system' as source, module, model, organization_id, cost, input_tokens, output_tokens")
             ->get();
 
         $rows = $ownRows->concat($systemRows);
@@ -106,16 +106,32 @@ class AiUsageReport
             $systemSeries[] = round((float) collect($dayRows)->where('source', 'system')->sum('cost'), 4);
         }
 
-        $byModel = $rows->groupBy('model')
-            ->map(fn ($g, $model) => [
+        $modelBreakdown = fn (Collection $g) => collect($g)->groupBy('model')
+            ->map(fn ($mg, $model) => [
                 'model' => $model,
+                'cost' => round((float) $mg->sum('cost'), 4),
+                'calls' => $mg->count(),
+                'input_tokens' => (int) $mg->sum('input_tokens'),
+                'output_tokens' => (int) $mg->sum('output_tokens'),
+            ])
+            ->sortByDesc('cost')
+            ->values()
+            ->all();
+
+        $byModel = collect($modelBreakdown($rows))->take(15)->all();
+
+        // Spend grouped by service (Chat, Apps, …), each with its own per-model
+        // breakdown so the dashboard can show "Chat $X: model A $z, model B $y".
+        $byService = $rows->groupBy(fn ($r) => $this->serviceFor($r->module ?? null))
+            ->map(fn ($g, $service) => [
+                'service' => $service,
                 'cost' => round((float) $g->sum('cost'), 4),
                 'calls' => $g->count(),
                 'input_tokens' => (int) $g->sum('input_tokens'),
                 'output_tokens' => (int) $g->sum('output_tokens'),
+                'models' => $modelBreakdown($g),
             ])
             ->sortByDesc('cost')
-            ->take(15)
             ->values()
             ->all();
 
@@ -132,11 +148,30 @@ class AiUsageReport
                 'system' => $bySource('system'),
             ],
             'by_model' => $byModel,
+            'by_service' => $byService,
             'series' => [
                 'labels' => $labels,
                 'own' => $ownSeries,
                 'system' => $systemSeries,
             ],
         ];
+    }
+
+    /**
+     * Map a recorded `module` to the user-facing service bucket shown on the
+     * spend dashboard. Related modules (app builder, runtime agents, workflows)
+     * roll up into a single "Apps" line.
+     */
+    private function serviceFor(?string $module): string
+    {
+        return match ($module) {
+            'chat' => 'Chat',
+            'builder', 'runtime_agent', 'workflow' => 'Apps',
+            'agent' => 'Agents',
+            'debate' => 'Debate',
+            'embeddings', 'document_ocr' => 'Knowledge',
+            null, '' => 'Other',
+            default => ucfirst($module),
+        };
     }
 }

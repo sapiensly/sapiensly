@@ -40,6 +40,27 @@ it('shapes a current-scope report with totals, source split and series', functio
         ->and($r['series']['labels'])->toHaveCount(count($r['series']['system']));
 });
 
+it('breaks current-scope spend down by service, each with a per-model split', function () {
+    // Chat: two models. Apps: builder + runtime_agent roll up into one service.
+    spendEvent(['module' => 'chat', 'model' => 'claude-a', 'cost' => 1.0]);
+    spendEvent(['module' => 'chat', 'model' => 'claude-b', 'cost' => 0.5]);
+    spendEvent(['module' => 'builder', 'model' => 'claude-a', 'cost' => 2.0]);
+    spendEvent(['module' => 'runtime_agent', 'model' => 'claude-a', 'cost' => 1.0]);
+
+    $r = app(AiUsageReport::class)->forCurrentOrg(30);
+
+    $services = collect($r['by_service'])->keyBy('service');
+
+    // Apps (3.0) outranks Chat (1.5) and is listed first.
+    expect(collect($r['by_service'])->pluck('service')->all())->toBe(['Apps', 'Chat'])
+        ->and($services['Apps']['cost'])->toBe(3.0)
+        ->and($services['Apps']['calls'])->toBe(2)
+        ->and($services['Apps']['models'])->toHaveCount(1)
+        ->and($services['Chat']['cost'])->toBe(1.5)
+        ->and($services['Chat']['models'])->toHaveCount(2)
+        ->and(collect($services['Chat']['models'])->firstWhere('model', 'claude-a')['cost'])->toBe(1.0);
+});
+
 function systemLedgerEvent(array $attrs = []): SystemAiUsageEvent
 {
     return SystemAiUsageEvent::create(array_merge([

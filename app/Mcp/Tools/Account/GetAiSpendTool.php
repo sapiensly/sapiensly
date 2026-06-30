@@ -11,7 +11,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description("The organization's AI spend over the last 7/30/90 days: total cost, calls and tokens, the own-key vs platform-key split, a per-model breakdown, a daily cost series, and the configured budgets/caps. Owner-only.")]
+#[Description("The organization's AI spend over the last 7/30/90 days: total cost, calls and tokens, the own-key vs platform-key split, a per-model breakdown, a per-service breakdown (Chat, Apps, … each with its own per-model split), a daily cost series, and the configured budgets/caps. Owner-only.")]
 class GetAiSpendTool extends SapiensTool
 {
     // No ability gate; owner-gated below to match the web AI Spend dashboard.

@@ -23,11 +23,21 @@ interface ModelRow {
     output_tokens: number;
 }
 
+interface ServiceRow {
+    service: string;
+    cost: number;
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    models: ModelRow[];
+}
+
 interface Report {
     range_days: number;
     totals: { cost: number; calls: number; input_tokens: number; output_tokens: number };
     by_source: { own: number; system: number };
     by_model: ModelRow[];
+    by_service: ServiceRow[];
     series: { labels: string[]; own: number[]; system: number[] };
 }
 
@@ -231,6 +241,42 @@ const scopeLabel = computed(() =>
                         </button>
                     </div>
                 </form>
+            </section>
+
+            <!-- Spend by service (each with its own per-model breakdown) -->
+            <section class="rounded-sp-sm border border-soft bg-navy p-5">
+                <h2 class="mb-3 text-sm font-medium text-ink">Spend by service</h2>
+                <p v-if="report.by_service.length === 0" class="text-xs text-ink-muted">
+                    No AI usage recorded in this period yet.
+                </p>
+                <div v-else class="flex flex-col gap-3">
+                    <div
+                        v-for="s in report.by_service"
+                        :key="s.service"
+                        class="rounded-sp-sm border border-soft/60 bg-surface/40 p-4"
+                    >
+                        <header class="flex items-baseline justify-between gap-3">
+                            <h3 class="text-sm font-medium text-ink">{{ s.service }}</h3>
+                            <div class="text-right">
+                                <span class="text-sm font-semibold text-ink">{{ money(s.cost) }}</span>
+                                <span class="ml-2 text-xs text-ink-subtle">{{ num(s.calls) }} calls</span>
+                            </div>
+                        </header>
+                        <ul class="mt-2 divide-y divide-soft/40">
+                            <li
+                                v-for="m in s.models"
+                                :key="m.model"
+                                class="flex items-center justify-between py-1.5 text-xs"
+                            >
+                                <span class="text-ink-muted">{{ m.model }}</span>
+                                <span class="flex items-center gap-3">
+                                    <span class="text-ink-subtle">{{ num(m.input_tokens + m.output_tokens) }} tok</span>
+                                    <span class="w-16 text-right font-medium text-ink">{{ money(m.cost) }}</span>
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
             </section>
 
             <!-- Top models -->
