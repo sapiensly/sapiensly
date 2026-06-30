@@ -54,6 +54,18 @@ class ListAvailableTriggersTool implements Tool
                 '{{vars.<X>}}' => 'workflow-scoped variable set by a set_variable step or output_variable',
                 '{{steps.<step_id>.output.<X>}}' => 'output of a previous step in the same workflow',
             ],
+            // Rules an AI must follow to author a trigger that actually fires —
+            // the schema can't express these, so they cause silent no-ops or
+            // save errors if ignored.
+            'notes' => [
+                'one_trigger' => 'A workflow has exactly ONE trigger (workflow.trigger is a single object, not a list).',
+                'resolve_ids' => 'NEVER invent the ids a trigger references — resolve real ones first. object_id/field_id: from this manifest\'s objects[].fields[]. integration_id (integration.event, email.inbound): call list_integrations. tool_id (integration.poll): call list_tools or list_connector_actions and pick an ACTIVE rest_api/graphql tool that returns a list. channel_id (channel.message_received): a WhatsApp/widget channel in the org.',
+                'external_setup' => 'Some triggers need setup the manifest cannot do, or they never fire: integration.event & email.inbound require the Integration to have an inbound webhook signing secret (or token) set under Integrations → Inbound webhook, and the provider must POST to that integration\'s signed URL (shown on the integration). email.inbound also reads the provider preset from the integration (postmark/mailgun/sendgrid/generic). integration.poll requires tool_id to be an active connected tool.',
+                'needs_scheduler' => 'Time-based triggers (schedule, record.date_reached) and integration.poll only fire when the host runs `php artisan schedule:run` every minute. They do nothing without it.',
+                'trigger_filter' => 'record.* and record.date_reached `filter` is a filter_expression: and/or/not groups + leaf {op, field_id, value}; ops eq/neq/gt/gte/lt/lte/in/not_in/contains/starts_with/ends_with/is_null/is_not_null/between. In a TRIGGER filter use a literal `value` only — `value_expression` and relation traversal (`related`) are rejected; do relation checks inside the workflow with a record.query + branch step.',
+                'date_reached_field' => 'record.date_reached `field_id` MUST be a date or datetime field on the object.',
+                'fire_once' => 'record.*, channel.message_received, integration.event, email.inbound and integration.poll fire per event/item (once each). webhook/event/email/poll dedupe provider retries automatically; date_reached/schedule fire on a monotonic cursor — no manual idempotency needed.',
+            ],
         ], JSON_THROW_ON_ERROR);
     }
 }
