@@ -42,6 +42,8 @@ class DatabaseConnectionFactory
                     'port' => $config['ssh_port'] ?? 22,
                     'username' => $config['ssh_username'] ?? '',
                     'private_key' => $config['ssh_private_key'] ?? '',
+                    'passphrase' => $config['ssh_passphrase'] ?? '',
+                    'password' => $config['ssh_password'] ?? '',
                     'strict_host_key' => $config['ssh_strict_host_key'] ?? 'accept-new',
                     'known_hosts_file' => $config['ssh_known_hosts_file'] ?? null,
                 ],

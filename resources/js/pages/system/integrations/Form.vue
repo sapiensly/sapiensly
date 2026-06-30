@@ -138,7 +138,13 @@ const form = useForm({
           ? // Editing a DB connection: the non-secret DSN fields come back
             // unmasked; secrets (password, SSH key) are blanked and kept on
             // save when left empty.
-            { ...(props.integration.masked_auth_config ?? {}), password: '', ssh_private_key: '' }
+            {
+                  ...(props.integration.masked_auth_config ?? {}),
+                  password: '',
+                  ssh_private_key: '',
+                  ssh_passphrase: '',
+                  ssh_password: '',
+              }
           : startingAsMcp
             ? { redirect_uri: props.oauthCallbackUrl ?? '', pkce: true }
             : buildInitialAuthConfig(),
@@ -187,15 +193,39 @@ const sshHost = dbField('ssh_host');
 const sshPort = dbField('ssh_port');
 const sshUser = dbField('ssh_username');
 const sshKey = dbField('ssh_private_key');
+const sshPassphrase = dbField('ssh_passphrase');
+const sshPassword = dbField('ssh_password');
+
+const sshAuthMethod = ref<'key' | 'password'>(
+    form.auth_config.ssh_password ? 'password' : 'key',
+);
+
+function setSshAuth(method: 'key' | 'password'): void {
+    sshAuthMethod.value = method;
+    const next = { ...form.auth_config };
+    if (method === 'password') {
+        delete next.ssh_private_key;
+        delete next.ssh_passphrase;
+    } else {
+        delete next.ssh_password;
+    }
+    form.auth_config = next;
+}
 
 function toggleTunnel(on: boolean): void {
     useTunnel.value = on;
     if (!on) {
         const next = { ...form.auth_config };
-        delete next.ssh_host;
-        delete next.ssh_port;
-        delete next.ssh_username;
-        delete next.ssh_private_key;
+        for (const k of [
+            'ssh_host',
+            'ssh_port',
+            'ssh_username',
+            'ssh_private_key',
+            'ssh_passphrase',
+            'ssh_password',
+        ]) {
+            delete next[k];
+        }
         form.auth_config = next;
     } else if (!form.auth_config.ssh_port) {
         form.auth_config = { ...form.auth_config, ssh_port: 22 };
@@ -518,19 +548,76 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     <Label for="ssh_user">{{ t('system.integrations.form.ssh_user') }}</Label>
                                     <Input id="ssh_user" v-model="sshUser" placeholder="jump" class="h-9" autocomplete="off" />
                                 </div>
+
+                                <!-- Tunnel auth: key (optionally passphrased) or password. -->
                                 <div class="space-y-1.5">
-                                    <Label for="ssh_key">{{ t('system.integrations.form.ssh_key') }}</Label>
-                                    <Textarea
-                                        id="ssh_key"
-                                        v-model="sshKey"
-                                        :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : '-----BEGIN OPENSSH PRIVATE KEY-----'"
-                                        rows="4"
-                                        class="font-mono text-xs"
-                                    />
-                                    <p class="text-[11px] text-ink-subtle">
-                                        {{ t('system.integrations.form.ssh_key_hint') }}
-                                    </p>
+                                    <Label>{{ t('system.integrations.form.ssh_auth') }}</Label>
+                                    <div class="inline-flex items-center gap-0.5 rounded-pill border border-soft bg-white/[0.03] p-0.5">
+                                        <button
+                                            type="button"
+                                            :class="[
+                                                'rounded-pill px-2.5 py-1 text-[11px] font-medium transition-colors',
+                                                sshAuthMethod === 'key' ? 'bg-accent-blue text-white shadow-btn-primary' : 'text-ink-muted hover:text-ink',
+                                            ]"
+                                            @click="setSshAuth('key')"
+                                        >
+                                            {{ t('system.integrations.form.ssh_auth_key') }}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :class="[
+                                                'rounded-pill px-2.5 py-1 text-[11px] font-medium transition-colors',
+                                                sshAuthMethod === 'password' ? 'bg-accent-blue text-white shadow-btn-primary' : 'text-ink-muted hover:text-ink',
+                                            ]"
+                                            @click="setSshAuth('password')"
+                                        >
+                                            {{ t('system.integrations.form.ssh_auth_password') }}
+                                        </button>
+                                    </div>
                                 </div>
+
+                                <template v-if="sshAuthMethod === 'key'">
+                                    <div class="space-y-1.5">
+                                        <Label for="ssh_key">{{ t('system.integrations.form.ssh_key') }}</Label>
+                                        <Textarea
+                                            id="ssh_key"
+                                            v-model="sshKey"
+                                            :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : '-----BEGIN OPENSSH PRIVATE KEY-----'"
+                                            rows="4"
+                                            class="font-mono text-xs"
+                                        />
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <Label for="ssh_passphrase">{{ t('system.integrations.form.ssh_passphrase') }}</Label>
+                                        <Input
+                                            id="ssh_passphrase"
+                                            v-model="sshPassphrase"
+                                            type="password"
+                                            autocomplete="new-password"
+                                            :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : ''"
+                                            class="h-9"
+                                        />
+                                        <p class="text-[11px] text-ink-subtle">
+                                            {{ t('system.integrations.form.ssh_passphrase_hint') }}
+                                        </p>
+                                    </div>
+                                </template>
+
+                                <div v-else class="space-y-1.5">
+                                    <Label for="ssh_password">{{ t('system.integrations.form.ssh_password') }}</Label>
+                                    <Input
+                                        id="ssh_password"
+                                        v-model="sshPassword"
+                                        type="password"
+                                        autocomplete="new-password"
+                                        :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : ''"
+                                        class="h-9"
+                                    />
+                                </div>
+
+                                <p class="text-[11px] text-ink-subtle">
+                                    {{ t('system.integrations.form.ssh_key_hint') }}
+                                </p>
                             </div>
 
                             <!-- Test: SELECT 1 against the DSN (through the tunnel if set). -->

@@ -10,11 +10,16 @@ use RuntimeException;
  * out to the `ssh` binary as a managed background process and tears it down
  * cleanly.
  *
- * Key-based auth only for now (the common bastion case): an encrypted key or
- * password prompt can't work under BatchMode without ssh-agent / sshpass.
+ * Auth methods:
+ *   - key, no passphrase  → BatchMode (no prompts).
+ *   - key + passphrase    → fed non-interactively via SSH_ASKPASS.
+ *   - password            → fed non-interactively via SSH_ASKPASS.
+ *
+ * Secrets are never placed on the command line; they go through a 0600 file a
+ * 0700 askpass helper reads, and all temp files are removed on close.
  *
  * Expected `ssh` config shape:
- *   host, port?, username, private_key,
+ *   host, port?, username, private_key?, passphrase?, password?,
  *   strict_host_key? ('accept-new'|'yes'|'no'), known_hosts_file?,
  *   connect_timeout?, startup_timeout?
  */
@@ -27,24 +32,41 @@ class SshTunnel
         }
 
         $localPort = $this->freePort();
+        $tempFiles = [];
 
+        $usesKey = ! empty($ssh['private_key']);
         $keyFile = null;
-        if (! empty($ssh['private_key'])) {
-            $keyFile = tempnam(sys_get_temp_dir(), 'sshkey_');
-            file_put_contents($keyFile, rtrim((string) $ssh['private_key'])."\n");
-            chmod($keyFile, 0600);
+        if ($usesKey) {
+            $keyFile = $this->writeTemp(rtrim((string) $ssh['private_key'])."\n", 0600);
+            $tempFiles[] = $keyFile;
         }
 
-        $command = $this->buildCommand($ssh, $localPort, $targetHost, $targetPort, $keyFile);
+        // The secret ssh may need to prompt for: a key's passphrase, or the
+        // login password when there's no key.
+        $secret = $usesKey ? (string) ($ssh['passphrase'] ?? '') : (string) ($ssh['password'] ?? '');
+        $interactive = $secret !== '';
+
+        $env = null;
+        if ($interactive) {
+            $secretFile = $this->writeTemp($secret, 0600);
+            $askpass = $this->writeTemp("#!/bin/sh\ncat ".escapeshellarg($secretFile)."\n", 0700);
+            $tempFiles[] = $secretFile;
+            $tempFiles[] = $askpass;
+            $env = $this->envWithAskpass($askpass);
+        }
+
+        $command = $this->buildCommand($ssh, $localPort, $targetHost, $targetPort, $keyFile, $interactive);
 
         $process = proc_open(
             $command,
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
+            null,
+            $env,
         );
 
         if (! is_resource($process)) {
-            $this->cleanupKey($keyFile);
+            $this->cleanup($tempFiles);
             throw new RuntimeException('Failed to start the SSH tunnel process.');
         }
 
@@ -54,26 +76,26 @@ class SshTunnel
             $error = trim((string) stream_get_contents($pipes[2]));
             @proc_terminate($process);
             @proc_close($process);
-            $this->cleanupKey($keyFile);
+            $this->cleanup($tempFiles);
 
             throw new RuntimeException('SSH tunnel did not come up'.($error !== '' ? ': '.$error : '.'));
         }
 
-        return new SshTunnelHandle($localPort, $process, $keyFile);
+        return new SshTunnelHandle($localPort, $process, $tempFiles);
     }
 
     /**
      * The `ssh` argv. Kept public + pure so the security-relevant flags are
-     * testable without spawning a process.
+     * testable without spawning a process. `$interactive` means a password /
+     * passphrase will be fed via SSH_ASKPASS, so BatchMode must stay off.
      *
      * @param  array<string, mixed>  $ssh
      * @return array<int, string>
      */
-    public function buildCommand(array $ssh, int $localPort, string $targetHost, int $targetPort, ?string $keyFile): array
+    public function buildCommand(array $ssh, int $localPort, string $targetHost, int $targetPort, ?string $keyFile, bool $interactive = false): array
     {
         $command = [
             'ssh', '-N',
-            '-o', 'BatchMode=yes',
             '-o', 'ExitOnForwardFailure=yes',
             '-o', 'ConnectTimeout='.(int) ($ssh['connect_timeout'] ?? 10),
             '-o', 'ServerAliveInterval=15',
@@ -81,6 +103,12 @@ class SshTunnel
             // known_hosts_file (below) upgrades it to strict verification.
             '-o', 'StrictHostKeyChecking='.($ssh['strict_host_key'] ?? 'accept-new'),
         ];
+
+        // No prompts at all when there's no secret to feed.
+        if (! $interactive) {
+            $command[] = '-o';
+            $command[] = 'BatchMode=yes';
+        }
 
         if (! empty($ssh['known_hosts_file'])) {
             $command[] = '-o';
@@ -92,6 +120,12 @@ class SshTunnel
             $command[] = $keyFile;
             $command[] = '-o';
             $command[] = 'IdentitiesOnly=yes';
+        } else {
+            // Password auth — don't let ssh try local keys first.
+            $command[] = '-o';
+            $command[] = 'PubkeyAuthentication=no';
+            $command[] = '-o';
+            $command[] = 'PreferredAuthentications=password,keyboard-interactive';
         }
 
         $command[] = '-p';
@@ -101,6 +135,30 @@ class SshTunnel
         $command[] = $ssh['username'].'@'.$ssh['host'];
 
         return $command;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function envWithAskpass(string $askpass): array
+    {
+        $env = getenv();
+        $env['SSH_ASKPASS'] = $askpass;
+        // OpenSSH 8.4+: use the askpass program even with a tty present.
+        $env['SSH_ASKPASS_REQUIRE'] = 'force';
+        // Older ssh only consults SSH_ASKPASS when DISPLAY is set.
+        $env['DISPLAY'] = $env['DISPLAY'] ?? ':0';
+
+        return $env;
+    }
+
+    private function writeTemp(string $contents, int $mode): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'ssh_');
+        file_put_contents($path, $contents);
+        chmod($path, $mode);
+
+        return $path;
     }
 
     private function freePort(): int
@@ -128,10 +186,15 @@ class SshTunnel
         return false;
     }
 
-    private function cleanupKey(?string $keyFile): void
+    /**
+     * @param  array<int, string>  $files
+     */
+    private function cleanup(array $files): void
     {
-        if ($keyFile !== null && is_file($keyFile)) {
-            @unlink($keyFile);
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                @unlink($file);
+            }
         }
     }
 }

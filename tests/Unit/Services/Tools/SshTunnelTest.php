@@ -26,6 +26,22 @@ it('builds a hardened ssh -L command', function () {
     expect($command[$portFlag + 1])->toBe('2222');
 });
 
+it('drops BatchMode and disables pubkey for password (interactive) auth', function () {
+    $command = (new SshTunnel)->buildCommand(
+        ['host' => 'b', 'username' => 'u'],
+        15003,
+        'db',
+        5432,
+        null,            // no key file → password auth
+        true,            // interactive (secret fed via askpass)
+    );
+
+    expect($command)
+        ->not->toContain('BatchMode=yes')
+        ->toContain('PubkeyAuthentication=no')
+        ->toContain('PreferredAuthentications=password,keyboard-interactive');
+});
+
 it('pins host-key verification to a known_hosts file when given one', function () {
     $command = (new SshTunnel)->buildCommand(
         ['host' => 'b', 'username' => 'u', 'strict_host_key' => 'yes', 'known_hosts_file' => '/etc/known'],

@@ -4,18 +4,19 @@ namespace App\Services\Tools;
 
 /**
  * A live SSH local-forward: a port on 127.0.0.1 that relays to the target
- * database through a bastion. Owns the `ssh` process and the temp key file so
- * close() leaves nothing behind.
+ * database through a bastion. Owns the `ssh` process and any temp files (key,
+ * secret, askpass helper) so close() leaves nothing behind.
  */
 class SshTunnelHandle
 {
     /**
      * @param  resource|null  $process
+     * @param  array<int, string>  $tempFiles
      */
     public function __construct(
         public readonly int $localPort,
         private mixed $process = null,
-        private ?string $keyFile = null,
+        private array $tempFiles = [],
     ) {}
 
     public function close(): void
@@ -26,9 +27,11 @@ class SshTunnelHandle
             $this->process = null;
         }
 
-        if ($this->keyFile !== null && is_file($this->keyFile)) {
-            @unlink($this->keyFile);
-            $this->keyFile = null;
+        foreach ($this->tempFiles as $file) {
+            if (is_file($file)) {
+                @unlink($file);
+            }
         }
+        $this->tempFiles = [];
     }
 }
