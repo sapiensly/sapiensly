@@ -2,10 +2,10 @@
 
 namespace App\Mcp\Tools\Integrations;
 
-use App\Enums\ConnectorEffect;
 use App\Mcp\Tools\SapiensTool;
 use App\Models\Tool;
 use App\Models\User;
+use App\Services\Connectors\ConnectorActionResolver;
 use App\Services\ToolExecutionService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -34,11 +34,16 @@ class ExecuteToolTool extends SapiensTool
             return Response::error("No tool '{$validated['tool_id']}' is visible to you.");
         }
 
+        // Report the resolved effect (pinned column else inferred from
+        // method/operation/read_only), matching use_tool — not the raw column,
+        // which is null for an inferred-effect tool.
+        $effect = app(ConnectorActionResolver::class)->resolve($tool)->effect->value;
+
         $result = app(ToolExecutionService::class)->execute($tool, $validated['parameters'] ?? []);
 
         return Response::json([
             'success' => $result->success,
-            'effect' => $tool->effect?->value ?? ConnectorEffect::Read->value,
+            'effect' => $effect,
             'data' => $result->data,
             'status_code' => $result->statusCode,
             'error' => $result->error,

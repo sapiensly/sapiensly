@@ -1,12 +1,19 @@
 <?php
 
+use App\Enums\MembershipRole;
+use App\Enums\MembershipStatus;
+use App\Enums\Visibility;
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Integrations\CreateIntegrationTool;
 use App\Mcp\Tools\Integrations\DeleteIntegrationTool;
 use App\Mcp\Tools\Integrations\GetIntegrationTool;
 use App\Mcp\Tools\Integrations\UpdateIntegrationTool;
 use App\Models\Integration;
+use App\Models\Organization;
+use App\Models\OrganizationMembership;
 use App\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
+use Spatie\Permission\PermissionRegistrar;
 
 beforeEach(function () {
     $this->user = User::factory()->create(['email_verified_at' => now()]);
@@ -78,6 +85,44 @@ it('delete_integration removes a connection in the caller context', function () 
         ->assertSee('deleted');
 
     expect(Integration::find($integration->id))->toBeNull();
+});
+
+it('create_integration makes an org user a connection their org can see', function () {
+    // Regression: an org-scoped user must get an Organization-visible
+    // integration (org_id set), or forAccountContext can't resolve it — found
+    // running use_tool end-to-end against a real org.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+    $org = Organization::create(['name' => 'Acme', 'slug' => 'acme-'.uniqid()]);
+    $owner = User::factory()->create(['organization_id' => $org->id, 'email_verified_at' => now()]);
+    OrganizationMembership::create([
+        'organization_id' => $org->id,
+        'user_id' => $owner->id,
+        'role' => MembershipRole::Owner,
+        'status' => MembershipStatus::Active,
+    ]);
+    setPermissionsTeamId($org->id);
+
+    $response = SapiensServer::actingAs($owner)
+        ->tool(CreateIntegrationTool::class, [
+            'name' => 'Org Connection',
+            'base_url' => 'https://api.example.com',
+            'kind' => 'http',
+            'auth_type' => 'none',
+        ]);
+
+    $response->assertOk();
+
+    $integration = Integration::where('name', 'Org Connection')->first();
+    expect($integration->visibility)->toBe(Visibility::Organization);
+    expect($integration->organization_id)->toBe($org->id);
+
+    // And it round-trips through the org-scoped resolver.
+    SapiensServer::actingAs($owner)
+        ->tool(GetIntegrationTool::class, ['integration_id' => $integration->id])
+        ->assertOk()
+        ->assertSee('Org Connection');
 });
 
 it('does not expose or mutate an integration outside the caller context', function () {

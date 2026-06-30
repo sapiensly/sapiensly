@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools\Integrations;
 
 use App\Enums\IntegrationAuthType;
+use App\Enums\Visibility;
 use App\Mcp\Tools\Integrations\Concerns\PresentsIntegration;
 use App\Mcp\Tools\SapiensTool;
 use App\Models\Integration;
@@ -38,6 +39,12 @@ class CreateIntegrationTool extends SapiensTool
             IntegrationRules::validateOAuth2OnStore($v, (array) ($data['auth_config'] ?? []), $data['auth_type'] ?? null);
         });
         $validated = $validator->validate();
+
+        // Default the visibility to the caller's context so an org user's
+        // connection is org-visible (and resolvable by forAccountContext),
+        // mirroring CreateToolTool — IntegrationService otherwise defaults to
+        // Private, which an org-scoped query can't see.
+        $validated['visibility'] ??= ($user->organization_id ? Visibility::Organization->value : Visibility::Private->value);
 
         $integration = app(IntegrationService::class)->create($user, $validated);
 
