@@ -120,6 +120,7 @@ class IntegrationController extends Controller
             'authTypes' => $this->authTypeOptions(),
             'visibilities' => $this->visibilityOptions(),
             'oauthCallbackUrl' => route('integrations.oauth2.callback'),
+            'webhookUrl' => route('webhooks.integrations.receive', $integration),
         ]);
     }
 

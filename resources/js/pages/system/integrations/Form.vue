@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import PageHeader from '@/components/app-v2/PageHeader.vue';
+import InputError from '@/components/InputError.vue';
 import AuthConfigField from '@/components/integrations/AuthConfigField.vue';
 import AuthMethodPicker from '@/components/integrations/AuthMethodPicker.vue';
 import HeaderEditor from '@/components/integrations/HeaderEditor.vue';
-import InputError from '@/components/InputError.vue';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Collapsible,
@@ -22,10 +22,11 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import axios from 'axios';
 import {
+    Check,
     CheckCircle2,
     ChevronDown,
+    Copy,
     Database,
     Eye,
     Globe,
@@ -38,8 +39,10 @@ import {
     Sparkles,
     Ticket,
     UserCheck,
+    Webhook,
     XCircle,
 } from '@lucide/vue';
+import axios from 'axios';
 import type { Component } from 'vue';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -81,6 +84,8 @@ interface Props {
     template?: IntegrationTemplate | null;
     kind?: string | null;
     oauthCallbackUrl?: string;
+    /** Inbound webhook receiver URL for this integration (edit mode only). */
+    webhookUrl?: string;
 }
 
 const props = defineProps<Props>();
@@ -101,8 +106,22 @@ const templateAuthConfigDefaults: Record<string, Record<string, unknown>> = {
     bearer: { token: '' },
     basic: { username: '', password: '' },
     custom_headers: { headers: [] },
-    oauth2_client_credentials: { token_url: '', client_id: '', client_secret: '', scope: '', audience: '' },
-    oauth2_auth_code: { authorize_url: '', token_url: '', client_id: '', client_secret: '', redirect_uri: '', scope: '', pkce: true },
+    oauth2_client_credentials: {
+        token_url: '',
+        client_id: '',
+        client_secret: '',
+        scope: '',
+        audience: '',
+    },
+    oauth2_auth_code: {
+        authorize_url: '',
+        token_url: '',
+        client_id: '',
+        client_secret: '',
+        redirect_uri: '',
+        scope: '',
+        pkce: true,
+    },
 };
 
 function buildInitialAuthConfig(): Record<string, unknown> {
@@ -133,18 +152,25 @@ const form = useForm({
           ? 'oauth2_auth_code'
           : (props.integration?.auth_type ?? 'none'),
     auth_config: startingAsDatabase
-        ? { driver: 'pgsql', host: '', port: 5432, database: '', username: '', password: '' }
+        ? {
+              driver: 'pgsql',
+              host: '',
+              port: 5432,
+              database: '',
+              username: '',
+              password: '',
+          }
         : props.integration?.kind === 'database'
           ? // Editing a DB connection: the non-secret DSN fields come back
             // unmasked; secrets (password, SSH key) are blanked and kept on
             // save when left empty.
             {
-                  ...(props.integration.masked_auth_config ?? {}),
-                  password: '',
-                  ssh_private_key: '',
-                  ssh_passphrase: '',
-                  ssh_password: '',
-              }
+                ...(props.integration.masked_auth_config ?? {}),
+                password: '',
+                ssh_private_key: '',
+                ssh_passphrase: '',
+                ssh_password: '',
+            }
           : startingAsMcp
             ? { redirect_uri: props.oauthCallbackUrl ?? '', pkce: true }
             : buildInitialAuthConfig(),
@@ -251,6 +277,34 @@ watch(
 const openBasics = ref(true);
 const openAuth = ref(true);
 const openHeaders = ref(false);
+const openWebhook = ref(false);
+
+const webhookUrlCopied = ref(false);
+async function copyWebhookUrl() {
+    if (!props.webhookUrl) return;
+    try {
+        await navigator.clipboard.writeText(props.webhookUrl);
+        webhookUrlCopied.value = true;
+        setTimeout(() => {
+            webhookUrlCopied.value = false;
+        }, 1500);
+    } catch {
+        // Clipboard API may be unavailable (HTTP/permission); no-op.
+    }
+}
+
+/** Merge a single key into the auth_config form state (mirrors AuthConfigField). */
+function setAuthConfig(key: string, value: string) {
+    form.auth_config = { ...form.auth_config, [key]: value };
+}
+
+/** Placeholder that signals an existing secret is kept when left blank. */
+function webhookSecretPlaceholder(): string {
+    const masked = props.integration?.masked_auth_config?.webhook_secret;
+    return typeof masked === 'string' && masked !== ''
+        ? t('system.integrations.auth.kept_secret')
+        : '';
+}
 const openVisibility = ref(false);
 
 // MCP access: Public / OAuth (web auth) / Token cover the real cases; rarer
@@ -340,7 +394,9 @@ async function discoverOAuth2(): Promise<void> {
             status: 'success',
             message: data.dynamically_registered
                 ? t('system.integrations.oauth2_discover.success_registered')
-                : t('system.integrations.oauth2_discover.success_manual_client'),
+                : t(
+                      'system.integrations.oauth2_discover.success_manual_client',
+                  ),
         };
     } catch (error) {
         const message =
@@ -388,6 +444,7 @@ const sectionMeta: Record<string, SectionMeta> = {
     auth: { icon: Key, tint: 'var(--sp-spectrum-magenta)' },
     headers: { icon: Heading1, tint: 'var(--sp-accent-cyan)' },
     visibility: { icon: Eye, tint: 'var(--sp-warning)' },
+    webhook: { icon: Webhook, tint: 'var(--sp-spectrum-magenta)' },
 };
 </script>
 
@@ -420,7 +477,9 @@ const sectionMeta: Record<string, SectionMeta> = {
                 <template v-if="isDatabase">
                     <!-- Basics. -->
                     <div class="rounded-sp-sm border border-soft bg-navy">
-                        <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
+                        <div
+                            class="flex items-center gap-3 border-b border-soft px-5 py-4"
+                        >
                             <div
                                 class="flex size-8 items-center justify-center rounded-xs bg-accent-cyan/15 text-accent-cyan"
                             >
@@ -431,27 +490,52 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     {{ t('system.integrations.form.basics') }}
                                 </p>
                                 <p class="text-xs text-ink-muted">
-                                    {{ t('system.integrations.form.db_basics_hint') }}
+                                    {{
+                                        t(
+                                            'system.integrations.form.db_basics_hint',
+                                        )
+                                    }}
                                 </p>
                             </div>
                         </div>
                         <div class="space-y-3 px-5 py-4">
                             <div class="space-y-1.5">
-                                <Label for="db_name">{{ t('system.integrations.form.name') }}</Label>
-                                <Input id="db_name" v-model="form.name" :placeholder="t('system.integrations.form.name_placeholder')" class="h-9" />
+                                <Label for="db_name">{{
+                                    t('system.integrations.form.name')
+                                }}</Label>
+                                <Input
+                                    id="db_name"
+                                    v-model="form.name"
+                                    :placeholder="
+                                        t(
+                                            'system.integrations.form.name_placeholder',
+                                        )
+                                    "
+                                    class="h-9"
+                                />
                                 <InputError :message="form.errors.name" />
                             </div>
                             <div class="space-y-1.5">
-                                <Label for="db_description">{{ t('system.integrations.form.description') }}</Label>
-                                <Textarea id="db_description" v-model="form.description" rows="2" />
-                                <InputError :message="form.errors.description" />
+                                <Label for="db_description">{{
+                                    t('system.integrations.form.description')
+                                }}</Label>
+                                <Textarea
+                                    id="db_description"
+                                    v-model="form.description"
+                                    rows="2"
+                                />
+                                <InputError
+                                    :message="form.errors.description"
+                                />
                             </div>
                         </div>
                     </div>
 
                     <!-- Connection. -->
                     <div class="rounded-sp-sm border border-soft bg-navy">
-                        <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
+                        <div
+                            class="flex items-center gap-3 border-b border-soft px-5 py-4"
+                        >
                             <div
                                 class="flex size-8 items-center justify-center rounded-xs bg-accent-cyan/15 text-accent-cyan"
                             >
@@ -459,52 +543,118 @@ const sectionMeta: Record<string, SectionMeta> = {
                             </div>
                             <div class="min-w-0">
                                 <p class="text-sm font-medium text-ink">
-                                    {{ t('system.integrations.form.db_connection') }}
+                                    {{
+                                        t(
+                                            'system.integrations.form.db_connection',
+                                        )
+                                    }}
                                 </p>
                                 <p class="text-xs text-ink-muted">
-                                    {{ t('system.integrations.form.db_connection_hint') }}
+                                    {{
+                                        t(
+                                            'system.integrations.form.db_connection_hint',
+                                        )
+                                    }}
                                 </p>
                             </div>
                         </div>
                         <div class="space-y-3 px-5 py-4">
                             <div class="space-y-1.5">
-                                <Label>{{ t('system.integrations.form.db_driver') }}</Label>
+                                <Label>{{
+                                    t('system.integrations.form.db_driver')
+                                }}</Label>
                                 <Select v-model="dbDriver">
-                                    <SelectTrigger class="h-9"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger class="h-9"
+                                        ><SelectValue
+                                    /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem v-for="o in dbDriverOptions" :key="o.value" :value="o.value">
+                                        <SelectItem
+                                            v-for="o in dbDriverOptions"
+                                            :key="o.value"
+                                            :value="o.value"
+                                        >
                                             {{ o.label }}
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div v-if="dbRequiresHost" class="grid grid-cols-[1fr_120px] gap-3">
+                            <div
+                                v-if="dbRequiresHost"
+                                class="grid grid-cols-[1fr_120px] gap-3"
+                            >
                                 <div class="space-y-1.5">
-                                    <Label for="db_host">{{ t('system.integrations.form.db_host') }}</Label>
-                                    <Input id="db_host" v-model="dbHost" placeholder="db.example.com" class="h-9 font-mono" />
+                                    <Label for="db_host">{{
+                                        t('system.integrations.form.db_host')
+                                    }}</Label>
+                                    <Input
+                                        id="db_host"
+                                        v-model="dbHost"
+                                        placeholder="db.example.com"
+                                        class="h-9 font-mono"
+                                    />
                                 </div>
                                 <div class="space-y-1.5">
-                                    <Label for="db_port">{{ t('system.integrations.form.db_port') }}</Label>
-                                    <Input id="db_port" v-model="dbPort" type="number" class="h-9" />
+                                    <Label for="db_port">{{
+                                        t('system.integrations.form.db_port')
+                                    }}</Label>
+                                    <Input
+                                        id="db_port"
+                                        v-model="dbPort"
+                                        type="number"
+                                        class="h-9"
+                                    />
                                 </div>
                             </div>
                             <div class="space-y-1.5">
-                                <Label for="db_name_field">{{ t('system.integrations.form.db_database') }}</Label>
-                                <Input id="db_name_field" v-model="dbDatabase" :placeholder="dbRequiresHost ? 'analytics' : '/path/to/db.sqlite'" class="h-9 font-mono" />
+                                <Label for="db_name_field">{{
+                                    t('system.integrations.form.db_database')
+                                }}</Label>
+                                <Input
+                                    id="db_name_field"
+                                    v-model="dbDatabase"
+                                    :placeholder="
+                                        dbRequiresHost
+                                            ? 'analytics'
+                                            : '/path/to/db.sqlite'
+                                    "
+                                    class="h-9 font-mono"
+                                />
                             </div>
-                            <div v-if="dbRequiresHost" class="grid grid-cols-2 gap-3">
+                            <div
+                                v-if="dbRequiresHost"
+                                class="grid grid-cols-2 gap-3"
+                            >
                                 <div class="space-y-1.5">
-                                    <Label for="db_user">{{ t('system.integrations.form.db_username') }}</Label>
-                                    <Input id="db_user" v-model="dbUsername" autocomplete="off" class="h-9" />
+                                    <Label for="db_user">{{
+                                        t(
+                                            'system.integrations.form.db_username',
+                                        )
+                                    }}</Label>
+                                    <Input
+                                        id="db_user"
+                                        v-model="dbUsername"
+                                        autocomplete="off"
+                                        class="h-9"
+                                    />
                                 </div>
                                 <div class="space-y-1.5">
-                                    <Label for="db_pass">{{ t('system.integrations.form.db_password') }}</Label>
+                                    <Label for="db_pass">{{
+                                        t(
+                                            'system.integrations.form.db_password',
+                                        )
+                                    }}</Label>
                                     <Input
                                         id="db_pass"
                                         v-model="dbPassword"
                                         type="password"
                                         autocomplete="new-password"
-                                        :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : ''"
+                                        :placeholder="
+                                            mode === 'edit'
+                                                ? t(
+                                                      'system.integrations.auth.kept_secret',
+                                                  )
+                                                : ''
+                                        "
                                         class="h-9"
                                     />
                                 </div>
@@ -518,14 +668,26 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 <Checkbox
                                     id="db_use_tunnel"
                                     :model-value="useTunnel"
-                                    @update:model-value="toggleTunnel($event === true)"
+                                    @update:model-value="
+                                        toggleTunnel($event === true)
+                                    "
                                 />
                                 <div class="min-w-0">
                                     <p class="text-sm font-medium text-ink">
-                                        {{ t('system.integrations.form.ssh_tunnel') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.ssh_tunnel',
+                                            )
+                                        }}
                                     </p>
-                                    <p class="mt-0.5 text-[11px] text-ink-subtle">
-                                        {{ t('system.integrations.form.ssh_tunnel_hint') }}
+                                    <p
+                                        class="mt-0.5 text-[11px] text-ink-subtle"
+                                    >
+                                        {{
+                                            t(
+                                                'system.integrations.form.ssh_tunnel_hint',
+                                            )
+                                        }}
                                     </p>
                                 </div>
                             </label>
@@ -536,87 +698,168 @@ const sectionMeta: Record<string, SectionMeta> = {
                             >
                                 <div class="grid grid-cols-[1fr_120px] gap-3">
                                     <div class="space-y-1.5">
-                                        <Label for="ssh_host">{{ t('system.integrations.form.ssh_host') }}</Label>
-                                        <Input id="ssh_host" v-model="sshHost" placeholder="bastion.example.com" class="h-9 font-mono" />
+                                        <Label for="ssh_host">{{
+                                            t(
+                                                'system.integrations.form.ssh_host',
+                                            )
+                                        }}</Label>
+                                        <Input
+                                            id="ssh_host"
+                                            v-model="sshHost"
+                                            placeholder="bastion.example.com"
+                                            class="h-9 font-mono"
+                                        />
                                     </div>
                                     <div class="space-y-1.5">
-                                        <Label for="ssh_port">{{ t('system.integrations.form.ssh_port') }}</Label>
-                                        <Input id="ssh_port" v-model="sshPort" type="number" placeholder="22" class="h-9" />
+                                        <Label for="ssh_port">{{
+                                            t(
+                                                'system.integrations.form.ssh_port',
+                                            )
+                                        }}</Label>
+                                        <Input
+                                            id="ssh_port"
+                                            v-model="sshPort"
+                                            type="number"
+                                            placeholder="22"
+                                            class="h-9"
+                                        />
                                     </div>
                                 </div>
                                 <div class="space-y-1.5">
-                                    <Label for="ssh_user">{{ t('system.integrations.form.ssh_user') }}</Label>
-                                    <Input id="ssh_user" v-model="sshUser" placeholder="jump" class="h-9" autocomplete="off" />
+                                    <Label for="ssh_user">{{
+                                        t('system.integrations.form.ssh_user')
+                                    }}</Label>
+                                    <Input
+                                        id="ssh_user"
+                                        v-model="sshUser"
+                                        placeholder="jump"
+                                        class="h-9"
+                                        autocomplete="off"
+                                    />
                                 </div>
 
                                 <!-- Tunnel auth: key (optionally passphrased) or password. -->
                                 <div class="space-y-1.5">
-                                    <Label>{{ t('system.integrations.form.ssh_auth') }}</Label>
-                                    <div class="inline-flex items-center gap-0.5 rounded-pill border border-soft bg-white/[0.03] p-0.5">
+                                    <Label>{{
+                                        t('system.integrations.form.ssh_auth')
+                                    }}</Label>
+                                    <div
+                                        class="inline-flex items-center gap-0.5 rounded-pill border border-soft bg-white/[0.03] p-0.5"
+                                    >
                                         <button
                                             type="button"
                                             :class="[
                                                 'rounded-pill px-2.5 py-1 text-[11px] font-medium transition-colors',
-                                                sshAuthMethod === 'key' ? 'bg-accent-blue text-white shadow-btn-primary' : 'text-ink-muted hover:text-ink',
+                                                sshAuthMethod === 'key'
+                                                    ? 'bg-accent-blue text-white shadow-btn-primary'
+                                                    : 'text-ink-muted hover:text-ink',
                                             ]"
                                             @click="setSshAuth('key')"
                                         >
-                                            {{ t('system.integrations.form.ssh_auth_key') }}
+                                            {{
+                                                t(
+                                                    'system.integrations.form.ssh_auth_key',
+                                                )
+                                            }}
                                         </button>
                                         <button
                                             type="button"
                                             :class="[
                                                 'rounded-pill px-2.5 py-1 text-[11px] font-medium transition-colors',
-                                                sshAuthMethod === 'password' ? 'bg-accent-blue text-white shadow-btn-primary' : 'text-ink-muted hover:text-ink',
+                                                sshAuthMethod === 'password'
+                                                    ? 'bg-accent-blue text-white shadow-btn-primary'
+                                                    : 'text-ink-muted hover:text-ink',
                                             ]"
                                             @click="setSshAuth('password')"
                                         >
-                                            {{ t('system.integrations.form.ssh_auth_password') }}
+                                            {{
+                                                t(
+                                                    'system.integrations.form.ssh_auth_password',
+                                                )
+                                            }}
                                         </button>
                                     </div>
                                 </div>
 
                                 <template v-if="sshAuthMethod === 'key'">
                                     <div class="space-y-1.5">
-                                        <Label for="ssh_key">{{ t('system.integrations.form.ssh_key') }}</Label>
+                                        <Label for="ssh_key">{{
+                                            t(
+                                                'system.integrations.form.ssh_key',
+                                            )
+                                        }}</Label>
                                         <Textarea
                                             id="ssh_key"
                                             v-model="sshKey"
-                                            :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : '-----BEGIN OPENSSH PRIVATE KEY-----'"
+                                            :placeholder="
+                                                mode === 'edit'
+                                                    ? t(
+                                                          'system.integrations.auth.kept_secret',
+                                                      )
+                                                    : '-----BEGIN OPENSSH PRIVATE KEY-----'
+                                            "
                                             rows="4"
                                             class="font-mono text-xs"
                                         />
                                     </div>
                                     <div class="space-y-1.5">
-                                        <Label for="ssh_passphrase">{{ t('system.integrations.form.ssh_passphrase') }}</Label>
+                                        <Label for="ssh_passphrase">{{
+                                            t(
+                                                'system.integrations.form.ssh_passphrase',
+                                            )
+                                        }}</Label>
                                         <Input
                                             id="ssh_passphrase"
                                             v-model="sshPassphrase"
                                             type="password"
                                             autocomplete="new-password"
-                                            :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : ''"
+                                            :placeholder="
+                                                mode === 'edit'
+                                                    ? t(
+                                                          'system.integrations.auth.kept_secret',
+                                                      )
+                                                    : ''
+                                            "
                                             class="h-9"
                                         />
                                         <p class="text-[11px] text-ink-subtle">
-                                            {{ t('system.integrations.form.ssh_passphrase_hint') }}
+                                            {{
+                                                t(
+                                                    'system.integrations.form.ssh_passphrase_hint',
+                                                )
+                                            }}
                                         </p>
                                     </div>
                                 </template>
 
                                 <div v-else class="space-y-1.5">
-                                    <Label for="ssh_password">{{ t('system.integrations.form.ssh_password') }}</Label>
+                                    <Label for="ssh_password">{{
+                                        t(
+                                            'system.integrations.form.ssh_password',
+                                        )
+                                    }}</Label>
                                     <Input
                                         id="ssh_password"
                                         v-model="sshPassword"
                                         type="password"
                                         autocomplete="new-password"
-                                        :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : ''"
+                                        :placeholder="
+                                            mode === 'edit'
+                                                ? t(
+                                                      'system.integrations.auth.kept_secret',
+                                                  )
+                                                : ''
+                                        "
                                         class="h-9"
                                     />
                                 </div>
 
                                 <p class="text-[11px] text-ink-subtle">
-                                    {{ t('system.integrations.form.ssh_key_hint') }}
+                                    {{
+                                        t(
+                                            'system.integrations.form.ssh_key_hint',
+                                        )
+                                    }}
                                 </p>
                             </div>
 
@@ -624,19 +867,31 @@ const sectionMeta: Record<string, SectionMeta> = {
                             <div class="flex flex-col gap-2 pt-1">
                                 <button
                                     type="button"
-                                    :disabled="testState.status === 'loading' || !form.base_url"
-                                    class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
+                                    :disabled="
+                                        testState.status === 'loading' ||
+                                        !form.base_url
+                                    "
+                                    class="inline-flex items-center gap-1.5 self-start rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
                                     @click="testConnection"
                                 >
-                                    <Loader2 v-if="testState.status === 'loading'" class="size-3.5 animate-spin" />
+                                    <Loader2
+                                        v-if="testState.status === 'loading'"
+                                        class="size-3.5 animate-spin"
+                                    />
                                     <Database v-else class="size-3.5" />
-                                    {{ testState.status === 'loading' ? t('system.integrations.testing') : t('system.integrations.test_now') }}
+                                    {{
+                                        testState.status === 'loading'
+                                            ? t('system.integrations.testing')
+                                            : t('system.integrations.test_now')
+                                    }}
                                 </button>
                                 <div
                                     v-if="testState.status === 'success'"
                                     class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
                                 >
-                                    <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
+                                    <CheckCircle2
+                                        class="mt-0.5 size-3.5 shrink-0"
+                                    />
                                     <span>{{ testState.message }}</span>
                                 </div>
                                 <div
@@ -655,7 +910,9 @@ const sectionMeta: Record<string, SectionMeta> = {
                 <template v-else-if="isMcp">
                     <!-- Basics: one Server URL field, with discovery as an inline assist. -->
                     <div class="rounded-sp-sm border border-soft bg-navy">
-                        <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
+                        <div
+                            class="flex items-center gap-3 border-b border-soft px-5 py-4"
+                        >
                             <div
                                 class="flex size-8 items-center justify-center rounded-xs bg-accent-blue/15 text-accent-blue"
                             >
@@ -666,7 +923,11 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     {{ t('system.integrations.form.basics') }}
                                 </p>
                                 <p class="text-xs text-ink-muted">
-                                    {{ t('system.integrations.form.mcp_basics_hint') }}
+                                    {{
+                                        t(
+                                            'system.integrations.form.mcp_basics_hint',
+                                        )
+                                    }}
                                 </p>
                             </div>
                         </div>
@@ -678,45 +939,71 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 <Input
                                     id="mcp_name"
                                     v-model="form.name"
-                                    :placeholder="t('system.integrations.form.name_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'system.integrations.form.name_placeholder',
+                                        )
+                                    "
                                     class="h-9"
                                 />
                                 <InputError :message="form.errors.name" />
                             </div>
                             <div class="space-y-1.5">
                                 <Label for="mcp_url">
-                                    {{ t('system.integrations.form.server_url') }}
+                                    {{
+                                        t('system.integrations.form.server_url')
+                                    }}
                                 </Label>
                                 <div class="flex gap-2">
                                     <Input
                                         id="mcp_url"
                                         v-model="form.base_url"
-                                        :placeholder="t('system.integrations.form.server_url_placeholder')"
+                                        :placeholder="
+                                            t(
+                                                'system.integrations.form.server_url_placeholder',
+                                            )
+                                        "
                                         class="h-9 font-mono"
                                         @keydown.enter.prevent="discoverOAuth2"
                                     />
                                     <button
                                         type="button"
-                                        :disabled="discoverState.status === 'loading' || !form.base_url"
+                                        :disabled="
+                                            discoverState.status ===
+                                                'loading' || !form.base_url
+                                        "
                                         class="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-accent-blue px-3 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                                         @click="discoverOAuth2"
                                     >
                                         <Loader2
-                                            v-if="discoverState.status === 'loading'"
+                                            v-if="
+                                                discoverState.status ===
+                                                'loading'
+                                            "
                                             class="size-3.5 animate-spin"
                                         />
                                         <Sparkles v-else class="size-3.5" />
-                                        {{ t('system.integrations.oauth2_discover.action') }}
+                                        {{
+                                            t(
+                                                'system.integrations.oauth2_discover.action',
+                                            )
+                                        }}
                                     </button>
                                 </div>
                                 <p class="text-[11px] text-ink-subtle">
-                                    {{ t('system.integrations.form.mcp_discover_hint') }}
+                                    {{
+                                        t(
+                                            'system.integrations.form.mcp_discover_hint',
+                                        )
+                                    }}
                                 </p>
                                 <div
                                     v-if="discoverState.status === 'success'"
                                     class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
                                 >
-                                    <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
+                                    <CheckCircle2
+                                        class="mt-0.5 size-3.5 shrink-0"
+                                    />
                                     <span>{{ discoverState.message }}</span>
                                 </div>
                                 <div
@@ -733,7 +1020,9 @@ const sectionMeta: Record<string, SectionMeta> = {
 
                     <!-- Access (auth). -->
                     <div class="rounded-sp-sm border border-soft bg-navy">
-                        <div class="flex items-center gap-3 border-b border-soft px-5 py-4">
+                        <div
+                            class="flex items-center gap-3 border-b border-soft px-5 py-4"
+                        >
                             <div
                                 class="flex size-8 items-center justify-center rounded-xs"
                                 :style="{
@@ -745,7 +1034,9 @@ const sectionMeta: Record<string, SectionMeta> = {
                             </div>
                             <div class="min-w-0">
                                 <p class="text-sm font-medium text-ink">
-                                    {{ t('system.integrations.mcp_auth.label') }}
+                                    {{
+                                        t('system.integrations.mcp_auth.label')
+                                    }}
                                 </p>
                                 <p class="text-xs text-ink-muted">
                                     {{ t('system.integrations.mcp_auth.hint') }}
@@ -764,13 +1055,25 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     ]"
                                     @click="selectAuthMethod('none')"
                                 >
-                                    <Globe class="mt-0.5 size-4 shrink-0 text-ink-muted" />
+                                    <Globe
+                                        class="mt-0.5 size-4 shrink-0 text-ink-muted"
+                                    />
                                     <div class="min-w-0">
                                         <p class="text-sm font-medium text-ink">
-                                            {{ t('system.integrations.mcp_auth.public') }}
+                                            {{
+                                                t(
+                                                    'system.integrations.mcp_auth.public',
+                                                )
+                                            }}
                                         </p>
-                                        <p class="mt-0.5 text-[11px] text-ink-subtle">
-                                            {{ t('system.integrations.mcp_auth.public_hint') }}
+                                        <p
+                                            class="mt-0.5 text-[11px] text-ink-subtle"
+                                        >
+                                            {{
+                                                t(
+                                                    'system.integrations.mcp_auth.public_hint',
+                                                )
+                                            }}
                                         </p>
                                     </div>
                                 </button>
@@ -782,15 +1085,29 @@ const sectionMeta: Record<string, SectionMeta> = {
                                             ? 'border-accent-blue/50 bg-accent-blue/[0.08]'
                                             : 'border-soft bg-white/[0.03] hover:border-accent-blue/30 hover:bg-white/[0.06]',
                                     ]"
-                                    @click="selectAuthMethod('oauth2_auth_code')"
+                                    @click="
+                                        selectAuthMethod('oauth2_auth_code')
+                                    "
                                 >
-                                    <UserCheck class="mt-0.5 size-4 shrink-0 text-ink-muted" />
+                                    <UserCheck
+                                        class="mt-0.5 size-4 shrink-0 text-ink-muted"
+                                    />
                                     <div class="min-w-0">
                                         <p class="text-sm font-medium text-ink">
-                                            {{ t('system.integrations.mcp_auth.oauth') }}
+                                            {{
+                                                t(
+                                                    'system.integrations.mcp_auth.oauth',
+                                                )
+                                            }}
                                         </p>
-                                        <p class="mt-0.5 text-[11px] text-ink-subtle">
-                                            {{ t('system.integrations.mcp_auth.oauth_hint') }}
+                                        <p
+                                            class="mt-0.5 text-[11px] text-ink-subtle"
+                                        >
+                                            {{
+                                                t(
+                                                    'system.integrations.mcp_auth.oauth_hint',
+                                                )
+                                            }}
                                         </p>
                                     </div>
                                 </button>
@@ -804,13 +1121,25 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     ]"
                                     @click="selectAuthMethod('bearer')"
                                 >
-                                    <Ticket class="mt-0.5 size-4 shrink-0 text-ink-muted" />
+                                    <Ticket
+                                        class="mt-0.5 size-4 shrink-0 text-ink-muted"
+                                    />
                                     <div class="min-w-0">
                                         <p class="text-sm font-medium text-ink">
-                                            {{ t('system.integrations.mcp_auth.token') }}
+                                            {{
+                                                t(
+                                                    'system.integrations.mcp_auth.token',
+                                                )
+                                            }}
                                         </p>
-                                        <p class="mt-0.5 text-[11px] text-ink-subtle">
-                                            {{ t('system.integrations.mcp_auth.token_hint') }}
+                                        <p
+                                            class="mt-0.5 text-[11px] text-ink-subtle"
+                                        >
+                                            {{
+                                                t(
+                                                    'system.integrations.mcp_auth.token_hint',
+                                                )
+                                            }}
                                         </p>
                                     </div>
                                 </button>
@@ -818,42 +1147,71 @@ const sectionMeta: Record<string, SectionMeta> = {
 
                             <!-- OAuth web auth: nothing to fill when the client is
                                  registered; advanced fields cover manual setup. -->
-                            <template v-if="form.auth_type === 'oauth2_auth_code'">
-                                <p class="flex items-start gap-2 text-[11px] text-ink-subtle">
+                            <template
+                                v-if="form.auth_type === 'oauth2_auth_code'"
+                            >
+                                <p
+                                    class="flex items-start gap-2 text-[11px] text-ink-subtle"
+                                >
                                     <Lock class="mt-px size-3 shrink-0" />
-                                    <span>{{ t('system.integrations.mcp_auth.per_user_note') }}</span>
+                                    <span>{{
+                                        t(
+                                            'system.integrations.mcp_auth.per_user_note',
+                                        )
+                                    }}</span>
                                 </p>
                                 <p
                                     v-if="oauthConfigured"
                                     class="flex items-center gap-1.5 text-[11px] text-sp-success"
                                 >
                                     <CheckCircle2 class="size-3.5 shrink-0" />
-                                    {{ t('system.integrations.mcp_auth.oauth_configured') }}
+                                    {{
+                                        t(
+                                            'system.integrations.mcp_auth.oauth_configured',
+                                        )
+                                    }}
                                 </p>
                                 <p v-else class="text-[11px] text-ink-subtle">
-                                    {{ t('system.integrations.mcp_auth.oauth_discover_hint') }}
+                                    {{
+                                        t(
+                                            'system.integrations.mcp_auth.oauth_discover_hint',
+                                        )
+                                    }}
                                 </p>
                                 <button
                                     type="button"
                                     class="inline-flex items-center gap-1 text-[11px] font-medium text-accent-blue hover:underline"
-                                    @click="showOAuthAdvanced = !showOAuthAdvanced"
+                                    @click="
+                                        showOAuthAdvanced = !showOAuthAdvanced
+                                    "
                                 >
                                     <ChevronDown
                                         :class="[
                                             'size-3 transition-transform',
-                                            showOAuthAdvanced || !oauthConfigured ? 'rotate-180' : '',
+                                            showOAuthAdvanced ||
+                                            !oauthConfigured
+                                                ? 'rotate-180'
+                                                : '',
                                         ]"
                                     />
-                                    {{ t('system.integrations.mcp_auth.advanced') }}
+                                    {{
+                                        t(
+                                            'system.integrations.mcp_auth.advanced',
+                                        )
+                                    }}
                                 </button>
                                 <AuthConfigField
                                     v-if="showOAuthAdvanced || !oauthConfigured"
                                     :auth-type="form.auth_type"
                                     :model-value="form.auth_config"
-                                    :masked-values="integration?.masked_auth_config"
+                                    :masked-values="
+                                        integration?.masked_auth_config
+                                    "
                                     :callback-url="oauthCallbackUrl"
                                     :errors="form.errors"
-                                    @update:model-value="form.auth_config = $event"
+                                    @update:model-value="
+                                        form.auth_config = $event
+                                    "
                                 />
                             </template>
 
@@ -905,14 +1263,23 @@ const sectionMeta: Record<string, SectionMeta> = {
                                         color: sectionMeta.basics.tint,
                                     }"
                                 >
-                                    <component :is="sectionMeta.basics.icon" class="size-4" />
+                                    <component
+                                        :is="sectionMeta.basics.icon"
+                                        class="size-4"
+                                    />
                                 </div>
                                 <div class="min-w-0">
                                     <p class="text-sm font-medium text-ink">
-                                        {{ t('system.integrations.form.basics') }}
+                                        {{
+                                            t('system.integrations.form.basics')
+                                        }}
                                     </p>
                                     <p class="text-xs text-ink-muted">
-                                        {{ t('system.integrations.form.basics_hint') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.basics_hint',
+                                            )
+                                        }}
                                     </p>
                                 </div>
                             </div>
@@ -924,7 +1291,9 @@ const sectionMeta: Record<string, SectionMeta> = {
                             />
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                            <div class="space-y-3 border-t border-soft px-5 py-4">
+                            <div
+                                class="space-y-3 border-t border-soft px-5 py-4"
+                            >
                                 <div class="space-y-1.5">
                                     <Label for="name">
                                         {{ t('system.integrations.form.name') }}
@@ -932,33 +1301,53 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     <Input
                                         id="name"
                                         v-model="form.name"
-                                        :placeholder="t('system.integrations.form.name_placeholder')"
+                                        :placeholder="
+                                            t(
+                                                'system.integrations.form.name_placeholder',
+                                            )
+                                        "
                                         class="h-9"
                                     />
                                     <InputError :message="form.errors.name" />
                                 </div>
                                 <div class="space-y-1.5">
                                     <Label for="description">
-                                        {{ t('system.integrations.form.description') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.description',
+                                            )
+                                        }}
                                     </Label>
                                     <Textarea
                                         id="description"
                                         v-model="form.description"
                                         rows="2"
                                     />
-                                    <InputError :message="form.errors.description" />
+                                    <InputError
+                                        :message="form.errors.description"
+                                    />
                                 </div>
                                 <div class="space-y-1.5">
                                     <Label for="base_url">
-                                        {{ t('system.integrations.form.base_url') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.base_url',
+                                            )
+                                        }}
                                     </Label>
                                     <Input
                                         id="base_url"
                                         v-model="form.base_url"
-                                        :placeholder="t('system.integrations.form.base_url_placeholder')"
+                                        :placeholder="
+                                            t(
+                                                'system.integrations.form.base_url_placeholder',
+                                            )
+                                        "
                                         class="h-9"
                                     />
-                                    <InputError :message="form.errors.base_url" />
+                                    <InputError
+                                        :message="form.errors.base_url"
+                                    />
                                 </div>
                             </div>
                         </CollapsibleContent>
@@ -980,14 +1369,25 @@ const sectionMeta: Record<string, SectionMeta> = {
                                         color: sectionMeta.auth.tint,
                                     }"
                                 >
-                                    <component :is="sectionMeta.auth.icon" class="size-4" />
+                                    <component
+                                        :is="sectionMeta.auth.icon"
+                                        class="size-4"
+                                    />
                                 </div>
                                 <div class="min-w-0">
                                     <p class="text-sm font-medium text-ink">
-                                        {{ t('system.integrations.form.authentication') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.authentication',
+                                            )
+                                        }}
                                     </p>
                                     <p class="text-xs text-ink-muted">
-                                        {{ t('system.integrations.form.authentication_hint') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.authentication_hint',
+                                            )
+                                        }}
                                     </p>
                                 </div>
                             </div>
@@ -999,10 +1399,16 @@ const sectionMeta: Record<string, SectionMeta> = {
                             />
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                            <div class="space-y-3 border-t border-soft px-5 py-4">
+                            <div
+                                class="space-y-3 border-t border-soft px-5 py-4"
+                            >
                                 <div class="space-y-2">
                                     <Label>
-                                        {{ t('system.integrations.form.auth_method') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.auth_method',
+                                            )
+                                        }}
                                     </Label>
                                     <AuthMethodPicker
                                         :options="authTypes"
@@ -1014,45 +1420,202 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 <AuthConfigField
                                     :auth-type="form.auth_type"
                                     :model-value="form.auth_config"
-                                    :masked-values="integration?.masked_auth_config"
+                                    :masked-values="
+                                        integration?.masked_auth_config
+                                    "
                                     :callback-url="oauthCallbackUrl"
                                     :errors="form.errors"
-                                    @update:model-value="form.auth_config = $event"
+                                    @update:model-value="
+                                        form.auth_config = $event
+                                    "
                                 />
 
                                 <!-- Test connection — pill trigger + semantic banners. -->
                                 <div class="flex flex-col gap-2 pt-1">
                                     <button
                                         type="button"
-                                        :disabled="testState.status === 'loading' || !form.base_url"
-                                        class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
+                                        :disabled="
+                                            testState.status === 'loading' ||
+                                            !form.base_url
+                                        "
+                                        class="inline-flex items-center gap-1.5 self-start rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
                                         @click="testConnection"
                                     >
                                         <Loader2
-                                            v-if="testState.status === 'loading'"
+                                            v-if="
+                                                testState.status === 'loading'
+                                            "
                                             class="size-3.5 animate-spin"
                                         />
                                         <Plug v-else class="size-3.5" />
                                         {{
                                             testState.status === 'loading'
-                                                ? t('system.integrations.testing')
-                                                : t('system.integrations.test_now')
+                                                ? t(
+                                                      'system.integrations.testing',
+                                                  )
+                                                : t(
+                                                      'system.integrations.test_now',
+                                                  )
                                         }}
                                     </button>
                                     <div
                                         v-if="testState.status === 'success'"
                                         class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
                                     >
-                                        <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
+                                        <CheckCircle2
+                                            class="mt-0.5 size-3.5 shrink-0"
+                                        />
                                         <span>{{ testState.message }}</span>
                                     </div>
                                     <div
                                         v-else-if="testState.status === 'error'"
                                         class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
                                     >
-                                        <XCircle class="mt-0.5 size-3.5 shrink-0" />
+                                        <XCircle
+                                            class="mt-0.5 size-3.5 shrink-0"
+                                        />
                                         <span>{{ testState.message }}</span>
                                     </div>
+                                </div>
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
+
+                    <!-- Inbound webhook (integration.event trigger). -->
+                    <Collapsible
+                        v-model:open="openWebhook"
+                        class="rounded-sp-sm border border-soft bg-navy"
+                    >
+                        <CollapsibleTrigger
+                            class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="flex size-8 items-center justify-center rounded-xs"
+                                    :style="{
+                                        backgroundColor: `color-mix(in oklab, ${sectionMeta.webhook.tint} 15%, transparent)`,
+                                        color: sectionMeta.webhook.tint,
+                                    }"
+                                >
+                                    <component
+                                        :is="sectionMeta.webhook.icon"
+                                        class="size-4"
+                                    />
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium text-ink">
+                                        {{
+                                            t(
+                                                'system.integrations.webhook.title',
+                                            )
+                                        }}
+                                    </p>
+                                    <p class="text-xs text-ink-muted">
+                                        {{
+                                            t(
+                                                'system.integrations.webhook.hint',
+                                            )
+                                        }}
+                                    </p>
+                                </div>
+                            </div>
+                            <ChevronDown
+                                :class="[
+                                    openWebhook ? 'rotate-180' : '',
+                                    'size-4 shrink-0 text-ink-subtle transition-transform',
+                                ]"
+                            />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                            <div
+                                class="space-y-3 border-t border-soft px-5 py-4"
+                            >
+                                <!-- Receiver URL (edit only) — give this to the provider. -->
+                                <div
+                                    v-if="mode === 'edit' && webhookUrl"
+                                    class="space-y-1"
+                                >
+                                    <Label>{{
+                                        t('system.integrations.webhook.url')
+                                    }}</Label>
+                                    <div class="flex items-center gap-2">
+                                        <Input
+                                            :model-value="webhookUrl"
+                                            readonly
+                                            class="font-mono text-xs"
+                                        />
+                                        <button
+                                            type="button"
+                                            class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-xs text-ink transition-colors hover:border-strong"
+                                            @click="copyWebhookUrl"
+                                        >
+                                            <Check
+                                                v-if="webhookUrlCopied"
+                                                class="size-3.5 text-sp-success"
+                                            />
+                                            <Copy v-else class="size-3.5" />
+                                            {{
+                                                webhookUrlCopied
+                                                    ? t(
+                                                          'system.integrations.webhook.copied',
+                                                      )
+                                                    : t(
+                                                          'system.integrations.webhook.copy',
+                                                      )
+                                            }}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <Label>{{
+                                        t('system.integrations.webhook.secret')
+                                    }}</Label>
+                                    <Input
+                                        type="password"
+                                        :model-value="
+                                            (form.auth_config
+                                                .webhook_secret as string) ?? ''
+                                        "
+                                        :placeholder="
+                                            webhookSecretPlaceholder()
+                                        "
+                                        @update:model-value="
+                                            setAuthConfig(
+                                                'webhook_secret',
+                                                $event,
+                                            )
+                                        "
+                                    />
+                                    <p class="text-xs text-ink-muted">
+                                        {{
+                                            t(
+                                                'system.integrations.webhook.secret_hint',
+                                            )
+                                        }}
+                                    </p>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <Label>{{
+                                        t(
+                                            'system.integrations.webhook.signature_header',
+                                        )
+                                    }}</Label>
+                                    <Input
+                                        :model-value="
+                                            (form.auth_config
+                                                .webhook_signature_header as string) ??
+                                            ''
+                                        "
+                                        placeholder="X-Hub-Signature-256"
+                                        @update:model-value="
+                                            setAuthConfig(
+                                                'webhook_signature_header',
+                                                $event,
+                                            )
+                                        "
+                                    />
                                 </div>
                             </div>
                         </CollapsibleContent>
@@ -1074,14 +1637,25 @@ const sectionMeta: Record<string, SectionMeta> = {
                                         color: sectionMeta.headers.tint,
                                     }"
                                 >
-                                    <component :is="sectionMeta.headers.icon" class="size-4" />
+                                    <component
+                                        :is="sectionMeta.headers.icon"
+                                        class="size-4"
+                                    />
                                 </div>
                                 <div class="min-w-0">
                                     <p class="text-sm font-medium text-ink">
-                                        {{ t('system.integrations.form.default_headers') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.default_headers',
+                                            )
+                                        }}
                                     </p>
                                     <p class="text-xs text-ink-muted">
-                                        {{ t('system.integrations.form.default_headers_hint') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.default_headers_hint',
+                                            )
+                                        }}
                                     </p>
                                 </div>
                             </div>
@@ -1116,14 +1690,23 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     color: sectionMeta.visibility.tint,
                                 }"
                             >
-                                <component :is="sectionMeta.visibility.icon" class="size-4" />
+                                <component
+                                    :is="sectionMeta.visibility.icon"
+                                    class="size-4"
+                                />
                             </div>
                             <div class="min-w-0">
                                 <p class="text-sm font-medium text-ink">
-                                    {{ t('system.integrations.form.visibility') }}
+                                    {{
+                                        t('system.integrations.form.visibility')
+                                    }}
                                 </p>
                                 <p class="text-xs text-ink-muted">
-                                    {{ t('system.integrations.form.visibility_hint') }}
+                                    {{
+                                        t(
+                                            'system.integrations.form.visibility_hint',
+                                        )
+                                    }}
                                 </p>
                             </div>
                         </div>
@@ -1160,14 +1743,27 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 <Checkbox
                                     id="allow_insecure_tls"
                                     :model-value="form.allow_insecure_tls"
-                                    @update:model-value="form.allow_insecure_tls = $event === true"
+                                    @update:model-value="
+                                        form.allow_insecure_tls =
+                                            $event === true
+                                    "
                                 />
                                 <div class="min-w-0">
                                     <p class="text-sm font-medium text-ink">
-                                        {{ t('system.integrations.form.allow_insecure_tls') }}
+                                        {{
+                                            t(
+                                                'system.integrations.form.allow_insecure_tls',
+                                            )
+                                        }}
                                     </p>
-                                    <p class="mt-0.5 text-[11px] text-ink-subtle">
-                                        {{ t('system.integrations.form.allow_insecure_tls_hint') }}
+                                    <p
+                                        class="mt-0.5 text-[11px] text-ink-subtle"
+                                    >
+                                        {{
+                                            t(
+                                                'system.integrations.form.allow_insecure_tls_hint',
+                                            )
+                                        }}
                                     </p>
                                 </div>
                             </label>
@@ -1187,7 +1783,9 @@ const sectionMeta: Record<string, SectionMeta> = {
                     </Link>
                     <button
                         type="submit"
-                        :disabled="form.processing || !form.name || !form.base_url"
+                        :disabled="
+                            form.processing || !form.name || !form.base_url
+                        "
                         class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                     >
                         {{ t('system.integrations.form.save') }}
