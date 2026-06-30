@@ -273,7 +273,9 @@ const showRequestBody = computed(() =>
             />
             <p class="text-xs text-ink-muted">
                 JSON template with
-                <code class="rounded bg-white/[0.06] px-1">{""}</code>
+                <code v-pre class="rounded bg-white/[0.06] px-1">{{
+                    variable
+                }}</code>
                 placeholders
             </p>
             <InputError :message="errors['config.request_body_template']" />

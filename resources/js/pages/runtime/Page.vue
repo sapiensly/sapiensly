@@ -119,7 +119,7 @@ const breadcrumbBlock = computed<AnyBlock | null>(() => {
         return null;
     }
     const blocks = props.page.blocks ?? [];
-    return blocks.find((b) => (b.type as string) === 'breadcrumb') ?? null;
+    return blocks.find((b) => b.type === 'breadcrumb') ?? null;
 });
 
 // Sidebar body: the band owns both the breadcrumb and the page title, so lift
@@ -130,7 +130,7 @@ const contentBlocks = computed<AnyBlock[]>(() => {
     if (!useSidebar.value) {
         return blocks;
     }
-    blocks = blocks.filter((b) => (b.type as string) !== 'breadcrumb');
+    blocks = blocks.filter((b) => b.type !== 'breadcrumb');
     const first = blocks[0];
     if (
         first?.type === 'heading' &&

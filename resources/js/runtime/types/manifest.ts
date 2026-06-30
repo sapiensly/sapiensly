@@ -150,6 +150,61 @@ export interface BlockStat extends BlockBase {
     delta_good?: 'up' | 'down';
 }
 
+/**
+ * Every other runtime block type that doesn't (yet) have a dedicated typed
+ * interface here. Listed so `AnyBlock['type']` is the COMPLETE set of block
+ * types the runtime renders — callers can compare `block.type` against any real
+ * type without a cast. Each Block*.vue component still declares its own precise
+ * props locally; the index signature keeps these loosely-typed blocks readable
+ * from generic code (AppRenderer, the Builder preview) without per-block types.
+ */
+export interface BlockOther extends BlockBase {
+    type:
+        | 'accordion'
+        | 'alert'
+        | 'avatar'
+        | 'badge'
+        | 'breadcrumb'
+        | 'button'
+        | 'calendar'
+        | 'card_grid'
+        | 'carousel'
+        | 'chart'
+        | 'cta'
+        | 'data_grid'
+        | 'faq'
+        | 'feature_grid'
+        | 'filter_bar'
+        | 'flow'
+        | 'form'
+        | 'funnel'
+        | 'gantt'
+        | 'gauge'
+        | 'heatmap'
+        | 'hero'
+        | 'image'
+        | 'insight'
+        | 'kanban'
+        | 'map'
+        | 'markdown'
+        | 'metric_grid'
+        | 'modal'
+        | 'multi_step_form'
+        | 'pricing'
+        | 'progress'
+        | 'record_detail'
+        | 'related_list'
+        | 'sparkline'
+        | 'split_view'
+        | 'stat_band'
+        | 'stepper'
+        | 'tabs'
+        | 'testimonials'
+        | 'timeline'
+        | 'word_cloud';
+    [key: string]: unknown;
+}
+
 export type AnyBlock =
     | BlockContainer
     | BlockText
@@ -157,7 +212,8 @@ export type AnyBlock =
     | BlockDivider
     | BlockSpacer
     | BlockTable
-    | BlockStat;
+    | BlockStat
+    | BlockOther;
 
 export interface PageDef {
     id: string;

@@ -1160,7 +1160,7 @@ const previewBreadcrumbBlock = computed<AnyBlock | null>(() => {
         return null;
     }
     const blocks = props.preview?.page?.blocks ?? [];
-    return blocks.find((b) => (b.type as string) === 'breadcrumb') ?? null;
+    return blocks.find((b) => b.type === 'breadcrumb') ?? null;
 });
 // The band owns both the breadcrumb and the page title; lift the breadcrumb out
 // and drop a leading heading that repeats the page name so it never doubles.
@@ -1168,7 +1168,7 @@ const previewContentBlocks = computed<AnyBlock[]>(() => {
     let blocks = props.preview?.page?.blocks ?? [];
     const name = props.preview?.page?.name ?? '';
     if (previewSidebar.value) {
-        blocks = blocks.filter((b) => (b.type as string) !== 'breadcrumb');
+        blocks = blocks.filter((b) => b.type !== 'breadcrumb');
     }
     const first = blocks[0];
     if (
