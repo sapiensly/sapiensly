@@ -2786,3 +2786,43 @@ it('rejects a `related` traversal inside a trigger filter', function () {
     expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
         ->toContain('unsupported_in_trigger');
 });
+
+it('rejects a record.date_reached trigger whose field_id is not a date/datetime field', function () {
+    $manifest = baseManifest();
+    $objA = $manifest['objects'][0]['id'];
+    $fld = $manifest['objects'][0]['fields'][0]['id']; // 'nombre' (string)
+    $manifest['workflows'] = [[
+        'id' => id('wkf'), 'slug' => 'wf', 'name' => 'WF',
+        'trigger' => [
+            'type' => 'record.date_reached',
+            'object_id' => $objA,
+            'field_id' => $fld,
+            'offset' => ['value' => 3, 'unit' => 'days', 'direction' => 'before'],
+        ],
+        'steps' => [['id' => id('stp'), 'type' => 'log', 'message' => 'x']],
+    ]];
+
+    expect(collect((new ManifestValidator)->validate($manifest)->errors)->pluck('code'))
+        ->toContain('incompatible_type');
+});
+
+it('accepts a record.date_reached trigger on a datetime field', function () {
+    $manifest = baseManifest();
+    $objA = $manifest['objects'][0]['id'];
+    $fldDue = id('fld');
+    $manifest['objects'][0]['fields'][] = [
+        'id' => $fldDue, 'slug' => 'due_at', 'name' => 'Due at', 'type' => 'datetime',
+    ];
+    $manifest['workflows'] = [[
+        'id' => id('wkf'), 'slug' => 'wf', 'name' => 'WF',
+        'trigger' => [
+            'type' => 'record.date_reached',
+            'object_id' => $objA,
+            'field_id' => $fldDue,
+            'offset' => ['value' => 3, 'unit' => 'days', 'direction' => 'before'],
+        ],
+        'steps' => [['id' => id('stp'), 'type' => 'log', 'message' => 'x']],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});

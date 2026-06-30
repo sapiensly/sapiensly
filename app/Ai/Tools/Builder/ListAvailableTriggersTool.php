@@ -40,6 +40,7 @@ class ListAvailableTriggersTool implements Tool
             ['type' => 'record.deleted', 'props' => 'object_id (required), filter? — fires after a record is deleted. Payload carries the final record snapshot.'],
             ['type' => 'schedule', 'props' => 'cron (required, 5-field e.g. "0 9 * * 1-5"), timezone? (IANA, default UTC) — fires on a recurring schedule. Trigger payload: {scheduled_at: ISO8601}'],
             ['type' => 'webhook.inbound', 'props' => 'dedupe_path? (JSON path to the provider delivery id, e.g. "id"), signature_header? (default X-Sapiensly-Signature) — fires when an external system POSTs to the workflow\'s signed webhook URL. Trigger payload: {webhook: {body, headers}}'],
+            ['type' => 'record.date_reached', 'props' => 'object_id (required), field_id (required, a date/datetime field), offset? ({value, unit: minutes|hours|days|weeks, direction: before|after}), at? (HH:MM, default 09:00, for date-only fields), timezone? (IANA, default UTC), filter? — fires when the record\'s date field ± offset reaches now (e.g. 3 days before due_date). Payload: {record: {...}, reached_at: ISO8601}'],
         ];
 
         return json_encode([

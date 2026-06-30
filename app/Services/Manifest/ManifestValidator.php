@@ -1150,7 +1150,7 @@ class ManifestValidator
             // Trigger validations
             $trigger = $workflow['trigger'] ?? [];
             $triggerType = $trigger['type'] ?? null;
-            if (in_array($triggerType, ['record.created', 'record.updated', 'record.deleted'], true)) {
+            if (in_array($triggerType, ['record.created', 'record.updated', 'record.deleted', 'record.date_reached'], true)) {
                 $triggerObjectId = $trigger['object_id'] ?? null;
                 if ($triggerObjectId === null || ! isset($objectsById[$triggerObjectId])) {
                     $errors[] = new ManifestValidationError(
@@ -1166,6 +1166,25 @@ class ManifestValidator
                         $errors,
                         forTrigger: true,
                     );
+
+                    // date_reached must point at a date/datetime field on the object.
+                    if ($triggerType === 'record.date_reached') {
+                        $fieldId = $trigger['field_id'] ?? null;
+                        $field = $fieldsByObjectId[$triggerObjectId][$fieldId] ?? null;
+                        if ($field === null) {
+                            $errors[] = new ManifestValidationError(
+                                "/workflows/{$i}/trigger/field_id",
+                                "date_reached trigger field_id '".($fieldId ?? '')."' does not belong to the object",
+                                'unresolved_ref',
+                            );
+                        } elseif (! in_array($field['type'] ?? null, ['date', 'datetime'], true)) {
+                            $errors[] = new ManifestValidationError(
+                                "/workflows/{$i}/trigger/field_id",
+                                "date_reached trigger field_id must be a date or datetime field, got '".($field['type'] ?? '')."'",
+                                'incompatible_type',
+                            );
+                        }
+                    }
                 }
             }
 

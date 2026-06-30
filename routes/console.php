@@ -31,3 +31,9 @@ Schedule::command('flows:dispatch-scheduled')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Fire record.date_reached workflows whose date-field offset is due.
+Schedule::command('flows:dispatch-date-reached')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();
