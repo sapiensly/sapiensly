@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n';
 
 interface OrgRow {
     organization_id: string | null;
+    name: string | null;
     cost: number;
     system_cost: number;
     calls: number;
@@ -21,11 +22,20 @@ interface ModelRow {
     input_tokens: number;
     output_tokens: number;
 }
+interface ServiceRow {
+    service: string;
+    cost: number;
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    models: ModelRow[];
+}
 interface Report {
     range_days: number;
     totals: { cost: number; calls: number; input_tokens: number; output_tokens: number };
     by_source: { own: number; system: number };
     by_model: ModelRow[];
+    by_service: ServiceRow[];
     by_org: OrgRow[];
     series: { labels: string[]; own: number[]; system: number[] };
 }
@@ -130,6 +140,36 @@ const chartSeries = computed(() => [
                 <BigChart :series="chartSeries" :height="220" />
             </section>
 
+            <!-- Spend by service (each with its own per-model breakdown) -->
+            <section class="rounded-sp-sm border border-soft bg-navy p-5">
+                <h2 class="mb-3 text-sm font-medium text-ink">Spend by service</h2>
+                <p v-if="report.by_service.length === 0" class="text-xs text-ink-muted">No usage yet.</p>
+                <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div
+                        v-for="s in report.by_service"
+                        :key="s.service"
+                        class="rounded-sp-sm border border-soft/60 bg-surface/40 p-4"
+                    >
+                        <header class="flex items-baseline justify-between gap-3">
+                            <h3 class="text-sm font-medium text-ink">{{ s.service }}</h3>
+                            <div class="text-right">
+                                <span class="text-sm font-semibold text-ink">{{ money(s.cost) }}</span>
+                                <span class="ml-2 text-xs text-ink-subtle">{{ num(s.calls) }} calls</span>
+                            </div>
+                        </header>
+                        <ul class="mt-2 divide-y divide-soft/40">
+                            <li v-for="m in s.models" :key="m.model" class="flex items-center justify-between py-1.5 text-xs">
+                                <span class="text-ink-muted">{{ m.model }}</span>
+                                <span class="flex items-center gap-3">
+                                    <span class="text-ink-subtle">{{ num(m.input_tokens + m.output_tokens) }} tok</span>
+                                    <span class="w-16 text-right font-medium text-ink">{{ money(m.cost) }}</span>
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
             <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <section class="rounded-sp-sm border border-soft bg-navy p-5">
                     <h2 class="mb-3 text-sm font-medium text-ink">Top organizations by spend</h2>
@@ -145,7 +185,16 @@ const chartSeries = computed(() => [
                         </thead>
                         <tbody>
                             <tr v-for="o in report.by_org" :key="o.organization_id ?? 'personal'" class="border-b border-soft/50">
-                                <td class="py-2 font-mono text-xs text-ink">{{ o.organization_id ?? '— (personal)' }}</td>
+                                <td class="py-2 text-xs text-ink">
+                                    <Link
+                                        v-if="o.organization_id"
+                                        :href="`/admin/ai/usage/${o.organization_id}?days=${days}`"
+                                        class="text-accent-blue hover:underline"
+                                    >
+                                        {{ o.name ?? o.organization_id }}
+                                    </Link>
+                                    <span v-else class="text-ink-muted">— (personal)</span>
+                                </td>
                                 <td class="py-2 text-right text-ink-muted">{{ money(o.system_cost) }}</td>
                                 <td class="py-2 text-right font-medium text-ink">{{ money(o.cost) }}</td>
                                 <td class="py-2 text-right">

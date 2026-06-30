@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
 use App\Models\AppSetting;
+use App\Models\Organization;
 use App\Models\OrganizationAiBudget;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiUsageReport;
@@ -128,6 +129,30 @@ class AdminAiController extends Controller
             'caps' => OrganizationAiBudget::query()
                 ->whereNotNull('platform_system_cap')
                 ->pluck('platform_system_cap', 'organization_id'),
+        ]);
+    }
+
+    /**
+     * Sysadmin drill-down into a single organization's AI usage: same shape as
+     * the org-facing dashboard (totals, source split, per-service and per-model
+     * breakdowns, daily series) but read cross-org via the owner connection.
+     */
+    public function usageOrg(Request $request, string $organization, AiUsageReport $report): Response
+    {
+        $days = (int) ($request->integer('days') ?: 30);
+        if (! in_array($days, [7, 30, 90], true)) {
+            $days = 30;
+        }
+
+        $org = Organization::findOrFail($organization);
+
+        return Inertia::render('admin/Ai/UsageOrg', [
+            'days' => $days,
+            'organization' => ['id' => $org->id, 'name' => $org->name],
+            'report' => $report->forOrganization($org->id, $days),
+            'cap' => OrganizationAiBudget::query()
+                ->where('organization_id', $org->id)
+                ->value('platform_system_cap'),
         ]);
     }
 

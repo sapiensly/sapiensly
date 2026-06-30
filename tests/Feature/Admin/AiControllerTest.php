@@ -2,7 +2,9 @@
 
 use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
+use App\Models\AiUsageEvent;
 use App\Models\AppSetting;
+use App\Models\Organization;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use Illuminate\Support\Facades\Http;
@@ -804,6 +806,40 @@ test('syncProviderModels rejects a non-syncable driver', function () {
     $this->actingAs($admin)
         ->post('/admin/ai/providers/sync-models', ['driver' => 'voyageai'])
         ->assertSessionHasErrors(['driver']);
+});
+
+test('usageOrg renders a single-org drill-down with the per-service breakdown', function () {
+    $admin = sysadminForAi();
+    $org = Organization::create(['name' => 'Drill Co', 'slug' => 'drill-'.uniqid()]);
+    AiUsageEvent::create([
+        'organization_id' => $org->id,
+        'user_id' => null,
+        'module' => 'chat',
+        'driver' => 'anthropic',
+        'model' => 'claude-x',
+        'source' => 'own',
+        'input_tokens' => 100,
+        'output_tokens' => 50,
+        'cost' => 0.5,
+        'estimated' => false,
+        'status' => 'success',
+    ]);
+
+    $this->actingAs($admin)
+        ->get("/admin/ai/usage/{$org->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/Ai/UsageOrg')
+            ->where('organization.name', 'Drill Co')
+            ->where('report.totals.cost', 0.5)
+            ->where('report.by_service.0.service', 'Chat'));
+});
+
+test('usageOrg is blocked for a non-sysadmin', function () {
+    $member = User::factory()->create();
+    $org = Organization::create(['name' => 'X', 'slug' => 'x-'.uniqid()]);
+
+    $this->actingAs($member)->get("/admin/ai/usage/{$org->id}")->assertForbidden();
 });
 
 test('non-sysadmin is blocked from /admin/ai', function () {

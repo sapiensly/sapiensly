@@ -3,6 +3,7 @@
 namespace App\Services\Ai;
 
 use App\Models\AiUsageEvent;
+use App\Models\Organization;
 use App\Support\Tenancy\Schemas;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -64,7 +65,7 @@ class AiUsageReport
         $report = $this->shape($rows, $since, $days);
 
         // Top organizations by spend (system spend is what the platform pays).
-        $report['by_org'] = collect($rows)
+        $byOrg = collect($rows)
             ->groupBy('organization_id')
             ->map(fn ($g, $org) => [
                 'organization_id' => $org ?: null,
@@ -74,10 +75,49 @@ class AiUsageReport
             ])
             ->sortByDesc('cost')
             ->take(20)
-            ->values()
+            ->values();
+
+        // Attach the human-readable org name so the dashboard can show it (and
+        // link through to the per-org detail) instead of the raw ULID.
+        $names = Organization::query()
+            ->whereIn('id', $byOrg->pluck('organization_id')->filter()->all())
+            ->pluck('name', 'id');
+
+        $report['by_org'] = $byOrg
+            ->map(fn ($o) => [
+                ...$o,
+                'name' => $o['organization_id'] ? ($names[$o['organization_id']] ?? null) : null,
+            ])
             ->all();
 
         return $report;
+    }
+
+    /**
+     * Spend for a single organization for the sysadmin drill-down. Reads
+     * cross-org via the owner connection (RLS bypassed), mirroring platformWide:
+     * `own` (BYOK) from tenant.ai_usage_events, `system` from the platform ledger.
+     *
+     * @return array<string, mixed>
+     */
+    public function forOrganization(string $organizationId, int $days = 30): array
+    {
+        $since = Carbon::today()->subDays($days - 1);
+
+        $ownRows = DB::connection('pgsql')->table(Schemas::qualify('ai_usage_events'))
+            ->where('organization_id', $organizationId)
+            ->where('source', 'own')
+            ->where('created_at', '>=', $since)
+            ->selectRaw("date(created_at) as d, 'own' as source, module, model, cost, input_tokens, output_tokens")
+            ->get();
+
+        $systemRows = DB::connection('pgsql')->table('platform.system_ai_usage_events')
+            ->where('organization_id', $organizationId)
+            ->where('created_at', '>=', $since)
+            ->selectRaw("date(created_at) as d, 'system' as source, module, model, cost, input_tokens, output_tokens")
+            ->get();
+
+        return $this->shape($ownRows->concat($systemRows), $since, $days);
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AiUsageEvent;
+use App\Models\Organization;
 use App\Models\SystemAiUsageEvent;
 use App\Services\Ai\AiUsageReport;
 
@@ -108,4 +109,25 @@ it('counts an unattributed system call in the platform-wide total', function () 
 
     expect($r['by_source']['system'])->toBe(1.5)
         ->and(collect($r['by_org'])->firstWhere('organization_id', null)['cost'])->toBe(1.5);
+});
+
+it('labels platform-wide org rows with the organization name', function () {
+    $org = Organization::create(['name' => 'Acme Co', 'slug' => 'acme-'.uniqid()]);
+    systemLedgerEvent(['organization_id' => $org->id, 'cost' => 2.0]);
+
+    $r = app(AiUsageReport::class)->platformWide(30);
+
+    expect(collect($r['by_org'])->firstWhere('organization_id', $org->id)['name'])->toBe('Acme Co');
+});
+
+it('scopes a single-org drill-down to that org with a per-service split', function () {
+    $org = Organization::create(['name' => 'Solo', 'slug' => 'solo-'.uniqid()]);
+    spendEvent(['organization_id' => $org->id, 'source' => 'own', 'module' => 'chat', 'cost' => 1.0]);
+    // A second org's spend must NOT leak into the drill-down.
+    spendEvent(['organization_id' => 'org_other0000', 'source' => 'own', 'module' => 'chat', 'cost' => 5.0]);
+
+    $r = app(AiUsageReport::class)->forOrganization($org->id, 30);
+
+    expect($r['totals']['cost'])->toBe(1.0)
+        ->and(collect($r['by_service'])->pluck('service')->all())->toBe(['Chat']);
 });
