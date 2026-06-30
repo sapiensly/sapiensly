@@ -12,6 +12,7 @@ import {
     CalendarClock,
     Clock,
     Hand,
+    MessageSquare,
     Pencil,
     Plus,
     Trash2,
@@ -94,6 +95,15 @@ const meta = computed(() => {
                 label: t('apps.builder.workflows.trigger.date_reached'),
                 summary: objectLabel(props.data.object_id),
                 color: '#2dd4bf',
+            };
+        case 'channel.message_received':
+            return {
+                icon: MessageSquare,
+                label: t('apps.builder.workflows.trigger.channel_message'),
+                summary: t(
+                    'apps.builder.workflows.trigger.channel_message_summary',
+                ),
+                color: '#38bdf8',
             };
     }
     return { icon: Hand, label: '?', summary: '—', color: '#94a3b8' };

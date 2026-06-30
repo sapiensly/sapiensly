@@ -1,9 +1,11 @@
 <?php
 
 use App\Enums\AgentStatus;
+use App\Enums\ChannelType;
 use App\Enums\ToolType;
 use App\Models\App;
 use App\Models\AppVersion;
+use App\Models\Channel;
 use App\Models\Integration;
 use App\Models\Tool;
 use App\Models\User;
@@ -102,6 +104,23 @@ it('GET /connector-actions returns tenant integrations with their typed actions'
     expect($payload[0])->toMatchArray(['id' => $integration->id, 'name' => 'Acme API', 'authorized' => true]);
     expect($payload[0]['actions'])->toHaveCount(1);
     expect($payload[0]['actions'][0])->toMatchArray(['name' => 'Get deal', 'effect' => 'read']);
+});
+
+it('GET /channels returns the org chat channels for the channel.message_received picker', function () {
+    $channel = Channel::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'channel_type' => ChannelType::WhatsApp,
+        'name' => 'Support WA',
+    ]);
+
+    $payload = $this->actingAs($this->user)
+        ->getJson("/apps/{$this->testApp->id}/builder/channels")
+        ->assertOk()
+        ->json('channels');
+
+    expect($payload)->toHaveCount(1);
+    expect($payload[0])->toMatchArray(['id' => $channel->id, 'name' => 'Support WA', 'type' => 'whatsapp']);
 });
 
 it('POST /verify dry-runs a workflow and returns a passing report', function () {

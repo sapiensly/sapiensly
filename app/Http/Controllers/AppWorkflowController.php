@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\IntegrationAuthType;
 use App\Models\App;
+use App\Models\Channel;
 use App\Models\Integration;
 use App\Models\IntegrationUserToken;
 use App\Models\Tool;
@@ -163,6 +164,27 @@ class AppWorkflowController extends Controller
         ]);
 
         return response()->json(['integrations' => $payload]);
+    }
+
+    /**
+     * The org's chat channels (WhatsApp/widget), for the
+     * channel.message_received trigger's channel picker.
+     */
+    public function channels(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $channels = Channel::query()
+            ->forAccountContext($request->user())
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Channel $channel): array => [
+                'id' => $channel->id,
+                'name' => $channel->name,
+                'type' => $channel->channel_type->value,
+            ]);
+
+        return response()->json(['channels' => $channels]);
     }
 
     /**

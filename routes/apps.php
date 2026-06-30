@@ -49,6 +49,8 @@ Route::middleware([
         ->name('apps.builder.workflows.webhook-info');
     Route::get('/apps/{app}/builder/connector-actions', [AppWorkflowController::class, 'connectorActions'])
         ->name('apps.builder.connector-actions');
+    Route::get('/apps/{app}/builder/channels', [AppWorkflowController::class, 'channels'])
+        ->name('apps.builder.channels');
     // Gated-write proposals (propose-don't-mutate approval gate).
     Route::get('/apps/{app}/builder/workflow-proposals', [AppWorkflowController::class, 'pendingProposals'])
         ->name('apps.builder.workflow-proposals.index');

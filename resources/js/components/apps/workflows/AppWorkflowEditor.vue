@@ -171,11 +171,27 @@ async function loadConnectorActions() {
     }
 }
 
+// Chat channels, fetched lazily — drives the channel.message_received trigger's
+// channel picker.
+const channels = ref<{ id: string; name: string; type: string }[]>([]);
+
+async function loadChannels() {
+    try {
+        const { data } = await axios.get(
+            `/apps/${props.appId}/builder/channels`,
+        );
+        channels.value = data.channels ?? [];
+    } catch {
+        channels.value = [];
+    }
+}
+
 const workflowName = computed(() => editor.graph.value?.meta.name ?? '');
 
 onMounted(() => {
     editor.load(props.workflow);
     loadConnectorActions();
+    loadChannels();
 });
 
 watch(
@@ -254,7 +270,7 @@ async function save() {
         } else {
             errorText.value = body?.message ?? err.message ?? 'Save failed';
         }
-         
+
         console.error(
             'Workflow save failed:',
             e,
@@ -292,7 +308,7 @@ async function run() {
         };
         errorText.value =
             err.response?.data?.message ?? err.message ?? 'Run failed';
-         
+
         console.error('Workflow run failed:', e);
     } finally {
         running.value = false;
@@ -554,7 +570,9 @@ function describeStepRunRow(stepId: string): string {
                                 @click="resolveProposal(p.id, 'approve')"
                                 class="rounded-md bg-sp-success/15 px-2 py-1 text-xs font-medium text-sp-success hover:bg-sp-success/25 disabled:opacity-50"
                             >
-                                {{ t('apps.builder.workflows.approval.approve') }}
+                                {{
+                                    t('apps.builder.workflows.approval.approve')
+                                }}
                             </button>
                             <button
                                 type="button"
@@ -562,7 +580,9 @@ function describeStepRunRow(stepId: string): string {
                                 @click="resolveProposal(p.id, 'dismiss')"
                                 class="rounded-md border border-medium px-2 py-1 text-xs text-ink-muted hover:bg-white/5 disabled:opacity-50"
                             >
-                                {{ t('apps.builder.workflows.approval.dismiss') }}
+                                {{
+                                    t('apps.builder.workflows.approval.dismiss')
+                                }}
                             </button>
                         </div>
                     </div>
@@ -629,6 +649,7 @@ function describeStepRunRow(stepId: string): string {
                 :meta="editor.graph.value.meta"
                 :objects="objects"
                 :connector-integrations="connectorIntegrations"
+                :channels="channels"
                 :app-id="appId"
                 :workflow-id="editor.graph.value.meta.id"
                 @update-node="(p) => editor.updateNodeData(p.id, p.patch)"

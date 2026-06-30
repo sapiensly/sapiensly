@@ -47,6 +47,8 @@ const props = defineProps<{
     objects: ManifestObject[];
     /** Tenant integrations + their typed actions, for the connector.call pickers. */
     connectorIntegrations?: ConnectorIntegration[];
+    /** Org chat channels, for the channel.message_received trigger picker. */
+    channels?: { id: string; name: string; type: string }[];
     /** App id, for fetching the webhook ingress URL + secret. */
     appId?: string;
     /** Current workflow id, for the webhook ingress URL + secret. */
@@ -302,6 +304,8 @@ const TRIGGER_KEYS = [
     'timezone',
     'dedupe_path',
     'signature_header',
+    'channel_id',
+    'contains',
 ];
 
 function changeTriggerType(newType: WorkflowTrigger['type']) {
@@ -324,6 +328,8 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
             field_id: '',
             offset: { value: 3, unit: 'days', direction: 'before' },
         };
+    } else if (newType === 'channel.message_received') {
+        specifics = { type: 'channel.message_received', channel_id: '' };
     } else {
         specifics = { type: newType, object_id: '' };
     }
@@ -454,6 +460,11 @@ watch(
                     </option>
                     <option value="record.date_reached">
                         {{ t('apps.builder.workflows.trigger.date_reached') }}
+                    </option>
+                    <option value="channel.message_received">
+                        {{
+                            t('apps.builder.workflows.trigger.channel_message')
+                        }}
                     </option>
                 </select>
             </label>
@@ -704,6 +715,76 @@ watch(
                         (v: unknown) => patchTrigger({ filter: v })
                     "
                 />
+            </template>
+
+            <!-- Channel message trigger: pick a channel + optional keyword. -->
+            <template
+                v-else-if="triggerData.type === 'channel.message_received'"
+            >
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.channel')
+                    }}</span>
+                    <select
+                        :value="
+                            (triggerData as { channel_id?: string })
+                                .channel_id ?? ''
+                        "
+                        @change="
+                            patchTrigger({
+                                channel_id: ($event.target as HTMLSelectElement)
+                                    .value,
+                            })
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    >
+                        <option value="" disabled>
+                            {{
+                                t(
+                                    'apps.builder.workflows.panel.channel_placeholder',
+                                )
+                            }}
+                        </option>
+                        <option
+                            v-for="c in channels ?? []"
+                            :key="c.id"
+                            :value="c.id"
+                        >
+                            {{ c.name }} ({{ c.type }})
+                        </option>
+                    </select>
+                    <span
+                        v-if="(channels ?? []).length === 0"
+                        class="text-xs text-ink-subtle"
+                    >
+                        {{ t('apps.builder.workflows.panel.channel_none') }}
+                    </span>
+                </label>
+
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.contains')
+                    }}</span>
+                    <input
+                        type="text"
+                        :value="
+                            (triggerData as { contains?: string }).contains ??
+                            ''
+                        "
+                        @input="
+                            patchTrigger({
+                                contains: ($event.target as HTMLInputElement)
+                                    .value,
+                            })
+                        "
+                        :placeholder="
+                            t(
+                                'apps.builder.workflows.panel.contains_placeholder',
+                            )
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    />
+                </label>
             </template>
 
             <!-- Schedule trigger: cron preset/custom + natural-language preview. -->
