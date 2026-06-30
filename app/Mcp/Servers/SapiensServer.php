@@ -57,13 +57,20 @@ Chatbots (apps:build):
     before authoring a flow), read_bot_flow, scaffold_bot_flow (generate from a
     prompt), update_bot_flow (persist a definition), test_bot_flow (step it).
 
-Integrations & tools (apps:build):
-  - list_integrations, list_connector_actions, test_tool_connection,
-    execute_tool (a write tool performs a real external operation — confirm first).
+Integrations & tools (apps:build) — "Connection vs Action": an Integration is the
+connection (base URL + auth shared by tools); a Tool is one operation that may
+reference a connection via config.integration_id. Read tools_reference for the
+config/auth_config shapes.
+  - Manage connections: list_integrations, get_integration (auth masked),
+    create_integration, update_integration, delete_integration,
+    test_integration_connection.
   - Manage tools (one tool = one connector operation): list_tools, get_tool
-    (config masked + typed contract), create_tool, update_tool, delete_tool.
-    create_tool needs a type (function/mcp/rest_api/graphql/database/group) and
-    its type-specific config; secrets are encrypted at rest.
+    (config masked + typed contract), create_tool (type mcp/rest_api/database/
+    group + its config; secrets encrypted at rest), update_tool, delete_tool.
+  - Inspect + run: list_connector_actions (typed inputs/outputs/effect),
+    test_tool_connection, use_tool (safe-by-default: runs read tools, refuses
+    unmarked writes) and execute_tool (force-run — a write performs a real
+    external operation, confirm with the user first).
 
 Tenant data (data:read / data:write):
   - Records: query_records, get_record, aggregate_records; create_record /
@@ -159,6 +166,11 @@ class SapiensServer extends Server
         Tools\Chatbots\DeleteChatbotTool::class,
         // Integrations & tools.
         Tools\Integrations\ListIntegrationsTool::class,
+        Tools\Integrations\GetIntegrationTool::class,
+        Tools\Integrations\CreateIntegrationTool::class,
+        Tools\Integrations\UpdateIntegrationTool::class,
+        Tools\Integrations\DeleteIntegrationTool::class,
+        Tools\Integrations\TestIntegrationConnectionTool::class,
         Tools\Integrations\ListToolsTool::class,
         Tools\Integrations\GetToolTool::class,
         Tools\Integrations\CreateToolTool::class,
@@ -166,7 +178,9 @@ class SapiensServer extends Server
         Tools\Integrations\DeleteToolTool::class,
         Tools\Integrations\ListConnectorActionsTool::class,
         Tools\Integrations\TestToolConnectionTool::class,
+        Tools\Integrations\UseToolTool::class,
         Tools\Integrations\ExecuteToolTool::class,
+        Tools\Integrations\ToolsReferenceTool::class,
         // Tenant data.
         Tools\Data\DescribeAppDataTool::class,
         Tools\Data\QueryRecordsTool::class,

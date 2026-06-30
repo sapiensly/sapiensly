@@ -27,10 +27,12 @@ class ListIntegrationsTool extends SapiensTool
                 'id' => $i->id,
                 'name' => $i->name,
                 'slug' => $i->slug,
+                'kind' => $i->kind?->value,
                 'status' => $i->status,
                 'auth_type' => $i->auth_type?->value,
                 'is_mcp' => $i->is_mcp,
                 'base_url' => $i->base_url,
+                'requests_count' => $i->requests()->count(),
             ])->values(),
         ]);
     }

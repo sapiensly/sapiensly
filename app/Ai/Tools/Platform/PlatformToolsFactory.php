@@ -32,6 +32,11 @@ class PlatformToolsFactory
         'delete_knowledge_base',
         'delete_document',
         'delete_record',
+        'delete_integration',
+        // Real external connection probe; agents use read paths, not this.
+        'test_integration_connection',
+        // Force-run path: writes hit the external system unconditionally. Agents
+        // use the effect-gated use_tool instead (reads run, writes need `safe`).
         'execute_tool',
         'run_workflow',
         'approve_workflow_proposal',

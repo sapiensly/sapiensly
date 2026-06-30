@@ -17,7 +17,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Create a tool (a single connector operation an agent can call). Pick a type (function, mcp, rest_api, graphql, database, group) and pass the type-specific config — call get_tool on an existing tool or framework_reference to learn the config shape. The tool is created as a draft; update_tool activates it. Sensitive config (auth, credentials) is encrypted at rest.')]
+#[Description('Create a tool (a single connector operation an agent can call). Pick a type (mcp, rest_api, database, group) and pass the type-specific config — call get_tool on an existing tool or tools_reference to learn the config shape. A connected http/database tool references an integration via config.integration_id (create it first with create_integration). The tool is created as a draft; update_tool activates it. Sensitive config (auth, credentials) is encrypted at rest.')]
 class CreateToolTool extends SapiensTool
 {
     use PresentsTool;
@@ -34,7 +34,7 @@ class CreateToolTool extends SapiensTool
         }
 
         $validated = $request->validate([
-            'type' => ['required', Rule::enum(ToolType::class)],
+            'type' => ['required', Rule::in(array_map(fn (ToolType $t): string => $t->value, ToolType::creatable()))],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
             'config' => ['nullable', 'array'],
@@ -77,10 +77,10 @@ class CreateToolTool extends SapiensTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->enum(array_column(ToolType::cases(), 'value'))->description('Tool type: function, mcp, rest_api, graphql, database, or group.')->required(),
+            'type' => $schema->string()->enum(array_map(fn (ToolType $t): string => $t->value, ToolType::creatable()))->description('Tool type: mcp, rest_api, database, or group.')->required(),
             'name' => $schema->string()->description('The tool name.')->required(),
             'description' => $schema->string()->description('What the operation does (helps agents pick it).'),
-            'config' => $schema->object()->description('Type-specific config (e.g. rest_api: { base_url, method, auth_type }; database: { driver, database, query_template }). See get_tool / framework_reference.'),
+            'config' => $schema->object()->description('Type-specific config (e.g. rest_api: { base_url, method, auth_type } or { integration_id, method, path }; database: { driver, database, query_template }). See get_tool / tools_reference.'),
             'tool_ids' => $schema->array()->description('For type=group: the member tool ids, in order.'),
         ];
     }

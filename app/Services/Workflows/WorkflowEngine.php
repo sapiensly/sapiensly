@@ -16,7 +16,7 @@ use App\Models\WorkflowStepRun;
 use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
-use App\Services\Connectors\ConnectorActionResolver;
+use App\Services\Connectors\ConnectorCallGate;
 use App\Services\LLMService;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordQueryService;
@@ -66,7 +66,7 @@ class WorkflowEngine
         private ScriptRunner $scripts,
         private SafeHttpClient $safeHttp,
         private ToolExecutionService $toolExecution,
-        private ConnectorActionResolver $connectorActions,
+        private ConnectorCallGate $connectorGate,
     ) {}
 
     /**
@@ -455,7 +455,8 @@ class WorkflowEngine
                 : $expression;
         }
 
-        $contract = $this->connectorActions->resolve($tool);
+        $decision = $this->connectorGate->inspect($tool, $this->gateApprovals);
+        $contract = $decision->contract;
 
         // Verification pass: never call the external system. Emit a Proposal
         // preview (what WOULD happen) instead — for writes and reads alike, so
@@ -478,7 +479,7 @@ class WorkflowEngine
         // Propose-don't-mutate: a non-`safe` write to an external system of
         // record halts the run and emits a proposal instead of executing
         // (FR-5.3/9.3). `safe`-marked writes and all reads run straight through.
-        if ($this->gateApprovals && $contract->effect->isWrite() && ! $contract->safe) {
+        if ($decision->mustGate) {
             throw new WorkflowAwaitingApprovalException([
                 'step_id' => (string) ($step['id'] ?? 'connector.call'),
                 'effect' => $contract->effect->value,

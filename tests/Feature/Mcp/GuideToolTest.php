@@ -36,6 +36,20 @@ it('guide has a chat-history QA playbook', function () {
         ->assertSee('continue_chat');
 });
 
+it('guide has an integration playbook and an enriched tool playbook', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(GuideTool::class, ['topic' => 'integration'])
+        ->assertOk()
+        ->assertSee('create_integration')
+        ->assertSee('config.integration_id');
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GuideTool::class, ['topic' => 'tool'])
+        ->assertOk()
+        ->assertSee('use_tool')
+        ->assertSee('tools_reference');
+});
+
 it('guide reports an unknown topic with the valid topics', function () {
     SapiensServer::actingAs($this->user)
         ->tool(GuideTool::class, ['topic' => 'nope'])

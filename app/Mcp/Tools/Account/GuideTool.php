@@ -68,7 +68,7 @@ class GuideTool extends SapiensTool
     {
         return [
             '(none)' => 'Identity & orientation: whoami, list_team_members, guide. (get_ai_spend is owner-gated.)',
-            'apps:build' => 'Author apps (create_app, read_manifest, propose_change, …), chatbots (create_chatbot/update_chatbot + bot flow tools), tools (create/update/get/delete_tool), agents (list_agent_models, create_agent, update_agent, delete_agent), workflows and integrations.',
+            'apps:build' => 'Author apps (create_app, read_manifest, propose_change, …), chatbots (create_chatbot/update_chatbot + bot flow tools), tools (create/update/get/delete_tool, use_tool/execute_tool, tools_reference), integrations/connections (list/get/create/update/delete_integration, test_integration_connection, list_connector_actions), agents (list_agent_models, create_agent, update_agent, delete_agent) and workflows.',
             'data:read' => 'Read tenant data: describe_app_data (objects, live counts, relation graph — the big picture), query_records (filter incl. relation traversal {op:related}, search, expand belongs_to inline, sort, total/has_more paging) / get_record / aggregate_records (count/sum/avg/min/max, optionally group_by + date bucket), search_knowledge, list/get_knowledge_base, list/get_document.',
             'data:write' => 'Write tenant data: create/update/delete_record, create/update/delete_knowledge_base, add/delete_document.',
             'agents:invoke' => 'Use agents: list_agents, get_agent, invoke_agent (reuse conversation_id for memory), list_conversations.',
@@ -158,12 +158,23 @@ class GuideTool extends SapiensTool
             ],
             [
                 'topic' => 'tool',
-                'when' => 'Add a connector operation (one external action) an agent can call.',
+                'when' => 'Add a connector operation (one external action) an agent can call, then use it.',
                 'steps' => [
-                    '1. create_tool with a type (function / rest_api / graphql / database / mcp / group) and its type-specific config; secrets are encrypted at rest.',
+                    '0. Connection vs Action: a Tool is one operation; the connection it uses (base URL + auth) is an Integration. Read tools_reference for the per-type config + auth_config shapes. For a shared/authenticated endpoint, see the `integration` playbook first and reference it from the tool via config.integration_id.',
+                    '1. create_tool with a type (mcp / rest_api / database / group) and its type-specific config; secrets are encrypted at rest. (function/graphql are legacy and can no longer be created.)',
                     '2. get_tool to review the masked config + resolved typed contract (inputs/outputs/effect); test_tool_connection to check reachability.',
-                    '3. update_tool status=active; execute_tool to run it — a write tool performs a real external operation, so confirm first.',
-                    '4. Attach it to an agent via create_agent / update_agent tool_ids.',
+                    '3. update_tool status=active. Run it: use_tool is the safe default (read tools execute; an unmarked write is refused with its blast radius). execute_tool force-runs — a write performs a real external operation, so confirm with the user first.',
+                    '4. Attach it to an agent via create_agent / update_agent tool_ids — a bound tool is callable directly inside that agent\'s chats.',
+                ],
+            ],
+            [
+                'topic' => 'integration',
+                'when' => 'Provision a connection (base URL + auth) that one or more tools share.',
+                'steps' => [
+                    '1. create_integration — pick a kind (http for REST/GraphQL, mcp for an MCP server, database for an external DB), a base_url (or DSN for database) and an auth_type with its auth_config. See tools_reference topic=integration for the auth_config shape per auth_type. Credentials are encrypted at rest and masked by get_integration.',
+                    '2. test_integration_connection to confirm reachability with the configured auth.',
+                    '3. create_tool referencing it via config.integration_id (a connected rest_api/database tool borrows base_url + auth from the connection — no inline credentials).',
+                    '4. list_connector_actions (optionally integration_id=…) to see the typed actions; list_integrations / get_integration to review; update_integration / delete_integration to manage. OAuth2 (auth_code) connections still need a per-user browser authorize step done in the web app.',
                 ],
             ],
             [
@@ -185,7 +196,7 @@ class GuideTool extends SapiensTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'topic' => $schema->string()->description('A playbook topic (support_squad, build_app, rag, chatbot, agent, tool, chat_history) or "abilities" / "conventions". Omit to get the map and the list of playbooks.'),
+            'topic' => $schema->string()->description('A playbook topic (support_squad, build_app, rag, chatbot, agent, tool, integration, chat_history) or "abilities" / "conventions". Omit to get the map and the list of playbooks.'),
         ];
     }
 }
