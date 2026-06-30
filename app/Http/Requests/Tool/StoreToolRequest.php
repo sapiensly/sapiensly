@@ -17,7 +17,7 @@ class StoreToolRequest extends FormRequest
     public function rules(): array
     {
         $rules = [
-            'type' => ['required', Rule::enum(ToolType::class)],
+            'type' => ['required', Rule::enum(ToolType::class)->only(ToolType::creatable())],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
             'config' => ['nullable', 'array'],

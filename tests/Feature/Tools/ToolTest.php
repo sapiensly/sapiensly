@@ -68,8 +68,9 @@ describe('create', function () {
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('tools/Create')
-                // 5 selectable types — `group` is no longer offered.
-                ->has('toolTypes', 5)
+                // 3 selectable types (mcp, rest_api, database) — `group`,
+                // `function` and `graphql` are no longer offered.
+                ->has('toolTypes', 3)
             );
     });
 
@@ -96,7 +97,7 @@ describe('create', function () {
 });
 
 describe('store', function () {
-    it('creates a function tool', function () {
+    it('rejects creating a function tool (type disabled)', function () {
         $data = [
             'type' => ToolType::Function->value,
             'name' => 'Get Weather',
@@ -119,13 +120,11 @@ describe('store', function () {
 
         $this->actingAs($this->user)
             ->post(route('tools.store'), $data)
-            ->assertRedirect();
+            ->assertSessionHasErrors('type');
 
-        $this->assertDatabaseHas('tools', [
+        $this->assertDatabaseMissing('tools', [
             'user_id' => $this->user->id,
             'name' => 'Get Weather',
-            'type' => ToolType::Function->value,
-            'status' => AgentStatus::Draft->value,
         ]);
     });
 
@@ -279,7 +278,7 @@ describe('store', function () {
             ->assertSessionHasErrors('config.integration_id');
     });
 
-    it('creates a GraphQL tool', function () {
+    it('rejects creating a GraphQL tool (type disabled)', function () {
         $data = [
             'type' => ToolType::Graphql->value,
             'name' => 'Customer Query',
@@ -294,12 +293,11 @@ describe('store', function () {
 
         $this->actingAs($this->user)
             ->post(route('tools.store'), $data)
-            ->assertRedirect();
+            ->assertSessionHasErrors('type');
 
-        $this->assertDatabaseHas('tools', [
+        $this->assertDatabaseMissing('tools', [
             'user_id' => $this->user->id,
             'name' => 'Customer Query',
-            'type' => ToolType::Graphql->value,
         ]);
     });
 

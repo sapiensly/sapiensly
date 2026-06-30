@@ -58,6 +58,12 @@ class ToolController extends Controller
     {
         $type = $request->query('type');
 
+        // Ignore a non-creatable type passed directly via ?type= so disabled
+        // types (function/graphql/group) can't be reached by URL.
+        if ($type !== null && ! in_array($type, array_column(ToolType::creatable(), 'value'), true)) {
+            $type = null;
+        }
+
         return Inertia::render('tools/Create', [
             'selectedType' => $type,
             'toolTypes' => $this->selectableToolTypes(),
@@ -72,14 +78,14 @@ class ToolController extends Controller
     }
 
     /**
-     * Tool types offered in the UI. `group` is intentionally excluded — it's
-     * no longer surfaced as a creatable/filterable type.
+     * Tool types offered in the UI. `group`, `function` and `graphql` are
+     * intentionally excluded — see {@see ToolType::creatable()}.
      *
      * @return array<int, array{value: string, label: string, description: string}>
      */
     private function selectableToolTypes(): array
     {
-        return collect(ToolType::cases())
+        return collect(ToolType::creatable())
             ->reject(fn (ToolType $type): bool => $type === ToolType::Group)
             ->map(fn (ToolType $type): array => [
                 'value' => $type->value,
