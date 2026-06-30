@@ -3,6 +3,7 @@
 use App\Enums\IntegrationKind;
 use App\Models\Integration;
 use App\Models\User;
+use App\Services\Integrations\IntegrationService;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
@@ -36,6 +37,25 @@ it('creates a database connection storing the DSN in auth_config', function () {
     expect($integration->isDatabase())->toBeTrue();
     expect($integration->auth_config['host'])->toBe('db.example.com');
     expect($integration->auth_config['database'])->toBe('analytics');
+});
+
+it('masks the SSH private key but not the bastion host', function () {
+    $integration = Integration::factory()->forUser($this->user)->create([
+        'kind' => 'database',
+        'base_url' => 'pgsql://h/db',
+        'auth_type' => 'none',
+        'auth_config' => [
+            'driver' => 'pgsql', 'host' => 'h', 'database' => 'db', 'username' => 'u', 'password' => 'p',
+            'ssh_host' => 'bastion.example.com', 'ssh_username' => 'jump',
+            'ssh_private_key' => 'SUPER-SECRET-KEY-MATERIAL-1234567890',
+        ],
+    ]);
+
+    $masked = app(IntegrationService::class)->maskAuthConfig($integration);
+
+    expect($masked['ssh_host'])->toBe('bastion.example.com');
+    expect($masked['ssh_username'])->toBe('jump');
+    expect($masked['ssh_private_key'])->not->toBe('SUPER-SECRET-KEY-MATERIAL-1234567890');
 });
 
 it('does not force the http URL scheme on a database connection', function () {

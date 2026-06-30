@@ -86,6 +86,7 @@ return [
         'sensitive_fields' => [
             'value', 'token', 'password', 'client_secret', 'access_token',
             'refresh_token', 'api_key', 'apikey', 'secret', 'authorization', 'key',
+            'ssh_private_key',
         ],
 
         // Exact header names whose value is redacted (case-insensitive).

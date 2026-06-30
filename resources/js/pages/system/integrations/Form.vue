@@ -136,8 +136,9 @@ const form = useForm({
         ? { driver: 'pgsql', host: '', port: 5432, database: '', username: '', password: '' }
         : props.integration?.kind === 'database'
           ? // Editing a DB connection: the non-secret DSN fields come back
-            // unmasked; only the password is blanked (kept on save if left empty).
-            { ...(props.integration.masked_auth_config ?? {}), password: '' }
+            // unmasked; secrets (password, SSH key) are blanked and kept on
+            // save when left empty.
+            { ...(props.integration.masked_auth_config ?? {}), password: '', ssh_private_key: '' }
           : startingAsMcp
             ? { redirect_uri: props.oauthCallbackUrl ?? '', pkce: true }
             : buildInitialAuthConfig(),
@@ -178,6 +179,28 @@ const dbDriverOptions = [
     { value: 'sqlite', label: 'SQLite' },
 ];
 const dbRequiresHost = computed(() => form.auth_config.driver !== 'sqlite');
+
+// Optional SSH tunnel for bastion-only databases (flat ssh_* keys in
+// auth_config so masking + edit-merge work like the password).
+const useTunnel = ref(!!form.auth_config.ssh_host);
+const sshHost = dbField('ssh_host');
+const sshPort = dbField('ssh_port');
+const sshUser = dbField('ssh_username');
+const sshKey = dbField('ssh_private_key');
+
+function toggleTunnel(on: boolean): void {
+    useTunnel.value = on;
+    if (!on) {
+        const next = { ...form.auth_config };
+        delete next.ssh_host;
+        delete next.ssh_port;
+        delete next.ssh_username;
+        delete next.ssh_private_key;
+        form.auth_config = next;
+    } else if (!form.auth_config.ssh_port) {
+        form.auth_config = { ...form.auth_config, ssh_port: 22 };
+    }
+}
 
 // Keep base_url a readable DSN (no credentials) so lists and cards show the
 // target at a glance — the executor reads the real fields from auth_config.
@@ -457,7 +480,60 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 </div>
                             </div>
 
-                            <!-- Test: SELECT 1 against the DSN. -->
+                            <!-- Optional SSH tunnel (bastion-only databases). -->
+                            <label
+                                for="db_use_tunnel"
+                                class="flex cursor-pointer items-start gap-3 rounded-xs border border-soft bg-white/[0.03] p-3 transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
+                            >
+                                <Checkbox
+                                    id="db_use_tunnel"
+                                    :model-value="useTunnel"
+                                    @update:model-value="toggleTunnel($event === true)"
+                                />
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium text-ink">
+                                        {{ t('system.integrations.form.ssh_tunnel') }}
+                                    </p>
+                                    <p class="mt-0.5 text-[11px] text-ink-subtle">
+                                        {{ t('system.integrations.form.ssh_tunnel_hint') }}
+                                    </p>
+                                </div>
+                            </label>
+
+                            <div
+                                v-if="useTunnel"
+                                class="space-y-3 rounded-xs border border-soft bg-white/[0.02] p-3"
+                            >
+                                <div class="grid grid-cols-[1fr_120px] gap-3">
+                                    <div class="space-y-1.5">
+                                        <Label for="ssh_host">{{ t('system.integrations.form.ssh_host') }}</Label>
+                                        <Input id="ssh_host" v-model="sshHost" placeholder="bastion.example.com" class="h-9 font-mono" />
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <Label for="ssh_port">{{ t('system.integrations.form.ssh_port') }}</Label>
+                                        <Input id="ssh_port" v-model="sshPort" type="number" placeholder="22" class="h-9" />
+                                    </div>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <Label for="ssh_user">{{ t('system.integrations.form.ssh_user') }}</Label>
+                                    <Input id="ssh_user" v-model="sshUser" placeholder="jump" class="h-9" autocomplete="off" />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <Label for="ssh_key">{{ t('system.integrations.form.ssh_key') }}</Label>
+                                    <Textarea
+                                        id="ssh_key"
+                                        v-model="sshKey"
+                                        :placeholder="mode === 'edit' ? t('system.integrations.auth.kept_secret') : '-----BEGIN OPENSSH PRIVATE KEY-----'"
+                                        rows="4"
+                                        class="font-mono text-xs"
+                                    />
+                                    <p class="text-[11px] text-ink-subtle">
+                                        {{ t('system.integrations.form.ssh_key_hint') }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Test: SELECT 1 against the DSN (through the tunnel if set). -->
                             <div class="flex flex-col gap-2 pt-1">
                                 <button
                                     type="button"

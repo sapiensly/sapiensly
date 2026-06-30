@@ -35,9 +35,16 @@ class DatabaseConnectionFactory
     {
         $name = 'tool_db_'.bin2hex(random_bytes(8));
 
-        if (! empty($config['ssh'])) {
+        if (! empty($config['ssh_host'])) {
             $handle = $this->sshTunnel->open(
-                (array) $config['ssh'],
+                [
+                    'host' => $config['ssh_host'],
+                    'port' => $config['ssh_port'] ?? 22,
+                    'username' => $config['ssh_username'] ?? '',
+                    'private_key' => $config['ssh_private_key'] ?? '',
+                    'strict_host_key' => $config['ssh_strict_host_key'] ?? 'accept-new',
+                    'known_hosts_file' => $config['ssh_known_hosts_file'] ?? null,
+                ],
                 (string) ($config['host'] ?? '127.0.0.1'),
                 (int) ($config['port'] ?? 5432),
             );

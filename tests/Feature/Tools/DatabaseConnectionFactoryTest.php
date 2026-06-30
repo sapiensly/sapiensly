@@ -9,7 +9,7 @@ it('routes the connection through an SSH tunnel when configured', function () {
     $tunnel->shouldReceive('open')
         ->once()
         ->with(
-            Mockery::on(fn (array $ssh): bool => $ssh['host'] === 'bastion.example.com'),
+            Mockery::on(fn (array $ssh): bool => $ssh['host'] === 'bastion.example.com' && $ssh['username'] === 'jump'),
             'db.internal',
             5432,
         )
@@ -24,7 +24,9 @@ it('routes the connection through an SSH tunnel when configured', function () {
         'database' => 'analytics',
         'username' => 'u',
         'password' => 'p',
-        'ssh' => ['host' => 'bastion.example.com', 'username' => 'jump', 'private_key' => 'KEY'],
+        'ssh_host' => 'bastion.example.com',
+        'ssh_username' => 'jump',
+        'ssh_private_key' => 'KEY',
     ]);
 
     // The PDO connection points at the tunnel's local end, not the real host.
