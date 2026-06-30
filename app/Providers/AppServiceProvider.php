@@ -8,10 +8,12 @@ use App\Services\Security\Ssrf\DnsResolver;
 use App\Services\Security\Ssrf\IpRangeMatcher;
 use App\Services\Security\Ssrf\SsrfGuard;
 use App\Services\Security\Ssrf\SystemDnsResolver;
+use App\Services\Tools\SshTunnel;
 use App\Support\Tenancy\TenantCache;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\DB;
@@ -82,6 +84,14 @@ class AppServiceProvider extends ServiceProvider
         $this->propagateTenantContextToQueue();
 
         $this->forceOwnerConnectionForMigrations();
+
+        // Surface SSH-tunnel readiness in `php artisan about` so ops can verify
+        // the deploy image ships openssh-client.
+        AboutCommand::add('Tools', fn (): array => [
+            'SSH tunneling' => SshTunnel::available()
+                ? 'Available'
+                : 'Unavailable — install openssh-client',
+        ]);
 
         $this->boundStreamingHttpReads();
 

@@ -31,6 +31,9 @@ class SshTunnel
             throw new RuntimeException('SSH tunnel requires a host and username.');
         }
 
+        $binary = $this->binary();
+        $this->ensureAvailable($binary);
+
         $localPort = $this->freePort();
         $tempFiles = [];
 
@@ -56,6 +59,7 @@ class SshTunnel
         }
 
         $command = $this->buildCommand($ssh, $localPort, $targetHost, $targetPort, $keyFile, $interactive);
+        $command[0] = $binary;
 
         $process = proc_open(
             $command,
@@ -135,6 +139,42 @@ class SshTunnel
         $command[] = $ssh['username'].'@'.$ssh['host'];
 
         return $command;
+    }
+
+    /**
+     * Whether the ssh client is reachable. Used by the preflight check and the
+     * `about` diagnostic, without spawning a process.
+     */
+    public static function available(?string $binary = null): bool
+    {
+        $binary ??= (string) config('integrations.ssh_binary', 'ssh');
+
+        if (str_contains($binary, DIRECTORY_SEPARATOR)) {
+            return is_executable($binary);
+        }
+
+        foreach (explode(PATH_SEPARATOR, (string) getenv('PATH')) as $dir) {
+            if ($dir !== '' && is_executable(rtrim($dir, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$binary)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function binary(): string
+    {
+        return (string) config('integrations.ssh_binary', 'ssh');
+    }
+
+    private function ensureAvailable(string $binary): void
+    {
+        if (! self::available($binary)) {
+            throw new RuntimeException(
+                'SSH tunneling requires the `ssh` client, which is not installed on this server. '
+                .'Install openssh-client, or set INTEGRATIONS_SSH_BINARY to its full path.',
+            );
+        }
     }
 
     /**

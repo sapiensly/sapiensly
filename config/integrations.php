@@ -22,6 +22,12 @@ return [
     'allow_internal_hosts' => env('INTEGRATIONS_ALLOW_INTERNAL_HOSTS', false),
 
     /*
+    | The `ssh` client used to tunnel to bastion-only database connections.
+    | Override the path when openssh-client isn't on the default PATH.
+    */
+    'ssh_binary' => env('INTEGRATIONS_SSH_BINARY', 'ssh'),
+
+    /*
     | Extra header names to strip from stored execution records. Always lower-
     | case. The base list always includes authorization, proxy-authorization,
     | x-api-key, api-key, cookie, x-auth-token.

@@ -42,6 +42,11 @@ it('drops BatchMode and disables pubkey for password (interactive) auth', functi
         ->toContain('PreferredAuthentications=password,keyboard-interactive');
 });
 
+it('reports whether the ssh client is available', function () {
+    expect(SshTunnel::available('ssh'))->toBeTrue();
+    expect(SshTunnel::available('/no/such/ssh-binary-xyz'))->toBeFalse();
+});
+
 it('pins host-key verification to a known_hosts file when given one', function () {
     $command = (new SshTunnel)->buildCommand(
         ['host' => 'b', 'username' => 'u', 'strict_host_key' => 'yes', 'known_hosts_file' => '/etc/known'],
