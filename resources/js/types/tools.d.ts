@@ -97,6 +97,7 @@ export interface GraphqlConfig {
 }
 
 export interface DatabaseConfig {
+    integration_id?: string;
     driver?: 'pgsql' | 'mysql' | 'sqlite' | 'sqlsrv';
     host?: string;
     port?: number;

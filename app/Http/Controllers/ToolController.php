@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AgentStatus;
+use App\Enums\IntegrationKind;
 use App\Enums\ToolType;
 use App\Enums\Visibility;
 use App\Http\Requests\Tool\StoreToolRequest;
@@ -66,6 +67,7 @@ class ToolController extends Controller
                 ->get(['id', 'name', 'type']),
             'mcpConnections' => $this->mcpConnectionOptions($request),
             'httpConnections' => $this->httpConnectionOptions($request),
+            'dbConnections' => $this->dbConnectionOptions($request),
         ]);
     }
 
@@ -89,21 +91,39 @@ class ToolController extends Controller
     }
 
     /**
-     * Non-MCP connections (HTTP/REST/GraphQL integrations) an http or graphql
-     * tool can borrow its base URL + auth from. A connected tool is the
-     * *action*; the integration is the *connection*.
+     * HTTP connections an http or graphql tool can borrow its base URL + auth
+     * from. A connected tool is the *action*; the integration is the
+     * *connection*.
      *
      * @return array<int, array{id: string, name: string, base_url: string, auth_type: string}>
      */
     private function httpConnectionOptions(Request $request): array
     {
         return $this->integrationService->listForUser($request->user())
-            ->where('is_mcp', false)
+            ->filter(fn (Integration $integration): bool => $integration->kind === IntegrationKind::Http)
             ->map(fn (Integration $integration): array => [
                 'id' => $integration->id,
                 'name' => $integration->name,
                 'base_url' => $integration->base_url,
                 'auth_type' => $integration->auth_type->value,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Database connections a database tool can borrow its DSN from.
+     *
+     * @return array<int, array{id: string, name: string, base_url: string}>
+     */
+    private function dbConnectionOptions(Request $request): array
+    {
+        return $this->integrationService->listForUser($request->user())
+            ->filter(fn (Integration $integration): bool => $integration->kind === IntegrationKind::Database)
+            ->map(fn (Integration $integration): array => [
+                'id' => $integration->id,
+                'name' => $integration->name,
+                'base_url' => $integration->base_url,
             ])
             ->values()
             ->all();
@@ -246,6 +266,7 @@ class ToolController extends Controller
             'oauth2Integrations' => $this->oauth2IntegrationOptions($request),
             'oauth2AuthorizeUrl' => route('tools.oauth2.authorize', $tool),
             'httpConnections' => $this->httpConnectionOptions($request),
+            'dbConnections' => $this->dbConnectionOptions($request),
         ]);
     }
 

@@ -4,6 +4,7 @@ namespace App\Services\Tools;
 
 use App\Contracts\ToolExecutor;
 use App\DTOs\ToolExecutionResult;
+use App\Models\Integration;
 use App\Models\Tool;
 use App\Services\Tools\Concerns\SubstitutesParameters;
 use Illuminate\Database\QueryException;
@@ -36,15 +37,28 @@ class DatabaseExecutor implements ToolExecutor
         'INTO',
     ];
 
-    public function __construct(private DatabaseConnectionFactory $connections) {}
+    public function __construct(
+        private DatabaseConnectionFactory $dbConnections,
+        private ToolConnectionResolver $integrations,
+    ) {}
 
     public function execute(Tool $tool, array $parameters, array $config): ToolExecutionResult
     {
         $startTime = microtime(true);
 
+        // A connected tool borrows its DSN from a database Connection; only the
+        // query + read-only flag live on the tool.
+        $integration = $this->integrations->resolve($tool);
+        if ($integration instanceof Integration && $integration->isDatabase()) {
+            $config = array_merge($integration->databaseConnectionConfig(), [
+                'query_template' => $config['query_template'] ?? '',
+                'read_only' => $config['read_only'] ?? true,
+            ]);
+        }
+
         try {
             // Open a temporary connection to the external database.
-            $connectionName = $this->connections->open($config);
+            $connectionName = $this->dbConnections->open($config);
 
             $query = $config['query_template'] ?? '';
             $readOnly = $config['read_only'] ?? true;
@@ -79,7 +93,7 @@ class DatabaseExecutor implements ToolExecutor
             $executionTimeMs = (microtime(true) - $startTime) * 1000;
 
             // Clean up temporary connection
-            $this->connections->close($connectionName);
+            $this->dbConnections->close($connectionName);
 
             return ToolExecutionResult::success(
                 data: $results,
@@ -119,7 +133,7 @@ class DatabaseExecutor implements ToolExecutor
         } finally {
             // Ensure connection is removed
             if (isset($connectionName)) {
-                $this->connections->close($connectionName);
+                $this->dbConnections->close($connectionName);
             }
         }
     }
@@ -128,22 +142,28 @@ class DatabaseExecutor implements ToolExecutor
     {
         $errors = [];
 
-        $driver = $config['driver'] ?? '';
-        if (empty($driver)) {
-            $errors['driver'] = 'Database driver is required';
-        }
+        // Connected tools borrow the DSN from the database Connection; only the
+        // query lives on the tool.
+        $connected = ! empty($config['integration_id']);
 
-        if ($driver !== 'sqlite') {
-            if (empty($config['host'])) {
-                $errors['host'] = 'Database host is required';
+        if (! $connected) {
+            $driver = $config['driver'] ?? '';
+            if (empty($driver)) {
+                $errors['driver'] = 'Database driver is required';
             }
-            if (empty($config['username'])) {
-                $errors['username'] = 'Database username is required';
-            }
-        }
 
-        if (empty($config['database'])) {
-            $errors['database'] = 'Database name is required';
+            if ($driver !== 'sqlite') {
+                if (empty($config['host'])) {
+                    $errors['host'] = 'Database host is required';
+                }
+                if (empty($config['username'])) {
+                    $errors['username'] = 'Database username is required';
+                }
+            }
+
+            if (empty($config['database'])) {
+                $errors['database'] = 'Database name is required';
+            }
         }
 
         if (empty($config['query_template'])) {

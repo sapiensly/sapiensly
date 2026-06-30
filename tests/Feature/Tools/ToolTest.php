@@ -222,6 +222,46 @@ describe('store', function () {
         expect($tool->config)->not->toHaveKey('base_url');
     });
 
+    it('creates a connected database tool referencing a database connection', function () {
+        $connection = Integration::factory()->forUser($this->user)->create([
+            'kind' => 'database',
+            'base_url' => 'pgsql://db.example.com:5432/analytics',
+            'auth_type' => 'none',
+            'auth_config' => ['driver' => 'pgsql', 'host' => 'db.example.com', 'database' => 'analytics', 'username' => 'r', 'password' => 's'],
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('tools.store'), [
+                'type' => ToolType::Database->value,
+                'name' => 'Order lookup',
+                'config' => [
+                    'integration_id' => $connection->id,
+                    'query_template' => 'SELECT * FROM orders WHERE id = :id',
+                    'read_only' => true,
+                ],
+            ])
+            ->assertRedirect();
+
+        $tool = Tool::where('name', 'Order lookup')->firstOrFail();
+        expect($tool->config['integration_id'])->toBe($connection->id);
+        expect($tool->config)->not->toHaveKey('host');
+    });
+
+    it('rejects a database tool referencing a non-database connection', function () {
+        $http = Integration::factory()->forUser($this->user)->create([
+            'kind' => 'http',
+            'base_url' => 'https://api.example.com',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('tools.store'), [
+                'type' => ToolType::Database->value,
+                'name' => 'Bad DB tool',
+                'config' => ['integration_id' => $http->id, 'query_template' => 'SELECT 1'],
+            ])
+            ->assertSessionHasErrors('config.integration_id');
+    });
+
     it('rejects a connected tool that references an MCP connection', function () {
         $mcp = Integration::factory()->forUser($this->user)->create([
             'base_url' => 'https://mcp.example.com',

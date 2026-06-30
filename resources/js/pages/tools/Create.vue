@@ -44,6 +44,7 @@ interface Props {
     availableTools: ToolReference[];
     mcpConnections: McpConnectionOption[];
     httpConnections: HttpConnectionOption[];
+    dbConnections: HttpConnectionOption[];
 }
 
 const props = defineProps<Props>();
@@ -119,16 +120,22 @@ const getDefaultConfig = (type: ToolType): Record<string, unknown> => {
                       auth_config: {},
                   };
         case 'database':
-            return {
-                driver: 'pgsql',
-                host: '',
-                port: 5432,
-                database: '',
-                username: '',
-                password: '',
-                query_template: '',
-                read_only: true,
-            };
+            return props.dbConnections.length > 0
+                ? {
+                      integration_id: props.dbConnections[0].id,
+                      query_template: '',
+                      read_only: true,
+                  }
+                : {
+                      driver: 'pgsql',
+                      host: '',
+                      port: 5432,
+                      database: '',
+                      username: '',
+                      password: '',
+                      query_template: '',
+                      read_only: true,
+                  };
         case 'group':
             return {};
         default:
@@ -295,6 +302,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                     <DatabaseToolConfig
                         v-else-if="currentType === 'database'"
                         v-model:config="form.config"
+                        :connections="dbConnections"
                         :errors="form.errors"
                     />
 

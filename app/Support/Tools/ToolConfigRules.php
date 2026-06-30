@@ -27,7 +27,7 @@ class ToolConfigRules
             'mcp' => self::mcp($user),
             'rest_api' => self::restApi($user),
             'graphql' => self::graphql($user),
-            'database' => self::database(),
+            'database' => self::database($user),
             default => [],
         };
     }
@@ -104,14 +104,22 @@ class ToolConfigRules
     /**
      * @return array<string, mixed>
      */
-    private static function database(): array
+    /**
+     * A connected database tool borrows its driver/host/credentials from a
+     * `database` Connection; only the query lives on the tool. A legacy
+     * self-contained tool still carries the full DSN inline.
+     *
+     * @return array<string, mixed>
+     */
+    private static function database(?User $user): array
     {
         return [
-            'config.driver' => ['required', 'string', Rule::in(['pgsql', 'mysql', 'sqlite', 'sqlsrv'])],
-            'config.host' => ['required_unless:config.driver,sqlite', 'nullable', 'string', 'max:255'],
+            'config.integration_id' => ['nullable', 'string', new AccessibleIntegration($user, ['database'])],
+            'config.driver' => ['required_without:config.integration_id', 'nullable', 'string', Rule::in(['pgsql', 'mysql', 'sqlite', 'sqlsrv'])],
+            'config.host' => ['nullable', 'string', 'max:255'],
             'config.port' => ['nullable', 'integer', 'min:1', 'max:65535'],
-            'config.database' => ['required', 'string', 'max:255'],
-            'config.username' => ['required_unless:config.driver,sqlite', 'nullable', 'string', 'max:255'],
+            'config.database' => ['required_without:config.integration_id', 'nullable', 'string', 'max:255'],
+            'config.username' => ['nullable', 'string', 'max:255'],
             'config.password' => ['nullable', 'string'],
             'config.query_template' => ['required', 'string', 'max:10000'],
             'config.read_only' => ['nullable', 'boolean'],

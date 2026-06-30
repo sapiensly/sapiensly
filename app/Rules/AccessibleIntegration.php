@@ -2,6 +2,7 @@
 
 namespace App\Rules;
 
+use App\Enums\IntegrationKind;
 use App\Models\Integration;
 use App\Models\User;
 use Closure;
@@ -9,14 +10,19 @@ use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
  * Validates that the given integration id refers to a Connection the user may
- * access and that can back an HTTP-shaped tool (rest_api / graphql). MCP
- * connections are rejected here — those are consumed by mcp tools, not HTTP
- * ones — so a connected action can only borrow a real HTTP connection from the
- * user's own account context.
+ * access and whose kind can back this tool: HTTP tools (rest_api / graphql)
+ * borrow an `http` connection; database tools borrow a `database` one. MCP
+ * connections are consumed by mcp tools, never here.
  */
 class AccessibleIntegration implements ValidationRule
 {
-    public function __construct(private readonly ?User $user) {}
+    /**
+     * @param  array<int, string>  $allowedKinds
+     */
+    public function __construct(
+        private readonly ?User $user,
+        private readonly array $allowedKinds = ['http'],
+    ) {}
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
@@ -37,8 +43,12 @@ class AccessibleIntegration implements ValidationRule
             return;
         }
 
-        if ($integration->is_mcp) {
-            $fail('MCP connections cannot back an HTTP tool.');
+        $kind = $integration->kind instanceof IntegrationKind
+            ? $integration->kind->value
+            : ($integration->kind ?? 'http');
+
+        if (! in_array($kind, $this->allowedKinds, true)) {
+            $fail('The selected connection cannot back this tool.');
         }
     }
 }

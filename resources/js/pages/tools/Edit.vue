@@ -50,6 +50,7 @@ interface Props {
     oauth2Integrations: OAuth2IntegrationOption[];
     oauth2AuthorizeUrl: string;
     httpConnections: HttpConnectionOption[];
+    dbConnections: HttpConnectionOption[];
 }
 
 const props = defineProps<Props>();
@@ -202,6 +203,7 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
                     <DatabaseToolConfig
                         v-else-if="tool.type === 'database'"
                         v-model:config="form.config"
+                        :connections="dbConnections"
                         :errors="form.errors"
                     />
 

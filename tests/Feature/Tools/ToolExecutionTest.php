@@ -392,6 +392,24 @@ describe('Connected tools (reference a Connection)', function () {
         expect($this->executionService->validate($tool, []))->toBeEmpty();
     });
 
+    it('validates a connected database tool without inline DSN', function () {
+        $connection = Integration::factory()->forUser($this->user)->create([
+            'kind' => 'database',
+            'base_url' => 'pgsql://h/db',
+            'auth_type' => 'none',
+            'auth_config' => ['driver' => 'pgsql', 'host' => 'h', 'database' => 'db', 'username' => 'u', 'password' => 'p'],
+        ]);
+
+        $tool = Tool::factory()->create([
+            'user_id' => $this->user->id,
+            'type' => ToolType::Database,
+            'status' => AgentStatus::Active,
+            'config' => ['integration_id' => $connection->id, 'query_template' => 'SELECT 1', 'read_only' => true],
+        ]);
+
+        expect($this->executionService->validate($tool, []))->toBeEmpty();
+    });
+
     it('runs a GraphQL tool through the integration endpoint', function () {
         $integration = Integration::factory()->forUser($this->user)->create([
             'base_url' => 'https://connected.example.com/graphql',
