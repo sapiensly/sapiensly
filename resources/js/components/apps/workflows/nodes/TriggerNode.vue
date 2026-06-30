@@ -8,7 +8,15 @@
  */
 
 import type { WorkflowTrigger } from '@/types/appWorkflows';
-import { Clock, Hand, Pencil, Plus, Trash2, Webhook } from '@lucide/vue';
+import {
+    CalendarClock,
+    Clock,
+    Hand,
+    Pencil,
+    Plus,
+    Trash2,
+    Webhook,
+} from '@lucide/vue';
 import { Handle, Position } from '@vue-flow/core';
 import { computed, inject, type ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -79,6 +87,13 @@ const meta = computed(() => {
                 label: t('apps.builder.workflows.trigger.webhook'),
                 summary: t('apps.builder.workflows.trigger.webhook_summary'),
                 color: '#c084fc',
+            };
+        case 'record.date_reached':
+            return {
+                icon: CalendarClock,
+                label: t('apps.builder.workflows.trigger.date_reached'),
+                summary: objectLabel(props.data.object_id),
+                color: '#2dd4bf',
             };
     }
     return { icon: Hand, label: '?', summary: '—', color: '#94a3b8' };

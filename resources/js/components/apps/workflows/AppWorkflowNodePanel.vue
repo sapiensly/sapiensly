@@ -263,6 +263,30 @@ const triggerObjectFields = computed<ManifestField[]>(() => {
     return props.objects.find((o) => o.id === objectId)?.fields ?? [];
 });
 
+// Date/datetime fields only — the choices for a record.date_reached trigger.
+const triggerDateFields = computed<ManifestField[]>(() =>
+    triggerObjectFields.value.filter(
+        (f) => f.type === 'date' || f.type === 'datetime',
+    ),
+);
+
+// Type of the chosen date field, so `at` (time-of-day) shows only for date-only
+// fields (datetime fields already carry a time).
+const dateFieldIsDateOnly = computed<boolean>(() => {
+    const fieldId = (triggerData.value as { field_id?: string }).field_id;
+    return (
+        triggerDateFields.value.find((f) => f.id === fieldId)?.type === 'date'
+    );
+});
+
+/** Merge a partial offset into the trigger's offset object. */
+function patchOffset(partial: Record<string, unknown>) {
+    const current =
+        (triggerData.value as { offset?: Record<string, unknown> }).offset ??
+        {};
+    patchTrigger({ offset: { ...current, ...partial } });
+}
+
 // Every type-specific trigger key. The trigger schema is additionalProperties:
 // false, and updateNodeData merges patches, so on a type switch we must clear
 // the keys that don't belong to the new type (undefined → pruned on serialize)
@@ -270,6 +294,9 @@ const triggerObjectFields = computed<ManifestField[]>(() => {
 const TRIGGER_KEYS = [
     'label',
     'object_id',
+    'field_id',
+    'offset',
+    'at',
     'filter',
     'cron',
     'timezone',
@@ -290,6 +317,13 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
         specifics = { type: 'schedule', cron: '0 9 * * 1-5', timezone: 'UTC' };
     } else if (newType === 'webhook.inbound') {
         specifics = { type: 'webhook.inbound' };
+    } else if (newType === 'record.date_reached') {
+        specifics = {
+            type: 'record.date_reached',
+            object_id: '',
+            field_id: '',
+            offset: { value: 3, unit: 'days', direction: 'before' },
+        };
     } else {
         specifics = { type: newType, object_id: '' };
     }
@@ -418,6 +452,9 @@ watch(
                     <option value="webhook.inbound">
                         {{ t('apps.builder.workflows.trigger.webhook') }}
                     </option>
+                    <option value="record.date_reached">
+                        {{ t('apps.builder.workflows.trigger.date_reached') }}
+                    </option>
                 </select>
             </label>
 
@@ -442,7 +479,12 @@ watch(
                 />
             </label>
 
-            <template v-else-if="triggerData.type.startsWith('record.')">
+            <template
+                v-else-if="
+                    triggerData.type.startsWith('record.') &&
+                    triggerData.type !== 'record.date_reached'
+                "
+            >
                 <label class="space-y-1">
                     <span class="text-sm text-ink-muted">{{
                         t('apps.builder.workflows.panel.trigger_object_id')
@@ -464,6 +506,196 @@ watch(
                 </label>
 
                 <!-- Optional filter: fire only when the written record matches. -->
+                <TriggerFilterBuilder
+                    v-if="(triggerData as { object_id?: string }).object_id"
+                    :model-value="(triggerData as { filter?: unknown }).filter"
+                    :fields="triggerObjectFields"
+                    @update:model-value="
+                        (v: unknown) => patchTrigger({ filter: v })
+                    "
+                />
+            </template>
+
+            <!-- Date-reached: object + date field + offset (+ at/tz) + filter. -->
+            <template v-else-if="triggerData.type === 'record.date_reached'">
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.trigger_object_id')
+                    }}</span>
+                    <ObjectPicker
+                        :model-value="
+                            (triggerData as { object_id?: string }).object_id ??
+                            ''
+                        "
+                        :objects="objects"
+                        @update:model-value="
+                            (v: string) =>
+                                patchTrigger({
+                                    object_id: v,
+                                    field_id: '',
+                                    filter: undefined,
+                                })
+                        "
+                    />
+                </label>
+
+                <label
+                    v-if="(triggerData as { object_id?: string }).object_id"
+                    class="space-y-1"
+                >
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.date_field')
+                    }}</span>
+                    <select
+                        :value="
+                            (triggerData as { field_id?: string }).field_id ??
+                            ''
+                        "
+                        @change="
+                            patchTrigger({
+                                field_id: ($event.target as HTMLSelectElement)
+                                    .value,
+                            })
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    >
+                        <option value="" disabled>
+                            {{
+                                t(
+                                    'apps.builder.workflows.panel.date_field_placeholder',
+                                )
+                            }}
+                        </option>
+                        <option
+                            v-for="f in triggerDateFields"
+                            :key="f.id"
+                            :value="f.id"
+                        >
+                            {{ f.name }}
+                        </option>
+                    </select>
+                    <span
+                        v-if="triggerDateFields.length === 0"
+                        class="text-xs text-ink-subtle"
+                    >
+                        {{ t('apps.builder.workflows.panel.date_field_none') }}
+                    </span>
+                </label>
+
+                <!-- Offset: value + unit + direction. -->
+                <div class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.offset')
+                    }}</span>
+                    <div class="flex items-center gap-1">
+                        <input
+                            type="number"
+                            min="0"
+                            :value="
+                                (triggerData as { offset?: { value?: number } })
+                                    .offset?.value ?? 0
+                            "
+                            @input="
+                                patchOffset({
+                                    value: Number(
+                                        ($event.target as HTMLInputElement)
+                                            .value,
+                                    ),
+                                })
+                            "
+                            class="h-9 w-16 rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                        />
+                        <select
+                            :value="
+                                (triggerData as { offset?: { unit?: string } })
+                                    .offset?.unit ?? 'days'
+                            "
+                            @change="
+                                patchOffset({
+                                    unit: ($event.target as HTMLSelectElement)
+                                        .value,
+                                })
+                            "
+                            class="h-9 flex-1 rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                        >
+                            <option value="minutes">
+                                {{ t('apps.builder.workflows.unit.minutes') }}
+                            </option>
+                            <option value="hours">
+                                {{ t('apps.builder.workflows.unit.hours') }}
+                            </option>
+                            <option value="days">
+                                {{ t('apps.builder.workflows.unit.days') }}
+                            </option>
+                            <option value="weeks">
+                                {{ t('apps.builder.workflows.unit.weeks') }}
+                            </option>
+                        </select>
+                        <select
+                            :value="
+                                (
+                                    triggerData as {
+                                        offset?: { direction?: string };
+                                    }
+                                ).offset?.direction ?? 'before'
+                            "
+                            @change="
+                                patchOffset({
+                                    direction: (
+                                        $event.target as HTMLSelectElement
+                                    ).value,
+                                })
+                            "
+                            class="h-9 flex-1 rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                        >
+                            <option value="before">
+                                {{ t('apps.builder.workflows.dir.before') }}
+                            </option>
+                            <option value="after">
+                                {{ t('apps.builder.workflows.dir.after') }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- `at` time-of-day only matters for date-only fields. -->
+                <label v-if="dateFieldIsDateOnly" class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.at_time')
+                    }}</span>
+                    <input
+                        type="time"
+                        :value="(triggerData as { at?: string }).at ?? '09:00'"
+                        @input="
+                            patchTrigger({
+                                at: ($event.target as HTMLInputElement).value,
+                            })
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    />
+                </label>
+
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.timezone')
+                    }}</span>
+                    <input
+                        type="text"
+                        :value="
+                            (triggerData as { timezone?: string }).timezone ??
+                            ''
+                        "
+                        @input="
+                            patchTrigger({
+                                timezone: ($event.target as HTMLInputElement)
+                                    .value,
+                            })
+                        "
+                        placeholder="UTC"
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    />
+                </label>
+
                 <TriggerFilterBuilder
                     v-if="(triggerData as { object_id?: string }).object_id"
                     :model-value="(triggerData as { filter?: unknown }).filter"

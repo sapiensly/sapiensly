@@ -10,7 +10,16 @@
  */
 
 import type { ManifestWorkflow } from '@/types/appWorkflows';
-import { Clock, Hand, Pencil, Plus, Power, Trash2, Webhook } from '@lucide/vue';
+import {
+    CalendarClock,
+    Clock,
+    Hand,
+    Pencil,
+    Plus,
+    Power,
+    Trash2,
+    Webhook,
+} from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 defineProps<{
@@ -31,6 +40,7 @@ const triggerIcons: Record<string, unknown> = {
     'record.deleted': Trash2,
     schedule: Clock,
     'webhook.inbound': Webhook,
+    'record.date_reached': CalendarClock,
 };
 
 // Explicit type → i18n key map. Can't derive it (webhook.inbound's label key
@@ -42,6 +52,7 @@ const triggerLabelKeys: Record<string, string> = {
     'record.deleted': 'record_deleted',
     schedule: 'schedule',
     'webhook.inbound': 'webhook',
+    'record.date_reached': 'date_reached',
 };
 
 function triggerLabel(type: string): string {

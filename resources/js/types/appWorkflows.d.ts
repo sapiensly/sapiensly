@@ -23,11 +23,25 @@ export type WebhookTrigger = {
     dedupe_path?: string;
     signature_header?: string;
 };
+export type DateReachedTrigger = {
+    type: 'record.date_reached';
+    object_id: string;
+    field_id: string;
+    offset?: {
+        value?: number;
+        unit?: 'minutes' | 'hours' | 'days' | 'weeks';
+        direction?: 'before' | 'after';
+    };
+    at?: string;
+    timezone?: string;
+    filter?: unknown;
+};
 export type WorkflowTrigger =
     | ManualTrigger
     | RecordTrigger
     | ScheduleTrigger
-    | WebhookTrigger;
+    | WebhookTrigger
+    | DateReachedTrigger;
 
 export type StepType =
     | 'log'
