@@ -19,6 +19,7 @@ import {
     Plug,
     Plus,
     Power,
+    RefreshCw,
     Trash2,
     Webhook,
 } from '@lucide/vue';
@@ -45,6 +46,7 @@ const triggerIcons: Record<string, unknown> = {
     'record.date_reached': CalendarClock,
     'channel.message_received': MessageSquare,
     'integration.event': Plug,
+    'integration.poll': RefreshCw,
 };
 
 // Explicit type → i18n key map. Can't derive it (webhook.inbound's label key
@@ -59,6 +61,7 @@ const triggerLabelKeys: Record<string, string> = {
     'record.date_reached': 'date_reached',
     'channel.message_received': 'channel_message',
     'integration.event': 'integration_event',
+    'integration.poll': 'integration_poll',
 };
 
 function triggerLabel(type: string): string {

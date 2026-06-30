@@ -16,6 +16,7 @@ import {
     Pencil,
     Plug,
     Plus,
+    RefreshCw,
     Trash2,
     Webhook,
 } from '@lucide/vue';
@@ -114,6 +115,15 @@ const meta = computed(() => {
                     'apps.builder.workflows.trigger.integration_event_summary',
                 ),
                 color: '#a78bfa',
+            };
+        case 'integration.poll':
+            return {
+                icon: RefreshCw,
+                label: t('apps.builder.workflows.trigger.integration_poll'),
+                summary: t(
+                    'apps.builder.workflows.trigger.integration_poll_summary',
+                ),
+                color: '#fb923c',
             };
     }
     return { icon: Hand, label: '?', summary: '—', color: '#94a3b8' };

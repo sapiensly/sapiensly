@@ -146,6 +146,17 @@ const allActions = computed(() => {
     return map;
 });
 
+// Flat {id,label} list of every connected action — feeds the integration.poll
+// tool picker (the poll runs one connected action on a schedule).
+const pollActionOptions = computed(() =>
+    integrations.value.flatMap((integration) =>
+        integration.actions.map((action) => ({
+            id: action.id,
+            label: `${integration.name} · ${action.name}`,
+        })),
+    ),
+);
+
 const selectedAction = computed<ConnectorActionContract | undefined>(() => {
     const toolId =
         typeof stepData.value.tool_id === 'string'
@@ -308,6 +319,10 @@ const TRIGGER_KEYS = [
     'contains',
     'integration_id',
     'event',
+    'tool_id',
+    'items_path',
+    'watermark_path',
+    'interval_minutes',
 ];
 
 function changeTriggerType(newType: WorkflowTrigger['type']) {
@@ -334,6 +349,13 @@ function changeTriggerType(newType: WorkflowTrigger['type']) {
         specifics = { type: 'channel.message_received', channel_id: '' };
     } else if (newType === 'integration.event') {
         specifics = { type: 'integration.event', integration_id: '' };
+    } else if (newType === 'integration.poll') {
+        specifics = {
+            type: 'integration.poll',
+            tool_id: '',
+            watermark_path: '',
+            interval_minutes: 15,
+        };
     } else {
         specifics = { type: newType, object_id: '' };
     }
@@ -475,6 +497,11 @@ watch(
                             t(
                                 'apps.builder.workflows.trigger.integration_event',
                             )
+                        }}
+                    </option>
+                    <option value="integration.poll">
+                        {{
+                            t('apps.builder.workflows.trigger.integration_poll')
                         }}
                     </option>
                 </select>
@@ -864,6 +891,119 @@ watch(
                             'apps.builder.workflows.panel.integration_secret_hint',
                         )
                     }}</span>
+                </label>
+            </template>
+
+            <!-- Integration poll trigger: connected action + watermark + cadence. -->
+            <template v-else-if="triggerData.type === 'integration.poll'">
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.poll_action')
+                    }}</span>
+                    <select
+                        :value="
+                            (triggerData as { tool_id?: string }).tool_id ?? ''
+                        "
+                        @change="
+                            patchTrigger({
+                                tool_id: ($event.target as HTMLSelectElement)
+                                    .value,
+                            })
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    >
+                        <option value="" disabled>
+                            {{
+                                t(
+                                    'apps.builder.workflows.panel.poll_action_placeholder',
+                                )
+                            }}
+                        </option>
+                        <option
+                            v-for="a in pollActionOptions"
+                            :key="a.id"
+                            :value="a.id"
+                        >
+                            {{ a.label }}
+                        </option>
+                    </select>
+                    <span
+                        v-if="pollActionOptions.length === 0"
+                        class="text-xs text-ink-subtle"
+                    >
+                        {{ t('apps.builder.workflows.panel.poll_action_none') }}
+                    </span>
+                </label>
+
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.items_path')
+                    }}</span>
+                    <input
+                        type="text"
+                        :value="
+                            (triggerData as { items_path?: string })
+                                .items_path ?? ''
+                        "
+                        @input="
+                            patchTrigger({
+                                items_path: ($event.target as HTMLInputElement)
+                                    .value,
+                            })
+                        "
+                        placeholder="data.items"
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 font-mono text-sm text-ink"
+                    />
+                    <span class="text-xs text-ink-subtle">{{
+                        t('apps.builder.workflows.panel.items_path_hint')
+                    }}</span>
+                </label>
+
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.watermark_path')
+                    }}</span>
+                    <input
+                        type="text"
+                        :value="
+                            (triggerData as { watermark_path?: string })
+                                .watermark_path ?? ''
+                        "
+                        @input="
+                            patchTrigger({
+                                watermark_path: (
+                                    $event.target as HTMLInputElement
+                                ).value,
+                            })
+                        "
+                        placeholder="id"
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 font-mono text-sm text-ink"
+                    />
+                    <span class="text-xs text-ink-subtle">{{
+                        t('apps.builder.workflows.panel.watermark_path_hint')
+                    }}</span>
+                </label>
+
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.interval_minutes')
+                    }}</span>
+                    <input
+                        type="number"
+                        min="1"
+                        :value="
+                            (triggerData as { interval_minutes?: number })
+                                .interval_minutes ?? 15
+                        "
+                        @input="
+                            patchTrigger({
+                                interval_minutes: Number(
+                                    ($event.target as HTMLInputElement).value,
+                                ),
+                            })
+                        "
+                        class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                    />
                 </label>
             </template>
 

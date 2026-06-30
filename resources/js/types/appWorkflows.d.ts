@@ -46,6 +46,13 @@ export type IntegrationEventTrigger = {
     integration_id: string;
     event?: string;
 };
+export type IntegrationPollTrigger = {
+    type: 'integration.poll';
+    tool_id: string;
+    items_path?: string;
+    watermark_path: string;
+    interval_minutes?: number;
+};
 export type WorkflowTrigger =
     | ManualTrigger
     | RecordTrigger
@@ -53,7 +60,8 @@ export type WorkflowTrigger =
     | WebhookTrigger
     | DateReachedTrigger
     | ChannelMessageTrigger
-    | IntegrationEventTrigger;
+    | IntegrationEventTrigger
+    | IntegrationPollTrigger;
 
 export type StepType =
     | 'log'
