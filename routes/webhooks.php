@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Webhooks\FlowWebhookController;
+use App\Http\Controllers\Webhooks\IntegrationEventWebhookController;
 use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
@@ -30,4 +31,11 @@ Route::prefix('webhooks/flows')->middleware(SubstituteBindings::class)->group(fu
         ->where('workflow', 'wkf_[a-z0-9_]+')
         ->middleware('throttle:flows-webhook')
         ->name('webhooks.flows.receive');
+});
+
+Route::prefix('webhooks/integrations')->middleware(SubstituteBindings::class)->group(function () {
+    Route::post('{integration}', [IntegrationEventWebhookController::class, 'receive'])
+        ->where('integration', 'integ_[a-z0-9]+')
+        ->middleware('throttle:integration-event-webhook')
+        ->name('webhooks.integrations.receive');
 });

@@ -130,6 +130,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(300)->by('flows-webhook:'.$workflow);
         });
 
+        RateLimiter::for('integration-event-webhook', function (Request $request) {
+            $integration = (string) $request->route('integration');
+
+            return Limit::perMinute(600)->by('integration-event-webhook:'.$integration);
+        });
+
         $this->registerRuntimeRateLimiters();
     }
 

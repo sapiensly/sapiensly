@@ -2330,6 +2330,17 @@
                         "channel_id": { "type": "string", "maxLength": 64 },
                         "contains": { "type": "string", "maxLength": 200 }
                     }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "integration_id"],
+                    "additionalProperties": false,
+                    "description": "Fires when a third-party provider POSTs to the integration's signed webhook URL (one URL per integration, set the provider's signing secret on the Integration). `integration_id` binds the workflow to that integration; optional `event` fires only for that event type (e.g. a GitHub X-GitHub-Event header or a Stripe body `type`). Trigger payload: {integration_id, event, body, headers}.",
+                    "properties": {
+                        "type": { "const": "integration.event" },
+                        "integration_id": { "$ref": "#/$defs/id" },
+                        "event": { "type": "string", "maxLength": 120 }
+                    }
                 }
             ]
         },
