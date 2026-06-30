@@ -9,6 +9,7 @@
  */
 
 import ObjectPicker from '@/components/apps/workflows/ObjectPicker.vue';
+import TriggerFilterBuilder from '@/components/apps/workflows/TriggerFilterBuilder.vue';
 import type {
     AppWorkflowNode,
     ConnectorActionContract,
@@ -21,10 +22,21 @@ import axios from 'axios';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+interface ManifestField {
+    id: string;
+    slug: string;
+    name: string;
+    type: string;
+    options?: { value: string; label?: string }[];
+}
+
 interface ManifestObject {
     id: string;
     slug: string;
     name: string;
+    // Carried at runtime from the manifest (Builder.vue passes manifest.objects
+    // verbatim); used by the record.* trigger filter builder.
+    fields?: ManifestField[];
 }
 
 const props = defineProps<{
@@ -79,7 +91,7 @@ async function copyStepId() {
     } catch {
         // Clipboard API can be disabled (HTTP, permission policy); fall
         // back to a manual prompt so the user can still grab the id.
-         
+
         window.prompt(
             t('apps.builder.workflows.panel.copy_id'),
             stepData.value.id,
@@ -244,28 +256,48 @@ function patchTrigger(patch: Record<string, unknown>) {
     emit('update-node', { id: props.node.id, patch });
 }
 
+// Fields of the object a record.* trigger fires on — feeds the filter builder.
+const triggerObjectFields = computed<ManifestField[]>(() => {
+    const objectId = (triggerData.value as { object_id?: string }).object_id;
+    if (!objectId) return [];
+    return props.objects.find((o) => o.id === objectId)?.fields ?? [];
+});
+
+// Every type-specific trigger key. The trigger schema is additionalProperties:
+// false, and updateNodeData merges patches, so on a type switch we must clear
+// the keys that don't belong to the new type (undefined → pruned on serialize)
+// or a stale `object_id`/`filter`/`cron` would fail validation on save.
+const TRIGGER_KEYS = [
+    'label',
+    'object_id',
+    'filter',
+    'cron',
+    'timezone',
+    'dedupe_path',
+    'signature_header',
+];
+
 function changeTriggerType(newType: WorkflowTrigger['type']) {
-    if (newType === 'manual') {
-        emit('update-node', {
-            id: props.node.id,
-            patch: { type: 'manual', label: '' },
-        });
-    } else if (newType === 'schedule') {
-        emit('update-node', {
-            id: props.node.id,
-            patch: { type: 'schedule', cron: '0 9 * * 1-5', timezone: 'UTC' },
-        });
-    } else if (newType === 'webhook.inbound') {
-        emit('update-node', {
-            id: props.node.id,
-            patch: { type: 'webhook.inbound' },
-        });
-    } else {
-        emit('update-node', {
-            id: props.node.id,
-            patch: { type: newType, object_id: '' },
-        });
+    const cleared: Record<string, unknown> = {};
+    for (const key of TRIGGER_KEYS) {
+        cleared[key] = undefined;
     }
+
+    let specifics: Record<string, unknown>;
+    if (newType === 'manual') {
+        specifics = { type: 'manual', label: '' };
+    } else if (newType === 'schedule') {
+        specifics = { type: 'schedule', cron: '0 9 * * 1-5', timezone: 'UTC' };
+    } else if (newType === 'webhook.inbound') {
+        specifics = { type: 'webhook.inbound' };
+    } else {
+        specifics = { type: newType, object_id: '' };
+    }
+
+    emit('update-node', {
+        id: props.node.id,
+        patch: { ...cleared, ...specifics },
+    });
 }
 
 // ---------- Schedule trigger: cron presets + natural-language preview ----------
@@ -410,23 +442,37 @@ watch(
                 />
             </label>
 
-            <label
-                v-else-if="triggerData.type.startsWith('record.')"
-                class="space-y-1"
-            >
-                <span class="text-sm text-ink-muted">{{
-                    t('apps.builder.workflows.panel.trigger_object_id')
-                }}</span>
-                <ObjectPicker
-                    :model-value="
-                        (triggerData as { object_id?: string }).object_id ?? ''
-                    "
-                    :objects="objects"
+            <template v-else-if="triggerData.type.startsWith('record.')">
+                <label class="space-y-1">
+                    <span class="text-sm text-ink-muted">{{
+                        t('apps.builder.workflows.panel.trigger_object_id')
+                    }}</span>
+                    <ObjectPicker
+                        :model-value="
+                            (triggerData as { object_id?: string }).object_id ??
+                            ''
+                        "
+                        :objects="objects"
+                        @update:model-value="
+                            (v: string) =>
+                                patchTrigger({
+                                    object_id: v,
+                                    filter: undefined,
+                                })
+                        "
+                    />
+                </label>
+
+                <!-- Optional filter: fire only when the written record matches. -->
+                <TriggerFilterBuilder
+                    v-if="(triggerData as { object_id?: string }).object_id"
+                    :model-value="(triggerData as { filter?: unknown }).filter"
+                    :fields="triggerObjectFields"
                     @update:model-value="
-                        (v: string) => patchTrigger({ object_id: v })
+                        (v: unknown) => patchTrigger({ filter: v })
                     "
                 />
-            </label>
+            </template>
 
             <!-- Schedule trigger: cron preset/custom + natural-language preview. -->
             <template v-else-if="triggerData.type === 'schedule'">
@@ -447,7 +493,8 @@ watch(
                         @change="
                             (e) => {
                                 const v = (e.target as HTMLSelectElement).value;
-                                if (v !== '__custom__') patchTrigger({ cron: v });
+                                if (v !== '__custom__')
+                                    patchTrigger({ cron: v });
                             }
                         "
                         class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
@@ -457,7 +504,11 @@ watch(
                             :key="p.cron"
                             :value="p.cron"
                         >
-                            {{ t(`apps.builder.workflows.cron_preset.${p.labelKey}`) }}
+                            {{
+                                t(
+                                    `apps.builder.workflows.cron_preset.${p.labelKey}`,
+                                )
+                            }}
                         </option>
                         <option value="__custom__">
                             {{ t('apps.builder.workflows.cron_preset.custom') }}
@@ -480,7 +531,9 @@ watch(
                         class="h-9 w-full rounded-md border border-medium bg-surface px-2 font-mono text-sm text-ink"
                         placeholder="0 9 * * 1-5"
                     />
-                    <span class="text-xs text-accent-blue">{{ cronPreview }}</span>
+                    <span class="text-xs text-accent-blue">{{
+                        cronPreview
+                    }}</span>
                 </label>
 
                 <label class="space-y-1">
@@ -593,9 +646,12 @@ watch(
                 </label>
 
                 <div class="space-y-1">
-                    <span class="text-xs tracking-wider text-ink-subtle uppercase">{{
-                        t('apps.builder.workflows.panel.webhook_sample')
-                    }}</span>
+                    <span
+                        class="text-xs tracking-wider text-ink-subtle uppercase"
+                        >{{
+                            t('apps.builder.workflows.panel.webhook_sample')
+                        }}</span
+                    >
                     <pre
                         class="overflow-x-auto rounded-md border border-soft bg-black/20 p-2 font-mono text-[10px] text-ink-muted"
                         >{{ webhookSample }}</pre
