@@ -8,8 +8,8 @@
  */
 
 import type { WorkflowTrigger } from '@/types/appWorkflows';
+import { Clock, Hand, Pencil, Plus, Trash2, Webhook } from '@lucide/vue';
 import { Handle, Position } from '@vue-flow/core';
-import { Hand, Pencil, Plus, Trash2 } from '@lucide/vue';
 import { computed, inject, type ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -23,10 +23,9 @@ const { t } = useI18n();
 
 // Same provide/inject channel as StepNode uses, so the record.* triggers
 // can render "Película" instead of the raw obj_01ksj… id.
-const objectsById = inject<ComputedRef<Map<string, { id: string; slug: string; name: string }>> | null>(
-    'appWorkflowObjectsById',
-    null,
-);
+const objectsById = inject<ComputedRef<
+    Map<string, { id: string; slug: string; name: string }>
+> | null>('appWorkflowObjectsById', null);
 
 /** Look up the object's name from its id; fall back to the id (or "—"). */
 function objectLabel(objectId: string | undefined): string {
@@ -41,7 +40,9 @@ const meta = computed(() => {
             return {
                 icon: Hand,
                 label: t('apps.builder.workflows.trigger.manual'),
-                summary: props.data.label || t('apps.builder.workflows.trigger.manual_default'),
+                summary:
+                    props.data.label ||
+                    t('apps.builder.workflows.trigger.manual_default'),
                 color: '#94a3b8',
             };
         case 'record.created':
@@ -65,6 +66,20 @@ const meta = computed(() => {
                 summary: objectLabel(props.data.object_id),
                 color: '#f87171',
             };
+        case 'schedule':
+            return {
+                icon: Clock,
+                label: t('apps.builder.workflows.trigger.schedule'),
+                summary: props.data.cron || '—',
+                color: '#60a5fa',
+            };
+        case 'webhook.inbound':
+            return {
+                icon: Webhook,
+                label: t('apps.builder.workflows.trigger.webhook'),
+                summary: t('apps.builder.workflows.trigger.webhook_summary'),
+                color: '#c084fc',
+            };
     }
     return { icon: Hand, label: '?', summary: '—', color: '#94a3b8' };
 });
@@ -72,8 +87,10 @@ const meta = computed(() => {
 
 <template>
     <div
-        class="min-w-[220px] max-w-[300px] cursor-pointer rounded-sp-sm border bg-navy p-3 shadow-sp-float transition-colors"
-        :class="selected ? 'border-accent-blue' : 'border-soft hover:border-medium'"
+        class="max-w-[300px] min-w-[220px] cursor-pointer rounded-sp-sm border bg-navy p-3 shadow-sp-float transition-colors"
+        :class="
+            selected ? 'border-accent-blue' : 'border-soft hover:border-medium'
+        "
         :style="{ borderLeft: `3px solid ${meta.color}` }"
     >
         <div class="flex items-center gap-2">
@@ -82,11 +99,15 @@ const meta = computed(() => {
                 class="size-4 shrink-0"
                 :style="{ color: meta.color }"
             />
-            <span class="truncate text-sm font-medium uppercase tracking-wider text-ink-muted">
+            <span
+                class="truncate text-sm font-medium tracking-wider text-ink-muted uppercase"
+            >
                 {{ meta.label }}
             </span>
         </div>
-        <div class="mt-1 truncate text-xs text-ink-muted">{{ meta.summary }}</div>
+        <div class="mt-1 truncate text-xs text-ink-muted">
+            {{ meta.summary }}
+        </div>
 
         <Handle type="source" :position="Position.Bottom" class="!bg-soft" />
     </div>

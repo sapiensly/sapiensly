@@ -10,7 +10,7 @@
  */
 
 import type { ManifestWorkflow } from '@/types/appWorkflows';
-import { Hand, Pencil, Plus, Power, Trash2 } from '@lucide/vue';
+import { Clock, Hand, Pencil, Plus, Power, Trash2, Webhook } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 defineProps<{
@@ -29,10 +29,25 @@ const triggerIcons: Record<string, unknown> = {
     'record.created': Plus,
     'record.updated': Pencil,
     'record.deleted': Trash2,
+    schedule: Clock,
+    'webhook.inbound': Webhook,
+};
+
+// Explicit type → i18n key map. Can't derive it (webhook.inbound's label key
+// is `trigger.webhook`, not `trigger.webhook_inbound`).
+const triggerLabelKeys: Record<string, string> = {
+    manual: 'manual',
+    'record.created': 'record_created',
+    'record.updated': 'record_updated',
+    'record.deleted': 'record_deleted',
+    schedule: 'schedule',
+    'webhook.inbound': 'webhook',
 };
 
 function triggerLabel(type: string): string {
-    return t(`apps.builder.workflows.trigger.${type.replace('.', '_')}`);
+    return t(
+        `apps.builder.workflows.trigger.${triggerLabelKeys[type] ?? type.replace('.', '_')}`,
+    );
 }
 </script>
 
@@ -70,19 +85,25 @@ function triggerLabel(type: string): string {
                 >
                     <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0">
-                            <h3 class="truncate text-sm font-medium text-ink">{{ wf.name }}</h3>
-                            <p class="mt-0.5 truncate text-xs text-ink-subtle">{{ wf.slug }}</p>
+                            <h3 class="truncate text-sm font-medium text-ink">
+                                {{ wf.name }}
+                            </h3>
+                            <p class="mt-0.5 truncate text-xs text-ink-subtle">
+                                {{ wf.slug }}
+                            </p>
                         </div>
                         <span
                             v-if="wf.enabled === false"
-                            class="rounded-pill border border-medium bg-surface px-1.5 py-0.5 text-xs uppercase tracking-wider text-ink-muted"
+                            class="rounded-pill border border-medium bg-surface px-1.5 py-0.5 text-xs tracking-wider text-ink-muted uppercase"
                         >
                             <Power class="mr-0.5 inline size-2.5" />
                             {{ t('apps.builder.workflows.disabled') }}
                         </span>
                     </div>
 
-                    <div class="mt-2 flex items-center gap-3 text-xs text-ink-muted">
+                    <div
+                        class="mt-2 flex items-center gap-3 text-xs text-ink-muted"
+                    >
                         <span class="inline-flex items-center gap-1">
                             <component
                                 :is="triggerIcons[wf.trigger.type] ?? Hand"
@@ -91,7 +112,10 @@ function triggerLabel(type: string): string {
                             {{ triggerLabel(wf.trigger.type) }}
                         </span>
                         <span class="text-ink-subtle">·</span>
-                        <span>{{ wf.steps.length }} {{ t('apps.builder.workflows.steps_count') }}</span>
+                        <span
+                            >{{ wf.steps.length }}
+                            {{ t('apps.builder.workflows.steps_count') }}</span
+                        >
                     </div>
                 </li>
             </ul>

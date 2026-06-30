@@ -406,6 +406,7 @@
     "apps.builder.workflows.approval.dismiss": "Dismiss",
     "apps.builder.workflows.trigger.schedule": "On a schedule",
     "apps.builder.workflows.trigger.webhook": "On webhook",
+    "apps.builder.workflows.trigger.webhook_summary": "Inbound HTTP request",
     "apps.builder.workflows.cron_preset.every_hour": "Every hour",
     "apps.builder.workflows.cron_preset.daily_9am": "Every day at 9:00 AM",
     "apps.builder.workflows.cron_preset.weekdays_9am": "Weekdays at 9:00 AM",
