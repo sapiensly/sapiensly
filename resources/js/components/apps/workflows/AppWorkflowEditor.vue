@@ -33,6 +33,7 @@ import { Background } from '@vue-flow/background';
 import {
     VueFlow,
     type NodeMouseEvent,
+    type NodeTypesObject,
     type Node as VueFlowNode,
 } from '@vue-flow/core';
 import '@vue-flow/core/dist/style.css';
@@ -120,7 +121,10 @@ const vueFlowEdges = computed(() => {
     }));
 });
 
-const nodeTypes = { step: StepNode, trigger: TriggerNode };
+const nodeTypes = {
+    step: StepNode,
+    trigger: TriggerNode,
+} as NodeTypesObject;
 
 // Manual-trigger workflows are the only ones the Run button can fire.
 const canRun = computed(() => {

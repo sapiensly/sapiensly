@@ -126,7 +126,7 @@ function syncFromVisualToCode() {
     lastLoadedSource = next;
 }
 
-async function onTabChange(value: string) {
+async function onTabChange(value: string | number) {
     if (value === 'code') {
         syncFromVisualToCode();
     }
@@ -146,12 +146,18 @@ function exec(command: string, value?: string) {
 }
 
 function promptLink() {
-    const url = window.prompt(t('documents.artifact_editor.link_prompt'), 'https://');
+    const url = window.prompt(
+        t('documents.artifact_editor.link_prompt'),
+        'https://',
+    );
     if (url) exec('createLink', url);
 }
 
 function promptImage() {
-    const url = window.prompt(t('documents.artifact_editor.image_prompt'), 'https://');
+    const url = window.prompt(
+        t('documents.artifact_editor.image_prompt'),
+        'https://',
+    );
     if (url) exec('insertImage', url);
 }
 
@@ -212,7 +218,9 @@ watch(
             class="flex h-[95vh] w-[98vw] max-w-[98vw] flex-col gap-3 p-4 sm:max-w-[98vw]"
         >
             <DialogHeader class="shrink-0">
-                <DialogTitle>{{ t('documents.artifact_editor.title') }}</DialogTitle>
+                <DialogTitle>{{
+                    t('documents.artifact_editor.title')
+                }}</DialogTitle>
                 <DialogDescription>
                     {{ t('documents.artifact_editor.description') }}
                 </DialogDescription>
@@ -340,7 +348,9 @@ watch(
                             class="flex items-center gap-1 rounded px-1 text-xs"
                             :title="t('documents.artifact_editor.bg_color')"
                         >
-                            <span class="h-4 w-4 rounded border bg-yellow-200" />
+                            <span
+                                class="h-4 w-4 rounded border bg-yellow-200"
+                            />
                             <input
                                 v-model="bgColor"
                                 type="color"
@@ -365,10 +375,7 @@ watch(
                     value="code"
                     class="mt-3 flex min-h-0 flex-1 flex-col"
                 >
-                    <CodeMirrorEditor
-                        v-model="source"
-                        class="min-h-0 flex-1"
-                    />
+                    <CodeMirrorEditor v-model="source" class="min-h-0 flex-1" />
                 </TabsContent>
             </Tabs>
 

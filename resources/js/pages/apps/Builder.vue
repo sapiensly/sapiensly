@@ -44,6 +44,7 @@ import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
 import type {
+    AnyBlock,
     BlockData,
     ObjectDef,
     PageDef,
@@ -146,6 +147,23 @@ interface Preview {
     objects: ObjectDef[];
     settings: { default_locale?: string; default_currency?: string };
     custom_css?: string;
+}
+
+// Local mirrors of SiteSidebar's `navItems` / `pages` prop shapes, so the
+// preview chrome computeds are typed at the component boundary.
+interface PreviewNavItem {
+    id: string;
+    label: string;
+    icon?: string;
+    page_id?: string;
+    children?: PreviewNavItem[];
+}
+
+interface PreviewPageLink {
+    id: string;
+    slug: string;
+    name: string;
+    icon?: string;
 }
 
 interface SchemaPayload {
@@ -1121,36 +1139,41 @@ const previewSidebar = computed(
         (previewSettings.value as { navigation_layout?: string })
             .navigation_layout === 'sidebar',
 );
-const previewNavItems = computed(
+const previewNavItems = computed<PreviewNavItem[] | undefined>(
     () =>
-        (props.manifest?.navigation as { items?: unknown[] } | null)?.items ??
-        undefined,
+        ((props.manifest?.navigation as { items?: unknown[] } | null)?.items as
+            | PreviewNavItem[]
+            | undefined) ?? undefined,
+);
+// SiteSidebar's page links want `icon?: string`, but PageSummary carries
+// `icon: string | null`; normalise null → undefined so the prop type matches.
+const previewSidebarPages = computed<PreviewPageLink[]>(() =>
+    (props.preview?.pages ?? []).map((p) => ({
+        ...p,
+        icon: p.icon ?? undefined,
+    })),
 );
 // The breadcrumb lifts into the title band (above the page title); only in the
 // sidebar layout, mirroring the runtime.
-const previewBreadcrumbBlock = computed(() => {
+const previewBreadcrumbBlock = computed<AnyBlock | null>(() => {
     if (!previewSidebar.value) {
         return null;
     }
-    const blocks = (props.preview?.page?.blocks ?? []) as Array<
-        Record<string, unknown>
-    >;
-    return blocks.find((b) => b.type === 'breadcrumb') ?? null;
+    const blocks = props.preview?.page?.blocks ?? [];
+    return blocks.find((b) => (b.type as string) === 'breadcrumb') ?? null;
 });
 // The band owns both the breadcrumb and the page title; lift the breadcrumb out
 // and drop a leading heading that repeats the page name so it never doubles.
-const previewContentBlocks = computed(() => {
-    let blocks = (props.preview?.page?.blocks ?? []) as Array<
-        Record<string, unknown>
-    >;
-    const name =
-        (props.preview?.page as { name?: string } | undefined)?.name ?? '';
+const previewContentBlocks = computed<AnyBlock[]>(() => {
+    let blocks = props.preview?.page?.blocks ?? [];
+    const name = props.preview?.page?.name ?? '';
     if (previewSidebar.value) {
-        blocks = blocks.filter((b) => b.type !== 'breadcrumb');
+        blocks = blocks.filter((b) => (b.type as string) !== 'breadcrumb');
     }
+    const first = blocks[0];
     if (
-        blocks[0]?.type === 'heading' &&
-        String(blocks[0].content ?? '')
+        first?.type === 'heading' &&
+        String(first.content ?? '')
             .trim()
             .toLowerCase() === String(name).trim().toLowerCase()
     ) {
@@ -1234,7 +1257,6 @@ function useOrgBrand() {
         .then(() =>
             router.reload({
                 only: ['preview', 'manifest'],
-                preserveScroll: true,
             }),
         )
         .catch(() => toast.error(t('apps.builder.brand_apply_failed')));
@@ -1581,7 +1603,6 @@ function subscribe() {
             // (its step statuses advanced this turn).
             router.reload({
                 only: ['preview', 'manifest', 'conversation'],
-                preserveScroll: true,
             });
         },
     );
@@ -2816,7 +2837,7 @@ function statusTone(status: Message['status']): string {
                                     embedded
                                     :brand="previewBrand"
                                     :nav-items="previewNavItems"
-                                    :pages="preview.pages"
+                                    :pages="previewSidebarPages"
                                     :current-slug="preview.page.slug"
                                 />
                                 <div class="min-w-0 flex-1">
@@ -2945,7 +2966,6 @@ function statusTone(status: Message['status']): string {
                             () =>
                                 router.reload({
                                     only: ['preview', 'manifest', 'schema'],
-                                    preserveScroll: true,
                                 })
                         "
                         class="min-h-0 flex-1"

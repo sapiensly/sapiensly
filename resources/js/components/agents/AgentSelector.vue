@@ -2,7 +2,7 @@
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import type { AgentType, AgentTypeOption } from '@/types/agents';
 import { Link } from '@inertiajs/vue3';
-import { Bot, Brain, Plus, Zap } from '@lucide/vue';
+import { Bot, Brain, Plus, Sparkles, Zap } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 
@@ -28,6 +28,7 @@ const emit = defineEmits<{
 }>();
 
 const icons: Record<AgentType, Component> = {
+    general: Sparkles,
     triage: Bot,
     knowledge: Brain,
     action: Zap,
@@ -38,6 +39,7 @@ const typeIcon = computed<Component>(() => icons[props.type]);
 // Same tint mapping as the standalone-agents + AgentTypeSelector surfaces
 // so the triad reads as one consistent visual language.
 const tints: Record<AgentType, string> = {
+    general: 'var(--sp-accent-cyan)',
     triage: 'var(--sp-accent-blue)',
     knowledge: 'var(--sp-spectrum-magenta)',
     action: 'var(--sp-warning)',
@@ -91,7 +93,10 @@ const createUrl = computed(() => {
         </header>
 
         <!-- Empty state. -->
-        <div v-if="agents.length === 0" class="mt-5 flex-1 space-y-3 text-center">
+        <div
+            v-if="agents.length === 0"
+            class="mt-5 flex-1 space-y-3 text-center"
+        >
             <p class="text-xs text-ink-muted">
                 No {{ typeInfo.label.toLowerCase() }}s available
             </p>

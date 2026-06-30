@@ -85,6 +85,12 @@ class AppScaffolder
     /** Read-only computed types — shown in tables, never in create forms. */
     private const DERIVED_TYPES = ['rollup', 'lookup', 'formula'];
 
+    /** Max charts of each kind (breakdown / trend / value-bar) on the scaffolded dashboard. */
+    private const DASHBOARD_CHART_CAP = 4;
+
+    /** Rows a dashboard chart/sparkline loads so its client-side buckets reflect a real trend. */
+    private const DASHBOARD_ROW_LIMIT = 500;
+
     /**
      * A restrained, readable palette assigned (by position) to single/multi-select
      * options so status chips and kanban columns are colour-coded out of the box
@@ -840,8 +846,13 @@ class AppScaffolder
     }
 
     /**
-     * A dashboard landing page: a KPI per object (record count) plus a
-     * distribution chart for each object that has a status field (capped).
+     * A dashboard landing page driven by each object's field semantics: a KPI
+     * row (count + currency total + average per object), then per object the
+     * visualisations that fit its shape — a status donut, a growth trend
+     * (sparkline over sys_created_at, which always exists), and a value-by-status
+     * bar when the object tracks money. All deterministic and schema-valid; the
+     * AI builder then deepens it (compares, insights) via the dashboard
+     * blueprints. Caps total charts so a many-object app stays readable.
      *
      * @param  array<int, array{name: string, id: string, fieldIndex: array<int, array{id: string, slug: string, type: string}>}>  $objects
      * @return array<string, mixed>
@@ -856,20 +867,30 @@ class AppScaffolder
             'aggregation' => 'count',
         ], $objects);
 
-        // … plus a money KPI (sum of the first currency field) for objects that
-        // track an amount, so the dashboard leads with totals, not just counts.
+        // … plus money KPIs (total + average of the first currency field) for
+        // objects that track an amount, so the dashboard leads with the figures
+        // that matter, not just counts.
         foreach ($objects as $object) {
             $currencyField = $this->firstFieldOfType($object['fieldIndex'], 'currency');
-            if ($currencyField !== null) {
-                $items[] = [
-                    'id' => $this->id('itm'),
-                    'label' => $this->labelTotal($lang, $object['name']),
-                    'query' => ['object_id' => $object['id']],
-                    'aggregation' => 'sum',
-                    'field_id' => $currencyField['id'],
-                    'format' => 'currency',
-                ];
+            if ($currencyField === null) {
+                continue;
             }
+            $items[] = [
+                'id' => $this->id('itm'),
+                'label' => $this->labelTotal($lang, $object['name']),
+                'query' => ['object_id' => $object['id']],
+                'aggregation' => 'sum',
+                'field_id' => $currencyField['id'],
+                'format' => 'currency',
+            ];
+            $items[] = [
+                'id' => $this->id('itm'),
+                'label' => $this->labelAverage($lang, $object['name']),
+                'query' => ['object_id' => $object['id']],
+                'aggregation' => 'avg',
+                'field_id' => $currencyField['id'],
+                'format' => 'currency',
+            ];
         }
 
         $blocks = [
@@ -877,25 +898,63 @@ class AppScaffolder
             ['id' => $this->id('blk'), 'type' => 'metric_grid', 'items' => $items],
         ];
 
+        // Per object, the visualisations its shape supports. Status donuts come
+        // first (so the first `chart` block stays the status breakdown), then a
+        // growth trend, then a value-by-status bar for money objects.
         $charts = 0;
+        $trends = [];
+        $valueBars = [];
         foreach ($objects as $object) {
-            if ($charts >= 3) {
+            if ($charts >= self::DASHBOARD_CHART_CAP) {
                 break;
             }
             $status = $this->firstFieldOfType($object['fieldIndex'], 'single_select');
-            if ($status === null) {
-                continue;
+            $currency = $this->firstFieldOfType($object['fieldIndex'], 'currency');
+
+            if ($status !== null) {
+                $blocks[] = [
+                    'id' => $this->id('blk'),
+                    'type' => 'chart',
+                    'label' => $this->labelByStatus($lang, $object['name']),
+                    'chart_type' => 'donut',
+                    'data_source' => ['object_id' => $object['id'], 'limit' => self::DASHBOARD_ROW_LIMIT],
+                    'aggregation' => 'count',
+                    'group_by_field_id' => $status['id'],
+                ];
+                $charts++;
+
+                if ($currency !== null) {
+                    $valueBars[] = [
+                        'id' => $this->id('blk'),
+                        'type' => 'chart',
+                        'label' => $this->labelValueByStatus($lang, $object['name']),
+                        'chart_type' => 'bar',
+                        'data_source' => ['object_id' => $object['id'], 'limit' => self::DASHBOARD_ROW_LIMIT],
+                        'aggregation' => 'sum',
+                        'y_field_id' => $currency['id'],
+                        'group_by_field_id' => $status['id'],
+                    ];
+                }
             }
-            $blocks[] = [
+
+            // A growth trend works for every object via the always-present
+            // sys_created_at system field (sparkline truncates it to day).
+            $trends[] = [
                 'id' => $this->id('blk'),
-                'type' => 'chart',
-                'label' => $this->labelByStatus($lang, $object['name']),
-                'chart_type' => 'bar',
-                'data_source' => ['object_id' => $object['id']],
+                'type' => 'sparkline',
+                'label' => $this->labelOverTime($lang, $object['name']),
+                'data_source' => ['object_id' => $object['id'], 'limit' => self::DASHBOARD_ROW_LIMIT],
+                'x_field_id' => 'sys_created_at',
                 'aggregation' => 'count',
-                'group_by_field_id' => $status['id'],
             ];
-            $charts++;
+        }
+
+        // Append trends and value bars after the breakdowns, each capped.
+        foreach (array_slice($trends, 0, self::DASHBOARD_CHART_CAP) as $trend) {
+            $blocks[] = $trend;
+        }
+        foreach (array_slice($valueBars, 0, self::DASHBOARD_CHART_CAP) as $bar) {
+            $blocks[] = $bar;
         }
 
         return [
@@ -1497,6 +1556,21 @@ class AppScaffolder
     private function labelTotal(string $lang, string $name): string
     {
         return $lang === 'es' ? "Total {$name}" : "{$name} total";
+    }
+
+    private function labelAverage(string $lang, string $name): string
+    {
+        return $lang === 'es' ? "Promedio {$name}" : "{$name} average";
+    }
+
+    private function labelOverTime(string $lang, string $name): string
+    {
+        return $lang === 'es' ? "{$name} en el tiempo" : "{$name} over time";
+    }
+
+    private function labelValueByStatus(string $lang, string $name): string
+    {
+        return $lang === 'es' ? "Valor de {$name} por estado" : "{$name} value by status";
     }
 
     /**

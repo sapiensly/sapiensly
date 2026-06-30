@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import axios from 'axios';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import type { FieldDef } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import RichTextEditor from './RichTextEditor.vue';
@@ -29,6 +29,11 @@ const emit = defineEmits<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+
+// Typed view of a date_range value so the template reads from/to without casts.
+const range = computed(
+    () => (props.modelValue ?? {}) as { from?: string; to?: string },
+);
 
 function update(value: unknown) {
     emit('update:modelValue', value);
@@ -190,7 +195,7 @@ function isInMulti(value: string): boolean {
 
     <template v-else-if="field.type === 'boolean'">
         <button
-            v-if="(field as { display?: string }).display === 'switch'"
+            v-if="field.display === 'switch'"
             :id="inputId"
             type="button"
             role="switch"
@@ -273,10 +278,7 @@ function isInMulti(value: string): boolean {
     </template>
 
     <template v-else-if="field.type === 'single_select'">
-        <div
-            v-if="(field as { display?: string }).display === 'radio'"
-            class="flex flex-col gap-1.5"
-        >
+        <div v-if="field.display === 'radio'" class="flex flex-col gap-1.5">
             <label
                 v-for="opt in field.options ?? []"
                 :key="opt.id"
@@ -337,7 +339,7 @@ function isInMulti(value: string): boolean {
     <template v-else-if="field.type === 'rating'">
         <div class="flex items-center gap-1">
             <button
-                v-for="n in (field as unknown as { max?: number }).max ?? 5"
+                v-for="n in field.max ?? 5"
                 :key="n"
                 type="button"
                 @click="toggleRating(n)"
@@ -347,20 +349,19 @@ function isInMulti(value: string): boolean {
                         ? 'text-amber-400'
                         : 'text-ink-subtle hover:text-amber-400/60',
                 ]"
-                :title="`${n} of ${(field as unknown as { max?: number }).max ?? 5}`"
+                :title="`${n} of ${field.max ?? 5}`"
             >
                 {{
-                    (field as unknown as { icon?: string }).icon === 'heart'
+                    field.icon === 'heart'
                         ? '♥'
-                        : (field as unknown as { icon?: string }).icon ===
-                            'thumb'
+                        : field.icon === 'thumb'
                           ? '👍'
                           : '★'
                 }}
             </button>
             <span :class="['ml-2 text-xs', t.textMuted]">
                 {{ modelValue }} /
-                {{ (field as unknown as { max?: number }).max ?? 5 }}
+                {{ field.max ?? 5 }}
             </span>
         </div>
     </template>
@@ -372,25 +373,17 @@ function isInMulti(value: string): boolean {
                 :value="modelValue"
                 @input="onNumber"
                 type="range"
-                :min="(field as unknown as { min?: number }).min ?? 0"
-                :max="(field as unknown as { max?: number }).max ?? 100"
-                :step="(field as unknown as { step?: number }).step ?? 1"
+                :min="field.min ?? 0"
+                :max="field.max ?? 100"
+                :step="field.step ?? 1"
                 class="w-full accent-accent-blue"
             />
             <div :class="['flex justify-between text-[10px]', t.textSubtle]">
-                <span>{{
-                    formatSliderValue(
-                        (field as unknown as { min?: number }).min ?? 0,
-                    )
-                }}</span>
+                <span>{{ formatSliderValue(field.min ?? 0) }}</span>
                 <span :class="['font-semibold', t.text]">
                     {{ formatSliderValue((modelValue as number) ?? 0) }}
                 </span>
-                <span>{{
-                    formatSliderValue(
-                        (field as unknown as { max?: number }).max ?? 100,
-                    )
-                }}</span>
+                <span>{{ formatSliderValue(field.max ?? 100) }}</span>
             </div>
         </div>
     </template>
@@ -399,14 +392,9 @@ function isInMulti(value: string): boolean {
         <div class="flex items-center gap-2">
             <input
                 :id="`${inputId}_from`"
-                :value="(modelValue as { from?: string })?.from ?? ''"
+                :value="range.from ?? ''"
                 @input="patchRange('from', $event)"
-                :type="
-                    (field as unknown as { include_time?: boolean })
-                        .include_time
-                        ? 'datetime-local'
-                        : 'date'
-                "
+                :type="field.include_time ? 'datetime-local' : 'date'"
                 :class="[
                     'h-9 flex-1 rounded-md border px-3 text-sm',
                     t.surfaceMuted,
@@ -416,14 +404,9 @@ function isInMulti(value: string): boolean {
             <span :class="['text-xs', t.textSubtle]">→</span>
             <input
                 :id="`${inputId}_to`"
-                :value="(modelValue as { to?: string })?.to ?? ''"
+                :value="range.to ?? ''"
                 @input="patchRange('to', $event)"
-                :type="
-                    (field as unknown as { include_time?: boolean })
-                        .include_time
-                        ? 'datetime-local'
-                        : 'date'
-                "
+                :type="field.include_time ? 'datetime-local' : 'date'"
                 :class="[
                     'h-9 flex-1 rounded-md border px-3 text-sm',
                     t.surfaceMuted,
@@ -452,29 +435,10 @@ function isInMulti(value: string): boolean {
                         <span>Click to upload</span>
                         <span class="text-[10px] opacity-60">
                             Max
-                            {{
-                                (field as unknown as { max_size_mb?: number })
-                                    .max_size_mb ?? 10
-                            }}MB
-                            <template
-                                v-if="
-                                    (
-                                        field as unknown as {
-                                            mime_types?: string[];
-                                        }
-                                    ).mime_types?.length
-                                "
-                            >
+                            {{ field.max_size_mb ?? 10 }}MB
+                            <template v-if="field.mime_types?.length">
                                 ·
-                                {{
-                                    (
-                                        (
-                                            field as unknown as {
-                                                mime_types?: string[];
-                                            }
-                                        ).mime_types ?? []
-                                    ).join(', ')
-                                }}
+                                {{ (field.mime_types ?? []).join(', ') }}
                             </template>
                         </span>
                     </template>
@@ -483,10 +447,7 @@ function isInMulti(value: string): boolean {
                         type="file"
                         class="hidden"
                         :accept="
-                            (
-                                (field as unknown as { mime_types?: string[] })
-                                    .mime_types ?? []
-                            ).join(',') || undefined
+                            (field.mime_types ?? []).join(',') || undefined
                         "
                         @change="onFileSelected"
                     />

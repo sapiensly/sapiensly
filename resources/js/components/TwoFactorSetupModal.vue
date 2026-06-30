@@ -18,8 +18,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
 import { confirm } from '@/routes/two-factor';
 import { Form } from '@inertiajs/vue3';
-import { useClipboard } from '@vueuse/core';
 import { Check, Copy, ScanLine } from '@lucide/vue';
+import { useClipboard } from '@vueuse/core';
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 
 interface Props {
@@ -265,8 +265,12 @@ watch(
                                 </PinInput>
                                 <InputError
                                     :message="
-                                        errors?.confirmTwoFactorAuthentication
-                                            ?.code
+                                        (
+                                            errors as Record<
+                                                string,
+                                                { code?: string }
+                                            >
+                                        )?.confirmTwoFactorAuthentication?.code
                                     "
                                 />
                             </div>

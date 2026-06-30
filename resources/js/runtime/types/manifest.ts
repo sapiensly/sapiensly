@@ -13,7 +13,8 @@ export type FieldType =
     | 'slider'
     | 'date_range'
     | 'file'
-    | 'rich_text';
+    | 'rich_text'
+    | 'color';
 
 export interface FieldDef {
     id: string;
@@ -21,7 +22,23 @@ export interface FieldDef {
     name: string;
     type: FieldType;
     currency_code?: string;
-    options?: Array<{ id: string; value: string; label: string; color?: string }>;
+    options?: Array<{
+        id: string;
+        value: string;
+        label: string;
+        color?: string;
+    }>;
+    // Optional type-specific config the manifest may carry; read by the runtime
+    // inputs/renderers (so they don't need inline casts in templates).
+    format?: string;
+    display?: string;
+    icon?: string;
+    min?: number;
+    max?: number;
+    step?: number;
+    include_time?: boolean;
+    max_size_mb?: number;
+    mime_types?: string[];
 }
 
 export interface ObjectDef {
@@ -58,7 +75,10 @@ export const SYSTEM_FIELDS: Record<string, FieldDef> = {
  * Resolve a field id against an object's declared fields OR the system-fields
  * map. Returns undefined when neither matches.
  */
-export function resolveField(object: ObjectDef | undefined, fieldId: string | undefined): FieldDef | undefined {
+export function resolveField(
+    object: ObjectDef | undefined,
+    fieldId: string | undefined,
+): FieldDef | undefined {
     if (!fieldId) return undefined;
     if (fieldId in SYSTEM_FIELDS) return SYSTEM_FIELDS[fieldId];
     return object?.fields.find((f) => f.id === fieldId);
@@ -110,7 +130,12 @@ export interface BlockSpacer extends BlockBase {
 export interface BlockTable extends BlockBase {
     type: 'table';
     data_source: { object_id: string };
-    columns: Array<{ id: string; field_id: string; label_override?: string; width?: number }>;
+    columns: Array<{
+        id: string;
+        field_id: string;
+        label_override?: string;
+        width?: number;
+    }>;
     empty_state_message?: string;
 }
 
@@ -125,7 +150,14 @@ export interface BlockStat extends BlockBase {
     delta_good?: 'up' | 'down';
 }
 
-export type AnyBlock = BlockContainer | BlockText | BlockHeading | BlockDivider | BlockSpacer | BlockTable | BlockStat;
+export type AnyBlock =
+    | BlockContainer
+    | BlockText
+    | BlockHeading
+    | BlockDivider
+    | BlockSpacer
+    | BlockTable
+    | BlockStat;
 
 export interface PageDef {
     id: string;
@@ -143,7 +175,10 @@ export interface PageSummary {
     icon: string | null;
 }
 
-export type BlockData = Record<string, TableBlockData | StatBlockData | BlockErrorData>;
+export type BlockData = Record<
+    string,
+    TableBlockData | StatBlockData | BlockErrorData
+>;
 
 export interface TableBlockData {
     rows: Array<{ id: string; data: Record<string, unknown> }>;
@@ -166,11 +201,21 @@ export interface BlockErrorData {
 export type RuntimeTheme = 'light' | 'dark';
 
 export interface RuntimePageProps {
-    app: { id: string; slug: string; name: string; icon: string | null; color: string | null };
+    app: {
+        id: string;
+        slug: string;
+        name: string;
+        icon: string | null;
+        color: string | null;
+    };
     manifest: {
         navigation: { items?: unknown[] } | null;
         pages: PageSummary[];
-        settings: { default_currency?: string; default_locale?: string; theme?: RuntimeTheme };
+        settings: {
+            default_currency?: string;
+            default_locale?: string;
+            theme?: RuntimeTheme;
+        };
         objects: ObjectDef[];
         agent?: { enabled: boolean; name?: string } | null;
     };

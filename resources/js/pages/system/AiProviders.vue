@@ -70,16 +70,19 @@ async function testConnection(id: string) {
     connectionTests[id] = { loading: true, result: null };
 
     try {
-        const response = await fetch(`/system/ai-providers/${id}/test-connection`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-XSRF-TOKEN': decodeURIComponent(
-                    document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
-                ),
-                Accept: 'application/json',
+        const response = await fetch(
+            `/system/ai-providers/${id}/test-connection`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-XSRF-TOKEN': decodeURIComponent(
+                        document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
+                    ),
+                    Accept: 'application/json',
+                },
             },
-        });
+        );
 
         const data = await response.json();
         connectionTests[id] = { loading: false, result: data };
@@ -145,7 +148,10 @@ function deleteProvider(id: string) {
                 <p class="mt-1 text-xs text-ink-muted">
                     {{ t('system.ai_providers.no_providers_description') }}
                 </p>
-                <Link href="/system/ai-providers/create" class="mt-4 inline-block">
+                <Link
+                    href="/system/ai-providers/create"
+                    class="mt-4 inline-block"
+                >
                     <button
                         type="button"
                         class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
@@ -173,15 +179,25 @@ function deleteProvider(id: string) {
                                 <Plug class="size-4" />
                             </div>
                             <div class="min-w-0">
-                                <h3 class="truncate text-sm font-semibold text-ink">
+                                <h3
+                                    class="truncate text-sm font-semibold text-ink"
+                                >
                                     {{ provider.display_name }}
                                 </h3>
                                 <p class="mt-0.5 text-[11px] text-ink-subtle">
                                     {{ provider.chat_models_count }}
                                     {{ t('system.ai_providers.chat_models') }}
-                                    <span v-if="provider.embedding_models_count > 0">
+                                    <span
+                                        v-if="
+                                            provider.embedding_models_count > 0
+                                        "
+                                    >
                                         · {{ provider.embedding_models_count }}
-                                        {{ t('system.ai_providers.embedding_models') }}
+                                        {{
+                                            t(
+                                                'system.ai_providers.embedding_models',
+                                            )
+                                        }}
                                     </span>
                                 </p>
                             </div>
@@ -190,14 +206,28 @@ function deleteProvider(id: string) {
                             <span
                                 v-if="provider.is_default"
                                 class="inline-flex items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
-                                style="color: var(--sp-accent-blue); border-color: color-mix(in oklab, var(--sp-accent-blue) 45%, transparent)"
+                                style="
+                                    color: var(--sp-accent-blue);
+                                    border-color: color-mix(
+                                        in oklab,
+                                        var(--sp-accent-blue) 45%,
+                                        transparent
+                                    );
+                                "
                             >
                                 {{ t('system.ai_providers.default') }}
                             </span>
                             <span
                                 v-if="provider.is_default_embeddings"
                                 class="inline-flex items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
-                                style="color: var(--sp-spectrum-magenta); border-color: color-mix(in oklab, var(--sp-spectrum-magenta) 45%, transparent)"
+                                style="
+                                    color: var(--sp-spectrum-magenta);
+                                    border-color: color-mix(
+                                        in oklab,
+                                        var(--sp-spectrum-magenta) 45%,
+                                        transparent
+                                    );
+                                "
                             >
                                 {{ t('system.ai_providers.embeddings') }}
                             </span>
@@ -220,26 +250,42 @@ function deleteProvider(id: string) {
                                         variant="ghost"
                                         size="icon"
                                         class="size-7 text-ink-muted hover:bg-surface hover:text-ink"
-                                        :disabled="connectionTests[provider.id]?.loading"
+                                        :disabled="
+                                            connectionTests[provider.id]
+                                                ?.loading
+                                        "
                                         @click="testConnection(provider.id)"
                                     >
                                         <Loader2
-                                            v-if="connectionTests[provider.id]?.loading"
+                                            v-if="
+                                                connectionTests[provider.id]
+                                                    ?.loading
+                                            "
                                             class="size-3.5 animate-spin"
                                         />
                                         <Check
-                                            v-else-if="connectionTests[provider.id]?.result?.success"
+                                            v-else-if="
+                                                connectionTests[provider.id]
+                                                    ?.result?.success
+                                            "
                                             class="size-3.5 text-sp-success"
                                         />
                                         <X
-                                            v-else-if="connectionTests[provider.id]?.result && !connectionTests[provider.id]?.result?.success"
+                                            v-else-if="
+                                                connectionTests[provider.id]
+                                                    ?.result &&
+                                                !connectionTests[provider.id]
+                                                    ?.result?.success
+                                            "
                                             class="size-3.5 text-sp-danger"
                                         />
                                         <Plug v-else class="size-3.5" />
                                     </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    {{ t('system.ai_providers.test_connection') }}
+                                    {{
+                                        t('system.ai_providers.test_connection')
+                                    }}
                                 </TooltipContent>
                             </Tooltip>
                             <Tooltip v-if="!provider.is_default">
@@ -257,19 +303,28 @@ function deleteProvider(id: string) {
                                     {{ t('system.ai_providers.set_default') }}
                                 </TooltipContent>
                             </Tooltip>
-                            <Tooltip v-if="!provider.is_default_embeddings && provider.embedding_models_count > 0">
+                            <Tooltip
+                                v-if="
+                                    !provider.is_default_embeddings &&
+                                    provider.embedding_models_count > 0
+                                "
+                            >
                                 <TooltipTrigger as-child>
                                     <Button
                                         variant="ghost"
                                         size="icon"
                                         class="size-7 text-ink-muted hover:bg-surface hover:text-ink"
-                                        @click="setDefaultEmbeddings(provider.id)"
+                                        @click="
+                                            setDefaultEmbeddings(provider.id)
+                                        "
                                     >
                                         <Database class="size-3.5" />
                                     </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    {{ t('system.ai_providers.set_embeddings') }}
+                                    {{
+                                        t('system.ai_providers.set_embeddings')
+                                    }}
                                 </TooltipContent>
                             </Tooltip>
                             <Tooltip>
@@ -280,7 +335,9 @@ function deleteProvider(id: string) {
                                         class="size-7 text-ink-muted hover:bg-surface hover:text-ink"
                                         as-child
                                     >
-                                        <Link :href="`/system/ai-providers/${provider.id}/edit`">
+                                        <Link
+                                            :href="`/system/ai-providers/${provider.id}/edit`"
+                                        >
                                             <Pencil class="size-3.5" />
                                         </Link>
                                     </Button>
@@ -316,7 +373,7 @@ function deleteProvider(id: string) {
                                 : 'border-sp-danger/30 bg-sp-danger/10 text-sp-danger',
                         ]"
                     >
-                        {{ connectionTests[provider.id].result.detail }}
+                        {{ connectionTests[provider.id]?.result?.detail }}
                     </div>
                 </div>
             </div>

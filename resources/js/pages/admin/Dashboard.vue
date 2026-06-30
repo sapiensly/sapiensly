@@ -26,7 +26,6 @@ const { t } = useI18n();
 function refresh() {
     router.reload({
         only: ['stats', 'layers', 'spend', 'health', 'audit'],
-        preserveScroll: true,
     });
 }
 
@@ -85,7 +84,9 @@ const layerCards = computed(() => {
             <!-- Header: title + subtitle + Export / Refresh buttons -->
             <header class="flex items-start justify-between gap-4">
                 <div class="space-y-1">
-                    <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                    <h1
+                        class="text-[22px] leading-tight font-semibold text-ink"
+                    >
                         {{ t('admin.dashboard.heading_full') }}
                     </h1>
                     <p class="text-xs text-ink-muted">
@@ -118,7 +119,10 @@ const layerCards = computed(() => {
                 class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5"
             >
                 <StatCard
-                    :value="stats.ticketsResolved.display ?? String(stats.ticketsResolved.value)"
+                    :value="
+                        stats.ticketsResolved.display ??
+                        String(stats.ticketsResolved.value)
+                    "
                     :label="t('admin.dashboard.stats.tickets_resolved')"
                     :delta="stats.ticketsResolved.delta"
                     :delta-dir="stats.ticketsResolved.deltaDir"
@@ -127,7 +131,10 @@ const layerCards = computed(() => {
                     tint="var(--sp-success)"
                 />
                 <StatCard
-                    :value="stats.avgHandleTime.display ?? String(stats.avgHandleTime.value)"
+                    :value="
+                        stats.avgHandleTime.display ??
+                        String(stats.avgHandleTime.value)
+                    "
                     :label="t('admin.dashboard.stats.avg_handle_time')"
                     :caption="stats.avgHandleTime.caption"
                     :delta="stats.avgHandleTime.delta"
@@ -137,7 +144,10 @@ const layerCards = computed(() => {
                     tint="var(--sp-accent-blue)"
                 />
                 <StatCard
-                    :value="stats.tokensUsed.display ?? String(stats.tokensUsed.value)"
+                    :value="
+                        stats.tokensUsed.display ??
+                        String(stats.tokensUsed.value)
+                    "
                     :label="t('admin.dashboard.stats.tokens_used')"
                     :delta="stats.tokensUsed.delta"
                     :delta-dir="stats.tokensUsed.deltaDir"
@@ -146,7 +156,10 @@ const layerCards = computed(() => {
                     tint="var(--sp-spectrum-magenta)"
                 />
                 <StatCard
-                    :value="stats.spendToday.display ?? String(stats.spendToday.value)"
+                    :value="
+                        stats.spendToday.display ??
+                        String(stats.spendToday.value)
+                    "
                     :label="t('admin.dashboard.stats.spend_today')"
                     :caption="stats.spendToday.caption"
                     :delta="stats.spendToday.delta"
@@ -156,7 +169,10 @@ const layerCards = computed(() => {
                     tint="var(--sp-accent-cyan)"
                 />
                 <StatCard
-                    :value="stats.totalUsers.display ?? String(stats.totalUsers.value)"
+                    :value="
+                        stats.totalUsers.display ??
+                        String(stats.totalUsers.value)
+                    "
                     :label="t('admin.dashboard.stats.total_users')"
                     :caption="stats.totalUsers.caption"
                     :icon="User"
@@ -194,9 +210,7 @@ const layerCards = computed(() => {
                             :key="card.key"
                             :class="[
                                 'rounded-xs p-4 transition-all',
-                                idx === 2
-                                    ? 'border bg-white/[0.02]'
-                                    : '',
+                                idx === 2 ? 'border bg-white/[0.02]' : '',
                             ]"
                             :style="
                                 idx === 2
@@ -216,14 +230,19 @@ const layerCards = computed(() => {
                                 />
                                 {{ card.label }}
                             </p>
-                            <p class="mt-2 font-mono text-[24px] font-semibold text-ink">
+                            <p
+                                class="mt-2 font-mono text-[24px] font-semibold text-ink"
+                            >
                                 {{ card.count.toLocaleString() }}
                             </p>
                             <p class="mt-1 text-xs text-ink-muted">
                                 {{ card.subtitle }}
                             </p>
                             <div class="mt-4 h-10">
-                                <Sparkline :series="card.series" :tint="card.tint" />
+                                <Sparkline
+                                    :series="card.series"
+                                    :tint="card.tint"
+                                />
                             </div>
                         </div>
                     </div>
@@ -281,7 +300,10 @@ const layerCards = computed(() => {
                         </span>
                     </header>
 
-                    <div v-if="spend && spendSegments.length" class="mt-5 space-y-5">
+                    <div
+                        v-if="spend && spendSegments.length"
+                        class="mt-5 space-y-5"
+                    >
                         <!-- Stacked horizontal bar. -->
                         <div class="flex h-2 overflow-hidden rounded-pill">
                             <div
@@ -311,7 +333,9 @@ const layerCards = computed(() => {
                                     {{ p.calls.toLocaleString() }}
                                     {{ t('admin.dashboard.spend.calls') }}
                                 </span>
-                                <span class="text-right font-mono text-sm text-ink">
+                                <span
+                                    class="text-right font-mono text-sm text-ink"
+                                >
                                     ${{ p.cost.toFixed(2) }}
                                 </span>
                             </li>

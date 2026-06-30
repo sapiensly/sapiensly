@@ -70,6 +70,23 @@ const isTrigger = computed(() => props.node.kind === 'trigger');
 // ---------- Step nodes ----------
 const stepData = computed<ManifestStep>(() => props.node.data as ManifestStep);
 
+// Permissive view of the step's per-type config, so the template reads optional
+// fields without inline casts (which vue-tsc's template parser rejects).
+const step = computed(
+    () =>
+        stepData.value as {
+            object_id?: string;
+            record_id?: string;
+            tool_id?: string;
+            url?: string;
+            method?: string;
+            message?: string;
+            prompt?: string;
+            variable?: string;
+            value?: unknown;
+        },
+);
+
 function patchStep(patch: Record<string, unknown>) {
     emit('update-node', { id: props.node.id, patch });
 }
@@ -263,6 +280,38 @@ function commitAdvanced() {
 // ---------- Trigger nodes ----------
 const triggerData = computed<WorkflowTrigger>(
     () => props.node.data as WorkflowTrigger,
+);
+
+// Permissive view of the trigger's per-type config, so the template reads
+// optional fields without inline casts (which vue-tsc's template parser rejects).
+const trig = computed(
+    () =>
+        triggerData.value as {
+            object_id?: string;
+            field_id?: string;
+            filter?: unknown;
+            offset?: {
+                value?: number;
+                unit?: string;
+                direction?: string;
+                at?: string;
+                tz?: string;
+            };
+            cron?: string;
+            timezone?: string;
+            at?: string;
+            integration_id?: string;
+            tool_id?: string;
+            channel_id?: string;
+            event?: string;
+            interval_minutes?: number;
+            items_path?: string;
+            dedupe_path?: string;
+            watermark_path?: string;
+            contains?: string;
+            subject_contains?: string;
+            to_contains?: string;
+        },
 );
 
 function patchTrigger(patch: Record<string, unknown>) {
@@ -546,10 +595,7 @@ watch(
                         t('apps.builder.workflows.panel.trigger_object_id')
                     }}</span>
                     <ObjectPicker
-                        :model-value="
-                            (triggerData as { object_id?: string }).object_id ??
-                            ''
-                        "
+                        :model-value="trig.object_id ?? ''"
                         :objects="objects"
                         @update:model-value="
                             (v: string) =>
@@ -563,8 +609,8 @@ watch(
 
                 <!-- Optional filter: fire only when the written record matches. -->
                 <TriggerFilterBuilder
-                    v-if="(triggerData as { object_id?: string }).object_id"
-                    :model-value="(triggerData as { filter?: unknown }).filter"
+                    v-if="trig.object_id"
+                    :model-value="trig.filter"
                     :fields="triggerObjectFields"
                     @update:model-value="
                         (v: unknown) => patchTrigger({ filter: v })
@@ -579,10 +625,7 @@ watch(
                         t('apps.builder.workflows.panel.trigger_object_id')
                     }}</span>
                     <ObjectPicker
-                        :model-value="
-                            (triggerData as { object_id?: string }).object_id ??
-                            ''
-                        "
+                        :model-value="trig.object_id ?? ''"
                         :objects="objects"
                         @update:model-value="
                             (v: string) =>
@@ -595,18 +638,12 @@ watch(
                     />
                 </label>
 
-                <label
-                    v-if="(triggerData as { object_id?: string }).object_id"
-                    class="space-y-1"
-                >
+                <label v-if="trig.object_id" class="space-y-1">
                     <span class="text-sm text-ink-muted">{{
                         t('apps.builder.workflows.panel.date_field')
                     }}</span>
                     <select
-                        :value="
-                            (triggerData as { field_id?: string }).field_id ??
-                            ''
-                        "
+                        :value="trig.field_id ?? ''"
                         @change="
                             patchTrigger({
                                 field_id: ($event.target as HTMLSelectElement)
@@ -647,10 +684,7 @@ watch(
                         <input
                             type="number"
                             min="0"
-                            :value="
-                                (triggerData as { offset?: { value?: number } })
-                                    .offset?.value ?? 0
-                            "
+                            :value="trig.offset?.value ?? 0"
                             @input="
                                 patchOffset({
                                     value: Number(
@@ -662,10 +696,7 @@ watch(
                             class="h-9 w-16 rounded-md border border-medium bg-surface px-2 text-sm text-ink"
                         />
                         <select
-                            :value="
-                                (triggerData as { offset?: { unit?: string } })
-                                    .offset?.unit ?? 'days'
-                            "
+                            :value="trig.offset?.unit ?? 'days'"
                             @change="
                                 patchOffset({
                                     unit: ($event.target as HTMLSelectElement)
@@ -688,13 +719,7 @@ watch(
                             </option>
                         </select>
                         <select
-                            :value="
-                                (
-                                    triggerData as {
-                                        offset?: { direction?: string };
-                                    }
-                                ).offset?.direction ?? 'before'
-                            "
+                            :value="trig.offset?.direction ?? 'before'"
                             @change="
                                 patchOffset({
                                     direction: (
@@ -721,7 +746,7 @@ watch(
                     }}</span>
                     <input
                         type="time"
-                        :value="(triggerData as { at?: string }).at ?? '09:00'"
+                        :value="trig.at ?? '09:00'"
                         @input="
                             patchTrigger({
                                 at: ($event.target as HTMLInputElement).value,
@@ -737,10 +762,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            (triggerData as { timezone?: string }).timezone ??
-                            ''
-                        "
+                        :value="trig.timezone ?? ''"
                         @input="
                             patchTrigger({
                                 timezone: ($event.target as HTMLInputElement)
@@ -753,8 +775,8 @@ watch(
                 </label>
 
                 <TriggerFilterBuilder
-                    v-if="(triggerData as { object_id?: string }).object_id"
-                    :model-value="(triggerData as { filter?: unknown }).filter"
+                    v-if="trig.object_id"
+                    :model-value="trig.filter"
                     :fields="triggerObjectFields"
                     @update:model-value="
                         (v: unknown) => patchTrigger({ filter: v })
@@ -771,10 +793,7 @@ watch(
                         t('apps.builder.workflows.panel.channel')
                     }}</span>
                     <select
-                        :value="
-                            (triggerData as { channel_id?: string })
-                                .channel_id ?? ''
-                        "
+                        :value="trig.channel_id ?? ''"
                         @change="
                             patchTrigger({
                                 channel_id: ($event.target as HTMLSelectElement)
@@ -812,10 +831,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            (triggerData as { contains?: string }).contains ??
-                            ''
-                        "
+                        :value="trig.contains ?? ''"
                         @input="
                             patchTrigger({
                                 contains: ($event.target as HTMLInputElement)
@@ -839,10 +855,7 @@ watch(
                         t('apps.builder.workflows.panel.integration')
                     }}</span>
                     <select
-                        :value="
-                            (triggerData as { integration_id?: string })
-                                .integration_id ?? ''
-                        "
+                        :value="trig.integration_id ?? ''"
                         @change="
                             patchTrigger({
                                 integration_id: (
@@ -881,7 +894,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="(triggerData as { event?: string }).event ?? ''"
+                        :value="trig.event ?? ''"
                         @input="
                             patchTrigger({
                                 event: ($event.target as HTMLInputElement)
@@ -908,9 +921,7 @@ watch(
                         t('apps.builder.workflows.panel.poll_action')
                     }}</span>
                     <select
-                        :value="
-                            (triggerData as { tool_id?: string }).tool_id ?? ''
-                        "
+                        :value="trig.tool_id ?? ''"
                         @change="
                             patchTrigger({
                                 tool_id: ($event.target as HTMLSelectElement)
@@ -948,10 +959,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            (triggerData as { items_path?: string })
-                                .items_path ?? ''
-                        "
+                        :value="trig.items_path ?? ''"
                         @input="
                             patchTrigger({
                                 items_path: ($event.target as HTMLInputElement)
@@ -972,10 +980,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            (triggerData as { watermark_path?: string })
-                                .watermark_path ?? ''
-                        "
+                        :value="trig.watermark_path ?? ''"
                         @input="
                             patchTrigger({
                                 watermark_path: (
@@ -998,10 +1003,7 @@ watch(
                     <input
                         type="number"
                         min="1"
-                        :value="
-                            (triggerData as { interval_minutes?: number })
-                                .interval_minutes ?? 15
-                        "
+                        :value="trig.interval_minutes ?? 15"
                         @input="
                             patchTrigger({
                                 interval_minutes: Number(
@@ -1021,10 +1023,7 @@ watch(
                         t('apps.builder.workflows.panel.integration')
                     }}</span>
                     <select
-                        :value="
-                            (triggerData as { integration_id?: string })
-                                .integration_id ?? ''
-                        "
+                        :value="trig.integration_id ?? ''"
                         @change="
                             patchTrigger({
                                 integration_id: (
@@ -1060,10 +1059,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            (triggerData as { to_contains?: string })
-                                .to_contains ?? ''
-                        "
+                        :value="trig.to_contains ?? ''"
                         @input="
                             patchTrigger({
                                 to_contains: ($event.target as HTMLInputElement)
@@ -1085,10 +1081,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            (triggerData as { subject_contains?: string })
-                                .subject_contains ?? ''
-                        "
+                        :value="trig.subject_contains ?? ''"
                         @input="
                             patchTrigger({
                                 subject_contains: (
@@ -1114,12 +1107,8 @@ watch(
                     }}</span>
                     <select
                         :value="
-                            CRON_PRESETS.some(
-                                (p) =>
-                                    p.cron ===
-                                    (triggerData as { cron?: string }).cron,
-                            )
-                                ? (triggerData as { cron?: string }).cron
+                            CRON_PRESETS.some((p) => p.cron === trig.cron)
+                                ? trig.cron
                                 : '__custom__'
                         "
                         @change="
@@ -1154,7 +1143,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="(triggerData as { cron?: string }).cron ?? ''"
+                        :value="trig.cron ?? ''"
                         @input="
                             patchTrigger({
                                 cron: ($event.target as HTMLInputElement).value,
@@ -1174,10 +1163,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            (triggerData as { timezone?: string }).timezone ??
-                            'UTC'
-                        "
+                        :value="trig.timezone ?? 'UTC'"
                         @input="
                             patchTrigger({
                                 timezone: ($event.target as HTMLInputElement)
@@ -1262,10 +1248,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            (triggerData as { dedupe_path?: string })
-                                .dedupe_path ?? ''
-                        "
+                        :value="trig.dedupe_path ?? ''"
                         @input="
                             patchTrigger({
                                 dedupe_path: ($event.target as HTMLInputElement)
@@ -1390,7 +1373,7 @@ watch(
                     t('apps.builder.workflows.panel.log_message')
                 }}</span>
                 <textarea
-                    :value="(stepData as { message?: string }).message ?? ''"
+                    :value="step.message ?? ''"
                     @input="
                         patchStep({
                             message: ($event.target as HTMLTextAreaElement)
@@ -1409,9 +1392,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            (stepData as { variable?: string }).variable ?? ''
-                        "
+                        :value="step.variable ?? ''"
                         @input="
                             patchStep({
                                 variable: ($event.target as HTMLInputElement)
@@ -1427,11 +1408,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="
-                            String(
-                                (stepData as { value?: unknown }).value ?? '',
-                            )
-                        "
+                        :value="String(step.value ?? '')"
                         @input="
                             patchStep({
                                 value: ($event.target as HTMLInputElement)
@@ -1458,9 +1435,7 @@ watch(
                     t('apps.builder.workflows.panel.object_id')
                 }}</span>
                 <ObjectPicker
-                    :model-value="
-                        (stepData as { object_id?: string }).object_id ?? ''
-                    "
+                    :model-value="step.object_id ?? ''"
                     :objects="objects"
                     @update:model-value="
                         (v: string) => patchStep({ object_id: v })
@@ -1479,9 +1454,7 @@ watch(
                 }}</span>
                 <input
                     type="text"
-                    :value="
-                        (stepData as { record_id?: string }).record_id ?? ''
-                    "
+                    :value="step.record_id ?? ''"
                     @input="
                         patchStep({
                             record_id: ($event.target as HTMLInputElement)
@@ -1498,7 +1471,7 @@ watch(
                     t('apps.builder.workflows.panel.ai_prompt')
                 }}</span>
                 <textarea
-                    :value="(stepData as { prompt?: string }).prompt ?? ''"
+                    :value="step.prompt ?? ''"
                     @input="
                         patchStep({
                             prompt: ($event.target as HTMLTextAreaElement)
@@ -1516,9 +1489,7 @@ watch(
                         t('apps.builder.workflows.panel.http_method')
                     }}</span>
                     <select
-                        :value="
-                            (stepData as { method?: string }).method ?? 'GET'
-                        "
+                        :value="step.method ?? 'GET'"
                         @change="
                             patchStep({
                                 method: ($event.target as HTMLSelectElement)
@@ -1540,7 +1511,7 @@ watch(
                     }}</span>
                     <input
                         type="text"
-                        :value="(stepData as { url?: string }).url ?? ''"
+                        :value="step.url ?? ''"
                         @input="
                             patchStep({
                                 url: ($event.target as HTMLInputElement).value,
@@ -1606,9 +1577,7 @@ watch(
                         t('apps.builder.workflows.panel.connector_action')
                     }}</span>
                     <select
-                        :value="
-                            (stepData as { tool_id?: string }).tool_id ?? ''
-                        "
+                        :value="step.tool_id ?? ''"
                         @change="
                             selectConnectorAction(
                                 ($event.target as HTMLSelectElement).value,

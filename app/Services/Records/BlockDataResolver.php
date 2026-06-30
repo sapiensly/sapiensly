@@ -29,6 +29,7 @@ class BlockDataResolver
         private ExpressionResolver $expressions,
         private ConnectedObjectReader $connected,
         private ConnectedIntegrationResolver $integrations,
+        private InMemoryAggregator $aggregator,
     ) {}
 
     /**
@@ -109,31 +110,15 @@ class BlockDataResolver
         }
 
         if ($block['type'] === 'stat' || $block['type'] === 'gauge' || $block['type'] === 'progress') {
-            $value = $this->records->aggregate(
-                $app,
-                $block['query'],
-                $block['aggregation'],
-                $block['field_id'] ?? null,
-                $manifest,
-                $context,
-            );
+            return $this->kpiPayload($app, $block, $manifest, $context);
+        }
 
-            $payload = ['value' => $value];
-
-            // Optional comparison value (e.g. previous period) → drives the
-            // trend chip on the card.
-            if (isset($block['compare'])) {
-                $payload['compare_value'] = $this->records->aggregate(
-                    $app,
-                    $block['compare'],
-                    $block['aggregation'],
-                    $block['field_id'] ?? null,
-                    $manifest,
-                    $context,
-                );
-            }
-
-            return $payload;
+        // A computed insight: aggregate a live figure (and optional comparison)
+        // so the card states a real, current number instead of hand-written
+        // prose. Routes through aggregateBlock, so it works over connected
+        // objects too. Without `compute`, an insight is static (no server data).
+        if ($block['type'] === 'insight' && isset($block['compute'])) {
+            return $this->kpiPayload($app, $block['compute'], $manifest, $context);
         }
 
         if (in_array($block['type'], ['chart', 'kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'gantt', 'map', 'card_grid', 'word_cloud', 'data_grid'], true)) {
@@ -144,27 +129,7 @@ class BlockDataResolver
             $items = [];
             foreach ($block['items'] ?? [] as $item) {
                 try {
-                    $entry = [
-                        'value' => $this->records->aggregate(
-                            $app,
-                            $item['query'],
-                            $item['aggregation'],
-                            $item['field_id'] ?? null,
-                            $manifest,
-                            $context,
-                        ),
-                    ];
-                    if (isset($item['compare'])) {
-                        $entry['compare_value'] = $this->records->aggregate(
-                            $app,
-                            $item['compare'],
-                            $item['aggregation'],
-                            $item['field_id'] ?? null,
-                            $manifest,
-                            $context,
-                        );
-                    }
-                    $items[$item['id']] = $entry;
+                    $items[$item['id']] = $this->kpiPayload($app, $item, $manifest, $context);
                 } catch (Throwable $e) {
                     $items[$item['id']] = ['error' => $e->getMessage()];
                 }
@@ -209,7 +174,7 @@ class BlockDataResolver
             foreach ($block['stages'] ?? [] as $stage) {
                 try {
                     $stages[$stage['id']] = [
-                        'value' => $this->records->aggregate(
+                        'value' => $this->aggregateBlock(
                             $app,
                             $stage['query'],
                             $stage['aggregation'],
@@ -366,6 +331,64 @@ class BlockDataResolver
         }
 
         return $this->records->count($app, $dataSource, $manifest, $context);
+    }
+
+    /**
+     * Resolve a KPI spec (a stat block, a metric_grid item, or an insight's
+     * `compute`) into its payload. A `ratio_denominator` makes the value a ratio
+     * (this spec's aggregate ÷ the denominator's, guarded against /0) — no trend
+     * chip. Otherwise it is the aggregate, plus an optional `compare` value for
+     * the trend chip. All aggregates route through aggregateBlock, so KPIs work
+     * over internal and connected objects alike.
+     *
+     * @param  array<string, mixed>  $spec
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function kpiPayload(App $app, array $spec, array $manifest, array $context): array
+    {
+        if (isset($spec['ratio_denominator'])) {
+            $numerator = $this->aggregateBlock($app, $spec['query'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest, $context);
+            $den = $spec['ratio_denominator'];
+            $denominator = $this->aggregateBlock($app, $den['query'], $den['aggregation'], $den['field_id'] ?? null, $manifest, $context);
+
+            return ['value' => $denominator != 0 ? $numerator / $denominator : 0];
+        }
+
+        $payload = ['value' => $this->aggregateBlock($app, $spec['query'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest, $context)];
+
+        if (isset($spec['compare'])) {
+            $payload['compare_value'] = $this->aggregateBlock($app, $spec['compare'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest, $context);
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Source-agnostic scalar aggregation for a KPI block (stat/gauge/progress/
+     * metric_grid item/funnel stage). Internal objects fold in SQL via
+     * RecordQueryService; connected objects have no SQL store, so their mapped
+     * passthrough rows are read live and folded in-memory by the shared
+     * InMemoryAggregator — the same routing queryRows() does for row blocks, so a
+     * dashboard KPI works against an integration, not just internal records.
+     *
+     * @param  array<string, mixed>  $query
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    private function aggregateBlock(App $app, array $query, string $aggregation, ?string $fieldId, array $manifest, array $context): int|float
+    {
+        $object = $this->findObject($manifest, $query['object_id'] ?? null);
+
+        if ($object !== null && (($object['source']['type'] ?? 'internal') === 'connected')) {
+            $rows = $this->connectedRows($app, $object, $query);
+            $slug = $fieldId !== null ? $this->fieldSlug($object, $fieldId) : null;
+
+            return $this->aggregator->aggregate($rows, $aggregation, $slug);
+        }
+
+        return $this->records->aggregate($app, $query, $aggregation, $fieldId, $manifest, $context);
     }
 
     /**

@@ -42,6 +42,7 @@ class SafeExpressionEvaluator
         'now', 'today', 'random', 'count', 'length', 'first', 'last', 'slice',
         'pluck', 'sum', 'min', 'max', 'avg', 'upper', 'lower', 'concat',
         'default', 'round', 'abs', 'floor', 'ceil',
+        'days_ago', 'months_ago', 'start_of_week', 'start_of_month', 'start_of_year',
     ];
 
     private ExpressionLanguage $engine;
@@ -171,6 +172,13 @@ class SafeExpressionEvaluator
             'abs' => fn (mixed $n): float|int => abs(is_int($n) ? $n : (float) $n),
             'floor' => fn (mixed $n): float => floor((float) $n),
             'ceil' => fn (mixed $n): float => ceil((float) $n),
+            // Date helpers (UTC, return YYYY-MM-DD) for period filters — e.g. a
+            // previous-period `compare` query without hand-computing dates.
+            'days_ago' => fn (mixed $n = 0): string => now()->utc()->subDays((int) $n)->toDateString(),
+            'months_ago' => fn (mixed $n = 0): string => now()->utc()->subMonthsNoOverflow((int) $n)->toDateString(),
+            'start_of_week' => fn (mixed $offset = 0): string => now()->utc()->subWeeks((int) $offset)->startOfWeek()->toDateString(),
+            'start_of_month' => fn (mixed $offset = 0): string => now()->utc()->subMonthsNoOverflow((int) $offset)->startOfMonth()->toDateString(),
+            'start_of_year' => fn (mixed $offset = 0): string => now()->utc()->subYears((int) $offset)->startOfYear()->toDateString(),
         ];
     }
 

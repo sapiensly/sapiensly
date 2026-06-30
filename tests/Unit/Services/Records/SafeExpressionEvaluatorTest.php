@@ -89,6 +89,16 @@ it('evaluates a random-number-in-range formula end to end', function () {
     }
 });
 
+/* ---------------------------- date helpers -------------------------- */
+
+it('computes period date helpers for filters', function () {
+    expect($this->eval->evaluate('days_ago(0)', []))->toBe(now()->utc()->toDateString())
+        ->and($this->eval->evaluate('days_ago(7)', []))->toBe(now()->utc()->subDays(7)->toDateString())
+        ->and($this->eval->evaluate('start_of_month()', []))->toBe(now()->utc()->startOfMonth()->toDateString())
+        ->and($this->eval->evaluate('start_of_month(1)', []))->toBe(now()->utc()->subMonthNoOverflow()->startOfMonth()->toDateString())
+        ->and($this->eval->evaluate('start_of_year()', []))->toBe(now()->utc()->startOfYear()->toDateString());
+});
+
 /* --------------------------- robustness ----------------------------- */
 
 it('throws on unknown functions so callers can fall back', function () {

@@ -22,7 +22,7 @@ const trend = computed(() =>
     computeTrend(
         value.value,
         props.data?.compare_value,
-        (props.block as { delta_good?: 'up' | 'down' }).delta_good ?? 'up',
+        props.block.delta_good ?? 'up',
     ),
 );
 
@@ -56,8 +56,8 @@ const formatted = computed(() => {
                 {{ block.label }}
             </p>
             <RuntimeIcon
-                v-if="(block as { icon?: string }).icon"
-                :name="(block as { icon?: string }).icon"
+                v-if="block.icon"
+                :name="block.icon"
                 :size="16"
                 :class="t.textSubtle"
             />

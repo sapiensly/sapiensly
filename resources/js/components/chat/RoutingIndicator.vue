@@ -13,8 +13,14 @@ const props = defineProps<{
 
 const isExpanded = ref(false);
 
+const routingAction = computed<'knowledge' | 'action' | 'direct' | undefined>(
+    () =>
+        (props.routing as { action?: 'knowledge' | 'action' | 'direct' })
+            .action,
+);
+
 const agentLabel = computed(() => {
-    switch (props.routing.action) {
+    switch (routingAction.value) {
         case 'knowledge':
             return 'Knowledge Agent';
         case 'action':
@@ -27,7 +33,7 @@ const agentLabel = computed(() => {
 });
 
 const agentIcon = computed(() => {
-    switch (props.routing.action) {
+    switch (routingAction.value) {
         case 'knowledge':
             return Brain;
         case 'action':

@@ -33,6 +33,16 @@ const emit = defineEmits<{
 // in runtime/blocks/RichTextEditor.vue.
 let editing = false;
 
+// The tiptap-markdown extension augments the editor storage with a `markdown`
+// namespace at runtime, but its types don't surface on TipTap's `Storage`.
+function getEditorMarkdown(): string {
+    return (
+        editor.storage as unknown as {
+            markdown: { getMarkdown: () => string };
+        }
+    ).markdown.getMarkdown();
+}
+
 const editor = new Editor({
     // The Markdown extension parses a markdown string passed as `content` into
     // the ProseMirror document, so the editor opens already showing formatting.
@@ -63,9 +73,9 @@ const editor = new Editor({
             class: 'tiptap-content prose prose-sm dark:prose-invert max-w-none min-h-[24rem] p-4 focus:outline-none',
         },
     },
-    onUpdate({ editor }) {
+    onUpdate() {
         editing = true;
-        emit('update:modelValue', editor.storage.markdown.getMarkdown());
+        emit('update:modelValue', getEditorMarkdown());
         Promise.resolve().then(() => {
             editing = false;
         });
@@ -76,7 +86,7 @@ watch(
     () => props.modelValue,
     (value) => {
         if (editing) return;
-        if (editor.storage.markdown.getMarkdown() === value) return;
+        if (getEditorMarkdown() === value) return;
         editor.commands.setContent(value || '', { emitUpdate: false });
     },
 );

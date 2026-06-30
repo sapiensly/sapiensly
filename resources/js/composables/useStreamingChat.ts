@@ -11,6 +11,17 @@ export interface FlowMenuEvent {
     options: { id: string; label: string }[];
 }
 
+/**
+ * StreamChunk variant that also carries the bot-flow event fields
+ * (`flow_menu` / `flow_message` / `flow_end`) emitted by the SSE endpoint.
+ */
+interface FlowStreamChunk extends Omit<StreamChunk, 'type'> {
+    type?: StreamChunk['type'] | 'flow_menu' | 'flow_message' | 'flow_end';
+    options?: { id: string; label: string }[];
+    message?: string;
+    action?: string;
+}
+
 export interface StreamCallbacks {
     onChunk: (content: string) => void;
     onComplete: () => void;
@@ -127,7 +138,7 @@ export function useStreamingChat() {
                         }
 
                         try {
-                            const data: StreamChunk = JSON.parse(payload);
+                            const data: FlowStreamChunk = JSON.parse(payload);
 
                             if (data.error) {
                                 error.value = data.error;
@@ -174,12 +185,23 @@ export function useStreamingChat() {
                                 };
                                 knowledgeBases.value.push(kb);
                                 onKnowledgeBase?.(kb);
-                            } else if (data.type === 'flow_menu' && data.options) {
-                                onFlowMenu?.({ message: data.message, options: data.options });
-                            } else if (data.type === 'flow_message' && data.content) {
+                            } else if (
+                                data.type === 'flow_menu' &&
+                                data.options
+                            ) {
+                                onFlowMenu?.({
+                                    message: data.message ?? '',
+                                    options: data.options,
+                                });
+                            } else if (
+                                data.type === 'flow_message' &&
+                                data.content
+                            ) {
                                 onFlowMessage?.(data.content);
                             } else if (data.type === 'flow_end') {
-                                onFlowEnd?.(data.action ?? 'resume_conversation');
+                                onFlowEnd?.(
+                                    data.action ?? 'resume_conversation',
+                                );
                             } else if (data.content) {
                                 streamingContent.value += data.content;
                                 onChunk(data.content);
@@ -196,10 +218,11 @@ export function useStreamingChat() {
             })
             .catch((err) => {
                 if (err.name === 'AbortError') return;
-                error.value =
+                const message: string =
                     err.message || 'Connection lost. Please try again.';
+                error.value = message;
                 stopStream();
-                onError(error.value);
+                onError(message);
             });
     }
 

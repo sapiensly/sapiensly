@@ -70,6 +70,165 @@ it('loads the schema from resources/ (ships with the code, not shared storage)',
         ->and($schema['description'] ?? '')->not->toContain('MVP subset');
 });
 
+it('accepts an insight block with a computed live figure', function () {
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'insight',
+            'variant' => 'conclusion',
+            'title' => 'Clientes vs período anterior',
+            'compute' => [
+                'query' => ['object_id' => $objectId],
+                'aggregation' => 'count',
+                'compare' => ['object_id' => $objectId],
+                'delta_good' => 'up',
+            ],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
+it('accepts a stat KPI with a ratio_denominator', function () {
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'stat',
+            'label' => 'Win rate',
+            'format' => 'percentage',
+            'query' => ['object_id' => $objectId],
+            'aggregation' => 'count',
+            'ratio_denominator' => ['query' => ['object_id' => $objectId], 'aggregation' => 'count'],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
+it('accepts a previous-period compare query using date helpers', function () {
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'stat',
+            'label' => 'This month',
+            'query' => ['object_id' => $objectId, 'filter' => ['op' => 'gte', 'field_id' => 'sys_created_at', 'value_expression' => '{{start_of_month()}}']],
+            'aggregation' => 'count',
+            'compare' => ['object_id' => $objectId, 'filter' => ['op' => 'and', 'conditions' => [
+                ['op' => 'gte', 'field_id' => 'sys_created_at', 'value_expression' => '{{start_of_month(1)}}'],
+                ['op' => 'lt', 'field_id' => 'sys_created_at', 'value_expression' => '{{start_of_month()}}'],
+            ]]],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
+it('accepts a chart with a date bucket', function () {
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'dashboard', 'name' => 'Dashboard', 'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'chart', 'chart_type' => 'line', 'aggregation' => 'count',
+            'data_source' => ['object_id' => $objectId],
+            'group_by_field_id' => 'sys_created_at',
+            'bucket' => 'month',
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
+it('rejects an unknown chart bucket', function () {
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'chart', 'chart_type' => 'line', 'aggregation' => 'count',
+            'data_source' => ['object_id' => $objectId], 'bucket' => 'fortnight',
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
+it('accepts a combo chart with a secondary axis', function () {
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $nombreId = $manifest['objects'][0]['fields'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'chart',
+            'chart_type' => 'bar',
+            'aggregation' => 'count',
+            'data_source' => ['object_id' => $objectId],
+            'group_by_field_id' => $nombreId,
+            'series' => [
+                ['type' => 'bar', 'aggregation' => 'count', 'label' => 'Volume', 'axis' => 'left'],
+                ['type' => 'line', 'aggregation' => 'count', 'label' => 'Trend', 'axis' => 'right', 'color' => '#10B981'],
+            ],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
+it('rejects a combo series with an unknown mark type', function () {
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'chart', 'chart_type' => 'bar', 'aggregation' => 'count',
+            'data_source' => ['object_id' => $objectId],
+            'series' => [['type' => 'pie', 'aggregation' => 'count']],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse();
+});
+
 it('rejects missing required top-level fields', function () {
     $manifest = baseManifest();
     unset($manifest['permissions']);

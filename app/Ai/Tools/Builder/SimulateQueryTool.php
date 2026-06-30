@@ -61,10 +61,10 @@ DESC;
                 ->required(),
             'aggregation' => $schema
                 ->string()
-                ->description('Optional aggregation to compute: count|sum|avg|min|max. If set, also returns aggregation_value.'),
+                ->description('Optional aggregation to compute: count|sum|avg|min|max|distinct_count|median|p90|p95. If set, also returns aggregation_value. Use this to verify a stat/metric_grid/gauge/progress KPI before proposing it.'),
             'field_id' => $schema
                 ->string()
-                ->description('Required when aggregation is sum|avg|min|max — the numeric field to aggregate.'),
+                ->description('Required for every aggregation except count. distinct_count takes any field; sum|avg|min|max|median|p90|p95 take a numeric field.'),
         ];
     }
 

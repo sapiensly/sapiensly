@@ -332,24 +332,101 @@ class RecordQueryService
             return $this->aggregateDerived($app, $object, $builder, $aggregation, $field, $manifest);
         }
 
+        // distinct_count works on ANY field type (how many unique customers /
+        // categories / values), so it skips the numeric guard.
+        if ($aggregation === 'distinct_count') {
+            $result = $builder->selectRaw($this->sqlAggExpr('distinct_count', $this->jsonExtract('data', $field)).' as agg')->value('agg');
+
+            return (int) ($result ?? 0);
+        }
+
         if (! in_array($field['type'], ['number', 'currency', 'rating', 'slider'], true)) {
             throw new InvalidArgumentException(
                 "Aggregation '{$aggregation}' requires a numeric field, got '{$field['type']}'.",
             );
         }
 
-        $expr = $this->jsonExtract('data', $field);
-        $sqlAgg = match ($aggregation) {
+        $result = $builder
+            ->selectRaw($this->sqlAggExpr($aggregation, $this->jsonExtract('data', $field)).' as agg')
+            ->value('agg');
+
+        return $result === null ? 0 : (float) $result;
+    }
+
+    /**
+     * The aggregations the engine supports, mapped to whether they require a
+     * numeric field. `count` aggregates rows (no field); `distinct_count` counts
+     * unique values of any field; the rest fold a numeric measure.
+     */
+    public const AGGREGATIONS = ['count', 'sum', 'avg', 'min', 'max', 'distinct_count', 'median', 'p90', 'p95'];
+
+    /** Percentile aggregations → their fraction for percentile_cont. */
+    private const PERCENTILES = ['median' => 0.5, 'p90' => 0.9, 'p95' => 0.95];
+
+    /**
+     * SQL fragment for one aggregation over an already type-cast value expression.
+     * Centralised so the scalar and grouped paths stay in lockstep. `count` is
+     * handled by its callers (it needs no field), so it is not produced here.
+     */
+    private function sqlAggExpr(string $aggregation, string $expr): string
+    {
+        if (isset(self::PERCENTILES[$aggregation])) {
+            return 'percentile_cont('.self::PERCENTILES[$aggregation].") within group (order by {$expr})";
+        }
+
+        return match ($aggregation) {
             'sum' => "sum({$expr})",
             'avg' => "avg({$expr})",
             'min' => "min({$expr})",
             'max' => "max({$expr})",
+            'distinct_count' => "count(distinct {$expr})",
             default => throw new InvalidArgumentException("Unknown aggregation '{$aggregation}'."),
         };
+    }
 
-        $result = $builder->selectRaw("{$sqlAgg} as agg")->value('agg');
+    /**
+     * Fold a list of numeric values for one aggregation, mirroring sqlAggExpr for
+     * the PHP (derived-field) path. Assumes a non-empty array.
+     *
+     * @param  list<float>  $values
+     */
+    private function foldNumeric(string $aggregation, array $values): float
+    {
+        if (isset(self::PERCENTILES[$aggregation])) {
+            return $this->percentile($values, self::PERCENTILES[$aggregation]);
+        }
 
-        return $result === null ? 0 : (float) $result;
+        return match ($aggregation) {
+            'sum' => array_sum($values),
+            'avg' => array_sum($values) / count($values),
+            'min' => min($values),
+            'max' => max($values),
+            default => throw new InvalidArgumentException("Unknown aggregation '{$aggregation}'."),
+        };
+    }
+
+    /**
+     * Linear-interpolated percentile, matching Postgres percentile_cont so the
+     * derived-field path agrees with the SQL path.
+     *
+     * @param  list<float>  $values
+     */
+    private function percentile(array $values, float $fraction): float
+    {
+        sort($values);
+        $n = count($values);
+        if ($n === 1) {
+            return $values[0];
+        }
+
+        $rank = $fraction * ($n - 1);
+        $low = (int) floor($rank);
+        $high = (int) ceil($rank);
+        if ($low === $high) {
+            return $values[$low];
+        }
+
+        return $values[$low] + ($rank - $low) * ($values[$high] - $values[$low]);
     }
 
     /**
@@ -374,23 +451,27 @@ class RecordQueryService
         $this->derived->enrich($app, $object, $rows, $manifest);
 
         $slug = $field['slug'];
-        $values = $rows
+        $raw = $rows
             ->map(fn (Record $r) => $r->data[$slug] ?? null)
-            ->filter(fn ($v) => is_numeric($v))
-            ->map(fn ($v) => (float) $v)
-            ->values();
+            ->filter(fn ($v) => $v !== null && $v !== '');
 
-        if ($values->isEmpty()) {
-            return $aggregation === 'avg' ? 0 : 0;
+        // distinct_count counts unique values of any kind (e.g. a lookup of
+        // company name), so it folds the raw values, not just the numeric ones.
+        if ($aggregation === 'distinct_count') {
+            return $raw->map(fn ($v) => is_scalar($v) ? (string) $v : json_encode($v))->unique()->count();
         }
 
-        return match ($aggregation) {
-            'sum' => (float) $values->sum(),
-            'avg' => (float) $values->avg(),
-            'min' => (float) $values->min(),
-            'max' => (float) $values->max(),
-            default => throw new InvalidArgumentException("Unknown aggregation '{$aggregation}'."),
-        };
+        $values = $raw
+            ->filter(fn ($v) => is_numeric($v))
+            ->map(fn ($v) => (float) $v)
+            ->values()
+            ->all();
+
+        if ($values === []) {
+            return 0;
+        }
+
+        return $this->foldNumeric($aggregation, $values);
     }
 
     /**
@@ -495,6 +576,7 @@ class RecordQueryService
         array $manifest,
         array $context = [],
         int $limit = 100,
+        ?string $secondGroupFieldId = null,
     ): array {
         $objectId = $query['object_id'] ?? null;
         if ($objectId === null) {
@@ -503,6 +585,7 @@ class RecordQueryService
 
         $object = $this->findObject($manifest, $objectId);
         $groupField = $this->findField($object, $groupFieldId);
+        $group2Field = $secondGroupFieldId !== null ? $this->findField($object, $secondGroupFieldId) : null;
 
         if ($bucket !== null && ! in_array($groupField['type'], ['date', 'datetime'], true)) {
             throw new InvalidArgumentException('bucket is only valid for a date or datetime group field.');
@@ -521,10 +604,16 @@ class RecordQueryService
 
         // A derived metric has no SQL column to fold — group it in PHP.
         if ($aggField !== null && in_array($aggField['type'], ['formula', 'lookup', 'rollup'], true)) {
+            if ($group2Field !== null) {
+                throw new InvalidArgumentException('A two-dimension pivot requires a stored numeric/count metric, not a derived field.');
+            }
+
             return $this->groupedAggregateDerived($app, $object, $builder, $aggregation, $aggField, $groupField, $bucket, $manifest, $limit);
         }
 
-        if ($aggField !== null && ! in_array($aggField['type'], ['number', 'currency', 'rating', 'slider'], true)) {
+        // distinct_count groups any field type; only the numeric folds need the guard.
+        if ($aggField !== null && $aggregation !== 'distinct_count'
+            && ! in_array($aggField['type'], ['number', 'currency', 'rating', 'slider'], true)) {
             throw new InvalidArgumentException(
                 "Aggregation '{$aggregation}' requires a numeric field, got '{$aggField['type']}'.",
             );
@@ -536,13 +625,26 @@ class RecordQueryService
 
         $aggSql = $aggregation === 'count'
             ? 'count(*)'
-            : match ($aggregation) {
-                'sum' => 'sum('.$this->jsonExtract('data', $aggField).')',
-                'avg' => 'avg('.$this->jsonExtract('data', $aggField).')',
-                'min' => 'min('.$this->jsonExtract('data', $aggField).')',
-                'max' => 'max('.$this->jsonExtract('data', $aggField).')',
-                default => throw new InvalidArgumentException("Unknown aggregation '{$aggregation}'."),
-            };
+            : $this->sqlAggExpr($aggregation, $this->jsonExtract('data', $aggField));
+
+        $castValue = fn ($v) => in_array($aggregation, ['count', 'distinct_count'], true) ? (int) $v : (float) $v;
+
+        // Two-dimension pivot: GROUP BY both fields, returning {group, group2, value}.
+        if ($group2Field !== null) {
+            $group2Expr = $this->jsonExtract('data', $group2Field);
+            $rows = $builder->toBase()
+                ->selectRaw("{$groupExpr} as grp, {$group2Expr} as grp2, {$aggSql} as val")
+                ->groupByRaw("{$groupExpr}, {$group2Expr}")
+                ->orderByRaw("{$groupExpr}, {$group2Expr}")
+                ->limit($limit)
+                ->get();
+
+            return $rows->map(fn ($r) => [
+                'group' => $r->grp,
+                'group2' => $r->grp2,
+                'value' => $castValue($r->val),
+            ])->all();
+        }
 
         $rows = $builder->toBase()
             ->selectRaw("{$groupExpr} as grp, {$aggSql} as val")
@@ -553,7 +655,7 @@ class RecordQueryService
 
         return $rows->map(fn ($r) => [
             'group' => $r->grp,
-            'value' => $aggregation === 'count' ? (int) $r->val : (float) $r->val,
+            'value' => $castValue($r->val),
         ])->all();
     }
 
@@ -583,10 +685,22 @@ class RecordQueryService
         $this->derived->enrich($app, $object, $rows, $manifest);
 
         $aggSlug = $aggField['slug'];
+        $isDistinct = $aggregation === 'distinct_count';
         $buckets = [];
         foreach ($rows as $row) {
             $group = $this->groupValueFor($row, $groupField, $bucket);
             $value = $row->data[$aggSlug] ?? null;
+            // distinct_count folds raw values of any type; the numeric folds skip
+            // non-numeric values.
+            if ($isDistinct) {
+                if ($value === null || $value === '') {
+                    continue;
+                }
+                $buckets[$group] ??= [];
+                $buckets[$group][] = is_scalar($value) ? (string) $value : json_encode($value);
+
+                continue;
+            }
             if (! is_numeric($value)) {
                 continue;
             }
@@ -599,13 +713,7 @@ class RecordQueryService
         foreach ($buckets as $group => $values) {
             $out[] = [
                 'group' => $group === '' ? null : $group,
-                'value' => match ($aggregation) {
-                    'sum' => array_sum($values),
-                    'avg' => array_sum($values) / count($values),
-                    'min' => min($values),
-                    'max' => max($values),
-                    default => throw new InvalidArgumentException("Unknown aggregation '{$aggregation}'."),
-                },
+                'value' => $isDistinct ? count(array_unique($values)) : $this->foldNumeric($aggregation, $values),
             ];
             if (count($out) >= $limit) {
                 break;

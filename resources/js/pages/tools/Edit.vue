@@ -21,9 +21,15 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
+    DatabaseConfig,
+    FunctionConfig,
+    GraphqlConfig,
     HttpConnectionOption,
+    McpConfig,
     OAuth2IntegrationOption,
+    RestApiConfig,
     Tool,
+    ToolConfig,
     ToolReference,
     ToolTypeOption,
 } from '@/types/tools';
@@ -55,12 +61,58 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const form = useForm({
+interface ToolEditForm {
+    name: string;
+    description: string;
+    status: Tool['status'];
+    config: ToolConfig;
+    tool_ids: string[];
+}
+
+const form = useForm<ToolEditForm>({
     name: props.tool.name,
     description: props.tool.description ?? '',
     status: props.tool.status,
     config: props.tool.config ?? {},
     tool_ids: props.tool.group_items?.map((item) => item.tool_id) ?? [],
+});
+
+// `form.config` is the union of every tool-type config; each config editor
+// wants its own concrete shape, so expose narrowed two-way views keyed by the
+// tool's type.
+const functionConfig = computed<FunctionConfig>({
+    get: () => form.config as FunctionConfig,
+    set: (value) => {
+        form.config = value;
+    },
+});
+
+const mcpConfig = computed<McpConfig>({
+    get: () => form.config as McpConfig,
+    set: (value) => {
+        form.config = value;
+    },
+});
+
+const restApiConfig = computed<RestApiConfig>({
+    get: () => form.config as RestApiConfig,
+    set: (value) => {
+        form.config = value;
+    },
+});
+
+const graphqlConfig = computed<GraphqlConfig>({
+    get: () => form.config as GraphqlConfig,
+    set: (value) => {
+        form.config = value;
+    },
+});
+
+const databaseConfig = computed<DatabaseConfig>({
+    get: () => form.config as DatabaseConfig,
+    set: (value) => {
+        form.config = value;
+    },
 });
 
 const statusOptions = computed(() => [
@@ -92,8 +144,12 @@ const typeIconMap: Record<string, Component> = {
     database: Database,
 };
 
-const typeTint = computed(() => typeTintMap[props.tool.type] ?? 'var(--sp-accent-blue)');
-const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code);
+const typeTint = computed(
+    () => typeTintMap[props.tool.type] ?? 'var(--sp-accent-blue)',
+);
+const typeIcon = computed<Component>(
+    () => typeIconMap[props.tool.type] ?? Code,
+);
 </script>
 
 <template>
@@ -134,7 +190,9 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
                         <Textarea
                             id="description"
                             v-model="form.description"
-                            :placeholder="t('tools.edit.description_placeholder')"
+                            :placeholder="
+                                t('tools.edit.description_placeholder')
+                            "
                             rows="3"
                             class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
@@ -174,13 +232,13 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
                 >
                     <FunctionToolConfig
                         v-if="tool.type === 'function'"
-                        v-model:config="form.config"
+                        v-model:config="functionConfig"
                         :errors="form.errors"
                     />
 
                     <McpToolConfig
                         v-else-if="tool.type === 'mcp'"
-                        v-model:config="form.config"
+                        v-model:config="mcpConfig"
                         :errors="form.errors"
                         :oauth2-integrations="oauth2Integrations"
                         :oauth2-authorize-url="oauth2AuthorizeUrl"
@@ -188,21 +246,21 @@ const typeIcon = computed<Component>(() => typeIconMap[props.tool.type] ?? Code)
 
                     <RestApiToolConfig
                         v-else-if="tool.type === 'rest_api'"
-                        v-model:config="form.config"
+                        v-model:config="restApiConfig"
                         :connections="httpConnections"
                         :errors="form.errors"
                     />
 
                     <GraphqlToolConfig
                         v-else-if="tool.type === 'graphql'"
-                        v-model:config="form.config"
+                        v-model:config="graphqlConfig"
                         :connections="httpConnections"
                         :errors="form.errors"
                     />
 
                     <DatabaseToolConfig
                         v-else-if="tool.type === 'database'"
-                        v-model:config="form.config"
+                        v-model:config="databaseConfig"
                         :connections="dbConnections"
                         :errors="form.errors"
                     />

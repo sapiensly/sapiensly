@@ -323,6 +323,11 @@ class ExpressionResolver
             'lower' => is_string($args[0] ?? null) ? mb_strtolower($args[0]) : null,
             'concat' => $this->fnConcat($args),
             'default' => $args[0] ?? ($args[1] ?? null),
+            'days_ago' => now()->utc()->subDays((int) ($args[0] ?? 0))->toDateString(),
+            'months_ago' => now()->utc()->subMonthsNoOverflow((int) ($args[0] ?? 0))->toDateString(),
+            'start_of_week' => now()->utc()->subWeeks((int) ($args[0] ?? 0))->startOfWeek()->toDateString(),
+            'start_of_month' => now()->utc()->subMonthsNoOverflow((int) ($args[0] ?? 0))->startOfMonth()->toDateString(),
+            'start_of_year' => now()->utc()->subYears((int) ($args[0] ?? 0))->startOfYear()->toDateString(),
             default => null,
         };
     }

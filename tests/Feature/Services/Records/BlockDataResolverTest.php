@@ -80,6 +80,74 @@ it('resolves a table block and a stat block side by side', function () {
         ->and($data['blk_stat']['value'])->toBe(100.0);
 });
 
+it('computes a live figure and comparison for an insight block', function () {
+    Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $this->object['id'], 'data' => ['nombre' => 'Beto', 'monto' => 300]]);
+
+    $blocks = [[
+        'id' => 'blk_insight',
+        'type' => 'insight',
+        'variant' => 'conclusion',
+        'title' => 'Pipeline',
+        'compute' => [
+            'query' => ['object_id' => $this->object['id']],
+            'aggregation' => 'sum',
+            'field_id' => $this->amountField['id'],
+            'compare' => ['object_id' => $this->object['id'], 'filter' => ['op' => 'eq', 'field_id' => $this->nameField['id'], 'value' => 'Nobody']],
+            'delta_good' => 'up',
+        ],
+    ]];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect((float) $data['blk_insight']['value'])->toBe(400.0)        // 100 + 300
+        ->and((float) $data['blk_insight']['compare_value'])->toBe(0.0); // nothing matches "Nobody"
+});
+
+it('computes a ratio KPI (numerator over denominator)', function () {
+    // 4 records, 1 of them "Ana" → ratio of Ana-records to all = 0.25.
+    Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $this->object['id'], 'data' => ['nombre' => 'Beto', 'monto' => 0]]);
+    Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $this->object['id'], 'data' => ['nombre' => 'Caro', 'monto' => 0]]);
+    Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $this->object['id'], 'data' => ['nombre' => 'Dani', 'monto' => 0]]);
+
+    $blocks = [[
+        'id' => 'blk_rate',
+        'type' => 'stat',
+        'label' => 'Ana share',
+        'format' => 'percentage',
+        'query' => ['object_id' => $this->object['id'], 'filter' => ['op' => 'eq', 'field_id' => $this->nameField['id'], 'value' => 'Ana']],
+        'aggregation' => 'count',
+        'ratio_denominator' => ['query' => ['object_id' => $this->object['id']], 'aggregation' => 'count'],
+    ]];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data['blk_rate']['value'])->toBe(0.25)            // 1 Ana / 4 total
+        ->and($data['blk_rate'])->not->toHaveKey('compare_value'); // ratios omit the trend chip
+});
+
+it('guards a ratio KPI against division by zero', function () {
+    $blocks = [[
+        'id' => 'blk_zero',
+        'type' => 'stat',
+        'label' => 'Empty rate',
+        'query' => ['object_id' => $this->object['id']],
+        'aggregation' => 'count',
+        'ratio_denominator' => ['query' => ['object_id' => $this->object['id'], 'filter' => ['op' => 'eq', 'field_id' => $this->nameField['id'], 'value' => 'Nobody']], 'aggregation' => 'count'],
+    ]];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data['blk_zero']['value'])->toBe(0); // denominator 0 → 0, not a crash
+});
+
+it('returns no server data for a static insight with no compute', function () {
+    $blocks = [['id' => 'blk_static', 'type' => 'insight', 'title' => 'Note', 'body' => 'Just text', 'metric' => '+34%']];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data)->not->toHaveKey('blk_static'); // null payload → not in the map
+});
+
 it('does not crash when a stat block references a missing field_id', function () {
     $blocks = [
         [

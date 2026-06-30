@@ -196,6 +196,48 @@ it('adds a currency sum KPI to the dashboard', function () {
     expect($sumKpi['field_id'])->toBe($totalField['id']);
 });
 
+it('adds an average currency KPI alongside the total', function () {
+    $manifest = scaffoldFor('en');
+    $metrics = blockByType(pageBySlug($manifest, 'dashboard'), 'metric_grid');
+
+    $avgKpi = collect($metrics['items'])->firstWhere('aggregation', 'avg');
+    expect($avgKpi)->not->toBeNull();
+    expect($avgKpi['format'])->toBe('currency');
+    expect($avgKpi['label'])->toBe('Comandas average');
+
+    $totalField = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'total');
+    expect($avgKpi['field_id'])->toBe($totalField['id']);
+});
+
+it('leads the dashboard breakdown with a donut and adds a growth trend', function () {
+    $manifest = scaffoldFor('es-MX');
+    $dashboard = pageBySlug($manifest, 'dashboard');
+
+    // The first chart stays the status breakdown, now a share-friendly donut.
+    $chart = blockByType($dashboard, 'chart');
+    expect($chart['chart_type'])->toBe('donut');
+    expect($chart['label'])->toBe('Comandas por estado');
+
+    // A sparkline trend over the always-present sys_created_at system field.
+    $trend = blockByType($dashboard, 'sparkline');
+    expect($trend)->not->toBeNull();
+    expect($trend['x_field_id'])->toBe('sys_created_at');
+    expect($trend['label'])->toBe('Comandas en el tiempo');
+});
+
+it('adds a value-by-status bar for a money object', function () {
+    $manifest = scaffoldFor('en');
+    $charts = blocksByType(pageBySlug($manifest, 'dashboard'), 'chart');
+
+    $valueBar = collect($charts)->first(fn (array $c): bool => ($c['aggregation'] ?? null) === 'sum');
+    expect($valueBar)->not->toBeNull();
+    expect($valueBar['chart_type'])->toBe('bar');
+    expect($valueBar['label'])->toBe('Comandas value by status');
+
+    $totalField = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'total');
+    expect($valueBar['y_field_id'])->toBe($totalField['id']);
+});
+
 it('builds a master-detail page for a parent with children', function () {
     $manifest = scaffoldWithChild('es-MX');
 

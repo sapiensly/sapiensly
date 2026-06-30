@@ -2,15 +2,34 @@
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import type { PaginatedKnowledgeBases } from '@/types/knowledge-base';
+import type {
+    KnowledgeBase,
+    PaginatedKnowledgeBases,
+} from '@/types/knowledge-base';
 import { Head, Link } from '@inertiajs/vue3';
 import { Database, FileText, Plus } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
+/**
+ * The index controller serialises a combined `total_documents_count`
+ * (legacy + attached) that the shared `KnowledgeBase` type does not declare.
+ */
+interface KnowledgeBaseListItem extends KnowledgeBase {
+    total_documents_count?: number;
+    attached_documents_count?: number;
+}
+
+interface PaginatedKnowledgeBaseList extends Omit<
+    PaginatedKnowledgeBases,
+    'data'
+> {
+    data: KnowledgeBaseListItem[];
+}
+
 interface Props {
-    knowledgeBases: PaginatedKnowledgeBases;
+    knowledgeBases: PaginatedKnowledgeBaseList;
 }
 
 defineProps<Props>();
@@ -64,7 +83,10 @@ function tintFor(status: string) {
                 <p class="mt-1 text-xs text-ink-muted">
                     {{ t('knowledge_bases.index.no_kbs_description') }}
                 </p>
-                <Link :href="KnowledgeBaseController.create().url" class="mt-4 inline-block">
+                <Link
+                    :href="KnowledgeBaseController.create().url"
+                    class="mt-4 inline-block"
+                >
                     <button
                         type="button"
                         class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
@@ -79,7 +101,10 @@ function tintFor(status: string) {
                 <Link
                     v-for="kb in knowledgeBases.data"
                     :key="kb.id"
-                    :href="KnowledgeBaseController.show({ knowledge_base: kb.id }).url"
+                    :href="
+                        KnowledgeBaseController.show({ knowledge_base: kb.id })
+                            .url
+                    "
                     class="flex flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
                 >
                     <div class="flex items-start justify-between gap-3">
@@ -90,7 +115,9 @@ function tintFor(status: string) {
                                 <Database class="size-4" />
                             </div>
                             <div class="min-w-0">
-                                <h3 class="truncate text-sm font-semibold text-ink">
+                                <h3
+                                    class="truncate text-sm font-semibold text-ink"
+                                >
                                     {{ kb.name }}
                                 </h3>
                                 <p

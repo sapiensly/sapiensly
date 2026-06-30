@@ -2,11 +2,11 @@
 import { Check, ChevronLeft } from '@lucide/vue';
 import { computed, inject, ref, type Ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
-import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
+import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import FormFieldInput from './FormFieldInput.vue';
-import { initialFieldValue } from './formFieldDefault';
 import { evaluateFieldCondition, type FieldCondition } from './fieldCondition';
+import { initialFieldValue } from './formFieldDefault';
 
 interface StepFieldConfig {
     field_id: string;
@@ -66,7 +66,10 @@ function deriveSlugFromUrl(): string {
 
 // Forwarded as `params` at submit time so a modal-hosted multi_step_form
 // can resolve {{params.record_id}} on its edit-mode record_id_expression.
-const modalParams = inject<Ref<Record<string, unknown>> | null>('modalParams', null);
+const modalParams = inject<Ref<Record<string, unknown>> | null>(
+    'modalParams',
+    null,
+);
 
 // Drop the card chrome when the form lives inside a modal (same reasoning
 // as BlockForm).
@@ -98,14 +101,18 @@ function slugForFieldId(fieldId: string): string | undefined {
     return object.value?.fields.find((f) => f.id === fieldId)?.slug;
 }
 
-const readonlyMap = computed<Record<string, boolean>>(() => props.data?.form?.readonly ?? {});
+const readonlyMap = computed<Record<string, boolean>>(
+    () => props.data?.form?.readonly ?? {},
+);
 
 /** Flatten a single step into the field descriptors the renderer uses. */
 function fieldsForStep(step: Step): RenderedField[] {
     if (!object.value) return [];
     return step.fields
-        .map((sf) => {
-            const field = object.value!.fields.find((f) => f.id === sf.field_id);
+        .map((sf): RenderedField | null => {
+            const field = object.value!.fields.find(
+                (f) => f.id === sf.field_id,
+            );
             if (!field) return null;
             return {
                 fieldId: sf.field_id,
@@ -113,7 +120,9 @@ function fieldsForStep(step: Step): RenderedField[] {
                 label: sf.label_override ?? field.name,
                 type: field.type,
                 field,
-                required: Boolean((field as unknown as { required?: boolean }).required),
+                required: Boolean(
+                    (field as unknown as { required?: boolean }).required,
+                ),
                 readonly: Boolean(readonlyMap.value[field.slug]),
                 visible_if: sf.visible_if,
                 required_if: sf.required_if,
@@ -128,8 +137,12 @@ const allFields = computed<RenderedField[]>(() =>
 
 const currentStepIndex = ref(0);
 const currentStep = computed(() => props.block.steps[currentStepIndex.value]);
-const currentStepFields = computed(() => fieldsForStep(currentStep.value).filter(isVisible));
-const isLastStep = computed(() => currentStepIndex.value === props.block.steps.length - 1);
+const currentStepFields = computed(() =>
+    fieldsForStep(currentStep.value).filter(isVisible),
+);
+const isLastStep = computed(
+    () => currentStepIndex.value === props.block.steps.length - 1,
+);
 const isFirstStep = computed(() => currentStepIndex.value === 0);
 
 const formData = ref<Record<string, unknown>>(initialState());
@@ -141,20 +154,25 @@ function initialState(): Record<string, unknown> {
     const state: Record<string, unknown> = {};
     const defaults = props.data?.form?.defaults ?? {};
     for (const f of allFields.value) {
-        state[f.slug] = f.slug in defaults ? defaults[f.slug] : initialFieldValue(f.field);
+        state[f.slug] =
+            f.slug in defaults ? defaults[f.slug] : initialFieldValue(f.field);
     }
     return state;
 }
 
 /** Whether a field passes its visible_if condition (always visible when none set). */
 function isVisible(rf: RenderedField): boolean {
-    return rf.visible_if ? evaluateFieldCondition(rf.visible_if, formData.value, slugForFieldId) : true;
+    return rf.visible_if
+        ? evaluateFieldCondition(rf.visible_if, formData.value, slugForFieldId)
+        : true;
 }
 
 /** Effective required: the field's own flag OR a satisfied required_if condition. */
 function isRequired(rf: RenderedField): boolean {
     if (rf.required) return true;
-    return rf.required_if ? evaluateFieldCondition(rf.required_if, formData.value, slugForFieldId) : false;
+    return rf.required_if
+        ? evaluateFieldCondition(rf.required_if, formData.value, slugForFieldId)
+        : false;
 }
 
 const showProgress = computed(() => props.block.show_progress !== false);
@@ -170,11 +188,16 @@ function canAdvance(): boolean {
     for (const f of currentStepFields.value) {
         if (!isRequired(f)) continue;
         const v = formData.value[f.slug];
-        const empty = v === null
-            || v === undefined
-            || v === ''
-            || (Array.isArray(v) && v.length === 0)
-            || (typeof v === 'object' && v !== null && 'from' in v && (v as { from?: string; to?: string }).from === '' && (v as { from?: string; to?: string }).to === '');
+        const empty =
+            v === null ||
+            v === undefined ||
+            v === '' ||
+            (Array.isArray(v) && v.length === 0) ||
+            (typeof v === 'object' &&
+                v !== null &&
+                'from' in v &&
+                (v as { from?: string; to?: string }).from === '' &&
+                (v as { from?: string; to?: string }).to === '');
         if (empty) missing.push(f.label);
     }
     if (missing.length > 0) {
@@ -207,7 +230,9 @@ async function submit() {
 
     // Submit only currently-visible fields, so a conditionally-hidden field
     // never writes a stale value.
-    const visibleSlugs = new Set(allFields.value.filter(isVisible).map((f) => f.slug));
+    const visibleSlugs = new Set(
+        allFields.value.filter(isVisible).map((f) => f.slug),
+    );
     const payload: Record<string, unknown> = {};
     for (const [slug, value] of Object.entries(formData.value)) {
         if (visibleSlugs.has(slug)) payload[slug] = value;
@@ -234,18 +259,16 @@ async function submit() {
 }
 
 async function cancel() {
-    await execute(
-        (props.block.on_cancel ?? []) as RuntimeAction[],
-        { appSlug, form: { ...formData.value }, params: modalParams?.value ?? {} },
-    );
+    await execute((props.block.on_cancel ?? []) as RuntimeAction[], {
+        appSlug,
+        form: { ...formData.value },
+        params: modalParams?.value ?? {},
+    });
 }
 </script>
 
 <template>
-    <form
-        :class="wrapperClass"
-        @submit.prevent="submit"
-    >
+    <form :class="wrapperClass" @submit.prevent="submit">
         <!-- Progress indicator: clickable bubbles for steps the user has already passed. -->
         <ol v-if="showProgress" class="flex flex-wrap items-center gap-2">
             <li
@@ -255,15 +278,17 @@ async function cancel() {
             >
                 <button
                     type="button"
-                    @click="idx < currentStepIndex ? currentStepIndex = idx : null"
+                    @click="
+                        idx < currentStepIndex ? (currentStepIndex = idx) : null
+                    "
                     :disabled="idx > currentStepIndex"
                     :class="[
                         'flex items-center gap-2 rounded-pill px-2.5 py-1 text-[11px] transition-colors',
                         idx === currentStepIndex
                             ? 'bg-accent-blue/15 text-accent-blue'
                             : idx < currentStepIndex
-                                ? 'text-ink-muted hover:text-ink'
-                                : 'text-ink-subtle opacity-50',
+                              ? 'text-ink-muted hover:text-ink'
+                              : 'text-ink-subtle opacity-50',
                     ]"
                 >
                     <span
@@ -272,8 +297,8 @@ async function cancel() {
                             idx === currentStepIndex
                                 ? 'bg-accent-blue text-white'
                                 : idx < currentStepIndex
-                                    ? 'bg-accent-blue/20 text-accent-blue'
-                                    : 'bg-surface-hover text-ink-subtle',
+                                  ? 'bg-accent-blue/20 text-accent-blue'
+                                  : 'bg-surface-hover text-ink-subtle',
                         ]"
                     >
                         <Check v-if="idx < currentStepIndex" class="size-3" />
@@ -283,26 +308,44 @@ async function cancel() {
                 </button>
                 <span
                     v-if="idx < block.steps.length - 1"
-                    :class="['text-ink-subtle', idx < currentStepIndex ? 'opacity-100' : 'opacity-30']"
-                >·</span>
+                    :class="[
+                        'text-ink-subtle',
+                        idx < currentStepIndex ? 'opacity-100' : 'opacity-30',
+                    ]"
+                    >·</span
+                >
             </li>
         </ol>
 
         <!-- Step header. -->
         <header v-if="currentStep" class="space-y-1">
-            <h3 :class="['text-sm font-semibold', t.text]">{{ currentStep.title }}</h3>
-            <p v-if="currentStep.description" :class="['text-xs', t.textMuted]">{{ currentStep.description }}</p>
+            <h3 :class="['text-sm font-semibold', t.text]">
+                {{ currentStep.title }}
+            </h3>
+            <p v-if="currentStep.description" :class="['text-xs', t.textMuted]">
+                {{ currentStep.description }}
+            </p>
         </header>
 
         <!-- Fields of the current step. -->
         <div class="space-y-4">
-            <div v-for="rf in currentStepFields" :key="rf.fieldId" class="space-y-1.5">
-                <label :for="`msf_${block.id}_${rf.slug}`" :class="['text-xs', t.textMuted]">
+            <div
+                v-for="rf in currentStepFields"
+                :key="rf.fieldId"
+                class="space-y-1.5"
+            >
+                <label
+                    :for="`msf_${block.id}_${rf.slug}`"
+                    :class="['text-xs', t.textMuted]"
+                >
                     {{ rf.label }}
                     <span v-if="isRequired(rf)" class="text-red-400">*</span>
                 </label>
 
-                <div :inert="rf.readonly" :class="rf.readonly ? 'opacity-60' : ''">
+                <div
+                    :inert="rf.readonly"
+                    :class="rf.readonly ? 'opacity-60' : ''"
+                >
                     <FormFieldInput
                         :field="rf.field"
                         :input-id="`msf_${block.id}_${rf.slug}`"
@@ -311,13 +354,19 @@ async function cancel() {
                     />
                 </div>
 
-                <p v-for="msg in fieldErrors[rf.slug] ?? []" :key="msg" class="text-[11px] text-red-400">
+                <p
+                    v-for="msg in fieldErrors[rf.slug] ?? []"
+                    :key="msg"
+                    class="text-[11px] text-red-400"
+                >
                     {{ msg }}
                 </p>
             </div>
         </div>
 
-        <p v-if="stepError" class="text-[11px] text-amber-400">{{ stepError }}</p>
+        <p v-if="stepError" class="text-[11px] text-amber-400">
+            {{ stepError }}
+        </p>
 
         <!-- Navigation. -->
         <div class="flex items-center justify-between gap-2 pt-2">
@@ -325,7 +374,10 @@ async function cancel() {
                 v-if="!isFirstStep"
                 type="button"
                 @click="back"
-                :class="['inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs transition-colors hover:bg-surface-hover', t.text]"
+                :class="[
+                    'inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs transition-colors hover:bg-surface-hover',
+                    t.text,
+                ]"
             >
                 <ChevronLeft class="size-3" />
                 Back
@@ -337,7 +389,10 @@ async function cancel() {
                     v-if="block.on_cancel && block.on_cancel.length > 0"
                     type="button"
                     @click="cancel"
-                    :class="['inline-flex items-center rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs transition-colors hover:bg-surface-hover', t.text]"
+                    :class="[
+                        'inline-flex items-center rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs transition-colors hover:bg-surface-hover',
+                        t.text,
+                    ]"
                 >
                     {{ block.cancel_label ?? 'Cancel' }}
                 </button>

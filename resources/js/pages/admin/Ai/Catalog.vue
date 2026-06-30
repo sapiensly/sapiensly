@@ -35,7 +35,15 @@ import { Head, router } from '@inertiajs/vue3';
 import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-const props = defineProps<{ models: AiModel[] }>();
+/**
+ * The catalog endpoint also serialises an editable `label` (broker rows can
+ * rename their model) which the shared `AiModel` type does not declare.
+ */
+interface CatalogModel extends AiModel {
+    label: string;
+}
+
+const props = defineProps<{ models: CatalogModel[] }>();
 const { t } = useI18n();
 
 const filter = ref<'all' | 'chat' | 'embedding'>('all');
@@ -77,7 +85,7 @@ const availableDrivers = computed(() => [
     ),
 ]);
 
-function matches(model: AiModel, query: string): boolean {
+function matches(model: CatalogModel, query: string): boolean {
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -171,7 +179,7 @@ async function testModel(model: AiModel) {
 const editingId = ref<string | null>(null);
 const editLabel = ref('');
 
-function startEdit(model: AiModel) {
+function startEdit(model: CatalogModel) {
     editingId.value = model.id;
     editLabel.value = model.label;
 }
@@ -188,7 +196,7 @@ function cancelEdit() {
     editingId.value = null;
 }
 
-function saveEdit(model: AiModel) {
+function saveEdit(model: CatalogModel) {
     if (editingId.value !== model.id) return;
     const next = editLabel.value.trim();
     editingId.value = null;

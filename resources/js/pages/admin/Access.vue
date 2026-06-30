@@ -13,18 +13,18 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import {
     Key,
-    NavAccess as ShieldIcon,
     Plug,
     Shield,
+    NavAccess as ShieldIcon,
     Zap,
 } from '@/lib/admin/icons';
 import type { AccessProps } from '@/lib/admin/types';
+import type { RequestPayload } from '@inertiajs/core';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -36,7 +36,7 @@ const { t } = useI18n();
 // Local optimistic copies — reset back to props on server error.
 const form = ref({ ...props.settings });
 
-function sendPatch(payload: Record<string, unknown>, rollback?: () => void) {
+function sendPatch(payload: RequestPayload, rollback?: () => void) {
     router.patch('/admin/access', payload, {
         preserveScroll: true,
         preserveState: true,
@@ -113,7 +113,8 @@ function cancelTwoFactor() {
 }
 
 // ── Chips ───────────────────────────────────────────────────────────────
-const DOMAIN_REGEX = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+const DOMAIN_REGEX =
+    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
 function updateDomainAllowlist(next: string[]) {
     const prev = form.value.domainAllowlist;
@@ -165,7 +166,7 @@ function commitSessionLifetime() {
     <AdminLayout :title="t('admin.nav.access')">
         <div class="mx-auto max-w-5xl space-y-6">
             <header class="space-y-1">
-                <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                <h1 class="text-[22px] leading-tight font-semibold text-ink">
                     {{ t('admin.access.heading') }}
                 </h1>
                 <p class="text-xs text-ink-muted">
@@ -182,13 +183,17 @@ function commitSessionLifetime() {
                 <ToggleRow
                     :model-value="form.registrationOpen"
                     :label="t('admin.access.registration.open_label')"
-                    :description="t('admin.access.registration.open_description')"
+                    :description="
+                        t('admin.access.registration.open_description')
+                    "
                     @update:model-value="toggleRegistration"
                 />
                 <ToggleRow
                     :model-value="form.emailVerificationRequired"
                     :label="t('admin.access.registration.verify_label')"
-                    :description="t('admin.access.registration.verify_description')"
+                    :description="
+                        t('admin.access.registration.verify_description')
+                    "
                     @update:model-value="toggleEmailVerification"
                 />
             </SettingsCard>
@@ -291,7 +296,9 @@ function commitSessionLifetime() {
 
         <!-- Warning modal for 2FA-required toggle -->
         <AlertDialog v-model:open="twoFactorWarningOpen">
-            <AlertDialogContent class="rounded-sp-sm border-sp-warning/30 bg-navy">
+            <AlertDialogContent
+                class="rounded-sp-sm border-sp-warning/30 bg-navy"
+            >
                 <AlertDialogHeader>
                     <AlertDialogTitle class="text-ink">
                         {{ t('admin.access.auth.two_factor_warning_title') }}

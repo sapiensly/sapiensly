@@ -11,7 +11,6 @@ import KnowledgeAgentConfig from '@/components/standalone-agents/KnowledgeAgentC
 import TriageAgentConfig from '@/components/standalone-agents/TriageAgentConfig.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import {
     Select,
     SelectContent,
@@ -19,6 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
@@ -48,6 +48,38 @@ interface Props {
 
 const props = defineProps<Props>();
 
+interface AgentFormConfig {
+    temperature?: number;
+    guardrails?: {
+        content_filters?: boolean;
+    };
+    rag_params?: {
+        chunk_size?: number;
+        top_k?: number;
+        similarity_threshold?: number;
+    };
+    tool_execution?: {
+        timeout?: number;
+        retry_count?: number;
+    };
+    web_search?: {
+        max_results?: number | null;
+    };
+}
+
+interface AgentFormData {
+    type: AgentType;
+    name: string;
+    description: string;
+    keywords: string[];
+    prompt_template: string;
+    model: string;
+    web_search: boolean;
+    config: AgentFormConfig;
+    knowledge_base_ids: string[];
+    tool_ids: string[];
+}
+
 const currentType = ref<AgentType | null>(props.selectedType);
 
 const currentTypeLabel = computed(() => {
@@ -61,7 +93,7 @@ const headingTitle = computed(() => {
     return `${t('agents.create.heading')}: ${currentTypeLabel.value}`;
 });
 
-const form = useForm({
+const form = useForm<AgentFormData>({
     type: props.selectedType ?? 'general',
     name: '',
     description: '',
@@ -69,7 +101,7 @@ const form = useForm({
     prompt_template: '',
     model: '',
     web_search: false,
-    config: {} as Record<string, unknown>,
+    config: {},
     knowledge_base_ids: [] as string[],
     tool_ids: [] as string[],
 });
@@ -87,7 +119,7 @@ const selectType = (type: AgentType) => {
     form.prompt_template = getDefaultPromptTemplate(type);
 };
 
-const getDefaultConfig = (type: AgentType): Record<string, unknown> => {
+const getDefaultConfig = (type: AgentType): AgentFormConfig => {
     switch (type) {
         case 'general':
             return {
@@ -211,11 +243,14 @@ const typeIcon = computed<Component>(
 
 // Optional cap on web search results (config.web_search.max_results). Empty =
 // the provider default.
-const webSearchMaxResults = computed<number | null>({
-    get: () => (form.config as any)?.web_search?.max_results ?? null,
+const webSearchMaxResults = computed<number | undefined>({
+    get: () => form.config.web_search?.max_results ?? undefined,
     set: (value) => {
-        const config = { ...((form.config as any) ?? {}) };
-        const max = value === null || (value as unknown) === '' ? null : Number(value);
+        const config: AgentFormConfig = { ...form.config };
+        const max =
+            value === undefined || (value as unknown) === ''
+                ? null
+                : Number(value);
         config.web_search = { ...(config.web_search ?? {}), max_results: max };
         if (max === null) {
             delete config.web_search.max_results;
@@ -372,7 +407,9 @@ const webSearchMaxResults = computed<number | null>({
                             for="web_search_max_results"
                             class="text-xs font-medium text-ink"
                         >
-                            {{ t('agents.create.web_search_max_results_label') }}
+                            {{
+                                t('agents.create.web_search_max_results_label')
+                            }}
                         </Label>
                         <Input
                             id="web_search_max_results"
@@ -380,13 +417,25 @@ const webSearchMaxResults = computed<number | null>({
                             type="number"
                             min="1"
                             max="10"
-                            :placeholder="t('agents.create.web_search_max_results_placeholder')"
+                            :placeholder="
+                                t(
+                                    'agents.create.web_search_max_results_placeholder',
+                                )
+                            "
                             class="w-32"
                         />
                         <p class="text-[11px] text-ink-subtle">
-                            {{ t('agents.create.web_search_max_results_description') }}
+                            {{
+                                t(
+                                    'agents.create.web_search_max_results_description',
+                                )
+                            }}
                         </p>
-                        <InputError :message="form.errors['config.web_search.max_results']" />
+                        <InputError
+                            :message="
+                                form.errors['config.web_search.max_results']
+                            "
+                        />
                     </div>
                 </SettingsCard>
 

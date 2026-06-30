@@ -285,7 +285,7 @@ export function useActionExecutor() {
                 break;
             }
             case 'refresh':
-                router.reload({ preserveScroll: true });
+                router.reload();
                 break;
             case 'show_toast': {
                 const message =

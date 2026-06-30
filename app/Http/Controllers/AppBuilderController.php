@@ -863,7 +863,7 @@ class AppBuilderController extends Controller
         }
 
         $aggregation = (string) $request->query('aggregation', 'count');
-        if (! in_array($aggregation, ['count', 'sum', 'avg', 'min', 'max'], true)) {
+        if (! in_array($aggregation, RecordQueryService::AGGREGATIONS, true)) {
             throw new HttpException(422, 'Invalid aggregation.');
         }
 
@@ -876,7 +876,7 @@ class AppBuilderController extends Controller
         $q = trim((string) $request->query('q', ''));
 
         if ($aggregation !== 'count' && $fieldId === null) {
-            throw new HttpException(422, 'field_id is required for sum/avg/min/max.');
+            throw new HttpException(422, 'field_id is required for every aggregation except count.');
         }
 
         $context = [

@@ -139,6 +139,7 @@ class SapiensServer extends Server
         Tools\Build\RevokeAppRoleTool::class,
         // Build catalogs.
         Tools\Build\ListAvailableComponentsTool::class,
+        Tools\Build\ListDashboardBlueprintsTool::class,
         Tools\Build\ListAvailableIconsTool::class,
         Tools\Build\GeneratePaletteTool::class,
         Tools\Build\ListAvailableFieldTypesTool::class,
@@ -186,6 +187,7 @@ class SapiensServer extends Server
         Tools\Data\QueryRecordsTool::class,
         Tools\Data\GetRecordTool::class,
         Tools\Data\AggregateRecordsTool::class,
+        Tools\Data\ProfileObjectTool::class,
         Tools\Data\CreateRecordTool::class,
         Tools\Data\UpdateRecordTool::class,
         Tools\Data\DeleteRecordTool::class,

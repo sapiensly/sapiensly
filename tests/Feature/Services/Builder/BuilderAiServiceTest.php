@@ -7,6 +7,7 @@ use App\Ai\Tools\Builder\GeneratePaletteTool;
 use App\Ai\Tools\Builder\InspectRecordsTool;
 use App\Ai\Tools\Builder\ListAvailableComponentsTool;
 use App\Ai\Tools\Builder\ListAvailableFieldTypesTool;
+use App\Ai\Tools\Builder\ProfileObjectTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
 use App\Ai\Tools\Builder\ScaffoldAppTool;
@@ -1173,6 +1174,66 @@ it('SimulateQueryTool reports aggregation_value when aggregation arg is given', 
     expect($result['count'])->toBe(2)
         ->and($result['aggregation'])->toBe('sum')
         ->and((float) $result['aggregation_value'])->toBe(350.0);
+});
+
+it('ProfileObjectTool classifies field roles and reports grounded stats', function () {
+    $manifest = $this->manifestService->getActiveManifest($this->testApp->fresh());
+    $objectId = $manifest['objects'][0]['id'];
+
+    // Enrich the object with a status (single_select) and a money (currency) field.
+    $estadoId = 'fld_'.strtolower((string) Str::ulid());
+    $montoId = 'fld_'.strtolower((string) Str::ulid());
+    $manifest['objects'][0]['fields'][] = [
+        'id' => $estadoId, 'slug' => 'estado', 'name' => 'Estado', 'type' => 'single_select',
+        'options' => [
+            ['id' => 'opt_'.strtolower((string) Str::ulid()), 'value' => 'vip', 'label' => 'VIP'],
+            ['id' => 'opt_'.strtolower((string) Str::ulid()), 'value' => 'normal', 'label' => 'Normal'],
+        ],
+    ];
+    $manifest['objects'][0]['fields'][] = [
+        'id' => $montoId, 'slug' => 'monto', 'name' => 'Monto', 'type' => 'currency', 'currency_code' => 'MXN',
+    ];
+    $this->manifestService->createVersion($this->testApp, $manifest);
+
+    foreach ([['vip', 100], ['vip', 300], ['normal', 200]] as [$estado, $monto]) {
+        Record::create([
+            'app_id' => $this->testApp->id,
+            'object_definition_id' => $objectId,
+            'data' => ['nombre' => 'C'.$monto, 'estado' => $estado, 'monto' => $monto],
+        ]);
+    }
+
+    $tool = new ProfileObjectTool($this->testApp->fresh(), $this->manifestService, app(RecordQueryService::class));
+    $result = json_decode($tool->handle(new ToolRequest(['object_id' => $objectId])), true);
+
+    expect($result['total_records'])->toBe(3);
+
+    $byId = collect($result['fields'])->keyBy('id');
+
+    // The money field is a measure with real aggregates.
+    $monto = $byId[$montoId];
+    expect($monto['role'])->toBe('measure')
+        ->and((float) $monto['sum'])->toBe(600.0)
+        ->and((float) $monto['avg'])->toBe(200.0)
+        ->and((float) $monto['max'])->toBe(300.0);
+
+    // The status field is categorical with cardinality + top values.
+    $estado = $byId[$estadoId];
+    expect($estado['role'])->toBe('categorical')
+        ->and($estado['distinct_count'])->toBe(2)
+        ->and($estado['high_cardinality'])->toBeFalse()
+        ->and(collect($estado['top_values'])->firstWhere('value', 'vip')['count'])->toBe(2);
+
+    // And it recommends concrete, data-backed visualisations.
+    expect($result['recommended_visualizations'])->not->toBeEmpty()
+        ->and(collect($result['recommended_visualizations'])->contains(fn ($r) => str_contains($r, 'Estado')))->toBeTrue();
+});
+
+it('ProfileObjectTool errors cleanly on an unknown object', function () {
+    $tool = new ProfileObjectTool($this->testApp->fresh(), $this->manifestService, app(RecordQueryService::class));
+
+    $bad = json_decode($tool->handle(new ToolRequest(['object_id' => 'obj_'.strtolower((string) Str::ulid())])), true);
+    expect($bad['error'])->toContain('Unknown object_id');
 });
 
 it('SimulateQueryTool returns errors on bad input instead of throwing', function () {

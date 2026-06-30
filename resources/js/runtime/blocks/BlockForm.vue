@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, inject, ref, type Ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
-import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
+import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import FormFieldInput from './FormFieldInput.vue';
-import { initialFieldValue } from './formFieldDefault';
 import { evaluateFieldCondition, type FieldCondition } from './fieldCondition';
+import { initialFieldValue } from './formFieldDefault';
 
 interface FormFieldConfig {
     field_id: string;
@@ -61,7 +61,10 @@ function deriveSlugFromUrl(): string {
 // provides those params here. We forward them as `params` in the submit so
 // the form's record_id_expression can resolve {{params.record_id}} against
 // the row that triggered the open.
-const modalParams = inject<Ref<Record<string, unknown>> | null>('modalParams', null);
+const modalParams = inject<Ref<Record<string, unknown>> | null>(
+    'modalParams',
+    null,
+);
 
 // When rendered inside a modal, drop the form's own card chrome — the modal
 // already supplies the border + background + padding. Without this the user
@@ -94,14 +97,20 @@ function slugForFieldId(fieldId: string): string | undefined {
     return object.value?.fields.find((f) => f.id === fieldId)?.slug;
 }
 
-const readonlyMap = computed<Record<string, boolean>>(() => props.data?.form?.readonly ?? {});
+const readonlyMap = computed<Record<string, boolean>>(
+    () => props.data?.form?.readonly ?? {},
+);
 
 const renderedFields = computed<RenderedField[]>(() => {
     if (!object.value) return [];
-    const formFields = props.block.fields ?? object.value.fields.map((f) => ({ field_id: f.id }));
+    const formFields: FormFieldConfig[] =
+        props.block.fields ??
+        object.value.fields.map((f): FormFieldConfig => ({ field_id: f.id }));
     return formFields
-        .map((ff) => {
-            const field = object.value!.fields.find((f) => f.id === ff.field_id);
+        .map((ff): RenderedField | null => {
+            const field = object.value!.fields.find(
+                (f) => f.id === ff.field_id,
+            );
             if (!field) return null;
             return {
                 fieldId: ff.field_id,
@@ -109,7 +118,9 @@ const renderedFields = computed<RenderedField[]>(() => {
                 label: ff.label_override ?? field.name,
                 type: field.type,
                 field,
-                required: Boolean((field as unknown as { required?: boolean }).required),
+                required: Boolean(
+                    (field as unknown as { required?: boolean }).required,
+                ),
                 readonly: Boolean(readonlyMap.value[field.slug]),
                 visible_if: ff.visible_if,
                 required_if: ff.required_if,
@@ -126,26 +137,38 @@ function initialState(): Record<string, unknown> {
     const state: Record<string, unknown> = {};
     const defaults = props.data?.form?.defaults ?? {};
     for (const f of renderedFields.value) {
-        state[f.slug] = f.slug in defaults ? defaults[f.slug] : initialFieldValue(f.field);
+        state[f.slug] =
+            f.slug in defaults ? defaults[f.slug] : initialFieldValue(f.field);
     }
     return state;
 }
 
 /** Whether a field passes its visible_if condition (always visible when none set). */
 function isVisible(rf: RenderedField): boolean {
-    return rf.visible_if ? evaluateFieldCondition(rf.visible_if, formData.value, slugForFieldId) : true;
+    return rf.visible_if
+        ? evaluateFieldCondition(rf.visible_if, formData.value, slugForFieldId)
+        : true;
 }
 
 /** Effective required: the field's own flag OR a satisfied required_if condition. */
 function isRequired(rf: RenderedField): boolean {
     if (rf.required) return true;
-    return rf.required_if ? evaluateFieldCondition(rf.required_if, formData.value, slugForFieldId) : false;
+    return rf.required_if
+        ? evaluateFieldCondition(rf.required_if, formData.value, slugForFieldId)
+        : false;
 }
 
-const visibleFields = computed<RenderedField[]>(() => renderedFields.value.filter(isVisible));
+const visibleFields = computed<RenderedField[]>(() =>
+    renderedFields.value.filter(isVisible),
+);
 
 function isEmpty(value: unknown): boolean {
-    return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
+    return (
+        value === null ||
+        value === undefined ||
+        value === '' ||
+        (Array.isArray(value) && value.length === 0)
+    );
 }
 
 async function submit() {
@@ -188,20 +211,21 @@ async function submit() {
 }
 
 async function cancel() {
-    await execute(
-        (props.block.on_cancel ?? []) as RuntimeAction[],
-        { appSlug, form: { ...formData.value }, params: modalParams?.value ?? {} },
-    );
+    await execute((props.block.on_cancel ?? []) as RuntimeAction[], {
+        appSlug,
+        form: { ...formData.value },
+        params: modalParams?.value ?? {},
+    });
 }
 </script>
 
 <template>
-    <form
-        :class="wrapperClass"
-        @submit.prevent="submit"
-    >
+    <form :class="wrapperClass" @submit.prevent="submit">
         <div v-for="rf in visibleFields" :key="rf.fieldId" class="space-y-1.5">
-            <label :for="`form_${block.id}_${rf.slug}`" :class="['text-xs', t.textMuted]">
+            <label
+                :for="`form_${block.id}_${rf.slug}`"
+                :class="['text-xs', t.textMuted]"
+            >
                 {{ rf.label }}
                 <span v-if="isRequired(rf)" class="text-red-400">*</span>
             </label>
@@ -215,7 +239,11 @@ async function cancel() {
                 />
             </div>
 
-            <p v-for="msg in fieldErrors[rf.slug] ?? []" :key="msg" class="text-[11px] text-red-400">
+            <p
+                v-for="msg in fieldErrors[rf.slug] ?? []"
+                :key="msg"
+                class="text-[11px] text-red-400"
+            >
                 {{ msg }}
             </p>
         </div>

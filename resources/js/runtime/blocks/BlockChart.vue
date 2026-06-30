@@ -4,6 +4,17 @@ import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 
+type Agg = 'count' | 'sum' | 'avg' | 'min' | 'max';
+
+interface ComboSeries {
+    type: 'bar' | 'line' | 'area';
+    aggregation: Agg;
+    field_id?: string;
+    label?: string;
+    axis?: 'left' | 'right';
+    color?: string;
+}
+
 interface ChartBlock {
     id: string;
     type: 'chart';
@@ -24,7 +35,9 @@ interface ChartBlock {
     group_by_field_id?: string;
     series_field_id?: string;
     stacked?: boolean;
-    aggregation: 'count' | 'sum' | 'avg' | 'min' | 'max';
+    aggregation: Agg;
+    bucket?: 'day' | 'week' | 'month' | 'quarter' | 'year';
+    series?: ComboSeries[];
 }
 
 interface RowData {
@@ -99,14 +112,61 @@ const series = computed<{ label: string; value: number }[]>(() => {
         }
         out.push({ label, value });
     }
+    // A bucketed date X reads chronologically; bucket keys sort lexicographically
+    // in time order (YYYY-MM-DD, YYYY-MM, YYYY-Qn, YYYY).
+    if (isTemporal(groupField.value)) {
+        out.sort((a, b) =>
+            a.label < b.label ? -1 : a.label > b.label ? 1 : 0,
+        );
+    }
     return out;
 });
+
+function isTemporal(field: FieldDef | undefined): boolean {
+    return field?.type === 'date' || field?.type === 'datetime';
+}
+
+/**
+ * Truncate a date/datetime value to the chart's bucket, matching the backend's
+ * date_trunc buckets so a chart shows one point per period (chronologically
+ * sortable as a string) instead of one per raw timestamp. Falls back to the raw
+ * string when unparseable.
+ */
+function bucketDate(value: unknown, bucket: ChartBlock['bucket']): string {
+    const s = String(value);
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return s;
+    const y = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    switch (bucket) {
+        case 'year':
+            return `${y}`;
+        case 'quarter':
+            return `${y}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
+        case 'month':
+            return `${y}-${mm}`;
+        case 'week': {
+            // Monday of the ISO week, as a sortable YYYY-MM-DD.
+            const w = new Date(Date.UTC(y, d.getUTCMonth(), d.getUTCDate()));
+            const wd = (w.getUTCDay() + 6) % 7;
+            w.setUTCDate(w.getUTCDate() - wd);
+            return w.toISOString().slice(0, 10);
+        }
+        default:
+            return `${y}-${mm}-${dd}`; // day
+    }
+}
 
 function formatGroupKey(value: unknown, field: FieldDef | undefined): string {
     if (value === null || value === undefined || value === '') return '—';
     if (field?.type === 'single_select') {
         const opt = field.options?.find((o) => o.value === value);
         return opt?.label ?? String(value);
+    }
+    // Date/datetime X (incl. sys_created_at) → truncate to the bucket (default day).
+    if (isTemporal(field)) {
+        return bucketDate(value, props.block.bucket ?? 'day');
     }
     return String(value);
 }
@@ -219,9 +279,21 @@ const multi = computed(() => {
         }
     };
 
-    const data = cats.map((_, ci) =>
+    let data = cats.map((_, ci) =>
         sers.map((_, si) => aggregate(bucket[ci]?.[si])),
     );
+    // Chronological order when the category axis is a bucketed date.
+    if (isTemporal(catField)) {
+        const order = cats
+            .map((_, i) => i)
+            .sort((a, b) =>
+                cats[a] < cats[b] ? -1 : cats[a] > cats[b] ? 1 : 0,
+            );
+        const sortedCats = order.map((i) => cats[i]);
+        cats.length = 0;
+        cats.push(...sortedCats);
+        data = order.map((i) => data[i]);
+    }
     const stacked = !!props.block.stacked;
     const max = stacked
         ? Math.max(1, ...data.map((row) => row.reduce((a, b) => a + b, 0)))
@@ -422,6 +494,184 @@ const treemap = computed(() => {
     return { W, H, rects };
 });
 
+// Combo: overlay several typed measures (bar/line/area) on a shared X axis,
+// each scaled against the left (primary) or right (secondary) Y axis. When
+// block.series is set, this replaces the single-type render above. All geometry
+// is precomputed here so the template just paints.
+const isCombo = computed(
+    () => Array.isArray(props.block.series) && props.block.series.length > 0,
+);
+
+function aggregateVals(vals: number[] | undefined, agg: Agg): number {
+    if (!vals || vals.length === 0) return 0;
+    switch (agg) {
+        case 'sum':
+            return vals.reduce((a, b) => a + b, 0);
+        case 'avg':
+            return vals.reduce((a, b) => a + b, 0) / vals.length;
+        case 'min':
+            return Math.min(...vals);
+        case 'max':
+            return Math.max(...vals);
+        default:
+            return vals.length; // count
+    }
+}
+
+const combo = computed(() => {
+    if (!isCombo.value) return null;
+    const defs = props.block.series!;
+    const rows = props.data?.rows ?? [];
+    const xField = groupField.value; // group_by_field_id ?? x_field_id
+    const xSlug = xField?.slug;
+
+    // Ordered categories + raw per-series, per-category numeric values.
+    const cats: string[] = [];
+    const catIndex = new Map<string, number>();
+    const raw: number[][][] = defs.map(() => []);
+    for (const r of rows) {
+        const key = formatGroupKey(xSlug ? r.data[xSlug] : 'all', xField);
+        let ci = catIndex.get(key);
+        if (ci === undefined) {
+            ci = cats.length;
+            cats.push(key);
+            catIndex.set(key, ci);
+        }
+        defs.forEach((d, si) => {
+            const fld = fieldOf(d.field_id);
+            const v = fld ? Number(r.data[fld.slug] ?? 0) : 1; // count → 1 per row
+            (raw[si][ci] ??= []).push(Number.isFinite(v) ? v : 0);
+        });
+    }
+    if (cats.length === 0) return null;
+
+    let vals = defs.map((d, si) =>
+        cats.map((_, ci) => aggregateVals(raw[si][ci], d.aggregation)),
+    );
+
+    // Chronological order for a bucketed date X (keys sort in time order).
+    if (isTemporal(xField)) {
+        const order = cats
+            .map((_, i) => i)
+            .sort((a, b) =>
+                cats[a] < cats[b] ? -1 : cats[a] > cats[b] ? 1 : 0,
+            );
+        const sortedCats = order.map((i) => cats[i]);
+        cats.length = 0;
+        cats.push(...sortedCats);
+        vals = vals.map((row) => order.map((i) => row[i]));
+    }
+
+    const hasRight = defs.some((d) => d.axis === 'right');
+    const leftMax = Math.max(
+        1,
+        ...defs.flatMap((d, si) => (d.axis === 'right' ? [] : vals[si])),
+    );
+    const rightMax = Math.max(
+        1,
+        ...defs.flatMap((d, si) => (d.axis === 'right' ? vals[si] : [])),
+    );
+
+    const W = 360;
+    const H = 210;
+    const padL = 36;
+    const padR = hasRight ? 36 : 12;
+    const padT = 10;
+    const padB = 30;
+    const innerH = H - padT - padB;
+    const innerW = W - padL - padR;
+    const n = cats.length;
+    const slot = innerW / n;
+    const centerX = (ci: number) => padL + slot * (ci + 0.5);
+    const baselineY = padT + innerH;
+    const yFor = (v: number, axis?: string) =>
+        baselineY - (v / (axis === 'right' ? rightMax : leftMax)) * innerH;
+    const color = (d: ComboSeries, si: number) => d.color ?? chartColor(si);
+
+    // Grouped bars (one slot per category, bar series side by side).
+    const barDefs = defs
+        .map((d, si) => ({ d, si }))
+        .filter((x) => x.d.type === 'bar');
+    const groupCount = Math.max(1, barDefs.length);
+    const barW = (slot * 0.64) / groupCount;
+    const bars: {
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+        color: string;
+        title: string;
+    }[] = [];
+    barDefs.forEach(({ d, si }, bIdx) => {
+        cats.forEach((cat, ci) => {
+            const v = vals[si][ci];
+            const y = yFor(v, d.axis);
+            const groupLeft = centerX(ci) - (groupCount * barW) / 2;
+            bars.push({
+                x: groupLeft + bIdx * barW,
+                y,
+                w: Math.max(1, barW - 1),
+                h: Math.max(0, baselineY - y),
+                color: color(d, si),
+                title: `${d.label ?? ''} · ${cat}: ${formatNumber(v)}`,
+            });
+        });
+    });
+
+    // Line/area overlays across category centres.
+    const lines = defs
+        .map((d, si) => ({ d, si }))
+        .filter((x) => x.d.type !== 'bar')
+        .map(({ d, si }) => {
+            const pts = cats.map((_, ci) => ({
+                x: centerX(ci),
+                y: yFor(vals[si][ci], d.axis),
+            }));
+            const path = pts
+                .map((p, i) =>
+                    i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`,
+                )
+                .join(' ');
+            const area =
+                d.type === 'area' && pts.length
+                    ? `${path} L ${pts[pts.length - 1].x} ${baselineY} L ${pts[0].x} ${baselineY} Z`
+                    : null;
+            return { color: color(d, si), path, area, points: pts };
+        });
+
+    const tickSet = (max: number, side: 'left' | 'right') =>
+        [0, 0.5, 1].map((f) => ({
+            y: baselineY - f * innerH,
+            label: formatNumber(max * f),
+            x: side === 'left' ? padL - 5 : W - padR + 5,
+            anchor: side === 'left' ? 'end' : 'start',
+        }));
+
+    return {
+        W,
+        H,
+        padL,
+        padR,
+        baselineY,
+        bars,
+        lines,
+        leftTicks: tickSet(leftMax, 'left'),
+        rightTicks: hasRight ? tickSet(rightMax, 'right') : null,
+        catLabels: cats.map((c, ci) => ({ x: centerX(ci), label: c })),
+        legend: defs.map((d, si) => ({
+            label: d.label ?? fieldOf(d.field_id)?.name ?? 'Count',
+            color: color(d, si),
+            type: d.type,
+            secondary: d.axis === 'right',
+        })),
+    };
+});
+
+// Empty state must account for combo (which ignores the single-series path).
+const emptyState = computed(() =>
+    isCombo.value ? combo.value === null : series.value.length === 0,
+);
+
 // Scatter: plot raw (x_field, y_field) points from each row.
 const scatter = computed(() => {
     const rows = props.data?.rows ?? [];
@@ -469,12 +719,127 @@ const scatter = computed(() => {
             </p>
         </header>
 
-        <p
-            v-if="series.length === 0"
-            :class="['py-8 text-center text-xs', t.textMuted]"
-        >
+        <p v-if="emptyState" :class="['py-8 text-center text-xs', t.textMuted]">
             No data to plot.
         </p>
+
+        <!-- Combo: bars + lines/areas on a shared X, with an optional 2nd Y axis -->
+        <template v-else-if="combo">
+            <ul class="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                <li
+                    v-for="(s, i) in combo.legend"
+                    :key="i"
+                    class="flex items-center gap-1.5"
+                >
+                    <span
+                        class="inline-block shrink-0 rounded-xs"
+                        :class="s.type === 'bar' ? 'size-2.5' : 'h-0.5 w-3.5'"
+                        :style="{ background: s.color }"
+                    />
+                    <span class="truncate" :class="t.text">{{ s.label }}</span>
+                    <span
+                        v-if="s.secondary"
+                        :class="['text-[10px]', t.textMuted]"
+                        >(eje der.)</span
+                    >
+                </li>
+            </ul>
+            <svg
+                :viewBox="`0 0 ${combo.W} ${combo.H}`"
+                class="w-full"
+                :class="t.text"
+            >
+                <!-- left-axis gridlines + tick labels -->
+                <g
+                    v-for="(tk, i) in combo.leftTicks"
+                    :key="'lt' + i"
+                    :class="t.textMuted"
+                >
+                    <line
+                        :x1="combo.padL"
+                        :y1="tk.y"
+                        :x2="combo.W - combo.padR"
+                        :y2="tk.y"
+                        stroke="currentColor"
+                        stroke-opacity="0.1"
+                    />
+                    <text
+                        :x="tk.x"
+                        :y="tk.y + 3"
+                        text-anchor="end"
+                        fill="currentColor"
+                        fill-opacity="0.7"
+                        style="font-size: 8px"
+                    >
+                        {{ tk.label }}
+                    </text>
+                </g>
+                <!-- right-axis tick labels -->
+                <text
+                    v-for="(tk, i) in combo.rightTicks ?? []"
+                    :key="'rt' + i"
+                    :x="tk.x"
+                    :y="tk.y + 3"
+                    text-anchor="start"
+                    fill="currentColor"
+                    fill-opacity="0.7"
+                    style="font-size: 8px"
+                >
+                    {{ tk.label }}
+                </text>
+                <!-- bars -->
+                <rect
+                    v-for="(b, i) in combo.bars"
+                    :key="'b' + i"
+                    :x="b.x"
+                    :y="b.y"
+                    :width="b.w"
+                    :height="b.h"
+                    :fill="b.color"
+                    rx="1"
+                >
+                    <title>{{ b.title }}</title>
+                </rect>
+                <!-- area fills then line strokes + points -->
+                <template v-for="(ln, i) in combo.lines" :key="'l' + i">
+                    <path
+                        v-if="ln.area"
+                        :d="ln.area"
+                        :fill="ln.color"
+                        fill-opacity="0.12"
+                    />
+                    <path
+                        :d="ln.path"
+                        fill="none"
+                        :stroke="ln.color"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                    <circle
+                        v-for="(p, j) in ln.points"
+                        :key="j"
+                        :cx="p.x"
+                        :cy="p.y"
+                        r="2.5"
+                        :fill="ln.color"
+                    />
+                </template>
+                <!-- x labels -->
+                <text
+                    v-for="(c, i) in combo.catLabels"
+                    :key="'x' + i"
+                    :x="c.x"
+                    :y="combo.baselineY + 14"
+                    text-anchor="middle"
+                    fill="currentColor"
+                    fill-opacity="0.7"
+                    style="font-size: 8px"
+                >
+                    {{ c.label }}
+                </text>
+            </svg>
+        </template>
 
         <template
             v-else-if="

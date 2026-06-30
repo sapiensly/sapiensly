@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
+import type { ObjectDef } from '../types/manifest';
+import { computeTrend } from './trend';
 
 type Variant =
     | 'insight'
@@ -9,6 +11,16 @@ type Variant =
     | 'positive'
     | 'warning'
     | 'risk';
+
+interface InsightCompute {
+    query: { object_id: string };
+    aggregation: string;
+    field_id?: string;
+    format?: 'number' | 'currency' | 'percentage' | 'duration';
+    compare?: unknown;
+    delta_good?: 'up' | 'down';
+}
+
 interface InsightBlock {
     id: string;
     type: 'insight';
@@ -17,15 +29,24 @@ interface InsightBlock {
     body?: string;
     icon?: string;
     metric?: string;
+    compute?: InsightCompute;
+}
+
+interface InsightData {
+    value?: number;
+    compare_value?: number | null;
 }
 
 defineOptions({ inheritAttrs: false });
 
-const props = defineProps<{ block: InsightBlock }>();
+const props = defineProps<{
+    block: InsightBlock;
+    data?: InsightData;
+    objects?: ObjectDef[];
+    locale?: string;
+    defaultCurrency?: string;
+}>();
 
-// Each variant carries an accent colour + default emoji. Colours are applied
-// as a left border + tinted background derived from the accent, so the card
-// reads on light or dark sections.
 const VARIANTS: Record<
     Variant,
     { color: string; icon: string; label: string }
@@ -39,6 +60,48 @@ const VARIANTS: Record<
 };
 
 const v = computed(() => VARIANTS[props.block.variant ?? 'insight']);
+
+// A computed figure (block.compute) overrides any static `metric`.
+const hasComputed = computed(
+    () => !!props.block.compute && typeof props.data?.value === 'number',
+);
+
+const computedMetric = computed(() => {
+    if (!hasComputed.value) return null;
+    const c = props.block.compute!;
+    const value = props.data!.value as number;
+    if (c.format === 'currency') {
+        const obj = props.objects?.find((o) => o.id === c.query.object_id);
+        const field = obj?.fields.find((f) => f.id === c.field_id);
+        const code = field?.currency_code ?? props.defaultCurrency ?? 'MXN';
+        return new Intl.NumberFormat(props.locale, {
+            style: 'currency',
+            currency: code,
+        }).format(value);
+    }
+    if (c.format === 'percentage') {
+        return new Intl.NumberFormat(props.locale, {
+            style: 'percent',
+            maximumFractionDigits: 1,
+        }).format(value);
+    }
+    return new Intl.NumberFormat(props.locale).format(value);
+});
+
+const trend = computed(() =>
+    hasComputed.value
+        ? computeTrend(
+              props.data!.value as number,
+              props.data?.compare_value,
+              props.block.compute?.delta_good ?? 'up',
+          )
+        : null,
+);
+
+// The big figure on the right: computed when present, else the static metric.
+const displayMetric = computed(
+    () => computedMetric.value ?? props.block.metric,
+);
 </script>
 
 <template>
@@ -70,11 +133,31 @@ const v = computed(() => VARIANTS[props.block.variant ?? 'insight']);
             </p>
         </div>
         <div
-            v-if="block.metric"
-            class="shrink-0 self-center text-2xl font-bold tracking-tight"
-            :style="{ color: v.color }"
+            v-if="displayMetric"
+            class="flex shrink-0 flex-col items-end self-center"
         >
-            {{ block.metric }}
+            <span
+                class="text-2xl font-bold tracking-tight"
+                :style="{ color: v.color }"
+            >
+                {{ displayMetric }}
+            </span>
+            <span
+                v-if="trend"
+                class="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold"
+                :class="
+                    trend.dir === 'flat'
+                        ? 'opacity-60'
+                        : trend.good
+                          ? 'text-emerald-500'
+                          : 'text-red-500'
+                "
+            >
+                <span v-if="trend.dir === 'up'">▲</span>
+                <span v-else-if="trend.dir === 'down'">▼</span>
+                <span v-else>→</span>
+                {{ trend.label }}
+            </span>
         </div>
     </div>
 </template>

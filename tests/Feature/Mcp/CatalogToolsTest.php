@@ -11,6 +11,7 @@ use App\Mcp\Tools\Build\FrameworkReferenceTool;
 use App\Mcp\Tools\Build\ListAppsTool;
 use App\Mcp\Tools\Build\ListAvailableComponentsTool;
 use App\Mcp\Tools\Build\ListAvailableFieldTypesTool;
+use App\Mcp\Tools\Build\ListDashboardBlueprintsTool;
 use App\Mcp\Tools\Chatbots\DeleteChatbotTool;
 use App\Mcp\Tools\Chatbots\ListChatbotsTool;
 use App\Mcp\Tools\Integrations\ListIntegrationsTool;
@@ -95,6 +96,35 @@ it('catalog entries carry the machine-readable schema contract', function () {
         ->assertSee('example')
         ->assertSee('field_relation')
         ->assertSee('many_to_many');
+});
+
+it('list_dashboard_blueprints lists sectors with no arg and returns a sector blueprint', function () {
+    $user = User::factory()->create();
+
+    // No sector → the picker list, including the MVP support sector.
+    SapiensServer::actingAs($user)
+        ->tool(ListDashboardBlueprintsTool::class, [])
+        ->assertOk()
+        ->assertSee('support')
+        ->assertSee('sales_crm');
+
+    // A sector → its expert KPI set + application guidance.
+    SapiensServer::actingAs($user)
+        ->tool(ListDashboardBlueprintsTool::class, ['sector' => 'support'])
+        ->assertOk()
+        ->assertSee('Median resolution time')
+        ->assertSee('distinct_count')
+        ->assertSee('metric_grid')
+        ->assertSee('delta_good');
+});
+
+it('list_dashboard_blueprints reports an unknown sector cleanly', function () {
+    $user = User::factory()->create();
+
+    SapiensServer::actingAs($user)
+        ->tool(ListDashboardBlueprintsTool::class, ['sector' => 'nope'])
+        ->assertOk()
+        ->assertSee('Unknown sector');
 });
 
 it('framework_reference lists topics when called with no topic', function () {

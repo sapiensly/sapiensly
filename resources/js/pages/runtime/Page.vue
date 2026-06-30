@@ -6,7 +6,7 @@ import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
-import type { RuntimePageProps } from '@/runtime/types/manifest';
+import type { AnyBlock, RuntimePageProps } from '@/runtime/types/manifest';
 import { blockDataBus } from '@/runtime/useActionExecutor';
 import { useScrollReveal } from '@/runtime/useReveal';
 import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
@@ -15,6 +15,48 @@ import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
 import { computed, onUnmounted, provide, ref, watch } from 'vue';
 
 const props = defineProps<RuntimePageProps>();
+
+// The shared manifest `settings` type only declares the runtime-relevant subset;
+// the authored manifest also carries chrome config (brand/footer/accent/font/
+// palette/navigation layout) consumed below. Model that extended shape locally
+// so the chrome computeds are typed without touching the shared manifest types.
+interface RuntimeSettings {
+    default_currency?: string;
+    default_locale?: string;
+    theme?: 'light' | 'dark';
+    brand?: {
+        name?: string;
+        logo?: string;
+        icon?: string;
+        header_bg?: string;
+        cta?: { label: string; href: string };
+    };
+    footer?: { text?: string; links?: Array<{ label: string; href: string }> };
+    accent?: string;
+    font?: string;
+    palette?: {
+        ramp?: Record<string, string>;
+        soft?: string;
+        contrast?: string;
+        chart?: string[];
+    };
+    navigation_layout?: string;
+}
+
+interface NavItem {
+    id: string;
+    label: string;
+    icon?: string;
+    page_id?: string;
+    children?: NavItem[];
+}
+
+interface PageLink {
+    id: string;
+    slug: string;
+    name: string;
+    icon?: string;
+}
 
 // Live block data: seeded from the server prop, re-synced on every Inertia
 // navigation, and patched in place when an action returns fresh data (so adding
@@ -35,7 +77,7 @@ const stopBlockData = blockDataBus.on((patch) => {
 });
 onUnmounted(stopBlockData);
 
-const settings = computed(() => props.manifest.settings ?? {});
+const settings = computed<RuntimeSettings>(() => props.manifest.settings ?? {});
 const locale = computed(() => settings.value.default_locale ?? 'es-MX');
 const defaultCurrency = computed(
     () => settings.value.default_currency ?? 'MXN',
@@ -56,39 +98,43 @@ const surfaceStyle = computed(() => ({
 
 // Chrome layout: a left sidebar (best for many/nested pages) or the top header.
 const useSidebar = computed(
-    () =>
-        (settings.value as { navigation_layout?: string }).navigation_layout ===
-        'sidebar',
+    () => settings.value.navigation_layout === 'sidebar',
 );
-const navItems = computed(
+const navItems = computed<NavItem[] | undefined>(
     () =>
-        (props.manifest.navigation as { items?: unknown[] } | null)?.items ??
+        (props.manifest.navigation?.items as NavItem[] | undefined) ??
         undefined,
+);
+// SiteSidebar's page links want `icon?: string`, but PageSummary carries
+// `icon: string | null`; normalise null → undefined so the prop type matches.
+const sidebarPages = computed<PageLink[]>(() =>
+    props.manifest.pages.map((p) => ({ ...p, icon: p.icon ?? undefined })),
 );
 
 // In the sidebar layout the top band hosts the breadcrumb (above the page
 // title). If the page authors a breadcrumb block it moves up there; otherwise
 // the band falls back to the page name as the title.
-const breadcrumbBlock = computed(() => {
+const breadcrumbBlock = computed<AnyBlock | null>(() => {
     if (!useSidebar.value) {
         return null;
     }
-    const blocks = (props.page.blocks ?? []) as Array<Record<string, unknown>>;
-    return blocks.find((b) => b.type === 'breadcrumb') ?? null;
+    const blocks = props.page.blocks ?? [];
+    return blocks.find((b) => (b.type as string) === 'breadcrumb') ?? null;
 });
 
 // Sidebar body: the band owns both the breadcrumb and the page title, so lift
 // the breadcrumb out and drop a leading heading that just repeats the page name
 // (the title never appears twice).
-const contentBlocks = computed(() => {
-    let blocks = (props.page.blocks ?? []) as Array<Record<string, unknown>>;
+const contentBlocks = computed<AnyBlock[]>(() => {
+    let blocks = props.page.blocks ?? [];
     if (!useSidebar.value) {
         return blocks;
     }
-    blocks = blocks.filter((b) => b.type !== 'breadcrumb');
+    blocks = blocks.filter((b) => (b.type as string) !== 'breadcrumb');
+    const first = blocks[0];
     if (
-        blocks[0]?.type === 'heading' &&
-        String(blocks[0].content ?? '')
+        first?.type === 'heading' &&
+        String(first.content ?? '')
             .trim()
             .toLowerCase() ===
             String(props.page.name ?? '')
@@ -130,7 +176,7 @@ useScrollReveal(sectionsEl);
             <SiteSidebar
                 :brand="brand"
                 :nav-items="navItems"
-                :pages="manifest.pages"
+                :pages="sidebarPages"
                 :current-slug="page.slug"
                 :href-for="hrefFor"
             />

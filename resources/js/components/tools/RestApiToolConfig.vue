@@ -135,7 +135,9 @@ const showRequestBody = computed(() =>
         <!-- Connection: the encouraged path. When set, base URL + auth come from
              the connection and their inline fields disappear. -->
         <div class="grid gap-2">
-            <Label for="connection">{{ t('tools.config.connection.label') }}</Label>
+            <Label for="connection">{{
+                t('tools.config.connection.label')
+            }}</Label>
             <Select v-if="connections.length > 0" v-model="connectionValue">
                 <SelectTrigger id="connection">
                     <SelectValue />
@@ -193,9 +195,7 @@ const showRequestBody = computed(() =>
                 placeholder="https://api.example.com"
                 class="font-mono"
             />
-            <p class="text-xs text-ink-muted">
-                The base URL for the REST API
-            </p>
+            <p class="text-xs text-ink-muted">The base URL for the REST API</p>
             <InputError :message="errors['config.base_url']" />
         </div>
 
@@ -273,7 +273,7 @@ const showRequestBody = computed(() =>
             />
             <p class="text-xs text-ink-muted">
                 JSON template with
-                <code class="rounded bg-white/[0.06] px-1">{"{{ variable }}"}</code>
+                <code class="rounded bg-white/[0.06] px-1">{""}</code>
                 placeholders
             </p>
             <InputError :message="errors['config.request_body_template']" />

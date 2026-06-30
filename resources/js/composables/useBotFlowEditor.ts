@@ -1,10 +1,13 @@
 import type { BotFlowDefinition, BotFlowNodeType } from '@/types/botFlows';
 import type { Edge, Node } from '@vue-flow/core';
-import { computed, ref } from 'vue';
+import { computed, ref, type Ref } from 'vue';
 
 export function useBotFlowEditor(initialDefinition?: BotFlowDefinition) {
-    const nodes = ref<Node[]>([]);
-    const edges = ref<Edge[]>([]);
+    // Cast the Refs explicitly: `ref<Node[]>()` would force TS to evaluate
+    // `UnwrapRef<Node[]>`, and vue-flow's deeply recursive `Node`/`Edge` types
+    // blow the instantiation depth limit (TS2589).
+    const nodes = ref([]) as Ref<Node[]>;
+    const edges = ref([]) as Ref<Edge[]>;
     const selectedNodeId = ref<string | null>(null);
 
     function loadDefinition(def: BotFlowDefinition): void {
@@ -37,8 +40,8 @@ export function useBotFlowEditor(initialDefinition?: BotFlowDefinition) {
                 id: e.id,
                 source: e.source,
                 target: e.target,
-                sourceHandle: e.sourceHandle,
-                label: e.label,
+                sourceHandle: e.sourceHandle ?? undefined,
+                label: typeof e.label === 'string' ? e.label : undefined,
             })),
         };
     }

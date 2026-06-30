@@ -61,6 +61,27 @@ interface IntegrationTemplate {
     auth_config?: Record<string, unknown>;
 }
 
+/**
+ * Inertia's `FormDataType` constraint only accepts form fields whose (nested)
+ * values are FormData-convertible, so the credential bag is typed as a flat
+ * record of scalar values rather than `Record<string, unknown>`.
+ */
+type AuthConfigValue = string | number | boolean | null | undefined;
+
+interface IntegrationFormData {
+    name: string;
+    description: string;
+    base_url: string;
+    is_mcp: boolean;
+    kind: string;
+    auth_type: string;
+    auth_config: Record<string, AuthConfigValue>;
+    default_headers: Array<{ key: string; value: string }>;
+    visibility: string;
+    status: string;
+    allow_insecure_tls: boolean;
+}
+
 interface Props {
     mode: 'create' | 'edit';
     integration?: {
@@ -132,7 +153,7 @@ function buildInitialAuthConfig(): Record<string, unknown> {
     return { ...shape, ...(props.template!.auth_config ?? {}) };
 }
 
-const form = useForm({
+const form = useForm<IntegrationFormData>({
     name: creatingFromTemplate
         ? (props.template!.name ?? '')
         : (props.integration?.name ?? ''),
@@ -153,7 +174,7 @@ const form = useForm({
         : startingAsMcp
           ? 'oauth2_auth_code'
           : (props.integration?.auth_type ?? 'none'),
-    auth_config: startingAsDatabase
+    auth_config: (startingAsDatabase
         ? {
               driver: 'pgsql',
               host: '',
@@ -175,7 +196,7 @@ const form = useForm({
             }
           : startingAsMcp
             ? { redirect_uri: props.oauthCallbackUrl ?? '', pkce: true }
-            : buildInitialAuthConfig(),
+            : buildInitialAuthConfig()) as Record<string, AuthConfigValue>,
     default_headers: creatingFromTemplate
         ? (props.template!.default_headers ?? [])
         : (props.integration?.default_headers ?? []),
@@ -296,8 +317,13 @@ async function copyWebhook(text: string | undefined, which: 'url' | 'email') {
 }
 
 /** Merge a single key into the auth_config form state (mirrors AuthConfigField). */
-function setAuthConfig(key: string, value: string) {
+function setAuthConfig(key: string, value: string | number) {
     form.auth_config = { ...form.auth_config, [key]: value };
+}
+
+/** Replace the whole auth_config bag from a child credential editor's emit. */
+function replaceAuthConfig(value: Record<string, unknown>): void {
+    form.auth_config = value as Record<string, AuthConfigValue>;
 }
 
 /** Placeholder that signals an existing secret is kept when left blank. */
@@ -1212,7 +1238,7 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     :callback-url="oauthCallbackUrl"
                                     :errors="form.errors"
                                     @update:model-value="
-                                        form.auth_config = $event
+                                        replaceAuthConfig($event)
                                     "
                                 />
                             </template>
@@ -1225,7 +1251,7 @@ const sectionMeta: Record<string, SectionMeta> = {
                                 :masked-values="integration?.masked_auth_config"
                                 :callback-url="oauthCallbackUrl"
                                 :errors="form.errors"
-                                @update:model-value="form.auth_config = $event"
+                                @update:model-value="replaceAuthConfig($event)"
                             />
 
                             <!-- Rare schemes: API key, basic. -->
@@ -1428,7 +1454,7 @@ const sectionMeta: Record<string, SectionMeta> = {
                                     :callback-url="oauthCallbackUrl"
                                     :errors="form.errors"
                                     @update:model-value="
-                                        form.auth_config = $event
+                                        replaceAuthConfig($event)
                                     "
                                 />
 

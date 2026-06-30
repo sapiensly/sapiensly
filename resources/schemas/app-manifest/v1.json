@@ -718,6 +718,17 @@
             }
         },
 
+        "ratio_operand": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["query", "aggregation"],
+            "description": "Makes the KPI a RATIO: its value becomes (this block's aggregation of its query) ÷ (this denominator's aggregation). Use format=percentage for rates (win rate = won ÷ closed, conversion = converted ÷ total). The trend chip is omitted for ratios.",
+            "properties": {
+                "query": { "$ref": "#/$defs/query" },
+                "aggregation": { "enum": ["count", "sum", "avg", "min", "max", "distinct_count", "median", "p90", "p95"] },
+                "field_id": { "$ref": "#/$defs/id" }
+            }
+        },
         "query": {
             "type": "object",
             "required": ["object_id"],
@@ -952,12 +963,13 @@
                         "type": { "const": "stat" },
                         "label": { "type": "string" },
                         "query": { "$ref": "#/$defs/query" },
-                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max", "distinct_count", "median", "p90", "p95"] },
                         "field_id": { "$ref": "#/$defs/id" },
                         "format": { "enum": ["number", "currency", "percentage", "duration"] },
                         "icon": { "type": "string", "maxLength": 40, "description": "Optional emoji shown in the card corner." },
                         "compare": { "$ref": "#/$defs/query", "description": "Optional comparison query (e.g. the previous period). When set the card shows the % change vs this value as a trend chip." },
-                        "delta_good": { "enum": ["up", "down"], "default": "up", "description": "Which direction of change is GOOD (green): 'up' (more is better) or 'down' (less is better, e.g. costs/churn)." }
+                        "delta_good": { "enum": ["up", "down"], "default": "up", "description": "Which direction of change is GOOD (green): 'up' (more is better) or 'down' (less is better, e.g. costs/churn)." },
+                        "ratio_denominator": { "$ref": "#/$defs/ratio_operand" }
                     },
                     "required": ["type", "label", "query", "aggregation"]
                 }
@@ -976,7 +988,21 @@
                         "title": { "type": "string", "minLength": 1, "maxLength": 200 },
                         "body": { "type": "string", "maxLength": 2000 },
                         "icon": { "type": "string", "maxLength": 40, "description": "Optional emoji override; otherwise a default per variant is used." },
-                        "metric": { "type": "string", "maxLength": 60, "description": "Optional highlighted figure shown large (e.g. '+34%')." }
+                        "metric": { "type": "string", "maxLength": 60, "description": "Optional highlighted figure shown large (e.g. '+34%'). For a LIVE figure use `compute` instead — it overrides this." },
+                        "compute": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["query", "aggregation"],
+                            "description": "Makes the card's figure LIVE: the runtime aggregates the data and shows the result as the metric, with a trend chip vs `compare`. Same shape as a stat block. Use it so an insight states a real, current number instead of a hand-written one.",
+                            "properties": {
+                                "query": { "$ref": "#/$defs/query" },
+                                "aggregation": { "enum": ["count", "sum", "avg", "min", "max", "distinct_count", "median", "p90", "p95"] },
+                                "field_id": { "$ref": "#/$defs/id" },
+                                "format": { "enum": ["number", "currency", "percentage", "duration"] },
+                                "compare": { "$ref": "#/$defs/query", "description": "Optional comparison query (e.g. previous period) → drives the trend chip." },
+                                "delta_good": { "enum": ["up", "down"], "default": "up", "description": "Which direction of change is GOOD (green)." }
+                            }
+                        }
                     },
                     "required": ["type", "title"]
                 }
@@ -1269,7 +1295,27 @@
                         "group_by_field_id": { "$ref": "#/$defs/id" },
                         "series_field_id": { "$ref": "#/$defs/id" },
                         "stacked": { "type": "boolean" },
-                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] }
+                        "bucket": { "enum": ["day", "week", "month", "quarter", "year"], "description": "When the X / group_by field is a date or datetime (incl. sys_created_at), truncate it to this period so the chart shows one point per day/week/month/quarter/year (sorted chronologically) instead of one per timestamp. Defaults to 'day' for a date/datetime X; ignored for non-date fields." },
+                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                        "series": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 4,
+                            "description": "COMBO chart: overlay several typed measures sharing one X axis (group_by_field_id, or x_field_id). When present, the chart renders as a combo and the top-level chart_type/aggregation/y_field_id are ignored (still set chart_type, e.g. 'bar', to satisfy the schema). Each series picks its own mark and which Y axis it uses — set axis:'right' for a measure on a different scale (DUAL AXIS), e.g. revenue (bar, left) + conversion rate (line, right).",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["type", "aggregation"],
+                                "properties": {
+                                    "type": { "enum": ["bar", "line", "area"], "description": "The mark for this series." },
+                                    "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                                    "field_id": { "$ref": "#/$defs/id", "description": "Numeric field for sum/avg/min/max (omit for count)." },
+                                    "label": { "type": "string", "maxLength": 80 },
+                                    "axis": { "enum": ["left", "right"], "default": "left", "description": "Which Y axis this series is scaled against. 'right' is the secondary axis for a different unit/scale." },
+                                    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                                }
+                            }
+                        }
                     },
                     "required": ["type", "chart_type", "data_source", "aggregation"]
                 }
@@ -1621,12 +1667,13 @@
                                     "id": { "$ref": "#/$defs/id" },
                                     "label": { "type": "string", "maxLength": 80 },
                                     "query": { "$ref": "#/$defs/query" },
-                                    "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                                    "aggregation": { "enum": ["count", "sum", "avg", "min", "max", "distinct_count", "median", "p90", "p95"] },
                                     "field_id": { "$ref": "#/$defs/id" },
                                     "format": { "enum": ["number", "currency", "percentage", "duration"] },
                                     "icon": { "type": "string", "maxLength": 40 },
                                     "compare": { "$ref": "#/$defs/query" },
-                                    "delta_good": { "enum": ["up", "down"], "default": "up" }
+                                    "delta_good": { "enum": ["up", "down"], "default": "up" },
+                                    "ratio_denominator": { "$ref": "#/$defs/ratio_operand" }
                                 }
                             }
                         }
@@ -1666,7 +1713,7 @@
                         "type": { "const": "gauge" },
                         "label": { "type": "string", "maxLength": 80 },
                         "query": { "$ref": "#/$defs/query" },
-                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max", "distinct_count", "median", "p90", "p95"] },
                         "field_id": { "$ref": "#/$defs/id" },
                         "max_value": { "type": "number" },
                         "format": { "enum": ["number", "currency", "percentage"] },
@@ -1688,7 +1735,7 @@
                         "type": { "const": "progress" },
                         "label": { "type": "string", "maxLength": 80 },
                         "query": { "$ref": "#/$defs/query" },
-                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+                        "aggregation": { "enum": ["count", "sum", "avg", "min", "max", "distinct_count", "median", "p90", "p95"] },
                         "field_id": { "$ref": "#/$defs/id" },
                         "max_value": { "type": "number" },
                         "format": { "enum": ["number", "currency", "percentage"] },

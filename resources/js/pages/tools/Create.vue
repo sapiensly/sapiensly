@@ -15,8 +15,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
+    DatabaseConfig,
+    FunctionConfig,
+    GraphqlConfig,
     HttpConnectionOption,
     McpConnectionOption,
+    RestApiConfig,
+    ToolConfig,
     ToolReference,
     ToolType,
     ToolTypeOption,
@@ -51,12 +56,20 @@ const props = defineProps<Props>();
 
 const currentType = ref<ToolType | null>(props.selectedType);
 
-const form = useForm({
+interface ToolCreateForm {
+    type: ToolType;
+    name: string;
+    description: string;
+    config: ToolConfig;
+    tool_ids: string[];
+}
+
+const form = useForm<ToolCreateForm>({
     type: props.selectedType ?? 'function',
     name: '',
     description: '',
-    config: {} as Record<string, unknown>,
-    tool_ids: [] as string[],
+    config: {},
+    tool_ids: [],
 });
 
 const selectType = (type: ToolType) => {
@@ -65,7 +78,7 @@ const selectType = (type: ToolType) => {
     form.config = getDefaultConfig(type);
 };
 
-const getDefaultConfig = (type: ToolType): Record<string, unknown> => {
+const getDefaultConfig = (type: ToolType): ToolConfig => {
     switch (type) {
         case 'function':
             return {
@@ -143,6 +156,37 @@ const getDefaultConfig = (type: ToolType): Record<string, unknown> => {
     }
 };
 
+// The shared `form.config` holds the union of every tool-type config; each
+// config editor wants its own concrete shape, so expose narrowed two-way
+// views keyed by the currently selected type.
+const functionConfig = computed<FunctionConfig>({
+    get: () => form.config as FunctionConfig,
+    set: (value) => {
+        form.config = value;
+    },
+});
+
+const restApiConfig = computed<RestApiConfig>({
+    get: () => form.config as RestApiConfig,
+    set: (value) => {
+        form.config = value;
+    },
+});
+
+const graphqlConfig = computed<GraphqlConfig>({
+    get: () => form.config as GraphqlConfig,
+    set: (value) => {
+        form.config = value;
+    },
+});
+
+const databaseConfig = computed<DatabaseConfig>({
+    get: () => form.config as DatabaseConfig,
+    set: (value) => {
+        form.config = value;
+    },
+});
+
 // MCP tools are created by picking an existing connection — the endpoint and
 // auth come from the integration, so there's nothing to fill in by hand.
 const selectedMcpId = ref<string | null>(null);
@@ -201,8 +245,12 @@ const typeIconMap: Record<string, Component> = {
     database: Database,
 };
 
-const typeTint = computed(() => typeTintMap[currentType.value ?? ''] ?? 'var(--sp-accent-blue)');
-const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] ?? Code);
+const typeTint = computed(
+    () => typeTintMap[currentType.value ?? ''] ?? 'var(--sp-accent-blue)',
+);
+const typeIcon = computed<Component>(
+    () => typeIconMap[currentType.value ?? ''] ?? Code,
+);
 </script>
 
 <template>
@@ -244,7 +292,9 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                             id="name"
                             v-model="form.name"
                             required
-                            :placeholder="t('tools.create.tool_name_placeholder')"
+                            :placeholder="
+                                t('tools.create.tool_name_placeholder')
+                            "
                             class="h-9 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
                         <InputError :message="form.errors.name" />
@@ -257,7 +307,9 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                         <Textarea
                             id="description"
                             v-model="form.description"
-                            :placeholder="t('tools.create.description_placeholder')"
+                            :placeholder="
+                                t('tools.create.description_placeholder')
+                            "
                             rows="3"
                             class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
@@ -273,7 +325,7 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                 >
                     <FunctionToolConfig
                         v-if="currentType === 'function'"
-                        v-model:config="form.config"
+                        v-model:config="functionConfig"
                         :errors="form.errors"
                     />
 
@@ -281,27 +333,30 @@ const typeIcon = computed<Component>(() => typeIconMap[currentType.value ?? ''] 
                         v-else-if="currentType === 'mcp'"
                         :connections="mcpConnections"
                         :selected-id="selectedMcpId"
-                        :error="form.errors['config.integration_id'] || form.errors['config.endpoint']"
+                        :error="
+                            form.errors['config.integration_id'] ||
+                            form.errors['config.endpoint']
+                        "
                         @select="selectMcpConnection"
                     />
 
                     <RestApiToolConfig
                         v-else-if="currentType === 'rest_api'"
-                        v-model:config="form.config"
+                        v-model:config="restApiConfig"
                         :connections="httpConnections"
                         :errors="form.errors"
                     />
 
                     <GraphqlToolConfig
                         v-else-if="currentType === 'graphql'"
-                        v-model:config="form.config"
+                        v-model:config="graphqlConfig"
                         :connections="httpConnections"
                         :errors="form.errors"
                     />
 
                     <DatabaseToolConfig
                         v-else-if="currentType === 'database'"
-                        v-model:config="form.config"
+                        v-model:config="databaseConfig"
                         :connections="dbConnections"
                         :errors="form.errors"
                     />

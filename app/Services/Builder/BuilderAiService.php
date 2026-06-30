@@ -19,6 +19,8 @@ use App\Ai\Tools\Builder\ListAvailableIntegrationsTool;
 use App\Ai\Tools\Builder\ListAvailableStepsTool;
 use App\Ai\Tools\Builder\ListAvailableTriggersTool;
 use App\Ai\Tools\Builder\ListConnectorActionsTool;
+use App\Ai\Tools\Builder\ListDashboardBlueprintsTool;
+use App\Ai\Tools\Builder\ProfileObjectTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Ai\Tools\Builder\ProposePlanTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
@@ -161,6 +163,7 @@ class BuilderAiService
             new ReadManifestTool($app, $this->manifestService, $proposeTool),
             new FrameworkReferenceTool,
             new ListAvailableComponentsTool,
+            new ListDashboardBlueprintsTool,
             new ListAvailableIconsTool,
             new GeneratePaletteTool,
             new ListAvailableFieldTypesTool,
@@ -168,6 +171,7 @@ class BuilderAiService
             new ListAvailableTriggersTool,
             new ListAvailableStepsTool,
             new InspectRecordsTool($app),
+            new ProfileObjectTool($app, $this->manifestService, $this->records, $proposeTool),
             new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
             new ValidateManifestTool($this->validator),
             $proposeTool,
@@ -358,6 +362,7 @@ class BuilderAiService
             new ReadManifestTool($app, $this->manifestService, $proposeTool),
             new FrameworkReferenceTool,
             new ListAvailableComponentsTool,
+            new ListDashboardBlueprintsTool,
             new ListAvailableIconsTool,
             new GeneratePaletteTool,
             new ListAvailableFieldTypesTool,
@@ -365,6 +370,7 @@ class BuilderAiService
             new ListAvailableTriggersTool,
             new ListAvailableStepsTool,
             new InspectRecordsTool($app),
+            new ProfileObjectTool($app, $this->manifestService, $this->records, $proposeTool),
             new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
             new ValidateManifestTool($this->validator),
             $proposeTool,

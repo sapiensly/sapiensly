@@ -43,7 +43,6 @@ import type {
     DocumentTypeOption,
     IngestionCostEstimate,
     KnowledgeBase,
-    KnowledgeBaseDocument,
 } from '@/types/knowledge-base';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -66,8 +65,45 @@ import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
+/**
+ * A `Document` attached to the KB through the pivot table; the controller eager
+ * loads these as `attached_documents` with the per-link pivot state.
+ */
+interface AttachedDocument extends Document {
+    pivot?: {
+        embedding_status?: string;
+        error_message?: string | null;
+        ingestion_cost?: number | string | null;
+        extraction_method?: string | null;
+        page_count?: number | null;
+    };
+}
+
+/** The KB as serialised by the `show` controller, with the loaded relations. */
+interface KnowledgeBaseWithDocuments extends KnowledgeBase {
+    attached_documents?: AttachedDocument[];
+}
+
+/**
+ * Normalised row rendered in the documents list — legacy KB documents and
+ * pivot-attached documents are mapped to this common shape.
+ */
+interface DisplayDocument {
+    id: string;
+    original_filename: string | null;
+    name?: string;
+    source: string;
+    type: string;
+    embedding_status: string;
+    error_message: string | null;
+    ingestion_cost?: number | string | null;
+    extraction_method?: string | null;
+    page_count?: number | null;
+    isAttached: boolean;
+}
+
 interface Props {
-    knowledgeBase: KnowledgeBase;
+    knowledgeBase: KnowledgeBaseWithDocuments;
     documentTypes: DocumentTypeOption[];
     availableDocuments: Document[];
     attachedDocumentIds: string[];
@@ -133,7 +169,7 @@ const currentChunkCount = computed(
 );
 
 // Combine legacy documents and new attached documents
-const allDocuments = computed(() => {
+const allDocuments = computed((): DisplayDocument[] => {
     const legacy = props.knowledgeBase.documents || [];
     const attached = props.knowledgeBase.attached_documents || [];
 
@@ -222,9 +258,7 @@ const documentTypeLabel = (type: string) => {
     return found?.label ?? type.toUpperCase();
 };
 
-const deleteDocument = (
-    doc: KnowledgeBaseDocument & { isAttached?: boolean },
-) => {
+const deleteDocument = (doc: DisplayDocument) => {
     if (
         !confirm(`Remove "${doc.original_filename ?? doc.name ?? doc.source}"?`)
     )
@@ -251,9 +285,7 @@ const deleteDocument = (
     }
 };
 
-const reprocessDocument = (
-    doc: KnowledgeBaseDocument & { isAttached?: boolean },
-) => {
+const reprocessDocument = (doc: DisplayDocument) => {
     // Optimistically update status
     statusOverrides[doc.id] = { status: 'pending', errorMessage: null };
 
