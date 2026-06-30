@@ -2354,6 +2354,18 @@
                         "watermark_path": { "type": "string", "maxLength": 200 },
                         "interval_minutes": { "type": "integer", "minimum": 1, "maximum": 10080 }
                     }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "integration_id"],
+                    "additionalProperties": false,
+                    "description": "Fires when an inbound-email provider (Postmark/Mailgun/SendGrid/…) POSTs a parsed email to the integration's email webhook URL. `integration_id` binds the workflow to that integration (set its provider + signing secret/token there). Optional `to_contains`/`subject_contains` narrow which emails fire (case-insensitive). The payload is normalised across providers. Trigger payload: {integration_id, email:{from,from_name,to,subject,text,html,message_id}}.",
+                    "properties": {
+                        "type": { "const": "email.inbound" },
+                        "integration_id": { "$ref": "#/$defs/id" },
+                        "to_contains": { "type": "string", "maxLength": 200 },
+                        "subject_contains": { "type": "string", "maxLength": 200 }
+                    }
                 }
             ]
         },

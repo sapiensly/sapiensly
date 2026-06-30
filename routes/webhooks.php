@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Webhooks\EmailInboundWebhookController;
 use App\Http\Controllers\Webhooks\FlowWebhookController;
 use App\Http\Controllers\Webhooks\IntegrationEventWebhookController;
 use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
@@ -38,4 +39,11 @@ Route::prefix('webhooks/integrations')->middleware(SubstituteBindings::class)->g
         ->where('integration', 'integ_[a-z0-9]+')
         ->middleware('throttle:integration-event-webhook')
         ->name('webhooks.integrations.receive');
+});
+
+Route::prefix('webhooks/email')->middleware(SubstituteBindings::class)->group(function () {
+    Route::post('{integration}', [EmailInboundWebhookController::class, 'receive'])
+        ->where('integration', 'integ_[a-z0-9]+')
+        ->middleware('throttle:email-inbound-webhook')
+        ->name('webhooks.email.receive');
 });

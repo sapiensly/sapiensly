@@ -136,6 +136,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(600)->by('integration-event-webhook:'.$integration);
         });
 
+        RateLimiter::for('email-inbound-webhook', function (Request $request) {
+            $integration = (string) $request->route('integration');
+
+            return Limit::perMinute(300)->by('email-inbound-webhook:'.$integration);
+        });
+
         $this->registerRuntimeRateLimiters();
     }
 
