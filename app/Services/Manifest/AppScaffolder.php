@@ -788,6 +788,14 @@ class AppScaffolder
             $button,
         ];
 
+        // Two date fields (a start + an end) turn the page into a schedule: a
+        // Gantt of each record's span. This is what makes a plan/project object
+        // render as a work-plan timeline.
+        $gantt = $this->buildGantt($objectId, $fieldIndex);
+        if ($gantt !== null) {
+            $blocks[] = $gantt;
+        }
+
         // A status (single_select) field turns the page into a board: a kanban
         // grouped by that status, with the title field on each card.
         $kanban = $this->buildKanban($objectId, $fieldIndex);
@@ -843,6 +851,46 @@ class AppScaffolder
         }
 
         return $kanban;
+    }
+
+    /**
+     * A Gantt chart of each record's span, or null when the object lacks the two
+     * date/datetime fields (a start + an end) a schedule needs. Each bar runs
+     * from the first date field to the second, titled by the title field and —
+     * when the object has a status (single_select) — coloured by it. This is how
+     * a "Tasks"/"Milestones" object with start & end dates surfaces as a
+     * work-plan timeline.
+     *
+     * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
+     * @return array<string, mixed>|null
+     */
+    private function buildGantt(string $objectId, array $fieldIndex): ?array
+    {
+        $dates = array_values(array_filter(
+            $fieldIndex,
+            fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true),
+        ));
+        $title = $this->titleField($fieldIndex);
+        if (count($dates) < 2 || $title === null) {
+            return null;
+        }
+
+        $gantt = [
+            'id' => $this->id('blk'),
+            'type' => 'gantt',
+            'data_source' => ['object_id' => $objectId],
+            'start_field_id' => $dates[0]['id'],
+            'end_field_id' => $dates[1]['id'],
+            'title_field_id' => $title['id'],
+        ];
+
+        // Colour each bar by the object's status, when it has one.
+        $status = $this->firstFieldOfType($fieldIndex, 'single_select');
+        if ($status !== null) {
+            $gantt['color_field_id'] = $status['id'];
+        }
+
+        return $gantt;
     }
 
     /**

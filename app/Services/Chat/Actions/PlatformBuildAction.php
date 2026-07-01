@@ -12,11 +12,11 @@ use Laravel\Mcp\Request as McpRequest;
 use RuntimeException;
 
 /**
- * Executes a platform "build" proposal (create_app / create_chatbot /
- * create_integration / create_knowledge_base / create_agent) by running the
- * corresponding MCP tool AS THE CHAT OWNER, mirroring
- * {@see McpBridgeTool}: the owner's authorization + RLS
- * cap the call, so a build can never do more than the user who owns the chat.
+ * Executes a platform "build" proposal (create_app / scaffold_app /
+ * create_chatbot / create_integration / create_knowledge_base / create_agent /
+ * save_document) by running the corresponding MCP tool AS THE CHAT OWNER,
+ * mirroring {@see McpBridgeTool}: the owner's authorization + RLS cap the call,
+ * so a build can never do more than the user who owns the chat.
  *
  * One instance is registered per build action_type in {@see ActionRegistry}; the
  * proposal's `parameters` are passed straight to the MCP tool, which validates

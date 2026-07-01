@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { normalizeChatMarkdown } from '@/lib/markdown';
-import type { ChatMessageDto, ChatSynthesisStatus } from '@/types/chatModule';
+import type {
+    ActionPayloadDto,
+    ChatMessageDto,
+    ChatSynthesisStatus,
+} from '@/types/chatModule';
 import { CircleCheck, Loader2, Sparkles, X } from '@lucide/vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -18,9 +22,18 @@ const props = defineProps<{
 
 defineEmits<{ execute: []; dismiss: [] }>();
 
-const payload = computed(() => props.message.action_payload);
+// This card only renders action_proposal messages; message_type guarantees the
+// payload is an ActionPayloadDto (not the question shape sharing the column).
+const payload = computed(
+    () => props.message.action_payload as ActionPayloadDto | null,
+);
+// Only short scalar params make sense as pills; long values (a document `body`,
+// a scaffold `description`) would blow up the card, so drop them.
 const parameters = computed(() =>
-    Object.entries(payload.value?.parameters ?? {}),
+    Object.entries(payload.value?.parameters ?? {}).filter(([, value]) => {
+        if (value === null || typeof value === 'object') return false;
+        return String(value).length <= 80;
+    }),
 );
 // A single chat can hold several proposals, so the per-message status drives the
 // card's locked state; fall back to the chat-level status for legacy proposals.

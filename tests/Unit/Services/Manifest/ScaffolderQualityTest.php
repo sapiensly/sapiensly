@@ -141,6 +141,74 @@ function blockByType(array $page, string $type): ?array
     return collect($page['blocks'])->firstWhere('type', $type);
 }
 
+/**
+ * A work-plan model: a Tasks object with a start date, an end date and a status
+ * — the shape a project/plan tracker takes, which should render a Gantt.
+ *
+ * @return array<string, mixed>
+ */
+function scaffoldPlan(string $locale): array
+{
+    $base = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_pl1',
+        'slug' => 'plan',
+        'name' => 'Plan',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => $locale, 'default_currency' => 'USD'],
+    ];
+
+    $spec = [
+        'objects' => [[
+            'name' => 'Tasks',
+            'slug' => 'tasks',
+            'fields' => [
+                ['name' => 'Task', 'slug' => 'task', 'type' => 'string', 'options' => null],
+                ['name' => 'Start', 'slug' => 'start_date', 'type' => 'date', 'options' => null],
+                ['name' => 'End', 'slug' => 'end_date', 'type' => 'date', 'options' => null],
+                ['name' => 'Status', 'slug' => 'status', 'type' => 'single_select', 'options' => [
+                    ['value' => 'todo', 'label' => 'To do'],
+                    ['value' => 'done', 'label' => 'Done'],
+                ]],
+            ],
+        ]],
+        'links' => [],
+    ];
+
+    return app(AppScaffolder::class)->assemble($base, $spec);
+}
+
+it('renders a plan object with two date fields as a Gantt, coloured by status', function () {
+    $manifest = scaffoldPlan('en');
+
+    $page = pageBySlug($manifest, 'tasks');
+    $gantt = blockByType($page, 'gantt');
+    expect($gantt)->not->toBeNull();
+
+    $fields = collect($manifest['objects'][0]['fields']);
+    $start = $fields->firstWhere('slug', 'start_date')['id'];
+    $end = $fields->firstWhere('slug', 'end_date')['id'];
+    $title = $fields->firstWhere('slug', 'task')['id'];
+    $status = $fields->firstWhere('slug', 'status')['id'];
+
+    expect($gantt['start_field_id'])->toBe($start)
+        ->and($gantt['end_field_id'])->toBe($end)
+        ->and($gantt['title_field_id'])->toBe($title)
+        ->and($gantt['color_field_id'])->toBe($status);
+
+    // The whole manifest still validates.
+    expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('does not add a Gantt when an object has fewer than two date fields', function () {
+    // Comandas has a status but only a folio + total — no date pair.
+    $manifest = scaffoldFor('es-MX');
+    expect(blockByType(pageBySlug($manifest, 'comandas'), 'gantt'))->toBeNull();
+});
+
 it('scaffolds an editable kanban with colour-coded status options', function () {
     $manifest = scaffoldFor('es-MX');
 

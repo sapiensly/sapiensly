@@ -37,10 +37,12 @@ class ProposeBuildTool implements ToolContract
      */
     public const BUILD_TYPES = [
         'create_app',
+        'scaffold_app',
         'create_chatbot',
         'create_integration',
         'create_knowledge_base',
         'create_agent',
+        'save_document',
     ];
 
     public function __construct(
@@ -50,7 +52,12 @@ class ProposeBuildTool implements ToolContract
 
     public function description(): Stringable|string
     {
-        return 'Surface an actionable "build this" card (with Execute / Dismiss buttons) proposing that the platform build something for the user: an app/dashboard, chatbot, integration, knowledge base, or agent. Use this when you PROACTIVELY detect a need the platform can cover — instead of building silently. The build runs only if the user clicks Execute. Put the inputs for the matching create_* tool in `parameters` (e.g. for create_app: name, slug) so they satisfy that tool\'s required fields. Do NOT also call the create_* tool yourself — the card runs it. When the user has explicitly asked you to build something right now, call the create_* tool directly instead of proposing.';
+        return 'Surface an actionable "build this" card (with Execute / Dismiss buttons) proposing that the platform build something for the user. The build runs only if the user clicks Execute. Use this when you PROACTIVELY detect a need the platform can cover — instead of building silently. Put the inputs the matching tool needs in `parameters`; do NOT also run the tool yourself — the card runs it. Action types:
+- `create_app`: an empty app to refine interactively (parameters: name, slug).
+- `scaffold_app`: a COMPLETE ready-to-use app generated from a description in one step — objects, fields, list/board pages and a dashboard. Prefer this for a real "build me an app" offer, e.g. a PROJECT / PLAN TRACKER: parameters {name, description}. Make the description spell out the entities and their fields; for a work plan describe a "Tasks" object with a start date, an end date and a status — the app then renders a Gantt timeline of the plan.
+- `create_chatbot`, `create_integration`, `create_knowledge_base`, `create_agent`: parameters satisfy that create_* tool.
+- `save_document`: save a document the user can keep in Sapiensly. Use it after you produce a substantial HTML or Markdown deliverable (a report, brief, spec, plan write-up). parameters {name, body (the full content), type: "artifact" for HTML or "md" for Markdown}.
+When the user has explicitly asked you to build/save something right now, call the underlying tool directly instead of proposing.';
     }
 
     /**

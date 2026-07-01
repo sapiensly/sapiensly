@@ -2,6 +2,7 @@
 
 use App\Ai\ChatAgent;
 use App\Ai\Tools\Chat\ProposeBuildTool;
+use App\Enums\DocumentType;
 use App\Events\Chat\ChatActionExecuted;
 use App\Events\Chat\ChatActionProposalReady;
 use App\Models\Agent;
@@ -9,7 +10,9 @@ use App\Models\AiProvider;
 use App\Models\App;
 use App\Models\Chat;
 use App\Models\ChatMessage;
+use App\Models\Document;
 use App\Models\User;
+use App\Services\Chat\Actions\ActionRegistry;
 use App\Services\Chat\ChatAiService;
 use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Ai;
@@ -127,6 +130,74 @@ it('locks each proposal independently and refuses a second execution', function 
     $this->actingAs($this->user)
         ->postJson(route('chat.actions.execute', ['chat' => $chat, 'message' => $first]))
         ->assertStatus(422);
+});
+
+it('proposes and saves an HTML document the user keeps', function () {
+    Event::fake([ChatActionProposalReady::class, ChatActionExecuted::class]);
+    $chat = Chat::factory()->forUser($this->user)->create();
+
+    $reply = (new ProposeBuildTool($chat, $this->user))->handle(new ToolRequest([
+        'action_type' => 'save_document',
+        'action_label' => 'Save the Q3 report',
+        'summary' => 'I can save this write-up as a document you can keep.',
+        'parameters' => [
+            'name' => 'Q3 Report',
+            'body' => '<h1>Q3</h1><p>Great quarter.</p>',
+            'type' => 'artifact',
+        ],
+    ]));
+
+    expect((string) $reply)->toContain('Save the Q3 report');
+
+    $proposal = ChatMessage::where('chat_id', $chat->id)
+        ->where('message_type', 'action_proposal')->sole();
+    expect($proposal->action_payload['action_type'])->toBe('save_document')
+        ->and($proposal->action_payload['executable'])->toBeTrue();
+
+    $this->actingAs($this->user)
+        ->postJson(route('chat.actions.execute', ['chat' => $chat, 'message' => $proposal]))
+        ->assertOk()
+        ->assertJsonPath('message.message_type', 'action_result');
+
+    $doc = Document::query()->where('name', 'Q3 Report')->sole();
+    expect($doc->type)->toBe(DocumentType::Artifact)
+        ->and($doc->body)->toContain('Great quarter')
+        // Inline document: content in the body column, no file on disk.
+        ->and($doc->file_path)->toBeNull();
+});
+
+it('knows the scaffold_app and save_document build types', function () {
+    $registry = app(ActionRegistry::class);
+    expect($registry->knows('scaffold_app'))->toBeTrue()
+        ->and($registry->knows('save_document'))->toBeTrue()
+        ->and(ProposeBuildTool::BUILD_TYPES)
+        ->toContain('scaffold_app')
+        ->toContain('save_document');
+});
+
+it('proposes a scaffold_app project tracker without building it', function () {
+    Event::fake([ChatActionProposalReady::class]);
+    $chat = Chat::factory()->forUser($this->user)->create();
+
+    $reply = (new ProposeBuildTool($chat, $this->user))->handle(new ToolRequest([
+        'action_type' => 'scaffold_app',
+        'action_label' => 'Build a project tracker',
+        'summary' => 'I can set up an app to track this plan with a Gantt.',
+        'parameters' => [
+            'name' => 'Launch Plan',
+            'description' => 'A Tasks object with a start date, end date and status to track the launch plan.',
+        ],
+    ]));
+
+    expect((string) $reply)->toContain('Build a project tracker');
+
+    $proposal = ChatMessage::where('chat_id', $chat->id)
+        ->where('message_type', 'action_proposal')->sole();
+    expect($proposal->action_payload['action_type'])->toBe('scaffold_app')
+        ->and($proposal->action_payload['executable'])->toBeTrue()
+        ->and($proposal->action_payload['status'])->toBe('ready');
+
+    Event::assertDispatched(ChatActionProposalReady::class);
 });
 
 it('exposes propose_build to a plain chat but not to a selected agent', function () {
