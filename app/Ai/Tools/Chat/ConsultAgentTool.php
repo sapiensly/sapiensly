@@ -39,6 +39,13 @@ class ConsultAgentTool implements ToolContract
      */
     private const MAX_CONSULTATIONS_PER_TURN = 3;
 
+    /**
+     * Relay the consulted agent's stream to the UI in small batches rather than
+     * one synchronous Reverb broadcast per token — smooth to watch, light on the
+     * wire (the nested consult runs inside the main turn's time budget).
+     */
+    private const CONSULT_STREAM_FLUSH_CHARS = 40;
+
     public function __construct(
         private Chat $chat,
         private ChatMessage $placeholder,
@@ -97,9 +104,22 @@ class ConsultAgentTool implements ToolContract
             // Stream the consulted agent's turn (chatStreamed) rather than a
             // blocking prompt(): a slow reasoning agent then survives on the SSE
             // idle watchdog instead of tripping the SDK's short 60s request cap.
+            // Relay its tokens live (throttled) so the user watches it write,
+            // mirroring the main chat stream.
+            $chunk = '';
             $answer = app(LLMService::class)
                 ->setContext($this->user)
-                ->chatStreamed($target, [new Message(['role' => MessageRole::User, 'content' => $question])]);
+                ->chatStreamed(
+                    $target,
+                    [new Message(['role' => MessageRole::User, 'content' => $question])],
+                    onDelta: function (string $delta) use (&$chunk, $consultationId, $target, $question, $visible): void {
+                        $chunk .= $delta;
+                        if (mb_strlen($chunk) >= self::CONSULT_STREAM_FLUSH_CHARS || str_contains($chunk, "\n")) {
+                            $this->broadcast('delta', $consultationId, $target, $question, $visible, $chunk);
+                            $chunk = '';
+                        }
+                    },
+                );
         } catch (\Throwable $e) {
             $answer = 'The agent could not respond: '.$e->getMessage();
         }

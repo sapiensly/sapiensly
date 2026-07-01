@@ -39,9 +39,39 @@ const open = ref(props.consultation.visible);
 </script>
 
 <template>
-    <!-- Live: still waiting on the consulted agent. -->
+    <!-- Live + visible + already writing: stream the answer into a card. -->
     <div
-        v-if="consultation.pending"
+        v-if="
+            consultation.pending && consultation.visible && consultation.answer
+        "
+        class="mb-2 overflow-hidden rounded-lg border text-xs"
+        :style="{ borderColor: accentSoft }"
+    >
+        <div
+            class="flex w-full items-center gap-1.5 px-2.5 py-1.5 font-medium"
+            :style="{ backgroundColor: accentSoft, color: accent }"
+        >
+            <Loader2 class="size-3.5 animate-spin" />
+            {{
+                t('chat.consult.consulting', { agent: consultation.agent_name })
+            }}
+        </div>
+        <div class="px-2.5 py-2">
+            <div
+                class="sp-chat-prose prose prose-sm inline max-w-none text-ink dark:prose-invert"
+                v-html="renderMarkdown(consultation.answer)"
+            />
+            <!-- Blinking caret signals the agent is still writing. -->
+            <span
+                class="ml-0.5 inline-block h-3 w-[2px] animate-pulse rounded-sm align-text-bottom"
+                :style="{ backgroundColor: accent }"
+            />
+        </div>
+    </div>
+
+    <!-- Live, waiting for the first token (or a quiet background consult). -->
+    <div
+        v-else-if="consultation.pending"
         class="mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs"
         :style="{
             borderColor: accentSoft,

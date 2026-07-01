@@ -144,14 +144,22 @@ class LLMService
      * the SSE idle watchdog instead of the SDK's short blocking request timeout.
      * A slow reasoning model then survives as long as tokens keep flowing.
      *
+     * When $onDelta is given it is invoked with each text chunk as it streams, so
+     * the caller can relay live progress (e.g. into a consultation card) while
+     * still receiving the assembled reply as the return value.
+     *
      * @param  array<Message>  $messages
      * @param  array<int, StoredImage|StoredDocument|StoredAudio>  $attachments
+     * @param  (callable(string): void)|null  $onDelta
      */
-    public function chatStreamed(Agent $agent, array $messages, array $attachments = []): string
+    public function chatStreamed(Agent $agent, array $messages, array $attachments = [], ?callable $onDelta = null): string
     {
         $text = '';
         foreach ($this->streamChat($agent, $messages, $attachments) as $delta) {
             $text .= $delta;
+            if ($onDelta !== null) {
+                $onDelta($delta);
+            }
         }
 
         return $text;

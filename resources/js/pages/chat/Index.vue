@@ -216,7 +216,7 @@ function subscribe(id: string) {
         '.ChatAgentConsultation',
         (data: {
             message_id: string;
-            phase: 'start' | 'result';
+            phase: 'start' | 'delta' | 'result';
             consultation_id: string;
             agent_id: string;
             agent_name: string;
@@ -224,18 +224,31 @@ function subscribe(id: string) {
             visible: boolean;
             answer: string | null;
         }) => {
-            const list = (consultations.value[data.message_id] ?? []).filter(
-                (c) => c.id !== data.consultation_id,
+            // Update in place (preserving order): `start` opens the card, each
+            // `delta` appends the consulted agent's next chunk live, `result`
+            // replaces it with the final answer and clears the pending state.
+            const list = (consultations.value[data.message_id] ?? []).map(
+                (c) => ({ ...c }),
             );
-            list.push({
+            const idx = list.findIndex((c) => c.id === data.consultation_id);
+            const prevAnswer = idx >= 0 ? list[idx].answer : null;
+            const entry = {
                 id: data.consultation_id,
                 agent_id: data.agent_id,
                 agent_name: data.agent_name,
                 question: data.question,
-                answer: data.answer,
+                answer:
+                    data.phase === 'delta'
+                        ? (prevAnswer ?? '') + (data.answer ?? '')
+                        : data.answer,
                 visible: data.visible,
-                pending: data.phase === 'start',
-            });
+                pending: data.phase !== 'result',
+            };
+            if (idx >= 0) {
+                list[idx] = entry;
+            } else {
+                list.push(entry);
+            }
             consultations.value = {
                 ...consultations.value,
                 [data.message_id]: list,

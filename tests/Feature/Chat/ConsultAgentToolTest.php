@@ -10,6 +10,8 @@ use App\Models\User;
 use App\Services\LLMService;
 use App\Support\Chat\ConsultationLog;
 use Illuminate\Support\Facades\Event;
+use Laravel\Ai\Ai;
+use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Tools\Request as AiRequest;
 
 beforeEach(function () {
@@ -51,6 +53,25 @@ it('consults another agent, broadcasts the exchange, and logs it', function () {
 
     // Live feedback: a start and a result event.
     Event::assertDispatchedTimes(ChatAgentConsultation::class, 2);
+});
+
+it('streams the consulted agent answer live via delta events', function () {
+    Event::fake([ChatAgentConsultation::class]);
+    // A long-enough answer to flush more than one live batch to the card.
+    Ai::fakeAgent(AnonymousAgent::class, ['This is a sufficiently long consulted answer so it streams to the card in more than one batch.']);
+
+    $out = (string) consultTool($this)->handle(new AiRequest([
+        'agent_id' => $this->target->id,
+        'question' => 'What is our positioning?',
+        'visible' => true,
+    ]));
+
+    expect($out)->toContain('sufficiently long consulted answer');
+
+    // The card is opened (start), written into live (delta), then finalized (result).
+    Event::assertDispatched(ChatAgentConsultation::class, fn ($e) => $e->phase === 'start');
+    Event::assertDispatched(ChatAgentConsultation::class, fn ($e) => $e->phase === 'delta' && $e->answer !== null && $e->answer !== '');
+    Event::assertDispatched(ChatAgentConsultation::class, fn ($e) => $e->phase === 'result' && str_contains((string) $e->answer, 'sufficiently long'));
 });
 
 it('refuses to consult beyond the per-turn cap', function () {

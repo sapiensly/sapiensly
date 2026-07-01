@@ -10,18 +10,20 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Emitted while the assistant consults another agent mid-turn, so the UI can
- * show it live: a "Consulting <Agent>…" indicator on `start`, then the answer on
- * `result`. `visible` is the consulting agent's choice — false renders a compact
- * pill (background), true a full card showing the other agent's answer (front).
- * The completed consultation is also persisted on the message's
- * agent_data_context so it survives a reload.
+ * show it live: a "Consulting <Agent>…" indicator on `start`, the consulted
+ * agent's answer streaming in on each `delta` (the `answer` field carries the
+ * incremental chunk to append), then the full answer on `result`. `visible` is
+ * the consulting agent's choice — false renders a compact pill (background), true
+ * a full card showing the other agent's answer (front). The completed
+ * consultation is also persisted on the message's agent_data_context so it
+ * survives a reload.
  */
 class ChatAgentConsultation implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     /**
-     * @param  'start'|'result'  $phase
+     * @param  'start'|'delta'|'result'  $phase
      */
     public function __construct(
         public string $chatId,
