@@ -52,6 +52,23 @@ it('offers the general type on the create form', function () {
             ->has('recommendedModels.general'));
 });
 
+it('collects a streamed turn into full text via chatStreamed', function () {
+    // chatStreamed drives the STREAMING transport (so a consulted agent inherits
+    // the SSE idle watchdog, not the SDK's 60s blocking cap) yet returns the full
+    // text — the fake gateway splits the reply into word deltas we reassemble.
+    Ai::fakeAgent(AnonymousAgent::class, ['Yes, order #1234 is eligible for a refund.']);
+
+    $agent = Agent::factory()->standalone()->general()->create([
+        'user_id' => $this->user->id,
+        'model' => 'claude-sonnet-4-20250514',
+    ]);
+    $message = new Message(['role' => MessageRole::User, 'content' => 'Is it eligible?']);
+
+    $answer = app(LLMService::class)->setContext($this->user)->chatStreamed($agent, [$message]);
+
+    expect($answer)->toBe('Yes, order #1234 is eligible for a refund.');
+});
+
 it('returns response and knowledge-base metadata from chatWithKnowledgeAndTools', function () {
     Ai::fakeAgent(AnonymousAgent::class, ['ok']);
 

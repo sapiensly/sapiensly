@@ -27,6 +27,15 @@ class ConsultationLog
     }
 
     /**
+     * Number of consultations recorded so far this turn — used to cap how many
+     * times one turn may consult other agents.
+     */
+    public function count(): int
+    {
+        return count($this->entries);
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function all(): array

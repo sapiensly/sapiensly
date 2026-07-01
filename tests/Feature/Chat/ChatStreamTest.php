@@ -71,6 +71,21 @@ it('replaces the cryptic timeout exception with a friendly, actionable message',
         ->and($placeholder->error)->toContain('ran out of time');
 });
 
+it('distinguishes an interrupted (killed) runner from a genuine timeout', function () {
+    Event::fake([ChatStreamError::class]);
+
+    $chat = Chat::factory()->forUser($this->user)->create();
+    $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'streaming']);
+
+    // A worker killed with no catchable exception (deploy/restart or OOM) → null.
+    (new RunChatAiJob($placeholder->id, 'Build me an app', null))->failed(null);
+
+    $placeholder->refresh();
+    expect($placeholder->status)->toBe('error')
+        ->and($placeholder->error)->toContain('was interrupted')
+        ->and($placeholder->error)->not->toContain('ran out of time');
+});
+
 it('tells the user when an app was partially built before the turn ran out of time', function () {
     $chat = Chat::factory()->forUser($this->user)->create();
     $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'streaming']);

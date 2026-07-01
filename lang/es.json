@@ -1,5 +1,6 @@
 {
     "The assistant ran out of time finishing this response. Please try again — and if it was a large build, ask for it in smaller steps.": "Al asistente se le acabó el tiempo para terminar esta respuesta. Inténtalo de nuevo — y si era una construcción grande, pídela en pasos más pequeños.",
+    "The assistant was interrupted before finishing this response (the process was stopped — usually a restart or a memory limit). Please try again — and if it was a large build, ask for it in smaller steps.": "El asistente se interrumpió antes de terminar esta respuesta (el proceso se detuvo — normalmente un reinicio o un límite de memoria). Inténtalo de nuevo — y si era una construcción grande, pídela en pasos más pequeños.",
     "Anything it already built is saved: :names — open it from your apps (every change is a reversible version).": "Lo que ya construyó está guardado: :names — ábrelo desde tus apps (cada cambio es una versión reversible).",
     "The chat request did not finish in time.": "La solicitud del chat no terminó a tiempo.",
     "Verify your email address": "Verifica tu correo electrónico",

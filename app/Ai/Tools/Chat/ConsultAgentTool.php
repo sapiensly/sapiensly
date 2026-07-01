@@ -30,6 +30,15 @@ use Stringable;
  */
 class ConsultAgentTool implements ToolContract
 {
+    /**
+     * Hard cap on consultations per assistant turn. Each consult is a full
+     * (streamed) agent run that eats into the turn's job budget (280s), so an
+     * unbounded chain of consults could time the whole turn out. The soft
+     * guidance already tells the model to consult sparingly; this is the
+     * deterministic backstop when it doesn't.
+     */
+    private const MAX_CONSULTATIONS_PER_TURN = 3;
+
     public function __construct(
         private Chat $chat,
         private ChatMessage $placeholder,
@@ -75,14 +84,22 @@ class ConsultAgentTool implements ToolContract
             return "Error: no agent '{$agentId}' is available to consult. Use list_agents first.";
         }
 
+        if ($this->log->count() >= self::MAX_CONSULTATIONS_PER_TURN) {
+            return 'Error: consultation limit reached for this turn ('.self::MAX_CONSULTATIONS_PER_TURN.'). '
+                .'Answer the user directly using what you already have.';
+        }
+
         $consultationId = (string) Str::ulid();
 
         $this->broadcast('start', $consultationId, $target, $question, $visible, null);
 
         try {
+            // Stream the consulted agent's turn (chatStreamed) rather than a
+            // blocking prompt(): a slow reasoning agent then survives on the SSE
+            // idle watchdog instead of tripping the SDK's short 60s request cap.
             $answer = app(LLMService::class)
                 ->setContext($this->user)
-                ->chat($target, [new Message(['role' => MessageRole::User, 'content' => $question])]);
+                ->chatStreamed($target, [new Message(['role' => MessageRole::User, 'content' => $question])]);
         } catch (\Throwable $e) {
             $answer = 'The agent could not respond: '.$e->getMessage();
         }

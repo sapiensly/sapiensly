@@ -99,22 +99,27 @@ class RunChatAiJob implements ShouldQueue
 
     /**
      * Turn the failure into a clear, actionable message in the owner's language.
-     * The framework's own "has been attempted too many times" / "has timed out"
-     * (and a runner killed with no exception) all mean the same thing to a user:
-     * the turn ran out of time. Other exceptions keep their message.
+     * We distinguish two job-death modes that read differently to a user:
+     *  - a genuine timeout (framework's "attempted too many times" / "has timed
+     *    out") — the model took too long;
+     *  - a runner killed with NO catchable exception ($e === null) — the process
+     *    was stopped mid-turn (a deploy/restart or a memory limit), not a clock.
+     * Other exceptions keep their own message.
      */
     private function friendlyReason(?Throwable $e, ChatMessage $message): string
     {
-        $ranOutOfTime = $e === null
-            || $e instanceof MaxAttemptsExceededException
+        $timedOut = $e instanceof MaxAttemptsExceededException
             || $e instanceof TimeoutExceededException;
+        $interrupted = $e === null;
 
-        if (! $ranOutOfTime) {
+        if (! $timedOut && ! $interrupted) {
             return $e->getMessage() !== '' ? $e->getMessage() : __('The chat request did not finish in time.');
         }
 
         $locale = $this->ownerLocale($message);
-        $reason = __('The assistant ran out of time finishing this response. Please try again — and if it was a large build, ask for it in smaller steps.', [], $locale);
+        $reason = $timedOut
+            ? __('The assistant ran out of time finishing this response. Please try again — and if it was a large build, ask for it in smaller steps.', [], $locale)
+            : __('The assistant was interrupted before finishing this response (the process was stopped — usually a restart or a memory limit). Please try again — and if it was a large build, ask for it in smaller steps.', [], $locale);
 
         $apps = $this->appsBuiltDuringTurn($message);
         if ($apps !== []) {

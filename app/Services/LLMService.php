@@ -87,6 +87,18 @@ class LLMService
     }
 
     /**
+     * Total HTTP timeout (seconds) for the SDK's blocking prompt() calls. The
+     * SDK defaults to 60s, which kills legitimately slow reasoning models before
+     * they finish; this raises it to the configured bound (still below the AI
+     * worker timeout). Streaming calls are unaffected — they rely on the idle
+     * watchdog, not a total cap.
+     */
+    private function requestTimeout(): int
+    {
+        return (int) config('ai.request_timeout', 180);
+    }
+
+    /**
      * Resolve the user from context or agent relationship.
      */
     private function resolveUser(?Agent $agent = null): ?User
@@ -118,11 +130,31 @@ class LLMService
             attachments: $attachments,
             provider: $this->getProvider($agent->model, $agent),
             model: $agent->model,
+            timeout: $this->requestTimeout(),
         );
 
         $this->recordUsage($agent, 'agent', $response->usage ?? null);
 
         return $response->text;
+    }
+
+    /**
+     * Run an agent turn through the STREAMING transport but return the full text,
+     * so a blocking caller (e.g. one agent consulting another mid-turn) inherits
+     * the SSE idle watchdog instead of the SDK's short blocking request timeout.
+     * A slow reasoning model then survives as long as tokens keep flowing.
+     *
+     * @param  array<Message>  $messages
+     * @param  array<int, StoredImage|StoredDocument|StoredAudio>  $attachments
+     */
+    public function chatStreamed(Agent $agent, array $messages, array $attachments = []): string
+    {
+        $text = '';
+        foreach ($this->streamChat($agent, $messages, $attachments) as $delta) {
+            $text .= $delta;
+        }
+
+        return $text;
     }
 
     /**
@@ -282,6 +314,7 @@ class LLMService
             attachments: $attachments,
             provider: $this->getProvider($agent->model, $agent),
             model: $agent->model,
+            timeout: $this->requestTimeout(),
         );
 
         $lastStep = $response->steps->last();
@@ -349,6 +382,7 @@ class LLMService
             $prompt,
             provider: $this->getProvider($agent->model, $agent),
             model: $agent->model,
+            timeout: $this->requestTimeout(),
         );
 
         $this->recordUsage($agent, 'agent', $response->usage ?? null);
@@ -382,6 +416,7 @@ class LLMService
             $prompt,
             provider: $this->getProvider($agent->model, $agent),
             model: $agent->model,
+            timeout: $this->requestTimeout(),
         );
 
         $lastStep = $response->steps->last();

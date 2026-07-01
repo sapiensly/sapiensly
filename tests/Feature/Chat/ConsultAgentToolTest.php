@@ -29,9 +29,11 @@ function consultTool($test): ConsultAgentTool
 it('consults another agent, broadcasts the exchange, and logs it', function () {
     Event::fake([ChatAgentConsultation::class]);
 
+    // The consulted turn is streamed (chatStreamed), so a slow reasoning agent
+    // rides the SSE idle watchdog instead of the SDK's short blocking timeout.
     $llm = Mockery::mock(LLMService::class);
     $llm->shouldReceive('setContext')->andReturnSelf();
-    $llm->shouldReceive('chat')->once()->andReturn('Yes, order #1234 is eligible.');
+    $llm->shouldReceive('chatStreamed')->once()->andReturn('Yes, order #1234 is eligible.');
     $this->app->instance(LLMService::class, $llm);
 
     $out = (string) consultTool($this)->handle(new AiRequest([
@@ -51,9 +53,29 @@ it('consults another agent, broadcasts the exchange, and logs it', function () {
     Event::assertDispatchedTimes(ChatAgentConsultation::class, 2);
 });
 
+it('refuses to consult beyond the per-turn cap', function () {
+    // Fill the turn's consultation log up to the cap (3).
+    for ($i = 0; $i < 3; $i++) {
+        $this->log->add(['id' => (string) $i]);
+    }
+
+    // The expensive streamed consult must not run once the cap is reached.
+    $llm = Mockery::mock(LLMService::class);
+    $llm->shouldReceive('chatStreamed')->never();
+    $this->app->instance(LLMService::class, $llm);
+
+    $out = (string) consultTool($this)->handle(new AiRequest([
+        'agent_id' => $this->target->id,
+        'question' => 'One more question',
+    ]));
+
+    expect($out)->toContain('consultation limit reached');
+    expect($this->log->all())->toHaveCount(3);
+});
+
 it('refuses to let an agent consult itself', function () {
     $llm = Mockery::mock(LLMService::class);
-    $llm->shouldReceive('chat')->never();
+    $llm->shouldReceive('chatStreamed')->never();
     $this->app->instance(LLMService::class, $llm);
 
     $out = (string) consultTool($this)->handle(new AiRequest([

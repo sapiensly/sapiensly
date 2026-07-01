@@ -37,6 +37,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Blocking Request Timeout (seconds)
+    |--------------------------------------------------------------------------
+    |
+    | Total HTTP timeout for NON-streaming AI calls (the SDK's blocking
+    | prompt()). Unlike streaming — where a request bounds only time-to-headers
+    | and the idle watchdog above governs the body — a blocking call holds the
+    | connection open with no body until the whole completion is ready, so the
+    | SDK's 60s default kills legitimately slow reasoning models before they
+    | finish. Kept below the AI jobs' timeout (280s) and the worker timeout (300s).
+    |
+    */
+
+    'request_timeout' => (int) env('AI_REQUEST_TIMEOUT', 180),
+
+    /*
+    |--------------------------------------------------------------------------
     | Caching
     |--------------------------------------------------------------------------
     |
