@@ -303,7 +303,7 @@ class WorkflowEngine
         );
 
         $sdkAgent = new AnonymousAgent($systemPrompt, [], []);
-        $response = $sdkAgent->prompt($userPrompt, provider: $provider, model: $model);
+        $response = $sdkAgent->prompt($userPrompt, provider: $provider, model: $model, timeout: (int) config('ai.request_timeout', 180));
 
         app(AiUsageRecorder::class)->record(
             'workflow', $model, $user, $user?->organization_id, $response->usage ?? null,

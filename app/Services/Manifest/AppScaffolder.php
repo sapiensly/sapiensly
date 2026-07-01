@@ -144,7 +144,7 @@ class AppScaffolder
 
         try {
             $agent = new ChatAgent(instructions: self::SYSTEM, messages: [], tools: []);
-            $response = $agent->prompt(Str::limit($description, 2000), provider: $provider, model: $model);
+            $response = $agent->prompt(Str::limit($description, 2000), provider: $provider, model: $model, timeout: (int) config('ai.request_timeout', 180));
 
             return $this->normalizeSpec($this->decodeJson((string) ($response->text ?? '')));
         } catch (\Throwable $e) {

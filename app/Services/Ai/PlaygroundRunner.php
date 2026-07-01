@@ -218,7 +218,7 @@ class PlaygroundRunner
 
         // OpenRouter chat is OpenAI-compatible — the SDK driver handles plain text.
         $response = (new AnonymousAgent($system, [], []))
-            ->prompt($prompt, provider: $handler['provider'], model: $handler['model']);
+            ->prompt($prompt, provider: $handler['provider'], model: $handler['model'], timeout: (int) config('ai.request_timeout', 180));
         $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
 
         return (string) $response->text;
@@ -277,7 +277,7 @@ class PlaygroundRunner
         }
 
         $response = (new AnonymousAgent($instruction, [], []))
-            ->prompt('Extract all text from the attached file.', attachments: [Files\Document::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model']);
+            ->prompt('Extract all text from the attached file.', attachments: [Files\Document::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model'], timeout: (int) config('ai.request_timeout', 180));
         $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
 
         return (string) $response->text;
@@ -306,7 +306,7 @@ class PlaygroundRunner
         }
 
         $response = (new AnonymousAgent('You are a vision assistant.', [], []))
-            ->prompt($instruction, attachments: [Files\Image::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model']);
+            ->prompt($instruction, attachments: [Files\Image::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model'], timeout: (int) config('ai.request_timeout', 180));
         $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
 
         return (string) $response->text;

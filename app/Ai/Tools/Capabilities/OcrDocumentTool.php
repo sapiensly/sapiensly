@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\Tool as ToolContract;
 use Laravel\Ai\Files;
+use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Tools\Request as AiRequest;
 use Stringable;
 
@@ -68,14 +69,24 @@ class OcrDocumentTool implements ToolContract
                 ? Files\Image::fromStorage($attachment->storage_path, $attachment->disk)
                 : Files\Document::fromStorage($attachment->storage_path, $attachment->disk);
 
-            $response = (new AnonymousAgent(self::INSTRUCTIONS, [], []))->prompt(
+            // Stream (collecting the deltas) rather than a blocking prompt(): OCR
+            // of a long document rides the SSE idle watchdog instead of tripping
+            // the SDK's 60s total request cap.
+            $stream = (new AnonymousAgent(self::INSTRUCTIONS, [], []))->stream(
                 'Extract all text from the attached file.',
                 attachments: [$file],
                 provider: $handler['provider'],
                 model: $handler['model'],
             );
 
-            return "Extracted text ({$handler['model']}):\n".$response->text;
+            $text = '';
+            foreach ($stream as $event) {
+                if ($event instanceof TextDelta) {
+                    $text .= $event->delta;
+                }
+            }
+
+            return "Extracted text ({$handler['model']}):\n".$text;
         } catch (\Throwable $e) {
             return 'Error extracting text: '.$e->getMessage();
         }

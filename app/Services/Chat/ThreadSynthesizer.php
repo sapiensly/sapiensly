@@ -112,6 +112,7 @@ class ThreadSynthesizer
                 Str::limit($transcript, self::MAX_TRANSCRIPT_CHARS),
                 provider: $provider,
                 model: $model,
+                timeout: (int) config('ai.request_timeout', 180),
             );
 
             return $this->parsePayload((string) ($response->text ?? ''), $chat);

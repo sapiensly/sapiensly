@@ -90,7 +90,7 @@ class BotFlowScaffolder
 
         try {
             $agent = new ChatAgent(instructions: self::CONVERSE_SYSTEM, messages: [], tools: []);
-            $response = $agent->prompt(Str::limit($prompt, 4000), provider: $provider, model: $model);
+            $response = $agent->prompt(Str::limit($prompt, 4000), provider: $provider, model: $model, timeout: (int) config('ai.request_timeout', 180));
             $decoded = $this->decodeJson((string) ($response->text ?? ''));
 
             if ($decoded === null) {
@@ -137,7 +137,7 @@ class BotFlowScaffolder
 
         try {
             $agent = new ChatAgent(instructions: self::SYSTEM, messages: [], tools: []);
-            $response = $agent->prompt(Str::limit($description, 2000), provider: $provider, model: $model);
+            $response = $agent->prompt(Str::limit($description, 2000), provider: $provider, model: $model, timeout: (int) config('ai.request_timeout', 180));
 
             return $this->parseSpec((string) ($response->text ?? ''));
         } catch (\Throwable $e) {

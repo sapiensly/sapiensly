@@ -234,7 +234,7 @@ class BuilderAiService
 
                 $sdkAgent->forModel($model);
 
-                return $sdkAgent->prompt($promptText, provider: $provider, model: $model);
+                return $sdkAgent->prompt($promptText, provider: $provider, model: $model, timeout: (int) config('ai.request_timeout', 180));
             });
             $assistantText = $response->text ?? '';
 

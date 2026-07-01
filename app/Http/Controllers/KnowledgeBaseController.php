@@ -26,6 +26,7 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Ai\AnonymousAgent;
+use Laravel\Ai\Streaming\Events\TextDelta;
 
 class KnowledgeBaseController extends Controller
 {
@@ -260,7 +261,15 @@ class KnowledgeBaseController extends Controller
 
         $startGen = microtime(true);
         try {
-            $answer = (string) (new AnonymousAgent($system, [], []))->prompt($prompt)->text;
+            // Stream (collecting the deltas) instead of a blocking prompt() so a
+            // long KB answer rides the SSE idle watchdog rather than the SDK's
+            // 60s total request cap.
+            $answer = '';
+            foreach ((new AnonymousAgent($system, [], []))->stream($prompt) as $event) {
+                if ($event instanceof TextDelta) {
+                    $answer .= $event->delta;
+                }
+            }
         } catch (\Throwable $e) {
             $answer = 'Error generating answer: '.$e->getMessage();
         }

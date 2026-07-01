@@ -63,6 +63,7 @@ class AssessDebateRoundJob implements ShouldQueue
                 $orchestrator->buildAssessmentPrompt($round),
                 provider: $provider,
                 model: $debate->moderator_model,
+                timeout: (int) config('ai.request_timeout', 180),
             );
 
             $parsed = self::extractJson((string) ($response->text ?? ''));
