@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { type Artifact, documentArtifactFromProposal } from '@/lib/artifacts';
 import { normalizeChatMarkdown } from '@/lib/markdown';
 import type {
     ActionPayloadDto,
     ChatMessageDto,
     ChatSynthesisStatus,
 } from '@/types/chatModule';
-import { CircleCheck, Loader2, Sparkles, X } from '@lucide/vue';
+import { CircleCheck, FileText, Loader2, Sparkles, X } from '@lucide/vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { computed } from 'vue';
@@ -20,7 +21,11 @@ const props = defineProps<{
     busy?: boolean;
 }>();
 
-defineEmits<{ execute: []; dismiss: [] }>();
+const emit = defineEmits<{
+    execute: [];
+    dismiss: [];
+    openArtifact: [artifact: Artifact];
+}>();
 
 // This card only renders action_proposal messages; message_type guarantees the
 // payload is an ActionPayloadDto (not the question shape sharing the column).
@@ -41,6 +46,13 @@ const executed = computed(
     () => payload.value?.status === 'executed' || props.status === 'executed',
 );
 const dismissed = computed(() => payload.value?.status === 'dismissed');
+
+// A save_document proposal carries the document in its payload; expose it as a
+// previewable artifact so the user can open it in the side panel and decide
+// whether to keep it — before or after saving.
+const documentArtifact = computed<Artifact | null>(() =>
+    documentArtifactFromProposal(props.message.id, payload.value),
+);
 
 // The plain-language answer the user reads first. Older proposals lack it; in
 // that case the action label stands in as the headline.
@@ -150,6 +162,16 @@ function initials(name: string): string {
 
             <!-- Actions -->
             <div class="mt-4 flex items-center gap-2">
+                <!-- Preview a proposed document in the side panel. -->
+                <button
+                    v-if="documentArtifact"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-xl border border-medium bg-surface px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:border-strong"
+                    @click="emit('openArtifact', documentArtifact)"
+                >
+                    <FileText class="size-4 text-ink-subtle" />
+                    {{ t('chat.action.view_document') }}
+                </button>
                 <div
                     v-if="executed"
                     class="inline-flex items-center gap-1.5 rounded-xl bg-sp-success/15 px-3 py-2 text-sm font-medium text-sp-success"

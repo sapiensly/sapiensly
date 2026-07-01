@@ -31,14 +31,21 @@ const CLOSE_TAG = /<\/artifact>/i;
 const TRAILING_PARTIAL = /<artifact\b[^>]*$/i;
 
 function attr(raw: string, name: string): string | null {
-    const m = raw.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, 'i'))
-        ?? raw.match(new RegExp(`${name}\\s*=\\s*'([^']*)'`, 'i'));
+    const m =
+        raw.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, 'i')) ??
+        raw.match(new RegExp(`${name}\\s*=\\s*'([^']*)'`, 'i'));
     return m ? m[1] : null;
 }
 
 function normalizeType(raw: string | null): ArtifactType {
     const t = (raw ?? '').toLowerCase();
-    if (t === 'html' || t === 'markdown' || t === 'svg' || t === 'code' || t === 'text') {
+    if (
+        t === 'html' ||
+        t === 'markdown' ||
+        t === 'svg' ||
+        t === 'code' ||
+        t === 'text'
+    ) {
         return t;
     }
     if (t.includes('html')) return 'html';
@@ -52,7 +59,11 @@ function normalizeType(raw: string | null): ArtifactType {
  * `error`), a trailing artifact whose `</artifact>` tag never arrived is treated
  * as closed — otherwise its card would spin on "Writing…" forever.
  */
-export function parseArtifacts(content: string | null, messageId: string, streamDone = false): ParsedContent {
+export function parseArtifacts(
+    content: string | null,
+    messageId: string,
+    streamDone = false,
+): ParsedContent {
     const segments: Segment[] = [];
     const artifacts: Artifact[] = [];
 
@@ -111,15 +122,67 @@ export function parseArtifacts(content: string | null, messageId: string, stream
     return { segments, artifacts };
 }
 
+/**
+ * Build a previewable artifact from a `save_document` build proposal, whose
+ * content lives in the proposal payload (parameters.body) rather than in the
+ * message text. Returns null for any other proposal or when there is no body.
+ * The id is deterministic so the card's "preview" button and the panel lookup
+ * resolve to the same artifact.
+ */
+export function documentArtifactFromProposal(
+    messageId: string,
+    payload: unknown,
+): Artifact | null {
+    if (!payload || typeof payload !== 'object') return null;
+    const p = payload as { action_type?: unknown; parameters?: unknown };
+    if (p.action_type !== 'save_document') return null;
+    const params = (p.parameters ?? {}) as Record<string, unknown>;
+    const body = typeof params.body === 'string' ? params.body : '';
+    if (!body) return null;
+    // type: 'artifact' (HTML) | 'md' (Markdown), defaulting to markdown.
+    const type: ArtifactType =
+        String(params.type ?? 'md') === 'artifact' ? 'html' : 'markdown';
+    const title =
+        typeof params.name === 'string' && params.name.trim()
+            ? params.name
+            : 'Document';
+    return {
+        id: `${messageId}-doc`,
+        title,
+        type,
+        language: null,
+        content: body,
+        closed: true,
+    };
+}
+
 export function extensionFor(a: Artifact): string {
     if (a.type === 'html') return 'html';
     if (a.type === 'svg') return 'svg';
     if (a.type === 'markdown') return 'md';
     const map: Record<string, string> = {
-        javascript: 'js', typescript: 'ts', python: 'py', ruby: 'rb', php: 'php',
-        java: 'java', csharp: 'cs', cpp: 'cpp', c: 'c', go: 'go', rust: 'rs',
-        json: 'json', yaml: 'yml', sql: 'sql', bash: 'sh', shell: 'sh', css: 'css',
-        vue: 'vue', jsx: 'jsx', tsx: 'tsx', kotlin: 'kt', swift: 'swift',
+        javascript: 'js',
+        typescript: 'ts',
+        python: 'py',
+        ruby: 'rb',
+        php: 'php',
+        java: 'java',
+        csharp: 'cs',
+        cpp: 'cpp',
+        c: 'c',
+        go: 'go',
+        rust: 'rs',
+        json: 'json',
+        yaml: 'yml',
+        sql: 'sql',
+        bash: 'sh',
+        shell: 'sh',
+        css: 'css',
+        vue: 'vue',
+        jsx: 'jsx',
+        tsx: 'tsx',
+        kotlin: 'kt',
+        swift: 'swift',
     };
     return map[(a.language ?? '').toLowerCase()] ?? 'txt';
 }

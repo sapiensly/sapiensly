@@ -2309,6 +2309,7 @@
     "chat.action.dismiss": "Dismiss",
     "chat.action.synthesize": "Synthesize proposal",
     "chat.action.proposed": "Proposed action",
+    "chat.action.view_document": "View document",
     "chat.question.label": "Question",
     "chat.question.other": "Something else…",
     "chat.question.other_placeholder": "Type your answer…",

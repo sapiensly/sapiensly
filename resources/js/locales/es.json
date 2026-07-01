@@ -2308,6 +2308,7 @@
     "chat.action.dismiss": "Descartar",
     "chat.action.synthesize": "Sintetizar propuesta",
     "chat.action.proposed": "Acción propuesta",
+    "chat.action.view_document": "Ver documento",
     "chat.question.label": "Pregunta",
     "chat.question.other": "Otra cosa…",
     "chat.question.other_placeholder": "Escribe tu respuesta…",

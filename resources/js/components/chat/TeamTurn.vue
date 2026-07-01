@@ -86,6 +86,7 @@ function toggle() {
             :busy="actionBusy"
             @execute="emit('execute', close)"
             @dismiss="emit('dismiss', close)"
+            @open-artifact="emit('openArtifact', $event)"
         />
 
         <div v-else-if="isSystemClose" class="flex justify-center">
@@ -112,8 +113,9 @@ function toggle() {
             {{ result.content }}
         </div>
 
-        <!-- Collapsible deliberation: how the team got there. -->
-        <div v-if="deliberation.length">
+        <!-- Collapsible deliberation: how the team got there. Only shown when
+             actual agents deliberated (a plain proposal has no team). -->
+        <div v-if="agentCount > 0">
             <button
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-full border border-medium bg-surface px-3 py-1.5 text-[13px] font-medium text-ink-muted transition-colors hover:border-strong hover:text-ink"

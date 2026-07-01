@@ -7,7 +7,11 @@ import ChatSidebar from '@/components/chat/ChatSidebar.vue';
 import ChatThread from '@/components/chat/ChatThread.vue';
 import echo from '@/echo';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import { type Artifact, parseArtifacts } from '@/lib/artifacts';
+import {
+    type Artifact,
+    documentArtifactFromProposal,
+    parseArtifacts,
+} from '@/lib/artifacts';
 import type {
     ActionPayloadDto,
     ActiveChatDto,
@@ -110,9 +114,19 @@ const allArtifacts = computed<Artifact[]>(() =>
         .filter((m) => m.role === 'assistant' && m.content)
         .flatMap((m) => parseArtifacts(m.content, m.id).artifacts),
 );
+// Documents proposed via save_document carry their content in the proposal
+// payload (not the message text), so the panel can preview them on demand.
+// Kept out of allArtifacts so they never auto-open — only the card's button does.
+const proposalArtifacts = computed<Artifact[]>(() =>
+    messages.value
+        .map((m) => documentArtifactFromProposal(m.id, m.action_payload))
+        .filter((a): a is Artifact => a !== null),
+);
 const activeArtifact = computed<Artifact | null>(
     () =>
-        allArtifacts.value.find((a) => a.id === activeArtifactId.value) ?? null,
+        allArtifacts.value.find((a) => a.id === activeArtifactId.value) ??
+        proposalArtifacts.value.find((a) => a.id === activeArtifactId.value) ??
+        null,
 );
 
 function openArtifact(a: Artifact) {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ActionCard from '@/components/chat/ActionCard.vue';
 import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import AgentMessageBubble from '@/components/chat/AgentMessageBubble.vue';
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
@@ -73,9 +74,12 @@ const turns = computed<Turn[]>(() => {
     return groups.map((items, gi) => {
         const msgs = items.map((it) => it.m);
         const user = msgs.find((m) => m.role === 'user') ?? null;
-        const isTeam = msgs.some(
-            (m) => m.agent_id || m.message_type === 'action_proposal',
-        );
+        // A "team turn" is a multi-agent deliberation — it must carry
+        // agent-authored messages. A lone action_proposal in a plain chat (a
+        // propose_build card) is NOT a team turn: it renders flat so the
+        // assistant's own explanation shows inline instead of being buried in
+        // an empty "how the team decided (0)" toggle.
+        const isTeam = msgs.some((m) => m.agent_id);
         const proposal =
             msgs.find((m) => m.message_type === 'action_proposal') ?? null;
         const result =
@@ -232,7 +236,7 @@ function isLast(index: number): boolean {
                                 :agents="agents"
                             />
 
-                            <!-- Action proposal (synthesized close) -->
+                            <!-- Action proposal (e.g. a propose_build card) -->
                             <ActionCard
                                 v-else-if="m.message_type === 'action_proposal'"
                                 :message="m"
@@ -240,7 +244,16 @@ function isLast(index: number): boolean {
                                 :busy="actionBusy"
                                 @execute="emit('execute', m)"
                                 @dismiss="emit('dismiss', m)"
+                                @open-artifact="emit('openArtifact', $event)"
                             />
+
+                            <!-- Executed action result (e.g. "Done — saved …") -->
+                            <div
+                                v-else-if="m.message_type === 'action_result'"
+                                class="rounded-2xl border border-sp-success/30 bg-sp-success/[0.08] p-3.5 text-sm whitespace-pre-wrap text-ink"
+                            >
+                                {{ m.content }}
+                            </div>
 
                             <!-- Multiple-choice question (ask_user_question) -->
                             <QuestionCard
