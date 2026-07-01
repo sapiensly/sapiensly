@@ -3,6 +3,7 @@
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Build\ScaffoldAppTool;
 use App\Models\App;
+use App\Models\Record;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
@@ -155,6 +156,84 @@ it('scaffold_app derives a unique slug from the name when omitted', function () 
         ])
         ->assertOk()
         ->assertSee('content_engine_2');
+});
+
+it('scaffold_app seeds initial records, matching objects, fields and options tolerantly', function () {
+    fakeScaffold([
+        ['name' => 'Tareas', 'slug' => 'tareas', 'fields' => [
+            ['name' => 'Título', 'slug' => 'titulo', 'type' => 'string', 'options' => null],
+            ['name' => 'Fecha de inicio', 'slug' => 'fecha_inicio', 'type' => 'date', 'options' => null],
+            ['name' => 'Fecha fin', 'slug' => 'fecha_fin', 'type' => 'date', 'options' => null],
+            ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                ['value' => 'pendiente', 'label' => 'Pendiente'],
+                ['value' => 'en_curso', 'label' => 'En curso'],
+            ]],
+        ]],
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Growth Tracker',
+            'description' => 'Plan de 90 días.',
+            'seed_records' => [
+                [
+                    // Object referenced by NAME (not the generated slug).
+                    'object' => 'Tareas',
+                    'records' => [
+                        [
+                            // Field by name, select by label — both must snap on.
+                            'Título' => 'Publicar hilo build-in-public',
+                            'fecha_inicio' => '2026-07-01',
+                            'Fecha fin' => '2026-07-07',
+                            'Estado' => 'En curso',
+                        ],
+                        [
+                            'titulo' => 'Draft del essay',
+                            'fecha_inicio' => '2026-07-08',
+                            'fecha_fin' => '2026-07-14',
+                            'estado' => 'pendiente',
+                        ],
+                        // Bad row: invalid option — reported, not fatal.
+                        ['titulo' => 'Fila mala', 'estado' => 'nope'],
+                    ],
+                ],
+            ],
+        ])
+        ->assertOk()
+        ->assertSee('Row 2');
+
+    $app = App::where('user_id', $this->user->id)->where('slug', 'growth_tracker')->first();
+    expect($app)->not->toBeNull();
+
+    $records = Record::where('app_id', $app->id)->orderBy('created_at')->get();
+    expect($records)->toHaveCount(2);
+    expect($records[0]->data['titulo'])->toBe('Publicar hilo build-in-public');
+    expect($records[0]->data['estado'])->toBe('en_curso');
+    expect($records[0]->data['fecha_fin'])->toBe('2026-07-07');
+    expect($records[1]->data['estado'])->toBe('pendiente');
+});
+
+it('scaffold_app reports an unmatched seed object without failing the build', function () {
+    fakeScaffold([
+        ['name' => 'Ideas', 'slug' => 'ideas', 'fields' => [
+            ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null],
+        ]],
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Seedless',
+            'description' => 'x',
+            'seed_records' => [
+                ['object' => 'no_such_thing', 'records' => [['title' => 'x']]],
+            ],
+        ])
+        ->assertOk()
+        ->assertSee('No scaffolded object matched');
+
+    $app = App::where('user_id', $this->user->id)->where('slug', 'seedless')->first();
+    expect($app)->not->toBeNull();
+    expect(Record::where('app_id', $app->id)->count())->toBe(0);
 });
 
 it('scaffold_app rejects an explicit duplicate slug without creating an app', function () {
