@@ -9,17 +9,25 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Emitted when the assistant invokes a tool mid-stream, so the UI can show a
- * transient "using <tool>…" indicator. Not persisted — informational only.
+ * Emitted across a tool's lifecycle mid-stream so the UI can show live progress:
+ * a "using <tool>…" chip on `start`, then a done/failed chip on `result`. The
+ * `tool_id` (the provider's tool-call id) correlates the two so a turn with
+ * several tool calls tracks each independently. Not persisted — informational.
  */
 class ChatToolCall implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    /**
+     * @param  'start'|'result'  $phase
+     */
     public function __construct(
         public string $chatId,
         public string $messageId,
         public string $toolName,
+        public string $phase = 'start',
+        public string $toolId = '',
+        public ?bool $successful = null,
     ) {}
 
     public function broadcastAs(): string
@@ -43,6 +51,9 @@ class ChatToolCall implements ShouldBroadcastNow
         return [
             'message_id' => $this->messageId,
             'tool_name' => $this->toolName,
+            'phase' => $this->phase,
+            'tool_id' => $this->toolId,
+            'successful' => $this->successful,
         ];
     }
 }

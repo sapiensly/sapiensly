@@ -18,6 +18,7 @@ import type {
     ChatToolOption,
     ConsultationDto,
     KnowledgeBaseOption,
+    ToolActivityDto,
 } from '@/types/chatModule';
 import { Head, router } from '@inertiajs/vue3';
 import { PanelLeftClose, PanelLeftOpen, Sparkles } from '@lucide/vue';
@@ -57,7 +58,7 @@ const currentModel = ref<string | null>(
         null,
 );
 const selectedToolIds = ref<string[]>(props.activeChat?.tool_ids ?? []);
-const toolActivity = ref<Record<string, string>>({});
+const toolActivity = ref<Record<string, ToolActivityDto[]>>({});
 // Live agent-consultation cards per streaming message, keyed by consultation id.
 const consultations = ref<Record<string, ConsultationDto[]>>({});
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null);
@@ -204,10 +205,36 @@ function subscribe(id: string) {
 
     channel.listen(
         '.ChatToolCall',
-        (data: { message_id: string; tool_name: string }) => {
+        (data: {
+            message_id: string;
+            tool_name: string;
+            phase: 'start' | 'result';
+            tool_id: string;
+            successful: boolean | null;
+        }) => {
+            // Track each tool call's lifecycle: `start` adds a running chip,
+            // `result` flips it (by tool_id) to done or error.
+            const list = (toolActivity.value[data.message_id] ?? []).map(
+                (t) => ({
+                    ...t,
+                }),
+            );
+            const idx = list.findIndex((t) => t.id === data.tool_id);
+            const status =
+                data.phase === 'result'
+                    ? data.successful === false
+                        ? 'error'
+                        : 'done'
+                    : 'running';
+            const entry = { id: data.tool_id, name: data.tool_name, status };
+            if (idx >= 0) {
+                list[idx] = entry;
+            } else {
+                list.push(entry);
+            }
             toolActivity.value = {
                 ...toolActivity.value,
-                [data.message_id]: data.tool_name,
+                [data.message_id]: list,
             };
         },
     );

@@ -55,6 +55,7 @@ use Laravel\Ai\Providers\Tools\WebSearch;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\TextStart;
 use Laravel\Ai\Streaming\Events\ToolCall;
+use Laravel\Ai\Streaming\Events\ToolResult;
 
 /**
  * Streams a chat turn from the configured LLM provider, broadcasting each
@@ -464,7 +465,20 @@ class ChatAiService
                         // consult_agent has its own richer ChatAgentConsultation event.
                         if ($event->toolCall->name !== 'consult_agent') {
                             $usedSources[$this->prettySource($event->toolCall->name)] = 'used';
-                            $this->safeBroadcast(fn () => ChatToolCall::dispatch($chat->id, $placeholder->id, $event->toolCall->name));
+                            $this->safeBroadcast(fn () => ChatToolCall::dispatch(
+                                $chat->id, $placeholder->id, $event->toolCall->name, 'start', $event->toolCall->id,
+                            ));
+                        }
+
+                        continue;
+                    }
+
+                    if ($event instanceof ToolResult) {
+                        // Completion half of the lifecycle: flip the chip to done/failed.
+                        if ($event->toolResult->name !== 'consult_agent') {
+                            $this->safeBroadcast(fn () => ChatToolCall::dispatch(
+                                $chat->id, $placeholder->id, $event->toolResult->name, 'result', $event->toolResult->id, $event->successful,
+                            ));
                         }
 
                         continue;

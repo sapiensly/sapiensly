@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\Tools\McpServerTool;
+use App\Events\Chat\ChatToolCall;
 use App\Jobs\RunChatAiJob;
 use App\Models\AiProvider;
 use App\Models\Chat;
@@ -43,6 +44,23 @@ it('exposes the user\'s active tools to the chat index', function () {
             ->where('tools.0.id', $tool->id)
             ->where('tools.0.type', 'rest_api')
         );
+});
+
+it('carries the tool-call lifecycle (phase, id, status) in its broadcast payload', function () {
+    // start: a running chip, no verdict yet.
+    expect((new ChatToolCall('c1', 'm1', 'check_orders', 'start', 'tc_1'))->broadcastWith())->toBe([
+        'message_id' => 'm1',
+        'tool_name' => 'check_orders',
+        'phase' => 'start',
+        'tool_id' => 'tc_1',
+        'successful' => null,
+    ]);
+
+    // result: correlated by tool_id, flips the chip to done/failed.
+    $result = (new ChatToolCall('c1', 'm1', 'check_orders', 'result', 'tc_1', false))->broadcastWith();
+    expect($result['phase'])->toBe('result')
+        ->and($result['tool_id'])->toBe('tc_1')
+        ->and($result['successful'])->toBeFalse();
 });
 
 // ----- MCP server tool wrapper -----

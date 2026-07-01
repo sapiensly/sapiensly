@@ -69,6 +69,13 @@ export interface ConsultationDto {
     pending?: boolean;
 }
 
+// Client-only: one tool call's live lifecycle within a streaming message.
+export interface ToolActivityDto {
+    id: string;
+    name: string;
+    status: 'running' | 'done' | 'error';
+}
+
 export type ChatSynthesisStatus =
     | null
     | 'pending'

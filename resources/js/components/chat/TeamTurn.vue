@@ -8,6 +8,7 @@ import type {
     ChatMessageDto,
     ChatSynthesisStatus,
     ConsultationDto,
+    ToolActivityDto,
 } from '@/types/chatModule';
 import { ChevronDown, Loader2, Users } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
@@ -29,7 +30,7 @@ const props = defineProps<{
     actionBusy?: boolean;
     agents?: ChatAgentRef[];
     consultations?: Record<string, ConsultationDto[]>;
-    toolActivity?: Record<string, string>;
+    toolActivity?: Record<string, ToolActivityDto[]>;
     activeArtifactId?: string | null;
     isLastTurn?: boolean;
 }>();

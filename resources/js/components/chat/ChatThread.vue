@@ -3,6 +3,7 @@ import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import AgentMessageBubble from '@/components/chat/AgentMessageBubble.vue';
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
 import TeamTurn from '@/components/chat/TeamTurn.vue';
+import ToolActivityChips from '@/components/chat/ToolActivityChips.vue';
 import UserMessageBubble from '@/components/chat/UserMessageBubble.vue';
 import { type Artifact, parseArtifacts, type Segment } from '@/lib/artifacts';
 import { normalizeChatMarkdown } from '@/lib/markdown';
@@ -11,8 +12,9 @@ import type {
     ChatMessageDto,
     ChatSynthesisStatus,
     ConsultationDto,
+    ToolActivityDto,
 } from '@/types/chatModule';
-import { Check, Copy, RotateCw, Sparkles, Wrench } from '@lucide/vue';
+import { Check, Copy, RotateCw, Sparkles } from '@lucide/vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
@@ -24,7 +26,7 @@ const props = defineProps<{
     messages: ChatMessageDto[];
     title?: string | null;
     activeArtifactId?: string | null;
-    toolActivity?: Record<string, string>;
+    toolActivity?: Record<string, ToolActivityDto[]>;
     consultations?: Record<string, ConsultationDto[]>;
     synthesisStatus?: ChatSynthesisStatus;
     actionBusy?: boolean;
@@ -115,10 +117,6 @@ function isAgentMessage(m: ChatMessageDto): boolean {
 function segmentsFor(m: ChatMessageDto): Segment[] {
     const settled = m.status === 'complete' || m.status === 'error';
     return parseArtifacts(m.content, m.id, settled).segments;
-}
-
-function prettyToolName(name: string): string {
-    return name.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 const scroller = ref<HTMLElement | null>(null);
@@ -281,24 +279,9 @@ function isLast(index: number): boolean {
                                         </button>
                                     </div>
                                     <template v-else>
-                                        <div
-                                            v-if="
-                                                toolActivity &&
-                                                toolActivity[m.id]
-                                            "
-                                            class="mb-2 inline-flex items-center gap-1.5 rounded-full border border-accent-blue/30 bg-accent-blue/10 px-2.5 py-1 text-xs text-accent-blue"
-                                        >
-                                            <Wrench
-                                                class="size-3 animate-pulse"
-                                            />
-                                            {{
-                                                t('chat.tools.using', {
-                                                    tool: prettyToolName(
-                                                        toolActivity[m.id],
-                                                    ),
-                                                })
-                                            }}
-                                        </div>
+                                        <ToolActivityChips
+                                            :items="toolActivity?.[m.id] ?? []"
+                                        />
                                         <AgentConsultationCard
                                             v-for="c in consultationsFor(m)"
                                             :key="c.id"

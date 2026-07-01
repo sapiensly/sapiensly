@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
+import ToolActivityChips from '@/components/chat/ToolActivityChips.vue';
 import { type Artifact, parseArtifacts, type Segment } from '@/lib/artifacts';
 import { normalizeChatMarkdown } from '@/lib/markdown';
-import type { ChatMessageDto, ConsultationDto } from '@/types/chatModule';
-import { Bot, Wrench } from '@lucide/vue';
+import type {
+    ChatMessageDto,
+    ConsultationDto,
+    ToolActivityDto,
+} from '@/types/chatModule';
+import { Bot } from '@lucide/vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { computed } from 'vue';
@@ -14,7 +19,7 @@ const { t } = useI18n();
 
 const props = defineProps<{
     message: ChatMessageDto;
-    toolActivity?: string | null;
+    toolActivity?: ToolActivityDto[] | null;
     consultations?: ConsultationDto[];
     activeArtifactId?: string | null;
 }>();
@@ -48,10 +53,6 @@ function segments(): Segment[] {
         props.message.status === 'complete' || props.message.status === 'error';
     return parseArtifacts(props.message.content, props.message.id, settled)
         .segments;
-}
-
-function prettyToolName(name: string): string {
-    return name.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function renderMarkdown(content: string | null): string {
@@ -96,22 +97,11 @@ function renderMarkdown(content: string | null): string {
                 }}
             </div>
             <template v-else>
-                <div
-                    v-if="toolActivity"
-                    class="mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs"
-                    :style="{
-                        borderColor: accentSoft,
-                        backgroundColor: accentSoft,
-                        color: accent,
-                    }"
-                >
-                    <Wrench class="size-3 animate-pulse" />
-                    {{
-                        t('chat.tools.using', {
-                            tool: prettyToolName(toolActivity),
-                        })
-                    }}
-                </div>
+                <ToolActivityChips
+                    :items="toolActivity ?? []"
+                    :accent="accent"
+                    :accent-soft="accentSoft"
+                />
                 <AgentConsultationCard
                     v-for="c in consultationCards"
                     :key="c.id"
