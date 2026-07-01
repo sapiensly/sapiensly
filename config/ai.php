@@ -50,7 +50,7 @@ return [
     |
     */
 
-    'max_stream_seconds' => (int) env('AI_MAX_STREAM_SECONDS', 300),
+    'max_stream_seconds' => (int) env('AI_MAX_STREAM_SECONDS', 600),
 
     /*
     |--------------------------------------------------------------------------

@@ -72,7 +72,7 @@ return [
             // Streaming AI jobs (chat/debate/agent-responses/builder) re-arm the
             // worker's SIGALRM every token via the idle watchdog, which disables
             // the per-job total timeout — so their real ceiling is the stream
-            // wall-clock cap (ai.max_stream_seconds, 300s) plus the finalization
+            // wall-clock cap (ai.max_stream_seconds, 600s) plus the finalization
             // tail, not the nominal supervisor timeout. This must exceed that with
             // margin, or a still-running job gets re-reserved and killed with
             // MaxAttemptsExceeded (the 420s failure we saw on long chat turns).
