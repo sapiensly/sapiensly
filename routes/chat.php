@@ -5,6 +5,7 @@ use App\Http\Controllers\ChatAttachmentController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\ChatProjectController;
+use App\Http\Controllers\ChatQuestionController;
 use App\Http\Controllers\ChatSynthesisController;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('chat/{chat}/messages', [ChatMessageController::class, 'store'])->name('chat.messages.store');
     Route::post('chat/{chat}/stop', [ChatMessageController::class, 'stop'])->name('chat.stop');
+
+    // Answer a multiple-choice question card (ask_user_question) — records the
+    // choice and continues the conversation as a normal user turn.
+    Route::post('chat/{chat}/questions/{message}/answer', [ChatQuestionController::class, 'answer'])
+        ->middleware('throttle:60,1')
+        ->name('chat.questions.answer');
 
     // Multi-agent (@mention) thread synthesis + action close.
     Route::middleware('throttle:60,1')->group(function () {

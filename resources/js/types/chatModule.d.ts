@@ -16,7 +16,11 @@ export interface ChatAttachmentDto {
 
 export type ChatMessageStatus = 'pending' | 'streaming' | 'complete' | 'error';
 
-export type ChatMessageType = 'text' | 'action_proposal' | 'action_result';
+export type ChatMessageType =
+    | 'text'
+    | 'action_proposal'
+    | 'action_result'
+    | 'question';
 
 export interface ChatAgentRef {
     id: string;
@@ -39,6 +43,26 @@ export interface ActionPayloadDto {
     status?: 'ready' | 'executed' | 'dismissed';
 }
 
+// One choice on a multiple-choice question card (ask_user_question).
+export interface QuestionOptionDto {
+    label: string;
+    description?: string | null;
+}
+
+// A clarifying multiple-choice question the assistant raised (QuestionCard).
+// Shares the action_payload column with ActionPayloadDto; message_type
+// discriminates which one a message carries.
+export interface QuestionPayloadDto {
+    question: string;
+    options: QuestionOptionDto[];
+    // Whether a free-text "Other" answer is offered.
+    allow_other: boolean;
+    // The chosen answer once picked; null while pending.
+    selected?: string | null;
+    // Per-message lifecycle; 'answered' locks the card.
+    status: 'pending' | 'answered';
+}
+
 export interface ChatMessageDto {
     id: string;
     role: 'user' | 'assistant' | 'system';
@@ -53,7 +77,9 @@ export interface ChatMessageDto {
     agent?: ChatAgentRef | null;
     message_type?: ChatMessageType;
     agent_data_context?: Record<string, string> | null;
-    action_payload?: ActionPayloadDto | null;
+    // Carries either an ActionPayloadDto (action_proposal) or a QuestionPayloadDto
+    // (question); message_type says which. Consumers narrow by message_type.
+    action_payload?: ActionPayloadDto | QuestionPayloadDto | null;
     // Agents this turn consulted (the "ask another agent" feature).
     consultation_context?: ConsultationDto[] | null;
 }

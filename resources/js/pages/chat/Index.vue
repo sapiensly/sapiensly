@@ -9,6 +9,7 @@ import echo from '@/echo';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { type Artifact, parseArtifacts } from '@/lib/artifacts';
 import type {
+    ActionPayloadDto,
     ActiveChatDto,
     ChatAgentOption,
     ChatListItem,
@@ -18,6 +19,7 @@ import type {
     ChatToolOption,
     ConsultationDto,
     KnowledgeBaseOption,
+    QuestionPayloadDto,
     ToolActivityDto,
 } from '@/types/chatModule';
 import { Head, router } from '@inertiajs/vue3';
@@ -154,7 +156,13 @@ function markProposalStatus(
 ) {
     messages.value = messages.value.map((m) =>
         m.id === proposalId && m.action_payload
-            ? { ...m, action_payload: { ...m.action_payload, status } }
+            ? {
+                  ...m,
+                  action_payload: {
+                      ...(m.action_payload as ActionPayloadDto),
+                      status,
+                  },
+              }
             : m,
     );
 }
@@ -326,6 +334,14 @@ function subscribe(id: string) {
     );
 
     channel.listen(
+        '.ChatQuestionAsked',
+        (payload: { message: ChatMessageDto; chat_id?: string }) => {
+            // The assistant raised a multiple-choice question card mid-turn.
+            upsert({ ...payload.message, attachments: [] });
+        },
+    );
+
+    channel.listen(
         '.ChatActionProposalReady',
         (payload: {
             message: ChatMessageDto;
@@ -374,6 +390,7 @@ function unsubscribe() {
         channel.stopListening('.ChatStreamComplete');
         channel.stopListening('.ChatStreamError');
         channel.stopListening('.ChatAgentStarted');
+        channel.stopListening('.ChatQuestionAsked');
         channel.stopListening('.ChatActionProposalReady');
         channel.stopListening('.ChatActionExecuted');
         echo.leave(`chat.conversation.${subscribedId}`);
@@ -510,6 +527,45 @@ async function dismissAction(message: ChatMessageDto) {
     }
 }
 
+// The user picked an option on a QuestionCard. Lock the card, then post the
+// choice as a normal user turn so the assistant resumes with it in history.
+async function answerQuestion(message: ChatMessageDto, text: string) {
+    if (!activeId.value) return;
+    const previous = message.action_payload;
+
+    // Optimistically lock the card so it can't be answered twice.
+    messages.value = messages.value.map((m) =>
+        m.id === message.id && m.action_payload
+            ? {
+                  ...m,
+                  action_payload: {
+                      ...(m.action_payload as QuestionPayloadDto),
+                      status: 'answered',
+                      selected: text,
+                  },
+              }
+            : m,
+    );
+    actionBusy.value = true;
+    try {
+        const { data } = await axios.post(
+            `/chat/${activeId.value}/questions/${message.id}/answer`,
+            { answer: text },
+        );
+        if (data.question) upsert({ ...data.question, attachments: [] });
+        if (data.user_message)
+            upsert({ ...data.user_message, attachments: [] });
+        if (data.placeholder) upsert({ ...data.placeholder, attachments: [] });
+    } catch {
+        // Revert the optimistic lock so the user can retry.
+        messages.value = messages.value.map((m) =>
+            m.id === message.id ? { ...m, action_payload: previous } : m,
+        );
+    } finally {
+        actionBusy.value = false;
+    }
+}
+
 function synthesize() {
     if (!activeId.value) return;
     synthesisStatus.value = 'pending';
@@ -619,6 +675,7 @@ function retry() {
                         @open-artifact="openArtifact"
                         @execute="executeAction"
                         @dismiss="dismissAction"
+                        @answer-question="answerQuestion"
                     />
                     <div class="px-7 pb-4">
                         <div class="mx-auto w-full max-w-[820px]">

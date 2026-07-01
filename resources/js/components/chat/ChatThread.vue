@@ -2,6 +2,7 @@
 import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import AgentMessageBubble from '@/components/chat/AgentMessageBubble.vue';
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
+import QuestionCard from '@/components/chat/QuestionCard.vue';
 import TeamTurn from '@/components/chat/TeamTurn.vue';
 import ToolActivityChips from '@/components/chat/ToolActivityChips.vue';
 import UserMessageBubble from '@/components/chat/UserMessageBubble.vue';
@@ -109,6 +110,7 @@ const emit = defineEmits<{
     openArtifact: [artifact: Artifact];
     execute: [message: ChatMessageDto];
     dismiss: [message: ChatMessageDto];
+    answerQuestion: [message: ChatMessageDto, text: string];
 }>();
 
 function isAgentMessage(m: ChatMessageDto): boolean {
@@ -238,6 +240,14 @@ function isLast(index: number): boolean {
                                 :busy="actionBusy"
                                 @execute="emit('execute', m)"
                                 @dismiss="emit('dismiss', m)"
+                            />
+
+                            <!-- Multiple-choice question (ask_user_question) -->
+                            <QuestionCard
+                                v-else-if="m.message_type === 'question'"
+                                :message="m"
+                                :busy="actionBusy"
+                                @answer="emit('answerQuestion', m, $event)"
                             />
 
                             <!-- System note (e.g. no-recommendation / cap notice) -->
