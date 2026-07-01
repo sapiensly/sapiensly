@@ -27,7 +27,8 @@ const props = defineProps<{
     // The executed action's result, if the proposal was run.
     result?: ChatMessageDto | null;
     synthesisStatus?: ChatSynthesisStatus;
-    actionBusy?: boolean;
+    // Id of the proposal currently executing — only that card spins.
+    actionBusyId?: string | null;
     agents?: ChatAgentRef[];
     consultations?: Record<string, ConsultationDto[]>;
     toolActivity?: Record<string, ToolActivityDto[]>;
@@ -83,7 +84,7 @@ function toggle() {
             v-if="isProposal && close"
             :message="close"
             :status="synthesisStatus"
-            :busy="actionBusy"
+            :busy="actionBusyId === close.id"
             @execute="emit('execute', close)"
             @dismiss="emit('dismiss', close)"
             @open-artifact="emit('openArtifact', $event)"

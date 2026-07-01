@@ -74,7 +74,9 @@ const stopped = ref<Set<string>>(new Set());
 const synthesisStatus = ref<ActiveChatDto['synthesis_status']>(
     props.activeChat?.synthesis_status ?? null,
 );
-const actionBusy = ref(false);
+// Id of the proposal/question message currently executing, so only that
+// card shows its spinner (a shared boolean lit every card at once).
+const actionBusyId = ref<string | null>(null);
 
 // ----- Inner chat sidebar (collapsible) -----
 const SIDEBAR_KEY = 'chat:sidebar-open';
@@ -376,7 +378,7 @@ function subscribe(id: string) {
             message: ChatMessageDto;
             synthesis_status: ActiveChatDto['synthesis_status'];
         }) => {
-            actionBusy.value = false;
+            actionBusyId.value = null;
             if (payload.synthesis_status)
                 synthesisStatus.value = payload.synthesis_status;
             if (payload.message.message_type === 'action_result') {
@@ -423,7 +425,7 @@ watch(
             selectionFor(props.activeChat) ?? currentModel.value;
         selectedToolIds.value = props.activeChat?.tool_ids ?? [];
         synthesisStatus.value = props.activeChat?.synthesis_status ?? null;
-        actionBusy.value = false;
+        actionBusyId.value = null;
         toolActivity.value = {};
         consultations.value = {};
         stopped.value = new Set();
@@ -511,7 +513,7 @@ async function send(payload: {
 
 async function executeAction(message: ChatMessageDto) {
     if (!activeId.value) return;
-    actionBusy.value = true;
+    actionBusyId.value = message.id;
     try {
         const { data } = await axios.post(
             `/chat/${activeId.value}/actions/${message.id}/execute`,
@@ -523,7 +525,7 @@ async function executeAction(message: ChatMessageDto) {
     } catch {
         // leave the card actionable on failure
     } finally {
-        actionBusy.value = false;
+        actionBusyId.value = null;
     }
 }
 
@@ -560,7 +562,7 @@ async function answerQuestion(message: ChatMessageDto, text: string) {
               }
             : m,
     );
-    actionBusy.value = true;
+    actionBusyId.value = message.id;
     try {
         const { data } = await axios.post(
             `/chat/${activeId.value}/questions/${message.id}/answer`,
@@ -576,7 +578,7 @@ async function answerQuestion(message: ChatMessageDto, text: string) {
             m.id === message.id ? { ...m, action_payload: previous } : m,
         );
     } finally {
-        actionBusy.value = false;
+        actionBusyId.value = null;
     }
 }
 
@@ -683,7 +685,7 @@ function retry() {
                         :tool-activity="toolActivity"
                         :consultations="consultations"
                         :synthesis-status="synthesisStatus"
-                        :action-busy="actionBusy"
+                        :action-busy-id="actionBusyId"
                         :agents="agents"
                         @retry="retry"
                         @open-artifact="openArtifact"

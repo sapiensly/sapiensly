@@ -32,7 +32,8 @@ const props = defineProps<{
     toolActivity?: Record<string, ToolActivityDto[]>;
     consultations?: Record<string, ConsultationDto[]>;
     synthesisStatus?: ChatSynthesisStatus;
-    actionBusy?: boolean;
+    // Id of the proposal/question currently executing — only that card spins.
+    actionBusyId?: string | null;
     agents?: ChatAgentRef[];
 }>();
 
@@ -215,7 +216,7 @@ function isLast(index: number): boolean {
                         :close="turn.close"
                         :result="turn.result"
                         :synthesis-status="synthesisStatus"
-                        :action-busy="actionBusy"
+                        :action-busy-id="actionBusyId"
                         :agents="agents"
                         :consultations="consultations"
                         :tool-activity="toolActivity"
@@ -241,7 +242,7 @@ function isLast(index: number): boolean {
                                 v-else-if="m.message_type === 'action_proposal'"
                                 :message="m"
                                 :status="synthesisStatus"
-                                :busy="actionBusy"
+                                :busy="actionBusyId === m.id"
                                 @execute="emit('execute', m)"
                                 @dismiss="emit('dismiss', m)"
                                 @open-artifact="emit('openArtifact', $event)"
@@ -259,7 +260,7 @@ function isLast(index: number): boolean {
                             <QuestionCard
                                 v-else-if="m.message_type === 'question'"
                                 :message="m"
-                                :busy="actionBusy"
+                                :busy="actionBusyId === m.id"
                                 @answer="emit('answerQuestion', m, $event)"
                             />
 
