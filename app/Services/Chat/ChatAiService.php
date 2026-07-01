@@ -434,9 +434,24 @@ class ChatAiService
             $watchdog = $this->streamIdleWatchdog();
             $watchdog['arm']();
 
+            // Total wall-clock cap for the stream. The idle watchdog above
+            // commandeers the worker's SIGALRM and re-arms it on every token, which
+            // disables the job's own total timeout — so a long, steadily-streaming
+            // reply has NO total bound and would run until the queue's retry_after
+            // re-reserves the still-running job and fails it with
+            // MaxAttemptsExceeded (losing everything). This cap breaks cooperatively
+            // and keeps the partial reply, dying cleanly well before retry_after.
+            $maxStreamSeconds = (float) config('ai.max_stream_seconds', 300);
+            $truncated = false;
+
             try {
                 foreach ($stream as $event) {
                     $watchdog['tick']();
+
+                    if ($maxStreamSeconds > 0 && (microtime(true) - $startedAt) > $maxStreamSeconds) {
+                        $truncated = true;
+                        break;
+                    }
 
                     // Cooperative cancellation: the Stop button sets a cache flag the
                     // worker polls every few deltas, then breaks and finalizes the
@@ -478,6 +493,17 @@ class ChatAiService
             Cache::forget($stopKey);
 
             $buffer = self::closeDanglingArtifacts($buffer);
+
+            if ($truncated) {
+                $locale = $user?->locale ?? (string) config('app.fallback_locale', 'en');
+                $buffer .= "\n\n".__('_(The response was cut off because it was taking too long. Ask me to continue for the rest.)_', [], $locale);
+                Log::warning('Chat AI stream truncated at wall-clock cap', [
+                    'chat_id' => $chat->id,
+                    'message_id' => $placeholder->id,
+                    'max_stream_seconds' => $maxStreamSeconds,
+                    'response_length' => strlen($buffer),
+                ]);
+            }
 
             $finalAttributes = [
                 'content' => $buffer,

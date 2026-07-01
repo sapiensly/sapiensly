@@ -37,6 +37,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Max Stream Wall-Clock (seconds)
+    |--------------------------------------------------------------------------
+    |
+    | Total wall-clock cap for a single streamed chat turn. The idle watchdog
+    | re-arms the worker's SIGALRM on every token, which disables the job's own
+    | total timeout — so without this cap a long, steadily-streaming reply runs
+    | unbounded until the queue's retry_after re-reserves it (MaxAttemptsExceeded,
+    | losing the whole reply). At this bound the stream stops cooperatively and
+    | the partial reply is kept. Keep it below retry_after minus the finalization
+    | tail (title/summary), so the turn always ends cleanly first.
+    |
+    */
+
+    'max_stream_seconds' => (int) env('AI_MAX_STREAM_SECONDS', 300),
+
+    /*
+    |--------------------------------------------------------------------------
     | Blocking Request Timeout (seconds)
     |--------------------------------------------------------------------------
     |

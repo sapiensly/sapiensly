@@ -41,6 +41,29 @@ it('streams a reply into the placeholder and broadcasts completion', function ()
     Event::assertDispatched(ChatStreamComplete::class);
 });
 
+it('truncates and keeps the partial reply when the stream exceeds the wall-clock cap', function () {
+    // A tiny (sub-millisecond) cap trips on the first event, standing in for a
+    // reply that streams past the wall-clock bound. The turn must finalize as a
+    // usable (complete) message with a "cut off" note — never run on until
+    // retry_after kills it. (0 would DISABLE the cap, hence a tiny positive value.)
+    config(['ai.max_stream_seconds' => 0.0001]);
+    Event::fake([ChatStreamChunk::class, ChatStreamComplete::class, ChatStreamError::class]);
+    Ai::fakeAgent(ChatAgent::class, ['A very long strategy that never finishes in time.']);
+
+    $chat = Chat::factory()->forUser($this->user)->create(['title' => null]);
+    ChatMessage::factory()->create(['chat_id' => $chat->id, 'role' => 'user', 'content' => 'Hi', 'status' => 'complete']);
+    $placeholder = ChatMessage::factory()->streaming()->create(['chat_id' => $chat->id, 'status' => 'pending']);
+
+    app(ChatAiService::class)->streamMessage($placeholder, 'Hi', null);
+
+    $placeholder->refresh();
+    expect($placeholder->status)->toBe('complete')
+        ->and($placeholder->content)->toContain('cut off because it was taking too long');
+
+    Event::assertDispatched(ChatStreamComplete::class);
+    Event::assertNotDispatched(ChatStreamError::class);
+});
+
 it('marks the placeholder errored and broadcasts when the job fails', function () {
     Event::fake([ChatStreamError::class]);
 

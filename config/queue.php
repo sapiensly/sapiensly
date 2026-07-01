@@ -68,11 +68,15 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            // Must be >= the longest job timeout in any supervisor that pulls
-            // from this connection. supervisor-ai is 300s for Builder AI runs;
-            // we add a safety margin so a slow Anthropic response doesn't
-            // trigger a re-enqueue and get killed with MaxAttemptsExceeded.
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 420),
+            // Must be >= the longest a job on this connection can actually run.
+            // Streaming AI jobs (chat/debate/agent-responses/builder) re-arm the
+            // worker's SIGALRM every token via the idle watchdog, which disables
+            // the per-job total timeout — so their real ceiling is the stream
+            // wall-clock cap (ai.max_stream_seconds, 300s) plus the finalization
+            // tail, not the nominal supervisor timeout. This must exceed that with
+            // margin, or a still-running job gets re-reserved and killed with
+            // MaxAttemptsExceeded (the 420s failure we saw on long chat turns).
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 900),
             'block_for' => null,
             'after_commit' => false,
         ],
