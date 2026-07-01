@@ -2,8 +2,9 @@
 import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
 import ToolActivityChips from '@/components/chat/ToolActivityChips.vue';
-import { type Artifact, parseArtifacts, type Segment } from '@/lib/artifacts';
+import type { Artifact } from '@/lib/artifacts';
 import { normalizeChatMarkdown } from '@/lib/markdown';
+import { buildMessageContent } from '@/lib/messageSegments';
 import type {
     ChatMessageDto,
     ConsultationDto,
@@ -48,12 +49,18 @@ const pills = computed(() =>
     Object.entries(props.message.agent_data_context ?? {}),
 );
 
-function segments(): Segment[] {
+// Ordered render list: text + artifacts with consultation cards spliced in at
+// their inline markers (falling back to `leading` for legacy, marker-less turns).
+const content = computed(() => {
     const settled =
         props.message.status === 'complete' || props.message.status === 'error';
-    return parseArtifacts(props.message.content, props.message.id, settled)
-        .segments;
-}
+    return buildMessageContent(
+        props.message.content,
+        props.message.id,
+        settled,
+        consultationCards.value,
+    );
+});
 
 function renderMarkdown(content: string | null): string {
     if (!content) return '';
@@ -102,18 +109,23 @@ function renderMarkdown(content: string | null): string {
                     :accent="accent"
                     :accent-soft="accentSoft"
                 />
+                <!-- Legacy consultations with no inline marker. -->
                 <AgentConsultationCard
-                    v-for="c in consultationCards"
+                    v-for="c in content.leading"
                     :key="c.id"
                     :consultation="c"
                 />
 
-                <template v-for="(seg, si) in segments()" :key="si">
+                <template v-for="(seg, si) in content.segments" :key="si">
                     <ArtifactCard
                         v-if="seg.kind === 'artifact'"
                         :artifact="seg.artifact"
                         :active="activeArtifactId === seg.artifact.id"
                         @open="$emit('openArtifact', $event)"
+                    />
+                    <AgentConsultationCard
+                        v-else-if="seg.kind === 'consult'"
+                        :consultation="seg.consultation"
                     />
                     <div
                         v-else

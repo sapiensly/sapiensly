@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { normalizeChatMarkdown } from '@/lib/markdown';
 import type { ConsultationDto } from '@/types/chatModule';
-import { Loader2, MessagesSquare, Users } from '@lucide/vue';
+import { ChevronDown, Loader2, Users } from '@lucide/vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const props = defineProps<{ consultation: ConsultationDto }>();
@@ -34,58 +34,21 @@ const hue = computed(() => {
 const accent = computed(() => `hsl(${hue.value} 70% 45%)`);
 const accentSoft = computed(() => `hsl(${hue.value} 70% 45% / 0.1)`);
 
-// Background consultations collapse to a pill; expand on click.
-const open = ref(props.consultation.visible);
+// Closed by default — including while the agent is still writing. The user may
+// open it to watch the answer stream in live; that stays their choice.
+const open = ref(false);
+
+// When a consultation the assistant wanted visible finishes, reveal its answer.
+watch(
+    () => props.consultation.pending,
+    (pending, was) => {
+        if (was && !pending && props.consultation.visible) open.value = true;
+    },
+);
 </script>
 
 <template>
-    <!-- Live + visible + already writing: stream the answer into a card. -->
     <div
-        v-if="
-            consultation.pending && consultation.visible && consultation.answer
-        "
-        class="mb-2 overflow-hidden rounded-lg border text-xs"
-        :style="{ borderColor: accentSoft }"
-    >
-        <div
-            class="flex w-full items-center gap-1.5 px-2.5 py-1.5 font-medium"
-            :style="{ backgroundColor: accentSoft, color: accent }"
-        >
-            <Loader2 class="size-3.5 animate-spin" />
-            {{
-                t('chat.consult.consulting', { agent: consultation.agent_name })
-            }}
-        </div>
-        <div class="px-2.5 py-2">
-            <div
-                class="sp-chat-prose prose prose-sm inline max-w-none text-ink dark:prose-invert"
-                v-html="renderMarkdown(consultation.answer)"
-            />
-            <!-- Blinking caret signals the agent is still writing. -->
-            <span
-                class="ml-0.5 inline-block h-3 w-[2px] animate-pulse rounded-sm align-text-bottom"
-                :style="{ backgroundColor: accent }"
-            />
-        </div>
-    </div>
-
-    <!-- Live, waiting for the first token (or a quiet background consult). -->
-    <div
-        v-else-if="consultation.pending"
-        class="mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs"
-        :style="{
-            borderColor: accentSoft,
-            backgroundColor: accentSoft,
-            color: accent,
-        }"
-    >
-        <Loader2 class="size-3 animate-spin" />
-        {{ t('chat.consult.consulting', { agent: consultation.agent_name }) }}
-    </div>
-
-    <!-- Resolved: a card (visible) or a collapsible pill (background). -->
-    <div
-        v-else
         class="mb-2 overflow-hidden rounded-lg border text-xs"
         :style="{ borderColor: accentSoft }"
     >
@@ -95,21 +58,60 @@ const open = ref(props.consultation.visible);
             :style="{ backgroundColor: accentSoft, color: accent }"
             @click="open = !open"
         >
-            <Users class="size-3.5" />
-            {{
-                t('chat.consult.consulted', { agent: consultation.agent_name })
-            }}
-            <MessagesSquare v-if="!open" class="ml-auto size-3 opacity-60" />
+            <Loader2
+                v-if="consultation.pending"
+                class="size-3.5 shrink-0 animate-spin"
+            />
+            <Users v-else class="size-3.5 shrink-0" />
+            <span class="truncate">
+                {{
+                    consultation.pending
+                        ? t('chat.consult.consulting', {
+                              agent: consultation.agent_name,
+                          })
+                        : t('chat.consult.consulted', {
+                              agent: consultation.agent_name,
+                          })
+                }}
+            </span>
+            <!-- Pending gets an "in progress" tag; resolved gets a chevron. -->
+            <span
+                v-if="consultation.pending"
+                class="ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase opacity-70"
+                :style="{ backgroundColor: accentSoft }"
+            >
+                {{ t('chat.consult.in_progress') }}
+            </span>
+            <ChevronDown
+                v-else
+                class="ml-auto size-3.5 shrink-0 opacity-60 transition-transform"
+                :class="{ '-rotate-90': !open }"
+            />
         </button>
+
         <div v-if="open" class="space-y-1.5 px-2.5 py-2">
             <p class="text-ink-subtle">
                 <span class="font-medium">{{ t('chat.consult.asked') }}:</span>
                 {{ consultation.question }}
             </p>
-            <div
-                class="sp-chat-prose prose prose-sm max-w-none text-ink dark:prose-invert"
-                v-html="renderMarkdown(consultation.answer)"
-            />
+            <!-- The answer streams in live while pending; empty until the first token. -->
+            <p
+                v-if="consultation.pending && !consultation.answer"
+                class="text-ink-subtle italic"
+            >
+                {{ t('chat.consult.thinking') }}
+            </p>
+            <div v-else>
+                <div
+                    class="sp-chat-prose prose prose-sm inline max-w-none text-ink dark:prose-invert"
+                    v-html="renderMarkdown(consultation.answer)"
+                />
+                <span
+                    v-if="consultation.pending"
+                    class="ml-0.5 inline-block h-3 w-[2px] animate-pulse rounded-sm align-text-bottom"
+                    :style="{ backgroundColor: accent }"
+                />
+            </div>
         </div>
     </div>
 </template>

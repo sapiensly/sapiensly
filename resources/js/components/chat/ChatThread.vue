@@ -5,8 +5,9 @@ import ArtifactCard from '@/components/chat/ArtifactCard.vue';
 import TeamTurn from '@/components/chat/TeamTurn.vue';
 import ToolActivityChips from '@/components/chat/ToolActivityChips.vue';
 import UserMessageBubble from '@/components/chat/UserMessageBubble.vue';
-import { type Artifact, parseArtifacts, type Segment } from '@/lib/artifacts';
+import type { Artifact } from '@/lib/artifacts';
 import { normalizeChatMarkdown } from '@/lib/markdown';
+import { buildMessageContent } from '@/lib/messageSegments';
 import type {
     ChatAgentRef,
     ChatMessageDto,
@@ -114,9 +115,23 @@ function isAgentMessage(m: ChatMessageDto): boolean {
     return !!m.agent_id && (m.message_type ?? 'text') === 'text';
 }
 
-function segmentsFor(m: ChatMessageDto): Segment[] {
-    const settled = m.status === 'complete' || m.status === 'error';
-    return parseArtifacts(m.content, m.id, settled).segments;
+// Parse each plain-assistant message once per render into its ordered render
+// list (text + artifacts + consultation cards spliced in at their marker).
+const messageContent = computed(() => {
+    const map = new Map<string, ReturnType<typeof buildMessageContent>>();
+    for (const m of props.messages) {
+        if (m.role !== 'assistant' || isAgentMessage(m)) continue;
+        const settled = m.status === 'complete' || m.status === 'error';
+        map.set(
+            m.id,
+            buildMessageContent(m.content, m.id, settled, consultationsFor(m)),
+        );
+    }
+    return map;
+});
+
+function contentFor(m: ChatMessageDto) {
+    return messageContent.value.get(m.id) ?? { leading: [], segments: [] };
 }
 
 const scroller = ref<HTMLElement | null>(null);
@@ -282,13 +297,15 @@ function isLast(index: number): boolean {
                                         <ToolActivityChips
                                             :items="toolActivity?.[m.id] ?? []"
                                         />
+                                        <!-- Legacy consultations with no inline marker. -->
                                         <AgentConsultationCard
-                                            v-for="c in consultationsFor(m)"
+                                            v-for="c in contentFor(m).leading"
                                             :key="c.id"
                                             :consultation="c"
                                         />
                                         <template
-                                            v-for="(seg, si) in segmentsFor(m)"
+                                            v-for="(seg, si) in contentFor(m)
+                                                .segments"
                                             :key="si"
                                         >
                                             <ArtifactCard
@@ -301,6 +318,12 @@ function isLast(index: number): boolean {
                                                 @open="
                                                     emit('openArtifact', $event)
                                                 "
+                                            />
+                                            <AgentConsultationCard
+                                                v-else-if="
+                                                    seg.kind === 'consult'
+                                                "
+                                                :consultation="seg.consultation"
                                             />
                                             <div
                                                 v-else

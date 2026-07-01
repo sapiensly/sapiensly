@@ -69,6 +69,14 @@ class ChatAiService
     public const STOP_CACHE_PREFIX = 'chat-stop:';
 
     /**
+     * Inline placeholder for an agent consultation, emitted into the reply at the
+     * point the assistant paused to consult. The frontend splits the content on
+     * this token and renders the matching consultation card there (order-matched
+     * to consultation_context). Kept in sync with CONSULT_MARKER in the frontend.
+     */
+    public const CONSULT_MARKER = "\n\n[[consult]]\n\n";
+
+    /**
      * Max seconds the stream may go without producing a new event before we treat
      * the provider connection as stalled and abort. Guzzle's request timeout only
      * bounds connection setup, not reads from an already-open SSE body, so a
@@ -237,6 +245,8 @@ class ChatAiService
 
                 continue;
             }
+            // Inline consultation markers are a UI device; never feed them back.
+            $content = self::stripMarkers($content);
             if ($m->agent_id !== null && isset($agentNames[$m->agent_id])) {
                 $content = '[@'.$agentNames[$m->agent_id].'] '.$content;
             }
@@ -462,8 +472,14 @@ class ChatAiService
                     }
 
                     if ($event instanceof ToolCall) {
-                        // consult_agent has its own richer ChatAgentConsultation event.
-                        if ($event->toolCall->name !== 'consult_agent') {
+                        if ($event->toolCall->name === 'consult_agent') {
+                            // Drop a positional marker into the reply so the frontend
+                            // renders the consultation card inline — exactly where the
+                            // assistant paused to consult — instead of lumped at the
+                            // top. The card itself streams via ChatAgentConsultation.
+                            $buffer .= self::CONSULT_MARKER;
+                            $this->safeBroadcast(fn () => ChatStreamChunk::dispatch($chat->id, $placeholder->id, self::CONSULT_MARKER));
+                        } else {
                             $usedSources[$this->prettySource($event->toolCall->name)] = 'used';
                             $this->safeBroadcast(fn () => ChatToolCall::dispatch(
                                 $chat->id, $placeholder->id, $event->toolCall->name, 'start', $event->toolCall->id,
@@ -992,7 +1008,7 @@ class ChatAiService
         $toFold = $pending->slice(0, $foldCount)->values();
 
         $transcript = $toFold
-            ->map(fn (ChatMessage $m) => mb_strtoupper((string) $m->role).': '.trim((string) $m->content))
+            ->map(fn (ChatMessage $m) => mb_strtoupper((string) $m->role).': '.self::stripMarkers(trim((string) $m->content)))
             ->implode("\n\n");
 
         $model = $this->aiDefaults->model('summary_large');
@@ -1126,7 +1142,7 @@ class ChatAiService
             ->orderBy('id')
             ->limit(self::TITLE_REFINE_AT_MESSAGES)
             ->get()
-            ->map(fn (ChatMessage $m) => mb_strtoupper((string) $m->role).': '.trim((string) $m->content))
+            ->map(fn (ChatMessage $m) => mb_strtoupper((string) $m->role).': '.self::stripMarkers(trim((string) $m->content)))
             ->implode("\n\n");
 
         if (trim($transcript) === '') {
@@ -1214,6 +1230,16 @@ class ChatAiService
      * formed `<artifact …>` openers count, mirroring the frontend parser, so a
      * reply truncated mid-tag isn't given a stray close.
      */
+    /**
+     * Strip the inline consultation markers from persisted content before it is
+     * fed back to a model (history / summary / title). They are a UI-only device
+     * for rendering the consultation card in place; the model must never see them.
+     */
+    public static function stripMarkers(string $text): string
+    {
+        return (string) preg_replace("/\n*\\[\\[consult\\]\\]\n*/", "\n\n", $text);
+    }
+
     public static function closeDanglingArtifacts(string $buffer): string
     {
         $opens = preg_match_all('/<artifact\b[^>]*>/i', $buffer);

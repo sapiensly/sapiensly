@@ -94,6 +94,15 @@ it('replaces the cryptic timeout exception with a friendly, actionable message',
         ->and($placeholder->error)->toContain('ran out of time');
 });
 
+it('strips inline consult markers before content is fed back to a model', function () {
+    $raw = "Voy a consultar al equipo.\n\n[[consult]]\n\nYa tienes las perspectivas.";
+    $out = ChatAiService::stripMarkers($raw);
+
+    expect($out)->not->toContain('[[consult]]')
+        ->and($out)->toContain('Voy a consultar al equipo.')
+        ->and($out)->toContain('Ya tienes las perspectivas.');
+});
+
 it('distinguishes an interrupted (killed) runner from a genuine timeout', function () {
     Event::fake([ChatStreamError::class]);
 
