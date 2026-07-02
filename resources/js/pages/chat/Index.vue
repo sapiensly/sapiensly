@@ -522,6 +522,9 @@ async function executeAction(message: ChatMessageDto) {
             synthesisStatus.value = data.synthesis_status;
         markProposalStatus(message.id, 'executed');
         if (data.message) upsert({ ...data.message, attachments: [] });
+        // A build execute queues an automatic follow-up turn (the assistant
+        // populates the new resource); show its placeholder streaming in.
+        if (data.follow_up) upsert({ ...data.follow_up, attachments: [] });
     } catch {
         // leave the card actionable on failure
     } finally {

@@ -5,6 +5,7 @@ use App\Ai\Tools\Chat\ProposeBuildTool;
 use App\Enums\DocumentType;
 use App\Events\Chat\ChatActionExecuted;
 use App\Events\Chat\ChatActionProposalReady;
+use App\Jobs\RunChatAiJob;
 use App\Models\Agent;
 use App\Models\AiProvider;
 use App\Models\App;
@@ -15,6 +16,7 @@ use App\Models\User;
 use App\Services\Chat\Actions\ActionRegistry;
 use App\Services\Chat\ChatAiService;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Ai;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
@@ -64,6 +66,7 @@ it('rejects an unknown build type', function () {
 
 it('executes a create_app proposal, building the app as the owner', function () {
     Event::fake([ChatActionExecuted::class]);
+    Queue::fake([RunChatAiJob::class]);
     $chat = Chat::factory()->forUser($this->user)->create();
     $proposal = ChatMessage::factory()->create([
         'chat_id' => $chat->id,
@@ -85,7 +88,10 @@ it('executes a create_app proposal, building the app as the owner', function () 
     $this->actingAs($this->user)
         ->postJson(route('chat.actions.execute', ['chat' => $chat, 'message' => $proposal]))
         ->assertOk()
-        ->assertJsonPath('message.message_type', 'action_result');
+        ->assertJsonPath('message.message_type', 'action_result')
+        // A build queues an automatic follow-up turn to populate the resource.
+        ->assertJsonPath('follow_up.status', 'pending')
+        ->assertJsonPath('follow_up.role', 'assistant');
 
     expect(App::query()->where('slug', 'support_desk')->exists())->toBeTrue()
         ->and($proposal->refresh()->action_payload['status'])->toBe('executed')
@@ -93,10 +99,15 @@ it('executes a create_app proposal, building the app as the owner', function () 
         ->and($chat->refresh()->synthesis_status)->toBeNull();
 
     Event::assertDispatched(ChatActionExecuted::class);
+    Queue::assertPushed(RunChatAiJob::class, function (RunChatAiJob $job) {
+        return str_contains($job->userText, 'Automated follow-up')
+            && str_contains($job->userText, 'Create the Support Desk app');
+    });
 });
 
 it('locks each proposal independently and refuses a second execution', function () {
     Event::fake([ChatActionExecuted::class]);
+    Queue::fake([RunChatAiJob::class]);
     $chat = Chat::factory()->forUser($this->user)->create();
 
     $makeProposal = fn (string $slug) => ChatMessage::factory()->create([
@@ -134,6 +145,7 @@ it('locks each proposal independently and refuses a second execution', function 
 
 it('proposes and saves an HTML document the user keeps', function () {
     Event::fake([ChatActionProposalReady::class, ChatActionExecuted::class]);
+    Queue::fake([RunChatAiJob::class]);
     $chat = Chat::factory()->forUser($this->user)->create();
 
     $reply = (new ProposeBuildTool($chat, $this->user))->handle(new ToolRequest([

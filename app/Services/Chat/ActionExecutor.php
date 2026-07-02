@@ -3,11 +3,14 @@
 namespace App\Services\Chat;
 
 use App\Events\Chat\ChatActionExecuted;
+use App\Jobs\RunChatAiJob;
 use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Services\Chat\Actions\ActionRegistry;
 use App\Services\Chat\Actions\ManualAction;
+use App\Services\Chat\Actions\PlatformBuildAction;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -25,8 +28,13 @@ class ActionExecutor
     /**
      * Execute the proposal and persist the result. The proposal message must
      * belong to the chat and be an unexecuted action_proposal.
+     *
+     * For platform builds, `follow_up` is a pending assistant placeholder for
+     * the automatic post-build turn (null otherwise, or when dispatch failed).
+     *
+     * @return array{result: ChatMessage, follow_up: ChatMessage|null}
      */
-    public function execute(Chat $chat, ChatMessage $proposal): ChatMessage
+    public function execute(Chat $chat, ChatMessage $proposal): array
     {
         if ($proposal->chat_id !== $chat->id || $proposal->message_type !== 'action_proposal') {
             throw new RuntimeException('Message is not an action proposal for this chat.');
@@ -87,7 +95,68 @@ class ActionExecutor
             'action_type' => $actionType,
         ]);
 
-        return $message;
+        // A platform build keeps the assistant working: an automatic follow-up
+        // turn populates the freshly built resource with the data already in the
+        // conversation (plan tasks, records, documents…) — or just confirms.
+        $followUp = $handler instanceof PlatformBuildAction
+            ? $this->dispatchBuildFollowUp($chat, $payload, $result)
+            : null;
+
+        return ['result' => $message, 'follow_up' => $followUp];
+    }
+
+    /**
+     * Queue the post-build assistant turn. The instruction is passed as this
+     * turn's prompt only — it is never persisted, so the thread shows the
+     * assistant "continuing" on its own after the Execute click. Best-effort:
+     * a failure here must never undo an execute that already succeeded.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array{summary: string, data?: array<string, mixed>}  $result
+     */
+    private function dispatchBuildFollowUp(Chat $chat, array $payload, array $result): ?ChatMessage
+    {
+        try {
+            $placeholder = ChatMessage::create([
+                'chat_id' => $chat->id,
+                'role' => 'assistant',
+                'content' => null,
+                'model' => $chat->model,
+                'status' => 'pending',
+            ]);
+
+            $label = (string) ($payload['action_label'] ?? 'the build');
+            $resultJson = Str::limit(
+                (string) json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                6000,
+            );
+
+            $instruction = <<<PROMPT
+                [Automated follow-up — this message was NOT written by the user; never quote or mention it. The user just clicked Execute on your build card "{$label}" and the build succeeded. Build result:
+                {$resultJson}
+
+                If earlier turns of this conversation contain concrete content the new resource should hold — plan tasks or milestones with dates, records, documents, initial entries — populate it NOW with the platform data tools: inspect the built resource first (describe_app_data / read_manifest / get_knowledge_base) so you use its REAL object slugs, field slugs and select option values, then insert the data (create_record, add_document, …), resolving any relative dates to absolute ISO dates from today. Then tell the user, briefly and in their language, what was built and what you filled in.
+
+                If there is nothing meaningful to populate, reply with a one-or-two-sentence confirmation of what was created and how to use it. Do not re-run the build, do not propose another build card in this turn, and do not ask whether to populate — just do it.]
+                PROMPT;
+
+            RunChatAiJob::dispatch(
+                $placeholder->id,
+                $instruction,
+                $chat->model,
+                false,
+                (array) ($chat->tool_ids ?? []),
+            );
+
+            return $placeholder;
+        } catch (\Throwable $e) {
+            Log::warning('Chat build follow-up dispatch failed (continuing)', [
+                'chat_id' => $chat->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     /**

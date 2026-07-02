@@ -23,14 +23,19 @@ class ChatActionController extends Controller
         $this->ensureOwner($request, $chat, $message);
 
         try {
-            $result = $this->executor->execute($chat, $message);
+            $outcome = $this->executor->execute($chat, $message);
         } catch (RuntimeException $e) {
             return new JsonResponse(['message' => $e->getMessage()], 422);
         }
 
         return new JsonResponse([
             'synthesis_status' => $chat->refresh()->synthesis_status,
-            'message' => ChatMessagePresenter::present($result),
+            'message' => ChatMessagePresenter::present($outcome['result']),
+            // The post-build turn's placeholder, so the thread shows the
+            // assistant continuing right away (chunks then stream into it).
+            'follow_up' => $outcome['follow_up'] !== null
+                ? ChatMessagePresenter::present($outcome['follow_up'])
+                : null,
         ]);
     }
 
