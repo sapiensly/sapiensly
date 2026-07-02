@@ -1,24 +1,22 @@
 <script setup lang="ts">
 import PageHeader from '@/components/app-v2/PageHeader.vue';
+import IntegrationStarterGrid from '@/components/integrations/IntegrationStarterGrid.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import { INTEGRATION_TEMPLATES } from '@/lib/integrations/templates';
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowLeft } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
-
-const templates = INTEGRATION_TEMPLATES;
 </script>
 
 <template>
-    <Head :title="t('system.integrations.templates.title')" />
+    <Head :title="t('system.integrations.choose.title')" />
 
     <AppLayoutV2 :title="t('app_v2.nav.integrations')">
         <div class="space-y-5">
             <PageHeader
-                :title="t('system.integrations.templates.title')"
-                :description="t('system.integrations.templates.description')"
+                :title="t('system.integrations.choose.title')"
+                :description="t('system.integrations.choose.description')"
             >
                 <template #actions>
                     <Link href="/system/integrations">
@@ -33,30 +31,7 @@ const templates = INTEGRATION_TEMPLATES;
                 </template>
             </PageHeader>
 
-            <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                <Link
-                    v-for="template in templates"
-                    :key="template.slug"
-                    :href="`/system/integrations/create?template=${template.slug}`"
-                    class="flex cursor-pointer flex-col items-start gap-2 rounded-sp-sm border border-soft bg-white/[0.03] p-5 text-left transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
-                >
-                    <div
-                        class="flex size-9 items-center justify-center rounded-xs"
-                        :style="{
-                            backgroundColor: `color-mix(in oklab, ${template.tint} 15%, transparent)`,
-                            color: template.tint,
-                        }"
-                    >
-                        <component :is="template.icon" class="size-4" />
-                    </div>
-                    <h3 class="text-sm font-semibold text-ink">
-                        {{ template.label }}
-                    </h3>
-                    <p class="text-xs text-ink-muted">
-                        {{ t(template.descriptionKey) }}
-                    </p>
-                </Link>
-            </div>
+            <IntegrationStarterGrid />
         </div>
     </AppLayoutV2>
 </template>

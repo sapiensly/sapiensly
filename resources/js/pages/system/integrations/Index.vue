@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { LayoutTemplate, Plus, Search } from '@lucide/vue';
+import { Plus, Search } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -83,15 +83,6 @@ function handleDelete(id: string): void {
             >
                 <template #actions>
                     <Link href="/system/integrations/templates">
-                        <button
-                            type="button"
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
-                        >
-                            <LayoutTemplate class="size-3.5" />
-                            {{ t('system.integrations.templates.cta') }}
-                        </button>
-                    </Link>
-                    <Link href="/system/integrations/create">
                         <button
                             type="button"
                             class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
