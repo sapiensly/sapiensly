@@ -137,7 +137,9 @@ class ActionExecutor
 
                 If earlier turns of this conversation contain concrete content the new resource should hold — plan tasks or milestones with dates, records, documents, initial entries — populate it NOW with the platform data tools: inspect the built resource first (describe_app_data / read_manifest / get_knowledge_base) so you use its REAL object slugs, field slugs and select option values, then insert the data (create_record, add_document, …), resolving any relative dates to absolute ISO dates from today. Then tell the user, briefly and in their language, what was built and what you filled in.
 
-                If there is nothing meaningful to populate, reply with a one-or-two-sentence confirmation of what was created and how to use it. Do not re-run the build, do not propose another build card in this turn, and do not ask whether to populate — just do it.]
+                If there is nothing meaningful to populate, reply with a one-or-two-sentence confirmation of what was created and how to use it. Do not re-run the build, do not propose another build card in this turn, and do not ask whether to populate — just do it.
+
+                If the build result above includes a `url`, ALWAYS end your reply with a markdown link to it so the user can open what was built in one click (e.g. "👉 [Abrir Growth Tracker](url)" in the user's language). Links in this chat open in a new tab.]
                 PROMPT;
 
             RunChatAiJob::dispatch(

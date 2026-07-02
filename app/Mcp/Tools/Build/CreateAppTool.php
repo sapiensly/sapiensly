@@ -80,6 +80,7 @@ class CreateAppTool extends SapiensTool
             'name' => $app->name,
             'visibility' => $app->visibility?->value,
             'version_number' => $version->version_number,
+            'url' => route('apps.runtime', ['app_slug' => $app->slug]),
         ];
         $this->rememberIdempotent($user, $validated['idempotency_key'] ?? null, $payload);
 

@@ -102,6 +102,7 @@ class ScaffoldAppTool extends SapiensTool
                 'fields' => count($o['fields']),
             ], $manifest['objects']),
             'pages' => array_map(fn (array $p): string => $p['path'], $manifest['pages']),
+            'url' => route('apps.runtime', ['app_slug' => $app->slug]),
             'next' => 'Open the app to use it, or refine it with read_manifest + propose_change.',
         ];
         if ($seeded !== []) {

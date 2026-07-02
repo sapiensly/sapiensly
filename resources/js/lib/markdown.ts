@@ -1,3 +1,17 @@
+import DOMPurify from 'dompurify';
+
+// Chat-rendered markdown lives inside the SPA: a bare <a> would navigate the
+// whole app away mid-conversation. Make every sanitized link (e.g. the "open
+// the app" link after a build) open in a new tab instead. Registered once at
+// module load; applies to every DOMPurify.sanitize call in the bundle.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName !== 'A') return;
+    const href = node.getAttribute('href') ?? '';
+    if (!href || href.startsWith('#')) return;
+    node.setAttribute('target', '_blank');
+    node.setAttribute('rel', 'noopener noreferrer');
+});
+
 /**
  * Repairs quirky-but-common markdown that LLMs emit and that `marked` with
  * `breaks: true` would otherwise render as literal `-` / `|` characters: stray
