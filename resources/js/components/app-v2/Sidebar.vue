@@ -8,6 +8,7 @@ import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudPr
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import * as IntegrationController from '@/actions/App/Http/Controllers/IntegrationController';
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
+import * as SlidesController from '@/actions/App/Http/Controllers/SlidesController';
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import AppLogo from '@/components/AppLogo.vue';
 import UserMenuContent from '@/components/UserMenuContent.vue';
@@ -42,6 +43,7 @@ import {
     MessageSquare,
     MessagesSquare,
     Plug,
+    Presentation,
     Shield,
     Wallet,
     Wrench,
@@ -109,6 +111,13 @@ const sections = computed<NavSection[]>(() => [
                 href: AppController.index().url,
                 icon: AppWindow,
                 match: (u) => u.startsWith('/apps') || u.startsWith('/r/'),
+            },
+            {
+                key: 'slides',
+                label: t('app_v2.nav.slides'),
+                href: SlidesController.index().url,
+                icon: Presentation,
+                match: (u) => u.startsWith('/slides') || u.startsWith('/p/'),
             },
             {
                 key: 'chatbots',

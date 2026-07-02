@@ -45,6 +45,7 @@ require __DIR__.'/standalone-agents.php';
 require __DIR__.'/knowledge-bases.php';
 require __DIR__.'/tools.php';
 require __DIR__.'/documents.php';
+require __DIR__.'/slides.php';
 require __DIR__.'/chatbots.php';
 require __DIR__.'/system.php';
 require __DIR__.'/whatsapp.php';

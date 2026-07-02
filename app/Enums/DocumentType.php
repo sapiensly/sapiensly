@@ -12,6 +12,7 @@ enum DocumentType: string
     case Csv = 'csv';
     case Json = 'json';
     case Artifact = 'artifact';
+    case Deck = 'deck';
 
     public function label(): string
     {
@@ -24,6 +25,7 @@ enum DocumentType: string
             self::Csv => __('CSV'),
             self::Json => __('JSON'),
             self::Artifact => __('Artifact (HTML)'),
+            self::Deck => __('Presentation'),
         };
     }
 
@@ -38,6 +40,7 @@ enum DocumentType: string
             self::Csv => ['text/csv', 'application/csv'],
             self::Json => ['application/json'],
             self::Artifact => ['text/html'],
+            self::Deck => [],
         };
     }
 
@@ -52,6 +55,7 @@ enum DocumentType: string
             self::Csv => 'csv',
             self::Json => 'json',
             self::Artifact => 'html',
+            self::Deck => 'json',
         };
     }
 

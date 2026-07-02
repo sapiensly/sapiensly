@@ -206,6 +206,8 @@ class SapiensServer extends Server
         Tools\Data\GetDocumentTool::class,
         Tools\Data\AddDocumentTool::class,
         Tools\Data\DeleteDocumentTool::class,
+        // Presentations (slide decks).
+        Tools\Slides\CreatePresentationTool::class,
         // Agents.
         Tools\Agents\ListAgentsTool::class,
         Tools\Agents\GetAgentTool::class,

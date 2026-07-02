@@ -10,6 +10,7 @@ use App\Mcp\Tools\Chatbots\CreateChatbotTool;
 use App\Mcp\Tools\Data\AddDocumentTool;
 use App\Mcp\Tools\Data\CreateKnowledgeBaseTool;
 use App\Mcp\Tools\Integrations\CreateIntegrationTool;
+use App\Mcp\Tools\Slides\CreatePresentationTool;
 
 /**
  * Maps a synthesized / proposed `action_type` to the handler that can execute it.
@@ -38,6 +39,7 @@ class ActionRegistry
         $this->register(new PlatformBuildAction('create_knowledge_base', CreateKnowledgeBaseTool::class));
         $this->register(new PlatformBuildAction('create_agent', CreateAgentTool::class));
         $this->register(new PlatformBuildAction('save_document', AddDocumentTool::class));
+        $this->register(new PlatformBuildAction('create_presentation', CreatePresentationTool::class));
     }
 
     public function register(ActionHandler $handler): void
