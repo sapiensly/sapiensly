@@ -1,9 +1,11 @@
 <?php
 
+use App\Enums\DocumentType;
 use App\Models\BuilderConversation;
 use App\Models\Chat;
 use App\Models\Conversation;
 use App\Models\Debate;
+use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Models\RuntimeAgentConversation;
 use Illuminate\Support\Facades\Broadcast;
@@ -28,6 +30,15 @@ Broadcast::channel('chat.conversation.{chatId}', function ($user, string $chatId
     $chat = Chat::find($chatId);
 
     return $chat && $chat->user_id === $user->id;
+});
+
+// Slide Builder stream. The deck's builder chat is private to whoever can see
+// the deck in their account context (owner or org member, per visibility).
+Broadcast::channel('slides.builder.{documentId}', function ($user, string $documentId) {
+    return Document::forAccountContext($user)
+        ->where('type', DocumentType::Deck)
+        ->whereKey($documentId)
+        ->exists();
 });
 
 // Runtime agent stream (power #3). Each built-app agent conversation is private

@@ -6,6 +6,7 @@ use App\Enums\DocumentType;
 use App\Mcp\Tools\SapiensTool;
 use App\Models\Document;
 use App\Models\User;
+use App\Services\Slides\DeckEditor;
 use App\Services\Slides\DeckValidator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -48,84 +49,26 @@ class UpdatePresentationTool extends SapiensTool
             return Response::error('The presentation manifest is corrupted.');
         }
 
-        $slides = array_values((array) ($manifest['slides'] ?? []));
+        $editor = app(DeckEditor::class);
+        [$next, $error] = $editor->apply(
+            $manifest,
+            array_values((array) ($validated['operations'] ?? [])),
+            $validated['name'] ?? null,
+            $validated['theme'] ?? null,
+        );
 
-        foreach (array_values((array) ($validated['operations'] ?? [])) as $n => $op) {
-            $index = (int) $op['index'];
-            $count = count($slides);
-
-            switch ($op['op']) {
-                case 'replace':
-                    if ($index >= $count) {
-                        return Response::error("operations.{$n}: replace index {$index} is out of range (deck has {$count} slides).");
-                    }
-                    if (! is_array($op['slide'] ?? null)) {
-                        return Response::error("operations.{$n}: replace requires a `slide` object.");
-                    }
-                    $slides[$index] = $op['slide'];
-                    break;
-
-                case 'insert':
-                    if ($index > $count) {
-                        return Response::error("operations.{$n}: insert index {$index} is out of range (deck has {$count} slides; use {$count} to append).");
-                    }
-                    if (! is_array($op['slide'] ?? null)) {
-                        return Response::error("operations.{$n}: insert requires a `slide` object.");
-                    }
-                    array_splice($slides, $index, 0, [$op['slide']]);
-                    break;
-
-                case 'remove':
-                    if ($index >= $count) {
-                        return Response::error("operations.{$n}: remove index {$index} is out of range (deck has {$count} slides).");
-                    }
-                    array_splice($slides, $index, 1);
-                    break;
-
-                case 'move':
-                    $to = $op['to'] ?? null;
-                    if (! is_int($to)) {
-                        return Response::error("operations.{$n}: move requires `to`.");
-                    }
-                    if ($index >= $count || $to >= $count) {
-                        return Response::error("operations.{$n}: move indexes out of range (deck has {$count} slides).");
-                    }
-                    [$moved] = array_splice($slides, $index, 1);
-                    array_splice($slides, $to, 0, [$moved]);
-                    break;
-            }
+        if ($next === null) {
+            return Response::error($error ?? 'The edit could not be applied.');
         }
 
-        if ($slides === []) {
-            return Response::error('The operations would leave the deck without slides.');
-        }
-
-        $next = [
-            'title' => $validated['name'] ?? $manifest['title'] ?? $deck->name,
-            'theme' => $validated['theme'] ?? $manifest['theme'] ?? 'executive',
-            'slides' => $slides,
-        ];
-
-        $errors = app(DeckValidator::class)->validate($next);
-        if ($errors !== []) {
-            return Response::error("The edited deck is invalid — nothing was saved. Fix these and retry:\n- ".implode("\n- ", $errors));
-        }
-
-        $deck->update([
-            'name' => $next['title'],
-            'body' => json_encode($next, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            'metadata' => array_merge((array) $deck->metadata, [
-                'theme' => $next['theme'],
-                'slide_count' => count($slides),
-            ]),
-        ]);
+        $editor->persist($deck, $next);
 
         return Response::json([
             'updated' => true,
             'document_id' => $deck->id,
             'name' => $deck->name,
-            'theme' => $next['theme'],
-            'slide_count' => count($slides),
+            'theme' => (string) $next['theme'],
+            'slide_count' => count((array) $next['slides']),
             'url' => route('slides.present', ['document' => $deck->id]),
         ]);
     }

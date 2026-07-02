@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DocumentType;
+use App\Jobs\RunSlideBuilderJob;
 use App\Models\Document;
 use App\Models\User;
 use App\Services\Slides\DeckDataResolver;
+use App\Services\Slides\DeckEditor;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -71,6 +73,105 @@ class SlidesController extends Controller
                 'logo_url' => $brand?->logoUrl,
             ],
         ]);
+    }
+
+    /**
+     * The Slide Builder: AI chat on the left, live deck preview + direct
+     * editing on the right. `manifest` is the raw authored deck (what the
+     * inspector edits); `resolved` has live data bindings folded in (what the
+     * preview renders).
+     */
+    public function builder(Request $request, string $document): Response
+    {
+        $deck = Document::forAccountContext($request->user())
+            ->where('type', DocumentType::Deck)
+            ->findOrFail($document);
+
+        $manifest = json_decode((string) $deck->body, true);
+        abort_unless(is_array($manifest), 404);
+
+        $brand = $request->user()?->organization?->brandbook();
+
+        return Inertia::render('slides/Builder', [
+            'deck' => [
+                'id' => $deck->id,
+                'name' => $deck->name,
+                'manifest' => $manifest,
+                'resolved' => app(DeckDataResolver::class)->resolve($manifest, $request->user()),
+            ],
+            'brand' => [
+                'accent' => $brand?->effectiveAccent(),
+                'logo_url' => $brand?->logoUrl,
+            ],
+            'messages' => array_values((array) ($deck->metadata['builder_chat'] ?? [])),
+        ]);
+    }
+
+    /**
+     * Direct (non-AI) edit from the Builder UI: slide operations, rename,
+     * retheme — the same atomic DeckEditor path the AI and MCP use.
+     */
+    public function update(Request $request, string $document): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:120'],
+            'theme' => ['nullable', 'string'],
+            'operations' => ['nullable', 'array', 'max:40'],
+            'operations.*' => ['array'],
+        ]);
+
+        $deck = Document::forAccountContext($request->user())
+            ->where('type', DocumentType::Deck)
+            ->findOrFail($document);
+
+        $manifest = json_decode((string) $deck->body, true);
+        abort_unless(is_array($manifest), 404);
+
+        $editor = app(DeckEditor::class);
+        [$next, $error] = $editor->apply(
+            $manifest,
+            array_values((array) ($validated['operations'] ?? [])),
+            $validated['name'] ?? null,
+            $validated['theme'] ?? null,
+        );
+
+        if ($next === null) {
+            return new JsonResponse(['message' => $error], 422);
+        }
+
+        $editor->persist($deck, $next);
+
+        return new JsonResponse([
+            'name' => $deck->name,
+            'manifest' => $next,
+            'resolved' => app(DeckDataResolver::class)->resolve($next, $request->user()),
+        ]);
+    }
+
+    /**
+     * A Slide Builder chat message: queue the AI turn; the reply streams over
+     * Reverb into the placeholder id returned here.
+     */
+    public function builderMessage(Request $request, string $document): JsonResponse
+    {
+        $validated = $request->validate([
+            'content' => ['required', 'string', 'max:8000'],
+        ]);
+
+        $deck = Document::forAccountContext($request->user())
+            ->where('type', DocumentType::Deck)
+            ->findOrFail($document);
+
+        $messageId = 'sbm_'.strtolower((string) Str::ulid());
+
+        RunSlideBuilderJob::dispatch(
+            $deck->id,
+            $request->user()->id,
+            $messageId,
+            trim($validated['content']),
+        );
+
+        return new JsonResponse(['message_id' => $messageId], 202);
     }
 
     /**

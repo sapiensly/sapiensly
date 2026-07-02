@@ -3,7 +3,7 @@ import * as SlidesController from '@/actions/App/Http/Controllers/SlidesControll
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Presentation, Trash2 } from '@lucide/vue';
+import { Play, Presentation, Trash2 } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 interface DeckItem {
@@ -55,7 +55,7 @@ function destroyDeck(deck: DeckItem) {
                 <Link
                     v-for="deck in decks"
                     :key="deck.id"
-                    :href="SlidesController.present(deck.id).url"
+                    :href="SlidesController.builder(deck.id).url"
                     class="block"
                 >
                     <article
@@ -84,14 +84,28 @@ function destroyDeck(deck: DeckItem) {
                                     </p>
                                 </div>
                             </div>
-                            <button
-                                type="button"
-                                class="rounded-xs p-1.5 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-sp-danger"
-                                :aria-label="t('slides.index.delete')"
-                                @click.prevent.stop="destroyDeck(deck)"
-                            >
-                                <Trash2 class="size-3.5" />
-                            </button>
+                            <div class="flex items-center gap-1">
+                                <a
+                                    :href="
+                                        SlidesController.present(deck.id).url
+                                    "
+                                    target="_blank"
+                                    class="rounded-xs p-1.5 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent-blue"
+                                    :aria-label="t('slides.index.present')"
+                                    :title="t('slides.index.present')"
+                                    @click.stop
+                                >
+                                    <Play class="size-3.5" />
+                                </a>
+                                <button
+                                    type="button"
+                                    class="rounded-xs p-1.5 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-sp-danger"
+                                    :aria-label="t('slides.index.delete')"
+                                    @click.prevent.stop="destroyDeck(deck)"
+                                >
+                                    <Trash2 class="size-3.5" />
+                                </button>
+                            </div>
                         </header>
                         <footer
                             class="mt-auto flex items-center justify-between text-[11px] text-ink-subtle"

@@ -19,6 +19,12 @@ Route::middleware([
 ])->group(function () {
     Route::get('slides', [SlidesController::class, 'index'])
         ->name('slides.index');
+    Route::get('slides/{document}/builder', [SlidesController::class, 'builder'])
+        ->name('slides.builder');
+    Route::patch('slides/{document}', [SlidesController::class, 'update'])
+        ->name('slides.update');
+    Route::post('slides/{document}/builder/messages', [SlidesController::class, 'builderMessage'])
+        ->name('slides.builder.message');
     Route::get('p/{document}', [SlidesController::class, 'present'])
         ->name('slides.present');
     Route::get('slides/{document}/export', [SlidesController::class, 'export'])

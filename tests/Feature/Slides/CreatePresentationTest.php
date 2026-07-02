@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\DocumentType;
+use App\Jobs\RunSlideBuilderJob;
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Slides\CreatePresentationTool;
 use App\Mcp\Tools\Slides\GetPresentationTool;
@@ -245,6 +246,74 @@ it('mints a signed share link that renders read-only without a session', functio
 
     // The print route requires a signature too.
     $this->get(route('slides.print', ['document' => $deck->id]))->assertForbidden();
+});
+
+it('opens the builder, applies direct ops via PATCH and queues AI turns', function () {
+    Queue::fake([RunSlideBuilderJob::class]);
+
+    $deck = Document::create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'name' => 'Builder deck',
+        'keywords' => [],
+        'type' => DocumentType::Deck,
+        'body' => json_encode(['title' => 'Builder deck', 'theme' => 'executive', 'slides' => validSlides()]),
+        'visibility' => 'private',
+        'metadata' => ['theme' => 'executive', 'slide_count' => 8],
+    ]);
+
+    $this->actingAs($this->user)
+        ->get(route('slides.builder', ['document' => $deck->id]))
+        ->assertOk();
+
+    // Direct edit: duplicate the bullets slide via insert, rename + retheme.
+    $response = $this->actingAs($this->user)
+        ->patchJson(route('slides.update', ['document' => $deck->id]), [
+            'name' => 'Builder deck v2',
+            'theme' => 'dark',
+            'operations' => [
+                ['op' => 'insert', 'index' => 3, 'slide' => [
+                    'layout' => 'bullets', 'title' => 'Nuevo', 'bullets' => ['a', 'b'],
+                ]],
+            ],
+        ])
+        ->assertOk()
+        ->json();
+
+    expect($response['name'])->toBe('Builder deck v2')
+        ->and($response['manifest']['theme'])->toBe('dark')
+        ->and($response['manifest']['slides'])->toHaveCount(9)
+        ->and($response['resolved']['slides'])->toHaveCount(9);
+
+    // An invalid op is a 422 and persists nothing.
+    $this->actingAs($this->user)
+        ->patchJson(route('slides.update', ['document' => $deck->id]), [
+            'operations' => [['op' => 'remove', 'index' => 99]],
+        ])
+        ->assertStatus(422);
+    expect(json_decode((string) $deck->refresh()->body, true)['slides'])->toHaveCount(9);
+
+    // Chat message queues the builder AI turn and returns the placeholder id.
+    $messageId = $this->actingAs($this->user)
+        ->postJson(route('slides.builder.message', ['document' => $deck->id]), [
+            'content' => 'Haz el slide 2 más ejecutivo',
+        ])
+        ->assertStatus(202)
+        ->json('message_id');
+
+    expect($messageId)->toStartWith('sbm_');
+    Queue::assertPushed(RunSlideBuilderJob::class, function ($job) use ($deck) {
+        return $job->documentId === $deck->id
+            && $job->userText === 'Haz el slide 2 más ejecutivo';
+    });
+
+    // A stranger cannot touch the builder surface.
+    $stranger = User::factory()->create(['email_verified_at' => now()]);
+    $this->actingAs($stranger)
+        ->patchJson(route('slides.update', ['document' => $deck->id]), [
+            'operations' => [['op' => 'remove', 'index' => 0]],
+        ])
+        ->assertNotFound();
 });
 
 it('keeps decks out of the documents library listing', function () {

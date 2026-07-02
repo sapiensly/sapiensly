@@ -82,3 +82,68 @@ export function deckTheme(
     if (!accent) return base;
     return { ...base, series: [accent, ...base.series.slice(1)] };
 }
+
+export const DECK_LAYOUTS: DeckLayout[] = [
+    'title',
+    'section',
+    'bullets',
+    'two_column',
+    'big_number',
+    'metrics',
+    'chart',
+    'quote',
+    'closing',
+];
+
+/**
+ * A valid starter slide per layout, used by the Builder's "add slide" menu.
+ * Placeholder copy is intentionally generic — the user (or the AI) replaces it.
+ */
+export function defaultSlide(layout: DeckLayout): DeckSlideDef {
+    switch (layout) {
+        case 'title':
+            return {
+                layout,
+                title: 'Presentation title',
+                subtitle: 'Subtitle',
+            };
+        case 'section':
+            return { layout, title: 'New section', kicker: 'Section' };
+        case 'bullets':
+            return {
+                layout,
+                title: 'Key points',
+                bullets: ['First point', 'Second point'],
+            };
+        case 'two_column':
+            return {
+                layout,
+                title: 'Comparison',
+                left: { heading: 'Option A', items: ['Point'] },
+                right: { heading: 'Option B', items: ['Point'] },
+            };
+        case 'big_number':
+            return { layout, value: '100', label: 'The headline metric' };
+        case 'metrics':
+            return {
+                layout,
+                title: 'Key metrics',
+                items: [
+                    { value: '1', label: 'Metric one' },
+                    { value: '2', label: 'Metric two' },
+                ],
+            };
+        case 'chart':
+            return {
+                layout,
+                title: 'Chart',
+                chart_type: 'bar',
+                labels: ['A', 'B', 'C'],
+                series: [{ name: 'Series', data: [3, 5, 2] }],
+            };
+        case 'quote':
+            return { layout, quote: 'A quote worth a slide.' };
+        case 'closing':
+            return { layout, title: 'Next steps', cta: 'Let’s go' };
+    }
+}
