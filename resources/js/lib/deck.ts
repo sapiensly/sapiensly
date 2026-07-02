@@ -16,6 +16,8 @@ export type DeckLayout =
     | 'metrics'
     | 'chart'
     | 'quote'
+    | 'timeline'
+    | 'table'
     | 'closing';
 
 export interface DeckSlideDef {
@@ -71,6 +73,24 @@ export const DECK_THEMES: Record<string, DeckThemeTokens> = {
         line: '#243044',
         series: ['#38a6ff', '#9d87ff', '#32d583', '#fdb022'],
     },
+    minimal: {
+        bg: '#fafafa',
+        surface: '#f1f1f2',
+        ink: '#18181b',
+        muted: '#52525b',
+        subtle: '#a1a1aa',
+        line: '#e4e4e7',
+        series: ['#18181b', '#71717a', '#3f3f46', '#a1a1aa'],
+    },
+    bold: {
+        bg: '#09090b',
+        surface: '#18181f',
+        ink: '#ffffff',
+        muted: '#b8b8c2',
+        subtle: '#6e6e7a',
+        line: '#26262e',
+        series: ['#ff5c35', '#ffd166', '#36d399', '#38a6ff'],
+    },
 };
 
 /** Resolve a theme's tokens, overriding the first series color with the org accent. */
@@ -92,6 +112,8 @@ export const DECK_LAYOUTS: DeckLayout[] = [
     'metrics',
     'chart',
     'quote',
+    'timeline',
+    'table',
     'closing',
 ];
 
@@ -143,6 +165,30 @@ export function defaultSlide(layout: DeckLayout): DeckSlideDef {
             };
         case 'quote':
             return { layout, quote: 'A quote worth a slide.' };
+        case 'timeline':
+            return {
+                layout,
+                title: 'Roadmap',
+                items: [
+                    { label: 'Q1', title: 'Milestone one', status: 'done' },
+                    { label: 'Q2', title: 'Milestone two', status: 'active' },
+                    {
+                        label: 'Q3',
+                        title: 'Milestone three',
+                        status: 'upcoming',
+                    },
+                ],
+            };
+        case 'table':
+            return {
+                layout,
+                title: 'Comparison',
+                columns: ['Item', 'A', 'B'],
+                rows: [
+                    ['Row one', '—', '—'],
+                    ['Row two', '—', '—'],
+                ],
+            };
         case 'closing':
             return { layout, title: 'Next steps', cta: 'Let’s go' };
     }

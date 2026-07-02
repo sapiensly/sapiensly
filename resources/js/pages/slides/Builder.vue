@@ -310,6 +310,19 @@ function rescale() {
 const inspectorOpen = ref(true);
 const addMenuOpen = ref(false);
 
+// Thumbnail drag & drop → a single move op.
+const dragIndex = ref<number | null>(null);
+const dragOver = ref<number | null>(null);
+function onThumbDrop(to: number) {
+    const from = dragIndex.value;
+    dragIndex.value = null;
+    dragOver.value = null;
+    if (from === null || from === to) return;
+    applyOps([{ op: 'move', index: from, to }]).then(
+        () => (selected.value = to),
+    );
+}
+
 watch(inspectorOpen, () => nextTick(rescale));
 
 onMounted(() => {
@@ -379,6 +392,8 @@ async function shareDeck() {
             >
                 <option value="executive">Executive</option>
                 <option value="dark">Dark</option>
+                <option value="minimal">Minimal</option>
+                <option value="bold">Bold</option>
             </select>
 
             <button
@@ -391,7 +406,7 @@ async function shareDeck() {
                 <span v-else class="text-xs">✓</span>
             </button>
             <a
-                :href="SlidesController.export(deck.id).url"
+                :href="SlidesController.exportMethod(deck.id).url"
                 class="toolbar-btn"
                 :title="t('slides.present.download_pdf')"
             >
@@ -603,14 +618,24 @@ async function shareDeck() {
                         v-for="(slide, i) in previewSlides"
                         :key="i"
                         type="button"
-                        class="relative shrink-0 overflow-hidden rounded-md transition-shadow"
-                        :class="
+                        draggable="true"
+                        class="relative shrink-0 overflow-hidden rounded-md transition-all"
+                        :class="[
                             i === selected
                                 ? 'ring-2 ring-accent-blue'
-                                : 'ring-1 ring-white/10 hover:ring-white/30'
-                        "
+                                : 'ring-1 ring-white/10 hover:ring-white/30',
+                            dragOver === i && dragIndex !== i
+                                ? 'translate-x-1 ring-2 ring-accent-blue/60'
+                                : '',
+                            dragIndex === i ? 'opacity-40' : '',
+                        ]"
                         :style="{ width: '128px', height: '72px' }"
                         @click="selected = i"
+                        @dragstart="dragIndex = i"
+                        @dragend="((dragIndex = null), (dragOver = null))"
+                        @dragover.prevent="dragOver = i"
+                        @dragleave="dragOver === i && (dragOver = null)"
+                        @drop.prevent="onThumbDrop(i)"
                     >
                         <div
                             class="pointer-events-none absolute top-0 left-0 origin-top-left"

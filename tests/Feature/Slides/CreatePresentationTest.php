@@ -316,6 +316,42 @@ it('opens the builder, applies direct ops via PATCH and queues AI turns', functi
         ->assertNotFound();
 });
 
+it('validates the timeline and table layouts and the new themes', function () {
+    $validator = new DeckValidator;
+
+    expect($validator->validate([
+        'title' => 'F3',
+        'theme' => 'minimal',
+        'slides' => [
+            ['layout' => 'timeline', 'title' => 'Roadmap 90 días', 'items' => [
+                ['label' => 'F1', 'title' => 'Ignición', 'status' => 'done'],
+                ['label' => 'F2', 'title' => 'Motor', 'status' => 'active', 'description' => 'Contenido constante'],
+                ['label' => 'F3', 'title' => 'Palanca', 'status' => 'upcoming'],
+            ]],
+            ['layout' => 'table', 'title' => 'Canales', 'columns' => ['Canal', 'Esfuerzo', 'Meta'], 'rows' => [
+                ['Build in public', '60%', '40 clientes'],
+                ['Comunidades', '25%', '30 clientes'],
+            ]],
+        ],
+    ]))->toBe([]);
+
+    expect((new DeckValidator)->validate(['title' => 'x', 'theme' => 'bold', 'slides' => validSlides()]))->toBe([]);
+
+    $errors = $validator->validate([
+        'title' => 'Broken',
+        'slides' => [
+            ['layout' => 'timeline', 'title' => 'x', 'items' => [
+                ['label' => 'a', 'title' => 'b', 'status' => 'someday'],
+            ]],
+            ['layout' => 'table', 'title' => 'x', 'columns' => ['A', 'B'], 'rows' => [['solo una celda']]],
+        ],
+    ]);
+
+    expect(implode("\n", $errors))
+        ->toContain('slides.0.items: 2 to 6 items')
+        ->toContain('slides.1.rows.0: exactly one cell per column (2)');
+});
+
 it('keeps decks out of the documents library listing', function () {
     Document::create([
         'user_id' => $this->user->id,

@@ -9,6 +9,8 @@ import {
     ChevronRight,
     Download,
     Link2,
+    MonitorPlay,
+    TimerReset,
     X,
 } from '@lucide/vue';
 import axios from 'axios';
@@ -73,10 +75,43 @@ function onKeydown(e: KeyboardEvent) {
             break;
         case 'Escape':
             e.preventDefault();
-            exit();
+            if (presenter.value) presenter.value = false;
+            else exit();
+            break;
+        case 'p':
+        case 'P':
+            if (!props.shared) {
+                e.preventDefault();
+                presenter.value = !presenter.value;
+            }
             break;
     }
 }
+
+// ----- presenter mode: current + next slide, speaker notes, elapsed timer -----
+const presenter = ref(false);
+const presenterStart = ref(Date.now());
+const nowTick = ref(Date.now());
+let timerHandle: ReturnType<typeof setInterval> | null = null;
+
+const elapsed = computed(() => {
+    const s = Math.max(
+        0,
+        Math.floor((nowTick.value - presenterStart.value) / 1000),
+    );
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
+});
+
+function resetTimer() {
+    presenterStart.value = Date.now();
+}
+
+const currentNotes = computed(() => {
+    const slide = slides.value[current.value] as { notes?: string } | undefined;
+    return typeof slide?.notes === 'string' ? slide.notes : '';
+});
 
 function exit() {
     if (props.shared) return;
@@ -98,14 +133,22 @@ async function shareDeck() {
     }
 }
 
-const exportUrl = computed(() => SlidesController.export(props.deck.id).url);
+const exportUrl = computed(
+    () => SlidesController.exportMethod(props.deck.id).url,
+);
 
 // Scale the fixed design canvas to the viewport (letterboxed).
 const scale = ref(1);
+const presenterScale = ref(0.5);
 function rescale() {
     scale.value = Math.min(
         window.innerWidth / DESIGN_W,
         window.innerHeight / DESIGN_H,
+    );
+    // Presenter: the main slide takes the left ~64% of the screen.
+    presenterScale.value = Math.min(
+        (window.innerWidth * 0.64 - 64) / DESIGN_W,
+        (window.innerHeight - 140) / DESIGN_H,
     );
 }
 
@@ -113,10 +156,12 @@ onMounted(() => {
     rescale();
     window.addEventListener('resize', rescale);
     window.addEventListener('keydown', onKeydown);
+    timerHandle = setInterval(() => (nowTick.value = Date.now()), 1000);
 });
 onBeforeUnmount(() => {
     window.removeEventListener('resize', rescale);
     window.removeEventListener('keydown', onKeydown);
+    if (timerHandle) clearInterval(timerHandle);
 });
 
 const stageStyle = computed(() => ({
@@ -146,7 +191,7 @@ const progress = computed(() =>
         </div>
 
         <!-- Stage: fixed canvas, scaled to fit -->
-        <div class="stage-wrap" @click="go(current + 1)">
+        <div v-if="!presenter" class="stage-wrap" @click="go(current + 1)">
             <div
                 class="stage"
                 :style="{
@@ -171,8 +216,90 @@ const progress = computed(() =>
             </div>
         </div>
 
+        <!-- Presenter mode: current + next slide, notes, timer -->
+        <div v-else class="presenter" @click="go(current + 1)">
+            <div class="pmain">
+                <div
+                    class="pstage"
+                    :style="{
+                        width: `${DESIGN_W}px`,
+                        height: `${DESIGN_H}px`,
+                        transform: `scale(${presenterScale})`,
+                    }"
+                >
+                    <DeckSlide
+                        :slide="slides[current]"
+                        :position="current + 1"
+                        :tokens="tokens"
+                        :logo-url="brand.logo_url"
+                    />
+                </div>
+            </div>
+            <aside class="pside" @click.stop>
+                <div class="pnext">
+                    <p class="pside-label">
+                        {{ t('slides.present.next_slide') }}
+                    </p>
+                    <div v-if="slides[current + 1]" class="pnext-frame">
+                        <div
+                            class="pstage"
+                            :style="{
+                                width: `${DESIGN_W}px`,
+                                height: `${DESIGN_H}px`,
+                                transform: 'scale(0.21)',
+                            }"
+                        >
+                            <DeckSlide
+                                :slide="slides[current + 1]"
+                                :position="current + 2"
+                                :tokens="tokens"
+                                :logo-url="brand.logo_url"
+                                :print-mode="true"
+                            />
+                        </div>
+                    </div>
+                    <p v-else class="pnotes-empty">
+                        {{ t('slides.present.last_slide') }}
+                    </p>
+                </div>
+                <div class="pnotes">
+                    <p class="pside-label">{{ t('slides.present.notes') }}</p>
+                    <p v-if="currentNotes" class="pnotes-text">
+                        {{ currentNotes }}
+                    </p>
+                    <p v-else class="pnotes-empty">
+                        {{ t('slides.present.no_notes') }}
+                    </p>
+                </div>
+                <div class="pfoot">
+                    <span class="ptimer">{{ elapsed }}</span>
+                    <button
+                        type="button"
+                        class="control"
+                        :title="t('slides.present.reset_timer')"
+                        @click="resetTimer"
+                    >
+                        <TimerReset class="icon" />
+                    </button>
+                    <span class="pcount">
+                        {{ current + 1 }} / {{ slides.length }}
+                    </span>
+                </div>
+            </aside>
+        </div>
+
         <!-- Controls -->
         <div v-if="!shared" class="toolbar">
+            <button
+                type="button"
+                class="control"
+                :class="{ active: presenter }"
+                :aria-label="t('slides.present.presenter')"
+                :title="t('slides.present.presenter')"
+                @click.stop="presenter = !presenter"
+            >
+                <MonitorPlay class="icon" />
+            </button>
             <button
                 type="button"
                 class="control"
@@ -317,6 +444,92 @@ const progress = computed(() =>
     font-size: 13px;
     font-variant-numeric: tabular-nums;
     color: var(--deck-subtle);
+}
+
+/* Presenter mode */
+.presenter {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    padding: 56px 24px 24px;
+    gap: 20px;
+}
+.pmain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.pstage {
+    flex-shrink: 0;
+    transform-origin: center;
+    background: var(--deck-bg);
+    box-shadow: 0 8px 40px rgb(0 0 0 / 0.35);
+}
+.pnext .pstage {
+    transform-origin: top left;
+}
+.pside {
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    border-left: 1px solid color-mix(in srgb, var(--deck-ink) 10%, transparent);
+    padding-left: 20px;
+}
+.pside-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--deck-subtle);
+    margin-bottom: 8px;
+}
+.pnext-frame {
+    position: relative;
+    width: 268.8px;
+    height: 151.2px;
+    overflow: hidden;
+    border-radius: 8px;
+    outline: 1px solid color-mix(in srgb, var(--deck-ink) 12%, transparent);
+}
+.pnotes {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+.pnotes-text {
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--deck-ink);
+    white-space: pre-wrap;
+}
+.pnotes-empty {
+    font-size: 13px;
+    color: var(--deck-subtle);
+}
+.pfoot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.ptimer {
+    font-size: 28px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--deck-ink);
+}
+.pcount {
+    margin-left: auto;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    color: var(--deck-subtle);
+}
+.control.active {
+    opacity: 1;
+    color: var(--deck-accent);
 }
 
 /* Slide transitions: a restrained fade + drift. */

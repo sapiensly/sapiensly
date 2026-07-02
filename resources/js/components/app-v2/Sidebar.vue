@@ -42,8 +42,8 @@ import {
     MessageCircle,
     MessageSquare,
     MessagesSquare,
+    Play,
     Plug,
-    Presentation,
     Shield,
     Wallet,
     Wrench,
@@ -116,7 +116,7 @@ const sections = computed<NavSection[]>(() => [
                 key: 'slides',
                 label: t('app_v2.nav.slides'),
                 href: SlidesController.index().url,
-                icon: Presentation,
+                icon: Play,
                 match: (u) => u.startsWith('/slides') || u.startsWith('/p/'),
             },
             {

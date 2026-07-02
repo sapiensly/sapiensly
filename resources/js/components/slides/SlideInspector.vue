@@ -95,6 +95,65 @@ function removeMetric(i: number) {
     patch({ items });
 }
 
+// ----- timeline -----
+function setTimelineItem(i: number, key: string, value: string) {
+    const items = (s.value.items ?? []).map((it: any, j: number) => {
+        if (j !== i) return it;
+        const next = { ...it };
+        if (value.trim() === '' && (key === 'description' || key === 'status'))
+            delete next[key];
+        else next[key] = value;
+        return next;
+    });
+    patch({ items });
+}
+function addTimelineItem() {
+    const items = [...(s.value.items ?? [])];
+    if (items.length >= 6) return;
+    items.push({ label: '—', title: '', status: 'upcoming' });
+    patch({ items });
+}
+function removeTimelineItem(i: number) {
+    const items = [...(s.value.items ?? [])];
+    items.splice(i, 1);
+    patch({ items });
+}
+
+// ----- table -----
+function setColumns(value: string) {
+    const columns = value
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean);
+    // Keep every row aligned to the new column count.
+    const rows = (s.value.rows ?? []).map((row: string[]) => {
+        const next = [...row];
+        while (next.length < columns.length) next.push('');
+        return next.slice(0, columns.length);
+    });
+    patch({ columns, rows });
+}
+function setTableCell(i: number, j: number, value: string) {
+    const rows = (s.value.rows ?? []).map((row: string[], k: number) =>
+        k === i
+            ? row.map((c: string, l: number) => (l === j ? value : c))
+            : row,
+    );
+    patch({ rows });
+}
+function addRow() {
+    const rows = [...(s.value.rows ?? [])];
+    if (rows.length >= 5) return;
+    rows.push((s.value.columns ?? []).map(() => ''));
+    patch({ rows });
+}
+function removeRow(i: number) {
+    const rows = [...(s.value.rows ?? [])];
+    if (rows.length <= 1) return;
+    rows.splice(i, 1);
+    patch({ rows });
+}
+
 // ----- chart -----
 const labelsText = computed(() => (s.value.labels ?? []).join(', '));
 function setLabels(value: string) {
@@ -582,6 +641,124 @@ function removeSeries(i: number) {
                 </label>
             </div>
         </template>
+
+        <!-- timeline -->
+        <div v-if="slide.layout === 'timeline'" class="field">
+            <span class="label">{{
+                t('slides.builder.field.milestones')
+            }}</span>
+            <div
+                v-for="(item, i) in s.items ?? []"
+                :key="i"
+                class="rounded-lg border border-soft p-3"
+            >
+                <div class="row">
+                    <input
+                        :value="item.label ?? ''"
+                        class="input w-20"
+                        :placeholder="t('slides.builder.field.label')"
+                        @input="
+                            setTimelineItem(
+                                i,
+                                'label',
+                                ($event.target as HTMLInputElement).value,
+                            )
+                        "
+                    />
+                    <input
+                        :value="item.title ?? ''"
+                        class="input flex-1"
+                        :placeholder="t('slides.builder.field.title')"
+                        @input="
+                            setTimelineItem(
+                                i,
+                                'title',
+                                ($event.target as HTMLInputElement).value,
+                            )
+                        "
+                    />
+                    <select
+                        :value="item.status ?? 'upcoming'"
+                        class="input w-28"
+                        @change="
+                            setTimelineItem(
+                                i,
+                                'status',
+                                ($event.target as HTMLSelectElement).value,
+                            )
+                        "
+                    >
+                        <option value="done">done</option>
+                        <option value="active">active</option>
+                        <option value="upcoming">upcoming</option>
+                    </select>
+                    <button
+                        type="button"
+                        class="icon-btn"
+                        @click="removeTimelineItem(i)"
+                    >
+                        <Minus class="size-3.5" />
+                    </button>
+                </div>
+                <input
+                    :value="item.description ?? ''"
+                    class="input mt-2"
+                    :placeholder="t('slides.builder.field.context')"
+                    @input="
+                        setTimelineItem(
+                            i,
+                            'description',
+                            ($event.target as HTMLInputElement).value,
+                        )
+                    "
+                />
+            </div>
+            <button
+                v-if="(s.items ?? []).length < 6"
+                type="button"
+                class="add-btn"
+                @click="addTimelineItem"
+            >
+                <Plus class="size-3.5" /> {{ t('slides.builder.add_item') }}
+            </button>
+        </div>
+
+        <!-- table -->
+        <div v-if="slide.layout === 'table'" class="field">
+            <span class="label">{{ t('slides.builder.field.columns') }}</span>
+            <input
+                :value="(s.columns ?? []).join(', ')"
+                class="input"
+                @change="setColumns(($event.target as HTMLInputElement).value)"
+            />
+            <span class="label mt-2">{{ t('slides.builder.field.rows') }}</span>
+            <div v-for="(row, i) in s.rows ?? []" :key="i" class="row">
+                <input
+                    v-for="(cell, j) in row"
+                    :key="j"
+                    :value="cell"
+                    class="input flex-1"
+                    @input="
+                        setTableCell(
+                            i,
+                            j,
+                            ($event.target as HTMLInputElement).value,
+                        )
+                    "
+                />
+                <button type="button" class="icon-btn" @click="removeRow(i)">
+                    <Minus class="size-3.5" />
+                </button>
+            </div>
+            <button
+                v-if="(s.rows ?? []).length < 5"
+                type="button"
+                class="add-btn"
+                @click="addRow"
+            >
+                <Plus class="size-3.5" /> {{ t('slides.builder.add_item') }}
+            </button>
+        </div>
 
         <!-- closing bullets + cta -->
         <template v-if="slide.layout === 'closing'">

@@ -15,12 +15,14 @@ namespace App\Services\Slides;
  */
 class DeckValidator
 {
-    public const THEMES = ['executive', 'dark'];
+    public const THEMES = ['executive', 'dark', 'minimal', 'bold'];
 
     public const LAYOUTS = [
         'title', 'section', 'bullets', 'two_column', 'big_number',
-        'metrics', 'chart', 'quote', 'closing',
+        'metrics', 'chart', 'quote', 'timeline', 'table', 'closing',
     ];
+
+    public const TIMELINE_STATUSES = ['done', 'active', 'upcoming'];
 
     public const CHART_TYPES = ['bar', 'line', 'donut'];
 
@@ -94,6 +96,8 @@ class DeckValidator
             'metrics' => $this->validateMetrics($slide, $path, $errors),
             'chart' => $this->validateChart($slide, $path, $errors),
             'quote' => $this->validateQuote($slide, $path, $errors),
+            'timeline' => $this->validateTimeline($slide, $path, $errors),
+            'table' => $this->validateTable($slide, $path, $errors),
             'closing' => $this->validateClosing($slide, $path, $errors),
         };
     }
@@ -232,6 +236,68 @@ class DeckValidator
         $this->requireText($slide, 'quote', 240, $errors, $path);
         $this->optionalText($slide, 'attribution', 60, $path, $errors);
         $this->optionalText($slide, 'role', 60, $path, $errors);
+    }
+
+    /** @param array<string, mixed> $slide @param list<string> $errors */
+    private function validateTimeline(array $slide, string $path, array &$errors): void
+    {
+        $this->requireText($slide, 'title', 70, $errors, $path);
+        $this->optionalText($slide, 'kicker', 40, $path, $errors);
+
+        $items = $slide['items'] ?? null;
+        if (! is_array($items) || count($items) < 2 || count($items) > 6) {
+            $errors[] = "{$path}.items: 2 to 6 items of {label, title, description?, status?}.";
+
+            return;
+        }
+        foreach (array_values($items) as $i => $item) {
+            if (! is_array($item)) {
+                $errors[] = "{$path}.items.{$i}: must be an object.";
+
+                continue;
+            }
+            $this->requireText($item, 'label', 20, $errors, "{$path}.items.{$i}");
+            $this->requireText($item, 'title', 60, $errors, "{$path}.items.{$i}");
+            $this->optionalText($item, 'description', 90, "{$path}.items.{$i}", $errors);
+
+            $status = $item['status'] ?? null;
+            if ($status !== null && ! in_array($status, self::TIMELINE_STATUSES, true)) {
+                $errors[] = "{$path}.items.{$i}.status: must be one of ".implode(', ', self::TIMELINE_STATUSES).'.';
+            }
+        }
+    }
+
+    /** @param array<string, mixed> $slide @param list<string> $errors */
+    private function validateTable(array $slide, string $path, array &$errors): void
+    {
+        $this->requireText($slide, 'title', 70, $errors, $path);
+
+        $columns = $slide['columns'] ?? null;
+        if (! is_array($columns) || count($columns) < 2 || count($columns) > 4
+            || array_filter($columns, fn ($c) => ! is_string($c) || trim($c) === '' || mb_strlen($c) > 24) !== []) {
+            $errors[] = "{$path}.columns: 2 to 4 non-empty strings of at most 24 chars.";
+
+            return;
+        }
+
+        $rows = $slide['rows'] ?? null;
+        if (! is_array($rows) || count($rows) < 1 || count($rows) > 5) {
+            $errors[] = "{$path}.rows: 1 to 5 rows (arrays of cells).";
+
+            return;
+        }
+        foreach (array_values($rows) as $i => $row) {
+            if (! is_array($row) || count($row) !== count($columns)) {
+                $errors[] = "{$path}.rows.{$i}: exactly one cell per column (".count($columns).').';
+
+                continue;
+            }
+            foreach (array_values($row) as $j => $cell) {
+                if (! is_string($cell) || mb_strlen($cell) > 40) {
+                    $errors[] = "{$path}.rows.{$i}.{$j}: string of at most 40 characters.";
+                }
+            }
+        }
     }
 
     /** @param array<string, mixed> $slide @param list<string> $errors */

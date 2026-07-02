@@ -7,6 +7,8 @@ import SlideClosing from './layouts/SlideClosing.vue';
 import SlideMetrics from './layouts/SlideMetrics.vue';
 import SlideQuote from './layouts/SlideQuote.vue';
 import SlideSection from './layouts/SlideSection.vue';
+import SlideTable from './layouts/SlideTable.vue';
+import SlideTimeline from './layouts/SlideTimeline.vue';
 import SlideTitle from './layouts/SlideTitle.vue';
 import SlideTwoColumn from './layouts/SlideTwoColumn.vue';
 
@@ -82,6 +84,18 @@ const s = props.slide as Record<string, never>;
         :quote="s.quote"
         :attribution="s.attribution"
         :role="s.role"
+    />
+    <SlideTimeline
+        v-else-if="slide.layout === 'timeline'"
+        :title="s.title"
+        :kicker="s.kicker"
+        :items="s.items"
+    />
+    <SlideTable
+        v-else-if="slide.layout === 'table'"
+        :title="s.title"
+        :columns="s.columns"
+        :rows="s.rows"
     />
     <SlideClosing
         v-else-if="slide.layout === 'closing'"
