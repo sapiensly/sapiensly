@@ -37,6 +37,7 @@ final class Schemas
         // Documents & RAG content
         'folders',
         'documents',
+        'deck_versions',
         'app_files',
         'knowledge_bases',
         'knowledge_base_documents',

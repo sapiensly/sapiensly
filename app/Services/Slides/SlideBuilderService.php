@@ -74,7 +74,7 @@ class SlideBuilderService
                 : new AssistantMessage($m['content']);
         }
 
-        $editTool = new EditSlidesTool($deck, $this->editor);
+        $editTool = new EditSlidesTool($deck, $this->editor, $user);
 
         $system = self::SYSTEM_PROMPT
             ."\n\n## The deck right now (0-based indexes)\n"

@@ -3,6 +3,7 @@
 namespace App\Services\Slides;
 
 use App\Models\Document;
+use App\Models\User;
 
 /**
  * Applies slide-level operations to a deck manifest and persists the result.
@@ -101,10 +102,21 @@ class DeckEditor
     }
 
     /**
+     * Persist the deck AND record the version-history snapshot (Living Decks).
+     * Versioning is best-effort inside DeckVersioner — a history hiccup never
+     * breaks the write.
+     *
      * @param  array<string, mixed>  $manifest  a validated manifest
+     * @param  array<string, mixed>|null  $resolved  pass when already resolved to skip a second pass
      */
-    public function persist(Document $deck, array $manifest): void
-    {
+    public function persist(
+        Document $deck,
+        array $manifest,
+        ?User $actor = null,
+        string $cause = 'edit',
+        ?string $summary = null,
+        ?array $resolved = null,
+    ): void {
         $deck->update([
             'name' => (string) $manifest['title'],
             'body' => json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
@@ -113,5 +125,7 @@ class DeckEditor
                 'slide_count' => count((array) $manifest['slides']),
             ]),
         ]);
+
+        app(DeckVersioner::class)->record($deck, $manifest, $cause, $actor, $summary, $resolved);
     }
 }

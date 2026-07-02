@@ -43,3 +43,9 @@ Schedule::command('flows:dispatch-polls')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Living Decks: queue data refreshes for presentations whose schedule is due.
+Schedule::command('slides:refresh-due')
+    ->hourly()
+    ->withoutOverlapping()
+    ->runInBackground();

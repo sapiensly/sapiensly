@@ -3,6 +3,7 @@
 namespace App\Ai\Tools\Slides;
 
 use App\Models\Document;
+use App\Models\User;
 use App\Services\Slides\DeckEditor;
 use App\Services\Slides\DeckValidator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -25,6 +26,7 @@ class EditSlidesTool implements Tool
     public function __construct(
         private readonly Document $deck,
         private readonly DeckEditor $editor,
+        private readonly ?User $actor = null,
     ) {}
 
     public function name(): string
@@ -75,7 +77,7 @@ class EditSlidesTool implements Tool
             return json_encode(['error' => $error], JSON_THROW_ON_ERROR);
         }
 
-        $this->editor->persist($this->deck, $next);
+        $this->editor->persist($this->deck, $next, $this->actor);
         $this->appliedManifest = $next;
 
         return json_encode([

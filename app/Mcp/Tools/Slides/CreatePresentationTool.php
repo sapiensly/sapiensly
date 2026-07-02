@@ -8,6 +8,7 @@ use App\Mcp\Tools\SapiensTool;
 use App\Models\Document;
 use App\Models\User;
 use App\Services\Slides\DeckValidator;
+use App\Services\Slides\DeckVersioner;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -57,6 +58,8 @@ class CreatePresentationTool extends SapiensTool
                 'slide_count' => count($deck['slides']),
             ],
         ]);
+
+        app(DeckVersioner::class)->record($document, $deck, 'create', $user);
 
         return Response::json([
             'created' => true,

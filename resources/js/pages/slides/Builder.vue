@@ -16,14 +16,19 @@ import { normalizeChatMarkdown } from '@/lib/markdown';
 import { Head, Link } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    CalendarClock,
     ChevronLeft,
     ChevronRight,
     Copy,
     Download,
+    ExternalLink,
+    History,
     Link2,
     Loader2,
     Play,
     Plus,
+    RefreshCw,
+    RotateCcw,
     Send,
     SlidersHorizontal,
     Sparkles,
@@ -57,6 +62,12 @@ const props = defineProps<{
     };
     brand: DeckBrand;
     messages: { role: string; content: string; at?: string }[];
+    refresh: {
+        frequency?: string;
+        hour?: number;
+        narrative?: boolean;
+        last_refreshed_at?: string;
+    };
 }>();
 
 const { t } = useI18n();
@@ -265,6 +276,12 @@ function subscribe() {
             name: string | null;
         }) => {
             aiBusy.value = false;
+            // A completed data refresh also lands here (message_id refresh-*).
+            if (data.message_id.startsWith('refresh-')) {
+                refreshing.value = false;
+                if (refreshTimeout) clearTimeout(refreshTimeout);
+                if (historyOpen.value) loadVersions();
+            }
             const msg = chat.value.find((m) => m.id === data.message_id);
             if (msg) {
                 msg.content = data.content;
@@ -309,6 +326,102 @@ function rescale() {
 
 const inspectorOpen = ref(true);
 const addMenuOpen = ref(false);
+
+// ----- Living Deck: history, auto-refresh -----
+interface VersionRow {
+    id: string;
+    number: number;
+    cause: string;
+    summary: string | null;
+    author: string | null;
+    created_at: string | null;
+}
+
+const historyOpen = ref(false);
+const versionsLoading = ref(false);
+const versions = ref<VersionRow[]>([]);
+const frozenCopied = ref<string | null>(null);
+
+async function loadVersions() {
+    versionsLoading.value = true;
+    try {
+        const { data } = await axios.get(
+            SlidesController.versions(props.deck.id).url,
+        );
+        versions.value = data.versions;
+    } finally {
+        versionsLoading.value = false;
+    }
+}
+
+function toggleHistory() {
+    historyOpen.value = !historyOpen.value;
+    if (historyOpen.value) loadVersions();
+}
+
+async function restoreVersion(v: VersionRow) {
+    if (!confirm(t('slides.builder.restore_confirm', { n: v.number }))) return;
+    saving.value = true;
+    try {
+        const { data } = await axios.post(
+            SlidesController.restoreVersion([props.deck.id, v.id]).url,
+        );
+        manifest.value = data.manifest;
+        resolved.value = data.resolved;
+        name.value = data.name;
+        selected.value = Math.min(
+            selected.value,
+            (data.manifest.slides ?? []).length - 1,
+        );
+        await loadVersions();
+    } finally {
+        saving.value = false;
+    }
+}
+
+async function copyFrozenLink(v: VersionRow) {
+    try {
+        const { data } = await axios.post(
+            SlidesController.share(props.deck.id).url,
+            { version: v.number },
+        );
+        await navigator.clipboard.writeText(data.url);
+        frozenCopied.value = v.id;
+        setTimeout(() => (frozenCopied.value = null), 2000);
+    } catch {
+        // no-op
+    }
+}
+
+const refreshing = ref(false);
+let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
+
+async function refreshNow() {
+    if (refreshing.value) return;
+    refreshing.value = true;
+    try {
+        await axios.post(SlidesController.refreshNow(props.deck.id).url);
+        // The job broadcasts SlideBuilderComplete when done; the timeout is
+        // only a UI safety net.
+        refreshTimeout = setTimeout(() => (refreshing.value = false), 90000);
+    } catch {
+        refreshing.value = false;
+    }
+}
+
+const scheduleOpen = ref(false);
+const schedule = ref({
+    frequency: props.refresh?.frequency ?? 'manual',
+    hour: props.refresh?.hour ?? 7,
+    narrative: props.refresh?.narrative ?? true,
+});
+
+async function saveSchedule() {
+    scheduleOpen.value = false;
+    await axios.patch(SlidesController.update(props.deck.id).url, {
+        refresh: schedule.value,
+    });
+}
 
 // Thumbnail drag & drop → a single move op.
 const dragIndex = ref<number | null>(null);
@@ -357,7 +470,7 @@ async function shareDeck() {
 <template>
     <Head :title="`${name} · ${t('slides.builder.title')}`" />
 
-    <div class="flex h-screen flex-col bg-navy-deep text-ink">
+    <div class="relative flex h-screen flex-col bg-navy-deep text-ink">
         <!-- Topbar -->
         <header
             class="flex h-14 shrink-0 items-center gap-3 border-b border-soft px-4"
@@ -396,6 +509,99 @@ async function shareDeck() {
                 <option value="bold">Bold</option>
             </select>
 
+            <button
+                type="button"
+                class="toolbar-btn"
+                :class="{ '!text-accent-blue': refreshing }"
+                :title="t('slides.builder.refresh_now')"
+                @click="refreshNow"
+            >
+                <RefreshCw
+                    class="size-4"
+                    :class="{ 'animate-spin': refreshing }"
+                />
+            </button>
+            <div class="relative">
+                <button
+                    type="button"
+                    class="toolbar-btn"
+                    :class="{
+                        '!text-accent-blue': schedule.frequency !== 'manual',
+                    }"
+                    :title="t('slides.builder.auto_update')"
+                    @click="scheduleOpen = !scheduleOpen"
+                >
+                    <CalendarClock class="size-4" />
+                </button>
+                <div
+                    v-if="scheduleOpen"
+                    class="absolute top-11 right-0 z-50 w-64 space-y-3 rounded-xl border border-medium bg-navy p-4 shadow-lg"
+                >
+                    <p class="text-xs font-semibold text-ink">
+                        {{ t('slides.builder.auto_update') }}
+                    </p>
+                    <select
+                        v-model="schedule.frequency"
+                        class="w-full rounded-lg border border-medium bg-surface px-2 py-1.5 text-xs text-ink outline-none"
+                    >
+                        <option value="manual">
+                            {{ t('slides.builder.freq.manual') }}
+                        </option>
+                        <option value="hourly">
+                            {{ t('slides.builder.freq.hourly') }}
+                        </option>
+                        <option value="daily">
+                            {{ t('slides.builder.freq.daily') }}
+                        </option>
+                        <option value="weekly">
+                            {{ t('slides.builder.freq.weekly') }}
+                        </option>
+                        <option value="monthly">
+                            {{ t('slides.builder.freq.monthly') }}
+                        </option>
+                    </select>
+                    <label
+                        v-if="
+                            schedule.frequency !== 'manual' &&
+                            schedule.frequency !== 'hourly'
+                        "
+                        class="flex items-center gap-2 text-xs text-ink-muted"
+                    >
+                        {{ t('slides.builder.at_hour') }}
+                        <select
+                            v-model.number="schedule.hour"
+                            class="rounded-lg border border-medium bg-surface px-2 py-1 text-xs text-ink outline-none"
+                        >
+                            <option v-for="h in 24" :key="h - 1" :value="h - 1">
+                                {{ String(h - 1).padStart(2, '0') }}:00
+                            </option>
+                        </select>
+                    </label>
+                    <label
+                        v-if="schedule.frequency !== 'manual'"
+                        class="flex items-center gap-2 text-xs text-ink-muted"
+                    >
+                        <input v-model="schedule.narrative" type="checkbox" />
+                        {{ t('slides.builder.narrative') }}
+                    </label>
+                    <button
+                        type="button"
+                        class="w-full rounded-pill bg-accent-blue px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-blue-hover"
+                        @click="saveSchedule"
+                    >
+                        {{ t('slides.builder.save_schedule') }}
+                    </button>
+                </div>
+            </div>
+            <button
+                type="button"
+                class="toolbar-btn"
+                :class="{ '!text-accent-blue': historyOpen }"
+                :title="t('slides.builder.history')"
+                @click="toggleHistory"
+            >
+                <History class="size-4" />
+            </button>
             <button
                 type="button"
                 class="toolbar-btn"
@@ -663,6 +869,105 @@ async function shareDeck() {
                 </div>
             </main>
         </div>
+
+        <!-- Version history drawer (Living Decks) -->
+        <aside
+            v-if="historyOpen"
+            class="absolute top-14 right-0 bottom-0 z-50 flex w-[380px] flex-col border-l border-medium bg-navy shadow-2xl"
+        >
+            <div
+                class="flex items-center justify-between border-b border-soft px-4 py-3"
+            >
+                <p class="text-sm font-semibold text-ink">
+                    {{ t('slides.builder.history') }}
+                </p>
+                <button
+                    type="button"
+                    class="toolbar-btn"
+                    @click="historyOpen = false"
+                >
+                    ✕
+                </button>
+            </div>
+            <div class="flex-1 space-y-3 overflow-y-auto p-4">
+                <div
+                    v-if="versionsLoading"
+                    class="flex items-center gap-2 text-xs text-ink-subtle"
+                >
+                    <Loader2 class="size-3 animate-spin" />
+                    {{ t('slides.builder.loading') }}
+                </div>
+                <div
+                    v-for="v in versions"
+                    :key="v.id"
+                    class="rounded-xl border border-soft p-3"
+                >
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-semibold text-ink">
+                            v{{ v.number }}
+                        </span>
+                        <span
+                            class="rounded-full bg-surface px-2 py-0.5 text-[10px] font-medium tracking-wide text-ink-muted uppercase"
+                        >
+                            {{ t(`slides.builder.cause.${v.cause}`) }}
+                        </span>
+                        <span class="ml-auto text-[11px] text-ink-subtle">
+                            {{
+                                v.created_at
+                                    ? new Date(v.created_at).toLocaleString()
+                                    : ''
+                            }}
+                        </span>
+                    </div>
+                    <p
+                        v-if="v.summary"
+                        class="mt-1.5 text-xs leading-relaxed text-ink-muted"
+                    >
+                        {{ v.summary }}
+                    </p>
+                    <p v-if="v.author" class="mt-1 text-[11px] text-ink-subtle">
+                        {{ v.author }}
+                    </p>
+                    <div class="mt-2 flex items-center gap-1">
+                        <a
+                            :href="`${SlidesController.present(deck.id).url}?v=${v.number}`"
+                            target="_blank"
+                            class="history-action"
+                            :title="t('slides.builder.view_version')"
+                        >
+                            <ExternalLink class="size-3.5" />
+                        </a>
+                        <button
+                            type="button"
+                            class="history-action"
+                            :title="t('slides.builder.frozen_link')"
+                            @click="copyFrozenLink(v)"
+                        >
+                            <span
+                                v-if="frozenCopied === v.id"
+                                class="text-[10px]"
+                                >✓</span
+                            >
+                            <Link2 v-else class="size-3.5" />
+                        </button>
+                        <button
+                            type="button"
+                            class="history-action"
+                            :title="t('slides.builder.restore')"
+                            @click="restoreVersion(v)"
+                        >
+                            <RotateCcw class="size-3.5" />
+                        </button>
+                    </div>
+                </div>
+                <p
+                    v-if="!versionsLoading && versions.length === 0"
+                    class="text-xs text-ink-subtle"
+                >
+                    {{ t('slides.builder.no_versions') }}
+                </p>
+            </div>
+        </aside>
     </div>
 </template>
 
@@ -679,6 +984,22 @@ async function shareDeck() {
         background 0.15s ease;
 }
 .toolbar-btn:hover {
+    color: var(--sp-text-primary);
+    background: var(--sp-surface);
+}
+.history-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    color: var(--sp-text-tertiary);
+    transition:
+        color 0.15s ease,
+        background 0.15s ease;
+}
+.history-action:hover {
     color: var(--sp-text-primary);
     background: var(--sp-surface);
 }

@@ -25,6 +25,12 @@ Route::middleware([
         ->name('slides.update');
     Route::post('slides/{document}/builder/messages', [SlidesController::class, 'builderMessage'])
         ->name('slides.builder.message');
+    Route::get('slides/{document}/versions', [SlidesController::class, 'versions'])
+        ->name('slides.versions');
+    Route::post('slides/{document}/versions/{version}/restore', [SlidesController::class, 'restoreVersion'])
+        ->name('slides.versions.restore');
+    Route::post('slides/{document}/refresh', [SlidesController::class, 'refreshNow'])
+        ->name('slides.refresh');
     Route::get('p/{document}', [SlidesController::class, 'present'])
         ->name('slides.present');
     Route::get('slides/{document}/export', [SlidesController::class, 'export'])

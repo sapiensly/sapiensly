@@ -28,6 +28,9 @@ const props = defineProps<{
     brand: DeckBrand;
     /** true when opened through a share link: hides workspace affordances. */
     shared?: boolean;
+    /** Set when viewing a frozen snapshot (a version or pinned share): the
+     * ISO timestamp its data was captured at. */
+    as_of?: string | null;
 }>();
 
 const { t } = useI18n();
@@ -301,6 +304,7 @@ const progress = computed(() =>
                 <MonitorPlay class="icon" />
             </button>
             <button
+                v-if="!as_of"
                 type="button"
                 class="control"
                 :aria-label="t('slides.present.share')"
@@ -311,6 +315,7 @@ const progress = computed(() =>
                 <Link2 v-else class="icon" />
             </button>
             <a
+                v-if="!as_of"
                 :href="exportUrl"
                 class="control"
                 :aria-label="t('slides.present.download_pdf')"
@@ -347,6 +352,13 @@ const progress = computed(() =>
             <ChevronRight class="icon" />
         </button>
         <div class="counter">{{ current + 1 }} / {{ slides.length }}</div>
+        <div v-if="as_of" class="as-of">
+            {{
+                t('slides.present.as_of', {
+                    date: new Date(as_of).toLocaleString(),
+                })
+            }}
+        </div>
     </div>
 </template>
 
@@ -525,6 +537,17 @@ const progress = computed(() =>
     margin-left: auto;
     font-size: 14px;
     font-variant-numeric: tabular-nums;
+    color: var(--deck-subtle);
+}
+.as-of {
+    position: absolute;
+    bottom: 18px;
+    left: 24px;
+    z-index: 40;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--deck-ink) 7%, transparent);
     color: var(--deck-subtle);
 }
 .control.active {

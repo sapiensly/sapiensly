@@ -61,7 +61,7 @@ class UpdatePresentationTool extends SapiensTool
             return Response::error($error ?? 'The edit could not be applied.');
         }
 
-        $editor->persist($deck, $next);
+        $editor->persist($deck, $next, $user);
 
         return Response::json([
             'updated' => true,

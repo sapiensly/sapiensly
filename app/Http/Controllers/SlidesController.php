@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DocumentType;
+use App\Jobs\RefreshDeckJob;
 use App\Jobs\RunSlideBuilderJob;
+use App\Models\DeckVersion;
 use App\Models\Document;
 use App\Models\User;
 use App\Services\Slides\DeckDataResolver;
@@ -53,12 +55,25 @@ class SlidesController extends Controller
             ->where('type', DocumentType::Deck)
             ->findOrFail($document);
 
-        $manifest = json_decode((string) $deck->body, true);
-        abort_unless(is_array($manifest), 404);
+        $asOf = null;
 
-        // Live bindings (chart data_source / metric value_source) refresh on
-        // every open; failures leave the static fallback in place.
-        $manifest = app(DeckDataResolver::class)->resolve($manifest, $request->user());
+        if ($request->query('v') !== null) {
+            // Time travel: a historical version's manifest has its live data
+            // BAKED at snapshot time — rendered as-is, read-only.
+            $version = DeckVersion::query()
+                ->where('document_id', $deck->id)
+                ->where('version_number', (int) $request->query('v'))
+                ->firstOrFail();
+            $manifest = (array) $version->manifest;
+            $asOf = $version->created_at?->toIso8601String();
+        } else {
+            $manifest = json_decode((string) $deck->body, true);
+            abort_unless(is_array($manifest), 404);
+
+            // Live bindings (chart data_source / metric value_source) refresh
+            // on every open; failures leave the static fallback in place.
+            $manifest = app(DeckDataResolver::class)->resolve($manifest, $request->user());
+        }
 
         $brand = $request->user()?->organization?->brandbook();
 
@@ -72,7 +87,95 @@ class SlidesController extends Controller
                 'accent' => $brand?->effectiveAccent(),
                 'logo_url' => $brand?->logoUrl,
             ],
+            'as_of' => $asOf,
         ]);
+    }
+
+    /**
+     * The deck's version history (Living Decks): newest first, with the AI
+     * "what changed" summary per refresh.
+     */
+    public function versions(Request $request, string $document): JsonResponse
+    {
+        $deck = Document::forAccountContext($request->user())
+            ->where('type', DocumentType::Deck)
+            ->findOrFail($document);
+
+        $versions = DeckVersion::query()
+            ->where('document_id', $deck->id)
+            ->orderByDesc('version_number')
+            ->get(['id', 'version_number', 'cause', 'change_summary', 'created_by_user_id', 'created_at']);
+
+        $authors = User::query()
+            ->whereIn('id', $versions->pluck('created_by_user_id')->filter()->unique())
+            ->pluck('name', 'id');
+
+        return new JsonResponse([
+            'versions' => $versions->map(fn (DeckVersion $v): array => [
+                'id' => $v->id,
+                'number' => $v->version_number,
+                'cause' => $v->cause,
+                'summary' => $v->change_summary,
+                'author' => $v->created_by_user_id !== null ? $authors[$v->created_by_user_id] ?? null : null,
+                'created_at' => $v->created_at?->toIso8601String(),
+            ])->values(),
+            'refresh' => (array) ($deck->metadata['refresh'] ?? []),
+        ]);
+    }
+
+    /**
+     * Restore a historical version: its SOURCE manifest (with live bindings)
+     * becomes the current deck, recorded as a new `restore` version — history
+     * is append-only, never rewound.
+     */
+    public function restoreVersion(Request $request, string $document, string $version): JsonResponse
+    {
+        $deck = Document::forAccountContext($request->user())
+            ->where('type', DocumentType::Deck)
+            ->findOrFail($document);
+
+        $target = DeckVersion::query()
+            ->where('document_id', $deck->id)
+            ->whereKey($version)
+            ->firstOrFail();
+
+        $manifest = (array) $target->source_manifest;
+        $resolved = app(DeckDataResolver::class)->resolve($manifest, $request->user());
+
+        app(DeckEditor::class)->persist(
+            $deck,
+            $manifest,
+            $request->user(),
+            'restore',
+            "Restored version {$target->version_number}.",
+            $resolved,
+        );
+
+        return new JsonResponse([
+            'name' => $deck->refresh()->name,
+            'manifest' => $manifest,
+            'resolved' => $resolved,
+        ]);
+    }
+
+    /**
+     * Manual "Refresh now": queue the same job the scheduler uses. 202 —
+     * the result lands in the version history (and live in an open Builder).
+     */
+    public function refreshNow(Request $request, string $document): JsonResponse
+    {
+        $deck = Document::forAccountContext($request->user())
+            ->where('type', DocumentType::Deck)
+            ->findOrFail($document);
+
+        RefreshDeckJob::dispatch(
+            $deck->id,
+            $request->user()->organization_id,
+            $request->user()->id,
+            'manual_refresh',
+        );
+
+        return new JsonResponse(['queued' => true], 202);
     }
 
     /**
@@ -104,6 +207,7 @@ class SlidesController extends Controller
                 'logo_url' => $brand?->logoUrl,
             ],
             'messages' => array_values((array) ($deck->metadata['builder_chat'] ?? [])),
+            'refresh' => (array) ($deck->metadata['refresh'] ?? []),
         ]);
     }
 
@@ -118,6 +222,11 @@ class SlidesController extends Controller
             'theme' => ['nullable', 'string'],
             'operations' => ['nullable', 'array', 'max:40'],
             'operations.*' => ['array'],
+            // Living-Deck auto-refresh settings.
+            'refresh' => ['nullable', 'array'],
+            'refresh.frequency' => ['required_with:refresh', 'string', 'in:manual,hourly,daily,weekly,monthly'],
+            'refresh.hour' => ['nullable', 'integer', 'min:0', 'max:23'],
+            'refresh.narrative' => ['nullable', 'boolean'],
         ]);
 
         $deck = Document::forAccountContext($request->user())
@@ -127,24 +236,45 @@ class SlidesController extends Controller
         $manifest = json_decode((string) $deck->body, true);
         abort_unless(is_array($manifest), 404);
 
-        $editor = app(DeckEditor::class);
-        [$next, $error] = $editor->apply(
-            $manifest,
-            array_values((array) ($validated['operations'] ?? [])),
-            $validated['name'] ?? null,
-            $validated['theme'] ?? null,
-        );
-
-        if ($next === null) {
-            return new JsonResponse(['message' => $error], 422);
+        if (isset($validated['refresh'])) {
+            $metadata = (array) $deck->metadata;
+            $metadata['refresh'] = array_merge((array) ($metadata['refresh'] ?? []), [
+                'frequency' => $validated['refresh']['frequency'],
+                'hour' => (int) ($validated['refresh']['hour'] ?? 7),
+                'narrative' => (bool) ($validated['refresh']['narrative'] ?? true),
+            ]);
+            $deck->update(['metadata' => $metadata]);
         }
 
-        $editor->persist($deck, $next);
+        $hasEdit = ! empty($validated['operations'])
+            || isset($validated['name'])
+            || isset($validated['theme']);
+
+        if ($hasEdit) {
+            $editor = app(DeckEditor::class);
+            [$next, $error] = $editor->apply(
+                $manifest,
+                array_values((array) ($validated['operations'] ?? [])),
+                $validated['name'] ?? null,
+                $validated['theme'] ?? null,
+            );
+
+            if ($next === null) {
+                return new JsonResponse(['message' => $error], 422);
+            }
+
+            $resolved = app(DeckDataResolver::class)->resolve($next, $request->user());
+            $editor->persist($deck, $next, $request->user(), 'edit', null, $resolved);
+            $manifest = $next;
+        } else {
+            $resolved = app(DeckDataResolver::class)->resolve($manifest, $request->user());
+        }
 
         return new JsonResponse([
-            'name' => $deck->name,
-            'manifest' => $next,
-            'resolved' => app(DeckDataResolver::class)->resolve($next, $request->user()),
+            'name' => $deck->refresh()->name,
+            'manifest' => $manifest,
+            'resolved' => $resolved,
+            'refresh' => (array) ($deck->metadata['refresh'] ?? []),
         ]);
     }
 
@@ -246,15 +376,32 @@ class SlidesController extends Controller
     {
         $user = $request->user();
 
+        $validated = $request->validate([
+            // When set, the link is FROZEN to that version (what you sent is
+            // what they will always see); omitted, the link tracks the living
+            // deck with fresh data on every open.
+            'version' => ['nullable', 'integer', 'min:1'],
+        ]);
+
         $deck = Document::forAccountContext($user)
             ->where('type', DocumentType::Deck)
             ->findOrFail($document);
 
-        $url = URL::temporarySignedRoute('slides.shared', now()->addDays(30), [
+        $params = [
             'document' => $deck->id,
             'org' => $user->organization_id,
             'uid' => $user->id,
-        ]);
+        ];
+
+        if (isset($validated['version'])) {
+            DeckVersion::query()
+                ->where('document_id', $deck->id)
+                ->where('version_number', $validated['version'])
+                ->firstOrFail();
+            $params['v'] = $validated['version'];
+        }
+
+        $url = URL::temporarySignedRoute('slides.shared', now()->addDays(30), $params);
 
         return new JsonResponse(['url' => $url]);
     }
@@ -265,21 +412,23 @@ class SlidesController extends Controller
      */
     public function shared(Request $request, string $document): Response
     {
-        [$deckProps, $brandProps] = $this->loadSignedDeck($request, $document);
+        [$deckProps, $brandProps, $asOf] = $this->loadSignedDeck($request, $document);
 
         return Inertia::render('slides/Present', [
             'deck' => $deckProps,
             'brand' => $brandProps,
             'shared' => true,
+            'as_of' => $asOf,
         ]);
     }
 
     /**
      * Resolve a signed (sessionless) deck request: authenticate the scope the
      * signature carries, pin the tenant context to it, load + live-resolve the
-     * deck, and restore the previous context.
+     * deck (or a frozen version when the signature pins `v`), and restore the
+     * previous context.
      *
-     * @return array{0: array<string, mixed>, 1: array<string, mixed>}
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: string|null}
      */
     private function loadSignedDeck(Request $request, string $document): array
     {
@@ -299,15 +448,28 @@ class SlidesController extends Controller
                 ->where('type', DocumentType::Deck)
                 ->findOrFail($document);
 
-            $manifest = json_decode((string) $deck->body, true);
-            abort_unless(is_array($manifest), 404);
+            $asOf = null;
 
-            $manifest = app(DeckDataResolver::class)->resolve($manifest, $owner);
+            if ($request->query('v') !== null) {
+                // Frozen share: the signed `v` pins the exact snapshot.
+                $version = DeckVersion::query()
+                    ->where('document_id', $deck->id)
+                    ->where('version_number', (int) $request->query('v'))
+                    ->firstOrFail();
+                $manifest = (array) $version->manifest;
+                $asOf = $version->created_at?->toIso8601String();
+            } else {
+                $manifest = json_decode((string) $deck->body, true);
+                abort_unless(is_array($manifest), 404);
+                $manifest = app(DeckDataResolver::class)->resolve($manifest, $owner);
+            }
+
             $brand = $owner->organization?->brandbook();
 
             return [
                 ['id' => $deck->id, 'name' => $deck->name, 'manifest' => $manifest],
                 ['accent' => $brand?->effectiveAccent(), 'logo_url' => $brand?->logoUrl],
+                $asOf,
             ];
         } finally {
             $ctx->set($previousOrg, $previousUid);
