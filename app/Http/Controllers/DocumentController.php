@@ -38,10 +38,9 @@ class DocumentController extends Controller
         $folderId = $request->query('folder');
         $search = $request->query('search');
 
-        // Get documents query. Decks live in their own module (/slides), not
-        // in the documents library.
+        // Get documents query. Presentations (type deck) list here too — the
+        // frontend routes their click-through to the Slide Builder / viewer.
         $documentsQuery = Document::forAccountContext($user)
-            ->where('type', '!=', DocumentType::Deck)
             ->with(['user:id,name', 'folder:id,name'])
             ->withCount('knowledgeBases');
 

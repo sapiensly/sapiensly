@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import * as SlidesController from '@/actions/App/Http/Controllers/SlidesController';
 import DeckSlide from '@/components/slides/DeckSlide.vue';
 import { deckTheme, type DeckBrand, type DeckManifest } from '@/lib/deck';
@@ -118,7 +119,7 @@ const currentNotes = computed(() => {
 
 function exit() {
     if (props.shared) return;
-    router.visit(SlidesController.index().url);
+    router.visit(DocumentController.index().url);
 }
 
 // Share: mint (or refresh) the 30-day signed link and copy it.

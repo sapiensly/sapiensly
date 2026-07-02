@@ -1,9 +1,7 @@
 <script setup lang="ts">
+import * as SlidesController from '@/actions/App/Http/Controllers/SlidesController';
 import ArtifactWorkbench from '@/components/documents/ArtifactWorkbench.vue';
 import KeywordsInput from '@/components/KeywordsInput.vue';
-import echo from '@/echo';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -14,25 +12,32 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Code2, FileText, Type } from '@lucide/vue';
-import type { Component } from 'vue';
+import echo from '@/echo';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Folder, VisibilityOption } from '@/types/document';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import axios from 'axios';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    Code2,
     Eye,
+    FileText,
     FileUp,
     Globe,
+    Loader2,
     LoaderCircle,
     Lock,
     Maximize2,
     Minimize2,
     Pencil,
+    Presentation,
     Sparkles,
+    Type,
     Users,
 } from '@lucide/vue';
+import axios from 'axios';
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
+import type { Component } from 'vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -73,6 +78,20 @@ const form = useForm({
 
 const activeTab = ref<'write' | 'import' | 'ai'>('write');
 const writeMode = ref<'edit' | 'preview'>('edit');
+
+// "Slides" type: presentations are built in the Slide Builder, so this
+// creates a blank deck (named after the form's name field when filled) and
+// follows the redirect straight into it.
+const creatingDeck = ref(false);
+function createDeck() {
+    if (creatingDeck.value) return;
+    creatingDeck.value = true;
+    router.post(
+        SlidesController.store().url,
+        { name: form.name || null },
+        { onError: () => (creatingDeck.value = false) },
+    );
+}
 // Flips to true after a successful artifact AI generation so the page
 // transitions into the iterative workbench instead of the Write tab.
 const workbenchOpen = ref(false);
@@ -103,7 +122,8 @@ function togglePreviewFullscreen() {
 }
 
 function onFullscreenChange() {
-    isPreviewFullscreen.value = document.fullscreenElement === previewPane.value;
+    isPreviewFullscreen.value =
+        document.fullscreenElement === previewPane.value;
 }
 
 onMounted(() => {
@@ -399,7 +419,6 @@ const availableVisibilityOptions = computed(() =>
 function visibilityIcon(value: string) {
     return value === 'public' ? Globe : value === 'organization' ? Users : Lock;
 }
-
 </script>
 
 <template>
@@ -458,7 +477,9 @@ function visibilityIcon(value: string) {
                                 : t('app_v2.documents.heading')
                         }}
                     </Link>
-                    <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                    <h1
+                        class="text-[22px] leading-tight font-semibold text-ink"
+                    >
                         {{ t('documents.create.title') }}
                     </h1>
                     <p class="text-xs text-ink-muted">
@@ -512,11 +533,51 @@ function visibilityIcon(value: string) {
                                 />
                             </div>
                             <div class="min-w-0 space-y-0.5">
-                                <h3 class="text-[13px] leading-tight font-semibold text-ink">
+                                <h3
+                                    class="text-[13px] leading-tight font-semibold text-ink"
+                                >
                                     {{ opt.label }}
                                 </h3>
-                                <p class="text-[11px] leading-snug text-ink-muted">
-                                    {{ t(`documents.create.type_desc.${opt.value}`) }}
+                                <p
+                                    class="text-[11px] leading-snug text-ink-muted"
+                                >
+                                    {{
+                                        t(
+                                            `documents.create.type_desc.${opt.value}`,
+                                        )
+                                    }}
+                                </p>
+                            </div>
+                        </button>
+
+                        <!-- Presentations are authored in the Slide Builder,
+                             not the inline editor: this card creates a blank
+                             deck and jumps straight there. -->
+                        <button
+                            type="button"
+                            class="flex items-center gap-3 rounded-sp-sm border border-soft bg-white/[0.03] px-3 py-2.5 text-left transition-colors hover:border-accent-blue/30 hover:bg-white/[0.06]"
+                            :disabled="creatingDeck"
+                            @click="createDeck"
+                        >
+                            <div
+                                class="flex size-8 shrink-0 items-center justify-center rounded-xs bg-accent-blue/15 text-accent-blue"
+                            >
+                                <Loader2
+                                    v-if="creatingDeck"
+                                    class="size-4 animate-spin"
+                                />
+                                <Presentation v-else class="size-4" />
+                            </div>
+                            <div class="min-w-0 space-y-0.5">
+                                <h3
+                                    class="text-[13px] leading-tight font-semibold text-ink"
+                                >
+                                    {{ t('documents.create.type_deck') }}
+                                </h3>
+                                <p
+                                    class="text-[11px] leading-snug text-ink-muted"
+                                >
+                                    {{ t('documents.create.type_desc.deck') }}
                                 </p>
                             </div>
                         </button>
@@ -614,7 +675,7 @@ function visibilityIcon(value: string) {
                                  scrolls internally on its own. -->
                             <div
                                 v-if="form.type === 'md'"
-                                class="prose prose-sm prose-invert h-full max-w-none overflow-y-auto p-4"
+                                class="prose prose-sm h-full max-w-none overflow-y-auto p-4 prose-invert"
                                 v-html="renderedMarkdown"
                             />
                             <iframe
@@ -634,8 +695,12 @@ function visibilityIcon(value: string) {
                                 class="absolute top-2 right-2 z-10 inline-flex size-7 items-center justify-center rounded-xs border border-soft bg-navy/70 text-ink-muted backdrop-blur transition-colors hover:bg-navy hover:text-ink"
                                 :aria-label="
                                     isPreviewFullscreen
-                                        ? t('documents.create.preview_exit_fullscreen')
-                                        : t('documents.create.preview_fullscreen')
+                                        ? t(
+                                              'documents.create.preview_exit_fullscreen',
+                                          )
+                                        : t(
+                                              'documents.create.preview_fullscreen',
+                                          )
                                 "
                                 @click="togglePreviewFullscreen"
                             >
@@ -667,7 +732,9 @@ function visibilityIcon(value: string) {
                             <span class="text-sm text-ink">
                                 {{ t('documents.create.import_cta') }}
                             </span>
-                            <span class="mt-1 font-mono text-xs text-ink-subtle">
+                            <span
+                                class="mt-1 font-mono text-xs text-ink-subtle"
+                            >
                                 {{ acceptForType }}
                             </span>
                         </label>
@@ -687,10 +754,17 @@ function visibilityIcon(value: string) {
                             <Label for="ai-model">
                                 {{ t('documents.create.ai.model_label') }}
                             </Label>
-                            <Select v-model="aiModelId" :disabled="aiGenerating">
+                            <Select
+                                v-model="aiModelId"
+                                :disabled="aiGenerating"
+                            >
                                 <SelectTrigger id="ai-model" class="w-full">
                                     <SelectValue
-                                        :placeholder="t('documents.create.ai.model_placeholder')"
+                                        :placeholder="
+                                            t(
+                                                'documents.create.ai.model_placeholder',
+                                            )
+                                        "
                                     />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -700,7 +774,9 @@ function visibilityIcon(value: string) {
                                         :value="m.value"
                                     >
                                         {{ m.label }}
-                                        <span class="ml-1 text-[10px] text-ink-subtle">
+                                        <span
+                                            class="ml-1 text-[10px] text-ink-subtle"
+                                        >
                                             · {{ m.provider }}
                                         </span>
                                     </SelectItem>
@@ -810,7 +886,9 @@ function visibilityIcon(value: string) {
                     </p>
                 </div>
 
-                <div class="flex items-center justify-end gap-2 border-t border-soft pt-4">
+                <div
+                    class="flex items-center justify-end gap-2 border-t border-soft pt-4"
+                >
                     <Link
                         :href="backHref"
                         class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import * as SlidesController from '@/actions/App/Http/Controllers/SlidesController';
 import DeckSlide from '@/components/slides/DeckSlide.vue';
 import SlideInspector from '@/components/slides/SlideInspector.vue';
@@ -476,7 +477,7 @@ async function shareDeck() {
             class="flex h-14 shrink-0 items-center gap-3 border-b border-soft px-4"
         >
             <Link
-                :href="SlidesController.index().url"
+                :href="DocumentController.index().url"
                 class="rounded-lg p-2 text-ink-muted transition-colors hover:text-ink"
                 :aria-label="t('slides.builder.back')"
             >

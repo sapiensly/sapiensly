@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import * as FolderController from '@/actions/App/Http/Controllers/FolderController';
+import * as SlidesController from '@/actions/App/Http/Controllers/SlidesController';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue';
 import FolderDialog from '@/components/documents/FolderDialog.vue';
@@ -24,7 +25,6 @@ import type {
     VisibilityOption,
 } from '@/types/document';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { useDebounceFn } from '@vueuse/core';
 import {
     ChevronRight,
     Database,
@@ -34,12 +34,15 @@ import {
     FolderPlus,
     Home,
     Lock,
+    Play,
     Plus,
+    Presentation,
     Search,
     Trash2,
     Upload,
     Users,
 } from '@lucide/vue';
+import { useDebounceFn } from '@vueuse/core';
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -93,9 +96,19 @@ function getDocumentIcon(type: string) {
     switch (type) {
         case 'pdf':
             return FileText;
+        case 'deck':
+            return Presentation;
         default:
             return File;
     }
+}
+
+// Presentations open in the Slide Builder; everything else opens the
+// document detail page.
+function documentHref(doc: { id: string; type: string }): string {
+    return doc.type === 'deck'
+        ? SlidesController.builder(doc.id).url
+        : DocumentController.show({ document: doc.id }).url;
 }
 
 function getVisibilityIcon(visibility: string) {
@@ -111,6 +124,7 @@ const typeTints: Record<string, string> = {
     csv: 'var(--sp-success)',
     json: 'var(--sp-warning)',
     artifact: 'var(--sp-accent-cyan)',
+    deck: 'var(--sp-accent-blue)',
 };
 
 function tintForType(type: string): string {
@@ -167,7 +181,9 @@ function handleDeleteFolder() {
             <!-- Main content. -->
             <div class="min-w-0 flex-1 space-y-5">
                 <PageHeader
-                    :title="currentFolder?.name ?? t('app_v2.documents.heading')"
+                    :title="
+                        currentFolder?.name ?? t('app_v2.documents.heading')
+                    "
                     :description="t('app_v2.documents.description')"
                 >
                     <template #actions>
@@ -204,13 +220,14 @@ function handleDeleteFolder() {
                     >
                         <Home class="size-3" />
                     </Link>
-                    <template
-                        v-for="folder in breadcrumbs"
-                        :key="folder.id"
-                    >
+                    <template v-for="folder in breadcrumbs" :key="folder.id">
                         <ChevronRight class="size-3 text-ink-subtle" />
                         <Link
-                            :href="DocumentController.index({ query: { folder: folder.id } }).url"
+                            :href="
+                                DocumentController.index({
+                                    query: { folder: folder.id },
+                                }).url
+                            "
                             class="hover:text-ink"
                         >
                             {{ folder.name }}
@@ -258,7 +275,9 @@ function handleDeleteFolder() {
                                     : 'Upload your first document to get started.'
                             }}
                         </p>
-                        <div class="mt-4 flex items-center justify-center gap-2">
+                        <div
+                            class="mt-4 flex items-center justify-center gap-2"
+                        >
                             <button
                                 v-if="!filters.search"
                                 type="button"
@@ -269,7 +288,11 @@ function handleDeleteFolder() {
                                 {{ t('documents.index.upload') }}
                             </button>
                             <button
-                                v-if="currentFolder && canDeleteFolder && !filters.search"
+                                v-if="
+                                    currentFolder &&
+                                    canDeleteFolder &&
+                                    !filters.search
+                                "
                                 type="button"
                                 class="inline-flex items-center gap-1.5 rounded-pill border border-sp-danger/40 bg-sp-danger/10 px-3.5 py-1.5 text-xs text-sp-danger transition-colors hover:bg-sp-danger/20"
                                 @click="showDeleteFolderDialog = true"
@@ -287,8 +310,8 @@ function handleDeleteFolder() {
                         <Link
                             v-for="doc in documents.data"
                             :key="doc.id"
-                            :href="DocumentController.show({ document: doc.id }).url"
-                            class="flex flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
+                            :href="documentHref(doc)"
+                            class="group flex flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
                         >
                             <div class="flex items-start justify-between gap-3">
                                 <div class="flex min-w-0 items-start gap-3">
@@ -305,7 +328,9 @@ function handleDeleteFolder() {
                                         />
                                     </div>
                                     <div class="min-w-0">
-                                        <h3 class="line-clamp-1 text-sm font-semibold text-ink">
+                                        <h3
+                                            class="line-clamp-1 text-sm font-semibold text-ink"
+                                        >
                                             {{ doc.name }}
                                         </h3>
                                         <p
@@ -316,15 +341,30 @@ function handleDeleteFolder() {
                                         </p>
                                     </div>
                                 </div>
-                                <span
-                                    class="inline-flex shrink-0 items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
-                                    :style="{
-                                        color: tintForType(doc.type),
-                                        borderColor: `color-mix(in oklab, ${tintForType(doc.type)} 45%, transparent)`,
-                                    }"
-                                >
-                                    {{ doc.type }}
-                                </span>
+                                <div class="flex shrink-0 items-center gap-1.5">
+                                    <a
+                                        v-if="doc.type === 'deck'"
+                                        :href="
+                                            SlidesController.present(doc.id).url
+                                        "
+                                        target="_blank"
+                                        class="rounded-xs p-1.5 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent-blue"
+                                        :aria-label="t('slides.index.present')"
+                                        :title="t('slides.index.present')"
+                                        @click.stop
+                                    >
+                                        <Play class="size-3.5" />
+                                    </a>
+                                    <span
+                                        class="inline-flex items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
+                                        :style="{
+                                            color: tintForType(doc.type),
+                                            borderColor: `color-mix(in oklab, ${tintForType(doc.type)} 45%, transparent)`,
+                                        }"
+                                    >
+                                        {{ doc.type }}
+                                    </span>
+                                </div>
                             </div>
 
                             <div
@@ -383,13 +423,17 @@ function handleDeleteFolder() {
                 <DialogHeader>
                     <DialogTitle>Delete Folder</DialogTitle>
                     <DialogDescription>
-                        Are you sure you want to delete "{{ currentFolder?.name }}"?
-                        This action cannot be undone.
+                        Are you sure you want to delete "{{
+                            currentFolder?.name
+                        }}"? This action cannot be undone.
                     </DialogDescription>
                 </DialogHeader>
 
                 <DialogFooter>
-                    <Button variant="outline" @click="showDeleteFolderDialog = false">
+                    <Button
+                        variant="outline"
+                        @click="showDeleteFolderDialog = false"
+                    >
                         Cancel
                     </Button>
                     <Button

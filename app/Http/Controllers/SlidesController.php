@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DocumentType;
+use App\Enums\Visibility;
 use App\Jobs\RefreshDeckJob;
 use App\Jobs\RunSlideBuilderJob;
 use App\Models\DeckVersion;
@@ -10,6 +11,7 @@ use App\Models\Document;
 use App\Models\User;
 use App\Services\Slides\DeckDataResolver;
 use App\Services\Slides\DeckEditor;
+use App\Services\Slides\DeckVersioner;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -29,24 +31,41 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 class SlidesController extends Controller
 {
-    public function index(Request $request): Response
+    /**
+     * Create a blank presentation (from /documents/create) and land straight
+     * in the Slide Builder to author it — with the AI chat or by hand.
+     */
+    public function store(Request $request): RedirectResponse
     {
-        $decks = Document::forAccountContext($request->user())
-            ->where('type', DocumentType::Deck)
-            ->with('user:id,name')
-            ->reorder()
-            ->orderByDesc('updated_at')
-            ->get()
-            ->map(fn (Document $d): array => [
-                'id' => $d->id,
-                'name' => $d->name,
-                'theme' => (string) ($d->metadata['theme'] ?? 'executive'),
-                'slide_count' => (int) ($d->metadata['slide_count'] ?? 0),
-                'updated_at' => $d->updated_at?->toIso8601String(),
-                'created_by' => $d->user?->name,
-            ]);
+        $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:120'],
+        ]);
 
-        return Inertia::render('slides/Index', ['decks' => $decks]);
+        $user = $request->user();
+        $name = trim((string) ($validated['name'] ?? '')) ?: __('Untitled presentation');
+
+        $manifest = [
+            'title' => $name,
+            'theme' => 'executive',
+            'slides' => [
+                ['layout' => 'title', 'title' => $name],
+            ],
+        ];
+
+        $deck = Document::create([
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+            'name' => $name,
+            'keywords' => [],
+            'type' => DocumentType::Deck,
+            'body' => json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'visibility' => $user->organization_id ? Visibility::Organization : Visibility::Private,
+            'metadata' => ['theme' => 'executive', 'slide_count' => 1],
+        ]);
+
+        app(DeckVersioner::class)->record($deck, $manifest, 'create', $user);
+
+        return redirect()->route('slides.builder', ['document' => $deck->id]);
     }
 
     public function present(Request $request, string $document): Response
@@ -484,6 +503,6 @@ class SlidesController extends Controller
 
         $deck->delete();
 
-        return redirect()->route('slides.index');
+        return redirect()->route('documents.index');
     }
 }

@@ -6,6 +6,7 @@ use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Slides\CreatePresentationTool;
 use App\Mcp\Tools\Slides\GetPresentationTool;
 use App\Mcp\Tools\Slides\UpdatePresentationTool;
+use App\Models\DeckVersion;
 use App\Models\Document;
 use App\Models\User;
 use App\Services\Slides\DeckValidator;
@@ -115,7 +116,24 @@ it('create_presentation rejects an invalid deck without persisting anything', fu
     expect(Document::query()->where('type', DocumentType::Deck)->exists())->toBeFalse();
 });
 
-it('lists decks in /slides and renders the viewer, scoped to the account', function () {
+it('creates a blank deck from documents/create and lands in the builder', function () {
+    $response = $this->actingAs($this->user)
+        ->post(route('slides.store'), ['name' => 'Pitch Q3']);
+
+    $deck = Document::query()->where('type', DocumentType::Deck)->sole();
+    $response->assertRedirect(route('slides.builder', ['document' => $deck->id]));
+
+    expect($deck->name)->toBe('Pitch Q3')
+        ->and(json_decode((string) $deck->body, true)['slides'])->toHaveCount(1)
+        ->and(DeckVersion::where('document_id', $deck->id)->count())->toBe(1);
+
+    // The old /slides list URL now lands on the documents library.
+    $this->actingAs($this->user)
+        ->get('/slides')
+        ->assertRedirect('/documents');
+});
+
+it('lists decks in the documents library and renders the viewer, scoped to the account', function () {
     $deck = Document::create([
         'user_id' => $this->user->id,
         'organization_id' => $this->user->organization_id,
@@ -128,7 +146,7 @@ it('lists decks in /slides and renders the viewer, scoped to the account', funct
     ]);
 
     $this->actingAs($this->user)
-        ->get(route('slides.index'))
+        ->get(route('documents.index'))
         ->assertOk()
         ->assertSee('Mi deck');
 
@@ -352,11 +370,11 @@ it('validates the timeline and table layouts and the new themes', function () {
         ->toContain('slides.1.rows.0: exactly one cell per column (2)');
 });
 
-it('keeps decks out of the documents library listing', function () {
+it('lists decks inside the documents library', function () {
     Document::create([
         'user_id' => $this->user->id,
         'organization_id' => $this->user->organization_id,
-        'name' => 'Deck oculto en documentos',
+        'name' => 'Deck visible en documentos',
         'keywords' => [],
         'type' => DocumentType::Deck,
         'body' => json_encode(['title' => 'x', 'slides' => validSlides()]),
@@ -367,5 +385,5 @@ it('keeps decks out of the documents library listing', function () {
     $this->actingAs($this->user)
         ->get(route('documents.index'))
         ->assertOk()
-        ->assertDontSee('Deck oculto en documentos');
+        ->assertSee('Deck visible en documentos');
 });

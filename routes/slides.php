@@ -17,8 +17,11 @@ Route::middleware([
     'auth',
     'verified',
 ])->group(function () {
-    Route::get('slides', [SlidesController::class, 'index'])
-        ->name('slides.index');
+    // Presentations live inside the Documents module (/documents); keep the
+    // old list URL working for muscle memory and stale links.
+    Route::redirect('slides', 'documents')->name('slides.index');
+    Route::post('slides', [SlidesController::class, 'store'])
+        ->name('slides.store');
     Route::get('slides/{document}/builder', [SlidesController::class, 'builder'])
         ->name('slides.builder');
     Route::patch('slides/{document}', [SlidesController::class, 'update'])
