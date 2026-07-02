@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\ChatAgent;
+use App\Enums\AgentStatus;
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Chats\ContinueChatTool;
 use App\Mcp\Tools\Chats\GetChatTool;
@@ -8,6 +9,7 @@ use App\Mcp\Tools\Chats\ListChatsTool;
 use App\Mcp\Tools\Chats\SearchChatMessagesTool;
 use App\Models\Chat;
 use App\Models\ChatMessage;
+use App\Models\Tool;
 use App\Models\User;
 use Laravel\Ai\Ai;
 
@@ -57,6 +59,46 @@ it('get_chat returns the full transcript in order', function () {
         ->assertOk()
         ->assertSee('refund window')
         ->assertSee('Thirty days from purchase');
+});
+
+it('get_chat exposes attached composer tools resolved to name and type, flagging unresolvable ids', function () {
+    $tool = Tool::factory()->mcp()->create([
+        'user_id' => $this->user->id,
+        'name' => 'YuhuGo Metrics',
+        'status' => AgentStatus::Active,
+    ]);
+    $chat = Chat::factory()->forUser($this->user)->create(['tool_ids' => [$tool->id, 'tool_gone']]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetChatTool::class, ['chat_id' => $chat->id])
+        ->assertOk()
+        ->assertSee('YuhuGo Metrics')
+        ->assertSee('"type":"mcp"')
+        ->assertSee('"tool_id":"tool_gone"')
+        ->assertSee('"missing":true');
+});
+
+it('get_chat exposes per-message diagnostics: used sources, consultations, and errors', function () {
+    $chat = Chat::factory()->forUser($this->user)->create();
+    ChatMessage::factory()->assistant()->create([
+        'chat_id' => $chat->id,
+        'content' => 'Done.',
+        'agent_data_context' => ['Knowledge base' => '3 passages'],
+        'consultation_context' => [['agent_name' => 'Analyst', 'question' => 'Q1 numbers?']],
+    ]);
+    ChatMessage::factory()->assistant()->create([
+        'chat_id' => $chat->id,
+        'content' => null,
+        'status' => 'error',
+        'error' => 'The assistant ran out of time.',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetChatTool::class, ['chat_id' => $chat->id])
+        ->assertOk()
+        ->assertSee('3 passages')
+        ->assertSee('Analyst')
+        ->assertSee('The assistant ran out of time.');
 });
 
 it('get_chat rejects an unknown chat', function () {
