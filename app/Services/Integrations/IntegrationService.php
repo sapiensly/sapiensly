@@ -68,7 +68,10 @@ class IntegrationService
             if ($user->organization_id) {
                 $q->orWhere(function ($inner) use ($user) {
                     $inner->where('organization_id', $user->organization_id)
-                        ->whereIn('visibility', [Visibility::Organization, Visibility::Private]);
+                        ->where(function ($vis) use ($user) {
+                            $vis->where('visibility', Visibility::Organization)
+                                ->orWhere('user_id', $user->id);
+                        });
                 });
             } else {
                 $q->orWhere(function ($inner) use ($user) {
@@ -83,9 +86,14 @@ class IntegrationService
         return DB::transaction(function () use ($user, $attributes) {
             $visibility = $attributes['visibility'] ?? Visibility::Private->value;
 
+            // Non-global integrations stay pinned to the creator's tenant (their
+            // org, or null in personal mode); `visibility` alone decides
+            // private-vs-shared WITHIN that tenant. Nulling organization_id for
+            // a private integration would hide it from its own org-context
+            // owner (forAccountContext / isVisibleTo filter by organization_id).
             $integration = Integration::create([
                 'user_id' => $visibility === Visibility::Global->value ? null : $user->id,
-                'organization_id' => $visibility === Visibility::Organization->value ? $user->organization_id : null,
+                'organization_id' => $visibility === Visibility::Global->value ? null : $user->organization_id,
                 'visibility' => $visibility,
                 'name' => $attributes['name'],
                 'slug' => $attributes['slug'] ?? $this->buildSlug($user, $attributes['name']),

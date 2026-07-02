@@ -1,6 +1,10 @@
 <?php
 
+use App\Enums\MembershipRole;
+use App\Enums\MembershipStatus;
 use App\Models\Integration;
+use App\Models\Organization;
+use App\Models\OrganizationMembership;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 
@@ -204,6 +208,75 @@ test('store accepts a public PKCE oauth2_auth_code integration without a client_
     ])->assertRedirect();
 
     expect(Integration::query()->where('name', 'MCP Public Client')->exists())->toBeTrue();
+});
+
+test('store with private visibility in business mode keeps the integration in the org tenant', function () {
+    $org = Organization::create(['name' => 'Acme', 'slug' => 'acme-'.uniqid()]);
+    $user = User::factory()->create(['organization_id' => $org->id]);
+    OrganizationMembership::create([
+        'organization_id' => $org->id,
+        'user_id' => $user->id,
+        'role' => MembershipRole::Owner,
+        'status' => MembershipStatus::Active,
+    ]);
+    setPermissionsTeamId($org->id);
+
+    $response = actingAs($user)->post('/system/integrations', [
+        'name' => 'My MCP Server',
+        'base_url' => 'https://mcp.example.com',
+        'kind' => 'mcp',
+        'auth_type' => 'none',
+        'visibility' => 'private',
+    ]);
+
+    $integration = Integration::where('name', 'My MCP Server')->first();
+    expect($integration)->not->toBeNull()
+        ->and($integration->organization_id)->toBe($org->id)
+        ->and($integration->user_id)->toBe($user->id);
+
+    // The post-save redirect to show must not 403 on the creator.
+    $response->assertRedirect("/system/integrations/{$integration->id}");
+    actingAs($user)->get("/system/integrations/{$integration->id}")->assertOk();
+
+    // And the integration is listed in the creator's index.
+    actingAs($user)
+        ->get('/system/integrations')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('integrations', 1));
+});
+
+test('private integrations of another org member are not listed and not viewable', function () {
+    $org = Organization::create(['name' => 'Acme', 'slug' => 'acme-'.uniqid()]);
+    [$author, $viewer] = collect(range(1, 2))->map(function () use ($org) {
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        OrganizationMembership::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'role' => MembershipRole::Member,
+            'status' => MembershipStatus::Active,
+        ]);
+
+        return $user;
+    })->all();
+    setPermissionsTeamId($org->id);
+
+    actingAs($author)->post('/system/integrations', [
+        'name' => 'Author Private',
+        'base_url' => 'https://private.example.com',
+        'auth_type' => 'none',
+        'visibility' => 'private',
+    ])->assertRedirect();
+
+    $integration = Integration::where('name', 'Author Private')->first();
+
+    actingAs($viewer)
+        ->get('/system/integrations')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('integrations', 0));
+
+    actingAs($viewer)
+        ->get("/system/integrations/{$integration->id}")
+        ->assertForbidden();
 });
 
 test('global visibility is rejected for non-sysadmin via policy when updating', function () {
