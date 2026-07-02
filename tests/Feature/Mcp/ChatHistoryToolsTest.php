@@ -78,6 +78,25 @@ it('get_chat exposes attached composer tools resolved to name and type, flagging
         ->assertSee('"missing":true');
 });
 
+it('get_chat reports the auto tool policy with the effective auto-activated set', function () {
+    $tool = Tool::factory()->create([
+        'user_id' => $this->user->id,
+        'type' => 'rest_api',
+        'name' => 'Orders API',
+        'status' => AgentStatus::Active,
+    ]);
+    Tool::factory()->create(['user_id' => $this->user->id, 'type' => 'rest_api', 'status' => AgentStatus::Draft, 'name' => 'Draft API']);
+    $chat = Chat::factory()->forUser($this->user)->create(['tool_ids' => null]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetChatTool::class, ['chat_id' => $chat->id])
+        ->assertOk()
+        ->assertSee('"tool_policy":"auto"')
+        ->assertSee('Orders API')
+        ->assertSee($tool->id)
+        ->assertDontSee('Draft API');
+});
+
 it('get_chat exposes per-message diagnostics: used sources, consultations, and errors', function () {
     $chat = Chat::factory()->forUser($this->user)->create();
     ChatMessage::factory()->assistant()->create([

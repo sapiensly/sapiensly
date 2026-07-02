@@ -557,6 +557,11 @@ defineExpose({ focus });
                             >
                                 {{ t('chat.tools.label') }}
                             </DropdownMenuLabel>
+                            <p
+                                class="px-2 pb-1.5 text-[11px] leading-snug text-ink-muted"
+                            >
+                                {{ t('chat.tools.auto_hint') }}
+                            </p>
                             <DropdownMenuCheckboxItem
                                 v-for="tool in tools"
                                 :key="tool.id"

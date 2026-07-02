@@ -333,6 +333,15 @@ class ChatAiService
             $ragKbIds = $chat->project
                 ? $chat->project->knowledgeBases()->pluck('knowledge_bases.id')->all()
                 : [];
+
+            // Zero-config tools: when the composer didn't restrict the selection,
+            // every active connector the user can see is available to the turn —
+            // users expect "their" tools to just work in chat, without creating
+            // an agent or hand-picking them per conversation. An explicit
+            // composer selection narrows the set instead.
+            if (empty($toolIds) && $user !== null) {
+                $toolIds = $this->autoAttachableToolIds($user);
+            }
         }
 
         if ($summary !== '') {
@@ -773,6 +782,24 @@ class ChatAiService
         }
 
         return max(1, min(10, (int) $max));
+    }
+
+    /**
+     * The tools a plain chat activates automatically when the composer made no
+     * explicit selection: every active connector visible to the user, same
+     * types the composer picker offers. Mirrors ChatController::index so what
+     * auto-activates is exactly what the picker would let the user choose.
+     *
+     * @return array<int, string>
+     */
+    public function autoAttachableToolIds(User $user): array
+    {
+        return Tool::query()
+            ->forAccountContext($user)
+            ->where('status', 'active')
+            ->whereIn('type', [ToolType::RestApi, ToolType::Graphql, ToolType::Database, ToolType::Mcp])
+            ->pluck('id')
+            ->all();
     }
 
     private function buildChatTools(array $toolIds, ?User $user, bool $webSearch, ?int $webSearchMax = null): array

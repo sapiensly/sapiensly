@@ -7,13 +7,14 @@ use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Models\Tool;
 use App\Models\User;
+use App\Services\Chat\ChatAiService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Retrieve one chat conversation by id with its full transcript (messages in chronological order) plus metadata and any rolling summary — for QA, review, diagnosis, or to summarize it client-side. Includes the diagnostic context of each turn: the agent and project the chat is bound to, the tools attached from the composer (resolved to name/type/status), and per message the data sources used, agent consultations made, and attachments. Use list_chats or search_chat_messages to find the chat_id.')]
+#[Description('Retrieve one chat conversation by id with its full transcript (messages in chronological order) plus metadata and any rolling summary — for QA, review, diagnosis, or to summarize it client-side. Includes the diagnostic context of each turn: the agent and project the chat is bound to, the tool policy (agent / explicit / auto) with the effective tool set resolved to name/type/status, and per message the data sources used, agent consultations made, and attachments. Use list_chats or search_chat_messages to find the chat_id.')]
 class GetChatTool extends SapiensTool
 {
     protected const ABILITY = 'data:read';
@@ -64,7 +65,8 @@ class GetChatTool extends SapiensTool
                     'name' => $chat->project->name,
                 ],
                 'mode' => $chat->mode,
-                'attached_tools' => $this->attachedTools($chat),
+                'tool_policy' => $this->toolPolicy($chat),
+                'attached_tools' => $this->attachedTools($chat, $user),
                 'summary' => $chat->summary,
                 'archived' => $chat->archived_at !== null,
                 'created_at' => $chat->created_at?->toIso8601String(),
@@ -94,18 +96,47 @@ class GetChatTool extends SapiensTool
     }
 
     /**
-     * The tools attached to the chat from the composer (chat.tool_ids), resolved
-     * to name/type/status so a reviewer can tell what the model could actually
-     * call — the #1 question when diagnosing "why didn't it use tool X". Deleted
-     * or unresolvable ids are kept and flagged rather than silently dropped.
+     * How the chat's turns get their tools, mirroring ChatAiService:
+     * `agent` — a selected agent governs its own tool set;
+     * `explicit` — the composer restricted the selection (chat.tool_ids);
+     * `auto` — no restriction: every active connector auto-activates.
+     */
+    private function toolPolicy(Chat $chat): string
+    {
+        if ($chat->agent_id !== null) {
+            return 'agent';
+        }
+
+        return empty($chat->tool_ids) ? 'auto' : 'explicit';
+    }
+
+    /**
+     * The tools the chat's turns can actually call, resolved to
+     * name/type/status — the #1 question when diagnosing "why didn't it use
+     * tool X". Follows the tool policy: the agent's active tools, the
+     * composer's explicit selection (deleted or unresolvable ids kept and
+     * flagged rather than silently dropped), or the auto-activated set.
      *
      * @return list<array<string, mixed>>
      */
-    private function attachedTools(Chat $chat): array
+    private function attachedTools(Chat $chat, User $user): array
     {
+        if ($chat->agent_id !== null) {
+            $tools = $chat->agent?->tools()->where('status', 'active')->get() ?? collect();
+
+            return $tools->map(fn (Tool $tool): array => $this->presentTool($tool))->values()->all();
+        }
+
         $toolIds = array_values(array_filter((array) ($chat->tool_ids ?? []), 'is_string'));
+
         if ($toolIds === []) {
-            return [];
+            $owner = $chat->user ?? $user;
+            $autoIds = app(ChatAiService::class)->autoAttachableToolIds($owner);
+
+            return Tool::query()->whereIn('id', $autoIds)->get()
+                ->map(fn (Tool $tool): array => $this->presentTool($tool))
+                ->values()
+                ->all();
         }
 
         $byId = Tool::query()->withTrashed()->whereIn('id', $toolIds)->get()->keyBy('id');
@@ -116,14 +147,22 @@ class GetChatTool extends SapiensTool
                 return ['tool_id' => $id, 'missing' => true];
             }
 
-            return array_filter([
-                'tool_id' => $tool->id,
-                'name' => $tool->name,
-                'type' => $tool->type?->value,
-                'status' => $tool->status?->value,
-                'deleted' => $tool->trashed() ?: null,
-            ], fn ($v) => $v !== null);
+            return $this->presentTool($tool);
         }, $toolIds);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function presentTool(Tool $tool): array
+    {
+        return array_filter([
+            'tool_id' => $tool->id,
+            'name' => $tool->name,
+            'type' => $tool->type?->value,
+            'status' => $tool->status?->value,
+            'deleted' => $tool->trashed() ?: null,
+        ], fn ($v) => $v !== null);
     }
 
     /**

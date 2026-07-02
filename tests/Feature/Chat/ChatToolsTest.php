@@ -7,6 +7,7 @@ use App\Models\AiProvider;
 use App\Models\Chat;
 use App\Models\Tool;
 use App\Models\User;
+use App\Services\Chat\ChatAiService;
 use App\Services\Tools\McpClient;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Tools\Request as ToolRequest;
@@ -61,6 +62,21 @@ it('carries the tool-call lifecycle (phase, id, status) in its broadcast payload
     expect($result['phase'])->toBe('result')
         ->and($result['tool_id'])->toBe('tc_1')
         ->and($result['successful'])->toBeFalse();
+});
+
+// ----- Zero-config tool activation -----
+
+it('auto-activates every active connector the user can see when the composer made no selection', function () {
+    $rest = Tool::factory()->create(['user_id' => $this->user->id, 'type' => 'rest_api', 'status' => 'active']);
+    $mcp = Tool::factory()->mcp()->create(['user_id' => $this->user->id, 'status' => 'active']);
+    Tool::factory()->create(['user_id' => $this->user->id, 'type' => 'rest_api', 'status' => 'draft']); // inactive
+    Tool::factory()->function()->create(['user_id' => $this->user->id, 'status' => 'active']); // not a chat connector
+    Tool::factory()->create(['type' => 'rest_api', 'status' => 'active']); // another user's
+
+    $auto = app(ChatAiService::class)->autoAttachableToolIds($this->user);
+
+    expect($auto)->toContain($rest->id, $mcp->id)
+        ->and($auto)->toHaveCount(2);
 });
 
 // ----- MCP server tool wrapper -----

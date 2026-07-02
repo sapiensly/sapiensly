@@ -2372,6 +2372,7 @@
     "chat.tools.label": "Tools",
     "chat.tools.using": "Using {tool}…",
     "chat.tools.thinking": "Thinking…",
+    "chat.tools.auto_hint": "All active tools are available automatically. Select some to limit the chat to those.",
     "chat.consult.consulting": "Consulting {agent}…",
     "chat.consult.consulted": "Consulted {agent}",
     "chat.consult.asked": "Asked",
