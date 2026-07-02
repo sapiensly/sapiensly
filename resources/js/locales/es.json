@@ -2371,6 +2371,7 @@
     "chat.web_search": "Buscar",
     "chat.tools.label": "Herramientas",
     "chat.tools.using": "Usando {tool}…",
+    "chat.tools.thinking": "Pensando…",
     "chat.consult.consulting": "Consultando a {agent}…",
     "chat.consult.consulted": "Consultó a {agent}",
     "chat.consult.asked": "Preguntó",

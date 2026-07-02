@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { ToolActivityDto } from '@/types/chatModule';
-import { Check, Wrench, X } from '@lucide/vue';
+import { Brain, Check, Wrench, X } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 // Live tool-call chips for a streaming message: each tool shows a pulsing
 // "using <tool>…" while it runs, then settles to a check (done) or a red x
-// (failed). `accent`/`accentSoft` tint the chip to the agent's hue in a
-// multi-agent bubble; without them it falls back to the assistant accent.
+// (failed). The reserved `__reasoning__` name (extended thinking) renders as a
+// pulsing "thinking…" chip instead. `accent`/`accentSoft` tint the chip to the
+// agent's hue in a multi-agent bubble; without them it falls back to the
+// assistant accent.
 defineProps<{
     items: ToolActivityDto[];
     accent?: string | null;
@@ -15,8 +17,19 @@ defineProps<{
 
 const { t } = useI18n();
 
+const REASONING = '__reasoning__';
+
 function prettyToolName(name: string): string {
     return name.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function chipLabel(item: ToolActivityDto): string {
+    if (item.name === REASONING) {
+        return t('chat.tools.thinking');
+    }
+    return item.status === 'running'
+        ? t('chat.tools.using', { tool: prettyToolName(item.name) })
+        : prettyToolName(item.name);
 }
 </script>
 
@@ -41,8 +54,12 @@ function prettyToolName(name: string): string {
                     : undefined
             "
         >
+            <Brain
+                v-if="item.name === REASONING"
+                class="size-3 animate-pulse"
+            />
             <Wrench
-                v-if="item.status === 'running'"
+                v-else-if="item.status === 'running'"
                 class="size-3 animate-pulse"
             />
             <Check v-else-if="item.status === 'done'" class="size-3" />
@@ -50,13 +67,7 @@ function prettyToolName(name: string): string {
             <span
                 :class="{ 'line-through opacity-70': item.status === 'error' }"
             >
-                {{
-                    item.status === 'running'
-                        ? t('chat.tools.using', {
-                              tool: prettyToolName(item.name),
-                          })
-                        : prettyToolName(item.name)
-                }}
+                {{ chipLabel(item) }}
             </span>
         </span>
     </div>

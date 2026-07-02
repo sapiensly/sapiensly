@@ -2,6 +2,7 @@
 
 namespace App\Ai\Tools\Platform;
 
+use App\Ai\Tools\Chat\ProposeBuildTool;
 use App\Ai\Tools\RuntimeToolFactory;
 use App\Mcp\Servers\SapiensServer;
 use App\Models\User;
@@ -12,8 +13,10 @@ use Laravel\Ai\Contracts\Tool as ToolContract;
  * Bridges the MCP tool catalogue ({@see SapiensServer::TOOLS}) into the set of
  * built-in "platform tools" every internal agent run gets, scoped to the agent's
  * owner. Destructive / irreversible operations are excluded (the user chose
- * "read + safe writes"); each remaining tool runs as the owner so its own
- * authorization + RLS enforce the owner's permissions (see {@see McpBridgeTool}).
+ * "read + safe writes"), and resource creation is withheld behind user
+ * confirmation (CONFIRM_REQUIRED → propose_build card); each remaining tool
+ * runs as the owner so its own authorization + RLS enforce the owner's
+ * permissions (see {@see McpBridgeTool}).
  */
 class PlatformToolsFactory
 {
@@ -51,6 +54,33 @@ class PlatformToolsFactory
         'continue_builder_conversation',
     ];
 
+    /**
+     * Resource-creating tools an AI run must NEVER call on its own — creating
+     * agents, apps, chatbots, integrations or knowledge bases is a user
+     * decision. The only sanctioned path is the propose_build card
+     * ({@see ProposeBuildTool}): the model proposes, the
+     * build runs when the user clicks Execute. Withheld here (not just
+     * discouraged in the prompt) so a model can't create resources silently.
+     *
+     * @var list<string>
+     */
+    public const CONFIRM_REQUIRED = [
+        'create_app',
+        'scaffold_app',
+        'create_agent',
+        'create_chatbot',
+        'scaffold_bot_flow',
+        'create_integration',
+        'create_tool',
+        'create_knowledge_base',
+        'create_presentation',
+        'generate_demo_data',
+        // Org-wide state and app access changes are user decisions too.
+        'set_organization_brand',
+        'assign_app_role',
+        'revoke_app_role',
+    ];
+
     /** @var array<string, list<ToolContract>> */
     private static array $memo = [];
 
@@ -70,7 +100,7 @@ class PlatformToolsFactory
         $tools = [];
         foreach (SapiensServer::TOOLS as $class) {
             $name = self::toolName($class);
-            if (in_array($name, self::DENYLIST, true)) {
+            if (in_array($name, self::DENYLIST, true) || in_array($name, self::CONFIRM_REQUIRED, true)) {
                 continue;
             }
             $tools[] = RuntimeToolFactory::named($name, new McpBridgeTool($class, $owner));

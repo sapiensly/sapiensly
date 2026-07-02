@@ -53,6 +53,8 @@ use Laravel\Ai\Files\StoredImage;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Providers\Tools\WebSearch;
+use Laravel\Ai\Streaming\Events\ReasoningEnd;
+use Laravel\Ai\Streaming\Events\ReasoningStart;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\TextStart;
 use Laravel\Ai\Streaming\Events\ToolCall;
@@ -91,6 +93,20 @@ class ChatAiService
      * (a `consult_agent` turn or a slow REST tool yields no events while it runs).
      */
     private const STREAM_IDLE_TIMEOUT_SECONDS = 120;
+
+    /**
+     * Reserved ChatToolCall name broadcast across a reasoning phase so the UI
+     * shows a live "thinking…" chip. Mirrored in the frontend (chat/Index.vue).
+     */
+    private const REASONING_CHIP = '__reasoning__';
+
+    /**
+     * Minimum seconds between partial-buffer persists while streaming. The live
+     * text travels over WebSockets; persisting the accumulating buffer every few
+     * seconds means a page reload (or get_chat) shows the progress so far and a
+     * dead worker loses seconds of output, not the whole turn.
+     */
+    private const PARTIAL_PERSIST_INTERVAL_SECONDS = 3.0;
 
     private const MAX_HISTORY_MESSAGES = 30;
 
@@ -166,8 +182,8 @@ class ChatAiService
         Map the need to the specific capability above and offer it.
 
         How to propose:
-        - When you PROACTIVELY spot the need, surface it with the `propose_build` tool — it shows the user an Execute / Dismiss card and runs the build only if they accept. Fill `parameters` with the inputs the matching tool needs (create_app → name, slug; scaffold_app → name, description, seed_records; save_document → name, body, type). After calling it, briefly tell the user you've proposed it; do NOT also run the underlying tool yourself.
-        - Build DIRECTLY with the create_* tools only when the user has explicitly asked you to build it now ("create an app called X"). Otherwise prefer the proposal card over silent creation.
+        - Surface every build with the `propose_build` tool — it shows the user an Execute / Dismiss card and runs the build only if they accept. Fill `parameters` with the inputs the matching tool needs (create_app → name, slug; scaffold_app → name, description, seed_records; save_document → name, body, type). After calling it, briefly tell the user you've proposed it.
+        - You CANNOT create resources (apps, agents, chatbots, integrations, knowledge bases, presentations) directly — those tools are not available to you, even when the user asks you to build something right now. The proposal card IS how you build: it is one click for the user and it keeps them in control. Never claim you created something yourself.
         - Don't derail a simple question, a one-off answer, or casual chat with a build offer. One clear suggestion beats repeated nudges; if the user declines, drop it.
         - Before proposing or building, lean on the relevant `guide` / `framework_reference` topic and confirm the user is allowed (`whoami`). If a capability isn't available to this user, or the platform genuinely can't express what they need, say so honestly — never promise or fake a feature.
         PROMPT;
@@ -464,6 +480,7 @@ class ChatAiService
             $stopKey = self::STOP_CACHE_PREFIX.$placeholder->id;
             $sawText = false;
             $deltaCount = 0;
+            $lastPartialPersist = microtime(true);
 
             // Idle watchdog: abort if the provider stalls mid-stream. Reset on
             // every event below; if it elapses, the handler throws and the catch
@@ -527,6 +544,27 @@ class ChatAiService
                         continue;
                     }
 
+                    // Extended thinking emits no text, so without this the user
+                    // stares at a silent spinner for the whole reasoning phase.
+                    // Ride the tool-chip lifecycle with a reserved name: the
+                    // frontend renders it as a "thinking…" chip and drops it on
+                    // the matching `result`.
+                    if ($event instanceof ReasoningStart) {
+                        $this->safeBroadcast(fn () => ChatToolCall::dispatch(
+                            $chat->id, $placeholder->id, self::REASONING_CHIP, 'start', $event->reasoningId,
+                        ));
+
+                        continue;
+                    }
+
+                    if ($event instanceof ReasoningEnd) {
+                        $this->safeBroadcast(fn () => ChatToolCall::dispatch(
+                            $chat->id, $placeholder->id, self::REASONING_CHIP, 'result', $event->reasoningId, true,
+                        ));
+
+                        continue;
+                    }
+
                     if ($event instanceof TextStart) {
                         $separator = self::blockSeparator($buffer, $sawText);
                         if ($separator !== '') {
@@ -542,6 +580,16 @@ class ChatAiService
                         $deltaCount++;
                         $buffer .= $event->delta;
                         $this->safeBroadcast(fn () => ChatStreamChunk::dispatch($chat->id, $placeholder->id, $event->delta));
+
+                        if ((microtime(true) - $lastPartialPersist) > self::PARTIAL_PERSIST_INTERVAL_SECONDS) {
+                            $lastPartialPersist = microtime(true);
+                            try {
+                                $placeholder->newQuery()->whereKey($placeholder->id)->update(['content' => $buffer]);
+                            } catch (\Throwable) {
+                                // Progress snapshots are best-effort; the final
+                                // persist below is the one that matters.
+                            }
+                        }
                     }
                 }
             } finally {

@@ -49,3 +49,9 @@ Schedule::command('slides:refresh-due')
     ->hourly()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Resolve chat messages orphaned mid-stream (worker died without finalizing).
+Schedule::command('chat:fail-stale-streams')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();

@@ -59,7 +59,7 @@ class ProposeBuildTool implements ToolContract
 - `create_chatbot`, `create_integration`, `create_knowledge_base`, `create_agent`: parameters satisfy that create_* tool.
 - `save_document`: save a document the user can keep in Sapiensly. Use it after you produce a substantial HTML or Markdown deliverable (a report, brief, spec, plan write-up). parameters {name, body (the full content), type: "artifact" for HTML or "md" for Markdown}.
 - `create_presentation`: a polished slide deck the user can present full-screen and share, rendered on-brand by the platform. Offer it when the conversation produced content worth presenting (a strategy, pitch, plan, results review). parameters {name, theme?: executive|dark|minimal|bold, slides: [{layout, ...fields}]} — author the COMPLETE slides array in the proposal using the constrained layouts (title, section, bullets, two_column, big_number, metrics, chart, quote, timeline, table, closing); never HTML. Keep copy tight: one message per slide.
-When the user has explicitly asked you to build/save something right now, call the underlying tool directly instead of proposing.';
+This card is the ONLY way to build: the underlying create/scaffold tools are not available to you directly, even when the user asks you to build something right now — propose the card and let them click Execute.';
     }
 
     /**

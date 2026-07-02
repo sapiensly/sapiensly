@@ -237,7 +237,18 @@ function subscribe(id: string) {
             successful: boolean | null;
         }) => {
             // Track each tool call's lifecycle: `start` adds a running chip,
-            // `result` flips it (by tool_id) to done or error.
+            // `result` flips it (by tool_id) to done or error. The reserved
+            // `__reasoning__` chip (extended thinking) simply disappears when
+            // its phase ends — "thought ✓" is noise.
+            if (data.tool_name === '__reasoning__' && data.phase === 'result') {
+                toolActivity.value = {
+                    ...toolActivity.value,
+                    [data.message_id]: (
+                        toolActivity.value[data.message_id] ?? []
+                    ).filter((t) => t.id !== data.tool_id),
+                };
+                return;
+            }
             const list = (toolActivity.value[data.message_id] ?? []).map(
                 (t) => ({
                     ...t,

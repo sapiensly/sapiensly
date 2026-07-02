@@ -20,12 +20,29 @@ it('exposes safe MCP tools and withholds the destructive ones', function () {
         ->all();
 
     // Safe set present.
-    expect($names)->toContain('query_records', 'search_knowledge', 'create_record', 'create_knowledge_base', 'invoke_agent', 'list_apps');
+    expect($names)->toContain('query_records', 'search_knowledge', 'create_record', 'invoke_agent', 'list_apps');
 
     // Denylisted set absent.
     foreach (PlatformToolsFactory::DENYLIST as $denied) {
         expect($names)->not->toContain($denied);
     }
+});
+
+it('withholds resource creation from AI runs — building requires user confirmation', function () {
+    $names = collect(PlatformToolsFactory::for($this->owner))
+        ->map(fn (ToolContract $t) => class_basename($t))
+        ->all();
+
+    foreach (PlatformToolsFactory::CONFIRM_REQUIRED as $gated) {
+        expect($names)->not->toContain($gated);
+    }
+
+    // The gate covers the resources the propose_build card can create, so the
+    // card remains the only build path (create_* silently is what it prevents).
+    expect(PlatformToolsFactory::CONFIRM_REQUIRED)->toContain(
+        'create_app', 'scaffold_app', 'create_agent', 'create_chatbot',
+        'create_integration', 'create_knowledge_base', 'create_presentation',
+    );
 });
 
 it('gives every platform tool a unique SDK name', function () {
@@ -35,15 +52,18 @@ it('gives every platform tool a unique SDK name', function () {
     expect($names->duplicates())->toBeEmpty();
 });
 
-it('drift guard: every registered MCP tool is either exposed or denylisted', function () {
+it('drift guard: every registered MCP tool is exposed, denylisted, or confirmation-gated', function () {
     $exposed = collect(PlatformToolsFactory::for($this->owner))
         ->map(fn (ToolContract $t) => class_basename($t))
         ->all();
 
     foreach (SapiensServer::TOOLS as $class) {
         $name = (string) Str::of(class_basename($class))->beforeLast('Tool')->snake();
-        expect(in_array($name, $exposed, true) || in_array($name, PlatformToolsFactory::DENYLIST, true))
-            ->toBeTrue("MCP tool '{$name}' is neither exposed to agents nor denylisted — classify it.");
+        $classified = in_array($name, $exposed, true)
+            || in_array($name, PlatformToolsFactory::DENYLIST, true)
+            || in_array($name, PlatformToolsFactory::CONFIRM_REQUIRED, true);
+        expect($classified)
+            ->toBeTrue("MCP tool '{$name}' is neither exposed to agents, denylisted, nor confirmation-gated — classify it.");
     }
 });
 
