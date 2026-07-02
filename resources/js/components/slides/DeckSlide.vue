@@ -21,6 +21,8 @@ const props = defineProps<{
     position: number;
     tokens: DeckThemeTokens;
     logoUrl?: string | null;
+    /** true in the PDF print page: disables chart animation. */
+    printMode?: boolean;
 }>();
 
 const s = props.slide as Record<string, never>;
@@ -73,6 +75,7 @@ const s = props.slide as Record<string, never>;
         :series="s.series"
         :takeaway="s.takeaway"
         :tokens="tokens"
+        :animated="!printMode"
     />
     <SlideQuote
         v-else-if="slide.layout === 'quote'"

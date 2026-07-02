@@ -30,6 +30,7 @@
         "predis/predis": "^3.3",
         "railsware/mailtrap-php": "^3.11",
         "smalot/pdfparser": "^2.12",
+        "spatie/browsershot": "^5.4",
         "spatie/laravel-permission": "^7.2",
         "symfony/dom-crawler": "*",
         "symfony/expression-language": "^8.0",

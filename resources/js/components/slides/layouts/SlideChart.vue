@@ -30,14 +30,19 @@ interface Series {
     data: number[];
 }
 
-const props = defineProps<{
-    title: string;
-    chartType: 'bar' | 'line' | 'donut';
-    labels: string[];
-    series: Series[];
-    takeaway?: string;
-    tokens: DeckThemeTokens;
-}>();
+const props = withDefaults(
+    defineProps<{
+        title: string;
+        chartType: 'bar' | 'line' | 'donut';
+        labels: string[];
+        series: Series[];
+        takeaway?: string;
+        tokens: DeckThemeTokens;
+        /** false in the PDF print page so the capture never races a tween. */
+        animated?: boolean;
+    }>(),
+    { animated: true },
+);
 
 // The theme styles the chart; the manifest only supplies data. Fixed fonts
 // assume the 1280×720 design canvas (the stage scales everything together).
@@ -84,7 +89,7 @@ const showLegend = computed(
 const chartOptions = computed(() => ({
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 300 },
+    animation: props.animated ? { duration: 300 } : false,
     plugins: {
         legend: {
             display: showLegend.value,

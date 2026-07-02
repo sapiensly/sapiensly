@@ -3,6 +3,8 @@
 use App\Enums\DocumentType;
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Slides\CreatePresentationTool;
+use App\Mcp\Tools\Slides\GetPresentationTool;
+use App\Mcp\Tools\Slides\UpdatePresentationTool;
 use App\Models\Document;
 use App\Models\User;
 use App\Services\Slides\DeckValidator;
@@ -138,6 +140,111 @@ it('lists decks in /slides and renders the viewer, scoped to the account', funct
     $this->actingAs($stranger)
         ->get(route('slides.present', ['document' => $deck->id]))
         ->assertNotFound();
+});
+
+it('edits a deck with slide operations and revalidates the result', function () {
+    $create = SapiensServer::actingAs($this->user)
+        ->tool(CreatePresentationTool::class, [
+            'name' => 'Editable',
+            'slides' => validSlides(),
+        ])
+        ->assertOk();
+
+    $deck = Document::query()->where('type', DocumentType::Deck)->sole();
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetPresentationTool::class, ['document_id' => $deck->id])
+        ->assertOk()
+        ->assertSee('"slide_count":8');
+
+    // Replace slide 2, remove the quote (index 6), move closing forward.
+    SapiensServer::actingAs($this->user)
+        ->tool(UpdatePresentationTool::class, [
+            'document_id' => $deck->id,
+            'name' => 'Editable v2',
+            'theme' => 'dark',
+            'operations' => [
+                ['op' => 'replace', 'index' => 2, 'slide' => [
+                    'layout' => 'bullets', 'title' => 'Canales priorizados',
+                    'bullets' => ['X primero', 'Comunidades después'],
+                ]],
+                ['op' => 'remove', 'index' => 6],
+                ['op' => 'move', 'index' => 6, 'to' => 5],
+            ],
+        ])
+        ->assertOk()
+        ->assertSee('"slide_count":7');
+
+    $manifest = json_decode((string) $deck->refresh()->body, true);
+    expect($deck->name)->toBe('Editable v2')
+        ->and($manifest['theme'])->toBe('dark')
+        ->and($manifest['slides'][2]['title'])->toBe('Canales priorizados')
+        ->and(collect($manifest['slides'])->pluck('layout'))->not->toContain('quote');
+
+    // An invalid edit is rejected atomically — nothing changes.
+    SapiensServer::actingAs($this->user)
+        ->tool(UpdatePresentationTool::class, [
+            'document_id' => $deck->id,
+            'operations' => [
+                ['op' => 'replace', 'index' => 0, 'slide' => ['layout' => 'bullets', 'title' => 'x', 'bullets' => ['solo uno']]],
+            ],
+        ])
+        ->assertHasErrors();
+    expect(json_decode((string) $deck->refresh()->body, true)['slides'][0]['layout'])->toBe('title');
+});
+
+it('accepts live data bindings in charts and metrics', function () {
+    $errors = (new DeckValidator)->validate([
+        'title' => 'Live',
+        'slides' => [
+            ['layout' => 'chart', 'title' => 'Tareas por estado', 'chart_type' => 'donut',
+                'data_source' => ['app_slug' => 'tracker', 'object' => 'tareas', 'group_by' => 'estado', 'aggregation' => 'count']],
+            ['layout' => 'metrics', 'items' => [
+                ['label' => 'Clientes', 'value_source' => ['app_slug' => 'tracker', 'object' => 'clientes', 'aggregation' => 'count']],
+                ['value' => '12', 'label' => 'Estático'],
+            ]],
+        ],
+    ]);
+    expect($errors)->toBe([]);
+
+    $errors = (new DeckValidator)->validate([
+        'title' => 'Broken live',
+        'slides' => [
+            ['layout' => 'chart', 'title' => 'x', 'chart_type' => 'bar',
+                'data_source' => ['app_slug' => 'tracker', 'object' => 'tareas', 'group_by' => 'estado', 'aggregation' => 'sum']],
+        ],
+    ]);
+    expect(implode("\n", $errors))->toContain('data_source.field: required');
+});
+
+it('mints a signed share link that renders read-only without a session', function () {
+    $deck = Document::create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'name' => 'Compartible',
+        'keywords' => [],
+        'type' => DocumentType::Deck,
+        'body' => json_encode(['title' => 'Compartible', 'slides' => validSlides()]),
+        'visibility' => 'private',
+        'metadata' => ['theme' => 'executive', 'slide_count' => 8],
+    ]);
+
+    $url = $this->actingAs($this->user)
+        ->postJson(route('slides.share', ['document' => $deck->id]))
+        ->assertOk()
+        ->json('url');
+
+    expect($url)->toContain('/share/p/'.$deck->id);
+
+    // The link works with NO authenticated session.
+    $this->post(route('logout'));
+    $this->get($url)->assertOk();
+
+    // Tampering with the signature is rejected.
+    $this->get(str_replace('signature=', 'signature=dead', $url))->assertForbidden();
+
+    // The print route requires a signature too.
+    $this->get(route('slides.print', ['document' => $deck->id]))->assertForbidden();
 });
 
 it('keeps decks out of the documents library listing', function () {

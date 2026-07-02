@@ -3,8 +3,17 @@ import * as SlidesController from '@/actions/App/Http/Controllers/SlidesControll
 import DeckSlide from '@/components/slides/DeckSlide.vue';
 import { deckTheme, type DeckBrand, type DeckManifest } from '@/lib/deck';
 import { Head, router } from '@inertiajs/vue3';
-import { ChevronLeft, ChevronRight, X } from '@lucide/vue';
+import {
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    Download,
+    Link2,
+    X,
+} from '@lucide/vue';
+import axios from 'axios';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 /**
  * Full-screen deck viewer. The slide is laid out on a fixed 1280×720 design
@@ -15,7 +24,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 const props = defineProps<{
     deck: { id: string; name: string; manifest: DeckManifest };
     brand: DeckBrand;
+    /** true when opened through a share link: hides workspace affordances. */
+    shared?: boolean;
 }>();
+
+const { t } = useI18n();
 
 const DESIGN_W = 1280;
 const DESIGN_H = 720;
@@ -66,8 +79,26 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function exit() {
+    if (props.shared) return;
     router.visit(SlidesController.index().url);
 }
+
+// Share: mint (or refresh) the 30-day signed link and copy it.
+const shareCopied = ref(false);
+async function shareDeck() {
+    try {
+        const { data } = await axios.post(
+            SlidesController.share(props.deck.id).url,
+        );
+        await navigator.clipboard.writeText(data.url);
+        shareCopied.value = true;
+        setTimeout(() => (shareCopied.value = false), 2000);
+    } catch {
+        // Clipboard or network hiccup — the button simply stays idle.
+    }
+}
+
+const exportUrl = computed(() => SlidesController.export(props.deck.id).url);
 
 // Scale the fixed design canvas to the viewport (letterboxed).
 const scale = ref(1);
@@ -141,14 +172,35 @@ const progress = computed(() =>
         </div>
 
         <!-- Controls -->
-        <button
-            type="button"
-            class="control close"
-            :aria-label="deck.name"
-            @click.stop="exit"
-        >
-            <X class="icon" />
-        </button>
+        <div v-if="!shared" class="toolbar">
+            <button
+                type="button"
+                class="control"
+                :aria-label="t('slides.present.share')"
+                :title="t('slides.present.share')"
+                @click.stop="shareDeck"
+            >
+                <Check v-if="shareCopied" class="icon" />
+                <Link2 v-else class="icon" />
+            </button>
+            <a
+                :href="exportUrl"
+                class="control"
+                :aria-label="t('slides.present.download_pdf')"
+                :title="t('slides.present.download_pdf')"
+                @click.stop
+            >
+                <Download class="icon" />
+            </a>
+            <button
+                type="button"
+                class="control"
+                :aria-label="t('slides.present.close')"
+                @click.stop="exit"
+            >
+                <X class="icon" />
+            </button>
+        </div>
         <button
             v-if="current > 0"
             type="button"
@@ -236,9 +288,16 @@ const progress = computed(() =>
     width: 20px;
     height: 20px;
 }
-.close {
+.toolbar {
+    position: absolute;
     top: 20px;
     right: 20px;
+    z-index: 40;
+    display: flex;
+    gap: 10px;
+}
+.toolbar .control {
+    position: static;
 }
 .prev {
     left: 20px;

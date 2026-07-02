@@ -24,6 +24,10 @@ class DeckValidator
 
     public const CHART_TYPES = ['bar', 'line', 'donut'];
 
+    public const AGGREGATIONS = ['count', 'sum', 'avg', 'min', 'max'];
+
+    public const BUCKETS = ['day', 'week', 'month', 'quarter', 'year'];
+
     private const MAX_SLIDES = 40;
 
     /**
@@ -159,7 +163,14 @@ class DeckValidator
 
                 continue;
             }
-            $this->requireText($item, 'value', 14, $errors, "{$path}.items.{$i}");
+            // A live-bound metric resolves its value at present-time; the
+            // static `value` then serves as an optional fallback.
+            if (isset($item['value_source'])) {
+                $this->validateValueSource($item['value_source'], "{$path}.items.{$i}.value_source", $errors);
+                $this->optionalText($item, 'value', 14, "{$path}.items.{$i}", $errors);
+            } else {
+                $this->requireText($item, 'value', 14, $errors, "{$path}.items.{$i}");
+            }
             $this->requireText($item, 'label', 40, $errors, "{$path}.items.{$i}");
             $this->optionalText($item, 'delta', 20, "{$path}.items.{$i}", $errors);
         }
@@ -174,6 +185,15 @@ class DeckValidator
         $type = $slide['chart_type'] ?? null;
         if (! in_array($type, self::CHART_TYPES, true)) {
             $errors[] = "{$path}.chart_type: must be one of ".implode(', ', self::CHART_TYPES).'.';
+        }
+
+        // A live-bound chart resolves labels + series from app data at
+        // present-time; static labels/series then serve as an optional fallback.
+        if (isset($slide['data_source'])) {
+            $this->validateDataSource($slide['data_source'], "{$path}.data_source", $errors);
+            if (! isset($slide['labels']) && ! isset($slide['series'])) {
+                return;
+            }
         }
 
         $labels = $slide['labels'] ?? null;
@@ -221,6 +241,60 @@ class DeckValidator
         $this->optionalText($slide, 'subtitle', 140, $path, $errors);
         $this->optionalText($slide, 'cta', 40, $path, $errors);
         $this->stringList($slide, 'bullets', 1, 3, 80, $path, $errors, required: false);
+    }
+
+    /**
+     * A chart's live data binding: grouped aggregation over an app object.
+     *
+     * @param  list<string>  $errors
+     */
+    private function validateDataSource(mixed $source, string $path, array &$errors): void
+    {
+        if (! is_array($source)) {
+            $errors[] = "{$path}: must be an object {app_slug, object, group_by, aggregation, field?, bucket?}.";
+
+            return;
+        }
+        $this->requireText($source, 'app_slug', 100, $errors, $path);
+        $this->requireText($source, 'object', 100, $errors, $path);
+        $this->requireText($source, 'group_by', 100, $errors, $path);
+        $this->validateAggregation($source, $path, $errors);
+
+        $bucket = $source['bucket'] ?? null;
+        if ($bucket !== null && ! in_array($bucket, self::BUCKETS, true)) {
+            $errors[] = "{$path}.bucket: must be one of ".implode(', ', self::BUCKETS).'.';
+        }
+    }
+
+    /**
+     * A metric's live value binding: a single aggregation over an app object.
+     *
+     * @param  list<string>  $errors
+     */
+    private function validateValueSource(mixed $source, string $path, array &$errors): void
+    {
+        if (! is_array($source)) {
+            $errors[] = "{$path}: must be an object {app_slug, object, aggregation, field?}.";
+
+            return;
+        }
+        $this->requireText($source, 'app_slug', 100, $errors, $path);
+        $this->requireText($source, 'object', 100, $errors, $path);
+        $this->validateAggregation($source, $path, $errors);
+    }
+
+    /** @param array<string, mixed> $source @param list<string> $errors */
+    private function validateAggregation(array $source, string $path, array &$errors): void
+    {
+        $aggregation = $source['aggregation'] ?? null;
+        if (! in_array($aggregation, self::AGGREGATIONS, true)) {
+            $errors[] = "{$path}.aggregation: must be one of ".implode(', ', self::AGGREGATIONS).'.';
+
+            return;
+        }
+        if ($aggregation !== 'count' && (! is_string($source['field'] ?? null) || $source['field'] === '')) {
+            $errors[] = "{$path}.field: required for aggregation '{$aggregation}' (the numeric field to fold).";
+        }
     }
 
     /** @param array<string, mixed> $source @param list<string> $errors */
