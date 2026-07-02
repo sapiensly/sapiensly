@@ -146,14 +146,19 @@ class AiUsageReport
             $systemSeries[] = round((float) collect($dayRows)->where('source', 'system')->sum('cost'), 4);
         }
 
+        // A model with usage but no catalog price silently meters at $0 —
+        // corrupting totals and bypassing budgets. Flag it instead of letting
+        // a zero-cost line read as "free".
+        $pricing = app(AiPricing::class);
         $modelBreakdown = fn (Collection $g) => collect($g)->groupBy('model')
-            ->map(fn ($mg, $model) => [
+            ->map(fn ($mg, $model) => array_filter([
                 'model' => $model,
                 'cost' => round((float) $mg->sum('cost'), 4),
                 'calls' => $mg->count(),
                 'input_tokens' => (int) $mg->sum('input_tokens'),
                 'output_tokens' => (int) $mg->sum('output_tokens'),
-            ])
+                'unpriced' => $pricing->pricesFor((string) $model) === null ? true : null,
+            ], fn ($v) => $v !== null))
             ->sortByDesc('cost')
             ->values()
             ->all();

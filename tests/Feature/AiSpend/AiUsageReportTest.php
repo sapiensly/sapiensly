@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AiCatalogModel;
 use App\Models\AiUsageEvent;
 use App\Models\Organization;
 use App\Models\SystemAiUsageEvent;
@@ -60,6 +61,27 @@ it('breaks current-scope spend down by service, each with a per-model split', fu
         ->and($services['Chat']['cost'])->toBe(1.5)
         ->and($services['Chat']['models'])->toHaveCount(2)
         ->and(collect($services['Chat']['models'])->firstWhere('model', 'claude-a')['cost'])->toBe(1.0);
+});
+
+it('flags models that have usage but no catalog price as unpriced', function () {
+    AiCatalogModel::create([
+        'driver' => 'anthropic',
+        'model_id' => 'claude-priced',
+        'label' => 'Claude Priced',
+        'capability' => 'chat',
+        'input_price_per_mtok' => 3.0,
+        'output_price_per_mtok' => 15.0,
+        'is_enabled' => true,
+        'sort_order' => 0,
+    ]);
+    spendEvent(['model' => 'claude-priced', 'cost' => 1.0]);
+    spendEvent(['model' => 'claude-mystery', 'cost' => 0.0, 'input_tokens' => 500000]);
+
+    $r = app(AiUsageReport::class)->forCurrentOrg(30);
+
+    $models = collect($r['by_model'])->keyBy('model');
+    expect($models['claude-mystery']['unpriced'])->toBeTrue()
+        ->and($models['claude-priced'])->not->toHaveKey('unpriced');
 });
 
 function systemLedgerEvent(array $attrs = []): SystemAiUsageEvent

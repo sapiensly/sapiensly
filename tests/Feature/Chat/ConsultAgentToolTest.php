@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\RuntimeAgent;
 use App\Ai\Tools\Chat\ConsultAgentTool;
 use App\Enums\AgentStatus;
 use App\Events\Chat\ChatAgentConsultation;
@@ -11,7 +12,6 @@ use App\Services\LLMService;
 use App\Support\Chat\ConsultationLog;
 use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Ai;
-use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Tools\Request as AiRequest;
 
 beforeEach(function () {
@@ -58,7 +58,7 @@ it('consults another agent, broadcasts the exchange, and logs it', function () {
 it('streams the consulted agent answer live via delta events', function () {
     Event::fake([ChatAgentConsultation::class]);
     // A long-enough answer to flush more than one live batch to the card.
-    Ai::fakeAgent(AnonymousAgent::class, ['This is a sufficiently long consulted answer so it streams to the card in more than one batch.']);
+    Ai::fakeAgent(RuntimeAgent::class, ['This is a sufficiently long consulted answer so it streams to the card in more than one batch.']);
 
     $out = (string) consultTool($this)->handle(new AiRequest([
         'agent_id' => $this->target->id,

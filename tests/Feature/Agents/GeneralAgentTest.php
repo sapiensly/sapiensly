@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\RuntimeAgent;
 use App\Enums\AgentType;
 use App\Enums\MessageRole;
 use App\Models\Agent;
@@ -9,7 +10,6 @@ use App\Models\Tool;
 use App\Models\User;
 use App\Services\LLMService;
 use Laravel\Ai\Ai;
-use Laravel\Ai\AnonymousAgent;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
@@ -56,7 +56,7 @@ it('collects a streamed turn into full text via chatStreamed', function () {
     // chatStreamed drives the STREAMING transport (so a consulted agent inherits
     // the SSE idle watchdog, not the SDK's 60s blocking cap) yet returns the full
     // text — the fake gateway splits the reply into word deltas we reassemble.
-    Ai::fakeAgent(AnonymousAgent::class, ['Yes, order #1234 is eligible for a refund.']);
+    Ai::fakeAgent(RuntimeAgent::class, ['Yes, order #1234 is eligible for a refund.']);
 
     $agent = Agent::factory()->standalone()->general()->create([
         'user_id' => $this->user->id,
@@ -70,7 +70,7 @@ it('collects a streamed turn into full text via chatStreamed', function () {
 });
 
 it('returns response and knowledge-base metadata from chatWithKnowledgeAndTools', function () {
-    Ai::fakeAgent(AnonymousAgent::class, ['ok']);
+    Ai::fakeAgent(RuntimeAgent::class, ['ok']);
 
     $agent = Agent::factory()->standalone()->general()->create([
         'user_id' => $this->user->id,

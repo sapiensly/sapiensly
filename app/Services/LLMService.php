@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Ai\RuntimeAgent;
 use App\Ai\Tools\Platform\PlatformToolsFactory;
 use App\Enums\MessageRole;
 use App\Models\Agent;
@@ -498,7 +499,7 @@ EOT;
     }
 
     /**
-     * Build an AnonymousAgent configured for the given agent.
+     * Build the SDK agent configured for the given agent.
      *
      * @param  array<UserMessage|AssistantMessage>  $messages
      * @param  array<Tool>  $tools
@@ -514,7 +515,17 @@ EOT;
             $tools = PlatformToolsFactory::merge($tools, $owner);
         }
 
-        return new AnonymousAgent($instructions, $messages, $tools);
+        $sdkAgent = new RuntimeAgent($instructions, $messages, $tools);
+
+        // The instructions + tool block are byte-stable across the round-trips
+        // of an agentic turn (and across turns), so mark them cacheable — on
+        // Anthropic the system breakpoint also covers the tools rendered before
+        // it, which is most of the prompt for tool-heavy agents.
+        if (config('ai.prompt_caching.enabled')) {
+            $sdkAgent->withCacheableSystem($instructions);
+        }
+
+        return $sdkAgent;
     }
 
     /**
