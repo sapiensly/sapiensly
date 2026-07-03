@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
@@ -54,6 +54,27 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+
+// Shared hover tooltip for EVERY chart type: each mark toggles `tip` content on
+// mouseenter/leave while the card tracks the cursor, so one floating tooltip
+// follows the pointer across SVG marks and HTML bars alike. One mechanism, so
+// every dashboard chart gets consistent hover info without per-chart wiring.
+const card = ref<HTMLElement | null>(null);
+const mouse = ref({ x: 0, y: 0 });
+const tip = ref<{ title: string; value?: string; color?: string } | null>(null);
+
+function onMove(e: MouseEvent): void {
+    const r = card.value?.getBoundingClientRect();
+    if (r) {
+        mouse.value = { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+}
+function showTip(title: string, value?: string, color?: string): void {
+    tip.value = { title, value, color };
+}
+function hideTip(): void {
+    tip.value = null;
+}
 
 const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.data_source.object_id),
@@ -478,6 +499,7 @@ const radar = computed(() => {
         const rr = (s.value / max) * r;
         return {
             label: s.label,
+            value: s.value,
             ax: cx + r * Math.cos(ang),
             ay: cy + r * Math.sin(ang),
             px: cx + rr * Math.cos(ang),
@@ -786,12 +808,44 @@ const scatter = computed(() => {
         maxY === minY
             ? h / 2
             : h - pad - ((y - minY) / (maxY - minY)) * (h - 2 * pad);
-    return { w, h, points: pts.map((p) => ({ cx: sx(p.x), cy: sy(p.y) })) };
+    return {
+        w,
+        h,
+        points: pts.map((p) => ({ cx: sx(p.x), cy: sy(p.y), x: p.x, y: p.y })),
+    };
 });
 </script>
 
 <template>
-    <div :class="['flex h-full flex-col rounded-sp-sm border p-5', t.surface]">
+    <div
+        ref="card"
+        :class="[
+            'relative flex h-full flex-col rounded-sp-sm border p-5',
+            t.surface,
+        ]"
+        @mousemove="onMove"
+        @mouseleave="hideTip"
+    >
+        <!-- Floating tooltip shared by every chart type; follows the cursor. -->
+        <div
+            v-if="tip"
+            class="pointer-events-none absolute z-20 rounded-sp-sm border border-medium bg-navy-elevated px-2.5 py-1.5 text-[11px] shadow-xl"
+            :style="{ left: mouse.x + 12 + 'px', top: mouse.y + 12 + 'px' }"
+        >
+            <span class="flex items-center gap-1.5">
+                <span
+                    v-if="tip.color"
+                    class="size-2 shrink-0 rounded-full"
+                    :style="{ background: tip.color }"
+                />
+                <span :class="t.text">{{ tip.title }}</span>
+            </span>
+            <span
+                v-if="tip.value"
+                :class="['mt-0.5 block font-semibold tabular-nums', t.text]"
+                >{{ tip.value }}</span
+            >
+        </div>
         <header
             v-if="block.label"
             class="mb-3 flex items-center justify-between"
@@ -889,9 +943,9 @@ const scatter = computed(() => {
                         :height="b.h"
                         :fill="b.color"
                         rx="1"
-                    >
-                        <title>{{ b.title }}</title>
-                    </rect>
+                        class="cursor-pointer transition-opacity hover:opacity-80"
+                        @mouseenter="showTip(b.title, undefined, b.color)"
+                    />
                     <!-- area fills then line strokes + points -->
                     <template v-for="(ln, i) in combo.lines" :key="'l' + i">
                         <path
@@ -947,6 +1001,17 @@ const scatter = computed(() => {
                             :fill="slice.color"
                             stroke="rgba(0,0,0,0.15)"
                             stroke-width="0.5"
+                            class="cursor-pointer transition-opacity hover:opacity-80"
+                            @mouseenter="
+                                showTip(
+                                    slice.label,
+                                    formatNumber(slice.value) +
+                                        ' · ' +
+                                        Math.round(slice.percent * 100) +
+                                        '%',
+                                    slice.color,
+                                )
+                            "
                         />
                         <circle
                             v-if="block.chart_type === 'donut'"
@@ -960,7 +1025,17 @@ const scatter = computed(() => {
                         <li
                             v-for="(slice, i) in pieSlices"
                             :key="i"
-                            class="flex items-center justify-between gap-2"
+                            class="flex cursor-default items-center justify-between gap-2 rounded-xs px-1 transition-colors hover:bg-surface"
+                            @mouseenter="
+                                showTip(
+                                    slice.label,
+                                    formatNumber(slice.value) +
+                                        ' · ' +
+                                        Math.round(slice.percent * 100) +
+                                        '%',
+                                    slice.color,
+                                )
+                            "
                         >
                             <span class="flex min-w-0 items-center gap-2">
                                 <span
@@ -1060,13 +1135,19 @@ const scatter = computed(() => {
                                 :key="j"
                                 :cx="p.x"
                                 :cy="p.y"
-                                r="2"
+                                r="3"
                                 :fill="s.color"
-                            >
-                                <title>
-                                    {{ p.label }}: {{ formatNumber(p.value) }}
-                                </title>
-                            </circle>
+                                class="cursor-pointer transition-all hover:[r:5px]"
+                                @mouseenter="
+                                    showTip(
+                                        lineChart.single
+                                            ? p.label
+                                            : s.label + ' · ' + p.label,
+                                        formatNumber(p.value),
+                                        s.color,
+                                    )
+                                "
+                            />
                         </template>
                         <!-- x-axis labels (thinned) -->
                         <text
@@ -1091,7 +1172,14 @@ const scatter = computed(() => {
                     <li
                         v-for="(s, i) in series"
                         :key="s.label"
-                        class="space-y-1"
+                        class="space-y-1 rounded-xs px-1 transition-colors hover:bg-surface"
+                        @mouseenter="
+                            showTip(
+                                s.label,
+                                formatNumber(s.value),
+                                colorFor(s.label, i),
+                            )
+                        "
                     >
                         <div
                             class="flex items-center justify-between text-[11px]"
@@ -1157,7 +1245,9 @@ const scatter = computed(() => {
                         :cx="a.px"
                         :cy="a.py"
                         r="3"
+                        class="cursor-pointer transition-all hover:[r:5px]"
                         :style="{ fill: 'var(--sp-accent, #3B82F6)' }"
+                        @mouseenter="showTip(a.label, formatNumber(a.value))"
                     />
                     <text
                         v-for="(a, i) in radar.axes"
@@ -1185,6 +1275,10 @@ const scatter = computed(() => {
                             :height="Math.max(0, r.h - 2)"
                             :fill="r.color"
                             rx="2"
+                            class="cursor-pointer transition-opacity hover:opacity-80"
+                            @mouseenter="
+                                showTip(r.label, formatNumber(r.value), r.color)
+                            "
                         />
                         <text
                             v-if="r.w > 44 && r.h > 22"
@@ -1238,7 +1332,13 @@ const scatter = computed(() => {
                         :cy="p.cy"
                         r="3.5"
                         fill-opacity="0.7"
+                        class="cursor-pointer transition-all hover:[fill-opacity:1] hover:[r:5px]"
                         :style="{ fill: 'var(--sp-accent, #3B82F6)' }"
+                        @mouseenter="
+                            showTip(
+                                formatNumber(p.x) + ', ' + formatNumber(p.y),
+                            )
+                        "
                     />
                 </svg>
             </template>
@@ -1276,15 +1376,17 @@ const scatter = computed(() => {
                             <div
                                 v-for="(val, si) in multi.data[ci]"
                                 :key="si"
-                                class="w-full transition-all first:rounded-t-xs"
+                                class="w-full cursor-pointer transition-all first:rounded-t-xs hover:opacity-80"
                                 :style="{
                                     height: (val / multi.max) * 100 + '%',
                                     background: multi.series[si].color,
                                 }"
-                                :title="
-                                    multi.series[si].label +
-                                    ': ' +
-                                    formatNumber(val)
+                                @mouseenter="
+                                    showTip(
+                                        multi.series[si].label + ' · ' + cat,
+                                        formatNumber(val),
+                                        multi.series[si].color,
+                                    )
                                 "
                             />
                         </div>
@@ -1296,17 +1398,19 @@ const scatter = computed(() => {
                             <div
                                 v-for="(val, si) in multi.data[ci]"
                                 :key="si"
-                                class="min-w-0 flex-1 rounded-t-xs transition-all"
+                                class="min-w-0 flex-1 cursor-pointer rounded-t-xs transition-all hover:opacity-80"
                                 :style="{
                                     height:
                                         Math.max(2, (val / multi.max) * 100) +
                                         '%',
                                     background: multi.series[si].color,
                                 }"
-                                :title="
-                                    multi.series[si].label +
-                                    ': ' +
-                                    formatNumber(val)
+                                @mouseenter="
+                                    showTip(
+                                        multi.series[si].label + ' · ' + cat,
+                                        formatNumber(val),
+                                        multi.series[si].color,
+                                    )
                                 "
                             />
                         </div>
@@ -1346,14 +1450,20 @@ const scatter = computed(() => {
                             {{ formatNumber(s.value) }}
                         </span>
                         <div
-                            class="rounded-t-xs transition-all"
+                            class="cursor-pointer rounded-t-xs transition-all hover:opacity-80"
                             :style="{
                                 height:
                                     Math.max(2, (s.value / maxValue) * 100) +
                                     '%',
                                 background: colorFor(s.label, i),
                             }"
-                            :title="s.label + ': ' + formatNumber(s.value)"
+                            @mouseenter="
+                                showTip(
+                                    s.label,
+                                    formatNumber(s.value),
+                                    colorFor(s.label, i),
+                                )
+                            "
                         />
                     </div>
                 </div>
