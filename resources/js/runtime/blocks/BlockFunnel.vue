@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ObjectDef } from '../types/manifest';
+import { useChartTooltip } from '../useChartTooltip';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import ChartTooltip from './ChartTooltip.vue';
 
 interface FunnelStage {
     id: string;
@@ -28,8 +30,16 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+const { card, mouse, tip, onMove, showTip, hideTip } = useChartTooltip();
 
-const palette = ['#3B82F6', '#6366F1', '#8B5CF6', '#A855F7', '#EC4899', '#F43F5E'];
+const palette = [
+    '#3B82F6',
+    '#6366F1',
+    '#8B5CF6',
+    '#A855F7',
+    '#EC4899',
+    '#F43F5E',
+];
 
 const stages = computed(() =>
     props.block.stages.map((s, i) => {
@@ -43,10 +53,14 @@ const stages = computed(() =>
     }),
 );
 
-const maxValue = computed(() => Math.max(1, ...stages.value.map((s) => s.value)));
+const maxValue = computed(() =>
+    Math.max(1, ...stages.value.map((s) => s.value)),
+);
 
 function formatNumber(value: number): string {
-    return new Intl.NumberFormat(props.locale).format(Math.round(value * 100) / 100);
+    return new Intl.NumberFormat(props.locale).format(
+        Math.round(value * 100) / 100,
+    );
 }
 
 function conversionFromFirst(value: number): string {
@@ -57,24 +71,45 @@ function conversionFromFirst(value: number): string {
 </script>
 
 <template>
-    <div :class="['rounded-sp-sm border p-5', t.surface]">
+    <div
+        ref="card"
+        :class="['relative rounded-sp-sm border p-5', t.surface]"
+        @mousemove="onMove"
+        @mouseleave="hideTip"
+    >
+        <ChartTooltip :tip="tip" :x="mouse.x" :y="mouse.y" />
         <header v-if="block.label" class="mb-4">
-            <p :class="['text-[11px] uppercase tracking-wider', t.textSubtle]">{{ block.label }}</p>
+            <p :class="['text-[11px] tracking-wider uppercase', t.textSubtle]">
+                {{ block.label }}
+            </p>
         </header>
         <ol class="space-y-1.5">
             <li
                 v-for="(s, i) in stages"
                 :key="s.id"
-                class="space-y-1"
+                class="cursor-pointer space-y-1 rounded-xs transition-opacity hover:opacity-90"
+                @mouseenter="
+                    showTip(
+                        s.label,
+                        formatNumber(s.value) +
+                            (i > 0 ? ' · ' + conversionFromFirst(s.value) : ''),
+                        s.color,
+                    )
+                "
             >
                 <div class="flex items-center justify-between text-[11px]">
                     <span :class="t.text">{{ s.label }}</span>
                     <span :class="['tabular-nums', t.textMuted]">
                         {{ formatNumber(s.value) }}
-                        <span v-if="i > 0" class="ml-1.5 text-[10px]">({{ conversionFromFirst(s.value) }})</span>
+                        <span v-if="i > 0" class="ml-1.5 text-[10px]"
+                            >({{ conversionFromFirst(s.value) }})</span
+                        >
                     </span>
                 </div>
-                <div class="mx-auto" :style="{ width: (s.value / maxValue) * 100 + '%' }">
+                <div
+                    class="mx-auto"
+                    :style="{ width: (s.value / maxValue) * 100 + '%' }"
+                >
                     <div
                         class="h-7 rounded-xs"
                         :style="{ background: s.color }"

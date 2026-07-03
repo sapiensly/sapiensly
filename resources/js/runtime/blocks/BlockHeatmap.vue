@@ -2,7 +2,9 @@
 import { computed } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
+import { useChartTooltip } from '../useChartTooltip';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import ChartTooltip from './ChartTooltip.vue';
 
 interface HeatmapBlock {
     id: string;
@@ -28,6 +30,7 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+const { card, mouse, tip, onMove, showTip, hideTip } = useChartTooltip();
 
 const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.data_source.object_id),
@@ -111,18 +114,41 @@ function cellStyle(cell: Cell): string {
 </script>
 
 <template>
-    <div :class="['rounded-sp-sm border p-4', t.surface]">
+    <div
+        ref="card"
+        :class="['relative rounded-sp-sm border p-4', t.surface]"
+        @mousemove="onMove"
+        @mouseleave="hideTip"
+    >
+        <ChartTooltip :tip="tip" :x="mouse.x" :y="mouse.y" />
         <header v-if="block.label" class="mb-3">
-            <p :class="['text-[11px] uppercase tracking-wider', t.textSubtle]">{{ block.label }}</p>
+            <p :class="['text-[11px] tracking-wider uppercase', t.textSubtle]">
+                {{ block.label }}
+            </p>
         </header>
         <div class="flex gap-[3px] overflow-x-auto">
-            <div v-for="(week, wi) in grid" :key="wi" class="flex flex-col gap-[3px]">
+            <div
+                v-for="(week, wi) in grid"
+                :key="wi"
+                class="flex flex-col gap-[3px]"
+            >
                 <div
                     v-for="(cell, di) in week"
                     :key="di"
-                    class="size-[11px] rounded-[2px]"
+                    class="size-[11px] cursor-pointer rounded-[2px] transition-transform hover:scale-125"
                     :style="cellStyle(cell)"
-                    :title="cell.iso + (cell.count ? ' · ' + cell.count : '')"
+                    @mouseenter="
+                        showTip(
+                            cell.iso,
+                            cell.count
+                                ? cell.count +
+                                      (cell.count === 1
+                                          ? ' registro'
+                                          : ' registros')
+                                : 'Sin registros',
+                            color,
+                        )
+                    "
                 />
             </div>
         </div>

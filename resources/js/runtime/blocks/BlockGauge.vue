@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ObjectDef } from '../types/manifest';
+import { useChartTooltip } from '../useChartTooltip';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import ChartTooltip from './ChartTooltip.vue';
 
 interface GaugeBlock {
     id: string;
@@ -24,13 +26,18 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+const { card, mouse, tip, onMove, showTip, hideTip } = useChartTooltip();
 
 const value = computed(() => Number(props.data?.value ?? 0));
-const ratio = computed(() => Math.min(1, Math.max(0, value.value / Math.max(1, props.block.max_value))));
+const ratio = computed(() =>
+    Math.min(1, Math.max(0, value.value / Math.max(1, props.block.max_value))),
+);
 
 // 180° arc going from -π to 0 (left to right, top half of a circle).
 const arc = computed(() => {
-    const cx = 100, cy = 90, r = 70;
+    const cx = 100,
+        cy = 90,
+        r = 70;
     const start = Math.PI;
     const end = Math.PI - Math.PI * ratio.value;
     const x1 = cx + r * Math.cos(start);
@@ -43,7 +50,9 @@ const arc = computed(() => {
 });
 
 const backgroundArc = computed(() => {
-    const cx = 100, cy = 90, r = 70;
+    const cx = 100,
+        cy = 90,
+        r = 70;
     // Full top semicircle from (-π) to 0.
     return `M ${cx - r} ${cy} A ${r} ${r} 0 0 0 ${cx + r} ${cy}`;
 });
@@ -52,26 +61,76 @@ const color = computed(() => props.block.color ?? '#3B82F6');
 
 const formatted = computed(() => {
     if (props.block.format === 'currency') {
-        const obj = props.objects.find((o) => o.id === props.block.query.object_id);
+        const obj = props.objects.find(
+            (o) => o.id === props.block.query.object_id,
+        );
         const field = obj?.fields.find((f) => f.id === props.block.field_id);
         const code = field?.currency_code ?? props.defaultCurrency ?? 'MXN';
-        return new Intl.NumberFormat(props.locale, { style: 'currency', currency: code }).format(value.value);
+        return new Intl.NumberFormat(props.locale, {
+            style: 'currency',
+            currency: code,
+        }).format(value.value);
     }
     if (props.block.format === 'percentage') {
-        return new Intl.NumberFormat(props.locale, { style: 'percent', maximumFractionDigits: 1 }).format(value.value);
+        return new Intl.NumberFormat(props.locale, {
+            style: 'percent',
+            maximumFractionDigits: 1,
+        }).format(value.value);
     }
     return new Intl.NumberFormat(props.locale).format(value.value);
 });
 </script>
 
 <template>
-    <div :class="['flex flex-col items-center rounded-sp-sm border p-5', t.surface]">
-        <p v-if="block.label" :class="['mb-2 text-[11px] uppercase tracking-wider', t.textSubtle]">{{ block.label }}</p>
-        <svg viewBox="0 0 200 110" class="w-full max-w-[280px]">
-            <path :d="backgroundArc" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" :class="t.textSubtle" stroke-opacity="0.25" />
-            <path :d="arc" fill="none" :stroke="color" stroke-width="14" stroke-linecap="round" />
+    <div
+        ref="card"
+        :class="[
+            'relative flex flex-col items-center rounded-sp-sm border p-5',
+            t.surface,
+        ]"
+        @mousemove="onMove"
+        @mouseleave="hideTip"
+    >
+        <ChartTooltip :tip="tip" :x="mouse.x" :y="mouse.y" />
+        <p
+            v-if="block.label"
+            :class="['mb-2 text-[11px] tracking-wider uppercase', t.textSubtle]"
+        >
+            {{ block.label }}
+        </p>
+        <svg
+            viewBox="0 0 200 110"
+            class="w-full max-w-[280px] cursor-pointer"
+            @mouseenter="
+                showTip(
+                    formatted,
+                    Math.round(ratio * 100) +
+                        '% de ' +
+                        new Intl.NumberFormat(locale).format(block.max_value),
+                    color,
+                )
+            "
+        >
+            <path
+                :d="backgroundArc"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="14"
+                stroke-linecap="round"
+                :class="t.textSubtle"
+                stroke-opacity="0.25"
+            />
+            <path
+                :d="arc"
+                fill="none"
+                :stroke="color"
+                stroke-width="14"
+                stroke-linecap="round"
+            />
         </svg>
         <p :class="['-mt-4 text-2xl font-semibold', t.text]">{{ formatted }}</p>
-        <p :class="['text-[11px]', t.textMuted]">/ {{ new Intl.NumberFormat(locale).format(block.max_value) }}</p>
+        <p :class="['text-[11px]', t.textMuted]">
+            / {{ new Intl.NumberFormat(locale).format(block.max_value) }}
+        </p>
     </div>
 </template>

@@ -2,7 +2,9 @@
 import { computed } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
+import { useChartTooltip } from '../useChartTooltip';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import ChartTooltip from './ChartTooltip.vue';
 
 interface SparklineBlock {
     id: string;
@@ -29,6 +31,7 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+const { card, mouse, tip, onMove, showTip, hideTip } = useChartTooltip();
 
 const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.data_source.object_id),
@@ -111,11 +114,20 @@ const series = computed<number[]>(() => {
                 continue;
             }
             switch (agg) {
-                case 'sum': out.push(vals.reduce((a, b) => a + b, 0)); break;
-                case 'avg': out.push(vals.reduce((a, b) => a + b, 0) / vals.length); break;
-                case 'min': out.push(Math.min(...vals)); break;
-                case 'max': out.push(Math.max(...vals)); break;
-                default: out.push(vals.length);
+                case 'sum':
+                    out.push(vals.reduce((a, b) => a + b, 0));
+                    break;
+                case 'avg':
+                    out.push(vals.reduce((a, b) => a + b, 0) / vals.length);
+                    break;
+                case 'min':
+                    out.push(Math.min(...vals));
+                    break;
+                case 'max':
+                    out.push(Math.max(...vals));
+                    break;
+                default:
+                    out.push(vals.length);
             }
         }
         return out;
@@ -132,11 +144,18 @@ const series = computed<number[]>(() => {
     return keys.map((k) => {
         const vals = buckets.get(k)!;
         switch (agg) {
-            case 'sum': return vals.reduce((a, b) => a + b, 0);
-            case 'avg': return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-            case 'min': return vals.length ? Math.min(...vals) : 0;
-            case 'max': return vals.length ? Math.max(...vals) : 0;
-            default: return vals.length;
+            case 'sum':
+                return vals.reduce((a, b) => a + b, 0);
+            case 'avg':
+                return vals.length
+                    ? vals.reduce((a, b) => a + b, 0) / vals.length
+                    : 0;
+            case 'min':
+                return vals.length ? Math.min(...vals) : 0;
+            case 'max':
+                return vals.length ? Math.max(...vals) : 0;
+            default:
+                return vals.length;
         }
     });
 });
@@ -164,9 +183,18 @@ const path = computed(() => {
     const first = points[0];
     const last = points[points.length - 1];
     const area = `${line} L ${last.sx},${h} L ${first.sx},${h} Z`;
+    const band = n > 0 ? w / n : w;
     return {
         line,
         area,
+        w,
+        h,
+        band,
+        // One transparent hover band per point (full height) → easy tooltip target.
+        hits: points.map((p, i) => ({
+            x: p.x - band / 2,
+            value: series.value[i],
+        })),
         last: series.value[series.value.length - 1],
         total: series.value.reduce((a, b) => a + b, 0),
     };
@@ -175,15 +203,30 @@ const path = computed(() => {
 const color = computed(() => props.block.color ?? '#3B82F6');
 
 function formatNumber(value: number): string {
-    return new Intl.NumberFormat(props.locale).format(Math.round(value * 100) / 100);
+    return new Intl.NumberFormat(props.locale).format(
+        Math.round(value * 100) / 100,
+    );
 }
 </script>
 
 <template>
-    <div :class="['rounded-sp-sm border p-4', t.surface]">
-        <header v-if="block.label" class="mb-2 flex items-center justify-between">
-            <p :class="['text-[11px] uppercase tracking-wider', t.textSubtle]">{{ block.label }}</p>
-            <p :class="['text-sm font-semibold', t.text]">{{ formatNumber(path.total) }}</p>
+    <div
+        ref="card"
+        :class="['relative rounded-sp-sm border p-4', t.surface]"
+        @mousemove="onMove"
+        @mouseleave="hideTip"
+    >
+        <ChartTooltip :tip="tip" :x="mouse.x" :y="mouse.y" />
+        <header
+            v-if="block.label"
+            class="mb-2 flex items-center justify-between"
+        >
+            <p :class="['text-[11px] tracking-wider uppercase', t.textSubtle]">
+                {{ block.label }}
+            </p>
+            <p :class="['text-sm font-semibold', t.text]">
+                {{ formatNumber(path.total) }}
+            </p>
         </header>
         <svg
             v-if="series.length > 0"
@@ -191,9 +234,34 @@ function formatNumber(value: number): string {
             class="w-full"
             preserveAspectRatio="none"
         >
-            <path :d="path.area" :fill="color" fill-opacity="0.12" stroke="none" />
-            <path :d="path.line" fill="none" :stroke="color" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <path
+                :d="path.area"
+                :fill="color"
+                fill-opacity="0.12"
+                stroke="none"
+            />
+            <path
+                :d="path.line"
+                fill="none"
+                :stroke="color"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            />
+            <rect
+                v-for="(hit, i) in path.hits"
+                :key="i"
+                :x="hit.x"
+                y="0"
+                :width="path.band"
+                :height="path.h"
+                fill="transparent"
+                class="cursor-pointer"
+                @mouseenter="showTip(formatNumber(hit.value), undefined, color)"
+            />
         </svg>
-        <p v-else :class="['py-4 text-center text-xs', t.textMuted]">No data.</p>
+        <p v-else :class="['py-4 text-center text-xs', t.textMuted]">
+            No data.
+        </p>
     </div>
 </template>

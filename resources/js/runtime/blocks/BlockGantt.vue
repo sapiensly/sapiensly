@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
+import { useChartTooltip } from '../useChartTooltip';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import ChartTooltip from './ChartTooltip.vue';
 
 interface GanttBlock {
     id: string;
@@ -28,6 +30,7 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+const { card, mouse, tip, onMove, showTip, hideTip } = useChartTooltip();
 
 const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.data_source.object_id),
@@ -107,10 +110,23 @@ const model = computed(() => {
 </script>
 
 <template>
-    <div :class="['rounded-sp-sm border p-5', t.surface]">
-        <p v-if="block.label" :class="['mb-3 text-[11px] uppercase tracking-wider', t.textSubtle]">{{ block.label }}</p>
+    <div
+        ref="card"
+        :class="['relative rounded-sp-sm border p-5', t.surface]"
+        @mousemove="onMove"
+        @mouseleave="hideTip"
+    >
+        <ChartTooltip :tip="tip" :x="mouse.x" :y="mouse.y" />
+        <p
+            v-if="block.label"
+            :class="['mb-3 text-[11px] tracking-wider uppercase', t.textSubtle]"
+        >
+            {{ block.label }}
+        </p>
 
-        <p v-if="!model" :class="['py-6 text-center text-xs', t.textMuted]">No dated records to schedule.</p>
+        <p v-if="!model" :class="['py-6 text-center text-xs', t.textMuted]">
+            No dated records to schedule.
+        </p>
 
         <div v-else class="space-y-1.5">
             <div
@@ -118,17 +134,32 @@ const model = computed(() => {
                 :key="bar.id"
                 class="flex items-center gap-3"
             >
-                <span :class="['w-32 shrink-0 truncate text-xs', t.text]" :title="bar.title">{{ bar.title }}</span>
-                <div class="relative h-5 flex-1 overflow-hidden rounded-xs bg-surface">
+                <span
+                    :class="['w-32 shrink-0 truncate text-xs', t.text]"
+                    :title="bar.title"
+                    >{{ bar.title }}</span
+                >
+                <div
+                    class="relative h-5 flex-1 overflow-hidden rounded-xs bg-surface"
+                >
                     <div
-                        class="absolute inset-y-0 rounded-xs"
-                        :style="{ left: bar.left + '%', width: bar.width + '%', background: bar.color }"
-                        :title="bar.title + ' — ' + bar.range"
+                        class="absolute inset-y-0 cursor-pointer rounded-xs transition-opacity hover:opacity-80"
+                        :style="{
+                            left: bar.left + '%',
+                            width: bar.width + '%',
+                            background: bar.color,
+                        }"
+                        @mouseenter="showTip(bar.title, bar.range, bar.color)"
                     />
                 </div>
             </div>
 
-            <div :class="['flex justify-between pt-1 pl-[8.75rem] text-[10px]', t.textMuted]">
+            <div
+                :class="[
+                    'flex justify-between pt-1 pl-[8.75rem] text-[10px]',
+                    t.textMuted,
+                ]"
+            >
                 <span>{{ model.minLabel }}</span>
                 <span>{{ model.maxLabel }}</span>
             </div>
