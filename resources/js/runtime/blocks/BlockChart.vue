@@ -1145,10 +1145,7 @@ const boxPlot = computed(() => {
 <template>
     <div
         ref="card"
-        :class="[
-            'relative flex h-full flex-col rounded-sp-sm border p-5',
-            t.surface,
-        ]"
+        :class="['relative flex flex-col rounded-sp-sm border p-5', t.surface]"
         @mousemove="onMove"
         @mouseleave="hideTip"
     >
