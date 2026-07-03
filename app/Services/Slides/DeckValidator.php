@@ -24,7 +24,7 @@ class DeckValidator
 
     public const TIMELINE_STATUSES = ['done', 'active', 'upcoming'];
 
-    public const CHART_TYPES = ['bar', 'line', 'donut'];
+    public const CHART_TYPES = ['bar', 'hbar', 'line', 'area', 'pie', 'donut', 'radar'];
 
     public const AGGREGATIONS = ['count', 'sum', 'avg', 'min', 'max'];
 
@@ -209,7 +209,8 @@ class DeckValidator
         }
 
         $series = $slide['series'] ?? null;
-        $maxSeries = $type === 'donut' ? 1 : 3;
+        // Part-to-whole forms read as ONE ring/disc; every other form compares up to 3 series.
+        $maxSeries = in_array($type, ['donut', 'pie'], true) ? 1 : 3;
         if (! is_array($series) || count($series) < 1 || count($series) > $maxSeries) {
             $errors[] = "{$path}.series: 1 to {$maxSeries} series of {name, data} for chart_type ".(is_string($type) ? $type : '?').'.';
 

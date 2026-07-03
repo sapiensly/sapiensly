@@ -72,6 +72,36 @@ it('validates a correct deck and rejects broken ones with precise errors', funct
         ->toContain('slides.2.series: 1 to 1 series');
 });
 
+it('accepts every extended chart form and keeps pie to one series', function () {
+    $validator = new DeckValidator;
+
+    foreach (['hbar', 'area', 'pie', 'radar'] as $type) {
+        $errors = $validator->validate([
+            'title' => 'Deck',
+            'slides' => [
+                ['layout' => 'chart', 'title' => 'x', 'chart_type' => $type,
+                    'labels' => ['a', 'b', 'c'],
+                    'series' => [['name' => 's1', 'data' => [1, 2, 3]]]],
+            ],
+        ]);
+        expect($errors)->toBe([], "chart_type {$type} should validate");
+    }
+
+    // pie is part-to-whole: a second series must be rejected like donut.
+    $errors = $validator->validate([
+        'title' => 'Deck',
+        'slides' => [
+            ['layout' => 'chart', 'title' => 'x', 'chart_type' => 'pie',
+                'labels' => ['a', 'b'],
+                'series' => [
+                    ['name' => 's1', 'data' => [1, 2]],
+                    ['name' => 's2', 'data' => [3, 4]],
+                ]],
+        ],
+    ]);
+    expect(implode("\n", $errors))->toContain('1 to 1 series');
+});
+
 it('enforces copy budgets so slides cannot overflow', function () {
     $errors = (new DeckValidator)->validate([
         'title' => 'Deck',

@@ -183,7 +183,12 @@ function setSeries(i: number, key: 'name' | 'data', value: string) {
 }
 function addSeries() {
     const series = [...(s.value.series ?? [])];
-    if (series.length >= 3 || s.value.chart_type === 'donut') return;
+    if (
+        series.length >= 3 ||
+        s.value.chart_type === 'donut' ||
+        s.value.chart_type === 'pie'
+    )
+        return;
     series.push({
         name: `Serie ${series.length + 1}`,
         data: (s.value.labels ?? []).map(() => 0),
@@ -506,8 +511,12 @@ function removeSeries(i: number) {
                     "
                 >
                     <option value="bar">Bar</option>
+                    <option value="hbar">Horizontal bar</option>
                     <option value="line">Line</option>
+                    <option value="area">Area</option>
+                    <option value="pie">Pie</option>
                     <option value="donut">Donut</option>
+                    <option value="radar">Radar</option>
                 </select>
             </label>
             <p
@@ -567,7 +576,11 @@ function removeSeries(i: number) {
                 </div>
             </div>
             <button
-                v-if="s.chart_type !== 'donut' && (s.series ?? []).length < 3"
+                v-if="
+                    s.chart_type !== 'donut' &&
+                    s.chart_type !== 'pie' &&
+                    (s.series ?? []).length < 3
+                "
                 type="button"
                 class="add-btn"
                 @click="addSeries"

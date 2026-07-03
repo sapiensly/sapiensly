@@ -5,22 +5,26 @@ import {
     BarElement,
     CategoryScale,
     Chart as ChartJS,
+    Filler,
     Legend,
     LinearScale,
     LineElement,
     PointElement,
+    RadialLinearScale,
     Tooltip,
 } from 'chart.js';
 import { computed } from 'vue';
-import { Bar, Doughnut, Line } from 'vue-chartjs';
+import { Bar, Doughnut, Line, Pie, Radar } from 'vue-chartjs';
 
 ChartJS.register(
     CategoryScale,
     LinearScale,
+    RadialLinearScale,
     PointElement,
     LineElement,
     BarElement,
     ArcElement,
+    Filler,
     Tooltip,
     Legend,
 );
@@ -33,7 +37,7 @@ interface Series {
 const props = withDefaults(
     defineProps<{
         title: string;
-        chartType: 'bar' | 'line' | 'donut';
+        chartType: 'bar' | 'hbar' | 'line' | 'area' | 'pie' | 'donut' | 'radar';
         labels: string[];
         series: Series[];
         takeaway?: string;
@@ -48,8 +52,24 @@ const props = withDefaults(
 // assume the 1280×720 design canvas (the stage scales everything together).
 const palette = computed(() => props.tokens.series);
 
+// Coarse form groups: arc (one disc/ring), bar-ish, line-ish, radial.
+const isArc = computed(
+    () => props.chartType === 'donut' || props.chartType === 'pie',
+);
+const isBar = computed(
+    () => props.chartType === 'bar' || props.chartType === 'hbar',
+);
+const isLine = computed(
+    () => props.chartType === 'line' || props.chartType === 'area',
+);
+
+/** Translucent fill for area/radar bodies, from the solid palette hex. */
+function softColor(hex: string): string {
+    return `color-mix(in oklab, ${hex} 22%, transparent)`;
+}
+
 const chartData = computed(() => {
-    if (props.chartType === 'donut') {
+    if (isArc.value) {
         return {
             labels: props.labels,
             datasets: [
@@ -65,31 +85,43 @@ const chartData = computed(() => {
     }
     return {
         labels: props.labels,
-        datasets: props.series.map((s, i) => ({
-            label: s.name,
-            data: s.data,
-            backgroundColor:
-                props.chartType === 'bar'
-                    ? palette.value[i % palette.value.length]
-                    : 'transparent',
-            borderColor: palette.value[i % palette.value.length],
-            borderWidth: props.chartType === 'line' ? 4 : 0,
-            borderRadius: props.chartType === 'bar' ? 8 : 0,
-            pointRadius: props.chartType === 'line' ? 5 : 0,
-            pointBackgroundColor: palette.value[i % palette.value.length],
-            tension: 0.35,
-        })),
+        datasets: props.series.map((s, i) => {
+            const color = palette.value[i % palette.value.length];
+            return {
+                label: s.name,
+                data: s.data,
+                backgroundColor: isBar.value
+                    ? color
+                    : props.chartType === 'area' || props.chartType === 'radar'
+                      ? softColor(color)
+                      : 'transparent',
+                fill: props.chartType === 'area' || props.chartType === 'radar',
+                borderColor: color,
+                borderWidth:
+                    isLine.value || props.chartType === 'radar' ? 4 : 0,
+                borderRadius: isBar.value ? 8 : 0,
+                pointRadius: isLine.value
+                    ? 5
+                    : props.chartType === 'radar'
+                      ? 4
+                      : 0,
+                pointBackgroundColor: color,
+                tension: 0.35,
+            };
+        }),
     };
 });
 
-const showLegend = computed(
-    () => props.chartType === 'donut' || props.series.length > 1,
-);
+const showLegend = computed(() => isArc.value || props.series.length > 1);
 
-const chartOptions = computed(() => ({
+// One options object shared across chart forms; chart.js's per-form generics
+// reject the union (radar's r-scale vs cartesian x/y), so it is typed loosely.
+const chartOptions = computed<any>(() => ({
     responsive: true,
     maintainAspectRatio: false,
     animation: props.animated ? { duration: 300 } : false,
+    // hbar = horizontal bars: categories on Y, values on X.
+    indexAxis: (props.chartType === 'hbar' ? 'y' : 'x') as 'x' | 'y',
     plugins: {
         legend: {
             display: showLegend.value,
@@ -106,28 +138,44 @@ const chartOptions = computed(() => ({
         },
         tooltip: { enabled: true },
     },
-    scales:
-        props.chartType === 'donut'
-            ? undefined
-            : {
-                  x: {
-                      grid: { display: false },
-                      border: { color: props.tokens.line },
-                      ticks: {
-                          color: props.tokens.muted,
-                          font: { size: 15 },
-                      },
-                  },
-                  y: {
-                      grid: { color: props.tokens.line },
-                      border: { display: false },
-                      ticks: {
-                          color: props.tokens.subtle,
-                          font: { size: 14 },
-                          maxTicksLimit: 6,
-                      },
-                  },
-              },
+    scales: isArc.value
+        ? undefined
+        : props.chartType === 'radar'
+          ? {
+                r: {
+                    grid: { color: props.tokens.line },
+                    angleLines: { color: props.tokens.line },
+                    pointLabels: {
+                        color: props.tokens.muted,
+                        font: { size: 15 },
+                    },
+                    ticks: {
+                        color: props.tokens.subtle,
+                        font: { size: 12 },
+                        maxTicksLimit: 5,
+                        backdropColor: 'transparent',
+                    },
+                },
+            }
+          : {
+                x: {
+                    grid: { display: false },
+                    border: { color: props.tokens.line },
+                    ticks: {
+                        color: props.tokens.muted,
+                        font: { size: 15 },
+                    },
+                },
+                y: {
+                    grid: { color: props.tokens.line },
+                    border: { display: false },
+                    ticks: {
+                        color: props.tokens.subtle,
+                        font: { size: 14 },
+                        maxTicksLimit: 6,
+                    },
+                },
+            },
 }));
 </script>
 
@@ -140,8 +188,18 @@ const chartOptions = computed(() => ({
                 :data="chartData"
                 :options="chartOptions"
             />
+            <Pie
+                v-else-if="chartType === 'pie'"
+                :data="chartData"
+                :options="chartOptions"
+            />
+            <Radar
+                v-else-if="chartType === 'radar'"
+                :data="chartData"
+                :options="chartOptions"
+            />
             <Line
-                v-else-if="chartType === 'line'"
+                v-else-if="chartType === 'line' || chartType === 'area'"
                 :data="chartData"
                 :options="chartOptions"
             />
