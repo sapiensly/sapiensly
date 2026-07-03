@@ -2,6 +2,7 @@
 
 namespace App\Services\Integrations\OAuth2;
 
+use App\Enums\IntegrationAuthType;
 use App\Models\Integration;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -81,16 +82,23 @@ class OAuth2TokenRefresher
 
             $cfg = $integration->auth_config ?? [];
 
-            // Use the refresh_token when present (AuthCode flow); else fall
-            // back to client_credentials flow which re-requests a fresh token.
+            // Use the refresh_token when present (AuthCode flow). Only a
+            // client_credentials connection may mint a fresh token on its own;
+            // an auth-code connection without a refresh token needs the USER to
+            // re-authorize — asking the provider for a client_credentials grant
+            // with a public PKCE client just yields a cryptic unauthorized_client.
             if (! empty($cfg['refresh_token'])) {
                 $tokens = $this->requestWithRefreshToken($cfg);
                 $cfg = array_merge($cfg, $tokens);
                 $integration->update(['auth_config' => $cfg]);
-            } else {
+            } elseif ($integration->auth_type === IntegrationAuthType::OAuth2ClientCredentials) {
                 $tokens = $this->requestWithClientCredentials($cfg);
                 $cfg = array_merge($cfg, $tokens);
                 $integration->update(['auth_config' => $cfg]);
+            } else {
+                throw new \RuntimeException(
+                    'Authorization expired (or was never completed) and no refresh token is stored — re-authorize this connection from the integrations panel.'
+                );
             }
 
             return $integration->fresh();

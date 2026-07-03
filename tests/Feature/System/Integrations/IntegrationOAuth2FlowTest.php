@@ -127,6 +127,34 @@ test('refresher uses refresh_token when present', function () {
         ->and($refreshed->auth_config['refresh_token'])->toBe('rotated-refresh');
 });
 
+test('an auth-code connection without a refresh token asks for re-authorization instead of trying client_credentials', function () {
+    // A public PKCE client can never mint tokens via client_credentials — the
+    // provider answers a cryptic unauthorized_client. The refresher must fail
+    // with the actionable message and never call the token endpoint.
+    Http::fake([
+        'https://auth.example.com/*' => Http::response(['error' => 'unauthorized_client'], 400),
+    ]);
+
+    $user = User::factory()->create(['organization_id' => null]);
+    $integration = Integration::factory()->oauth2AuthCode()->forUser($user)->create([
+        'auth_config' => [
+            'token_url' => 'https://auth.example.com/oauth/token',
+            'client_id' => 'cid', 'client_secret' => null, 'pkce' => true,
+            'access_token' => 'stale',
+            'expires_at' => time() - 10, // expired, and no refresh_token stored
+        ],
+    ]);
+
+    try {
+        app(OAuth2TokenRefresher::class)->refreshIfNeeded($integration);
+        $this->fail('Expected a re-authorization RuntimeException.');
+    } catch (RuntimeException $e) {
+        expect($e->getMessage())->toContain('re-authorize');
+    }
+
+    Http::assertNothingSent();
+});
+
 test('refresher surfaces provider errors', function () {
     Http::fake([
         'https://auth.example.com/oauth/token' => Http::response(['error' => 'invalid_client'], 401),
