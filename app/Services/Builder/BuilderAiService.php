@@ -59,6 +59,7 @@ use App\Services\Records\RecordWriteService;
 use App\Services\Storage\TenantStorage;
 use App\Services\Workflows\WorkflowAssertionEvaluator;
 use App\Services\Workflows\WorkflowEngine;
+use App\Support\Branding\OrganizationBrand;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -165,7 +166,7 @@ class BuilderAiService
             new ListAvailableComponentsTool,
             new ListDashboardBlueprintsTool,
             new ListAvailableIconsTool,
-            new GeneratePaletteTool,
+            new GeneratePaletteTool($app->organization?->brandbook()),
             new ListAvailableFieldTypesTool,
             new ListAvailableActionsTool,
             new ListAvailableTriggersTool,
@@ -364,7 +365,7 @@ class BuilderAiService
             new ListAvailableComponentsTool,
             new ListDashboardBlueprintsTool,
             new ListAvailableIconsTool,
-            new GeneratePaletteTool,
+            new GeneratePaletteTool($app->organization?->brandbook()),
             new ListAvailableFieldTypesTool,
             new ListAvailableActionsTool,
             new ListAvailableTriggersTool,
@@ -1275,6 +1276,8 @@ class BuilderAiService
 
     private function systemPrompt(App $app): string
     {
+        $brandbook = $this->brandbookSection($app);
+
         return <<<PROMPT
 You are the Builder AI inside Sapiensly. Your job is to help the tenant edit a low-code App by modifying its JSON manifest.
 
@@ -1282,6 +1285,8 @@ App details:
   id: {$app->id}
   slug: {$app->slug}
   name: {$app->name}
+
+{$brandbook}
 
 Language:
 0. ALWAYS reply in the same language as the most recent user message. If the user writes in Spanish, your assistant turn (including confirmations, error messages, clarifications and the `change_summary` you pass to propose_change) is in Spanish. If they switch to English mid-conversation, switch with them. Don't mix languages within a single reply. Default to the user's language even if your internal reasoning was in English.
@@ -1334,5 +1339,37 @@ Completion & honesty (read before ending any turn):
 Output:
 14. Keep replies SHORT and CONCRETE. Confirm what you did in ONE sentence (two only if there are genuinely two distinct things to report), then stop. No preamble ("Claro, voy a…"), no recap of the user's request, no restating the manifest, no bullet lists of what you "could" do next, no offers of further help. State the result, not the process. Bad: "He revisado el manifiesto y, tras analizar la estructura, decidí agregar un campo de tipo texto llamado…". Good: "Agregué el campo «Notas» al objeto Clientes.". If you must ask a clarifying question, ask exactly one, in one line.
 PROMPT;
+    }
+
+    /**
+     * The org Brandbook rendered for the system prompt, so the model designs with
+     * the tenant's real brand values instead of inventing colours. The runtime
+     * already inherits the brand fill-the-gaps; this makes the AUTHORING side
+     * aware of it too.
+     */
+    private function brandbookSection(App $app): string
+    {
+        $brand = $app->organization?->brandbook();
+
+        if ($brand === null || $brand->isEmpty()) {
+            return 'Organization Brandbook: not set — the platform accent '.OrganizationBrand::DEFAULT_ACCENT.' applies. Prefer the palette CSS vars (--sp-accent-*, --sp-chart-*) over hard-coded hexes so the app re-themes automatically if a brand is set later.';
+        }
+
+        $lines = ["Organization Brandbook (the tenant's brand — every app inherits it at runtime; design WITH these values, never invent brand colours):"];
+        $lines[] = '  accent: '.$brand->effectiveAccent().' — drives the live CSS vars (--sp-accent-50…900, --sp-chart-1…6); pass it to generate_palette when you need concrete hexes (gradients, single_select option colours).';
+        if ($brand->font !== null) {
+            $lines[] = '  font: '.$brand->font;
+        }
+        if ($brand->theme !== null) {
+            $lines[] = '  theme: '.$brand->theme;
+        }
+        if ($brand->logoUrl !== null) {
+            $lines[] = '  logo: '.$brand->logoUrl;
+        }
+        if ($brand->iconEmoji !== null || $brand->iconUrl !== null) {
+            $lines[] = '  icon: '.($brand->iconEmoji ?? $brand->iconUrl);
+        }
+
+        return implode("\n", $lines);
     }
 }

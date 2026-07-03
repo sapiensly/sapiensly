@@ -23,9 +23,17 @@ abstract class BuilderCatalogTool extends SapiensTool
 
     public function handle(Request $request): Response
     {
-        $tool = app(static::BUILDER_TOOL);
+        return Response::text($this->builderTool($request)->handle(new BuilderRequest($this->arguments($request))));
+    }
 
-        return Response::text($tool->handle(new BuilderRequest($this->arguments($request))));
+    /**
+     * The builder tool instance to delegate to. Override when the tool needs
+     * request context (e.g. the caller's organization) instead of the container
+     * default.
+     */
+    protected function builderTool(Request $request): object
+    {
+        return app(static::BUILDER_TOOL);
     }
 
     /**

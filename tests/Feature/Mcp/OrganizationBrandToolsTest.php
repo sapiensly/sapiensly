@@ -4,6 +4,7 @@ use App\Enums\MembershipRole;
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Account\GetOrganizationBrandTool;
 use App\Mcp\Tools\Account\SetOrganizationBrandTool;
+use App\Mcp\Tools\Build\GeneratePaletteTool;
 use App\Models\Organization;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Spatie\Permission\PermissionRegistrar;
@@ -30,6 +31,26 @@ it('reads the organization brand', function () {
         ->assertOk()
         ->assertSee('#123456')
         ->assertSee('serif');
+});
+
+it('exposes the effective accent and the derived palette', function () {
+    $this->org->update(['brand' => ['accent_color' => '#4f46e5']]);
+
+    SapiensServer::actingAs($this->member)
+        ->tool(GetOrganizationBrandTool::class, [])
+        ->assertOk()
+        ->assertSee('effective_accent')
+        ->assertSee('#4f46e5')
+        ->assertSee('palette');
+});
+
+it('generate_palette defaults to the org brand accent when no base is passed', function () {
+    $this->org->update(['brand' => ['accent_color' => '#123456']]);
+
+    SapiensServer::actingAs($this->owner)
+        ->tool(GeneratePaletteTool::class, [])
+        ->assertOk()
+        ->assertSee('#123456');
 });
 
 it('lets an owner set the brand (partial, normalized)', function () {
