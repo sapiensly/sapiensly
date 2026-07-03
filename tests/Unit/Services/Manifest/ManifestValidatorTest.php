@@ -100,6 +100,36 @@ it('accepts a sankey chart (chart_type enum extended)', function () {
         ->and($result->errors)->toBe([]);
 });
 
+it('accepts a box-and-whisker chart (chart_type enum extended)', function () {
+    $manifest = baseManifest();
+    $objId = $manifest['objects'][0]['id'];
+    $catId = $manifest['objects'][0]['fields'][0]['id'];
+    $numId = id('fld');
+    $manifest['objects'][0]['fields'][] = [
+        'id' => $numId, 'slug' => 'dias', 'name' => 'Días', 'type' => 'number',
+    ];
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'chart',
+            'chart_type' => 'box',
+            'data_source' => ['object_id' => $objId],
+            'group_by_field_id' => $catId,
+            'y_field_id' => $numId,
+            'aggregation' => 'count',
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
 it('accepts a masonry container (direction enum extended)', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[

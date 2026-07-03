@@ -29,7 +29,8 @@ interface ChartBlock {
         | 'radar'
         | 'scatter'
         | 'treemap'
-        | 'sankey';
+        | 'sankey'
+        | 'box';
     data_source: { object_id: string };
     x_field_id?: string;
     y_field_id?: string;
@@ -1028,6 +1029,117 @@ const sankey = computed(() => {
         tgtNodes: [...tgtNodes.values()],
     };
 });
+
+/** Linear-interpolated quantile of an ASCENDING-sorted array. */
+function quantile(sorted: number[], q: number): number {
+    const n = sorted.length;
+    if (n === 0) return 0;
+    if (n === 1) return sorted[0];
+    const pos = (n - 1) * q;
+    const base = Math.floor(pos);
+    const rest = pos - base;
+    return sorted[base + 1] !== undefined
+        ? sorted[base] + rest * (sorted[base + 1] - sorted[base])
+        : sorted[base];
+}
+
+// Box-and-whisker: one box per group_by category summarising the DISTRIBUTION of
+// the numeric y_field_id values in that group — box = Q1..Q3, line = median,
+// whiskers reach the furthest values within 1.5·IQR (Tukey), points beyond are
+// outliers. aggregation is ignored (the box IS the summary).
+const boxPlot = computed(() => {
+    if (props.block.chart_type !== 'box') return null;
+    const rows = props.data?.rows ?? [];
+    const catField = groupField.value;
+    const ySlug = yField.value?.slug;
+    if (!ySlug) return null; // a box plot needs a numeric field to summarise
+    const catSlug = catField?.slug;
+
+    const groups = new Map<string, number[]>();
+    for (const r of rows) {
+        const key = formatGroupKey(catSlug ? r.data[catSlug] : 'all', catField);
+        const v = Number(r.data[ySlug]);
+        if (!Number.isFinite(v)) continue;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(v);
+    }
+    if (groups.size === 0) return null;
+
+    const cats = [...groups.keys()];
+    const stats = cats.map((cat, i) => {
+        const vals = groups
+            .get(cat)!
+            .slice()
+            .sort((a, b) => a - b);
+        const q1 = quantile(vals, 0.25);
+        const med = quantile(vals, 0.5);
+        const q3 = quantile(vals, 0.75);
+        const iqr = q3 - q1;
+        const loFence = q1 - 1.5 * iqr;
+        const hiFence = q3 + 1.5 * iqr;
+        const inRange = vals.filter((v) => v >= loFence && v <= hiFence);
+        return {
+            cat,
+            q1,
+            med,
+            q3,
+            whiskLo: inRange.length ? inRange[0] : q1,
+            whiskHi: inRange.length ? inRange[inRange.length - 1] : q3,
+            outliers: vals.filter((v) => v < loFence || v > hiFence),
+            count: vals.length,
+            color: colorFor(cat, i),
+        };
+    });
+
+    const allVals = stats.flatMap((s) => [s.whiskLo, s.whiskHi, ...s.outliers]);
+    let dmin = Math.min(...allVals);
+    let dmax = Math.max(...allVals);
+    if (dmin === dmax) dmax = dmin + 1;
+    const domPad = (dmax - dmin) * 0.05;
+    dmin -= domPad;
+    dmax += domPad;
+
+    const W = 480;
+    const H = 240;
+    const padL = 38;
+    const padR = 12;
+    const padT = 12;
+    const padB = 30;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+    const baselineY = padT + innerH;
+    const n = cats.length;
+    const slot = innerW / n;
+    const centerX = (i: number) => padL + slot * (i + 0.5);
+    const boxW = Math.min(46, slot * 0.5);
+    const yFor = (v: number) =>
+        baselineY - ((v - dmin) / (dmax - dmin)) * innerH;
+
+    const boxes = stats.map((s, i) => ({
+        ...s,
+        cx: centerX(i),
+        x: centerX(i) - boxW / 2,
+        boxW,
+        capW: boxW * 0.6,
+        yQ1: yFor(s.q1),
+        yQ3: yFor(s.q3),
+        yMed: yFor(s.med),
+        yLo: yFor(s.whiskLo),
+        yHi: yFor(s.whiskHi),
+        outPts: s.outliers.map((v) => ({ y: yFor(v), value: v })),
+    }));
+
+    const yTicks = [0, 0.5, 1].map((f) => ({
+        y: baselineY - f * innerH,
+        label: formatNumber(dmin + f * (dmax - dmin)),
+    }));
+    const stride = Math.max(1, Math.ceil(n / 8));
+    const xLabels = cats
+        .map((label, i) => ({ x: centerX(i), label, i }))
+        .filter((l) => l.i % stride === 0 || l.i === n - 1);
+
+    return { W, H, padL, padR, baselineY, boxes, yTicks, xLabels };
+});
 </script>
 
 <template>
@@ -1657,6 +1769,140 @@ const sankey = computed(() => {
                 <p v-else :class="['py-8 text-center text-xs', t.textMuted]">
                     Sankey needs a group-by (source) and a series (target)
                     field.
+                </p>
+            </template>
+
+            <template v-else-if="block.chart_type === 'box'">
+                <!-- box-and-whisker: distribution of y_field per group_by category -->
+                <div v-if="boxPlot" class="h-64">
+                    <svg
+                        :viewBox="`0 0 ${boxPlot.W} ${boxPlot.H}`"
+                        class="h-full w-full"
+                        preserveAspectRatio="xMidYMid meet"
+                        :class="t.text"
+                    >
+                        <!-- y gridlines + ticks -->
+                        <g
+                            v-for="(tk, i) in boxPlot.yTicks"
+                            :key="'y' + i"
+                            :class="t.textMuted"
+                        >
+                            <line
+                                :x1="boxPlot.padL"
+                                :y1="tk.y"
+                                :x2="boxPlot.W - boxPlot.padR"
+                                :y2="tk.y"
+                                stroke="currentColor"
+                                stroke-opacity="0.1"
+                            />
+                            <text
+                                :x="boxPlot.padL - 5"
+                                :y="tk.y + 3"
+                                text-anchor="end"
+                                fill="currentColor"
+                                fill-opacity="0.6"
+                                style="font-size: 8px"
+                            >
+                                {{ tk.label }}
+                            </text>
+                        </g>
+                        <g v-for="(b, i) in boxPlot.boxes" :key="'box' + i">
+                            <!-- whisker line + caps -->
+                            <line
+                                :x1="b.cx"
+                                :y1="b.yHi"
+                                :x2="b.cx"
+                                :y2="b.yLo"
+                                :stroke="b.color"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                :x1="b.cx - b.capW / 2"
+                                :y1="b.yHi"
+                                :x2="b.cx + b.capW / 2"
+                                :y2="b.yHi"
+                                :stroke="b.color"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                :x1="b.cx - b.capW / 2"
+                                :y1="b.yLo"
+                                :x2="b.cx + b.capW / 2"
+                                :y2="b.yLo"
+                                :stroke="b.color"
+                                stroke-width="1.5"
+                            />
+                            <!-- box Q1..Q3 -->
+                            <rect
+                                :x="b.x"
+                                :y="b.yQ3"
+                                :width="b.boxW"
+                                :height="Math.max(1, b.yQ1 - b.yQ3)"
+                                :fill="b.color"
+                                fill-opacity="0.25"
+                                :stroke="b.color"
+                                stroke-width="1.5"
+                                rx="1"
+                                class="cursor-pointer transition-all hover:[fill-opacity:0.4]"
+                                @mouseenter="
+                                    showTip(
+                                        b.cat + ' (n=' + b.count + ')',
+                                        'mediana ' +
+                                            formatNumber(b.med) +
+                                            ' · Q1–Q3 ' +
+                                            formatNumber(b.q1) +
+                                            '–' +
+                                            formatNumber(b.q3),
+                                        b.color,
+                                    )
+                                "
+                            />
+                            <!-- median -->
+                            <line
+                                :x1="b.x"
+                                :y1="b.yMed"
+                                :x2="b.x + b.boxW"
+                                :y2="b.yMed"
+                                :stroke="b.color"
+                                stroke-width="2.5"
+                            />
+                            <!-- outliers -->
+                            <circle
+                                v-for="(o, oi) in b.outPts"
+                                :key="'o' + oi"
+                                :cx="b.cx"
+                                :cy="o.y"
+                                r="2"
+                                :fill="b.color"
+                                fill-opacity="0.7"
+                                class="cursor-pointer transition-all hover:[r:4px]"
+                                @mouseenter="
+                                    showTip(
+                                        b.cat + ' · outlier',
+                                        formatNumber(o.value),
+                                        b.color,
+                                    )
+                                "
+                            />
+                        </g>
+                        <!-- x labels -->
+                        <text
+                            v-for="(l, i) in boxPlot.xLabels"
+                            :key="'x' + i"
+                            :x="l.x"
+                            :y="boxPlot.baselineY + 15"
+                            text-anchor="middle"
+                            fill="currentColor"
+                            fill-opacity="0.6"
+                            style="font-size: 8px"
+                        >
+                            {{ l.label }}
+                        </text>
+                    </svg>
+                </div>
+                <p v-else :class="['py-8 text-center text-xs', t.textMuted]">
+                    Box plot needs a numeric field (y_field_id) and a group-by
+                    category.
                 </p>
             </template>
 
