@@ -36,6 +36,12 @@ class PlanDashboardTool implements Tool
         'filter_bar', 'heading', 'text', 'markdown',
     ];
 
+    /** Dedicated viz blocks: each is its own visual FORM (counts toward variety). */
+    private const VIZ_BLOCKS = [
+        'sparkline', 'gauge', 'progress', 'heatmap', 'timeline', 'gantt',
+        'funnel', 'map', 'word_cloud', 'kanban', 'calendar', 'card_grid',
+    ];
+
     /** Naturally SHORT blocks — alone in a row they leave it looking empty. */
     private const SHORT_BLOCKS = ['stat', 'gauge', 'progress', 'sparkline', 'badge'];
 
@@ -186,9 +192,13 @@ DESC;
                 $issues[] = "chart_type '{$type}' appears {$count} times — vary the forms (line/area for trend, donut for share, hbar for rankings, box for distribution, sankey for flow, radar for profiles). Max 2 of a kind.";
             }
         }
+        // Dedicated viz blocks (map, gantt, heatmap, funnel, …) are each their own
+        // visual form, so they earn variety credit alongside distinct chart_types.
+        $dedicatedForms = count(array_intersect(array_keys($blockTypesSeen), self::VIZ_BLOCKS));
+        $distinctForms = count($chartTypeCounts) + $dedicatedForms;
         $totalCharts = array_sum($chartTypeCounts);
-        if ($totalCharts >= 4 && count($chartTypeCounts) < 3) {
-            $issues[] = "{$totalCharts} charts but only ".count($chartTypeCounts).' distinct chart forms — a professional dashboard mixes visual forms so each question gets the shape that answers it.';
+        if ($totalCharts >= 4 && $distinctForms < 3) {
+            $issues[] = "{$totalCharts} charts but only {$distinctForms} distinct visual forms — a professional dashboard mixes forms so each question gets the shape that answers it (also consider the dedicated blocks: map, gantt, heatmap, funnel, gauge, word_cloud…).";
         }
 
         // Conclusions: numbers need a written reading.
