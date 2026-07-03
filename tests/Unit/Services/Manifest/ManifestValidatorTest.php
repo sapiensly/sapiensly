@@ -70,6 +70,47 @@ it('loads the schema from resources/ (ships with the code, not shared storage)',
         ->and($schema['description'] ?? '')->not->toContain('MVP subset');
 });
 
+it('accepts a masonry container (direction enum extended)', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'container',
+            'direction' => 'masonry',
+            'blocks' => [
+                ['id' => id('blk'), 'type' => 'heading', 'content' => 'Wall'],
+            ],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
+it('still rejects an unknown container direction', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'container',
+            'direction' => 'diagonal',
+            'blocks' => [],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
 it('accepts an insight block with a computed live figure', function () {
     $manifest = baseManifest();
     $objectId = $manifest['objects'][0]['id'];

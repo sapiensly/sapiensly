@@ -34,7 +34,7 @@ class ListAvailableComponentsTool implements Tool
     public function handle(Request $request): string
     {
         $catalog = [
-            ['type' => 'container', 'description' => 'Layout group. Has direction (row|column), gap, and nested blocks.'],
+            ['type' => 'container', 'description' => 'Layout group. direction: row = equal side-by-side columns that fill the width and stretch to a shared height; column = stacked; masonry = pack children at their NATURAL height into responsive columns, filling vertical gaps (a true masonry wall for INDEPENDENT cards of varying height — reading order is column-major). Plus gap and nested blocks.'],
             ['type' => 'text', 'description' => 'Paragraph of body text. Has content (string) and size (xs|sm|base|lg|xl).'],
             ['type' => 'heading', 'description' => 'Section heading. Props: content, level (1-6, semantic), and optional size (sm|md|lg|xl|2xl|display) to override the visual size. Defaults are already website-scaled (h2 ≈ 2xl/3xl); use size="display" for a big landing section title or size="sm" to tone one down.'],
             ['type' => 'divider', 'description' => 'Horizontal rule, no props.'],

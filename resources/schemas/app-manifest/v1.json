@@ -812,7 +812,7 @@
                     "properties": {
                         "id": true, "visibility": true, "style": true,
                         "type": { "const": "container" },
-                        "direction": { "enum": ["row", "column"], "default": "column" },
+                        "direction": { "enum": ["row", "column", "masonry"], "default": "column", "description": "row = equal side-by-side columns (stretch to a shared height); column = stacked; masonry = pack children at their natural height into responsive columns, filling vertical gaps (for INDEPENDENT cards of varying height — reading order is column-major)." },
                         "gap": { "enum": ["none", "sm", "md", "lg"], "default": "md" },
                         "blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } }
                     },

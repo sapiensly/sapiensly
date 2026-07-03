@@ -100,7 +100,7 @@ export interface BlockBase {
 
 export interface BlockContainer extends BlockBase {
     type: 'container';
-    direction?: 'row' | 'column';
+    direction?: 'row' | 'column' | 'masonry';
     gap?: 'none' | 'sm' | 'md' | 'lg';
     blocks: AnyBlock[];
 }
