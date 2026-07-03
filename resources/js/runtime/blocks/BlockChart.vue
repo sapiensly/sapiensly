@@ -488,35 +488,102 @@ const lineChart = computed(() => {
 });
 
 // Radar: plot the categorical buckets on radial axes (needs >= 3 axes).
+// Radar: group_by_field_id categories become the radial AXES; each value is a
+// point on its axis. With series_field_id set, every one of its values overlays
+// its OWN polygon on the same axes (compare 2-3 entities across the dimensions);
+// without it, a single polygon. Needs >= 3 axes to form an area.
 const radar = computed(() => {
-    const n = series.value.length;
+    if (props.block.chart_type !== 'radar') return null;
+    const rows = props.data?.rows ?? [];
+    const axisField = groupField.value;
+    const serField = seriesField.value;
+    const axisSlug = axisField?.slug;
+    const serSlug = serField?.slug;
+    const ySlug = yField.value?.slug;
+    const agg = props.block.aggregation;
+
+    const axesLabels: string[] = [];
+    const axisIndex = new Map<string, number>();
+    const serLabels: string[] = [];
+    const serIndex = new Map<string, number>();
+    const cells: number[][][] = []; // [seriesIdx][axisIdx] = raw values
+
+    for (const r of rows) {
+        const ak = formatGroupKey(
+            axisSlug ? r.data[axisSlug] : 'all',
+            axisField,
+        );
+        let ai = axisIndex.get(ak);
+        if (ai === undefined) {
+            ai = axesLabels.length;
+            axesLabels.push(ak);
+            axisIndex.set(ak, ai);
+        }
+        const sk = serField
+            ? formatGroupKey(serSlug ? r.data[serSlug] : '—', serField)
+            : '__single__';
+        let si = serIndex.get(sk);
+        if (si === undefined) {
+            si = serLabels.length;
+            serLabels.push(sk);
+            serIndex.set(sk, si);
+        }
+        const v = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
+        ((cells[si] ??= [])[ai] ??= []).push(Number.isFinite(v) ? v : 0);
+    }
+
+    const n = axesLabels.length;
     if (n < 3) return null;
+    const values = serLabels.map((_, si) =>
+        axesLabels.map((_, ai) => aggregateVals(cells[si]?.[ai], agg)),
+    );
+    const max = Math.max(1, ...values.flat());
+
     const cx = 110;
     const cy = 110;
     const r = 84;
-    const max = maxValue.value;
-    const axes = series.value.map((s, i) => {
-        const ang = -Math.PI / 2 + (i / n) * Math.PI * 2;
-        const rr = (s.value / max) * r;
+    const angleAt = (i: number) => -Math.PI / 2 + (i / n) * Math.PI * 2;
+    const axes = axesLabels.map((label, i) => {
+        const ang = angleAt(i);
         return {
-            label: s.label,
-            value: s.value,
+            label,
             ax: cx + r * Math.cos(ang),
             ay: cy + r * Math.sin(ang),
-            px: cx + rr * Math.cos(ang),
-            py: cy + rr * Math.sin(ang),
             lx: cx + (r + 16) * Math.cos(ang),
             ly: cy + (r + 16) * Math.sin(ang),
         };
     });
-    const poly =
-        axes
-            .map(
-                (a, i) =>
-                    `${i === 0 ? 'M' : 'L'} ${a.px.toFixed(1)} ${a.py.toFixed(1)}`,
-            )
-            .join(' ') + ' Z';
-    return { cx, cy, r, axes, poly };
+
+    const single = !serField;
+    const polys = serLabels.map((label, si) => {
+        const points = axesLabels.map((axisLabel, ai) => {
+            const ang = angleAt(ai);
+            const rr = (values[si][ai] / max) * r;
+            return {
+                x: cx + rr * Math.cos(ang),
+                y: cy + rr * Math.sin(ang),
+                value: values[si][ai],
+                axis: axisLabel,
+            };
+        });
+        const d =
+            points
+                .map(
+                    (p, k) =>
+                        `${k === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`,
+                )
+                .join(' ') + ' Z';
+        return {
+            label: single ? '' : label,
+            color: serField
+                ? paletteColorFor(serField, label, si)
+                : 'var(--sp-accent, #3B82F6)',
+            d,
+            points,
+        };
+    });
+
+    return { cx, cy, r, axes, polys, single };
 });
 
 // Treemap: squarified rectangles sized by each bucket's value (segmentation).
@@ -1352,6 +1419,25 @@ const sankey = computed(() => {
             </template>
 
             <template v-else-if="block.chart_type === 'radar' && radar">
+                <!-- Series legend (only when multiple polygons are overlaid) -->
+                <ul
+                    v-if="!radar.single"
+                    class="mb-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px]"
+                >
+                    <li
+                        v-for="(p, i) in radar.polys"
+                        :key="i"
+                        class="flex items-center gap-1.5"
+                    >
+                        <span
+                            class="inline-block size-2.5 shrink-0 rounded-xs"
+                            :style="{ background: p.color }"
+                        />
+                        <span class="truncate" :class="t.text">{{
+                            p.label
+                        }}</span>
+                    </li>
+                </ul>
                 <svg
                     viewBox="0 0 220 220"
                     class="mx-auto w-full max-w-[280px]"
@@ -1377,25 +1463,31 @@ const sankey = computed(() => {
                         stroke="currentColor"
                         stroke-opacity="0.12"
                     />
-                    <path
-                        :d="radar.poly"
-                        :style="{
-                            fill: 'var(--sp-accent, #3B82F6)',
-                            stroke: 'var(--sp-accent, #3B82F6)',
-                        }"
-                        fill-opacity="0.2"
-                        stroke-width="2"
-                    />
-                    <circle
-                        v-for="(a, i) in radar.axes"
-                        :key="'pt' + i"
-                        :cx="a.px"
-                        :cy="a.py"
-                        r="3"
-                        class="cursor-pointer transition-all hover:[r:5px]"
-                        :style="{ fill: 'var(--sp-accent, #3B82F6)' }"
-                        @mouseenter="showTip(a.label, formatNumber(a.value))"
-                    />
+                    <!-- one filled polygon + points per series -->
+                    <template v-for="(p, pi) in radar.polys" :key="'poly' + pi">
+                        <path
+                            :d="p.d"
+                            :style="{ fill: p.color, stroke: p.color }"
+                            :fill-opacity="radar.single ? 0.2 : 0.12"
+                            stroke-width="2"
+                        />
+                        <circle
+                            v-for="(pt, i) in p.points"
+                            :key="'pt' + pi + '-' + i"
+                            :cx="pt.x"
+                            :cy="pt.y"
+                            r="3"
+                            class="cursor-pointer transition-all hover:[r:5px]"
+                            :style="{ fill: p.color }"
+                            @mouseenter="
+                                showTip(
+                                    (p.label ? p.label + ' · ' : '') + pt.axis,
+                                    formatNumber(pt.value),
+                                    p.color,
+                                )
+                            "
+                        />
+                    </template>
                     <text
                         v-for="(a, i) in radar.axes"
                         :key="'lb' + i"
