@@ -112,6 +112,7 @@
     "settings.brand.palette_failed": "Could not generate proposals.",
     "settings.brand.palette_fallback": "AI unavailable — showing curated proposals.",
     "settings.brand.palette_charts": "Chart series",
+    "settings.brand.palette_current": "Current palette",
     "system.mcp.title": "MCP access",
     "system.mcp.page_description": "Connect Claude Code and Claude web to this organization over MCP.",
     "system.mcp.web_title": "Connect Claude (web)",

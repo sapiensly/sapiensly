@@ -32,7 +32,7 @@ beforeEach(function () {
     ]);
 });
 
-it('renders the brandbook page for an org admin with the current brand', function () {
+it('renders the brandbook page for an org admin with the current brand and its palette', function () {
     $this->org->update(['brand' => ['accent_color' => '#123456', 'font' => 'serif']]);
 
     $this->actingAs($this->owner)
@@ -41,7 +41,31 @@ it('renders the brandbook page for an org admin with the current brand', functio
         ->assertInertia(fn ($page) => $page
             ->component('settings/OrganizationBrand')
             ->where('brand.accent_color', '#123456')
-            ->where('brand.font', 'serif'));
+            ->where('brand.font', 'serif')
+            // The palette in effect is passed so the page shows it immediately.
+            ->where('palette.ramp.500', '#123456')
+            ->has('palette.chart', 6));
+});
+
+it('derives the palette for an accent (live current-palette preview)', function () {
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/palette', ['accent' => '#4caf50'])
+        ->assertOk()
+        ->assertJsonPath('accent', '#4caf50')
+        ->assertJsonPath('palette.ramp.500', '#4caf50')
+        ->assertJsonStructure(['palette' => ['ramp', 'soft', 'contrast', 'chart']]);
+});
+
+it('rejects an invalid accent when deriving a palette', function () {
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/palette', ['accent' => 'green'])
+        ->assertStatus(422);
+});
+
+it('forbids a non-admin from deriving a palette', function () {
+    $this->actingAs($this->member)
+        ->postJson('/settings/organization/brand/palette', ['accent' => '#4caf50'])
+        ->assertForbidden();
 });
 
 it('forbids a non-admin from viewing the brandbook page', function () {

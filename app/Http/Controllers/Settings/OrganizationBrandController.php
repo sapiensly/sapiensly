@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Services\Branding\PaletteProposalService;
 use App\Services\Storage\TenantStorage;
+use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
@@ -48,9 +49,35 @@ class OrganizationBrandController extends Controller
     public function show(Request $request): Response
     {
         $organization = $this->authorizeOrganization($request);
+        $brand = $organization->brandbook();
 
         return Inertia::render('settings/OrganizationBrand', [
-            'brand' => $organization->brandbook()->toArray(),
+            'brand' => $brand->toArray(),
+            // The palette currently in effect (derived from the active accent) so
+            // the page can show it without waiting for AI proposals.
+            'palette' => ColorPalette::fromAccent($brand->effectiveAccent()),
+        ]);
+    }
+
+    /**
+     * Derive the palette for a given accent (the same deterministic expansion
+     * every app surface uses), so the Brandbook page can preview the active
+     * palette live as the admin edits the accent — without porting the colour
+     * maths to JS or waiting on the AI proposal endpoint.
+     */
+    public function derivePalette(Request $request): JsonResponse
+    {
+        $this->authorizeOrganization($request);
+
+        $validated = $request->validate([
+            'accent' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+        ]);
+
+        $accent = $validated['accent'] ?? OrganizationBrand::DEFAULT_ACCENT;
+
+        return response()->json([
+            'accent' => $accent,
+            'palette' => ColorPalette::fromAccent($accent),
         ]);
     }
 

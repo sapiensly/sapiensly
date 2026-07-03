@@ -112,6 +112,7 @@
     "settings.brand.palette_failed": "No se pudieron generar propuestas.",
     "settings.brand.palette_fallback": "IA no disponible — mostrando propuestas estándar.",
     "settings.brand.palette_charts": "Serie para gráficas",
+    "settings.brand.palette_current": "Paleta vigente",
     "system.mcp.title": "Acceso MCP",
     "system.mcp.page_description": "Conecta Claude Code y Claude web a esta organización vía MCP.",
     "system.mcp.web_title": "Conectar Claude (web)",

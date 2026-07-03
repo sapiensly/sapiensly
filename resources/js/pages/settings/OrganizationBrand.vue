@@ -15,7 +15,7 @@ import {
     Wand2,
 } from '@lucide/vue';
 import axios from 'axios';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { toast } from 'vue-sonner';
 
@@ -28,7 +28,17 @@ interface Brand {
     theme: string | null;
 }
 
-const props = defineProps<{ brand: Brand }>();
+// The deterministic palette every app surface derives from an accent — the same
+// shape the backend (ColorPalette) and the AI proposal endpoint return.
+interface Palette {
+    ramp: Record<string, string>;
+    soft: string;
+    contrast: string;
+    chart: string[];
+}
+
+// `palette` is the one currently in effect (derived from the saved accent).
+const props = defineProps<{ brand: Brand; palette: Palette }>();
 
 const { t } = useI18n();
 
@@ -127,17 +137,37 @@ interface PaletteProposal {
     name: string;
     accent: string;
     rationale: string;
-    palette: {
-        ramp: Record<string, string>;
-        soft: string;
-        contrast: string;
-        chart: string[];
-    };
+    palette: Palette;
 }
 
 const paletteBrief = ref('');
 const paletteGenerating = ref(false);
 const paletteProposals = ref<PaletteProposal[]>([]);
+
+// The palette currently in effect, shown live: seeded from the saved accent and
+// re-derived (server-side, no colour-maths port) whenever the accent changes.
+const activePalette = ref<Palette>(props.palette);
+const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
+let deriveTimer: ReturnType<typeof setTimeout> | undefined;
+
+watch(
+    () => form.accent_color,
+    (accent) => {
+        if (!HEX_RE.test(accent)) return;
+        clearTimeout(deriveTimer);
+        deriveTimer = setTimeout(async () => {
+            try {
+                const { data } = await axios.post(
+                    '/settings/organization/brand/palette',
+                    { accent },
+                );
+                activePalette.value = data.palette;
+            } catch {
+                // Keep the last good palette on a transient failure.
+            }
+        }, 250);
+    },
+);
 
 async function generatePalettes(): Promise<void> {
     paletteGenerating.value = true;
@@ -160,6 +190,7 @@ async function generatePalettes(): Promise<void> {
 /** Adopt a proposal's accent on the form; the Save button persists it. */
 function applyProposal(proposal: PaletteProposal): void {
     form.accent_color = proposal.accent;
+    activePalette.value = proposal.palette;
     toast.success(t('settings.brand.palette_applied'));
 }
 
@@ -424,6 +455,44 @@ const RAMP_STOPS = ['100', '300', '500', '700', '900'];
                         <Wand2 v-else class="size-3.5" />
                         {{ t('settings.brand.palette_generate') }}
                     </button>
+                </div>
+
+                <!-- The palette currently in effect, always shown so the admin
+                     sees the active brand colours (updates live with the accent). -->
+                <div class="mt-4 rounded-sp-sm border border-soft p-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-medium">{{
+                            t('settings.brand.palette_current')
+                        }}</span>
+                        <span class="flex items-center gap-1.5">
+                            <span
+                                class="size-4 rounded-full border border-soft"
+                                :style="{ background: accent }"
+                            />
+                            <span class="text-xs text-ink-muted">{{
+                                accent
+                            }}</span>
+                        </span>
+                    </div>
+                    <div class="mt-2 flex h-7 overflow-hidden rounded-xs">
+                        <span
+                            v-for="stop in RAMP_STOPS"
+                            :key="stop"
+                            class="flex-1"
+                            :style="{ background: activePalette.ramp[stop] }"
+                        />
+                    </div>
+                    <div class="mt-1.5 flex items-center gap-1.5">
+                        <span
+                            v-for="color in activePalette.chart"
+                            :key="color"
+                            class="size-3.5 rounded-full"
+                            :style="{ background: color }"
+                        />
+                        <span class="ml-1 text-[10px] text-ink-muted">{{
+                            t('settings.brand.palette_charts')
+                        }}</span>
+                    </div>
                 </div>
 
                 <div
