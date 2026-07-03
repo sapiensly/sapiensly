@@ -791,7 +791,7 @@ const scatter = computed(() => {
 </script>
 
 <template>
-    <div :class="['rounded-sp-sm border p-5', t.surface]">
+    <div :class="['flex h-full flex-col rounded-sp-sm border p-5', t.surface]">
         <header
             v-if="block.label"
             class="mb-3 flex items-center justify-between"
@@ -801,547 +801,576 @@ const scatter = computed(() => {
             </p>
         </header>
 
-        <p v-if="emptyState" :class="['py-8 text-center text-xs', t.textMuted]">
-            No data to plot.
-        </p>
-
-        <!-- Combo: bars + lines/areas on a shared X, with an optional 2nd Y axis -->
-        <template v-else-if="combo">
-            <ul class="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-                <li
-                    v-for="(s, i) in combo.legend"
-                    :key="i"
-                    class="flex items-center gap-1.5"
-                >
-                    <span
-                        class="inline-block shrink-0 rounded-xs"
-                        :class="s.type === 'bar' ? 'size-2.5' : 'h-0.5 w-3.5'"
-                        :style="{ background: s.color }"
-                    />
-                    <span class="truncate" :class="t.text">{{ s.label }}</span>
-                    <span
-                        v-if="s.secondary"
-                        :class="['text-[10px]', t.textMuted]"
-                        >(eje der.)</span
-                    >
-                </li>
-            </ul>
-            <svg
-                :viewBox="`0 0 ${combo.W} ${combo.H}`"
-                class="w-full"
-                :class="t.text"
+        <!-- Content fills the card's (equal-height) cell and centres, so a short
+             chart never leaves an empty gap below it in a row of taller cards. -->
+        <div class="flex flex-1 flex-col justify-center">
+            <p
+                v-if="emptyState"
+                :class="['py-8 text-center text-xs', t.textMuted]"
             >
-                <!-- left-axis gridlines + tick labels -->
-                <g
-                    v-for="(tk, i) in combo.leftTicks"
-                    :key="'lt' + i"
-                    :class="t.textMuted"
+                No data to plot.
+            </p>
+
+            <!-- Combo: bars + lines/areas on a shared X, with an optional 2nd Y axis -->
+            <template v-else-if="combo">
+                <ul class="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                    <li
+                        v-for="(s, i) in combo.legend"
+                        :key="i"
+                        class="flex items-center gap-1.5"
+                    >
+                        <span
+                            class="inline-block shrink-0 rounded-xs"
+                            :class="
+                                s.type === 'bar' ? 'size-2.5' : 'h-0.5 w-3.5'
+                            "
+                            :style="{ background: s.color }"
+                        />
+                        <span class="truncate" :class="t.text">{{
+                            s.label
+                        }}</span>
+                        <span
+                            v-if="s.secondary"
+                            :class="['text-[10px]', t.textMuted]"
+                            >(eje der.)</span
+                        >
+                    </li>
+                </ul>
+                <svg
+                    :viewBox="`0 0 ${combo.W} ${combo.H}`"
+                    class="w-full"
+                    :class="t.text"
                 >
-                    <line
-                        :x1="combo.padL"
-                        :y1="tk.y"
-                        :x2="combo.W - combo.padR"
-                        :y2="tk.y"
-                        stroke="currentColor"
-                        stroke-opacity="0.1"
-                    />
+                    <!-- left-axis gridlines + tick labels -->
+                    <g
+                        v-for="(tk, i) in combo.leftTicks"
+                        :key="'lt' + i"
+                        :class="t.textMuted"
+                    >
+                        <line
+                            :x1="combo.padL"
+                            :y1="tk.y"
+                            :x2="combo.W - combo.padR"
+                            :y2="tk.y"
+                            stroke="currentColor"
+                            stroke-opacity="0.1"
+                        />
+                        <text
+                            :x="tk.x"
+                            :y="tk.y + 3"
+                            text-anchor="end"
+                            fill="currentColor"
+                            fill-opacity="0.7"
+                            style="font-size: 8px"
+                        >
+                            {{ tk.label }}
+                        </text>
+                    </g>
+                    <!-- right-axis tick labels -->
                     <text
+                        v-for="(tk, i) in combo.rightTicks ?? []"
+                        :key="'rt' + i"
                         :x="tk.x"
                         :y="tk.y + 3"
-                        text-anchor="end"
+                        text-anchor="start"
                         fill="currentColor"
                         fill-opacity="0.7"
                         style="font-size: 8px"
                     >
                         {{ tk.label }}
                     </text>
-                </g>
-                <!-- right-axis tick labels -->
-                <text
-                    v-for="(tk, i) in combo.rightTicks ?? []"
-                    :key="'rt' + i"
-                    :x="tk.x"
-                    :y="tk.y + 3"
-                    text-anchor="start"
-                    fill="currentColor"
-                    fill-opacity="0.7"
-                    style="font-size: 8px"
-                >
-                    {{ tk.label }}
-                </text>
-                <!-- bars -->
-                <rect
-                    v-for="(b, i) in combo.bars"
-                    :key="'b' + i"
-                    :x="b.x"
-                    :y="b.y"
-                    :width="b.w"
-                    :height="b.h"
-                    :fill="b.color"
-                    rx="1"
-                >
-                    <title>{{ b.title }}</title>
-                </rect>
-                <!-- area fills then line strokes + points -->
-                <template v-for="(ln, i) in combo.lines" :key="'l' + i">
-                    <path
-                        v-if="ln.area"
-                        :d="ln.area"
-                        :fill="ln.color"
-                        fill-opacity="0.12"
-                    />
-                    <path
-                        :d="ln.path"
-                        fill="none"
-                        :stroke="ln.color"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    />
-                    <circle
-                        v-for="(p, j) in ln.points"
-                        :key="j"
-                        :cx="p.x"
-                        :cy="p.y"
-                        r="2.5"
-                        :fill="ln.color"
-                    />
-                </template>
-                <!-- x labels -->
-                <text
-                    v-for="(c, i) in combo.catLabels"
-                    :key="'x' + i"
-                    :x="c.x"
-                    :y="combo.baselineY + 14"
-                    text-anchor="middle"
-                    fill="currentColor"
-                    fill-opacity="0.7"
-                    style="font-size: 8px"
-                >
-                    {{ c.label }}
-                </text>
-            </svg>
-        </template>
-
-        <template
-            v-else-if="
-                block.chart_type === 'pie' || block.chart_type === 'donut'
-            "
-        >
-            <div class="flex items-center gap-6">
-                <svg viewBox="0 0 160 160" class="size-32 shrink-0">
-                    <path
-                        v-for="(slice, i) in pieSlices"
-                        :key="i"
-                        :d="slice.path"
-                        :fill="slice.color"
-                        stroke="rgba(0,0,0,0.15)"
-                        stroke-width="0.5"
-                    />
-                    <circle
-                        v-if="block.chart_type === 'donut'"
-                        cx="80"
-                        cy="80"
-                        r="36"
-                        fill="var(--sp-bg-secondary, #ffffff)"
-                    />
-                </svg>
-                <ul class="flex-1 space-y-1 text-xs">
-                    <li
-                        v-for="(slice, i) in pieSlices"
-                        :key="i"
-                        class="flex items-center justify-between gap-2"
+                    <!-- bars -->
+                    <rect
+                        v-for="(b, i) in combo.bars"
+                        :key="'b' + i"
+                        :x="b.x"
+                        :y="b.y"
+                        :width="b.w"
+                        :height="b.h"
+                        :fill="b.color"
+                        rx="1"
                     >
-                        <span class="flex min-w-0 items-center gap-2">
-                            <span
-                                class="size-2.5 shrink-0 rounded-xs"
-                                :style="{ background: slice.color }"
-                            />
-                            <span class="truncate" :class="t.text">{{
-                                slice.label
-                            }}</span>
-                        </span>
-                        <span :class="t.textMuted">
-                            {{ formatNumber(slice.value) }}
-                            <span class="ml-1 text-[10px] opacity-70"
-                                >{{ Math.round(slice.percent * 100) }}%</span
-                            >
-                        </span>
-                    </li>
-                </ul>
-            </div>
-        </template>
-
-        <template v-else-if="lineChart">
-            <!-- Series legend (only when there's more than one line) -->
-            <ul
-                v-if="!lineChart.single"
-                class="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px]"
-            >
-                <li
-                    v-for="(s, i) in lineChart.series"
-                    :key="i"
-                    class="flex items-center gap-1.5"
-                >
-                    <span
-                        class="inline-block h-0.5 w-3.5 shrink-0 rounded-xs"
-                        :style="{ background: s.color }"
-                    />
-                    <span class="truncate" :class="t.text">{{ s.label }}</span>
-                </li>
-            </ul>
-            <div class="h-56">
-                <svg
-                    :viewBox="`0 0 ${lineChart.W} ${lineChart.H}`"
-                    class="h-full w-full"
-                    preserveAspectRatio="xMidYMid meet"
-                    :class="t.text"
-                >
-                    <!-- horizontal gridlines + y-axis ticks -->
-                    <g
-                        v-for="(tk, i) in lineChart.yTicks"
-                        :key="'y' + i"
-                        :class="t.textMuted"
-                    >
-                        <line
-                            :x1="lineChart.padL"
-                            :y1="tk.y"
-                            :x2="lineChart.W - lineChart.padR"
-                            :y2="tk.y"
-                            stroke="currentColor"
-                            stroke-opacity="0.1"
-                        />
-                        <text
-                            :x="lineChart.padL - 5"
-                            :y="tk.y + 3"
-                            text-anchor="end"
-                            fill="currentColor"
-                            fill-opacity="0.6"
-                            style="font-size: 8px"
-                        >
-                            {{ tk.label }}
-                        </text>
-                    </g>
-                    <!-- each series: soft area fill, line stroke, small markers -->
-                    <template
-                        v-for="(s, si) in lineChart.series"
-                        :key="'s' + si"
-                    >
+                        <title>{{ b.title }}</title>
+                    </rect>
+                    <!-- area fills then line strokes + points -->
+                    <template v-for="(ln, i) in combo.lines" :key="'l' + i">
                         <path
-                            v-if="block.chart_type === 'area'"
-                            :d="s.area"
-                            :fill="s.color"
+                            v-if="ln.area"
+                            :d="ln.area"
+                            :fill="ln.color"
                             fill-opacity="0.12"
                         />
                         <path
-                            :d="s.line"
+                            :d="ln.path"
                             fill="none"
-                            :stroke="s.color"
+                            :stroke="ln.color"
                             stroke-width="2"
                             stroke-linecap="round"
                             stroke-linejoin="round"
                         />
                         <circle
-                            v-for="(p, j) in s.points"
+                            v-for="(p, j) in ln.points"
                             :key="j"
                             :cx="p.x"
                             :cy="p.y"
-                            r="2"
-                            :fill="s.color"
-                        >
-                            <title>
-                                {{ p.label }}: {{ formatNumber(p.value) }}
-                            </title>
-                        </circle>
+                            r="2.5"
+                            :fill="ln.color"
+                        />
                     </template>
-                    <!-- x-axis labels (thinned) -->
+                    <!-- x labels -->
                     <text
-                        v-for="(l, i) in lineChart.xLabels"
+                        v-for="(c, i) in combo.catLabels"
                         :key="'x' + i"
-                        :x="l.x"
-                        :y="lineChart.baselineY + 15"
+                        :x="c.x"
+                        :y="combo.baselineY + 14"
                         text-anchor="middle"
                         fill="currentColor"
-                        fill-opacity="0.6"
+                        fill-opacity="0.7"
                         style="font-size: 8px"
                     >
-                        {{ l.label }}
+                        {{ c.label }}
                     </text>
                 </svg>
-            </div>
-        </template>
+            </template>
 
-        <template v-else-if="block.chart_type === 'hbar'">
-            <!-- hbar = horizontal bars (progress-style) -->
-            <ul class="space-y-2">
-                <li v-for="(s, i) in series" :key="s.label" class="space-y-1">
-                    <div class="flex items-center justify-between text-[11px]">
-                        <span :class="t.text">{{ s.label }}</span>
-                        <span :class="['tabular-nums', t.textMuted]">{{
-                            formatNumber(s.value)
+            <template
+                v-else-if="
+                    block.chart_type === 'pie' || block.chart_type === 'donut'
+                "
+            >
+                <div class="flex items-center gap-6">
+                    <svg viewBox="0 0 160 160" class="size-32 shrink-0">
+                        <path
+                            v-for="(slice, i) in pieSlices"
+                            :key="i"
+                            :d="slice.path"
+                            :fill="slice.color"
+                            stroke="rgba(0,0,0,0.15)"
+                            stroke-width="0.5"
+                        />
+                        <circle
+                            v-if="block.chart_type === 'donut'"
+                            cx="80"
+                            cy="80"
+                            r="36"
+                            fill="var(--sp-bg-secondary, #ffffff)"
+                        />
+                    </svg>
+                    <ul class="flex-1 space-y-1 text-xs">
+                        <li
+                            v-for="(slice, i) in pieSlices"
+                            :key="i"
+                            class="flex items-center justify-between gap-2"
+                        >
+                            <span class="flex min-w-0 items-center gap-2">
+                                <span
+                                    class="size-2.5 shrink-0 rounded-xs"
+                                    :style="{ background: slice.color }"
+                                />
+                                <span class="truncate" :class="t.text">{{
+                                    slice.label
+                                }}</span>
+                            </span>
+                            <span :class="t.textMuted">
+                                {{ formatNumber(slice.value) }}
+                                <span class="ml-1 text-[10px] opacity-70"
+                                    >{{
+                                        Math.round(slice.percent * 100)
+                                    }}%</span
+                                >
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+            </template>
+
+            <template v-else-if="lineChart">
+                <!-- Series legend (only when there's more than one line) -->
+                <ul
+                    v-if="!lineChart.single"
+                    class="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px]"
+                >
+                    <li
+                        v-for="(s, i) in lineChart.series"
+                        :key="i"
+                        class="flex items-center gap-1.5"
+                    >
+                        <span
+                            class="inline-block h-0.5 w-3.5 shrink-0 rounded-xs"
+                            :style="{ background: s.color }"
+                        />
+                        <span class="truncate" :class="t.text">{{
+                            s.label
                         }}</span>
-                    </div>
-                    <div
-                        class="h-2 w-full overflow-hidden rounded-pill bg-surface"
+                    </li>
+                </ul>
+                <div class="min-h-[14rem] flex-1">
+                    <svg
+                        :viewBox="`0 0 ${lineChart.W} ${lineChart.H}`"
+                        class="h-full w-full"
+                        preserveAspectRatio="xMidYMid meet"
+                        :class="t.text"
+                    >
+                        <!-- horizontal gridlines + y-axis ticks -->
+                        <g
+                            v-for="(tk, i) in lineChart.yTicks"
+                            :key="'y' + i"
+                            :class="t.textMuted"
+                        >
+                            <line
+                                :x1="lineChart.padL"
+                                :y1="tk.y"
+                                :x2="lineChart.W - lineChart.padR"
+                                :y2="tk.y"
+                                stroke="currentColor"
+                                stroke-opacity="0.1"
+                            />
+                            <text
+                                :x="lineChart.padL - 5"
+                                :y="tk.y + 3"
+                                text-anchor="end"
+                                fill="currentColor"
+                                fill-opacity="0.6"
+                                style="font-size: 8px"
+                            >
+                                {{ tk.label }}
+                            </text>
+                        </g>
+                        <!-- each series: soft area fill, line stroke, small markers -->
+                        <template
+                            v-for="(s, si) in lineChart.series"
+                            :key="'s' + si"
+                        >
+                            <path
+                                v-if="block.chart_type === 'area'"
+                                :d="s.area"
+                                :fill="s.color"
+                                fill-opacity="0.12"
+                            />
+                            <path
+                                :d="s.line"
+                                fill="none"
+                                :stroke="s.color"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                            <circle
+                                v-for="(p, j) in s.points"
+                                :key="j"
+                                :cx="p.x"
+                                :cy="p.y"
+                                r="2"
+                                :fill="s.color"
+                            >
+                                <title>
+                                    {{ p.label }}: {{ formatNumber(p.value) }}
+                                </title>
+                            </circle>
+                        </template>
+                        <!-- x-axis labels (thinned) -->
+                        <text
+                            v-for="(l, i) in lineChart.xLabels"
+                            :key="'x' + i"
+                            :x="l.x"
+                            :y="lineChart.baselineY + 15"
+                            text-anchor="middle"
+                            fill="currentColor"
+                            fill-opacity="0.6"
+                            style="font-size: 8px"
+                        >
+                            {{ l.label }}
+                        </text>
+                    </svg>
+                </div>
+            </template>
+
+            <template v-else-if="block.chart_type === 'hbar'">
+                <!-- hbar = horizontal bars (progress-style) -->
+                <ul class="space-y-2">
+                    <li
+                        v-for="(s, i) in series"
+                        :key="s.label"
+                        class="space-y-1"
                     >
                         <div
-                            class="h-full rounded-pill transition-all"
-                            :style="{
-                                width: (s.value / maxValue) * 100 + '%',
-                                background: colorFor(s.label, i),
-                            }"
-                        />
-                    </div>
-                </li>
-            </ul>
-        </template>
+                            class="flex items-center justify-between text-[11px]"
+                        >
+                            <span :class="t.text">{{ s.label }}</span>
+                            <span :class="['tabular-nums', t.textMuted]">{{
+                                formatNumber(s.value)
+                            }}</span>
+                        </div>
+                        <div
+                            class="h-2 w-full overflow-hidden rounded-pill bg-surface"
+                        >
+                            <div
+                                class="h-full rounded-pill transition-all"
+                                :style="{
+                                    width: (s.value / maxValue) * 100 + '%',
+                                    background: colorFor(s.label, i),
+                                }"
+                            />
+                        </div>
+                    </li>
+                </ul>
+            </template>
 
-        <template v-else-if="block.chart_type === 'radar' && radar">
-            <svg
-                viewBox="0 0 220 220"
-                class="mx-auto w-full max-w-[280px]"
-                :class="t.text"
-            >
-                <circle
-                    v-for="ring in [0.34, 0.67, 1]"
-                    :key="ring"
-                    :cx="radar.cx"
-                    :cy="radar.cy"
-                    :r="radar.r * ring"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-opacity="0.12"
-                />
-                <line
-                    v-for="(a, i) in radar.axes"
-                    :key="'ax' + i"
-                    :x1="radar.cx"
-                    :y1="radar.cy"
-                    :x2="a.ax"
-                    :y2="a.ay"
-                    stroke="currentColor"
-                    stroke-opacity="0.12"
-                />
-                <path
-                    :d="radar.poly"
-                    :style="{
-                        fill: 'var(--sp-accent, #3B82F6)',
-                        stroke: 'var(--sp-accent, #3B82F6)',
-                    }"
-                    fill-opacity="0.2"
-                    stroke-width="2"
-                />
-                <circle
-                    v-for="(a, i) in radar.axes"
-                    :key="'pt' + i"
-                    :cx="a.px"
-                    :cy="a.py"
-                    r="3"
-                    :style="{ fill: 'var(--sp-accent, #3B82F6)' }"
-                />
-                <text
-                    v-for="(a, i) in radar.axes"
-                    :key="'lb' + i"
-                    :x="a.lx"
-                    :y="a.ly"
-                    text-anchor="middle"
-                    dominant-baseline="middle"
-                    fill="currentColor"
-                    fill-opacity="0.7"
-                    style="font-size: 8px"
+            <template v-else-if="block.chart_type === 'radar' && radar">
+                <svg
+                    viewBox="0 0 220 220"
+                    class="mx-auto w-full max-w-[280px]"
+                    :class="t.text"
                 >
-                    {{ a.label }}
-                </text>
-            </svg>
-        </template>
-
-        <template v-else-if="block.chart_type === 'treemap' && treemap">
-            <svg :viewBox="`0 0 ${treemap.W} ${treemap.H}`" class="w-full">
-                <g v-for="(r, i) in treemap.rects" :key="i">
-                    <rect
-                        :x="r.x + 1"
-                        :y="r.y + 1"
-                        :width="Math.max(0, r.w - 2)"
-                        :height="Math.max(0, r.h - 2)"
-                        :fill="r.color"
-                        rx="2"
+                    <circle
+                        v-for="ring in [0.34, 0.67, 1]"
+                        :key="ring"
+                        :cx="radar.cx"
+                        :cy="radar.cy"
+                        :r="radar.r * ring"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-opacity="0.12"
+                    />
+                    <line
+                        v-for="(a, i) in radar.axes"
+                        :key="'ax' + i"
+                        :x1="radar.cx"
+                        :y1="radar.cy"
+                        :x2="a.ax"
+                        :y2="a.ay"
+                        stroke="currentColor"
+                        stroke-opacity="0.12"
+                    />
+                    <path
+                        :d="radar.poly"
+                        :style="{
+                            fill: 'var(--sp-accent, #3B82F6)',
+                            stroke: 'var(--sp-accent, #3B82F6)',
+                        }"
+                        fill-opacity="0.2"
+                        stroke-width="2"
+                    />
+                    <circle
+                        v-for="(a, i) in radar.axes"
+                        :key="'pt' + i"
+                        :cx="a.px"
+                        :cy="a.py"
+                        r="3"
+                        :style="{ fill: 'var(--sp-accent, #3B82F6)' }"
                     />
                     <text
-                        v-if="r.w > 44 && r.h > 22"
-                        :x="r.x + 6"
-                        :y="r.y + 16"
-                        fill="#fff"
-                        style="font-size: 9px; font-weight: 600"
-                    >
-                        {{ r.label }}
-                    </text>
-                    <text
-                        v-if="r.w > 44 && r.h > 34"
-                        :x="r.x + 6"
-                        :y="r.y + 28"
-                        fill="#fff"
-                        fill-opacity="0.8"
+                        v-for="(a, i) in radar.axes"
+                        :key="'lb' + i"
+                        :x="a.lx"
+                        :y="a.ly"
+                        text-anchor="middle"
+                        dominant-baseline="middle"
+                        fill="currentColor"
+                        fill-opacity="0.7"
                         style="font-size: 8px"
                     >
-                        {{ formatNumber(r.value) }}
+                        {{ a.label }}
                     </text>
-                </g>
-            </svg>
-        </template>
+                </svg>
+            </template>
 
-        <template v-else-if="block.chart_type === 'scatter' && scatter">
-            <svg
-                :viewBox="`0 0 ${scatter.w} ${scatter.h}`"
-                class="w-full"
-                :class="t.text"
-            >
-                <line
-                    x1="18"
-                    :y1="scatter.h - 18"
-                    :x2="scatter.w - 8"
-                    :y2="scatter.h - 18"
-                    stroke="currentColor"
-                    stroke-opacity="0.15"
-                />
-                <line
-                    x1="18"
-                    y1="8"
-                    x2="18"
-                    :y2="scatter.h - 18"
-                    stroke="currentColor"
-                    stroke-opacity="0.15"
-                />
-                <circle
-                    v-for="(p, i) in scatter.points"
-                    :key="i"
-                    :cx="p.cx"
-                    :cy="p.cy"
-                    r="3.5"
-                    fill-opacity="0.7"
-                    :style="{ fill: 'var(--sp-accent, #3B82F6)' }"
-                />
-            </svg>
-        </template>
-
-        <template v-else-if="isMultiSeries && multi">
-            <!-- multi-series bar: stacked or grouped segments per category -->
-            <ul class="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-                <li
-                    v-for="(s, i) in multi.series"
-                    :key="i"
-                    class="flex items-center gap-1.5"
-                >
-                    <span
-                        class="size-2.5 shrink-0 rounded-xs"
-                        :style="{ background: s.color }"
-                    />
-                    <span class="truncate" :class="t.text">{{ s.label }}</span>
-                </li>
-            </ul>
-            <div class="flex h-48 items-end gap-3 px-2 pt-2">
-                <div
-                    v-for="(cat, ci) in multi.cats"
-                    :key="cat"
-                    class="flex h-full min-w-0 flex-1 items-end justify-center"
-                >
-                    <!-- stacked: one column of stacked segments -->
-                    <div
-                        v-if="multi.stacked"
-                        class="flex h-full w-full flex-col-reverse"
-                    >
-                        <div
-                            v-for="(val, si) in multi.data[ci]"
-                            :key="si"
-                            class="w-full transition-all first:rounded-t-xs"
-                            :style="{
-                                height: (val / multi.max) * 100 + '%',
-                                background: multi.series[si].color,
-                            }"
-                            :title="
-                                multi.series[si].label +
-                                ': ' +
-                                formatNumber(val)
-                            "
+            <template v-else-if="block.chart_type === 'treemap' && treemap">
+                <svg :viewBox="`0 0 ${treemap.W} ${treemap.H}`" class="w-full">
+                    <g v-for="(r, i) in treemap.rects" :key="i">
+                        <rect
+                            :x="r.x + 1"
+                            :y="r.y + 1"
+                            :width="Math.max(0, r.w - 2)"
+                            :height="Math.max(0, r.h - 2)"
+                            :fill="r.color"
+                            rx="2"
                         />
-                    </div>
-                    <!-- grouped: thin bars side by side -->
-                    <div
-                        v-else
-                        class="flex h-full w-full items-end justify-center gap-0.5"
+                        <text
+                            v-if="r.w > 44 && r.h > 22"
+                            :x="r.x + 6"
+                            :y="r.y + 16"
+                            fill="#fff"
+                            style="font-size: 9px; font-weight: 600"
+                        >
+                            {{ r.label }}
+                        </text>
+                        <text
+                            v-if="r.w > 44 && r.h > 34"
+                            :x="r.x + 6"
+                            :y="r.y + 28"
+                            fill="#fff"
+                            fill-opacity="0.8"
+                            style="font-size: 8px"
+                        >
+                            {{ formatNumber(r.value) }}
+                        </text>
+                    </g>
+                </svg>
+            </template>
+
+            <template v-else-if="block.chart_type === 'scatter' && scatter">
+                <svg
+                    :viewBox="`0 0 ${scatter.w} ${scatter.h}`"
+                    class="w-full"
+                    :class="t.text"
+                >
+                    <line
+                        x1="18"
+                        :y1="scatter.h - 18"
+                        :x2="scatter.w - 8"
+                        :y2="scatter.h - 18"
+                        stroke="currentColor"
+                        stroke-opacity="0.15"
+                    />
+                    <line
+                        x1="18"
+                        y1="8"
+                        x2="18"
+                        :y2="scatter.h - 18"
+                        stroke="currentColor"
+                        stroke-opacity="0.15"
+                    />
+                    <circle
+                        v-for="(p, i) in scatter.points"
+                        :key="i"
+                        :cx="p.cx"
+                        :cy="p.cy"
+                        r="3.5"
+                        fill-opacity="0.7"
+                        :style="{ fill: 'var(--sp-accent, #3B82F6)' }"
+                    />
+                </svg>
+            </template>
+
+            <template v-else-if="isMultiSeries && multi">
+                <!-- multi-series bar: stacked or grouped segments per category -->
+                <ul class="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                    <li
+                        v-for="(s, i) in multi.series"
+                        :key="i"
+                        class="flex items-center gap-1.5"
                     >
+                        <span
+                            class="size-2.5 shrink-0 rounded-xs"
+                            :style="{ background: s.color }"
+                        />
+                        <span class="truncate" :class="t.text">{{
+                            s.label
+                        }}</span>
+                    </li>
+                </ul>
+                <div
+                    class="flex min-h-[12rem] flex-1 items-end gap-3 px-2 pt-2"
+                >
+                    <div
+                        v-for="(cat, ci) in multi.cats"
+                        :key="cat"
+                        class="flex h-full min-w-0 flex-1 items-end justify-center"
+                    >
+                        <!-- stacked: one column of stacked segments -->
                         <div
-                            v-for="(val, si) in multi.data[ci]"
-                            :key="si"
-                            class="min-w-0 flex-1 rounded-t-xs transition-all"
+                            v-if="multi.stacked"
+                            class="flex h-full w-full flex-col-reverse"
+                        >
+                            <div
+                                v-for="(val, si) in multi.data[ci]"
+                                :key="si"
+                                class="w-full transition-all first:rounded-t-xs"
+                                :style="{
+                                    height: (val / multi.max) * 100 + '%',
+                                    background: multi.series[si].color,
+                                }"
+                                :title="
+                                    multi.series[si].label +
+                                    ': ' +
+                                    formatNumber(val)
+                                "
+                            />
+                        </div>
+                        <!-- grouped: thin bars side by side -->
+                        <div
+                            v-else
+                            class="flex h-full w-full items-end justify-center gap-0.5"
+                        >
+                            <div
+                                v-for="(val, si) in multi.data[ci]"
+                                :key="si"
+                                class="min-w-0 flex-1 rounded-t-xs transition-all"
+                                :style="{
+                                    height:
+                                        Math.max(2, (val / multi.max) * 100) +
+                                        '%',
+                                    background: multi.series[si].color,
+                                }"
+                                :title="
+                                    multi.series[si].label +
+                                    ': ' +
+                                    formatNumber(val)
+                                "
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-3 px-2 pt-1">
+                    <div
+                        v-for="cat in multi.cats"
+                        :key="cat"
+                        :class="[
+                            'min-w-0 flex-1 truncate text-center text-[11px]',
+                            t.text,
+                        ]"
+                        :title="cat"
+                    >
+                        {{ cat }}
+                    </div>
+                </div>
+            </template>
+
+            <template v-else>
+                <!-- bar = vertical columns -->
+                <div
+                    class="flex min-h-[12rem] flex-1 items-end gap-3 px-2 pt-2"
+                >
+                    <div
+                        v-for="(s, i) in series"
+                        :key="s.label"
+                        class="flex h-full min-w-0 flex-1 flex-col items-stretch justify-end gap-1"
+                    >
+                        <span
+                            :class="[
+                                'text-center text-[11px] tabular-nums',
+                                t.textMuted,
+                            ]"
+                        >
+                            {{ formatNumber(s.value) }}
+                        </span>
+                        <div
+                            class="rounded-t-xs transition-all"
                             :style="{
                                 height:
-                                    Math.max(2, (val / multi.max) * 100) + '%',
-                                background: multi.series[si].color,
+                                    Math.max(2, (s.value / maxValue) * 100) +
+                                    '%',
+                                background: colorFor(s.label, i),
                             }"
-                            :title="
-                                multi.series[si].label +
-                                ': ' +
-                                formatNumber(val)
-                            "
+                            :title="s.label + ': ' + formatNumber(s.value)"
                         />
                     </div>
                 </div>
-            </div>
-            <div class="flex gap-3 px-2 pt-1">
-                <div
-                    v-for="cat in multi.cats"
-                    :key="cat"
-                    :class="[
-                        'min-w-0 flex-1 truncate text-center text-[11px]',
-                        t.text,
-                    ]"
-                    :title="cat"
-                >
-                    {{ cat }}
-                </div>
-            </div>
-        </template>
-
-        <template v-else>
-            <!-- bar = vertical columns -->
-            <div class="flex h-48 items-end gap-3 px-2 pt-2">
-                <div
-                    v-for="(s, i) in series"
-                    :key="s.label"
-                    class="flex h-full min-w-0 flex-1 flex-col items-stretch justify-end gap-1"
-                >
-                    <span
-                        :class="[
-                            'text-center text-[11px] tabular-nums',
-                            t.textMuted,
-                        ]"
-                    >
-                        {{ formatNumber(s.value) }}
-                    </span>
+                <div class="flex gap-3 px-2 pt-1">
                     <div
-                        class="rounded-t-xs transition-all"
-                        :style="{
-                            height:
-                                Math.max(2, (s.value / maxValue) * 100) + '%',
-                            background: colorFor(s.label, i),
-                        }"
-                        :title="s.label + ': ' + formatNumber(s.value)"
-                    />
+                        v-for="s in series"
+                        :key="s.label"
+                        :class="[
+                            'min-w-0 flex-1 truncate text-center text-[11px]',
+                            t.text,
+                        ]"
+                        :title="s.label"
+                    >
+                        {{ s.label }}
+                    </div>
                 </div>
-            </div>
-            <div class="flex gap-3 px-2 pt-1">
-                <div
-                    v-for="s in series"
-                    :key="s.label"
-                    :class="[
-                        'min-w-0 flex-1 truncate text-center text-[11px]',
-                        t.text,
-                    ]"
-                    :title="s.label"
-                >
-                    {{ s.label }}
-                </div>
-            </div>
-        </template>
+            </template>
+        </div>
     </div>
 </template>
