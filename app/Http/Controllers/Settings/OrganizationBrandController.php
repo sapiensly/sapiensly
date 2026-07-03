@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Branding\PaletteProposalService;
 use App\Support\Branding\OrganizationBrand;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -57,6 +58,27 @@ class OrganizationBrandController extends Controller
         $organization->save();
 
         return back()->with('success', __('Brandbook updated.'));
+    }
+
+    /**
+     * Generate accent-colour proposals for the brand (AI when a provider is
+     * available, a curated set otherwise). Each proposal ships with the full
+     * derived palette so the form can preview exactly what apps will inherit;
+     * saving still goes through {@see self::update} like any manual pick.
+     */
+    public function proposePalettes(Request $request, PaletteProposalService $palettes): JsonResponse
+    {
+        $organization = $this->authorizeOrganization($request);
+
+        $validated = $request->validate([
+            'brief' => ['nullable', 'string', 'max:600'],
+        ]);
+
+        return response()->json($palettes->propose(
+            trim((string) ($validated['brief'] ?? '')),
+            $organization->brandbook()->accentColor,
+            $request->user(),
+        ));
     }
 
     /**

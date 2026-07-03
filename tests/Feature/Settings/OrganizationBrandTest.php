@@ -5,6 +5,8 @@ use App\Enums\MembershipStatus;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\User;
+use App\Services\Branding\PaletteProposalService;
+use App\Support\Branding\ColorPalette;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -105,4 +107,33 @@ it('rejects a non-image asset upload', function () {
         ])
         ->assertStatus(422)
         ->assertJsonValidationErrorFor('file');
+});
+
+it('returns palette proposals for an org admin', function () {
+    $this->mock(PaletteProposalService::class)
+        ->shouldReceive('propose')
+        ->once()
+        ->withArgs(fn (string $brief) => $brief === 'fintech mexicana')
+        ->andReturn([
+            'proposals' => [[
+                'name' => 'Executive Indigo',
+                'accent' => '#4f46e5',
+                'rationale' => 'Trustworthy.',
+                'palette' => ColorPalette::fromAccent('#4f46e5'),
+            ]],
+            'generated_by' => 'ai',
+        ]);
+
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/palette-proposals', ['brief' => 'fintech mexicana'])
+        ->assertOk()
+        ->assertJsonPath('generated_by', 'ai')
+        ->assertJsonPath('proposals.0.accent', '#4f46e5')
+        ->assertJsonStructure(['proposals' => [['name', 'accent', 'rationale', 'palette' => ['ramp', 'soft', 'contrast', 'chart']]]]);
+});
+
+it('forbids a non-admin from generating palette proposals', function () {
+    $this->actingAs($this->member)
+        ->postJson('/settings/organization/brand/palette-proposals', ['brief' => 'x'])
+        ->assertForbidden();
 });

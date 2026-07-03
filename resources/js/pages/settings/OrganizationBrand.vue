@@ -5,7 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { ImagePlus, Loader2, Palette, Sparkles, Type } from '@lucide/vue';
+import {
+    Check,
+    ImagePlus,
+    Loader2,
+    Palette,
+    Sparkles,
+    Type,
+    Wand2,
+} from '@lucide/vue';
 import axios from 'axios';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -114,6 +122,50 @@ const previewHeaderStyle = computed(() =>
           }
         : {},
 );
+
+// AI palette proposals: the model picks accent directions; the server expands
+// each into the exact derived palette apps inherit (ramp + chart series).
+interface PaletteProposal {
+    name: string;
+    accent: string;
+    rationale: string;
+    palette: {
+        ramp: Record<string, string>;
+        soft: string;
+        contrast: string;
+        chart: string[];
+    };
+}
+
+const paletteBrief = ref('');
+const paletteGenerating = ref(false);
+const paletteProposals = ref<PaletteProposal[]>([]);
+
+async function generatePalettes(): Promise<void> {
+    paletteGenerating.value = true;
+    try {
+        const { data } = await axios.post(
+            '/settings/organization/brand/palette-proposals',
+            { brief: paletteBrief.value || null },
+        );
+        paletteProposals.value = data.proposals ?? [];
+        if (data.generated_by === 'fallback') {
+            toast.info(t('settings.brand.palette_fallback'));
+        }
+    } catch {
+        toast.error(t('settings.brand.palette_failed'));
+    } finally {
+        paletteGenerating.value = false;
+    }
+}
+
+/** Adopt a proposal's accent on the form; the Save button persists it. */
+function applyProposal(proposal: PaletteProposal): void {
+    form.accent_color = proposal.accent;
+    toast.success(t('settings.brand.palette_applied'));
+}
+
+const RAMP_STOPS = ['100', '300', '500', '700', '900'];
 </script>
 
 <template>
@@ -320,6 +372,111 @@ const previewHeaderStyle = computed(() =>
                         {{ t('settings.brand.logo_bg_hint') }}
                     </p>
                     <InputError :message="form.errors.logo_bg_color" />
+                </div>
+            </SettingsCard>
+
+            <!-- AI palette generator: propose accents, preview the derived
+                 palette, adopt one into the form (Save persists it). -->
+            <SettingsCard
+                :icon="Wand2"
+                :title="t('settings.brand.palette_title')"
+                :description="t('settings.brand.palette_hint')"
+                tint="var(--sp-accent-teal)"
+            >
+                <div class="flex items-center gap-2">
+                    <Input
+                        v-model="paletteBrief"
+                        class="h-9"
+                        maxlength="600"
+                        :placeholder="t('settings.brand.palette_placeholder')"
+                        @keydown.enter.prevent="generatePalettes"
+                    />
+                    <button
+                        type="button"
+                        :disabled="paletteGenerating"
+                        class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sp-sm border border-soft px-3 text-xs font-medium text-ink-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
+                        @click="generatePalettes"
+                    >
+                        <Loader2
+                            v-if="paletteGenerating"
+                            class="size-3.5 animate-spin"
+                        />
+                        <Wand2 v-else class="size-3.5" />
+                        {{ t('settings.brand.palette_generate') }}
+                    </button>
+                </div>
+
+                <div
+                    v-if="paletteProposals.length"
+                    class="mt-4 grid gap-3 sm:grid-cols-2"
+                >
+                    <div
+                        v-for="proposal in paletteProposals"
+                        :key="proposal.accent"
+                        class="rounded-sp-sm border p-3 transition-colors"
+                        :class="
+                            form.accent_color === proposal.accent
+                                ? 'border-accent-blue'
+                                : 'border-soft'
+                        "
+                    >
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-sm font-medium">{{
+                                proposal.name
+                            }}</span>
+                            <span class="text-xs text-ink-muted">{{
+                                proposal.accent
+                            }}</span>
+                        </div>
+
+                        <!-- The exact derived palette apps inherit: the tint/
+                             shade ramp plus the chart series. -->
+                        <div class="mt-2 flex h-7 overflow-hidden rounded-xs">
+                            <span
+                                v-for="stop in RAMP_STOPS"
+                                :key="stop"
+                                class="flex-1"
+                                :style="{
+                                    background: proposal.palette.ramp[stop],
+                                }"
+                            />
+                        </div>
+                        <div class="mt-1.5 flex items-center gap-1.5">
+                            <span
+                                v-for="color in proposal.palette.chart"
+                                :key="color"
+                                class="size-3.5 rounded-full"
+                                :style="{ background: color }"
+                            />
+                            <span class="ml-1 text-[10px] text-ink-muted">{{
+                                t('settings.brand.palette_charts')
+                            }}</span>
+                        </div>
+
+                        <p class="mt-2 text-xs text-ink-muted">
+                            {{ proposal.rationale }}
+                        </p>
+
+                        <button
+                            type="button"
+                            class="mt-2 inline-flex h-8 items-center gap-1.5 rounded-sp-sm px-3 text-xs font-medium transition-opacity hover:opacity-90"
+                            :style="{
+                                background: proposal.accent,
+                                color: proposal.palette.contrast,
+                            }"
+                            @click="applyProposal(proposal)"
+                        >
+                            <Check
+                                v-if="form.accent_color === proposal.accent"
+                                class="size-3.5"
+                            />
+                            {{
+                                form.accent_color === proposal.accent
+                                    ? t('settings.brand.palette_selected')
+                                    : t('settings.brand.palette_use')
+                            }}
+                        </button>
+                    </div>
                 </div>
             </SettingsCard>
 

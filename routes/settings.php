@@ -32,6 +32,7 @@ Route::middleware([
     Route::get('settings/organization/brand', [OrganizationBrandController::class, 'show'])->name('organization.brand.show');
     Route::put('settings/organization/brand', [OrganizationBrandController::class, 'update'])->name('organization.brand.update');
     Route::post('settings/organization/brand/asset', [OrganizationBrandController::class, 'uploadAsset'])->name('organization.brand.asset');
+    Route::post('settings/organization/brand/palette-proposals', [OrganizationBrandController::class, 'proposePalettes'])->name('organization.brand.palettes');
 
     Route::get('settings/sso', [SsoConnectionController::class, 'show'])->name('sso.show');
     Route::put('settings/sso', [SsoConnectionController::class, 'update'])->name('sso.update');
