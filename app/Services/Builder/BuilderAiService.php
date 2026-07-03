@@ -1366,8 +1366,8 @@ PROMPT;
         if ($brand->logoUrl !== null) {
             $lines[] = '  logo: '.$brand->logoUrl;
         }
-        if ($brand->iconEmoji !== null || $brand->iconUrl !== null) {
-            $lines[] = '  icon: '.($brand->iconEmoji ?? $brand->iconUrl);
+        if ($brand->iconUrl !== null) {
+            $lines[] = '  icon: '.$brand->iconUrl;
         }
 
         return implode("\n", $lines);

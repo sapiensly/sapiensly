@@ -5,17 +5,17 @@ use App\Support\Branding\OrganizationBrand;
 it('normalizes and drops invalid values from the stored array', function () {
     $brand = OrganizationBrand::fromArray([
         'logo_url' => '  https://cdn.example.com/logo.png  ',
+        'icon_url' => '  https://cdn.example.com/icon.png  ',
         'accent_color' => '#1A2B3C',
         'font' => 'comic',          // not in the allowed set
         'theme' => 'dark',
-        'icon_emoji' => '🚀',
     ]);
 
     expect($brand->logoUrl)->toBe('https://cdn.example.com/logo.png') // trimmed
+        ->and($brand->iconUrl)->toBe('https://cdn.example.com/icon.png') // trimmed
         ->and($brand->accentColor)->toBe('#1A2B3C')
         ->and($brand->font)->toBeNull()              // invalid enum dropped
-        ->and($brand->theme)->toBe('dark')
-        ->and($brand->iconEmoji)->toBe('🚀');
+        ->and($brand->theme)->toBe('dark');
 });
 
 it('drops an invalid accent hex', function () {

@@ -22,7 +22,6 @@ import { toast } from 'vue-sonner';
 interface Brand {
     logo_url: string | null;
     icon_url: string | null;
-    icon_emoji: string | null;
     accent_color: string | null;
     logo_bg_color: string | null;
     font: string | null;
@@ -40,7 +39,6 @@ const DEFAULT_ACCENT = '#0096ff';
 const form = useForm({
     logo_url: props.brand.logo_url ?? '',
     icon_url: props.brand.icon_url ?? '',
-    icon_emoji: props.brand.icon_emoji ?? '',
     accent_color: props.brand.accent_color ?? DEFAULT_ACCENT,
     logo_bg_color: props.brand.logo_bg_color ?? '',
     font: props.brand.font ?? '',
@@ -193,9 +191,6 @@ const RAMP_STOPS = ['100', '300', '500', '700', '900'];
                             alt="logo"
                             class="h-6 max-w-[140px] object-contain"
                         />
-                        <span v-else-if="form.icon_emoji" class="text-xl">{{
-                            form.icon_emoji
-                        }}</span>
                         <img
                             v-else-if="form.icon_url"
                             :src="form.icon_url"
@@ -231,6 +226,20 @@ const RAMP_STOPS = ['100', '300', '500', '700', '900'];
                 <div class="space-y-1.5">
                     <Label>{{ t('settings.brand.logo') }}</Label>
                     <div class="flex items-center gap-2">
+                        <span
+                            class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xs border border-soft bg-surface"
+                        >
+                            <img
+                                v-if="form.logo_url"
+                                :src="form.logo_url"
+                                alt="logo"
+                                class="size-full object-contain"
+                            />
+                            <ImagePlus
+                                v-else
+                                class="size-4 text-ink-muted/60"
+                            />
+                        </span>
                         <Input
                             v-model="form.logo_url"
                             class="h-9"
@@ -256,43 +265,46 @@ const RAMP_STOPS = ['100', '300', '500', '700', '900'];
                     <InputError :message="form.errors.logo_url" />
                 </div>
 
-                <div class="grid gap-3 sm:grid-cols-2">
-                    <div class="space-y-1.5">
-                        <Label>{{ t('settings.brand.icon') }}</Label>
-                        <div class="flex items-center gap-2">
-                            <Input
-                                v-model="form.icon_url"
-                                class="h-9"
-                                placeholder="https://… or upload"
+                <div class="space-y-1.5">
+                    <Label>{{ t('settings.brand.icon') }}</Label>
+                    <div class="flex items-center gap-2">
+                        <span
+                            class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xs border border-soft bg-surface"
+                        >
+                            <img
+                                v-if="form.icon_url"
+                                :src="form.icon_url"
+                                alt="icon"
+                                class="size-full object-cover"
                             />
-                            <label
-                                class="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
-                            >
-                                <Loader2
-                                    v-if="uploading.icon"
-                                    class="size-3.5 animate-spin"
-                                />
-                                <ImagePlus v-else class="size-3.5" />
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    class="hidden"
-                                    @change="uploadAsset('icon', $event)"
-                                />
-                            </label>
-                        </div>
-                        <InputError :message="form.errors.icon_url" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label>{{ t('settings.brand.icon_emoji') }}</Label>
+                            <ImagePlus
+                                v-else
+                                class="size-4 text-ink-muted/60"
+                            />
+                        </span>
                         <Input
-                            v-model="form.icon_emoji"
+                            v-model="form.icon_url"
                             class="h-9"
-                            maxlength="8"
-                            placeholder="🚀"
+                            placeholder="https://… or upload"
                         />
-                        <InputError :message="form.errors.icon_emoji" />
+                        <label
+                            class="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                        >
+                            <Loader2
+                                v-if="uploading.icon"
+                                class="size-3.5 animate-spin"
+                            />
+                            <ImagePlus v-else class="size-3.5" />
+                            {{ t('settings.brand.upload') }}
+                            <input
+                                type="file"
+                                accept="image/*"
+                                class="hidden"
+                                @change="uploadAsset('icon', $event)"
+                            />
+                        </label>
                     </div>
+                    <InputError :message="form.errors.icon_url" />
                 </div>
             </SettingsCard>
 

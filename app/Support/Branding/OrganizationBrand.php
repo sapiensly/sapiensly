@@ -25,7 +25,6 @@ final class OrganizationBrand
     public function __construct(
         public readonly ?string $logoUrl = null,
         public readonly ?string $iconUrl = null,
-        public readonly ?string $iconEmoji = null,
         public readonly ?string $accentColor = null,
         public readonly ?string $logoBgColor = null,
         public readonly ?string $font = null,
@@ -42,7 +41,6 @@ final class OrganizationBrand
         return new self(
             logoUrl: self::str($data['logo_url'] ?? null),
             iconUrl: self::str($data['icon_url'] ?? null),
-            iconEmoji: self::str($data['icon_emoji'] ?? null),
             accentColor: self::hex($data['accent_color'] ?? null),
             logoBgColor: self::hex($data['logo_bg_color'] ?? null),
             font: in_array($data['font'] ?? null, self::FONTS, true) ? $data['font'] : null,
@@ -61,7 +59,6 @@ final class OrganizationBrand
         return [
             'logo_url' => $this->logoUrl,
             'icon_url' => $this->iconUrl,
-            'icon_emoji' => $this->iconEmoji,
             'accent_color' => $this->accentColor,
             'logo_bg_color' => $this->logoBgColor,
             'font' => $this->font,
@@ -99,8 +96,7 @@ final class OrganizationBrand
         if ($this->theme !== null && empty($settings['theme'])) {
             $settings['theme'] = $this->theme;
         }
-        $brandIcon = $this->iconEmoji ?? $this->iconUrl;
-        if ($this->logoUrl !== null || $this->logoBgColor !== null || $brandIcon !== null) {
+        if ($this->logoUrl !== null || $this->logoBgColor !== null || $this->iconUrl !== null) {
             $brand = $settings['brand'] ?? [];
             if ($this->logoUrl !== null && empty($brand['logo'])) {
                 $brand['logo'] = $this->logoUrl;
@@ -108,8 +104,8 @@ final class OrganizationBrand
             if ($this->logoBgColor !== null && empty($brand['header_bg'])) {
                 $brand['header_bg'] = $this->logoBgColor;
             }
-            if ($brandIcon !== null && empty($brand['icon'])) {
-                $brand['icon'] = $brandIcon;
+            if ($this->iconUrl !== null && empty($brand['icon'])) {
+                $brand['icon'] = $this->iconUrl;
             }
             $settings['brand'] = $brand;
         }

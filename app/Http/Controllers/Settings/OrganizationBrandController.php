@@ -28,7 +28,7 @@ class OrganizationBrandController extends Controller
 {
     /** The brand fields accepted from the form, in canonical (stored) vocabulary. */
     private const FIELDS = [
-        'logo_url', 'icon_url', 'icon_emoji', 'accent_color', 'logo_bg_color', 'font', 'theme',
+        'logo_url', 'icon_url', 'accent_color', 'logo_bg_color', 'font', 'theme',
     ];
 
     /** Content storage prefix (under the tenant partition) for brand assets. */
@@ -61,7 +61,6 @@ class OrganizationBrandController extends Controller
         $validated = $request->validate([
             'logo_url' => ['nullable', 'string', 'max:2000'],
             'icon_url' => ['nullable', 'string', 'max:2000'],
-            'icon_emoji' => ['nullable', 'string', 'max:16'],
             'accent_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'logo_bg_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'font' => ['nullable', Rule::in(OrganizationBrand::FONTS)],
