@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountSwitchController;
+use App\Http\Controllers\Settings\OrganizationBrandController;
 use App\Http\Controllers\Tools\ToolOAuth2Controller;
 use App\Http\Controllers\WidgetAssetController;
 use Illuminate\Support\Facades\Auth;
@@ -14,6 +15,13 @@ Route::get('/', fn () => Auth::check()
 // Widget asset route (public, no auth)
 Route::get('widget/v1/widget.js', [WidgetAssetController::class, 'script'])
     ->name('widget.script');
+
+// Brand logo/icon serving (public, no auth) — brand assets are embedded in app
+// headers, public chatbot widgets and decks. Streams from the tenant cloud disk;
+// the filename is constrained so it can't escape the org's brand prefix.
+Route::get('brand-asset/{organization}/{filename}', [OrganizationBrandController::class, 'showAsset'])
+    ->where('filename', '[A-Za-z0-9._-]+')
+    ->name('organization.brand.asset.show');
 
 Route::middleware([
     'auth',

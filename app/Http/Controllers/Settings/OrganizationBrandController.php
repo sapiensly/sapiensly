@@ -6,14 +6,18 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\Branding\PaletteProposalService;
+use App\Services\Storage\TenantStorage;
 use App\Support\Branding\OrganizationBrand;
+use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Manages the organization Brandbook (logo, icon, colours, font) — the central
@@ -26,6 +30,20 @@ class OrganizationBrandController extends Controller
     private const FIELDS = [
         'logo_url', 'icon_url', 'icon_emoji', 'accent_color', 'logo_bg_color', 'font', 'theme',
     ];
+
+    /** Content storage prefix (under the tenant partition) for brand assets. */
+    private const ASSET_DIR = 'org-brand';
+
+    /** Upload extension → served Content-Type. We control the extension on write. */
+    private const ASSET_MIME = [
+        'png' => 'image/png',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'svg' => 'image/svg+xml',
+        'webp' => 'image/webp',
+    ];
+
+    public function __construct(private readonly TenantStorage $tenantStorage) {}
 
     public function show(Request $request): Response
     {
@@ -82,8 +100,12 @@ class OrganizationBrandController extends Controller
     }
 
     /**
-     * Upload a logo/icon image to the public disk and return its URL, so the form
-     * can store it like a pasted URL (assets and URLs are interchangeable).
+     * Upload a logo/icon image and return its URL, so the form can store it like a
+     * pasted URL (assets and URLs are interchangeable). Bytes land on the tenant's
+     * cloud disk (TenantStorage → the org/personal CloudProvider, else global S3),
+     * NEVER the local disk — brand assets must survive deploys/scale events and be
+     * reachable from every instance. Refuses with 503 if no object storage is
+     * wired, rather than silently persisting to ephemeral local storage.
      */
     public function uploadAsset(Request $request): JsonResponse
     {
@@ -94,11 +116,62 @@ class OrganizationBrandController extends Controller
             'file' => ['required', 'file', 'mimes:png,jpg,jpeg,svg,webp', 'max:2048'],
         ]);
 
-        $path = $request->file('file')->store("org-brand/{$organization->id}", 'public');
+        $uploaded = $request->file('file');
+        $ext = strtolower($uploaded->getClientOriginalExtension() ?: 'png');
+        $filename = $validated['kind'].'-'.Str::lower((string) Str::ulid()).'.'.$ext;
+
+        // Owner-aware disk (throws → 503 when no S3 is configured). The tenant
+        // partition prefix keeps a shared global bucket isolated per org.
+        $diskName = $this->tenantStorage->diskNameForOwner($organization->id, null);
+        $relativePath = TenantPath::scope($organization->id, null, self::ASSET_DIR.'/'.$filename);
+
+        $this->tenantStorage->diskFromName($diskName)->putFileAs(
+            dirname($relativePath),
+            $uploaded,
+            basename($relativePath),
+        );
 
         return response()->json([
             'kind' => $validated['kind'],
-            'url' => Storage::disk('public')->url($path),
+            'url' => route('organization.brand.asset.show', [
+                'organization' => $organization->id,
+                'filename' => $filename,
+            ]),
+        ]);
+    }
+
+    /**
+     * Publicly stream a brand asset from the tenant's cloud disk. Brand logos and
+     * icons are public by nature — embedded in app headers, chatbot widgets on
+     * external sites, and decks — so this route is unauthenticated. The disk is
+     * re-resolved from the owning org (no disk name is trusted from the URL), and
+     * the filename is regex-constrained on the route so the reconstructed path can
+     * never escape the org's own brand prefix.
+     */
+    public function showAsset(Organization $organization, string $filename): StreamedResponse
+    {
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if (! isset(self::ASSET_MIME[$ext])) {
+            throw new NotFoundHttpException('Asset not found.');
+        }
+
+        $relativePath = TenantPath::scope($organization->id, null, self::ASSET_DIR.'/'.$filename);
+
+        try {
+            $disk = $this->tenantStorage->diskFromName(
+                $this->tenantStorage->diskNameForOwner($organization->id, null),
+            );
+        } catch (\Throwable) {
+            throw new NotFoundHttpException('Asset not found.');
+        }
+
+        if (! $disk->exists($relativePath)) {
+            throw new NotFoundHttpException('Asset not found.');
+        }
+
+        return $disk->response($relativePath, $filename, [
+            'Content-Type' => self::ASSET_MIME[$ext],
+            'Cache-Control' => 'public, max-age=31536000, immutable',
         ]);
     }
 

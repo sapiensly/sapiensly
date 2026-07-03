@@ -82,10 +82,21 @@ it('forbids a non-admin member from editing the brand', function () {
     expect($this->org->refresh()->brand)->toBeNull();
 });
 
-it('uploads a logo asset to the public disk and returns its url', function () {
-    Storage::fake('public');
+/** Wire a fake global S3 disk so TenantStorage resolves to it (no local fallback). */
+function fakeCloudStorage(): void
+{
+    config([
+        'filesystems.disks.s3.key' => 'test-key',
+        'filesystems.disks.s3.secret' => 'test-secret',
+        'filesystems.disks.s3.bucket' => 'test-bucket',
+    ]);
+    Storage::fake('s3');
+}
 
-    $this->actingAs($this->owner)
+it('uploads a logo asset to the tenant cloud disk (not local) and returns a serve url', function () {
+    fakeCloudStorage();
+
+    $response = $this->actingAs($this->owner)
         ->postJson('/settings/organization/brand/asset', [
             'kind' => 'logo',
             'file' => UploadedFile::fake()->image('logo.png', 200, 80),
@@ -94,11 +105,55 @@ it('uploads a logo asset to the public disk and returns its url', function () {
         ->assertJsonPath('kind', 'logo')
         ->assertJsonStructure(['url']);
 
-    expect(Storage::disk('public')->allFiles("org-brand/{$this->org->id}"))->not->toBeEmpty();
+    // Bytes land on the cloud disk under the tenant partition, never local.
+    $files = Storage::disk('s3')->allFiles("org/{$this->org->id}/org-brand");
+    expect($files)->not->toBeEmpty();
+
+    // The returned url is the public serve route for this org's asset.
+    expect($response->json('url'))->toContain("brand-asset/{$this->org->id}/logo-");
+});
+
+it('refuses the upload with 503 when no object storage is configured', function () {
+    config([
+        'filesystems.disks.s3.key' => '',
+        'filesystems.disks.s3.secret' => '',
+        'filesystems.disks.s3.bucket' => '',
+    ]);
+
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/asset', [
+            'kind' => 'logo',
+            'file' => UploadedFile::fake()->image('logo.png', 200, 80),
+        ])
+        ->assertStatus(503)
+        ->assertJsonPath('error', 'storage_not_configured');
+});
+
+it('publicly serves an uploaded brand asset without auth', function () {
+    fakeCloudStorage();
+
+    $url = $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/asset', [
+            'kind' => 'icon',
+            'file' => UploadedFile::fake()->image('icon.png', 64, 64),
+        ])
+        ->json('url');
+
+    // No acting user: the serve route is public (embedded in widgets/decks).
+    $this->get($url)
+        ->assertOk()
+        ->assertHeader('Content-Type', 'image/png');
+});
+
+it('404s a brand asset serve for a missing file', function () {
+    fakeCloudStorage();
+
+    $this->get("/brand-asset/{$this->org->id}/logo-does-not-exist.png")
+        ->assertNotFound();
 });
 
 it('rejects a non-image asset upload', function () {
-    Storage::fake('public');
+    fakeCloudStorage();
 
     $this->actingAs($this->owner)
         ->postJson('/settings/organization/brand/asset', [
@@ -107,6 +162,17 @@ it('rejects a non-image asset upload', function () {
         ])
         ->assertStatus(422)
         ->assertJsonValidationErrorFor('file');
+});
+
+it('forbids a non-admin from uploading a brand asset', function () {
+    fakeCloudStorage();
+
+    $this->actingAs($this->member)
+        ->postJson('/settings/organization/brand/asset', [
+            'kind' => 'logo',
+            'file' => UploadedFile::fake()->image('logo.png', 200, 80),
+        ])
+        ->assertForbidden();
 });
 
 it('returns palette proposals for an org admin', function () {
