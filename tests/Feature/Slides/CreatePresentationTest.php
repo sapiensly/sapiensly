@@ -72,6 +72,43 @@ it('validates a correct deck and rejects broken ones with precise errors', funct
         ->toContain('slides.2.series: 1 to 1 series');
 });
 
+it('accepts a roadmap slide and rejects out-of-range bar spans', function () {
+    $validator = new DeckValidator;
+
+    $errors = $validator->validate([
+        'title' => 'Deck',
+        'slides' => [[
+            'layout' => 'roadmap',
+            'title' => 'Plan 2026',
+            'periods' => ['Q1', 'Q2', 'Q3', 'Q4'],
+            'lanes' => [
+                ['name' => 'Producto', 'bars' => [
+                    ['label' => 'Fase uno', 'start' => 1, 'end' => 2, 'status' => 'done'],
+                    ['label' => 'Fase dos', 'start' => 2, 'end' => 4, 'status' => 'active'],
+                ]],
+                ['name' => 'Ops', 'bars' => [
+                    ['label' => 'Rollout', 'start' => 3, 'end' => 4],
+                ]],
+            ],
+        ]],
+    ]);
+    expect($errors)->toBe([]);
+
+    // end beyond the period axis and inverted spans are named precisely.
+    $errors = $validator->validate([
+        'title' => 'Deck',
+        'slides' => [[
+            'layout' => 'roadmap',
+            'title' => 'Plan',
+            'periods' => ['Q1', 'Q2'],
+            'lanes' => [
+                ['name' => 'A', 'bars' => [['label' => 'x', 'start' => 2, 'end' => 5]]],
+            ],
+        ]],
+    ]);
+    expect(implode("\n", $errors))->toContain('1 <= start <= end <= 2');
+});
+
 it('accepts every extended chart form and keeps pie to one series', function () {
     $validator = new DeckValidator;
 

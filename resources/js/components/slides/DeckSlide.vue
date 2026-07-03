@@ -6,6 +6,7 @@ import SlideChart from './layouts/SlideChart.vue';
 import SlideClosing from './layouts/SlideClosing.vue';
 import SlideMetrics from './layouts/SlideMetrics.vue';
 import SlideQuote from './layouts/SlideQuote.vue';
+import SlideRoadmap from './layouts/SlideRoadmap.vue';
 import SlideSection from './layouts/SlideSection.vue';
 import SlideTable from './layouts/SlideTable.vue';
 import SlideTimeline from './layouts/SlideTimeline.vue';
@@ -90,6 +91,13 @@ const s = props.slide as Record<string, never>;
         :title="s.title"
         :kicker="s.kicker"
         :items="s.items"
+    />
+    <SlideRoadmap
+        v-else-if="slide.layout === 'roadmap'"
+        :title="s.title"
+        :kicker="s.kicker"
+        :periods="s.periods"
+        :lanes="s.lanes"
     />
     <SlideTable
         v-else-if="slide.layout === 'table'"

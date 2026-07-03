@@ -119,6 +119,77 @@ function removeTimelineItem(i: number) {
     patch({ items });
 }
 
+// ----- roadmap -----
+function setPeriods(value: string) {
+    const periods = value
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .slice(0, 8);
+    patch({ periods });
+}
+function setLaneName(li: number, value: string) {
+    const lanes = (s.value.lanes ?? []).map((l: any, j: number) =>
+        j === li ? { ...l, name: value } : l,
+    );
+    patch({ lanes });
+}
+function setBar(li: number, bi: number, key: string, value: string) {
+    const lanes = (s.value.lanes ?? []).map((l: any, j: number) => {
+        if (j !== li) return l;
+        const bars = (l.bars ?? []).map((b: any, k: number) => {
+            if (k !== bi) return b;
+            const next = { ...b };
+            if (key === 'start' || key === 'end') {
+                next[key] = Math.max(1, parseInt(value, 10) || 1);
+            } else if (value.trim() === '' && key === 'status') {
+                delete next[key];
+            } else {
+                next[key] = value;
+            }
+            return next;
+        });
+        return { ...l, bars };
+    });
+    patch({ lanes });
+}
+function addLane() {
+    const lanes = [...(s.value.lanes ?? [])];
+    if (lanes.length >= 5) return;
+    lanes.push({
+        name: `Lane ${lanes.length + 1}`,
+        bars: [{ label: '—', start: 1, end: 1, status: 'upcoming' }],
+    });
+    patch({ lanes });
+}
+function removeLane(li: number) {
+    const lanes = [...(s.value.lanes ?? [])];
+    lanes.splice(li, 1);
+    patch({ lanes });
+}
+function addBar(li: number) {
+    const lanes = (s.value.lanes ?? []).map((l: any, j: number) => {
+        if (j !== li || (l.bars ?? []).length >= 4) return l;
+        return {
+            ...l,
+            bars: [
+                ...(l.bars ?? []),
+                { label: '—', start: 1, end: 1, status: 'upcoming' },
+            ],
+        };
+    });
+    patch({ lanes });
+}
+function removeBar(li: number, bi: number) {
+    const lanes = (s.value.lanes ?? []).map((l: any, j: number) => {
+        if (j !== li) return l;
+        const bars = [...(l.bars ?? [])];
+        bars.splice(bi, 1);
+        return { ...l, bars };
+    });
+    patch({ lanes });
+}
+
 // ----- table -----
 function setColumns(value: string) {
     const columns = value
@@ -258,7 +329,8 @@ function removeSeries(i: number) {
             v-if="
                 slide.layout === 'section' ||
                 slide.layout === 'bullets' ||
-                slide.layout === 'big_number'
+                slide.layout === 'big_number' ||
+                slide.layout === 'roadmap'
             "
             class="field"
         >
@@ -735,6 +807,139 @@ function removeSeries(i: number) {
                 <Plus class="size-3.5" /> {{ t('slides.builder.add_item') }}
             </button>
         </div>
+
+        <!-- roadmap -->
+        <template v-if="slide.layout === 'roadmap'">
+            <label class="field">
+                <span class="label">{{
+                    t('slides.builder.field.periods')
+                }}</span>
+                <input
+                    :value="(s.periods ?? []).join(', ')"
+                    class="input"
+                    placeholder="Q1, Q2, Q3, Q4"
+                    @change="
+                        setPeriods(($event.target as HTMLInputElement).value)
+                    "
+                />
+            </label>
+            <div class="field">
+                <span class="label">{{ t('slides.builder.field.lanes') }}</span>
+                <div
+                    v-for="(lane, li) in s.lanes ?? []"
+                    :key="li"
+                    class="rounded-lg border border-soft p-3"
+                >
+                    <div class="row">
+                        <input
+                            :value="lane.name ?? ''"
+                            class="input flex-1"
+                            :placeholder="t('slides.builder.field.label')"
+                            @input="
+                                setLaneName(
+                                    li,
+                                    ($event.target as HTMLInputElement).value,
+                                )
+                            "
+                        />
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            @click="removeLane(li)"
+                        >
+                            <Minus class="size-3.5" />
+                        </button>
+                    </div>
+                    <div
+                        v-for="(bar, bi) in lane.bars ?? []"
+                        :key="bi"
+                        class="row mt-2"
+                    >
+                        <input
+                            :value="bar.label ?? ''"
+                            class="input flex-1"
+                            :placeholder="t('slides.builder.field.label')"
+                            @input="
+                                setBar(
+                                    li,
+                                    bi,
+                                    'label',
+                                    ($event.target as HTMLInputElement).value,
+                                )
+                            "
+                        />
+                        <input
+                            :value="bar.start ?? 1"
+                            type="number"
+                            min="1"
+                            class="input w-14"
+                            @input="
+                                setBar(
+                                    li,
+                                    bi,
+                                    'start',
+                                    ($event.target as HTMLInputElement).value,
+                                )
+                            "
+                        />
+                        <input
+                            :value="bar.end ?? 1"
+                            type="number"
+                            min="1"
+                            class="input w-14"
+                            @input="
+                                setBar(
+                                    li,
+                                    bi,
+                                    'end',
+                                    ($event.target as HTMLInputElement).value,
+                                )
+                            "
+                        />
+                        <select
+                            :value="bar.status ?? 'upcoming'"
+                            class="input w-28"
+                            @change="
+                                setBar(
+                                    li,
+                                    bi,
+                                    'status',
+                                    ($event.target as HTMLSelectElement).value,
+                                )
+                            "
+                        >
+                            <option value="done">done</option>
+                            <option value="active">active</option>
+                            <option value="upcoming">upcoming</option>
+                        </select>
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            @click="removeBar(li, bi)"
+                        >
+                            <Minus class="size-3.5" />
+                        </button>
+                    </div>
+                    <button
+                        v-if="(lane.bars ?? []).length < 4"
+                        type="button"
+                        class="add-btn mt-2"
+                        @click="addBar(li)"
+                    >
+                        <Plus class="size-3.5" />
+                        {{ t('slides.builder.add_item') }}
+                    </button>
+                </div>
+                <button
+                    v-if="(s.lanes ?? []).length < 5"
+                    type="button"
+                    class="add-btn"
+                    @click="addLane"
+                >
+                    <Plus class="size-3.5" /> {{ t('slides.builder.add_item') }}
+                </button>
+            </div>
+        </template>
 
         <!-- table -->
         <div v-if="slide.layout === 'table'" class="field">

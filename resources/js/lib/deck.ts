@@ -17,6 +17,7 @@ export type DeckLayout =
     | 'chart'
     | 'quote'
     | 'timeline'
+    | 'roadmap'
     | 'table'
     | 'closing';
 
@@ -113,6 +114,7 @@ export const DECK_LAYOUTS: DeckLayout[] = [
     'chart',
     'quote',
     'timeline',
+    'roadmap',
     'table',
     'closing',
 ];
@@ -176,6 +178,42 @@ export function defaultSlide(layout: DeckLayout): DeckSlideDef {
                         label: 'Q3',
                         title: 'Milestone three',
                         status: 'upcoming',
+                    },
+                ],
+            };
+        case 'roadmap':
+            return {
+                layout,
+                title: 'Roadmap',
+                periods: ['Q1', 'Q2', 'Q3', 'Q4'],
+                lanes: [
+                    {
+                        name: 'Workstream A',
+                        bars: [
+                            {
+                                label: 'Phase one',
+                                start: 1,
+                                end: 2,
+                                status: 'done',
+                            },
+                            {
+                                label: 'Phase two',
+                                start: 2,
+                                end: 4,
+                                status: 'active',
+                            },
+                        ],
+                    },
+                    {
+                        name: 'Workstream B',
+                        bars: [
+                            {
+                                label: 'Kickoff',
+                                start: 3,
+                                end: 4,
+                                status: 'upcoming',
+                            },
+                        ],
                     },
                 ],
             };

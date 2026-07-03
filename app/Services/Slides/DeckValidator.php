@@ -19,7 +19,7 @@ class DeckValidator
 
     public const LAYOUTS = [
         'title', 'section', 'bullets', 'two_column', 'big_number',
-        'metrics', 'chart', 'quote', 'timeline', 'table', 'closing',
+        'metrics', 'chart', 'quote', 'timeline', 'roadmap', 'table', 'closing',
     ];
 
     public const TIMELINE_STATUSES = ['done', 'active', 'upcoming'];
@@ -97,6 +97,7 @@ class DeckValidator
             'chart' => $this->validateChart($slide, $path, $errors),
             'quote' => $this->validateQuote($slide, $path, $errors),
             'timeline' => $this->validateTimeline($slide, $path, $errors),
+            'roadmap' => $this->validateRoadmap($slide, $path, $errors),
             'table' => $this->validateTable($slide, $path, $errors),
             'closing' => $this->validateClosing($slide, $path, $errors),
         };
@@ -264,6 +265,71 @@ class DeckValidator
             $status = $item['status'] ?? null;
             if ($status !== null && ! in_array($status, self::TIMELINE_STATUSES, true)) {
                 $errors[] = "{$path}.items.{$i}.status: must be one of ".implode(', ', self::TIMELINE_STATUSES).'.';
+            }
+        }
+    }
+
+    /**
+     * Roadmap = a static gantt for presentations: horizontal lanes of bars that
+     * span 1-based period indexes on a shared time axis (the `periods` headers).
+     * Indexes (not dates) keep authoring deterministic and the render exact.
+     *
+     * @param  array<string, mixed>  $slide
+     * @param  list<string>  $errors
+     */
+    private function validateRoadmap(array $slide, string $path, array &$errors): void
+    {
+        $this->requireText($slide, 'title', 70, $errors, $path);
+        $this->optionalText($slide, 'kicker', 40, $path, $errors);
+
+        $periods = $slide['periods'] ?? null;
+        if (! is_array($periods) || count($periods) < 2 || count($periods) > 8
+            || array_filter($periods, fn ($p) => ! is_string($p) || trim($p) === '' || mb_strlen($p) > 12) !== []) {
+            $errors[] = "{$path}.periods: 2 to 8 non-empty strings of at most 12 chars (the time-axis headers, e.g. Q1…Q4 or months).";
+
+            return;
+        }
+        $periodCount = count($periods);
+
+        $lanes = $slide['lanes'] ?? null;
+        if (! is_array($lanes) || count($lanes) < 1 || count($lanes) > 5) {
+            $errors[] = "{$path}.lanes: 1 to 5 lanes of {name, bars}.";
+
+            return;
+        }
+        foreach (array_values($lanes) as $i => $lane) {
+            if (! is_array($lane)) {
+                $errors[] = "{$path}.lanes.{$i}: must be an object.";
+
+                continue;
+            }
+            $this->requireText($lane, 'name', 20, $errors, "{$path}.lanes.{$i}");
+
+            $bars = $lane['bars'] ?? null;
+            if (! is_array($bars) || count($bars) < 1 || count($bars) > 4) {
+                $errors[] = "{$path}.lanes.{$i}.bars: 1 to 4 bars of {label, start, end, status?}.";
+
+                continue;
+            }
+            foreach (array_values($bars) as $j => $bar) {
+                if (! is_array($bar)) {
+                    $errors[] = "{$path}.lanes.{$i}.bars.{$j}: must be an object.";
+
+                    continue;
+                }
+                $this->requireText($bar, 'label', 24, $errors, "{$path}.lanes.{$i}.bars.{$j}");
+
+                $start = $bar['start'] ?? null;
+                $end = $bar['end'] ?? null;
+                if (! is_int($start) || ! is_int($end)
+                    || $start < 1 || $end > $periodCount || $start > $end) {
+                    $errors[] = "{$path}.lanes.{$i}.bars.{$j}: start/end must be 1-based period indexes with 1 <= start <= end <= {$periodCount}.";
+                }
+
+                $status = $bar['status'] ?? null;
+                if ($status !== null && ! in_array($status, self::TIMELINE_STATUSES, true)) {
+                    $errors[] = "{$path}.lanes.{$i}.bars.{$j}.status: must be one of ".implode(', ', self::TIMELINE_STATUSES).'.';
+                }
             }
         }
     }
