@@ -28,7 +28,8 @@ interface ChartBlock {
         | 'donut'
         | 'radar'
         | 'scatter'
-        | 'treemap';
+        | 'treemap'
+        | 'sankey';
     data_source: { object_id: string };
     x_field_id?: string;
     y_field_id?: string;
@@ -814,6 +815,152 @@ const scatter = computed(() => {
         points: pts.map((p) => ({ cx: sx(p.x), cy: sy(p.y), x: p.x, y: p.y })),
     };
 });
+
+// Sankey: a bipartite flow diagram — group_by_field_id is the SOURCE column and
+// series_field_id the TARGET column; each (source, target) pair is a ribbon whose
+// width is the aggregated value. Node heights are proportional to their total
+// flow; both columns fill the height, so ribbons form trapezoids between them.
+const sankey = computed(() => {
+    if (props.block.chart_type !== 'sankey') return null;
+    const rows = props.data?.rows ?? [];
+    const srcField = groupField.value;
+    const tgtField = seriesField.value;
+    if (!srcField || !tgtField) return null;
+    const srcSlug = srcField.slug;
+    const tgtSlug = tgtField.slug;
+    const ySlug = yField.value?.slug;
+    const agg = props.block.aggregation;
+
+    // Aggregate value per (source, target).
+    const cells = new Map<string, Map<string, number[]>>();
+    for (const r of rows) {
+        const s = formatGroupKey(r.data[srcSlug], srcField);
+        const tg = formatGroupKey(r.data[tgtSlug], tgtField);
+        const v = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
+        if (!cells.has(s)) cells.set(s, new Map());
+        const m = cells.get(s)!;
+        if (!m.has(tg)) m.set(tg, []);
+        m.get(tg)!.push(Number.isFinite(v) ? v : 0);
+    }
+
+    const rawLinks: { source: string; target: string; value: number }[] = [];
+    const srcTotals = new Map<string, number>();
+    const tgtTotals = new Map<string, number>();
+    for (const [s, m] of cells) {
+        for (const [tg, vals] of m) {
+            const value = aggregateVals(vals, agg);
+            if (value <= 0) continue;
+            rawLinks.push({ source: s, target: tg, value });
+            srcTotals.set(s, (srcTotals.get(s) ?? 0) + value);
+            tgtTotals.set(tg, (tgtTotals.get(tg) ?? 0) + value);
+        }
+    }
+    if (rawLinks.length === 0) return null;
+
+    const sources = [...srcTotals.keys()].sort(
+        (a, b) => srcTotals.get(b)! - srcTotals.get(a)!,
+    );
+    const targets = [...tgtTotals.keys()].sort(
+        (a, b) => tgtTotals.get(b)! - tgtTotals.get(a)!,
+    );
+    const totalFlow = [...srcTotals.values()].reduce((a, b) => a + b, 0);
+
+    const W = 480;
+    const rowCount = Math.max(sources.length, targets.length);
+    const H = Math.max(160, Math.min(380, 24 + rowCount * 38));
+    const padT = 10;
+    const innerH = H - padT * 2;
+    const gap = 10;
+    const nodeW = 12;
+    const leftX = 120;
+    const rightX = W - 120 - nodeW;
+    const scaleFor = (count: number) =>
+        (innerH - gap * Math.max(0, count - 1)) / totalFlow;
+    const sScale = scaleFor(sources.length);
+    const tScale = scaleFor(targets.length);
+
+    interface Node {
+        name: string;
+        x: number;
+        y: number;
+        h: number;
+        total: number;
+        cursor: number;
+        color: string;
+    }
+    const srcNodes = new Map<string, Node>();
+    let sy = padT;
+    sources.forEach((name, i) => {
+        const h = srcTotals.get(name)! * sScale;
+        srcNodes.set(name, {
+            name,
+            x: leftX,
+            y: sy,
+            h,
+            total: srcTotals.get(name)!,
+            cursor: sy,
+            color: paletteColorFor(srcField, name, i),
+        });
+        sy += h + gap;
+    });
+    const tgtNodes = new Map<string, Node>();
+    let ty = padT;
+    targets.forEach((name, i) => {
+        const h = tgtTotals.get(name)! * tScale;
+        tgtNodes.set(name, {
+            name,
+            x: rightX,
+            y: ty,
+            h,
+            total: tgtTotals.get(name)!,
+            cursor: ty,
+            color: paletteColorFor(tgtField, name, sources.length + i),
+        });
+        ty += h + gap;
+    });
+
+    // Stack ribbons tidily: by source order, then target order.
+    const srcIndex = new Map(sources.map((s, i) => [s, i]));
+    const tgtIndex = new Map(targets.map((tg, i) => [tg, i]));
+    rawLinks.sort(
+        (a, b) =>
+            srcIndex.get(a.source)! - srcIndex.get(b.source)! ||
+            tgtIndex.get(a.target)! - tgtIndex.get(b.target)!,
+    );
+
+    const links = rawLinks.map((l) => {
+        const sn = srcNodes.get(l.source)!;
+        const tn = tgtNodes.get(l.target)!;
+        const ths = l.value * sScale;
+        const tht = l.value * tScale;
+        const y0 = sn.cursor;
+        const y1 = tn.cursor;
+        sn.cursor += ths;
+        tn.cursor += tht;
+        const lx = sn.x + nodeW;
+        const rx = tn.x;
+        const mx = (lx + rx) / 2;
+        const path =
+            `M ${lx} ${y0} C ${mx} ${y0} ${mx} ${y1} ${rx} ${y1} ` +
+            `L ${rx} ${y1 + tht} C ${mx} ${y1 + tht} ${mx} ${y0 + ths} ${lx} ${y0 + ths} Z`;
+        return {
+            path,
+            color: sn.color,
+            source: l.source,
+            target: l.target,
+            value: l.value,
+        };
+    });
+
+    return {
+        W,
+        H,
+        nodeW,
+        links,
+        srcNodes: [...srcNodes.values()],
+        tgtNodes: [...tgtNodes.values()],
+    };
+});
 </script>
 
 <template>
@@ -1341,6 +1488,84 @@ const scatter = computed(() => {
                         "
                     />
                 </svg>
+            </template>
+
+            <template v-else-if="block.chart_type === 'sankey'">
+                <!-- sankey: source column → target column flow ribbons -->
+                <svg
+                    v-if="sankey"
+                    :viewBox="`0 0 ${sankey.W} ${sankey.H}`"
+                    class="w-full"
+                    :class="t.text"
+                >
+                    <path
+                        v-for="(lk, i) in sankey.links"
+                        :key="'lk' + i"
+                        :d="lk.path"
+                        :fill="lk.color"
+                        fill-opacity="0.35"
+                        class="cursor-pointer transition-all hover:[fill-opacity:0.6]"
+                        @mouseenter="
+                            showTip(
+                                lk.source + ' → ' + lk.target,
+                                formatNumber(lk.value),
+                                lk.color,
+                            )
+                        "
+                    />
+                    <g v-for="(n, i) in sankey.srcNodes" :key="'sn' + i">
+                        <rect
+                            :x="n.x"
+                            :y="n.y"
+                            :width="sankey.nodeW"
+                            :height="Math.max(1, n.h)"
+                            :fill="n.color"
+                            rx="1"
+                            class="cursor-pointer transition-opacity hover:opacity-80"
+                            @mouseenter="
+                                showTip(n.name, formatNumber(n.total), n.color)
+                            "
+                        />
+                        <text
+                            :x="n.x - 6"
+                            :y="n.y + n.h / 2 + 3"
+                            text-anchor="end"
+                            fill="currentColor"
+                            fill-opacity="0.75"
+                            style="font-size: 9px"
+                        >
+                            {{ n.name }}
+                        </text>
+                    </g>
+                    <g v-for="(n, i) in sankey.tgtNodes" :key="'tn' + i">
+                        <rect
+                            :x="n.x"
+                            :y="n.y"
+                            :width="sankey.nodeW"
+                            :height="Math.max(1, n.h)"
+                            :fill="n.color"
+                            rx="1"
+                            class="cursor-pointer transition-opacity hover:opacity-80"
+                            @mouseenter="
+                                showTip(n.name, formatNumber(n.total), n.color)
+                            "
+                        />
+                        <text
+                            :x="n.x + sankey.nodeW + 6"
+                            :y="n.y + n.h / 2 + 3"
+                            text-anchor="start"
+                            fill="currentColor"
+                            fill-opacity="0.75"
+                            style="font-size: 9px"
+                        >
+                            {{ n.name }}
+                        </text>
+                    </g>
+                </svg>
+                <p v-else :class="['py-8 text-center text-xs', t.textMuted]">
+                    Sankey needs a group-by (source) and a series (target)
+                    field.
+                </p>
             </template>
 
             <template v-else-if="isMultiSeries && multi">

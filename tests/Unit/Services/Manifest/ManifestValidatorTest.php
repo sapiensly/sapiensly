@@ -70,6 +70,36 @@ it('loads the schema from resources/ (ships with the code, not shared storage)',
         ->and($schema['description'] ?? '')->not->toContain('MVP subset');
 });
 
+it('accepts a sankey chart (chart_type enum extended)', function () {
+    $manifest = baseManifest();
+    $objId = $manifest['objects'][0]['id'];
+    $srcId = $manifest['objects'][0]['fields'][0]['id'];
+    $tgtId = id('fld');
+    $manifest['objects'][0]['fields'][] = [
+        'id' => $tgtId, 'slug' => 'estado', 'name' => 'Estado', 'type' => 'string',
+    ];
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'chart',
+            'chart_type' => 'sankey',
+            'data_source' => ['object_id' => $objId],
+            'group_by_field_id' => $srcId,
+            'series_field_id' => $tgtId,
+            'aggregation' => 'count',
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
 it('accepts a masonry container (direction enum extended)', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[
@@ -1327,7 +1357,7 @@ it('rejects an unknown chart_type', function () {
     $obj = $manifest['objects'][0];
     $manifest['pages'] = [[
         'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
-        'blocks' => [['id' => id('blk'), 'type' => 'chart', 'chart_type' => 'sankey', 'data_source' => ['object_id' => $obj['id']], 'aggregation' => 'count']],
+        'blocks' => [['id' => id('blk'), 'type' => 'chart', 'chart_type' => 'spiral', 'data_source' => ['object_id' => $obj['id']], 'aggregation' => 'count']],
     ]];
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
 });

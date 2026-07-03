@@ -1289,7 +1289,7 @@
                         "id": true, "visibility": true, "style": true,
                         "type": { "const": "chart" },
                         "label": { "type": "string", "maxLength": 120 },
-                        "chart_type": { "enum": ["bar", "hbar", "line", "area", "pie", "donut", "radar", "scatter", "treemap"] },
+                        "chart_type": { "enum": ["bar", "hbar", "line", "area", "pie", "donut", "radar", "scatter", "treemap", "sankey"] },
                         "data_source": { "$ref": "#/$defs/query" },
                         "x_field_id": { "$ref": "#/$defs/id" },
                         "y_field_id": { "$ref": "#/$defs/id" },
