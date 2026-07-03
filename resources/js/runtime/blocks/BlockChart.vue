@@ -345,42 +345,124 @@ const pieSlices = computed<PieSlice[]>(() => {
     });
 });
 
-// Line path for line/area charts
-const linePath = computed(() => {
-    const w = 320;
-    const h = 140;
-    const padL = 8;
-    const padR = 8;
-    const padT = 8;
-    const padB = 24;
-    const n = series.value.length;
-    if (n === 0)
+// Line / area chart, one OR several series. When series_field_id is set each of
+// its values becomes its own line over the shared (bucketed) X — so e.g. "created
+// vs closed per week" renders as two brand-coloured lines, not one collapsed one.
+// Geometry is bounded (a wide viewBox scaled to fit a fixed-height box) so a line
+// chart never balloons, and colours come from the palette / option colours.
+const lineChart = computed(() => {
+    const isLine =
+        props.block.chart_type === 'line' || props.block.chart_type === 'area';
+    if (!isLine) return null;
+
+    const rows = props.data?.rows ?? [];
+    const xField = groupField.value;
+    const xSlug = xField?.slug;
+    const ySlug = yField.value?.slug;
+    const agg = props.block.aggregation;
+    const serField = seriesField.value;
+    const serSlug = serField?.slug;
+
+    const cats: string[] = [];
+    const catIndex = new Map<string, number>();
+    const serLabels: string[] = [];
+    const serIndex = new Map<string, number>();
+    const cells: number[][][] = []; // [seriesIdx][catIdx] = raw values
+
+    for (const r of rows) {
+        const ck = formatGroupKey(xSlug ? r.data[xSlug] : 'all', xField);
+        let ci = catIndex.get(ck);
+        if (ci === undefined) {
+            ci = cats.length;
+            cats.push(ck);
+            catIndex.set(ck, ci);
+        }
+        const sk = serField
+            ? formatGroupKey(serSlug ? r.data[serSlug] : '—', serField)
+            : '__single__';
+        let si = serIndex.get(sk);
+        if (si === undefined) {
+            si = serLabels.length;
+            serLabels.push(sk);
+            serIndex.set(sk, si);
+        }
+        const yv = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
+        ((cells[si] ??= [])[ci] ??= []).push(Number.isFinite(yv) ? yv : 0);
+    }
+    if (cats.length === 0) return null;
+
+    // Chronological X for a bucketed date; keys sort in time order as strings.
+    let order = cats.map((_, i) => i);
+    if (isTemporal(xField)) {
+        order = order.sort((a, b) =>
+            cats[a] < cats[b] ? -1 : cats[a] > cats[b] ? 1 : 0,
+        );
+    }
+    const orderedCats = order.map((i) => cats[i]);
+    const values = serLabels.map((_, si) =>
+        order.map((ci) => aggregateVals(cells[si]?.[ci], agg)),
+    );
+    const max = Math.max(1, ...values.flat());
+
+    const W = 520;
+    const H = 200;
+    const padL = 34;
+    const padR = 12;
+    const padT = 12;
+    const padB = 26;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+    const n = orderedCats.length;
+    const stepX = n <= 1 ? 0 : innerW / (n - 1);
+    const xAt = (i: number) => padL + (n === 1 ? innerW / 2 : i * stepX);
+    const yAt = (v: number) => padT + innerH - (v / max) * innerH;
+    const single = !serField;
+
+    const seriesOut = serLabels.map((label, si) => {
+        const points = orderedCats.map((c, i) => ({
+            x: xAt(i),
+            y: yAt(values[si][i]),
+            label: c,
+            value: values[si][i],
+        }));
+        const line = points
+            .map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`))
+            .join(' ');
+        const area = points.length
+            ? `${line} L ${points[points.length - 1].x} ${padT + innerH} L ${points[0].x} ${padT + innerH} Z`
+            : '';
         return {
-            line: '',
-            area: '',
-            points: [] as Array<{
-                x: number;
-                y: number;
-                label: string;
-                value: number;
-            }>,
+            label: single ? (yField.value?.name ?? '') : label,
+            color: serField
+                ? paletteColorFor(serField, label, si)
+                : chartColor(0),
+            line,
+            area,
+            points,
         };
-    const innerW = w - padL - padR;
-    const innerH = h - padT - padB;
-    const stepX = n === 1 ? 0 : innerW / (n - 1);
-    const points = series.value.map((s, i) => {
-        const x = padL + (n === 1 ? innerW / 2 : i * stepX);
-        const y = padT + innerH - (s.value / maxValue.value) * innerH;
-        return { x, y, label: s.label, value: s.value };
     });
-    const line = points
-        .map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`))
-        .join(' ');
-    const area =
-        line +
-        ` L ${points[points.length - 1].x} ${padT + innerH}` +
-        ` L ${points[0].x} ${padT + innerH} Z`;
-    return { line, area, points };
+
+    const yTicks = [0, 0.5, 1].map((f) => ({
+        y: padT + innerH - f * innerH,
+        label: formatNumber(max * f),
+    }));
+    // Thin the X labels so long date ticks never collide (~6 across).
+    const stride = Math.max(1, Math.ceil(n / 6));
+    const xLabels = orderedCats
+        .map((label, i) => ({ x: xAt(i), label, i }))
+        .filter((l) => l.i % stride === 0 || l.i === n - 1);
+
+    return {
+        W,
+        H,
+        padL,
+        padR,
+        baselineY: padT + innerH,
+        single,
+        series: seriesOut,
+        yTicks,
+        xLabels,
+    };
 });
 
 // Radar: plot the categorical buckets on radial axes (needs >= 3 axes).
@@ -861,7 +943,7 @@ const scatter = computed(() => {
                         cx="80"
                         cy="80"
                         r="36"
-                        fill="var(--sp-navy, #0b1530)"
+                        fill="var(--sp-bg-secondary, #ffffff)"
                     />
                 </svg>
                 <ul class="flex-1 space-y-1 text-xs">
@@ -890,54 +972,103 @@ const scatter = computed(() => {
             </div>
         </template>
 
-        <template
-            v-else-if="
-                block.chart_type === 'line' || block.chart_type === 'area'
-            "
-        >
-            <svg
-                viewBox="0 0 320 140"
-                class="w-full"
-                preserveAspectRatio="none"
-            >
-                <path
-                    v-if="block.chart_type === 'area'"
-                    :d="linePath.area"
-                    fill="#3B82F6"
-                    fill-opacity="0.15"
-                />
-                <path
-                    :d="linePath.line"
-                    fill="none"
-                    stroke="#3B82F6"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                />
-                <circle
-                    v-for="(p, i) in linePath.points"
-                    :key="i"
-                    :cx="p.x"
-                    :cy="p.y"
-                    r="3"
-                    fill="#3B82F6"
-                />
-            </svg>
+        <template v-else-if="lineChart">
+            <!-- Series legend (only when there's more than one line) -->
             <ul
-                class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]"
-                :class="t.textMuted"
+                v-if="!lineChart.single"
+                class="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px]"
             >
                 <li
-                    v-for="(p, i) in linePath.points"
+                    v-for="(s, i) in lineChart.series"
                     :key="i"
-                    class="flex items-center gap-1"
+                    class="flex items-center gap-1.5"
                 >
-                    <span class="font-medium" :class="t.text">{{
-                        p.label
-                    }}</span>
-                    <span>{{ formatNumber(p.value) }}</span>
+                    <span
+                        class="inline-block h-0.5 w-3.5 shrink-0 rounded-xs"
+                        :style="{ background: s.color }"
+                    />
+                    <span class="truncate" :class="t.text">{{ s.label }}</span>
                 </li>
             </ul>
+            <div class="h-56">
+                <svg
+                    :viewBox="`0 0 ${lineChart.W} ${lineChart.H}`"
+                    class="h-full w-full"
+                    preserveAspectRatio="xMidYMid meet"
+                    :class="t.text"
+                >
+                    <!-- horizontal gridlines + y-axis ticks -->
+                    <g
+                        v-for="(tk, i) in lineChart.yTicks"
+                        :key="'y' + i"
+                        :class="t.textMuted"
+                    >
+                        <line
+                            :x1="lineChart.padL"
+                            :y1="tk.y"
+                            :x2="lineChart.W - lineChart.padR"
+                            :y2="tk.y"
+                            stroke="currentColor"
+                            stroke-opacity="0.1"
+                        />
+                        <text
+                            :x="lineChart.padL - 5"
+                            :y="tk.y + 3"
+                            text-anchor="end"
+                            fill="currentColor"
+                            fill-opacity="0.6"
+                            style="font-size: 8px"
+                        >
+                            {{ tk.label }}
+                        </text>
+                    </g>
+                    <!-- each series: soft area fill, line stroke, small markers -->
+                    <template
+                        v-for="(s, si) in lineChart.series"
+                        :key="'s' + si"
+                    >
+                        <path
+                            v-if="block.chart_type === 'area'"
+                            :d="s.area"
+                            :fill="s.color"
+                            fill-opacity="0.12"
+                        />
+                        <path
+                            :d="s.line"
+                            fill="none"
+                            :stroke="s.color"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        />
+                        <circle
+                            v-for="(p, j) in s.points"
+                            :key="j"
+                            :cx="p.x"
+                            :cy="p.y"
+                            r="2"
+                            :fill="s.color"
+                        >
+                            <title>
+                                {{ p.label }}: {{ formatNumber(p.value) }}
+                            </title>
+                        </circle>
+                    </template>
+                    <!-- x-axis labels (thinned) -->
+                    <text
+                        v-for="(l, i) in lineChart.xLabels"
+                        :key="'x' + i"
+                        :x="l.x"
+                        :y="lineChart.baselineY + 15"
+                        text-anchor="middle"
+                        fill="currentColor"
+                        fill-opacity="0.6"
+                        style="font-size: 8px"
+                    >
+                        {{ l.label }}
+                    </text>
+                </svg>
+            </div>
         </template>
 
         <template v-else-if="block.chart_type === 'hbar'">
