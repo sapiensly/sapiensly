@@ -195,7 +195,7 @@ const RAMP_STOPS = ['100', '300', '500', '700', '900'];
                             v-else-if="form.icon_url"
                             :src="form.icon_url"
                             alt="icon"
-                            class="size-6 rounded object-cover"
+                            class="size-6 rounded object-contain"
                         />
                         <span v-else class="text-sm font-semibold opacity-70">{{
                             t('settings.brand.preview_brand')
@@ -223,88 +223,96 @@ const RAMP_STOPS = ['100', '300', '500', '700', '900'];
                 :description="t('settings.brand.assets_hint')"
                 tint="var(--sp-accent-cyan)"
             >
-                <div class="space-y-1.5">
-                    <Label>{{ t('settings.brand.logo') }}</Label>
-                    <div class="flex items-center gap-2">
-                        <span
-                            class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xs border border-soft bg-surface"
-                        >
-                            <img
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="space-y-1.5">
+                        <Label>{{ t('settings.brand.logo') }}</Label>
+                        <div class="flex items-center gap-3">
+                            <span
+                                class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-sp-sm border border-soft bg-surface"
+                            >
+                                <img
+                                    v-if="form.logo_url"
+                                    :src="form.logo_url"
+                                    alt="logo"
+                                    class="size-full object-contain"
+                                />
+                                <ImagePlus
+                                    v-else
+                                    class="size-4 text-ink-muted/60"
+                                />
+                            </span>
+                            <label
+                                class="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                            >
+                                <Loader2
+                                    v-if="uploading.logo"
+                                    class="size-3.5 animate-spin"
+                                />
+                                <ImagePlus v-else class="size-3.5" />
+                                {{ t('settings.brand.upload') }}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    class="hidden"
+                                    @change="uploadAsset('logo', $event)"
+                                />
+                            </label>
+                            <button
                                 v-if="form.logo_url"
-                                :src="form.logo_url"
-                                alt="logo"
-                                class="size-full object-contain"
-                            />
-                            <ImagePlus
-                                v-else
-                                class="size-4 text-ink-muted/60"
-                            />
-                        </span>
-                        <Input
-                            v-model="form.logo_url"
-                            class="h-9"
-                            placeholder="https://… or upload"
-                        />
-                        <label
-                            class="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
-                        >
-                            <Loader2
-                                v-if="uploading.logo"
-                                class="size-3.5 animate-spin"
-                            />
-                            <ImagePlus v-else class="size-3.5" />
-                            {{ t('settings.brand.upload') }}
-                            <input
-                                type="file"
-                                accept="image/*"
-                                class="hidden"
-                                @change="uploadAsset('logo', $event)"
-                            />
-                        </label>
+                                type="button"
+                                class="shrink-0 text-xs text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+                                @click="form.logo_url = ''"
+                            >
+                                {{ t('settings.brand.clear') }}
+                            </button>
+                        </div>
+                        <InputError :message="form.errors.logo_url" />
                     </div>
-                    <InputError :message="form.errors.logo_url" />
-                </div>
 
-                <div class="space-y-1.5">
-                    <Label>{{ t('settings.brand.icon') }}</Label>
-                    <div class="flex items-center gap-2">
-                        <span
-                            class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xs border border-soft bg-surface"
-                        >
-                            <img
+                    <div class="space-y-1.5">
+                        <Label>{{ t('settings.brand.icon') }}</Label>
+                        <div class="flex items-center gap-3">
+                            <span
+                                class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-sp-sm border border-soft bg-surface"
+                            >
+                                <img
+                                    v-if="form.icon_url"
+                                    :src="form.icon_url"
+                                    alt="icon"
+                                    class="size-full object-contain"
+                                />
+                                <ImagePlus
+                                    v-else
+                                    class="size-4 text-ink-muted/60"
+                                />
+                            </span>
+                            <label
+                                class="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                            >
+                                <Loader2
+                                    v-if="uploading.icon"
+                                    class="size-3.5 animate-spin"
+                                />
+                                <ImagePlus v-else class="size-3.5" />
+                                {{ t('settings.brand.upload') }}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    class="hidden"
+                                    @change="uploadAsset('icon', $event)"
+                                />
+                            </label>
+                            <button
                                 v-if="form.icon_url"
-                                :src="form.icon_url"
-                                alt="icon"
-                                class="size-full object-cover"
-                            />
-                            <ImagePlus
-                                v-else
-                                class="size-4 text-ink-muted/60"
-                            />
-                        </span>
-                        <Input
-                            v-model="form.icon_url"
-                            class="h-9"
-                            placeholder="https://… or upload"
-                        />
-                        <label
-                            class="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
-                        >
-                            <Loader2
-                                v-if="uploading.icon"
-                                class="size-3.5 animate-spin"
-                            />
-                            <ImagePlus v-else class="size-3.5" />
-                            {{ t('settings.brand.upload') }}
-                            <input
-                                type="file"
-                                accept="image/*"
-                                class="hidden"
-                                @change="uploadAsset('icon', $event)"
-                            />
-                        </label>
+                                type="button"
+                                class="shrink-0 text-xs text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+                                @click="form.icon_url = ''"
+                            >
+                                {{ t('settings.brand.clear') }}
+                            </button>
+                        </div>
+                        <InputError :message="form.errors.icon_url" />
                     </div>
-                    <InputError :message="form.errors.icon_url" />
                 </div>
             </SettingsCard>
 

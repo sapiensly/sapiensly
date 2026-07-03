@@ -77,7 +77,7 @@
     "settings.brand.title": "Brandbook",
     "settings.brand.description": "Centraliza el logo, icono, colores y fuente de tu organización. Las apps y chatbots nuevos heredan esta marca, y las superficies que no hayan sobrescrito un valor la siguen en vivo.",
     "settings.brand.assets": "Logo e icono",
-    "settings.brand.assets_hint": "Sube una imagen o pega una URL — son intercambiables.",
+    "settings.brand.assets_hint": "Sube el logo y el icono de tu marca.",
     "settings.brand.logo": "Logo",
     "settings.brand.icon": "Imagen de icono",
     "settings.brand.upload": "Subir",

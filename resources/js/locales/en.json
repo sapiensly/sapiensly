@@ -77,7 +77,7 @@
     "settings.brand.title": "Brandbook",
     "settings.brand.description": "Centralize your organization's logo, icon, colours and font. New apps and chatbots inherit this brand, and surfaces that haven't overridden a value follow it live.",
     "settings.brand.assets": "Logo & icon",
-    "settings.brand.assets_hint": "Upload an image or paste a URL — they're interchangeable.",
+    "settings.brand.assets_hint": "Upload your brand logo and icon.",
     "settings.brand.logo": "Logo",
     "settings.brand.icon": "Icon image",
     "settings.brand.upload": "Upload",
