@@ -331,7 +331,7 @@ class BuilderAiService
      * response, broadcast deltas, then finalize the placeholder + broadcast
      * BuilderStreamComplete.
      */
-    public function streamMessage(BuilderMessage $placeholder, string $userText, ?string $attachmentPath = null, ?string $attachmentDisk = null, ?string $modelOverride = null): BuilderMessage
+    public function streamMessage(BuilderMessage $placeholder, string $userText, ?string $attachmentPath = null, ?string $attachmentDisk = null, ?string $modelOverride = null, bool $applyProposal = true): BuilderMessage
     {
         set_time_limit(0);
 
@@ -598,7 +598,33 @@ class BuilderAiService
                 'builder', $resolvedModel, $conversation->user, $app->organization_id, $stream->usage ?? null,
             );
 
-            $commit = $this->commitTurn($app, $proposeTool->lastProposal(), $conversation->user, $buffer);
+            // apply=false (MCP "leave pending for review"): keep the accumulated
+            // proposal on the placeholder as `pending` without creating a version.
+            // No version lands; the caller applies it in-app or with a later turn.
+            $proposal = $proposeTool->lastProposal();
+            if (! $applyProposal && $proposal !== null) {
+                $released = $this->applyPlanProgress($conversation, [
+                    'status' => 'pending',
+                    'applied_version_id' => null,
+                    'error' => null,
+                    'change_summary' => $proposal['summary'] ?? null,
+                ]);
+                $placeholder->update([
+                    'content' => $buffer,
+                    'proposed_patch' => $proposal['patch'],
+                    'change_summary' => $proposal['summary'] ?? null,
+                    'plan' => $planTool->plan(),
+                    'integration_proposal' => $createIntegrationTool->proposal(),
+                    'status' => 'pending',
+                    'applied_version_id' => null,
+                    'plan_step_ids' => $released !== [] ? $released : null,
+                ]);
+                $this->safeBroadcast(fn () => BuilderStreamComplete::dispatch($placeholder->refresh()));
+
+                return $placeholder;
+            }
+
+            $commit = $this->commitTurn($app, $proposal, $conversation->user, $buffer);
 
             if ($commit['error'] !== null) {
                 // The model already streamed a summary as if the change landed,

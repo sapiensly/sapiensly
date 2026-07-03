@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\RunBuilderAiJob;
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Build\ContinueBuilderConversationTool;
 use App\Mcp\Tools\Build\GetBuilderConversationTool;
@@ -9,6 +10,7 @@ use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 function bconvManifest(string $appId): array
@@ -165,6 +167,56 @@ it('get_builder_conversation requires conversation_id or app_slug', function () 
     SapiensServer::actingAs($this->user)
         ->tool(GetBuilderConversationTool::class, [])
         ->assertHasErrors();
+});
+
+it('continue_builder_conversation runs the turn async: enqueues the job and returns a streaming placeholder', function () {
+    Queue::fake();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ContinueBuilderConversationTool::class, [
+            'conversation_id' => $conv->id,
+            'message' => 'agrega un objeto Clientes',
+        ])
+        ->assertOk()
+        ->assertSee('streaming')
+        ->assertSee('Poll get_builder_conversation');
+
+    // The user turn + a streaming assistant placeholder are persisted up front.
+    expect(BuilderMessage::where('conversation_id', $conv->id)->where('role', 'user')->where('content', 'agrega un objeto Clientes')->exists())->toBeTrue();
+    $placeholder = BuilderMessage::where('conversation_id', $conv->id)->where('role', 'assistant')->first();
+    expect($placeholder)->not->toBeNull()
+        ->and($placeholder->status)->toBe('streaming');
+
+    // The turn runs in the background queue, not synchronously in the request.
+    Queue::assertPushed(
+        RunBuilderAiJob::class,
+        fn ($job) => $job->placeholderMessageId === $placeholder->id && $job->applyProposal === true,
+    );
+});
+
+it('continue_builder_conversation threads apply:false to the job', function () {
+    Queue::fake();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ContinueBuilderConversationTool::class, [
+            'conversation_id' => $conv->id,
+            'message' => 'propon sin aplicar',
+            'apply' => false,
+        ])
+        ->assertOk();
+
+    Queue::assertPushed(
+        RunBuilderAiJob::class,
+        fn ($job) => $job->applyProposal === false,
+    );
 });
 
 it('continue_builder_conversation rejects an unknown conversation id', function () {

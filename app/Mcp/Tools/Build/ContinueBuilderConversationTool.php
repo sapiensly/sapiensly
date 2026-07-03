@@ -2,9 +2,11 @@
 
 namespace App\Mcp\Tools\Build;
 
+use App\Jobs\RunBuilderAiJob;
 use App\Mcp\Tools\SapiensTool;
 use App\Models\App;
 use App\Models\BuilderConversation;
+use App\Models\BuilderMessage;
 use App\Models\User;
 use App\Services\Builder\BuilderAiService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -12,9 +14,8 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
-use Throwable;
 
-#[Description('Resume an app-builder conversation where it left off: post a message into it and run the builder AI turn synchronously, with the same tools (scaffold, propose_change, …) the in-app builder uses. By default the resulting manifest proposal is auto-applied as a new app version, exactly like the in-app builder. Identify the session by conversation_id (from list_builder_conversations) or by app_slug (its most recent conversation). Builder turns can take 30-120s.')]
+#[Description('Resume an app-builder conversation: post a message and run a builder AI turn — the same tools (scaffold, propose_change, …) the in-app builder uses — ASYNCHRONOUSLY in the background queue. Returns immediately with the placeholder message_id while the turn runs (30-120s); a synchronous run would exceed the MCP transport timeout and die mid-turn. POLL get_builder_conversation (by conversation_id) until the assistant message leaves status="streaming": then read its reply, change_summary and applied version. By default the proposal auto-applies as a new app version (reversible via rollback_app); pass apply:false to leave it pending for in-app review. Identify the session by conversation_id or app_slug (its most recent conversation, or a fresh one).')]
 class ContinueBuilderConversationTool extends SapiensTool
 {
     protected const ABILITY = 'apps:build';
@@ -46,31 +47,45 @@ class ContinueBuilderConversationTool extends SapiensTool
         }
 
         $apply = (bool) ($validated['apply'] ?? true);
-        $builder = app(BuilderAiService::class);
 
-        try {
-            $message = $apply
-                ? $builder->sendMessageAndApply($conversation, $text, $user)
-                : $builder->sendMessage($conversation, $text);
-        } catch (Throwable $e) {
-            return Response::error('The builder turn failed: '.$e->getMessage());
-        }
+        // Persist the user turn + an assistant placeholder up front, then run the
+        // turn in the background queue — exactly like the in-app builder. A
+        // synchronous run here would outlive the MCP transport timeout and get
+        // killed mid-turn, freezing the placeholder in `streaming` and applying
+        // nothing (the failure mode this tool used to hit).
+        BuilderMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'user',
+            'content' => $text,
+            'status' => 'none',
+        ]);
+        $placeholder = BuilderMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'assistant',
+            'content' => '',
+            'status' => 'streaming',
+        ]);
 
-        $patch = is_array($message->proposed_patch) ? $message->proposed_patch : null;
+        RunBuilderAiJob::dispatch(
+            $placeholder->id,
+            $text,
+            null,
+            null,
+            null,
+            0,
+            $apply,
+        );
 
-        return Response::json(array_filter([
+        return Response::json([
             'conversation_id' => $conversation->id,
             'app_slug' => $app->slug,
-            'message_id' => $message->id,
-            'reply' => $message->content,
-            'status' => $message->status,
-            'change_summary' => $message->change_summary,
-            'proposed_patch_op_count' => $patch !== null ? count($patch) : null,
-            'applied_version_id' => $message->applied_version_id,
-            // When a proposal exists but wasn't applied (apply:false, or an
-            // apply failure), say so plainly so the caller knows nothing landed.
-            'applied' => $message->status === 'applied',
-        ], fn ($v) => $v !== null && $v !== ''));
+            'message_id' => $placeholder->id,
+            'status' => 'streaming',
+            'apply' => $apply,
+            'message' => 'Builder turn started in the background. Poll get_builder_conversation'
+                ." (conversation_id='{$conversation->id}') until this message leaves status='streaming' —"
+                .' then read its reply, change_summary and applied_version_id. Turns take 30-120s.',
+        ]);
     }
 
     /**
@@ -127,7 +142,7 @@ class ContinueBuilderConversationTool extends SapiensTool
                 ->description('The instruction to send into the builder, as if typed in the in-app builder chat.')
                 ->required(),
             'apply' => $schema->boolean()
-                ->description('Auto-apply the resulting manifest proposal as a new version (default true, matching the in-app builder). Pass false to leave it pending for in-app review.'),
+                ->description('Auto-apply the resulting manifest proposal as a new version (default true, matching the in-app builder; reversible via rollback_app). Pass false to leave the proposal pending for in-app review instead. The turn runs async either way.'),
         ];
     }
 }

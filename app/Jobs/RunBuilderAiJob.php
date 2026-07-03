@@ -58,6 +58,13 @@ class RunBuilderAiJob implements ShouldQueue
          * single user-driven turn. See BuilderAiService::continueAutonomously.
          */
         public int $autonomousRemaining = 0,
+        /**
+         * Whether to auto-apply the turn's proposal as a new version (default
+         * true, matching the in-app builder). The MCP continue_builder_conversation
+         * tool passes false for its apply:false mode — the proposal is left
+         * `pending` for in-app review instead of committed.
+         */
+        public bool $applyProposal = true,
     ) {}
 
     /**
@@ -89,6 +96,7 @@ class RunBuilderAiJob implements ShouldQueue
             $this->attachmentPath,
             $this->attachmentDisk,
             $this->modelOverride,
+            $this->applyProposal,
         );
 
         // Autonomous mode: let the builder queue the next plan step itself,
