@@ -1923,9 +1923,7 @@ const boxPlot = computed(() => {
                         }}</span>
                     </li>
                 </ul>
-                <div
-                    class="flex min-h-[12rem] flex-1 items-end gap-3 px-2 pt-2"
-                >
+                <div class="flex h-56 items-end gap-3 px-2 pt-2">
                     <div
                         v-for="(cat, ci) in multi.cats"
                         :key="cat"
@@ -1996,9 +1994,7 @@ const boxPlot = computed(() => {
 
             <template v-else>
                 <!-- bar = vertical columns -->
-                <div
-                    class="flex min-h-[12rem] flex-1 items-end gap-3 px-2 pt-2"
-                >
+                <div class="flex h-56 items-end gap-3 px-2 pt-2">
                     <div
                         v-for="(s, i) in series"
                         :key="s.label"
