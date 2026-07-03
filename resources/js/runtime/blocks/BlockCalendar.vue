@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { ChevronLeft, ChevronRight } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
+import { useChartTooltip } from '../useChartTooltip';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
-import { ChevronLeft, ChevronRight } from '@lucide/vue';
+import ChartTooltip from './ChartTooltip.vue';
 
 interface CalendarBlock {
     id: string;
@@ -28,6 +30,7 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+const { card, mouse, tip, onMove, showTip, hideTip } = useChartTooltip();
 
 const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.data_source.object_id),
@@ -55,7 +58,10 @@ function shiftMonth(delta: number): void {
 }
 
 const monthLabel = computed(() =>
-    anchor.value.toLocaleDateString(props.locale, { month: 'long', year: 'numeric' }),
+    anchor.value.toLocaleDateString(props.locale, {
+        month: 'long',
+        year: 'numeric',
+    }),
 );
 
 interface DayCell {
@@ -118,7 +124,9 @@ const eventsByDay = computed<Record<string, CalendarEvent[]>>(() => {
 
         let color: string | null = null;
         if (colorField.value?.type === 'single_select' && colorSlug) {
-            const opt = colorField.value.options?.find((o) => o.value === r.data[colorSlug]);
+            const opt = colorField.value.options?.find(
+                (o) => o.value === r.data[colorSlug],
+            );
             color = opt?.color ?? null;
         }
 
@@ -140,28 +148,47 @@ const weekdayHeaders = computed(() => {
 </script>
 
 <template>
-    <div :class="['rounded-sp-sm border', t.surface]">
-        <header class="flex items-center justify-between border-b border-soft px-4 py-2">
-            <h3 :class="['text-sm font-medium capitalize', t.text]">{{ monthLabel }}</h3>
+    <div
+        ref="card"
+        :class="['relative rounded-sp-sm border', t.surface]"
+        @mousemove="onMove"
+        @mouseleave="hideTip"
+    >
+        <ChartTooltip :tip="tip" :x="mouse.x" :y="mouse.y" />
+        <header
+            class="flex items-center justify-between border-b border-soft px-4 py-2"
+        >
+            <h3 :class="['text-sm font-medium capitalize', t.text]">
+                {{ monthLabel }}
+            </h3>
             <div class="flex gap-1">
                 <button
                     type="button"
                     @click="shiftMonth(-1)"
-                    :class="['inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-surface transition-colors hover:border-strong', t.textMuted]"
+                    :class="[
+                        'inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-surface transition-colors hover:border-strong',
+                        t.textMuted,
+                    ]"
                 >
                     <ChevronLeft class="size-3.5" />
                 </button>
                 <button
                     type="button"
                     @click="anchor = startOfMonth(new Date())"
-                    :class="['inline-flex items-center rounded-xs border border-medium bg-surface px-2 text-[11px] transition-colors hover:border-strong', t.textMuted]"
+                    :class="[
+                        'inline-flex items-center rounded-xs border border-medium bg-surface px-2 text-[11px] transition-colors hover:border-strong',
+                        t.textMuted,
+                    ]"
                 >
                     Today
                 </button>
                 <button
                     type="button"
                     @click="shiftMonth(1)"
-                    :class="['inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-surface transition-colors hover:border-strong', t.textMuted]"
+                    :class="[
+                        'inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-surface transition-colors hover:border-strong',
+                        t.textMuted,
+                    ]"
                 >
                     <ChevronRight class="size-3.5" />
                 </button>
@@ -172,7 +199,10 @@ const weekdayHeaders = computed(() => {
             <div
                 v-for="(wd, i) in weekdayHeaders"
                 :key="i"
-                :class="['px-2 py-1.5 text-center text-[10px] uppercase tracking-wider', t.textSubtle]"
+                :class="[
+                    'px-2 py-1.5 text-center text-[10px] tracking-wider uppercase',
+                    t.textSubtle,
+                ]"
             >
                 {{ wd }}
             </div>
@@ -183,14 +213,16 @@ const weekdayHeaders = computed(() => {
                 v-for="day in days"
                 :key="day.iso"
                 :class="[
-                    'min-h-[96px] border-b border-r border-soft p-1.5 text-[11px]',
+                    'min-h-[96px] border-r border-b border-soft p-1.5 text-[11px] transition-colors hover:bg-surface',
                     day.isCurrentMonth ? '' : 'opacity-40',
                 ]"
             >
                 <p
                     :class="[
                         'mb-1 flex items-center justify-end text-[11px]',
-                        day.isToday ? 'font-semibold text-accent-blue' : t.textMuted,
+                        day.isToday
+                            ? 'font-semibold text-accent-blue'
+                            : t.textMuted,
                     ]"
                 >
                     {{ day.date.getDate() }}
@@ -199,8 +231,24 @@ const weekdayHeaders = computed(() => {
                     <li
                         v-for="ev in (eventsByDay[day.iso] ?? []).slice(0, 3)"
                         :key="ev.id"
-                        :class="['truncate rounded-xs px-1.5 py-0.5 text-[10px]', t.text]"
-                        :style="ev.color ? `background: color-mix(in oklab, ${ev.color} 25%, transparent); border-left: 2px solid ${ev.color}` : 'background: rgba(59,130,246,0.15); border-left: 2px solid #3B82F6'"
+                        :class="[
+                            'cursor-pointer truncate rounded-xs px-1.5 py-0.5 text-[10px] transition-opacity hover:opacity-80',
+                            t.text,
+                        ]"
+                        :style="
+                            ev.color
+                                ? `background: color-mix(in oklab, ${ev.color} 25%, transparent); border-left: 2px solid ${ev.color}`
+                                : 'background: rgba(59,130,246,0.15); border-left: 2px solid #3B82F6'
+                        "
+                        @mouseenter="
+                            showTip(
+                                ev.title,
+                                day.date.toLocaleDateString(locale, {
+                                    dateStyle: 'medium',
+                                }),
+                                ev.color ?? '#3B82F6',
+                            )
+                        "
                     >
                         {{ ev.title }}
                     </li>
@@ -208,7 +256,7 @@ const weekdayHeaders = computed(() => {
                         v-if="(eventsByDay[day.iso]?.length ?? 0) > 3"
                         :class="['text-[10px]', t.textSubtle]"
                     >
-                        +{{ (eventsByDay[day.iso]!.length) - 3 }} more
+                        +{{ eventsByDay[day.iso]!.length - 3 }} more
                     </li>
                 </ul>
             </div>

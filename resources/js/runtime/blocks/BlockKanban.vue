@@ -51,7 +51,9 @@ const appSlug = inject<string>('appSlug', '');
 
 // Drag-and-drop is opt-in (editable) and only meaningful when the grouping field
 // is a single_select — its option values are the target columns.
-const canDrag = computed(() => !!props.block.editable && groupField.value?.type === 'single_select');
+const canDrag = computed(
+    () => !!props.block.editable && groupField.value?.type === 'single_select',
+);
 
 // Optimistic moves: id → new group value, applied to the columns immediately on
 // drop so the card jumps without waiting for the round-trip; reverted on failure.
@@ -85,7 +87,10 @@ const columns = computed<Column[]>(() => {
 
     for (const r of rows) {
         const raw = gf ? (overrides[r.id] ?? r.data[gf.slug]) : null;
-        const key = raw === null || raw === undefined || raw === '' ? '__none__' : String(raw);
+        const key =
+            raw === null || raw === undefined || raw === ''
+                ? '__none__'
+                : String(raw);
         if (!cols.has(key)) {
             const opt = gf?.options?.find((o) => o.value === key);
             cols.set(key, {
@@ -118,7 +123,8 @@ async function onDrop(col: Column) {
     if (!canDrag.value || !id || !gf || col.value === '__none__') return;
 
     const row = (props.data?.rows ?? []).find((r) => r.id === id);
-    const current = overrides[id] ?? (row ? String(row.data[gf.slug] ?? '') : '');
+    const current =
+        overrides[id] ?? (row ? String(row.data[gf.slug] ?? '') : '');
     if (current === col.value) return;
 
     const prev = overrides[id];
@@ -188,42 +194,78 @@ function titleFor(row: RowData): string {
             <div
                 v-for="col in columns"
                 :key="col.value"
-                :class="['flex w-72 shrink-0 flex-col rounded-sp-sm border', t.surface, canDrag && draggingId ? 'ring-1 ring-inset ring-white/10' : '']"
+                :class="[
+                    'flex w-72 shrink-0 flex-col rounded-sp-sm border',
+                    t.surface,
+                    canDrag && draggingId
+                        ? 'ring-1 ring-white/10 ring-inset'
+                        : '',
+                ]"
                 @dragover.prevent
                 @drop="onDrop(col)"
             >
-                <header class="flex items-center justify-between gap-2 border-b border-soft px-3 py-2">
-                    <div class="flex items-center gap-2 min-w-0">
+                <header
+                    class="flex items-center justify-between gap-2 border-b border-soft px-3 py-2"
+                >
+                    <div class="flex min-w-0 items-center gap-2">
                         <span
                             v-if="col.color"
                             class="size-2.5 shrink-0 rounded-pill"
                             :style="{ background: col.color }"
                         />
-                        <span :class="['truncate text-xs font-medium', t.text]">{{ col.label }}</span>
+                        <span
+                            :class="['truncate text-xs font-medium', t.text]"
+                            >{{ col.label }}</span
+                        >
                     </div>
-                    <span :class="['rounded-pill border border-soft px-1.5 text-[10px]', t.textMuted]">
+                    <span
+                        :class="[
+                            'rounded-pill border border-soft px-1.5 text-[10px]',
+                            t.textMuted,
+                        ]"
+                    >
                         {{ col.rows.length }}
                     </span>
                 </header>
                 <ul class="flex-1 space-y-2 p-2">
-                    <li v-if="col.rows.length === 0" :class="['py-4 text-center text-[11px]', t.textSubtle]">
+                    <li
+                        v-if="col.rows.length === 0"
+                        :class="['py-4 text-center text-[11px]', t.textSubtle]"
+                    >
                         Empty
                     </li>
                     <li
                         v-for="row in col.rows"
                         :key="row.id"
                         :draggable="canDrag"
-                        :class="['rounded-xs border p-2', t.surfaceMuted, canDrag ? 'cursor-grab active:cursor-grabbing' : '', draggingId === row.id ? 'opacity-50' : '']"
+                        :class="[
+                            'rounded-xs border p-2 transition-all hover:border-strong hover:shadow-md',
+                            t.surfaceMuted,
+                            canDrag ? 'cursor-grab active:cursor-grabbing' : '',
+                            draggingId === row.id ? 'opacity-50' : '',
+                        ]"
                         @dragstart="onDragStart(row)"
                         @dragend="onDragEnd"
                     >
                         <p :class="['text-xs font-medium', t.text]">
                             {{ titleFor(row) }}
                         </p>
-                        <dl v-if="metaFields.length" :class="['mt-1 space-y-0.5 text-[11px]', t.textMuted]">
-                            <div v-for="f in metaFields" :key="f.id" class="flex items-center justify-between gap-2">
+                        <dl
+                            v-if="metaFields.length"
+                            :class="[
+                                'mt-1 space-y-0.5 text-[11px]',
+                                t.textMuted,
+                            ]"
+                        >
+                            <div
+                                v-for="f in metaFields"
+                                :key="f.id"
+                                class="flex items-center justify-between gap-2"
+                            >
                                 <dt class="truncate">{{ f.name }}</dt>
-                                <dd :class="['truncate', t.text]">{{ formatMeta(f, row.data[f.slug]) }}</dd>
+                                <dd :class="['truncate', t.text]">
+                                    {{ formatMeta(f, row.data[f.slug]) }}
+                                </dd>
                             </div>
                         </dl>
                     </li>
