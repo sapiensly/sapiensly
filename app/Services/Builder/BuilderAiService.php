@@ -26,6 +26,7 @@ use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Ai\Tools\Builder\ProposePlanTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
 use App\Ai\Tools\Builder\SampleEndpointTool;
+use App\Ai\Tools\Builder\SampleMcpToolTool;
 use App\Ai\Tools\Builder\ScaffoldAppTool;
 use App\Ai\Tools\Builder\SeedRecordsTool;
 use App\Ai\Tools\Builder\SetBuildPlanTool;
@@ -58,6 +59,7 @@ use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
 use App\Services\Storage\TenantStorage;
+use App\Services\Tools\McpClient;
 use App\Services\Workflows\WorkflowAssertionEvaluator;
 use App\Services\Workflows\WorkflowEngine;
 use App\Support\Branding\OrganizationBrand;
@@ -193,6 +195,7 @@ class BuilderAiService
             $createIntegrationTool,
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
             new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
+            new SampleMcpToolTool(app(McpClient::class), $conversation->user),
         ];
 
         $history = $this->buildHistory($conversation);
@@ -393,6 +396,7 @@ class BuilderAiService
             $createIntegrationTool,
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
             new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
+            new SampleMcpToolTool(app(McpClient::class), $conversation->user),
         ];
 
         // History excludes the placeholder we're about to fill. reorder()
@@ -1331,6 +1335,7 @@ Rules of engagement:
 1d-plan. PLAN A MULTI-PART BUILD across turns. When a request has several distinct pieces that won't fit one turn (e.g. "add objects, then pages, then a couple of workflows"), call `set_build_plan` FIRST with the ordered steps (just {title, detail?} — the server mints ids and tracks status). Then each turn: call `target_plan_steps` with the id(s) you're about to do, make the change with `propose_change` (or scaffold/add_* tools), and STOP. You do NOT mark steps done — the platform closes a step automatically only when your `propose_change` actually applies (a turn that proposes nothing advances nothing). When a plan is active it is shown to you at the top of each turn; work the next pending step(s). Use a plan only for genuinely multi-step builds — a single small edit needs no plan.
 1e. PLAN BEFORE YOU BUILD a workflow. For a request to create a new workflow, automation or multi-step flow — ESPECIALLY one that touches an external system (a connector.call) — call `propose_plan` FIRST with the trigger, the ordered steps, every external system each step touches (read vs write), and your assumptions as defaults the user can change. Then STOP for that turn: present the plan in plain language and do NOT call `propose_change`. The user approves, edits or discards the plan from the card; only on the next turn (after approval) do you build it with `propose_change`. Before composing a connector step, call `list_available_integrations` then `list_connector_actions` so the plan names real systems and effects. Skip `propose_plan` only for a small, unambiguous tweak to an existing flow.
 1f. PROVISION WHAT'S MISSING — by proposal, never by entering secrets. If a flow needs a system that `list_available_integrations` does not return, provision it with `create_integration` (use `discover_integration` first for an OAuth2 API). ALWAYS pass `reason` and the `actions` the flow needs — they render on a provisioning card. The connection is created as a DRAFT: you NEVER enter or request tokens/passwords; the user authorizes it in the provider's own surface from the card. A connector.call that depends on it is composed but stays unauthorized until the user connects — say so plainly ("I added the step; it'll run once you connect Slack"), and never claim it's working before authorization. A read-only connection may be authorized in one step; a write connection is a separate, explicit grant.
+1g. BUILD FROM AN MCP SOURCE'S REAL DATA — never invent it. When the user asks to build from an MCP integration ("analyze tickets from YuhuGo", "dashboard from <MCP server>"), the connection exposes its own tools over the protocol; `sample_endpoint` is REST-only and will 405 against it. Use `sample_mcp_tool` instead: FIRST call it with just the integration_id to LIST the server's tools, then call the right one (with arguments matching its input_schema) to PULL the actual records. Model your objects/fields from the SHAPE of that real data, and `seed_records` the real rows. Do NOT fall back to `generate_demo_data` or hand-invented placeholder records when a live MCP source is connected — that silently fakes the analysis. If the MCP call fails (auth/endpoint), say the exact error and that the connection needs authorizing, rather than substituting demo data. (`sample_mcp_tool` runs as the user; a per-user-authorized OAuth server sees their token — if it isn't authorized yet, tell them to authorize the connection.)
 2. ALWAYS call `list_available_components` and `list_available_field_types` if you need to recall what types are supported.
 3. NEVER invent block types or field types not in the catalogs — the runtime will refuse to render them.
 4. ALL changes go through `propose_change` as an RFC 6902 JSON Patch. After your turn ends the platform applies the ACCUMULATED proposal of the turn automatically — the user does NOT have to approve. So phrase confirmations like "I added X" / "I renamed Y to Z" / "I created the workflow" — past tense, as if already done. The user can undo from the chat if they don't like it. The `change_summary` you pass MUST be just as short and concrete as your chat reply: one plain past-tense clause naming what changed ("Agregué el campo «Notas» a Clientes"), no preamble, no explanation of why, no restating the manifest.
