@@ -63,7 +63,7 @@ DESC;
         }
 
         try {
-            $response = $this->caller->send($integration, 'GET', (string) ($args['path'] ?? ''));
+            $response = $this->caller->send($integration, 'GET', (string) ($args['path'] ?? ''), actor: $this->user);
         } catch (\Throwable $e) {
             return json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_THROW_ON_ERROR);
         }

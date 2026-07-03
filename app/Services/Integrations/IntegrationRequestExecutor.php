@@ -7,7 +7,6 @@ use App\Enums\IntegrationAuthType;
 use App\Models\Integration;
 use App\Models\IntegrationEnvironment;
 use App\Models\IntegrationRequest;
-use App\Models\IntegrationUserToken;
 use App\Models\User;
 use App\Services\Integrations\Auth\AuthStrategyFactory;
 use App\Services\Integrations\OAuth2\OAuth2ClientCredentialsFlow;
@@ -157,7 +156,7 @@ class IntegrationRequestExecutor
         // Refresh OAuth2 access tokens before applying the strategy. The
         // Authorization Code flow needs the user to complete consent first;
         // the executor never auto-redirects.
-        $userToken = null;
+        $userTokens = null;
         if ($authType === IntegrationAuthType::OAuth2ClientCredentials) {
             $integration = $this->oauth2ClientCredentials->acquire($integration);
         } elseif ($authType === IntegrationAuthType::OAuth2AuthorizationCode) {
@@ -166,28 +165,13 @@ class IntegrationRequestExecutor
             // the call — the integration itself only holds the shared client
             // config. Fall back to integration-level tokens for connections
             // authorized at the connection level.
-            $userToken = $actor !== null
-                ? IntegrationUserToken::query()
-                    ->where('user_id', $actor->id)
-                    ->where('integration_id', $integration->id)
-                    ->first()
-                : null;
-            if ($userToken?->isAuthorized()) {
-                $tokens = $this->oauth2Refresher->refreshTokens(
-                    $integration->auth_config ?? [],
-                    $userToken->auth_config ?? [],
-                );
-                $userToken->update(['auth_config' => $tokens]);
-            } else {
-                $userToken = null;
+            $userTokens = $this->oauth2Refresher->userTokensFor($integration, $actor);
+            if ($userTokens === null) {
                 $integration = $this->oauth2Refresher->refreshIfNeeded($integration);
             }
         }
 
-        $authConfig = $integration->auth_config ?? [];
-        if ($userToken !== null) {
-            $authConfig = array_merge($authConfig, $userToken->auth_config ?? []);
-        }
+        $authConfig = array_merge($integration->auth_config ?? [], $userTokens ?? []);
         $strategy = $this->authFactory->make($authType);
         $applied = $strategy->apply($authConfig);
 

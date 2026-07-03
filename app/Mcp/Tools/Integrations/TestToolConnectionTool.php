@@ -32,7 +32,7 @@ class TestToolConnectionTool extends SapiensTool
             return Response::error("No tool '{$validated['tool_id']}' is visible to you.");
         }
 
-        $result = app(ToolExecutionService::class)->testConnection($tool);
+        $result = app(ToolExecutionService::class)->testConnection($tool, $user);
 
         return Response::json([
             'success' => $result->success,

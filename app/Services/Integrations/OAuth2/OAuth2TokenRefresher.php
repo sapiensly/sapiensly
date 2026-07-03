@@ -4,6 +4,8 @@ namespace App\Services\Integrations\OAuth2;
 
 use App\Enums\IntegrationAuthType;
 use App\Models\Integration;
+use App\Models\IntegrationUserToken;
+use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -64,6 +66,37 @@ class OAuth2TokenRefresher
         $fresh = $this->requestWithRefreshToken($cfg);
 
         return array_merge($tokens, $fresh);
+    }
+
+    /**
+     * The ACTING user's token bag for an integration (per-user authorization —
+     * MCP-style connections store tokens on IntegrationUserToken, the
+     * integration itself only holds the shared client config). Returns the
+     * refreshed tokens ready to merge into the auth config, or null when the
+     * user hasn't authorized this connection (callers then fall back to
+     * integration-level tokens).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function userTokensFor(Integration $integration, ?User $actor): ?array
+    {
+        if ($actor === null) {
+            return null;
+        }
+
+        $userToken = IntegrationUserToken::query()
+            ->where('user_id', $actor->id)
+            ->where('integration_id', $integration->id)
+            ->first();
+
+        if (! $userToken?->isAuthorized()) {
+            return null;
+        }
+
+        $tokens = $this->refreshTokens($integration->auth_config ?? [], $userToken->auth_config ?? []);
+        $userToken->update(['auth_config' => $tokens]);
+
+        return $tokens;
     }
 
     public function refreshIfNeeded(Integration $integration): Integration

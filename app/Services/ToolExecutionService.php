@@ -6,6 +6,7 @@ use App\Contracts\ToolExecutor;
 use App\DTOs\ToolExecutionResult;
 use App\Enums\ToolType;
 use App\Models\Tool;
+use App\Models\User;
 use App\Services\Integrations\IntegrationService;
 use App\Services\Tools\DatabaseExecutor;
 use App\Services\Tools\GraphqlExecutor;
@@ -141,14 +142,14 @@ class ToolExecutionService
     /**
      * Test a tool's connection/configuration.
      */
-    public function testConnection(Tool $tool): ToolExecutionResult
+    public function testConnection(Tool $tool, ?User $actor = null): ToolExecutionResult
     {
         // Connected tools share the integration's reachability check — one
         // test-connection path for the whole connection, not a per-tool ping.
         $integration = $this->connections->resolve($tool);
         if ($integration !== null) {
             $startTime = microtime(true);
-            $result = $this->integrationService->testConnection($integration);
+            $result = $this->integrationService->testConnection($integration, $actor);
 
             if ($result['success'] ?? false) {
                 return ToolExecutionResult::success(

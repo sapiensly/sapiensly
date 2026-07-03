@@ -53,7 +53,7 @@ class TestIntegrationConnectionTool implements Tool
         }
 
         return json_encode(
-            $this->authoring->test($integration, $args['test_path'] ?? null),
+            $this->authoring->test($integration, $args['test_path'] ?? null, $this->user),
             JSON_THROW_ON_ERROR
         );
     }

@@ -4,6 +4,7 @@ namespace App\Services\Integrations;
 
 use App\Enums\IntegrationAuthType;
 use App\Models\Integration;
+use App\Models\User;
 use App\Services\Integrations\Auth\AuthStrategyFactory;
 use App\Services\Integrations\OAuth2\OAuth2TokenRefresher;
 use App\Services\Integrations\Support\SsrfGuard;
@@ -31,15 +32,25 @@ class IntegrationCaller
      * @param  array<string, mixed>  $options  query?, json?, headers? — caller
      *                                         headers merge on top of the auth
      *                                         headers the strategy applies.
+     * @param  User|null  $actor  the user the call runs as — their per-user
+     *                            token (IntegrationUserToken) authenticates an
+     *                            auth-code connection they authorized.
      */
-    public function send(Integration $integration, string $method, string $path, array $options = []): Response
+    public function send(Integration $integration, string $method, string $path, array $options = [], ?User $actor = null): Response
     {
         $authType = $integration->auth_type;
+        $userTokens = null;
         if ($authType instanceof IntegrationAuthType && $authType->isOAuth2()) {
-            $integration = $this->refresher->refreshIfNeeded($integration);
+            if ($authType === IntegrationAuthType::OAuth2AuthorizationCode) {
+                $userTokens = $this->refresher->userTokensFor($integration, $actor);
+            }
+            if ($userTokens === null) {
+                $integration = $this->refresher->refreshIfNeeded($integration);
+            }
         }
 
-        $applied = $this->authFactory->make($integration->auth_type)->apply($integration->auth_config ?? []);
+        $authConfig = array_merge($integration->auth_config ?? [], $userTokens ?? []);
+        $applied = $this->authFactory->make($integration->auth_type)->apply($authConfig);
 
         // An empty path means "hit the base URL as-is" (e.g. a GraphQL endpoint
         // that already encodes its full path); don't append a stray slash.

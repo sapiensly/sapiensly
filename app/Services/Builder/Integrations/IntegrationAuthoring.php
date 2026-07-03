@@ -105,10 +105,10 @@ class IntegrationAuthoring
      *
      * @return array{ok: bool, status?: int, sample?: string, error?: string}
      */
-    public function test(Integration $integration, ?string $path = null): array
+    public function test(Integration $integration, ?string $path = null, ?User $actor = null): array
     {
         try {
-            $response = $this->caller->send($integration, 'GET', (string) $path);
+            $response = $this->caller->send($integration, 'GET', (string) $path, actor: $actor);
 
             return [
                 'ok' => $response->successful(),
