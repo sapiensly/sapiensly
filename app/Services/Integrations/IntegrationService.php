@@ -193,7 +193,7 @@ class IntegrationService
      *
      * @return array{success: bool, message: string, detail?: string}
      */
-    public function testConnection(Integration $integration): array
+    public function testConnection(Integration $integration, ?User $actor = null): array
     {
         if ($integration->isDatabase()) {
             return $this->testDatabaseConnection($integration);
@@ -202,7 +202,7 @@ class IntegrationService
         try {
             $result = $this->executor->executeAdHoc(
                 integration: $integration,
-                actor: null,
+                actor: $actor,
                 method: 'GET',
                 path: '/',
                 queryParams: [],

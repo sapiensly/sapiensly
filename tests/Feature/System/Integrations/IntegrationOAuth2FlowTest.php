@@ -1,7 +1,9 @@
 <?php
 
 use App\Models\Integration;
+use App\Models\IntegrationUserToken;
 use App\Models\User;
+use App\Services\Integrations\IntegrationService;
 use App\Services\Integrations\OAuth2\OAuth2AuthorizationCodeFlow;
 use App\Services\Integrations\OAuth2\OAuth2ClientCredentialsFlow;
 use App\Services\Integrations\OAuth2\OAuth2TokenRefresher;
@@ -125,6 +127,39 @@ test('refresher uses refresh_token when present', function () {
 
     expect($refreshed->auth_config['access_token'])->toBe('rotated-access')
         ->and($refreshed->auth_config['refresh_token'])->toBe('rotated-refresh');
+});
+
+test('the executor authenticates with the acting user\'s token for an auth-code connection', function () {
+    // Per-user authorization (MCP-style connections): tokens live on
+    // IntegrationUserToken, not the integration. A connection test / ad-hoc
+    // call run AS that user must send the user's bearer token instead of
+    // failing over the tokenless integration-level config.
+    Http::fake([
+        'https://api.example.com/*' => Http::response(['ok' => true], 200),
+    ]);
+
+    $user = User::factory()->create(['organization_id' => null]);
+    $integration = Integration::factory()->oauth2AuthCode()->forUser($user)->create([
+        'base_url' => 'https://api.example.com',
+        'auth_config' => [
+            'token_url' => 'https://auth.example.com/oauth/token',
+            'client_id' => 'cid', 'client_secret' => null, 'pkce' => true,
+        ],
+    ]);
+    IntegrationUserToken::create([
+        'user_id' => $user->id,
+        'integration_id' => $integration->id,
+        'auth_config' => [
+            'access_token' => 'user-personal-token',
+            'expires_at' => time() + 3600,
+        ],
+    ]);
+
+    $result = app(IntegrationService::class)
+        ->testConnection($integration, $user);
+
+    expect($result['success'])->toBeTrue();
+    Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer user-personal-token'));
 });
 
 test('an auth-code connection without a refresh token asks for re-authorization instead of trying client_credentials', function () {

@@ -153,11 +153,11 @@ class IntegrationController extends Controller
         return to_route('system.integrations.show', ['integration' => $copy->id]);
     }
 
-    public function testConnection(Integration $integration): JsonResponse
+    public function testConnection(Request $request, Integration $integration): JsonResponse
     {
         $this->authorize('execute', $integration);
 
-        return response()->json($this->service->testConnection($integration));
+        return response()->json($this->service->testConnection($integration, $request->user()));
     }
 
     /**

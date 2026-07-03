@@ -34,7 +34,7 @@ class TestIntegrationConnectionTool extends SapiensTool
             return Response::error('You do not have permission to test this integration.');
         }
 
-        return Response::json(app(IntegrationService::class)->testConnection($integration));
+        return Response::json(app(IntegrationService::class)->testConnection($integration, $user));
     }
 
     /**
