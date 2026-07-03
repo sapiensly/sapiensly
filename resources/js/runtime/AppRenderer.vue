@@ -336,6 +336,22 @@ function innerMaxWidth(block: AnyBlock): string {
     return mw && mw !== 'full' ? (MAX_WIDTH[mw] ?? '') : '';
 }
 
+// Relative column width for a row child: turn `style.col_span` into a flex
+// weight (flex-grow N, basis 0) so a row splits its width by the children's
+// weights — e.g. a chart with col_span 7 beside one with col_span 3 → 70/30 —
+// while the row's items-stretch keeps both the SAME height. Overrides the row
+// container's default equal-column classes. No-op outside a flex row.
+function colSpanStyle(block: AnyBlock): Record<string, string> | undefined {
+    const span = block.style?.col_span;
+    if (!span) return undefined;
+    return { flexGrow: String(span), flexBasis: '0%', minWidth: '0' };
+}
+
+function outerStyle(block: AnyBlock): Record<string, string> | undefined {
+    const merged = { ...wrapperStyle(block), ...colSpanStyle(block) };
+    return Object.keys(merged).length ? merged : undefined;
+}
+
 function blockError(blockId: string): string | null {
     const entry = props.blockData[blockId];
     if (
@@ -366,7 +382,7 @@ function blockError(blockId: string): string | null {
         <div
             v-else-if="isSupported(block.type) && hasWrapper(block)"
             :class="wrapperClass(block)"
-            :style="wrapperStyle(block)"
+            :style="outerStyle(block)"
             :data-block-id="block.id"
             :data-block-type="block.type"
         >
@@ -400,6 +416,7 @@ function blockError(blockId: string): string | null {
             :objects="objects"
             :locale="locale"
             :default-currency="defaultCurrency"
+            :style="colSpanStyle(block)"
             :data-block-id="block.id"
             :data-block-type="block.type"
         />

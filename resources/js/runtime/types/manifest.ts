@@ -90,6 +90,7 @@ export interface BlockBase {
     style?: {
         padding?: string;
         margin?: string;
+        col_span?: number;
         background?: string;
         color?: string;
         max_width?: string;

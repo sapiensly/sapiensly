@@ -93,6 +93,48 @@ it('accepts a masonry container (direction enum extended)', function () {
         ->and($result->errors)->toBe([]);
 });
 
+it('accepts col_span weights on row children', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'container',
+            'direction' => 'row',
+            'blocks' => [
+                ['id' => id('blk'), 'type' => 'heading', 'content' => 'Wide', 'style' => ['col_span' => 7]],
+                ['id' => id('blk'), 'type' => 'heading', 'content' => 'Narrow', 'style' => ['col_span' => 3]],
+            ],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
+it('rejects an out-of-range col_span', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'),
+        'slug' => 'dashboard',
+        'name' => 'Dashboard',
+        'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'),
+            'type' => 'heading',
+            'content' => 'X',
+            'style' => ['col_span' => 20],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
 it('still rejects an unknown container direction', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[

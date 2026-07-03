@@ -112,6 +112,7 @@
             "properties": {
                 "padding": { "enum": ["none", "sm", "md", "lg"] },
                 "margin": { "enum": ["none", "sm", "md", "lg"] },
+                "col_span": { "type": "integer", "minimum": 1, "maximum": 12, "description": "Relative column WIDTH weight when this block is a direct child of a `direction:\"row\"` container. Children split the row width by their weights (all columns stay the same HEIGHT). E.g. a wide chart with col_span 7 next to a companion with col_span 3 → 70/30. Give every child of the row a col_span, or none (unset = equal columns). Ignored outside a row." },
                 "background": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
                 "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
                 "max_width": { "enum": ["sm", "md", "lg", "full"] },
