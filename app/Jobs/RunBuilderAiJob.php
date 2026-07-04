@@ -31,6 +31,18 @@ class RunBuilderAiJob implements ShouldQueue
     /** Auto-retry is off — failures broadcast an error and the user retries. */
     public int $tries = 1;
 
+    /**
+     * On timeout, FAIL immediately instead of releasing the job back to the
+     * queue. Without this, a turn that outruns $timeout (e.g. a slow model like
+     * DeepSeek doing several MCP tool calls) is killed, then sits reserved until
+     * the connection's retry_after (900s) before it is re-picked and dies with
+     * "attempted too many times" — a ~20-min wait to a confusing error, and the
+     * placeholder is frozen the whole time. failOnTimeout runs failed() at the
+     * moment of timeout: the partial work is checkpointed and the message is
+     * marked error right away.
+     */
+    public bool $failOnTimeout = true;
+
     public function __construct(
         public string $placeholderMessageId,
         public string $userText,

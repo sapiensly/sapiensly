@@ -55,3 +55,9 @@ Schedule::command('chat:fail-stale-streams')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Same, for app-builder turns whose worker was hard-killed (deploy/OOM).
+Schedule::command('builder:fail-stale-streams')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();
