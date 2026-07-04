@@ -118,7 +118,7 @@ class ScaffoldAppTool extends SapiensTool
      */
     private function deriveSlug(string $name, User $user): ?string
     {
-        $base = trim((string) preg_replace('/[^a-z0-9_]+/', '_', mb_strtolower($name)), '_');
+        $base = trim((string) preg_replace('/[^a-z0-9_]+/', '_', mb_strtolower(Str::ascii($name))), '_');
         if ($base === '' || ! preg_match('/^[a-z]/', $base)) {
             $base = 'app_'.$base;
         }

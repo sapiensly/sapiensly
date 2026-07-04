@@ -389,7 +389,9 @@ class AppScaffolder
      */
     private function toSlug(string $raw): string
     {
-        $slug = trim((string) preg_replace('/[^a-z0-9_]+/', '_', mb_strtolower($raw)), '_');
+        // Transliterate accents to ASCII first (Str::ascii) so "garantías" →
+        // "garantias", not "garant_as" (the í would otherwise collapse to _).
+        $slug = trim((string) preg_replace('/[^a-z0-9_]+/', '_', mb_strtolower(Str::ascii($raw))), '_');
         if ($slug !== '' && ! preg_match('/^[a-z]/', $slug)) {
             $slug = 'f_'.$slug;
         }

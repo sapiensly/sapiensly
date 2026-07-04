@@ -469,3 +469,25 @@ it('scaffolded apps produce no design-lint warnings', function () {
         expect($smells)->toBe([], "expected no design smells for {$label}");
     }
 });
+
+it('transliterates accented single_select values and field names into clean slugs', function () {
+    $scaffolder = app(AppScaffolder::class);
+    $coercions = [];
+
+    $field = $scaffolder->normalizeField([
+        'name' => 'Categoría',
+        'type' => 'single_select',
+        'options' => [
+            ['value' => 'Garantías', 'label' => 'Garantías'],
+            ['value' => 'Crítica', 'label' => 'Crítica'],
+            ['value' => 'Teléfono', 'label' => 'Teléfono'],
+        ],
+    ], [], $coercions);
+
+    // Accents transliterate (garantias) instead of collapsing to "garant_as".
+    expect(collect($field['options'])->pluck('value')->all())
+        ->toBe(['garantias', 'critica', 'telefono']);
+    // Labels keep their accents; only the machine slug is ASCII.
+    expect($field['options'][0]['label'])->toBe('Garantías');
+    expect($field['slug'])->toBe('categoria');
+});

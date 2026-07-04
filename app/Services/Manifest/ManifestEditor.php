@@ -239,7 +239,11 @@ class ManifestEditor
      */
     private function uniqueSlug(string $raw, array $taken, string $fallback): string
     {
-        $slug = trim((string) preg_replace('/[^a-z0-9_]+/', '_', mb_strtolower($raw)), '_');
+        // Transliterate accents to ASCII first (Str::ascii): "garantías" → a
+        // real "garantias" slug instead of "garant_as" — otherwise the í is a
+        // non-[a-z0-9_] char and collapses to an underscore, which then bit the
+        // builder when seeding single_select values by their mangled slug.
+        $slug = trim((string) preg_replace('/[^a-z0-9_]+/', '_', mb_strtolower(Str::ascii($raw))), '_');
         if ($slug === '' || ! preg_match('/^[a-z]/', $slug)) {
             $slug = $slug === '' ? $fallback : 'f_'.$slug;
         }

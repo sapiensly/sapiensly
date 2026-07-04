@@ -210,7 +210,7 @@ class BotFlowScaffolder
                 continue;
             }
 
-            $variable = trim((string) preg_replace('/[^a-z0-9_]+/', '_', mb_strtolower((string) ($field['variable'] ?? ''))), '_');
+            $variable = trim((string) preg_replace('/[^a-z0-9_]+/', '_', mb_strtolower(Str::ascii((string) ($field['variable'] ?? '')))), '_');
             if ($variable === '') {
                 continue;
             }
