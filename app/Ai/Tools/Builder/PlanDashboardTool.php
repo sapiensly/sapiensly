@@ -94,6 +94,29 @@ DESC;
         $purpose = trim((string) ($args['purpose'] ?? ''));
         $rows = is_array($args['rows'] ?? null) ? array_values($args['rows']) : [];
 
+        $result = self::lint($purpose, $rows);
+        $ok = $result['ok'];
+
+        return json_encode([
+            'ok' => $ok,
+            'issues' => $result['issues'],
+            'hints' => $result['hints'],
+            'message' => $ok
+                ? 'Plan approved — build EXACTLY this layout with propose_change: sections as headings, each planned row as a direction:"row" container (col_span as planned), KPI band and insights included. Re-call plan_dashboard if the layout changes while building.'
+                : 'Fix every issue and call plan_dashboard again — do NOT propose dashboard blocks until the plan returns ok:true.',
+        ], JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * The deterministic dashboard-quality lints, reusable outside the tool —
+     * the add_dashboard_page compiler runs them over its OWN generated layout
+     * so a compiled page is professional by construction, not by prompt.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{ok: bool, issues: list<string>, hints: list<string>}
+     */
+    public static function lint(string $purpose, array $rows): array
+    {
         $issues = [];
         $hints = [];
 
@@ -158,7 +181,7 @@ DESC;
                 }
                 $spans[] = is_array($block) && is_numeric($block['col_span'] ?? null)
                     ? (int) $block['col_span'] : null;
-                $rowKinds[] = $this->kindOf($type, $chartType);
+                $rowKinds[] = self::kindOf($type, $chartType);
             }
 
             // A lone SHORT block leaves the rest of the row empty.
@@ -211,20 +234,11 @@ DESC;
             $hints[] = 'No sections — group related rows under short headings ("Tendencia", "Desglose", "Lecturas clave") so the data reads coherently.';
         }
 
-        $ok = $issues === [];
-
-        return json_encode([
-            'ok' => $ok,
-            'issues' => $issues,
-            'hints' => $hints,
-            'message' => $ok
-                ? 'Plan approved — build EXACTLY this layout with propose_change: sections as headings, each planned row as a direction:"row" container (col_span as planned), KPI band and insights included. Re-call plan_dashboard if the layout changes while building.'
-                : 'Fix every issue and call plan_dashboard again — do NOT propose dashboard blocks until the plan returns ok:true.',
-        ], JSON_THROW_ON_ERROR);
+        return ['ok' => $issues === [], 'issues' => $issues, 'hints' => $hints];
     }
 
     /** Coarse layout footprint of a block for balance checks. */
-    private function kindOf(string $type, string $chartType): string
+    public static function kindOf(string $type, string $chartType): string
     {
         if ($type === 'metric_grid') {
             return 'kpi';

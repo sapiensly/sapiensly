@@ -3,6 +3,7 @@
 namespace App\Services\Manifest;
 
 use App\Ai\ChatAgent;
+use App\Ai\Tools\Builder\PlanDashboardTool;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
@@ -1014,6 +1015,351 @@ class AppScaffolder
             'path' => '/',
             'blocks' => $blocks,
         ];
+    }
+
+    /** Numeric field types a sum/avg/min/max (or a percentile KPI) can fold. */
+    private const NUMERIC_TYPES = ['number', 'currency', 'rating', 'slider'];
+
+    /** Date-ish field types that can drive the date-range filter / time axes. */
+    private const DATE_TYPES = ['date', 'datetime'];
+
+    /** Chart aggregations the runtime renders; percentiles belong in KPIs. */
+    private const CHART_AGGS = ['count', 'sum', 'avg', 'min', 'max'];
+
+    private const KPI_AGGS = ['count', 'sum', 'avg', 'min', 'max', 'distinct_count', 'median', 'p90', 'p95'];
+
+    /**
+     * Compile a full dashboard page from a compact CONTENT spec (the model says
+     * WHAT: kpis/charts/insights; the server decides HOW: balanced rows, column
+     * weights, ids, the date-range filter wiring, the brand hero). Deterministic
+     * and schema-valid by construction — the add_dashboard_page tool then lints
+     * the returned `plan_rows` with PlanDashboardTool::lint before proposing.
+     *
+     * @param  array<string, mixed>  $spec  {title?, purpose?, date_field_id?, kpis: [...], charts: [...], insights?: [...], include_hero?, include_date_filter?}
+     * @param  array<string, mixed>  $object  the manifest object node the dashboard reads
+     * @param  list<string>  $takenPageSlugs
+     * @param  array{ramp: array<string, string>}|null  $palette  brand palette for the hero gradient
+     * @return array{ok: bool, page?: array<string, mixed>, plan_rows?: list<array<string, mixed>>, purpose?: string, errors?: list<array{path: string, message: string, code: string}>}
+     */
+    public function buildDashboardFromSpec(array $spec, array $object, array $takenPageSlugs, ?array $palette, string $lang = 'en'): array
+    {
+        $fieldById = [];
+        foreach ($object['fields'] ?? [] as $f) {
+            $fieldById[$f['id']] = $f;
+        }
+        $fieldById['sys_created_at'] = ['id' => 'sys_created_at', 'slug' => 'sys_created_at', 'type' => 'datetime', 'name' => 'Created at'];
+        $fieldById['sys_updated_at'] = ['id' => 'sys_updated_at', 'slug' => 'sys_updated_at', 'type' => 'datetime', 'name' => 'Updated at'];
+
+        $errors = [];
+        $fieldType = function (?string $id, string $path, bool $required = false) use ($fieldById, $object, &$errors): ?string {
+            if ($id === null || $id === '') {
+                if ($required) {
+                    $errors[] = ['path' => $path, 'message' => 'field_id is required here.', 'code' => 'missing_field'];
+                }
+
+                return null;
+            }
+            if (! isset($fieldById[$id])) {
+                $errors[] = ['path' => $path, 'message' => "Field '{$id}' does not exist on object '{$object['slug']}'. Use the ids from read_manifest/profile_object.", 'code' => 'unknown_field'];
+
+                return null;
+            }
+
+            return $fieldById[$id]['type'];
+        };
+
+        $kpis = array_values(is_array($spec['kpis'] ?? null) ? $spec['kpis'] : []);
+        $charts = array_values(is_array($spec['charts'] ?? null) ? $spec['charts'] : []);
+        $insights = array_values(is_array($spec['insights'] ?? null) ? $spec['insights'] : []);
+        if ($kpis === []) {
+            $errors[] = ['path' => '/kpis', 'message' => 'Give at least one KPI — a dashboard opens with its headline numbers.', 'code' => 'missing_kpis'];
+        }
+        if ($charts === []) {
+            $errors[] = ['path' => '/charts', 'message' => 'Give at least one chart.', 'code' => 'missing_charts'];
+        }
+
+        // The date field that drives the range filter (and default time axes).
+        $dateFieldId = is_string($spec['date_field_id'] ?? null) && $spec['date_field_id'] !== '' ? $spec['date_field_id'] : null;
+        if ($dateFieldId !== null) {
+            $type = $fieldType($dateFieldId, '/date_field_id');
+            if ($type !== null && ! in_array($type, self::DATE_TYPES, true)) {
+                $errors[] = ['path' => '/date_field_id', 'message' => "Field '{$dateFieldId}' is {$type}, not a date/datetime.", 'code' => 'wrong_type'];
+            }
+        } else {
+            foreach ($object['fields'] ?? [] as $f) {
+                if (in_array($f['type'], self::DATE_TYPES, true)) {
+                    $dateFieldId = $f['id'];
+                    break;
+                }
+            }
+            $dateFieldId ??= 'sys_created_at';
+        }
+        $withDateFilter = (bool) ($spec['include_date_filter'] ?? true);
+
+        // Merge the range filter into a block's own filter (empty preset ⇒ the
+        // condition resolves empty and is skipped server-side ⇒ "Todo").
+        $rangeCondition = ['op' => 'gte', 'field_id' => $dateFieldId, 'value_expression' => "{{range_start(default(params.range, '30d'))}}"];
+        $withRange = function (?array $own) use ($withDateFilter, $rangeCondition): ?array {
+            if (! $withDateFilter) {
+                return $own;
+            }
+
+            return $own === null ? $rangeCondition : ['op' => 'and', 'conditions' => [$own, $rangeCondition]];
+        };
+
+        // --- KPI band ---------------------------------------------------------
+        $items = [];
+        foreach ($kpis as $i => $kpi) {
+            $agg = (string) ($kpi['aggregation'] ?? 'count');
+            if (! in_array($agg, self::KPI_AGGS, true)) {
+                $errors[] = ['path' => "/kpis/{$i}/aggregation", 'message' => "Unknown aggregation '{$agg}'. Valid: ".implode('|', self::KPI_AGGS).'.', 'code' => 'bad_aggregation'];
+
+                continue;
+            }
+            $needsField = $agg !== 'count';
+            $type = $fieldType($kpi['field_id'] ?? null, "/kpis/{$i}/field_id", $needsField);
+            if ($type !== null && $agg !== 'count' && $agg !== 'distinct_count' && ! in_array($type, self::NUMERIC_TYPES, true)) {
+                $errors[] = ['path' => "/kpis/{$i}/field_id", 'message' => "'{$agg}' needs a numeric field; '{$kpi['field_id']}' is {$type}.", 'code' => 'wrong_type'];
+            }
+
+            $ownFilter = is_array($kpi['filter'] ?? null) ? $kpi['filter'] : null;
+            $query = array_filter([
+                'object_id' => $object['id'],
+                'filter' => $withRange($ownFilter),
+            ], fn ($v) => $v !== null);
+
+            $compare = is_array($kpi['compare'] ?? null) ? $kpi['compare'] : null;
+            if ($compare !== null && ! isset($compare['object_id'])) {
+                $compare['object_id'] = $object['id'];
+            }
+
+            $items[] = array_filter([
+                'id' => $this->id('itm'),
+                'label' => (string) ($kpi['label'] ?? 'KPI'),
+                'query' => $query,
+                'aggregation' => $agg,
+                'field_id' => $needsField ? ($kpi['field_id'] ?? null) : null,
+                'format' => $kpi['format'] ?? null,
+                'icon' => $kpi['icon'] ?? null,
+                'compare' => $compare,
+                'delta_good' => $kpi['delta_good'] ?? null,
+            ], fn ($v) => $v !== null);
+        }
+
+        // --- Charts -----------------------------------------------------------
+        $chartBlocks = [];
+        foreach ($charts as $i => $chart) {
+            $chartType = (string) ($chart['chart_type'] ?? '');
+            $agg = (string) ($chart['aggregation'] ?? 'count');
+            if (in_array($agg, ['median', 'p90', 'p95', 'distinct_count'], true)) {
+                $errors[] = ['path' => "/charts/{$i}/aggregation", 'message' => "Charts render count|sum|avg|min|max only — put '{$agg}' in a KPI instead.", 'code' => 'bad_aggregation'];
+
+                continue;
+            }
+            if (! in_array($agg, self::CHART_AGGS, true)) {
+                $errors[] = ['path' => "/charts/{$i}/aggregation", 'message' => "Unknown aggregation '{$agg}'.", 'code' => 'bad_aggregation'];
+
+                continue;
+            }
+            $yType = $fieldType($chart['y_field_id'] ?? null, "/charts/{$i}/y_field_id", $agg !== 'count');
+            if ($yType !== null && ! in_array($yType, self::NUMERIC_TYPES, true)) {
+                $errors[] = ['path' => "/charts/{$i}/y_field_id", 'message' => "'{$agg}' needs a numeric y_field_id; '{$chart['y_field_id']}' is {$yType}.", 'code' => 'wrong_type'];
+            }
+            $groupType = $fieldType($chart['group_by_field_id'] ?? null, "/charts/{$i}/group_by_field_id");
+            $xType = $fieldType($chart['x_field_id'] ?? null, "/charts/{$i}/x_field_id");
+
+            // A date axis gets a bucket so the series reads chronologically.
+            $bucket = $chart['bucket'] ?? null;
+            if ($bucket === null
+                && (($groupType !== null && in_array($groupType, self::DATE_TYPES, true))
+                    || ($xType !== null && in_array($xType, self::DATE_TYPES, true)))) {
+                $bucket = 'week';
+            }
+
+            $ownFilter = is_array($chart['filter'] ?? null) ? $chart['filter'] : null;
+            $dataSource = array_filter([
+                'object_id' => $object['id'],
+                'filter' => $withRange($ownFilter),
+                'limit' => is_numeric($chart['limit'] ?? null) ? (int) $chart['limit'] : self::DASHBOARD_ROW_LIMIT,
+            ], fn ($v) => $v !== null);
+
+            $chartBlocks[] = array_filter([
+                'id' => $this->id('blk'),
+                'type' => 'chart',
+                'label' => (string) ($chart['label'] ?? 'Chart'),
+                'chart_type' => $chartType,
+                'data_source' => $dataSource,
+                'aggregation' => $agg,
+                'y_field_id' => $chart['y_field_id'] ?? null,
+                'group_by_field_id' => $chart['group_by_field_id'] ?? null,
+                'x_field_id' => $chart['x_field_id'] ?? null,
+                'bucket' => $bucket,
+                'series_field_id' => $chart['series_field_id'] ?? null,
+                'stacked' => $chart['stacked'] ?? null,
+            ], fn ($v) => $v !== null);
+        }
+
+        if ($errors !== []) {
+            return ['ok' => false, 'errors' => $errors];
+        }
+
+        // --- Deterministic layout: pair charts by their natural footprint ------
+        $wide = $medium = $short = [];
+        foreach ($chartBlocks as $block) {
+            match (PlanDashboardTool::kindOf('chart', $block['chart_type'])) {
+                'wide' => $wide[] = $block,
+                'short' => $short[] = $block,
+                default => $medium[] = $block,
+            };
+        }
+
+        $chartRows = [];
+        while ($wide !== [] && $short !== []) {
+            $w = array_shift($wide);
+            $s = array_shift($short);
+            $w['style'] = ['col_span' => 7];
+            $s['style'] = ['col_span' => 5];
+            $chartRows[] = [$w, $s];
+        }
+        while (count($short) >= 2) {
+            $chartRows[] = [array_shift($short), array_shift($short)];
+        }
+        while (count($medium) >= 2) {
+            $chartRows[] = [array_shift($medium), array_shift($medium)];
+        }
+        if ($medium !== [] && $short !== []) {
+            $m = array_shift($medium);
+            $s = array_shift($short);
+            $m['style'] = ['col_span' => 7];
+            $s['style'] = ['col_span' => 5];
+            $chartRows[] = [$m, $s];
+        }
+        while ($wide !== []) {
+            $chartRows[] = [array_shift($wide)];
+        }
+        while ($medium !== []) {
+            $chartRows[] = [array_shift($medium)];
+        }
+        if ($short !== []) {
+            // A leftover lone short chart joins the last roomy equal-width row
+            // rather than leaving a half-empty row of its own.
+            $placed = false;
+            for ($ri = count($chartRows) - 1; $ri >= 0; $ri--) {
+                $row = $chartRows[$ri];
+                $hasSpans = array_filter($row, fn ($b) => isset($b['style']['col_span'])) !== [];
+                if (count($row) < 3 && ! $hasSpans) {
+                    $chartRows[$ri][] = array_shift($short);
+                    $placed = true;
+                    break;
+                }
+            }
+            if (! $placed) {
+                $chartRows[] = array_splice($short, 0);
+            }
+        }
+
+        // --- Assemble the page -------------------------------------------------
+        $title = trim((string) ($spec['title'] ?? '')) ?: $object['name'];
+        $blocks = [];
+        $planRows = [];
+
+        if ((bool) ($spec['include_hero'] ?? true)) {
+            $hero = [
+                'id' => $this->id('hro'),
+                'type' => 'hero',
+                'title' => $title,
+                'align' => 'left',
+                'min_height' => 120,
+            ];
+            if (is_array($palette['ramp'] ?? null) && isset($palette['ramp']['900'], $palette['ramp']['600'])) {
+                $hero['style'] = ['gradient' => ['from' => $palette['ramp']['900'], 'to' => $palette['ramp']['600'], 'direction' => 'to-br']];
+            }
+            $blocks[] = $hero; // chrome — not a lint row
+        } else {
+            $blocks[] = ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $title];
+        }
+
+        if ($withDateFilter) {
+            $blocks[] = [
+                'id' => $this->id('blk'),
+                'type' => 'filter_bar',
+                'controls' => [['param' => 'range', 'type' => 'date_range', 'default' => '30d']],
+            ];
+            $planRows[] = ['blocks' => [['type' => 'filter_bar']]];
+        }
+
+        $blocks[] = [
+            'id' => $this->id('blk'),
+            'type' => 'metric_grid',
+            'columns' => count($items) <= 6 ? max(count($items), 3) : 4,
+            'items' => $items,
+        ];
+        $planRows[] = ['blocks' => [['type' => 'metric_grid']]];
+
+        foreach ($chartRows as $row) {
+            $blocks[] = [
+                'id' => $this->id('cn'),
+                'type' => 'container',
+                'direction' => 'row',
+                'gap' => 'md',
+                'blocks' => array_values($row),
+            ];
+            $planRows[] = ['blocks' => array_map(fn (array $b): array => array_filter([
+                'type' => 'chart',
+                'chart_type' => $b['chart_type'],
+                'col_span' => $b['style']['col_span'] ?? null,
+            ], fn ($v) => $v !== null), $row)];
+        }
+
+        foreach (array_chunk($insights, 3) as $chunk) {
+            $insightBlocks = array_map(fn (array $ins): array => array_filter([
+                'id' => $this->id('in'),
+                'type' => 'insight',
+                'variant' => $ins['variant'] ?? 'insight',
+                'title' => (string) ($ins['title'] ?? 'Insight'),
+                'body' => $ins['body'] ?? null,
+                'compute' => is_array($ins['compute'] ?? null) ? $ins['compute'] : null,
+            ], fn ($v) => $v !== null), $chunk);
+            $blocks[] = [
+                'id' => $this->id('cn'),
+                'type' => 'container',
+                'direction' => 'row',
+                'gap' => 'md',
+                'blocks' => array_values($insightBlocks),
+            ];
+            $planRows[] = ['blocks' => array_map(fn () => ['type' => 'insight'], $chunk)];
+        }
+
+        $pageSlug = $this->uniqueSlugAmong('dashboard', $takenPageSlugs);
+
+        return [
+            'ok' => true,
+            'page' => [
+                'id' => $this->id('pag'),
+                'slug' => $pageSlug,
+                'name' => $title,
+                'path' => '/'.$pageSlug,
+                'blocks' => $blocks,
+            ],
+            'plan_rows' => $planRows,
+            'purpose' => trim((string) ($spec['purpose'] ?? '')) ?: "Vista ejecutiva de {$object['name']}: KPIs, tendencias y conclusiones.",
+        ];
+    }
+
+    /**
+     * A page slug unique among the given taken slugs.
+     *
+     * @param  list<string>  $taken
+     */
+    private function uniqueSlugAmong(string $base, array $taken): string
+    {
+        $slug = $base;
+        $n = 2;
+        while (in_array($slug, $taken, true)) {
+            $slug = $base.'_'.$n++;
+        }
+
+        return $slug;
     }
 
     /**
