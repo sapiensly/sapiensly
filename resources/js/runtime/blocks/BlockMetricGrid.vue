@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
-import type { ObjectDef } from '../types/manifest';
+import type { ObjectDef, SparkSpec } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import MiniSparkline from './MiniSparkline.vue';
+import type { SparkRow } from './sparkSeries';
 import { computeTrend } from './trend';
 
 interface MetricItem {
@@ -14,6 +16,8 @@ interface MetricItem {
     format?: 'number' | 'currency' | 'percentage' | 'duration';
     icon?: string;
     delta_good?: 'up' | 'down';
+    compare_label?: string;
+    spark?: SparkSpec;
 }
 
 interface MetricGridBlock {
@@ -23,15 +27,25 @@ interface MetricGridBlock {
     items: MetricItem[];
 }
 
+interface MetricItemData {
+    value: number;
+    compare_value?: number;
+    spark_rows?: SparkRow[];
+}
+
 const props = defineProps<{
     block: MetricGridBlock;
-    data:
-        | { items: Record<string, { value: number; compare_value?: number }> }
-        | undefined;
+    data: { items: Record<string, MetricItemData> } | undefined;
     objects: ObjectDef[];
     locale: string;
     defaultCurrency: string;
 }>();
+
+function sparkObjectFor(item: MetricItem): ObjectDef | undefined {
+    return props.objects.find(
+        (o) => o.id === item.spark?.data_source.object_id,
+    );
+}
 
 function trendFor(item: MetricItem) {
     const entry = props.data?.items?.[item.id];
@@ -102,25 +116,48 @@ function format(item: MetricItem, raw: number | undefined): string {
                     :class="t.textSubtle"
                 />
             </div>
-            <p :class="['mt-2 text-2xl font-bold tracking-tight', t.statTint]">
-                {{ format(item, data?.items?.[item.id]?.value) }}
-            </p>
-            <p
-                v-if="trendFor(item)"
-                class="mt-1 inline-flex items-center gap-1 text-xs font-semibold"
-                :class="
-                    trendFor(item)!.dir === 'flat'
-                        ? t.textSubtle
-                        : trendFor(item)!.good
-                          ? 'text-emerald-500'
-                          : 'text-red-500'
-                "
+            <div class="mt-2 flex items-end justify-between gap-3">
+                <p :class="['text-2xl font-bold tracking-tight', t.statTint]">
+                    {{ format(item, data?.items?.[item.id]?.value) }}
+                </p>
+                <MiniSparkline
+                    v-if="item.spark"
+                    :rows="data?.items?.[item.id]?.spark_rows"
+                    :object="sparkObjectFor(item)"
+                    :x-field-id="item.spark.x_field_id"
+                    :y-field-id="item.spark.y_field_id"
+                    :aggregation="item.spark.aggregation"
+                    :color="item.spark.color"
+                />
+            </div>
+            <div
+                v-if="trendFor(item) || item.compare_label"
+                class="mt-1 flex items-center justify-between gap-2"
             >
-                <span v-if="trendFor(item)!.dir === 'up'">▲</span
-                ><span v-else-if="trendFor(item)!.dir === 'down'">▼</span
-                ><span v-else>→</span>
-                {{ trendFor(item)!.label }}
-            </p>
+                <p
+                    v-if="trendFor(item)"
+                    class="inline-flex items-center gap-1 text-xs font-semibold"
+                    :class="
+                        trendFor(item)!.dir === 'flat'
+                            ? t.textSubtle
+                            : trendFor(item)!.good
+                              ? 'text-emerald-500'
+                              : 'text-red-500'
+                    "
+                >
+                    <span v-if="trendFor(item)!.dir === 'up'">▲</span
+                    ><span v-else-if="trendFor(item)!.dir === 'down'">▼</span
+                    ><span v-else>→</span>
+                    {{ trendFor(item)!.label }}
+                </p>
+                <span v-else />
+                <span
+                    v-if="item.compare_label"
+                    :class="['text-[11px]', t.textMuted]"
+                >
+                    {{ item.compare_label }}
+                </span>
+            </div>
         </div>
     </div>
 </template>

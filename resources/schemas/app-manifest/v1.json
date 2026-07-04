@@ -730,6 +730,19 @@
                 "field_id": { "$ref": "#/$defs/id" }
             }
         },
+        "spark": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["data_source"],
+            "description": "Draws a small inline trend line (sparkline) inside the KPI card, beside its value — a compact history behind the single number. `data_source` is a query for the rows to plot; `x_field_id` (a date/datetime, bucketed by day) orders them and `y_field_id` + `aggregation` (default count) is the measure. Typically the same object as the KPI, scoped to the current period, e.g. the daily spend behind a 'Total spend' figure.",
+            "properties": {
+                "data_source": { "$ref": "#/$defs/query" },
+                "x_field_id": { "$ref": "#/$defs/id", "description": "Date/datetime field the series is ordered/bucketed by (by day). Omit to plot rows in query order." },
+                "y_field_id": { "$ref": "#/$defs/id", "description": "Numeric field to aggregate per bucket (omit for a count of rows)." },
+                "aggregation": { "enum": ["count", "sum", "avg", "min", "max"], "default": "count" },
+                "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "description": "Line colour; defaults to the brand accent." }
+            }
+        },
         "query": {
             "type": "object",
             "required": ["object_id"],
@@ -969,8 +982,10 @@
                         "format": { "enum": ["number", "currency", "percentage", "duration"] },
                         "icon": { "type": "string", "maxLength": 40, "description": "Optional emoji shown in the card corner." },
                         "compare": { "$ref": "#/$defs/query", "description": "Optional comparison query (e.g. the previous period). When set the card shows the % change vs this value as a trend chip." },
+                        "compare_label": { "type": "string", "maxLength": 40, "description": "Optional muted caption for the comparison, shown beside the trend chip (e.g. 'vs período anterior')." },
                         "delta_good": { "enum": ["up", "down"], "default": "up", "description": "Which direction of change is GOOD (green): 'up' (more is better) or 'down' (less is better, e.g. costs/churn)." },
-                        "ratio_denominator": { "$ref": "#/$defs/ratio_operand" }
+                        "ratio_denominator": { "$ref": "#/$defs/ratio_operand" },
+                        "spark": { "$ref": "#/$defs/spark" }
                     },
                     "required": ["type", "label", "query", "aggregation"]
                 }
@@ -1001,7 +1016,8 @@
                                 "field_id": { "$ref": "#/$defs/id" },
                                 "format": { "enum": ["number", "currency", "percentage", "duration"] },
                                 "compare": { "$ref": "#/$defs/query", "description": "Optional comparison query (e.g. previous period) → drives the trend chip." },
-                                "delta_good": { "enum": ["up", "down"], "default": "up", "description": "Which direction of change is GOOD (green)." }
+                                "delta_good": { "enum": ["up", "down"], "default": "up", "description": "Which direction of change is GOOD (green)." },
+                                "spark": { "$ref": "#/$defs/spark" }
                             }
                         }
                     },
@@ -1673,8 +1689,10 @@
                                     "format": { "enum": ["number", "currency", "percentage", "duration"] },
                                     "icon": { "type": "string", "maxLength": 40 },
                                     "compare": { "$ref": "#/$defs/query" },
+                                    "compare_label": { "type": "string", "maxLength": 40, "description": "Optional muted caption beside the trend chip (e.g. 'vs período anterior')." },
                                     "delta_good": { "enum": ["up", "down"], "default": "up" },
-                                    "ratio_denominator": { "$ref": "#/$defs/ratio_operand" }
+                                    "ratio_denominator": { "$ref": "#/$defs/ratio_operand" },
+                                    "spark": { "$ref": "#/$defs/spark" }
                                 }
                             }
                         }

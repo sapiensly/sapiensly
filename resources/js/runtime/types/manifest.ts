@@ -140,6 +140,15 @@ export interface BlockTable extends BlockBase {
     empty_state_message?: string;
 }
 
+/** Optional inline trend line for a KPI card (stat / metric_grid item). */
+export interface SparkSpec {
+    data_source: { object_id: string };
+    x_field_id?: string;
+    y_field_id?: string;
+    aggregation?: 'count' | 'sum' | 'avg' | 'min' | 'max';
+    color?: string;
+}
+
 export interface BlockStat extends BlockBase {
     type: 'stat';
     label: string;
@@ -149,6 +158,8 @@ export interface BlockStat extends BlockBase {
     format?: 'number' | 'currency' | 'percentage' | 'duration';
     icon?: string;
     delta_good?: 'up' | 'down';
+    compare_label?: string;
+    spark?: SparkSpec;
 }
 
 /**
@@ -244,6 +255,7 @@ export interface TableBlockData {
 export interface StatBlockData {
     value: number;
     compare_value?: number;
+    spark_rows?: { id: string; data: Record<string, unknown> }[];
 }
 
 /**

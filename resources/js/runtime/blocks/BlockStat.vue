@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type { BlockStat, ObjectDef, StatBlockData } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import MiniSparkline from './MiniSparkline.vue';
 import { computeTrend } from './trend';
 
 const props = defineProps<{
@@ -17,6 +18,12 @@ const theme = useRuntimeTheme();
 const t = themeTokens(theme);
 
 const value = computed(() => props.data?.value ?? 0);
+
+const sparkObject = computed<ObjectDef | undefined>(() =>
+    props.objects.find(
+        (o) => o.id === props.block.spark?.data_source.object_id,
+    ),
+);
 
 const trend = computed(() =>
     computeTrend(
@@ -62,24 +69,47 @@ const formatted = computed(() => {
                 :class="t.textSubtle"
             />
         </div>
-        <p :class="['mt-2 text-3xl font-bold tracking-tight', t.statTint]">
-            {{ formatted }}
-        </p>
-        <p
-            v-if="trend"
-            class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold"
-            :class="
-                trend.dir === 'flat'
-                    ? t.textSubtle
-                    : trend.good
-                      ? 'text-emerald-500'
-                      : 'text-red-500'
-            "
+        <div class="mt-2 flex items-end justify-between gap-3">
+            <p :class="['text-3xl font-bold tracking-tight', t.statTint]">
+                {{ formatted }}
+            </p>
+            <MiniSparkline
+                v-if="block.spark"
+                :rows="data?.spark_rows"
+                :object="sparkObject"
+                :x-field-id="block.spark.x_field_id"
+                :y-field-id="block.spark.y_field_id"
+                :aggregation="block.spark.aggregation"
+                :color="block.spark.color"
+            />
+        </div>
+        <div
+            v-if="trend || block.compare_label"
+            class="mt-1.5 flex items-center justify-between gap-2"
         >
-            <span v-if="trend.dir === 'up'">▲</span
-            ><span v-else-if="trend.dir === 'down'">▼</span
-            ><span v-else>→</span>
-            {{ trend.label }}
-        </p>
+            <p
+                v-if="trend"
+                class="inline-flex items-center gap-1 text-xs font-semibold"
+                :class="
+                    trend.dir === 'flat'
+                        ? t.textSubtle
+                        : trend.good
+                          ? 'text-emerald-500'
+                          : 'text-red-500'
+                "
+            >
+                <span v-if="trend.dir === 'up'">▲</span
+                ><span v-else-if="trend.dir === 'down'">▼</span
+                ><span v-else>→</span>
+                {{ trend.label }}
+            </p>
+            <span v-else />
+            <span
+                v-if="block.compare_label"
+                :class="['text-[11px]', t.textMuted]"
+            >
+                {{ block.compare_label }}
+            </span>
+        </div>
     </div>
 </template>

@@ -353,13 +353,43 @@ class BlockDataResolver
             $den = $spec['ratio_denominator'];
             $denominator = $this->aggregateBlock($app, $den['query'], $den['aggregation'], $den['field_id'] ?? null, $manifest, $context);
 
-            return ['value' => $denominator != 0 ? $numerator / $denominator : 0];
+            return $this->withSpark($app, $spec, ['value' => $denominator != 0 ? $numerator / $denominator : 0], $manifest, $context);
         }
 
         $payload = ['value' => $this->aggregateBlock($app, $spec['query'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest, $context)];
 
         if (isset($spec['compare'])) {
             $payload['compare_value'] = $this->aggregateBlock($app, $spec['compare'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest, $context);
+        }
+
+        return $this->withSpark($app, $spec, $payload, $manifest, $context);
+    }
+
+    /**
+     * Attach the rows for a KPI's optional inline sparkline. The client buckets
+     * and draws them (same as the sparkline block), so we just deliver the rows
+     * of the spark's data-source. A broken spark query must not sink the KPI, so
+     * it fails soft (no spark_rows) rather than throwing.
+     *
+     * @param  array<string, mixed>  $spec
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function withSpark(App $app, array $spec, array $payload, array $manifest, array $context): array
+    {
+        if (! isset($spec['spark']['data_source'])) {
+            return $payload;
+        }
+
+        try {
+            $payload['spark_rows'] = $this->queryRows($app, $spec['spark']['data_source'], $manifest, $context);
+        } catch (Throwable $e) {
+            Log::warning('KPI sparkline resolution failed', [
+                'app_id' => $app->id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         return $payload;

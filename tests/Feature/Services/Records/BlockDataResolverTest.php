@@ -312,3 +312,72 @@ it('recurses through layout blocks and tolerates broken descendants', function (
     expect($data['blk_table']['rows'])->toHaveCount(1)
         ->and($data['blk_broken_stat'])->toHaveKey('error');
 });
+
+it('attaches spark_rows to a stat that carries an inline sparkline', function () {
+    Record::create([
+        'app_id' => $this->testApp->id,
+        'object_definition_id' => $this->object['id'],
+        'data' => ['nombre' => 'Beto', 'monto' => 250],
+    ]);
+
+    $blocks = [
+        [
+            'id' => 'blk_statspark',
+            'type' => 'stat',
+            'label' => 'Total',
+            'query' => ['object_id' => $this->object['id']],
+            'aggregation' => 'sum',
+            'field_id' => $this->amountField['id'],
+            'spark' => [
+                'data_source' => ['object_id' => $this->object['id']],
+                'y_field_id' => $this->amountField['id'],
+                'aggregation' => 'sum',
+            ],
+        ],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data['blk_statspark']['value'])->toBe(350.0)
+        ->and($data['blk_statspark']['spark_rows'])->toHaveCount(2);
+});
+
+it('attaches spark_rows to a metric_grid item that carries an inline sparkline', function () {
+    $blocks = [
+        [
+            'id' => 'blk_mg',
+            'type' => 'metric_grid',
+            'items' => [
+                [
+                    'id' => 'itm_total',
+                    'label' => 'Total',
+                    'query' => ['object_id' => $this->object['id']],
+                    'aggregation' => 'count',
+                    'spark' => ['data_source' => ['object_id' => $this->object['id']]],
+                ],
+            ],
+        ],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data['blk_mg']['items']['itm_total']['spark_rows'])->toHaveCount(1);
+});
+
+it('keeps the KPI even when its spark query is broken (fails soft)', function () {
+    $blocks = [
+        [
+            'id' => 'blk_softspark',
+            'type' => 'stat',
+            'label' => 'Total',
+            'query' => ['object_id' => $this->object['id']],
+            'aggregation' => 'count',
+            'spark' => ['data_source' => ['object_id' => 'obj_missing']],
+        ],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest);
+
+    expect($data['blk_softspark'])->toHaveKey('value')
+        ->and($data['blk_softspark'])->not->toHaveKey('error');
+});
