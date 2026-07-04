@@ -188,12 +188,18 @@
 
         "source_operation": {
             "type": "object",
-            "required": ["method", "path"],
             "additionalProperties": false,
+            "description": "One external operation for a connected object. EITHER a REST request (method+path, with optional paging/sort/filter param mappings) OR an MCP tool call (mcp_tool + optional static arguments) — the bound integration's transport decides which. Either way the returned JSON rows are mapped by the object's field_map/id_path.",
+            "anyOf": [
+                { "required": ["method", "path"] },
+                { "required": ["mcp_tool"] }
+            ],
             "properties": {
                 "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
-                "path": { "type": "string", "description": "Path appended to the integration base URL; may template {id}." },
-                "collection_path": { "type": "string", "description": "Dot path to the row array in a list response (e.g. \"results\")." },
+                "path": { "type": "string", "description": "Path appended to the integration base URL; may template {id}. REST only." },
+                "mcp_tool": { "type": "string", "description": "For an MCP integration: the name of the tool to call for this operation (e.g. a list/query tool). Its returned JSON rows feed field_map/id_path. Use instead of method+path." },
+                "arguments": { "type": "object", "description": "Static arguments passed to the MCP tool call (e.g. a page size). MCP only." },
+                "collection_path": { "type": "string", "description": "Dot path to the row array in a list response (e.g. \"results\"). Works for REST and MCP results alike." },
                 "page_param": { "type": "string", "description": "Query param name for pagination, when supported." },
                 "page_mode": { "enum": ["offset", "page"], "description": "How page_param is expressed: a raw offset (default) or a 1-based page number derived from offset/limit." },
                 "page_size_param": { "type": "string", "description": "Query param name for the page size (the query's limit), when supported." },

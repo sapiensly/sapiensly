@@ -4,6 +4,7 @@ namespace App\Services\Connected;
 
 use App\Models\Integration;
 use App\Services\Integrations\IntegrationCaller;
+use App\Services\Tools\McpClient;
 use Illuminate\Support\Arr;
 
 /**
@@ -11,12 +12,22 @@ use Illuminate\Support\Arr;
  * object whose `source` is `connected`, it lists rows live from the external
  * system through the integration and maps them to the object's fields via
  * `field_map` — partial-tolerant. Passthrough: it stores NOTHING in our database.
- * Provider-agnostic; reads are remote/may-fail and degrade to an error result
- * rather than throwing.
+ * Provider-agnostic (REST endpoints and MCP tools alike); reads are remote/
+ * may-fail and degrade to an error result rather than throwing.
  */
 class ConnectedObjectReader
 {
-    public function __construct(private readonly IntegrationCaller $caller) {}
+    /**
+     * Upper bound on an MCP list result read into memory. Generous enough for a
+     * real dashboard dataset, capped so a runaway tool response can't OOM the
+     * worker (the failure the builder's row-by-row seeding used to hit).
+     */
+    private const MCP_MAX_CHARS = 2_000_000;
+
+    public function __construct(
+        private readonly IntegrationCaller $caller,
+        private readonly McpClient $mcp,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $object  a manifest object_definition with source.type === 'connected'
@@ -30,7 +41,18 @@ class ConnectedObjectReader
         $source = $object['source'] ?? [];
         $op = $source['operations']['list'] ?? null;
 
-        if (! is_array($op) || empty($op['path'])) {
+        if (! is_array($op)) {
+            return ['ok' => false, 'rows' => [], 'error' => 'No list operation is configured for this object.'];
+        }
+
+        // An MCP-backed connected object (e.g. a dashboard reading a support
+        // desk live) calls a tool instead of a REST endpoint. The mapping
+        // (field_map/id_path) and in-memory aggregation downstream are identical.
+        if ($integration->is_mcp || ! empty($op['mcp_tool'])) {
+            return $this->listViaMcp($object, $integration, $op, $source);
+        }
+
+        if (empty($op['path'])) {
             return ['ok' => false, 'rows' => [], 'error' => 'No list operation is configured for this object.'];
         }
 
@@ -54,6 +76,67 @@ class ConnectedObjectReader
         $raw = $collectionPath
             ? (array) Arr::get($json, $collectionPath, [])
             : (array) $json;
+
+        $fieldSlugById = collect($object['fields'] ?? [])->pluck('slug', 'id')->all();
+        $rows = array_map(
+            fn ($row) => $this->mapRow((array) $row, $source, $fieldSlugById),
+            array_values($raw),
+        );
+
+        return ['ok' => true, 'rows' => $rows];
+    }
+
+    /**
+     * List rows from an MCP integration: call the operation's `mcp_tool` (with
+     * its static `arguments`) as the integration itself (org-level auth — no
+     * per-user token), parse the JSON result, extract the row array via
+     * `collection_path`, and map each through the shared field_map/id_path. The
+     * data-source query (filter/sort/paging) is NOT pushed down — an MCP tool
+     * has no generic param surface — so pass a server-side limit in `arguments`
+     * for large sources; aggregation runs over what the tool returns.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $op
+     * @param  array<string, mixed>  $source
+     * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
+     */
+    private function listViaMcp(array $object, Integration $integration, array $op, array $source): array
+    {
+        $toolName = trim((string) ($op['mcp_tool'] ?? ''));
+        if ($toolName === '') {
+            return ['ok' => false, 'rows' => [], 'error' => 'No MCP tool is configured for this object\'s list operation.'];
+        }
+
+        $config = [
+            'endpoint' => $integration->base_url,
+            'integration_id' => $integration->id,
+            // Read with the integration's own credentials: OAuth connections
+            // resolve a service token via McpAuthResolver; static schemes pass
+            // through their auth_config. A per-user-only OAuth connection has no
+            // org token and will surface an auth error here.
+            'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
+            'auth_config' => $integration->auth_config ?? [],
+        ];
+        $arguments = is_array($op['arguments'] ?? null) ? $op['arguments'] : [];
+
+        try {
+            $text = $this->mcp->callTool($config, null, $toolName, $arguments, self::MCP_MAX_CHARS);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'rows' => [], 'error' => $e->getMessage()];
+        }
+
+        $decoded = json_decode($text, true);
+        if (! is_array($decoded)) {
+            return ['ok' => false, 'rows' => [], 'error' => 'The MCP tool did not return JSON rows.'];
+        }
+
+        $collectionPath = $op['collection_path'] ?? null;
+        $raw = $collectionPath ? (array) Arr::get($decoded, $collectionPath, []) : $decoded;
+
+        // A single object (not a list) → treat it as one row.
+        if ($raw !== [] && Arr::isAssoc($raw)) {
+            $raw = [$raw];
+        }
 
         $fieldSlugById = collect($object['fields'] ?? [])->pluck('slug', 'id')->all();
         $rows = array_map(

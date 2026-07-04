@@ -107,7 +107,7 @@ class McpClient
      *
      * @throws \RuntimeException On connection, auth, or protocol failure.
      */
-    public function callTool(array $config, ?User $user, string $name, array $arguments): string
+    public function callTool(array $config, ?User $user, string $name, array $arguments, int $maxChars = 12000): string
     {
         $endpoint = (string) ($config['endpoint'] ?? '');
         if ($endpoint === '') {
@@ -124,15 +124,18 @@ class McpClient
             'arguments' => empty($arguments) ? new \stdClass : $arguments,
         ], 3);
 
-        return $this->stringifyToolResult($call['result']);
+        return $this->stringifyToolResult($call['result'], $maxChars);
     }
 
     /**
-     * Flatten an MCP tools/call result (content blocks) into plain text.
+     * Flatten an MCP tools/call result (content blocks) into plain text, capped
+     * at $maxChars. Sampling passes the small default (a preview for the model);
+     * the connected-object reader passes a larger bound so a data list isn't
+     * truncated mid-row — still capped, to keep a runaway response off the heap.
      *
      * @param  array<string, mixed>  $result
      */
-    private function stringifyToolResult(array $result): string
+    private function stringifyToolResult(array $result, int $maxChars = 12000): string
     {
         $content = $result['content'] ?? null;
         if (is_array($content)) {
@@ -149,11 +152,11 @@ class McpClient
             }
             $text = trim(implode("\n", array_filter($parts)));
             if ($text !== '') {
-                return mb_substr($text, 0, 12000);
+                return mb_substr($text, 0, $maxChars);
             }
         }
 
-        return mb_substr(json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}', 0, 12000);
+        return mb_substr(json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}', 0, $maxChars);
     }
 
     /**
