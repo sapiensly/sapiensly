@@ -76,6 +76,7 @@ function showTip(title: string, value?: string, color?: string): void {
 }
 function hideTip(): void {
     tip.value = null;
+    activeIdx.value = null;
 }
 
 const object = computed<ObjectDef | undefined>(() =>
@@ -373,6 +374,37 @@ const pieSlices = computed<PieSlice[]>(() => {
 // vs closed per week" renders as two brand-coloured lines, not one collapsed one.
 // Geometry is bounded (a wide viewBox scaled to fit a fixed-height box) so a line
 // chart never balloons, and colours come from the palette / option colours.
+// Smooth a polyline into a Catmull-Rom → cubic-Bézier path so line/area charts
+// read as gentle curves instead of hard elbows. Tension is kept low so the
+// curve hugs the points without big overshoots. Falls back to straight segments
+// for < 3 points (nothing to smooth).
+function smoothLine(pts: { x: number; y: number }[]): string {
+    if (pts.length === 0) return '';
+    if (pts.length < 3) {
+        return pts
+            .map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`))
+            .join(' ');
+    }
+    const tension = 0.16;
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i - 1] ?? pts[i];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[i + 2] ?? p2;
+        const c1x = p1.x + (p2.x - p0.x) * tension;
+        const c1y = p1.y + (p2.y - p0.y) * tension;
+        const c2x = p2.x - (p3.x - p1.x) * tension;
+        const c2y = p2.y - (p3.y - p1.y) * tension;
+        d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
+    }
+    return d;
+}
+
+// The category index the cursor is over on a line/area chart — drives the
+// vertical crosshair, the highlighted markers and the multi-series tooltip.
+const activeIdx = ref<number | null>(null);
+
 const lineChart = computed(() => {
     const isLine =
         props.block.chart_type === 'line' || props.block.chart_type === 'area';
@@ -448,12 +480,11 @@ const lineChart = computed(() => {
             label: c,
             value: values[si][i],
         }));
-        const line = points
-            .map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`))
-            .join(' ');
-        const area = points.length
-            ? `${line} L ${points[points.length - 1].x} ${padT + innerH} L ${points[0].x} ${padT + innerH} Z`
-            : '';
+        const line = smoothLine(points);
+        const area =
+            points.length && line
+                ? `${line} L ${points[points.length - 1].x} ${padT + innerH} L ${points[0].x} ${padT + innerH} Z`
+                : '';
         return {
             label: single ? (yField.value?.name ?? '') : label,
             color: serField
@@ -480,11 +511,33 @@ const lineChart = computed(() => {
         H,
         padL,
         padR,
+        top: padT,
         baselineY: padT + innerH,
+        stepX,
+        xs: orderedCats.map((_, i) => xAt(i)),
+        cats: orderedCats,
         single,
         series: seriesOut,
         yTicks,
         xLabels,
+    };
+});
+
+// The active crosshair: the hovered category's x, its label, and every series'
+// point/value there — for the vertical guide, markers and tooltip rows.
+const crosshair = computed(() => {
+    const lc = lineChart.value;
+    const i = activeIdx.value;
+    if (!lc || i === null || i < 0 || i >= lc.cats.length) return null;
+    return {
+        x: lc.xs[i],
+        label: lc.cats[i],
+        rows: lc.series.map((s) => ({
+            label: s.label || props.block.label || 'Valor',
+            color: s.color,
+            y: s.points[i]?.y ?? 0,
+            value: formatNumber(s.points[i]?.value ?? 0),
+        })),
     };
 });
 
@@ -1169,6 +1222,33 @@ const boxPlot = computed(() => {
                 >{{ tip.value }}</span
             >
         </div>
+        <!-- Crosshair tooltip for line/area: the hovered category and every
+             series' value there, following the cursor. -->
+        <div
+            v-if="crosshair"
+            class="pointer-events-none absolute z-20 rounded-sp-sm border border-medium bg-navy-elevated px-3 py-2 text-[11px] shadow-xl"
+            :style="{ left: mouse.x + 14 + 'px', top: mouse.y + 14 + 'px' }"
+        >
+            <p :class="['mb-1 font-medium', t.textSubtle]">
+                {{ crosshair.label }}
+            </p>
+            <div
+                v-for="(r, ri) in crosshair.rows"
+                :key="'ct' + ri"
+                class="flex items-center gap-3 whitespace-nowrap"
+            >
+                <span class="flex items-center gap-1.5">
+                    <span
+                        class="h-2.5 w-1 shrink-0 rounded-full"
+                        :style="{ background: r.color }"
+                    />
+                    <span :class="t.text">{{ r.label }}</span>
+                </span>
+                <span :class="['ml-auto font-semibold tabular-nums', t.text]">{{
+                    r.value
+                }}</span>
+            </div>
+        </div>
         <header
             v-if="block.label"
             class="mb-3 flex items-center justify-between"
@@ -1434,7 +1514,7 @@ const boxPlot = computed(() => {
                                 {{ tk.label }}
                             </text>
                         </g>
-                        <!-- each series: soft area fill, line stroke, small markers -->
+                        <!-- each series: soft area fill + smoothed line stroke -->
                         <template
                             v-for="(s, si) in lineChart.series"
                             :key="'s' + si"
@@ -1453,25 +1533,46 @@ const boxPlot = computed(() => {
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
                             />
-                            <circle
-                                v-for="(p, j) in s.points"
-                                :key="j"
-                                :cx="p.x"
-                                :cy="p.y"
-                                r="3"
-                                :fill="s.color"
-                                class="cursor-pointer transition-all hover:[r:5px]"
-                                @mouseenter="
-                                    showTip(
-                                        lineChart.single
-                                            ? p.label
-                                            : s.label + ' · ' + p.label,
-                                        formatNumber(p.value),
-                                        s.color,
-                                    )
-                                "
-                            />
                         </template>
+                        <!-- crosshair: dashed vertical guide + markers on the
+                             hovered category, across every series -->
+                        <g v-if="crosshair" :class="t.textMuted">
+                            <line
+                                :x1="crosshair.x"
+                                :y1="lineChart.top"
+                                :x2="crosshair.x"
+                                :y2="lineChart.baselineY"
+                                stroke="currentColor"
+                                stroke-opacity="0.4"
+                                stroke-width="1"
+                                stroke-dasharray="3 3"
+                            />
+                            <circle
+                                v-for="(r, ri) in crosshair.rows"
+                                :key="'m' + ri"
+                                :cx="crosshair.x"
+                                :cy="r.y"
+                                r="3.5"
+                                :fill="r.color"
+                                class="text-navy"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            />
+                        </g>
+                        <!-- transparent full-height hover bands, one per
+                             category, so anywhere over a column arms the crosshair -->
+                        <rect
+                            v-for="(x, i) in lineChart.xs"
+                            :key="'hb' + i"
+                            :x="x - (lineChart.stepX || lineChart.W) / 2"
+                            :y="lineChart.top"
+                            :width="lineChart.stepX || lineChart.W"
+                            :height="lineChart.baselineY - lineChart.top"
+                            fill="transparent"
+                            class="cursor-crosshair"
+                            @mouseenter="activeIdx = i"
+                            @mousemove="activeIdx = i"
+                        />
                         <!-- x-axis labels (thinned) -->
                         <text
                             v-for="(l, i) in lineChart.xLabels"
