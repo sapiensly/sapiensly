@@ -17,12 +17,52 @@ class McpClient
 {
     private const TIMEOUT_SECONDS = 20;
 
+    private const CONNECT_TIMEOUT_SECONDS = 6;
+
     private const PROTOCOL_VERSION = '2025-06-18';
+
+    /**
+     * initialize→initialized handshake results, keyed by endpoint+auth. The
+     * builder samples an MCP source across SEVERAL calls in one turn (list the
+     * tools, then call one); reusing the session skips a full re-handshake
+     * (initialize + initialized, up to ~40s) on every call after the first.
+     * This instance is held for the lifetime of ONE builder turn, so the cache
+     * never crosses turns or users.
+     *
+     * @var array<string, string>
+     */
+    private array $sessions = [];
 
     public function __construct(
         private readonly McpAuthResolver $authResolver,
         private readonly SsrfGuard $ssrfGuard,
     ) {}
+
+    /**
+     * Return a live MCP session for this endpoint+auth, performing the
+     * initialize→initialized handshake once and caching the session id.
+     *
+     * @param  array<string, string>  $authHeaders
+     */
+    private function session(string $endpoint, array $authHeaders): string
+    {
+        $key = md5($endpoint.'|'.json_encode($authHeaders));
+        if (isset($this->sessions[$key])) {
+            return $this->sessions[$key];
+        }
+
+        $init = $this->rpc($endpoint, $authHeaders, null, 'initialize', [
+            'protocolVersion' => self::PROTOCOL_VERSION,
+            'capabilities' => new \stdClass,
+            'clientInfo' => ['name' => config('app.name', 'Sapiensly'), 'version' => '1.0.0'],
+        ], 1);
+        $session = (string) $init['session'];
+
+        // Tell the server initialization finished (notification, no response).
+        $this->notify($endpoint, $authHeaders, $session, 'notifications/initialized');
+
+        return $this->sessions[$key] = $session;
+    }
 
     /**
      * Connect to the MCP server and return the tools it exposes.
@@ -43,16 +83,7 @@ class McpClient
 
         $authHeaders = $this->authResolver->resolveHeaders($config, $user);
 
-        $init = $this->rpc($endpoint, $authHeaders, null, 'initialize', [
-            'protocolVersion' => self::PROTOCOL_VERSION,
-            'capabilities' => new \stdClass,
-            'clientInfo' => ['name' => config('app.name', 'Sapiensly'), 'version' => '1.0.0'],
-        ], 1);
-
-        $session = $init['session'];
-
-        // Tell the server initialization finished (notification, no response).
-        $this->notify($endpoint, $authHeaders, $session, 'notifications/initialized');
+        $session = $this->session($endpoint, $authHeaders);
 
         $list = $this->rpc($endpoint, $authHeaders, $session, 'tools/list', new \stdClass, 2);
 
@@ -86,14 +117,7 @@ class McpClient
         $this->ssrfGuard->assertHostAllowed($endpoint);
         $authHeaders = $this->authResolver->resolveHeaders($config, $user);
 
-        $init = $this->rpc($endpoint, $authHeaders, null, 'initialize', [
-            'protocolVersion' => self::PROTOCOL_VERSION,
-            'capabilities' => new \stdClass,
-            'clientInfo' => ['name' => config('app.name', 'Sapiensly'), 'version' => '1.0.0'],
-        ], 1);
-        $session = $init['session'];
-
-        $this->notify($endpoint, $authHeaders, $session, 'notifications/initialized');
+        $session = $this->session($endpoint, $authHeaders);
 
         $call = $this->rpc($endpoint, $authHeaders, $session, 'tools/call', [
             'name' => $name,
@@ -200,7 +224,8 @@ class McpClient
             $headers['Mcp-Session-Id'] = $session;
         }
 
-        return Http::timeout(self::TIMEOUT_SECONDS)
+        return Http::connectTimeout(self::CONNECT_TIMEOUT_SECONDS)
+            ->timeout(self::TIMEOUT_SECONDS)
             ->withHeaders($headers)
             ->post($endpoint, $body);
     }
