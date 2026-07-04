@@ -1,12 +1,14 @@
 <?php
 
 use App\Ai\Tools\Builder\AddDashboardPageTool;
+use App\Ai\Tools\Builder\PrepareDashboardTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Models\App;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\ManifestValidator;
+use App\Services\Records\RecordQueryService;
 use Illuminate\Support\Str;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
@@ -187,4 +189,24 @@ it('omits the filter bar and range wiring when include_date_filter is false', fu
 
     expect(collect($page['blocks'])->pluck('type'))->not->toContain('filter_bar');
     expect(json_encode($page))->not->toContain('range_start');
+});
+
+it('prepare_dashboard fuses blueprint, profile and brand into one response', function () {
+    $tool = new PrepareDashboardTool(
+        $this->testApp->fresh(),
+        $this->manifestService,
+        app(RecordQueryService::class),
+    );
+
+    $result = json_decode($tool->handle(new ToolRequest([
+        'object_id' => 'obj_ticketsobj',
+        'sector' => 'support',
+    ])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['blueprint']['sector'])->toBe('support')
+        ->and($result['profile']['object_id'])->toBe('obj_ticketsobj')
+        ->and(collect($result['profile']['fields'])->pluck('id'))->toContain('fld_hoursfield')
+        ->and($result['brand']['accent'])->toStartWith('#')
+        ->and($result['brand']['ramp'])->toHaveKeys(['600', '900']);
 });
