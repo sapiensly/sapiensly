@@ -79,6 +79,21 @@ class RunBuilderAiJob implements ShouldQueue
          * `pending` for in-app review instead of committed.
          */
         public bool $applyProposal = true,
+        /**
+         * True when this turn was queued by the platform itself (autonomous
+         * chain or timeout resume). Auto-queued turns never re-seed a fresh
+         * plan-driven chain via continueFromPlan — that's the guard that keeps
+         * the AUTONOMOUS_MAX_TURNS cap meaningful.
+         */
+        public bool $autoQueued = false,
+        /**
+         * How many CONSECUTIVE timeout resumes remain. When a turn is killed by
+         * the wall-clock but its checkpoint banked real progress on an active
+         * plan, failed() re-queues the next turn itself with this budget - 1;
+         * a successful turn re-earns the default. Keeps slow models converging
+         * without the user typing "continúa" after every timeout.
+         */
+        public int $resumeRemaining = 2,
     ) {}
 
     /**
@@ -118,6 +133,15 @@ class RunBuilderAiJob implements ShouldQueue
         // is hit (see continueAutonomously).
         if ($this->autonomousRemaining > 0) {
             $service->continueAutonomously($finished, $this->autonomousRemaining, $this->modelOverride);
+
+            return;
+        }
+
+        // Plan-driven autonomy: a user-initiated turn that authored or advanced
+        // an active build plan keeps executing it without the UI toggle. Never
+        // for auto-queued turns — an exhausted chain must not re-seed itself.
+        if (! $this->autoQueued) {
+            $service->continueFromPlan($finished, $this->modelOverride);
         }
     }
 
@@ -148,9 +172,23 @@ class RunBuilderAiJob implements ShouldQueue
         $checkpointError = null;
         if (! empty($message->proposed_patch)) {
             try {
-                $version = app(BuilderAiService::class)->applyCheckpoint($message);
+                $service = app(BuilderAiService::class);
+                $version = $service->applyCheckpoint($message);
                 if ($version !== null) {
-                    $note = "I ran out of time, but I saved the progress so far ({$message->change_summary}). Send \"continúa\" to keep going.";
+                    // Real progress banked. With an active plan the platform
+                    // resumes the build itself (bounded by resumeRemaining) —
+                    // with slow models a timeout is the expected rhythm, and
+                    // the user should not have to type "continúa" every 5 min.
+                    $resumed = $service->resumeAfterTimeout(
+                        $message->refresh(),
+                        $this->modelOverride,
+                        $this->autonomousRemaining,
+                        $this->resumeRemaining,
+                    );
+
+                    $note = $resumed
+                        ? "I ran out of time on this step, but I saved the progress ({$message->change_summary}) and I'm resuming automatically…"
+                        : "I ran out of time, but I saved the progress so far ({$message->change_summary}). Send \"continúa\" to keep going.";
                     $message->content = $message->content ?: $note;
                     $message->save();
                     try {

@@ -62,12 +62,17 @@ DESC;
             array_values($steps),
         );
 
+        // Stamp when the plan was (re)authored: plan-driven autonomy uses this
+        // to recognise a "set the plan, then STOP" turn and kick the first
+        // autonomous step itself (BuilderAiService::continueFromPlan).
+        $plan['updated_at'] = now()->toIso8601String();
+
         $this->conversation->update(['build_plan' => $plan]);
 
         return json_encode([
             'ok' => true,
             'plan' => BuildPlan::compact($plan),
-            'message' => 'Build plan saved. Target the step(s) you will execute this turn with target_plan_steps, then propose_change — progress is closed automatically when it applies.',
+            'message' => 'Build plan saved. The platform continues through the pending steps automatically, turn by turn. Target the step(s) for THIS turn with target_plan_steps, do them, then STOP — never ask the user to say "continue".',
         ], JSON_THROW_ON_ERROR);
     }
 

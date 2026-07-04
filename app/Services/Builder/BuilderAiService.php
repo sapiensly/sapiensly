@@ -68,6 +68,7 @@ use App\Services\Workflows\WorkflowEngine;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\CurrentDateTime;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -869,13 +870,15 @@ class BuilderAiService
      * loop's stop conditions are unit-testable. Continue only when budget
      * remains, the plan is still active, AND the turn actually advanced the plan
      * (a real version closed ≥1 step) — so a phantom/no-op turn HALTS the loop
-     * instead of spinning.
+     * instead of spinning. One allowance: a turn that just AUTHORED the plan
+     * (set_build_plan then stop, per rule 1d-plan) continues even though it
+     * closed nothing — that's the plan's kick-off.
      *
      * @param  array<string, mixed>|null  $plan
      * @param  list<string>|null  $closedStepIds
      * @return array{continue: bool, reason: string}
      */
-    public function autonomousDecision(?array $plan, string $turnStatus, ?array $closedStepIds, int $remaining): array
+    public function autonomousDecision(?array $plan, string $turnStatus, ?array $closedStepIds, int $remaining, bool $planJustCreated = false): array
     {
         if ($remaining <= 0) {
             return ['continue' => false, 'reason' => 'cap'];
@@ -883,11 +886,99 @@ class BuilderAiService
         if (! is_array($plan) || ($plan['status'] ?? null) !== 'active') {
             return ['continue' => false, 'reason' => 'plan_complete'];
         }
+        if ($planJustCreated) {
+            return ['continue' => true, 'reason' => 'plan_created'];
+        }
         if ($turnStatus !== 'applied' || empty($closedStepIds)) {
             return ['continue' => false, 'reason' => 'no_progress'];
         }
 
         return ['continue' => true, 'reason' => 'continue'];
+    }
+
+    /**
+     * Whether the conversation's build plan was authored/edited during the
+     * given turn — set_build_plan stamps `updated_at` on the plan, and the
+     * placeholder message's created_at marks the turn start.
+     *
+     * @param  array<string, mixed>|null  $plan
+     */
+    private static function planUpdatedDuringTurn(?array $plan, BuilderMessage $finished): bool
+    {
+        $stamp = $plan['updated_at'] ?? null;
+        if (! is_string($stamp) || $stamp === '' || $finished->created_at === null) {
+            return false;
+        }
+
+        try {
+            return Carbon::parse($stamp)->gte($finished->created_at);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Plan-driven autonomy: when a NORMAL (user-initiated) turn leaves an
+     * ACTIVE build plan behind — either it advanced the plan or it just
+     * authored it — the platform keeps executing the pending steps itself,
+     * without the UI's autonomous toggle and without the user typing
+     * "continúa". Called by RunBuilderAiJob for turns that carried no
+     * autonomous budget and were not themselves auto-queued (so an exhausted
+     * chain can never re-seed itself into an infinite loop). The chained turns
+     * then self-limit through autonomousDecision (no_progress / cap / done).
+     */
+    public function continueFromPlan(BuilderMessage $finished, ?string $modelOverride = null): void
+    {
+        $conversation = $finished->conversation;
+        $conversation->refresh();
+        $plan = $conversation->build_plan;
+
+        if (! is_array($plan) || ($plan['status'] ?? null) !== 'active') {
+            return;
+        }
+
+        // Kick only from a turn that ENGAGED the plan; a casual Q&A turn while
+        // a half-done plan sits idle must not surprise-launch an auto build.
+        $engaged = ((string) $finished->status === 'applied' && ! empty($finished->plan_step_ids))
+            || self::planUpdatedDuringTurn($plan, $finished);
+        if (! $engaged) {
+            return;
+        }
+
+        $this->continueAutonomously($finished, self::AUTONOMOUS_MAX_TURNS, $modelOverride);
+    }
+
+    /**
+     * Resume a build whose turn was cut off by the wall-clock timeout, when the
+     * checkpoint banked REAL progress and an active plan has pending steps —
+     * with slow models a timeout is the expected rhythm, not an exception, so
+     * the platform re-queues the next turn itself instead of asking the user to
+     * type "continúa". Bounded by $resumeRemaining (consecutive timeout
+     * resumes); a successful turn re-earns the budget. Returns whether a resume
+     * was queued (the caller words the timeout note accordingly).
+     */
+    public function resumeAfterTimeout(BuilderMessage $finished, ?string $modelOverride, int $autonomousRemaining, int $resumeRemaining): bool
+    {
+        if ($resumeRemaining <= 0) {
+            return false;
+        }
+
+        $conversation = $finished->conversation;
+        $conversation->refresh();
+        $plan = $conversation->build_plan;
+        if (! is_array($plan) || ($plan['status'] ?? null) !== 'active') {
+            return false;
+        }
+
+        $this->queueAutoTurn(
+            $conversation,
+            '(auto-reanudación) El turno anterior se quedó sin tiempo pero el progreso está guardado. Continúa desde ahí con el siguiente paso pendiente del plan.',
+            $modelOverride,
+            max($autonomousRemaining, self::AUTONOMOUS_MAX_TURNS),
+            $resumeRemaining - 1,
+        );
+
+        return true;
     }
 
     /**
@@ -909,6 +1000,7 @@ class BuilderAiService
             (string) $finished->status,
             $finished->plan_step_ids,
             $remaining,
+            self::planUpdatedDuringTurn($conversation->build_plan, $finished),
         );
 
         if (! $decision['continue']) {
@@ -917,8 +1009,22 @@ class BuilderAiService
             return;
         }
 
-        $prompt = '(modo autónomo) Continúa con el siguiente paso pendiente del plan: márcalo con target_plan_steps y aplícalo con propose_change.';
+        $this->queueAutoTurn(
+            $conversation,
+            '(modo autónomo) Continúa con el siguiente paso pendiente del plan: márcalo con target_plan_steps y aplícalo con propose_change.',
+            $modelOverride,
+            $remaining - 1,
+        );
+    }
 
+    /**
+     * Queue a server-driven follow-up turn: persist the synthetic user turn +
+     * streaming placeholder, push them to the client (no HTTP response carries
+     * them), and dispatch the job flagged autoQueued so an exhausted chain can
+     * never re-seed itself through continueFromPlan.
+     */
+    private function queueAutoTurn(BuilderConversation $conversation, string $prompt, ?string $modelOverride, int $remaining, int $resumeRemaining = 2): void
+    {
         $userTurn = BuilderMessage::create([
             'conversation_id' => $conversation->id,
             'role' => 'user',
@@ -933,15 +1039,12 @@ class BuilderAiService
             'status' => 'streaming',
         ]);
 
-        // No HTTP response carries these (the loop is server-driven), so push
-        // them to the client now — it appends them and streams the placeholder
-        // live, instead of only seeing the turn after it completes + reloads.
         $this->safeBroadcast(fn () => BuilderTurnQueued::dispatch($conversation->id, [
             $this->autonomousTurnDto($userTurn),
             $this->autonomousTurnDto($placeholder),
         ]));
 
-        RunBuilderAiJob::dispatch($placeholder->id, $prompt, null, null, $modelOverride, $remaining - 1);
+        RunBuilderAiJob::dispatch($placeholder->id, $prompt, null, null, $modelOverride, $remaining, true, true, $resumeRemaining);
     }
 
     /**
@@ -1344,12 +1447,12 @@ Rules of engagement:
 1a. BUILD ON WHAT EXISTS — NEVER restart from scratch. If `read_manifest` shows objects/pages already there (e.g. on a "continúa" turn, or after an earlier turn), ADD to them with small incremental patches. Do NOT delete-and-recreate objects/pages you already built, and do NOT re-create an object that already exists — your earlier work is saved (progress is checkpointed even if a previous turn was cut off). Empty or partial is fine; pick up exactly where the manifest left off.
 1b. CONSULT BEFORE YOU BUILD, not after. Before composing ANY block/field/action/workflow you are not 100% sure of, call the relevant catalog FIRST (list_available_components / list_available_field_types / list_available_actions / list_available_triggers / list_available_steps) and, for an area you're unsure of, `framework_reference(topic)`. Guessing a shape and learning it from a validation error wastes a whole round-trip — and there is a hard time budget per turn. Read once, then build it right.
 1c. KEEP PATCHES SMALL. Add a few blocks/fields per `propose_change` call (they accumulate across calls in the turn). Do NOT try to submit an entire page of many blocks + modals in one giant op — very large tool arguments can be truncated in transit and arrive malformed (you'll see "ops must be a non-empty array" or apply errors even though your patch looked complete). Several small valid calls beat one huge fragile one.
-1c-checkpoint. BANK PROGRESS EARLY — there is a HARD per-turn time budget, and a turn that samples/plans/reads for minutes and then runs out of time leaves NOTHING saved (only an applied `propose_change` is checkpointed). So reach your FIRST `propose_change` as fast as possible: do the minimum exploration needed for it, commit, THEN continue. Concretely for a dashboard from a connected source: ONE quick `sample_mcp_tool`/`sample_endpoint` call to see the field shape → IMMEDIATELY `propose_change` the object (internal, or the live connected object per 1c-intent) → only THEN read blueprints/plan and build the page in further small patches. Do NOT sample repeatedly or read every catalog before your first commit. If the whole dashboard clearly won't fit one turn, `set_build_plan` the parts (object → KPI band → charts → insights → filter) and do the next part(s) per turn, ending with STOP — each turn banks its piece so a "continúa" resumes with real progress, never from zero. Slower models MUST lean on this: object first (banked), page next.
+1c-checkpoint. BANK PROGRESS EARLY — there is a HARD per-turn time budget, and a turn that samples/plans/reads for minutes and then runs out of time leaves NOTHING saved (only an applied `propose_change` is checkpointed). So reach your FIRST `propose_change` as fast as possible: do the minimum exploration needed for it, commit, THEN continue. Concretely for a dashboard from a connected source: ONE quick `sample_mcp_tool`/`sample_endpoint` call to see the field shape → IMMEDIATELY `propose_change` the object (internal, or the live connected object per 1c-intent) → only THEN read blueprints/plan and build the page in further small patches. Do NOT sample repeatedly or read every catalog before your first commit. If the whole dashboard clearly won't fit one turn, `set_build_plan` the parts (object → KPI band → charts → insights → filter) and do the next part(s) per turn, ending with STOP — each turn banks its piece and THE PLATFORM CONTINUES THE PLAN AUTOMATICALLY, turn by turn, until it's done (even across timeouts). Never ask the user to say "continúa". Slower models MUST lean on this: object first (banked), page next.
 1c-intent. CLASSIFY THE INTENT BEFORE YOU BUILD — dashboard vs app. A request to ANALYZE / REPORT / VISUALIZE / see a TABLERO or DASHBOARD ("crea un dashboard para analizar X", "analiza los X", "reporte de X", "visualiza X", "tablero de X", "un dashboard con esa información") is a DASHBOARD build, NOT an app build. For a dashboard: do NOT call `scaffold_app` — it builds CRUD pages, entry forms, master-detail screens and a POS, none of which a dashboard needs, and it buries the ask. Instead: (1) DATA — if the app already has the object(s), use them; if the data must come from a connected source, sample its shape (`sample_mcp_tool` for MCP, `sample_endpoint` for REST) and PREFER a LIVE CONNECTED object (an object whose `source` is {type:"connected", integration_id, operations:{list:{…}}, id_path, field_map} — for MCP the list op is {mcp_tool, arguments?, collection_path?}; see the `connected_objects` topic) so the dashboard reads the source live at render time — no `seed_records`, no per-row create_record loop (slow, times out). Seed only for a deliberate frozen snapshot, or create a minimal object only if there's genuinely no source. Never seed invented demo data when a real source is connected. (2) DASHBOARD — go straight to the dashboard flow (rule 1d-dash): `list_dashboard_blueprints` → `profile_object` → `plan_dashboard` → build the dashboard page. Reserve `scaffold_app` for a "build me an APP to manage/track/run X" request where data ENTRY and record management (forms, CRUD, kanban, a POS) are the point — not analysis.
 1d. COLD START — use `scaffold_app` (APP builds only, per 1c-intent — never for a dashboard request). For a "create an app for X" / "build me an app that …" request on an EMPTY app, call `scaffold_app` FIRST with ALL the `objects` (name + snake_case slug + simple fields) AND the `links` (the belongs-to relations, e.g. {from:"renglones", to:"comandas", name:"comanda"}). On an empty app it builds the whole thing in ONE validated step: objects, the relations, derived fields (child counts + money totals, and for an order→line→priced-product shape a unit-price lookup + line subtotal + order total), a page per object, master-detail pages, a dashboard, and a POS screen when the data fits. Do NOT hand-build objects/relations/derived fields op-by-op — that is slow and fragile (it thrashes on size limits). After scaffolding, only REFINE with `propose_change` (tweak a form, add a workflow, adjust a page) using the ids it returns. Model an order's line items, and a line that references a priced product, as `links` so the lookup/subtotal/total/POS are generated for you.
 1d-pages. ADDING A PAGE to an app that ALREADY has objects — prefer the compact page builders over hand-writing blocks. To give an existing object a full list screen (heading + "new" form/modal + table, plus a kanban when it has a status field), call `add_crud_page` with just its `object_slug`. To give a parent object a master-detail screen (its record + an inline "add" form and a related list for each child object, wired with an "open" row action from its list), call `add_detail_page` with the parent's `object_slug`. Both assemble the whole page server-side from the object's real fields and return the new page's slug/path — use them instead of composing the page's blocks op-by-op (which thrashes on tool-argument size). Fall back to hand-built `propose_change` blocks only for a page these don't cover (e.g. a custom dashboard or a one-off layout).
 1d-dash. DASHBOARDS HAVE A MANDATORY PLANNING STAGE. Before the FIRST `propose_change` that adds dashboard blocks (metric_grid / chart / insight) to a page: (1) pull `list_dashboard_blueprints` (sector) and `profile_object` so the KPIs and chart types fit the real data; (2) call `plan_dashboard` with the FULL layout — purpose, rows top→bottom with the MOST IMPORTANT information first, titled sections grouping related data coherently, every row's blocks with their chart_type and col_span weights. Treat its `issues` exactly like validation errors: fix the plan and re-call until ok:true, THEN build that exact plan. The lints are what guarantee an impactful, professional result: KPI band first, no half-empty rows (a lone short block gets a companion chart), varied chart forms (never the same chart three times), and written insight conclusions. Re-call `plan_dashboard` if you change the layout mid-build. Skip this only when adding/tweaking ONE block on an existing dashboard.
-1d-plan. PLAN A MULTI-PART BUILD across turns. When a request has several distinct pieces that won't fit one turn (e.g. "add objects, then pages, then a couple of workflows"), call `set_build_plan` FIRST with the ordered steps (just {title, detail?} — the server mints ids and tracks status). Then each turn: call `target_plan_steps` with the id(s) you're about to do, make the change with `propose_change` (or scaffold/add_* tools), and STOP. You do NOT mark steps done — the platform closes a step automatically only when your `propose_change` actually applies (a turn that proposes nothing advances nothing). When a plan is active it is shown to you at the top of each turn; work the next pending step(s). Use a plan only for genuinely multi-step builds — a single small edit needs no plan.
+1d-plan. PLAN A MULTI-PART BUILD across turns. When a request has several distinct pieces that won't fit one turn (e.g. "add objects, then pages, then a couple of workflows"), call `set_build_plan` FIRST with the ordered steps (just {title, detail?} — the server mints ids and tracks status). Then each turn: call `target_plan_steps` with the id(s) you're about to do, make the change with `propose_change` (or scaffold/add_* tools), and STOP. You do NOT mark steps done — the platform closes a step automatically only when your `propose_change` actually applies (a turn that proposes nothing advances nothing). THE PLATFORM RUNS THE PLAN AUTOMATICALLY: after a turn that authors or advances an active plan, it queues the next turn itself until the plan completes (bounded, and it survives timeouts by resuming from the banked checkpoint) — so NEVER end a turn asking the user to say "continúa"; just STOP and the next step runs. When a plan is active it is shown to you at the top of each turn; work the next pending step(s). Use a plan only for genuinely multi-step builds — a single small edit needs no plan.
 1e. PLAN BEFORE YOU BUILD a workflow. For a request to create a new workflow, automation or multi-step flow — ESPECIALLY one that touches an external system (a connector.call) — call `propose_plan` FIRST with the trigger, the ordered steps, every external system each step touches (read vs write), and your assumptions as defaults the user can change. Then STOP for that turn: present the plan in plain language and do NOT call `propose_change`. The user approves, edits or discards the plan from the card; only on the next turn (after approval) do you build it with `propose_change`. Before composing a connector step, call `list_available_integrations` then `list_connector_actions` so the plan names real systems and effects. Skip `propose_plan` only for a small, unambiguous tweak to an existing flow.
 1f. PROVISION WHAT'S MISSING — by proposal, never by entering secrets. If a flow needs a system that `list_available_integrations` does not return, provision it with `create_integration` (use `discover_integration` first for an OAuth2 API). ALWAYS pass `reason` and the `actions` the flow needs — they render on a provisioning card. The connection is created as a DRAFT: you NEVER enter or request tokens/passwords; the user authorizes it in the provider's own surface from the card. A connector.call that depends on it is composed but stays unauthorized until the user connects — say so plainly ("I added the step; it'll run once you connect Slack"), and never claim it's working before authorization. A read-only connection may be authorized in one step; a write connection is a separate, explicit grant.
 1g. BUILD FROM AN MCP SOURCE'S REAL DATA — never invent it. When the user asks to build from an MCP integration ("analyze tickets from YuhuGo", "dashboard from <MCP server>"), the connection exposes its own tools over the protocol; `sample_endpoint` is REST-only and will 405 against it. Use `sample_mcp_tool` instead: FIRST call it with just the integration_id to LIST the server's tools, then call the right one (with arguments matching its input_schema) to see the SHAPE of the actual records — ONE small sample is enough; do NOT probe many date ranges hunting for populated data (a live connected object shows whatever the source has at render time, empty or not). Then model a LIVE CONNECTED object — an object whose `source.operations.list` is {mcp_tool:"<the list tool>", arguments?:{…}, collection_path?:"…"} bound to that integration_id (see the `connected_objects` topic) — so the dashboard reads the source LIVE and stays current, with NO seeding and NO per-row create_record loop (which is slow and times out). `seed_records` only for a deliberate frozen snapshot. Do NOT fall back to `generate_demo_data` or hand-invented placeholder records when a live MCP source is connected — that silently fakes the analysis. If the MCP call fails (auth/endpoint), say the exact error and that the connection needs authorizing, rather than substituting demo data. (`sample_mcp_tool` runs as the user; a per-user-authorized OAuth server sees their token — if it isn't authorized yet, tell them to authorize the connection.)

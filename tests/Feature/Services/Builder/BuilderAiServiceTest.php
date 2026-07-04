@@ -1374,3 +1374,117 @@ it('ProposeChangeTool accepts ops whose added nodes omit their ids', function ()
     expect($tareas['fields'][0]['id'])->toStartWith('fld_');
     expect($tareas['fields'][1]['options'][0]['id'])->toStartWith('opt_');
 });
+
+/* -------- Plan-driven autonomy (multi-turn plans run themselves) -------- */
+
+it('autonomousDecision allows a turn that just authored the plan (plan_created)', function () {
+    $activePlan = ['status' => 'active', 'steps' => [['id' => 'stp_a', 'status' => 'pending']]];
+
+    // set_build_plan + STOP: nothing applied, nothing closed — still continues.
+    expect($this->service->autonomousDecision($activePlan, 'none', null, 5, true))
+        ->toMatchArray(['continue' => true, 'reason' => 'plan_created']);
+    // The allowance never overrides the cap or a finished plan.
+    expect($this->service->autonomousDecision($activePlan, 'none', null, 0, true))
+        ->toMatchArray(['continue' => false, 'reason' => 'cap']);
+    expect($this->service->autonomousDecision(['status' => 'done', 'steps' => []], 'none', null, 5, true))
+        ->toMatchArray(['continue' => false, 'reason' => 'plan_complete']);
+});
+
+it('continueFromPlan queues the chain when a user turn advanced an active plan', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'detail' => null, 'status' => 'done', 'applied_version_id' => 'apv_1', 'version_number' => 2, 'closed_by_summary' => null, 'error' => null],
+        ['id' => 'stp_b', 'title' => 'B', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+    ]]]);
+
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => 'hecho A',
+        'status' => 'applied', 'applied_version_id' => 'apv_1', 'plan_step_ids' => ['stp_a'],
+    ]);
+
+    $this->service->continueFromPlan($finished, null);
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->autoQueued === true
+        && $job->autonomousRemaining === BuilderAiService::AUTONOMOUS_MAX_TURNS - 1);
+});
+
+it('continueFromPlan queues when the plan was authored during the turn (set plan then STOP)', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => 'plan listo',
+        'status' => 'none', 'applied_version_id' => null, 'plan_step_ids' => null,
+    ]);
+
+    // The plan is stamped AFTER the placeholder was created — authored this turn.
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => 'Dashboard', 'status' => 'active',
+        'updated_at' => now()->addSecond()->toIso8601String(), 'steps' => [
+            ['id' => 'stp_a', 'title' => 'Objeto', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+        ]]]);
+
+    $this->service->continueFromPlan($finished, null);
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->autoQueued === true);
+});
+
+it('continueFromPlan does NOT fire from a casual turn while a stale plan sits active', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active',
+        'updated_at' => now()->subHour()->toIso8601String(), 'steps' => [
+            ['id' => 'stp_a', 'title' => 'A', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+        ]]]);
+
+    // Pure Q&A: nothing applied, plan untouched this turn.
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => 'los colores son…',
+        'status' => 'none', 'applied_version_id' => null, 'plan_step_ids' => null,
+        'created_at' => now()->addMinute(),
+    ]);
+    BuilderMessage::where('id', $finished->id)->update(['created_at' => now()->addMinute()]);
+
+    $this->service->continueFromPlan($finished->fresh(), null);
+
+    Queue::assertNotPushed(RunBuilderAiJob::class);
+});
+
+it('resumeAfterTimeout re-queues the build with a decremented resume budget', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'detail' => null, 'status' => 'in_progress', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+    ]]]);
+
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => '',
+        'status' => 'applied', 'applied_version_id' => 'apv_ckpt', 'plan_step_ids' => null,
+    ]);
+
+    expect($this->service->resumeAfterTimeout($finished, null, 0, 2))->toBeTrue();
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->autoQueued === true
+        && $job->resumeRemaining === 1
+        && $job->autonomousRemaining === BuilderAiService::AUTONOMOUS_MAX_TURNS);
+});
+
+it('resumeAfterTimeout refuses without budget or without an active plan', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => '',
+        'status' => 'applied', 'applied_version_id' => 'apv_x', 'plan_step_ids' => null,
+    ]);
+
+    // No plan at all → manual resume.
+    expect($this->service->resumeAfterTimeout($finished, null, 0, 2))->toBeFalse();
+
+    // Active plan but the consecutive-resume budget is spent.
+    $conv->update(['build_plan' => ['schema' => 1, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'status' => 'pending'],
+    ]]]);
+    expect($this->service->resumeAfterTimeout($finished->fresh(), null, 0, 0))->toBeFalse();
+
+    Queue::assertNotPushed(RunBuilderAiJob::class);
+});
