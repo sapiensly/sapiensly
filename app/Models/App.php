@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AppKind;
 use App\Enums\Visibility;
 use App\Models\Concerns\HasPrefixedUlid;
 use App\Models\Concerns\HasVisibility;
@@ -27,6 +28,7 @@ class App extends Model
         'description',
         'icon',
         'color',
+        'kind',
         'current_version_id',
         'visibility',
     ];
@@ -35,6 +37,7 @@ class App extends Model
     {
         return [
             'visibility' => Visibility::class,
+            'kind' => AppKind::class,
         ];
     }
 

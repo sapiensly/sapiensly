@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
-import AppCard from '@/components/apps/AppCard.vue';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
+import AppCard from '@/components/apps/AppCard.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { AppWindow, Plus } from '@lucide/vue';
@@ -14,6 +14,7 @@ interface AppItem {
     description: string | null;
     icon: string | null;
     color: string | null;
+    kind?: string | null;
     visibility: string;
     created_at: string;
     current_version?: {
@@ -81,7 +82,10 @@ const { t } = useI18n();
                 <p class="mt-1 text-xs text-ink-muted">
                     {{ t('apps.index.no_apps_description') }}
                 </p>
-                <Link :href="AppController.create().url" class="mt-4 inline-block">
+                <Link
+                    :href="AppController.create().url"
+                    class="mt-4 inline-block"
+                >
                     <button
                         type="button"
                         class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"

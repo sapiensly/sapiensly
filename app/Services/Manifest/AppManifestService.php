@@ -2,6 +2,7 @@
 
 namespace App\Services\Manifest;
 
+use App\Enums\AppKind;
 use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\User;
@@ -142,7 +143,12 @@ class AppManifestService
                 'change_summary' => $summary,
             ]);
 
-            $locked->update(['current_version_id' => $version->id]);
+            // Re-classify the product (App vs Dashboard) from the manifest's
+            // content on every write, so the tag tracks what was actually built.
+            $locked->update([
+                'current_version_id' => $version->id,
+                'kind' => AppKind::classify($manifest)->value,
+            ]);
 
             return $version->refresh();
         });

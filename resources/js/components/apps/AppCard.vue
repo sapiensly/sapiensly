@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import { Link } from '@inertiajs/vue3';
-import { AppWindow, Building2, Globe, History, Lock, Sparkles } from '@lucide/vue';
+import {
+    AppWindow,
+    Building2,
+    Globe,
+    History,
+    LayoutDashboard,
+    Lock,
+    Sparkles,
+} from '@lucide/vue';
 import { computed, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -12,6 +20,7 @@ interface AppCardData {
     description: string | null;
     icon: string | null;
     color: string | null;
+    kind?: string | null;
     visibility: string;
     created_at: string;
     current_version?: {
@@ -27,6 +36,8 @@ const { t } = useI18n();
 
 const tint = props.app.color ?? 'var(--sp-accent-blue)';
 
+const isDashboard = computed(() => props.app.kind === 'dashboard');
+
 interface PillStyle {
     icon: Component;
     classes: string;
@@ -38,19 +49,22 @@ const visibilityPill = computed<PillStyle>(() => {
         case 'organization':
             return {
                 icon: Building2,
-                classes: 'border-accent-blue/30 bg-accent-blue/10 text-accent-blue',
+                classes:
+                    'border-accent-blue/30 bg-accent-blue/10 text-accent-blue',
                 label: 'Org',
             };
         case 'public':
             return {
                 icon: Globe,
-                classes: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
+                classes:
+                    'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
                 label: 'Public',
             };
         case 'global':
             return {
                 icon: Globe,
-                classes: 'border-spectrum-magenta/30 bg-spectrum-magenta/10 text-spectrum-magenta',
+                classes:
+                    'border-spectrum-magenta/30 bg-spectrum-magenta/10 text-spectrum-magenta',
                 label: 'Global',
             };
         default:
@@ -84,7 +98,7 @@ const versionPill = computed<PillStyle>(() => {
             class="group flex h-full flex-col gap-3 rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/40"
         >
             <header class="flex items-start justify-between gap-3">
-                <div class="flex items-start gap-3 min-w-0">
+                <div class="flex min-w-0 items-start gap-3">
                     <div
                         class="flex size-9 shrink-0 items-center justify-center rounded-xs"
                         :style="{
@@ -92,27 +106,41 @@ const versionPill = computed<PillStyle>(() => {
                             color: tint,
                         }"
                     >
-                        <AppWindow class="size-4" />
+                        <component
+                            :is="isDashboard ? LayoutDashboard : AppWindow"
+                            class="size-4"
+                        />
                     </div>
                     <div class="min-w-0">
                         <h3 class="truncate text-sm font-semibold text-ink">
                             {{ app.name }}
                         </h3>
-                        <p class="mt-0.5 truncate font-mono text-[11px] text-ink-subtle">
+                        <p
+                            class="mt-0.5 truncate font-mono text-[11px] text-ink-subtle"
+                        >
                             /r/{{ app.slug }}
                         </p>
                     </div>
                 </div>
 
-                <span
-                    :class="[
-                        'inline-flex shrink-0 items-center gap-1 rounded-pill border px-2 py-0.5 text-[10px] uppercase tracking-wider',
-                        visibilityPill.classes,
-                    ]"
-                >
-                    <component :is="visibilityPill.icon" class="size-3" />
-                    {{ visibilityPill.label }}
-                </span>
+                <div class="flex shrink-0 items-center gap-1.5">
+                    <span
+                        v-if="isDashboard"
+                        class="inline-flex items-center gap-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-2 py-0.5 text-[10px] tracking-wider text-accent-blue uppercase"
+                    >
+                        <LayoutDashboard class="size-3" />
+                        Dashboard
+                    </span>
+                    <span
+                        :class="[
+                            'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10px] tracking-wider uppercase',
+                            visibilityPill.classes,
+                        ]"
+                    >
+                        <component :is="visibilityPill.icon" class="size-3" />
+                        {{ visibilityPill.label }}
+                    </span>
+                </div>
             </header>
 
             <p
@@ -125,7 +153,7 @@ const versionPill = computed<PillStyle>(() => {
             <footer class="mt-auto flex items-center justify-between">
                 <span
                     :class="[
-                        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10px] uppercase tracking-wider',
+                        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10px] tracking-wider uppercase',
                         versionPill.classes,
                     ]"
                 >

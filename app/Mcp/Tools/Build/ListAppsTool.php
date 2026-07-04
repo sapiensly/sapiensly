@@ -26,6 +26,7 @@ class ListAppsTool extends SapiensTool
             'apps' => $apps->map(fn (App $app) => [
                 'slug' => $app->slug,
                 'name' => $app->name,
+                'kind' => $app->kind?->value ?? 'app',
                 'description' => $app->description,
                 'has_active_version' => $app->current_version_id !== null,
             ])->values(),

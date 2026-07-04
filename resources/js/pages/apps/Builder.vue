@@ -208,7 +208,13 @@ interface BuildPlanData {
 }
 
 interface Props {
-    app: { id: string; slug: string; name: string; description: string | null };
+    app: {
+        id: string;
+        slug: string;
+        name: string;
+        description: string | null;
+        kind?: string | null;
+    };
     manifest: Record<string, unknown> | null;
     preview: Preview | null;
     schema: SchemaPayload | null;
@@ -297,10 +303,37 @@ const TOOL_LABELS: Record<string, string> = {
     propose_change: 'Proposing a change',
     delete_block_by_id: 'Removing a block',
     seed_records: 'Adding sample data',
+    generate_demo_data: 'Adding sample data',
     discover_integration: 'Finding the connection',
     create_integration: 'Setting up the connection',
     test_connection: 'Testing the connection',
     sample_endpoint: 'Sampling the endpoint',
+    // MCP / connected-data sampling
+    list_available_integrations: 'Finding connections',
+    sample_mcp_tool: 'Fetching data from the connector',
+    // Dashboard flow
+    list_dashboard_blueprints: 'Choosing the layout',
+    profile_object: 'Analyzing the data',
+    aggregate_records: 'Crunching the numbers',
+    query_records: 'Reading records',
+    describe_app_data: 'Reviewing the data',
+    plan_dashboard: 'Planning the dashboard',
+    // Object / page scaffolding
+    add_object: 'Creating the object',
+    add_field: 'Adding a field',
+    add_relation: 'Linking objects',
+    scaffold_app: 'Scaffolding the app',
+    add_crud_page: 'Building the page',
+    add_detail_page: 'Building the detail page',
+    // Planning & reference
+    set_build_plan: 'Planning the steps',
+    target_plan_steps: 'Advancing the plan',
+    framework_reference: 'Checking the guide',
+    get_manifest_schema: 'Checking the schema',
+    // Brand / polish
+    get_organization_brand: 'Applying the brand',
+    generate_palette: 'Generating the palette',
+    list_available_icons: 'Finding icons',
 };
 function toolLabel(name: string): string {
     return (
@@ -1890,7 +1923,16 @@ function statusTone(status: Message['status']): string {
                             />
                             {{ t('apps.builder.title') }}
                         </h1>
-                        <p class="text-xs text-ink-muted">{{ app.name }}</p>
+                        <div class="flex items-center gap-2">
+                            <p class="text-xs text-ink-muted">{{ app.name }}</p>
+                            <span
+                                v-if="app.kind === 'dashboard'"
+                                class="inline-flex items-center gap-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-1.5 py-0.5 text-[10px] tracking-wider text-accent-blue uppercase"
+                            >
+                                <LayoutDashboard class="size-3" />
+                                Dashboard
+                            </span>
+                        </div>
                     </div>
                 </div>
 

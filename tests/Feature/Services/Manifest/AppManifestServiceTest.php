@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\AppKind;
 use App\Models\App;
 use App\Models\AppVersion;
 use App\Services\Manifest\AppManifestService;
@@ -209,4 +210,49 @@ it('persists a change summary longer than 255 chars (text column, not VARCHAR 25
     expect(mb_strlen($summary))->toBeGreaterThan(255);
     expect($version->fresh()->change_summary)->toBe($summary);
     expect($app->fresh()->current_version_id)->toBe($version->id);
+});
+
+it('tags the app as a dashboard when the version is analytics-only', function () {
+    $app = App::factory()->create();
+    $m = manifest('Reporte');
+    $m['objects'] = [[
+        'id' => 'obj_maindata', 'slug' => 'data', 'name' => 'Data',
+        'fields' => [['id' => 'fld_valuecolumn', 'slug' => 'valor', 'name' => 'Valor', 'type' => 'number']],
+    ]];
+    $m['pages'] = [[
+        'id' => 'pag_dashboard', 'slug' => 'resumen', 'name' => 'Resumen', 'path' => '/', 'blocks' => [
+            ['id' => 'mg_kpisband', 'type' => 'metric_grid', 'items' => [
+                ['id' => 'kp_totalcnt', 'label' => 'Total', 'query' => ['object_id' => 'obj_maindata'], 'aggregation' => 'count'],
+            ]],
+            ['id' => 'ch_trendline', 'type' => 'chart', 'chart_type' => 'line', 'data_source' => ['object_id' => 'obj_maindata'], 'aggregation' => 'count'],
+        ],
+    ]];
+
+    makeService()->createVersion($app, $m);
+
+    expect($app->fresh()->kind)->toBe(AppKind::Dashboard);
+});
+
+it('tags the app as an app when the version has a data-entry form, and re-tags on the next version', function () {
+    $app = App::factory()->create();
+
+    // First: a dashboard-only version → Dashboard.
+    $dash = manifest('Hybrid');
+    $dash['objects'] = [[
+        'id' => 'obj_maindata', 'slug' => 'data', 'name' => 'Data',
+        'fields' => [['id' => 'fld_valuecolumn', 'slug' => 'valor', 'name' => 'Valor', 'type' => 'number']],
+    ]];
+    $dash['pages'] = [[
+        'id' => 'pag_dashpage', 'slug' => 'd', 'name' => 'D', 'path' => '/', 'blocks' => [
+            ['id' => 'ch_alphabar', 'type' => 'chart', 'chart_type' => 'bar', 'data_source' => ['object_id' => 'obj_maindata'], 'aggregation' => 'count'],
+        ],
+    ]];
+    makeService()->createVersion($app, $dash);
+    expect($app->fresh()->kind)->toBe(AppKind::Dashboard);
+
+    // Then a version that adds a form → re-classified as App.
+    $withForm = $dash;
+    $withForm['pages'][0]['blocks'][] = ['id' => 'fm_newrecord', 'type' => 'form', 'object_id' => 'obj_maindata', 'mode' => 'create'];
+    makeService()->createVersion($app, $withForm);
+    expect($app->fresh()->kind)->toBe(AppKind::App);
 });

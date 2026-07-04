@@ -125,7 +125,7 @@ class AppBuilderController extends Controller
         $schema = $this->buildSchema($app, $manifest);
 
         return Inertia::render('apps/Builder', [
-            'app' => $app->only(['id', 'slug', 'name', 'description']),
+            'app' => $app->only(['id', 'slug', 'name', 'description', 'kind']),
             'models' => $this->chatModels(),
             'defaultModel' => BuilderAiService::defaultModel(),
             'manifest' => $manifest,
