@@ -30,6 +30,7 @@ class BlockDataResolver
         private ConnectedObjectReader $connected,
         private ConnectedIntegrationResolver $integrations,
         private InMemoryAggregator $aggregator,
+        private InMemoryRowFilter $rowFilter,
     ) {}
 
     /**
@@ -412,7 +413,7 @@ class BlockDataResolver
         $object = $this->findObject($manifest, $query['object_id'] ?? null);
 
         if ($object !== null && (($object['source']['type'] ?? 'internal') === 'connected')) {
-            $rows = $this->connectedRows($app, $object, $query);
+            $rows = $this->connectedRows($app, $object, $query, $context);
             $slug = $fieldId !== null ? $this->fieldSlug($object, $fieldId) : null;
 
             return $this->aggregator->aggregate($rows, $aggregation, $slug);
@@ -438,7 +439,7 @@ class BlockDataResolver
         $object = $this->findObject($manifest, $dataSource['object_id'] ?? null);
 
         if ($object !== null && (($object['source']['type'] ?? 'internal') === 'connected')) {
-            return $this->connectedRows($app, $object, $dataSource);
+            return $this->connectedRows($app, $object, $dataSource, $context);
         }
 
         return $this->mapRows(
@@ -475,7 +476,7 @@ class BlockDataResolver
      * @param  array<string, mixed>  $dataSource
      * @return list<array{id: mixed, data: array<string, mixed>}>
      */
-    private function connectedRows(App $app, array $object, array $dataSource): array
+    private function connectedRows(App $app, array $object, array $dataSource, array $context = []): array
     {
         $integration = $this->integrations->resolve($app, $object['source']['integration_id'] ?? null);
         if ($integration === null) {
@@ -487,12 +488,18 @@ class BlockDataResolver
             throw new RuntimeException($result['error'] ?? 'Could not read from the connected system.');
         }
 
-        return array_map(function (array $row): array {
+        $rows = array_map(function (array $row): array {
             $id = $row['_external_id'] ?? null;
             unset($row['_external_id']);
 
             return ['id' => $id, 'data' => $row];
         }, $result['rows']);
+
+        // The external read can't run our filter grammar (REST pushes down only
+        // mapped equality params; MCP nothing), so the data-source query is
+        // applied here in memory — this is what makes the dashboard date-range
+        // presets actually re-scope live connected data.
+        return $this->rowFilter->apply($rows, $dataSource, $object, $context);
     }
 
     /**
