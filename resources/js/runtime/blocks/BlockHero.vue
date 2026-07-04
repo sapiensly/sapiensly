@@ -63,11 +63,31 @@ const hasCustomBackground = computed(
     () => !!(props.block.style?.gradient || props.block.style?.background),
 );
 
-const alignClass = computed(() =>
-    props.block.align === 'left'
-        ? 'items-start text-left'
-        : 'items-center text-center',
+// A small min_height signals a dashboard banner rather than a landing hero:
+// slim padding, smaller type, tighter gap — so it introduces the page without
+// stealing space or focus from the data below.
+const compact = computed(() => (props.block.min_height ?? 420) <= 240);
+
+// Left-aligned heroes hug the section's left edge (mr-auto) instead of sitting
+// in a centred column (mx-auto), so the title lines up with the content beneath.
+const contentClass = computed(() => {
+    const align =
+        props.block.align === 'left'
+            ? 'mr-auto items-start text-left'
+            : 'mx-auto items-center text-center';
+    return `${align} ${compact.value ? 'gap-2' : 'gap-5'}`;
+});
+
+const sectionPadding = computed(() =>
+    compact.value ? 'px-6 py-6 sm:px-8' : 'px-6 py-16 sm:px-12',
 );
+const titleClass = computed(() =>
+    compact.value ? 'text-2xl sm:text-3xl' : 'text-4xl sm:text-5xl',
+);
+const subtitleClass = computed(() =>
+    compact.value ? 'text-sm sm:text-base' : 'text-base sm:text-lg',
+);
+
 const showOverlay = computed(
     () => props.block.overlay !== false && !!props.block.background_image,
 );
@@ -82,7 +102,8 @@ async function clickCta() {
 <template>
     <section
         :class="[
-            'relative flex w-full flex-col justify-center overflow-hidden rounded-sp-md px-6 py-16 sm:px-12',
+            'relative flex w-full flex-col justify-center overflow-hidden rounded-sp-md',
+            sectionPadding,
             hasCustomBackground ? '' : 'bg-slate-900',
         ]"
         :style="sectionStyle"
@@ -92,20 +113,18 @@ async function clickCta() {
             class="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/70"
         ></div>
 
-        <div
-            :class="[
-                'relative z-10 mx-auto flex max-w-3xl flex-col gap-5',
-                alignClass,
-            ]"
-        >
+        <div :class="['relative z-10 flex max-w-3xl flex-col', contentClass]">
             <h1
-                class="text-4xl leading-tight font-bold text-balance text-white sm:text-5xl"
+                :class="[
+                    'leading-tight font-bold text-balance text-white',
+                    titleClass,
+                ]"
             >
                 {{ block.title }}
             </h1>
             <p
                 v-if="block.subtitle"
-                class="max-w-2xl text-base text-pretty text-white/80 sm:text-lg"
+                :class="['max-w-2xl text-pretty text-white/80', subtitleClass]"
             >
                 {{ block.subtitle }}
             </p>

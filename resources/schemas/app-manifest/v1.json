@@ -1415,7 +1415,7 @@
                         "background_image": { "type": "string", "maxLength": 2000 },
                         "overlay": { "type": "boolean", "default": true },
                         "align": { "enum": ["left", "center"], "default": "center" },
-                        "min_height": { "type": "integer", "minimum": 200, "maximum": 900 },
+                        "min_height": { "type": "integer", "minimum": 96, "maximum": 900 },
                         "cta": {
                             "type": "object",
                             "additionalProperties": false,
