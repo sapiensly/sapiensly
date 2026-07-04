@@ -826,10 +826,9 @@ const combo = computed(() => {
         w: number;
         h: number;
         color: string;
-        title: string;
     }[] = [];
     barDefs.forEach(({ d, si }, bIdx) => {
-        cats.forEach((cat, ci) => {
+        cats.forEach((_, ci) => {
             const v = vals[si][ci];
             const y = yFor(v, d.axis);
             const groupLeft = centerX(ci) - (groupCount * barW) / 2;
@@ -839,7 +838,6 @@ const combo = computed(() => {
                 w: Math.max(1, barW - 1),
                 h: Math.max(0, baselineY - y),
                 color: color(d, si),
-                title: `${d.label ?? ''} · ${cat}: ${formatNumber(v)}`,
             });
         });
     });
@@ -853,13 +851,9 @@ const combo = computed(() => {
                 x: centerX(ci),
                 y: yFor(vals[si][ci], d.axis),
             }));
-            const path = pts
-                .map((p, i) =>
-                    i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`,
-                )
-                .join(' ');
+            const path = smoothLine(pts);
             const area =
-                d.type === 'area' && pts.length
+                d.type === 'area' && pts.length && path
                     ? `${path} L ${pts[pts.length - 1].x} ${baselineY} L ${pts[0].x} ${baselineY} Z`
                     : null;
             return { color: color(d, si), path, area, points: pts };
@@ -878,12 +872,29 @@ const combo = computed(() => {
         H,
         padL,
         padR,
+        top: padT,
         baselineY,
+        stepX: slot,
+        xs: cats.map((_, ci) => centerX(ci)),
         bars,
         lines,
         leftTicks: tickSet(leftMax, 'left'),
         rightTicks: hasRight ? tickSet(rightMax, 'right') : null,
         catLabels: cats.map((c, ci) => ({ x: centerX(ci), label: c })),
+        // Per-category hover payload: every series' value there (for the tooltip)
+        // and the line/area markers to highlight (bars show their own rect).
+        hover: cats.map((cat, ci) => ({
+            label: cat,
+            rows: defs.map((d, si) => ({
+                label: d.label ?? fieldOf(d.field_id)?.name ?? 'Count',
+                color: color(d, si),
+                value: formatNumber(vals[si][ci]),
+            })),
+            markers: lines.map((ln) => ({
+                y: ln.points[ci]?.y ?? 0,
+                color: ln.color,
+            })),
+        })),
         legend: defs.map((d, si) => ({
             label: d.label ?? fieldOf(d.field_id)?.name ?? 'Count',
             color: color(d, si),
@@ -892,6 +903,19 @@ const combo = computed(() => {
         })),
     };
 });
+
+// The active crosshair on a combo chart: shared-X category under the cursor with
+// every series' value and the line markers to highlight.
+const comboCrosshair = computed(() => {
+    const c = combo.value;
+    const i = activeIdx.value;
+    if (!c || i === null || i < 0 || i >= c.hover.length) return null;
+    const h = c.hover[i];
+    return { x: c.xs[i], label: h.label, rows: h.rows, markers: h.markers };
+});
+
+// One tooltip payload for both the single line/area and the combo paths.
+const activeCross = computed(() => crosshair.value ?? comboCrosshair.value);
 
 // Empty state must account for combo (which ignores the single-series path).
 const emptyState = computed(() =>
@@ -1222,18 +1246,18 @@ const boxPlot = computed(() => {
                 >{{ tip.value }}</span
             >
         </div>
-        <!-- Crosshair tooltip for line/area: the hovered category and every
-             series' value there, following the cursor. -->
+        <!-- Crosshair tooltip for line/area/combo: the hovered category and
+             every series' value there, following the cursor. -->
         <div
-            v-if="crosshair"
+            v-if="activeCross"
             class="pointer-events-none absolute z-20 rounded-sp-sm border border-medium bg-navy-elevated px-3 py-2 text-[11px] shadow-xl"
             :style="{ left: mouse.x + 14 + 'px', top: mouse.y + 14 + 'px' }"
         >
             <p :class="['mb-1 font-medium', t.textSubtle]">
-                {{ crosshair.label }}
+                {{ activeCross.label }}
             </p>
             <div
-                v-for="(r, ri) in crosshair.rows"
+                v-for="(r, ri) in activeCross.rows"
                 :key="'ct' + ri"
                 class="flex items-center gap-3 whitespace-nowrap"
             >
@@ -1346,10 +1370,8 @@ const boxPlot = computed(() => {
                         :height="b.h"
                         :fill="b.color"
                         rx="1"
-                        class="cursor-pointer transition-opacity hover:opacity-80"
-                        @mouseenter="showTip(b.title, undefined, b.color)"
                     />
-                    <!-- area fills then line strokes + points -->
+                    <!-- area fills then smoothed line strokes -->
                     <template v-for="(ln, i) in combo.lines" :key="'l' + i">
                         <path
                             v-if="ln.area"
@@ -1365,15 +1387,44 @@ const boxPlot = computed(() => {
                             stroke-linecap="round"
                             stroke-linejoin="round"
                         />
-                        <circle
-                            v-for="(p, j) in ln.points"
-                            :key="j"
-                            :cx="p.x"
-                            :cy="p.y"
-                            r="2.5"
-                            :fill="ln.color"
-                        />
                     </template>
+                    <!-- crosshair: dashed guide + line markers on the hovered category -->
+                    <g v-if="comboCrosshair" :class="t.textMuted">
+                        <line
+                            :x1="comboCrosshair.x"
+                            :y1="combo.top"
+                            :x2="comboCrosshair.x"
+                            :y2="combo.baselineY"
+                            stroke="currentColor"
+                            stroke-opacity="0.4"
+                            stroke-width="1"
+                            stroke-dasharray="3 3"
+                        />
+                        <circle
+                            v-for="(m, mi) in comboCrosshair.markers"
+                            :key="'cm' + mi"
+                            :cx="comboCrosshair.x"
+                            :cy="m.y"
+                            r="3.5"
+                            :fill="m.color"
+                            class="text-navy"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        />
+                    </g>
+                    <!-- transparent full-height hover bands, one per category -->
+                    <rect
+                        v-for="(x, i) in combo.xs"
+                        :key="'chb' + i"
+                        :x="x - combo.stepX / 2"
+                        :y="combo.top"
+                        :width="combo.stepX"
+                        :height="combo.baselineY - combo.top"
+                        fill="transparent"
+                        class="cursor-crosshair"
+                        @mouseenter="activeIdx = i"
+                        @mousemove="activeIdx = i"
+                    />
                     <!-- x labels -->
                     <text
                         v-for="(c, i) in combo.catLabels"
