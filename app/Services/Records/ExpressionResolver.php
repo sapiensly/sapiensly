@@ -328,6 +328,14 @@ class ExpressionResolver
             'start_of_week' => now()->utc()->subWeeks((int) ($args[0] ?? 0))->startOfWeek()->toDateString(),
             'start_of_month' => now()->utc()->subMonthsNoOverflow((int) ($args[0] ?? 0))->startOfMonth()->toDateString(),
             'start_of_year' => now()->utc()->subYears((int) ($args[0] ?? 0))->startOfYear()->toDateString(),
+            'range_start' => match (is_string($args[0] ?? null) ? $args[0] : '') {
+                'today' => now()->utc()->toDateString(),
+                '7d' => now()->utc()->subDays(7)->toDateString(),
+                '30d' => now()->utc()->subDays(30)->toDateString(),
+                '90d' => now()->utc()->subDays(90)->toDateString(),
+                '1y' => now()->utc()->subYear()->toDateString(),
+                default => '',
+            },
             default => null,
         };
     }

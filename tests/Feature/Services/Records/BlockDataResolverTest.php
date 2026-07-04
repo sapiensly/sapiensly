@@ -381,3 +381,35 @@ it('keeps the KPI even when its spark query is broken (fails soft)', function ()
     expect($data['blk_softspark'])->toHaveKey('value')
         ->and($data['blk_softspark'])->not->toHaveKey('error');
 });
+
+it('a date_range filter (range_start) narrows a block to the selected window', function () {
+    // Backdate one record beyond the default 30-day window; beforeEach's "Ana"
+    // stays recent. Force created_at at the DB layer (Eloquent overrides it on
+    // create).
+    $old = Record::create([
+        'app_id' => $this->testApp->id,
+        'object_definition_id' => $this->object['id'],
+        'data' => ['nombre' => 'Vieja', 'monto' => 10],
+    ]);
+    Record::where('id', $old->id)->update(['created_at' => now()->subDays(60)]);
+
+    $expr = "{{range_start(default(params.range, '30d'))}}";
+    $block = [
+        'id' => 'blk_ranged',
+        'type' => 'table',
+        'data_source' => [
+            'object_id' => $this->object['id'],
+            'filter' => ['op' => 'gte', 'field_id' => 'sys_created_at', 'value_expression' => $expr],
+        ],
+        'columns' => [['id' => 'col_a', 'field_id' => $this->nameField['id']]],
+    ];
+
+    // Default window (30d) → only the recent record.
+    $data = $this->resolver->resolve($this->testApp, [$block], $this->manifest, ['params' => []]);
+    expect($data['blk_ranged'])->not->toHaveKey('error')
+        ->and($data['blk_ranged']['rows'])->toHaveCount(1);
+
+    // 'all' clears the filter → both records show.
+    $data = $this->resolver->resolve($this->testApp, [$block], $this->manifest, ['params' => ['range' => 'all']]);
+    expect($data['blk_ranged']['rows'])->toHaveCount(2);
+});

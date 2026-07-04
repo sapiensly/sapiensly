@@ -208,3 +208,35 @@ it('leaves a string without tokens untouched even if it has braces-like text', f
 it('interpolates a numeric token into a string', function () {
     expect($this->resolver->resolve('Total: {{vars.n}}', ['vars' => ['n' => 1160.5]]))->toBe('Total: 1160.5');
 });
+
+/* -------------- range_start() — date-range preset filter ------------ */
+
+it('range_start maps preset keys to a window-start date', function () {
+    expect($this->resolver->resolve("{{range_start('today')}}", []))
+        ->toBe(now()->utc()->toDateString());
+    expect($this->resolver->resolve("{{range_start('7d')}}", []))
+        ->toBe(now()->utc()->subDays(7)->toDateString());
+    expect($this->resolver->resolve("{{range_start('30d')}}", []))
+        ->toBe(now()->utc()->subDays(30)->toDateString());
+    expect($this->resolver->resolve("{{range_start('90d')}}", []))
+        ->toBe(now()->utc()->subDays(90)->toDateString());
+    expect($this->resolver->resolve("{{range_start('1y')}}", []))
+        ->toBe(now()->utc()->subYear()->toDateString());
+});
+
+it("range_start returns '' for 'all' and unknown keys (filter is skipped)", function () {
+    expect($this->resolver->resolve("{{range_start('all')}}", []))->toBe('');
+    expect($this->resolver->resolve("{{range_start('nope')}}", []))->toBe('');
+});
+
+it('range_start(default(params.range, ...)) applies the preselected window when the param is unset', function () {
+    expect($this->resolver->resolve("{{range_start(default(params.range, '30d'))}}", ['params' => []]))
+        ->toBe(now()->utc()->subDays(30)->toDateString());
+});
+
+it('range_start(default(params.range, ...)) honours the chosen preset over the default', function () {
+    expect($this->resolver->resolve("{{range_start(default(params.range, '30d'))}}", ['params' => ['range' => '7d']]))
+        ->toBe(now()->utc()->subDays(7)->toDateString());
+    expect($this->resolver->resolve("{{range_start(default(params.range, '30d'))}}", ['params' => ['range' => 'all']]))
+        ->toBe('');
+});

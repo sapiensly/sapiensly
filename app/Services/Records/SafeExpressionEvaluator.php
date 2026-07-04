@@ -43,6 +43,7 @@ class SafeExpressionEvaluator
         'pluck', 'sum', 'min', 'max', 'avg', 'upper', 'lower', 'concat',
         'default', 'round', 'abs', 'floor', 'ceil',
         'days_ago', 'months_ago', 'start_of_week', 'start_of_month', 'start_of_year',
+        'range_start',
     ];
 
     private ExpressionLanguage $engine;
@@ -179,7 +180,28 @@ class SafeExpressionEvaluator
             'start_of_week' => fn (mixed $offset = 0): string => now()->utc()->subWeeks((int) $offset)->startOfWeek()->toDateString(),
             'start_of_month' => fn (mixed $offset = 0): string => now()->utc()->subMonthsNoOverflow((int) $offset)->startOfMonth()->toDateString(),
             'start_of_year' => fn (mixed $offset = 0): string => now()->utc()->subYears((int) $offset)->startOfYear()->toDateString(),
+            // Preset date-range filter: maps a UI preset key (today/7d/30d/90d/1y)
+            // to its window-start date; anything else (incl. 'all' / '') → '' so
+            // the gte filter is skipped and the full set shows.
+            'range_start' => fn (mixed $preset = null): string => $this->fnRangeStart($preset),
         ];
+    }
+
+    /**
+     * Map a date-range preset key to the start date of its window (UTC,
+     * YYYY-MM-DD). Unknown / 'all' / empty returns '' so a `gte` filter using it
+     * is treated as unset and the unfiltered set shows.
+     */
+    private function fnRangeStart(mixed $preset): string
+    {
+        return match (is_string($preset) ? $preset : '') {
+            'today' => now()->utc()->toDateString(),
+            '7d' => now()->utc()->subDays(7)->toDateString(),
+            '30d' => now()->utc()->subDays(30)->toDateString(),
+            '90d' => now()->utc()->subDays(90)->toDateString(),
+            '1y' => now()->utc()->subYear()->toDateString(),
+            default => '',
+        };
     }
 
     /**

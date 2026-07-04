@@ -1253,7 +1253,7 @@
             ]
         },
         "block_filter_bar": {
-            "description": "A row of page-level filter controls that drive {{params.*}}. Each control writes the user's input to a named URL query param; data blocks then react via a data_source.filter condition whose value_expression is \"{{params.<name>}}\" (an empty value is ignored, so the unfiltered set shows). Requires controls[] each {param (URL param name, snake_case), type (search|select), label?, placeholder? (search), options? (select: [{value,label}])}.",
+            "description": "A row of page-level filter controls that drive {{params.*}}. Each control writes the user's input to a named URL query param; data blocks then react via a data_source.filter condition whose value_expression is \"{{params.<name>}}\" (an empty value is ignored, so the unfiltered set shows). Requires controls[] each {param (URL param name, snake_case), type (search|select|date_range), label?, placeholder? (search), options?, default?}. A `date_range` control renders preset window pills (Hoy/7d/30d/90d/Año/Todo by default; override with options[{value,label}]) and writes the preset KEY to the param; wire each block to react with a filter {op:\"gte\", field_id:<a date field>, value_expression:\"{{range_start(default(params.<param>, '30d'))}}\"} — range_start maps the key to the window-start date and 'all' clears it. Set `default` (e.g. \"30d\") to preselect a window.",
             "allOf": [
                 { "$ref": "#/$defs/block_base" },
                 {
@@ -1272,9 +1272,10 @@
                                 "required": ["param", "type"],
                                 "properties": {
                                     "param": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 50 },
-                                    "type": { "enum": ["search", "select"] },
+                                    "type": { "enum": ["search", "select", "date_range"] },
                                     "label": { "type": "string", "maxLength": 60 },
                                     "placeholder": { "type": "string", "maxLength": 80 },
+                                    "default": { "type": "string", "maxLength": 120, "description": "Preselected value (e.g. a date_range preset key like \"30d\")." },
                                     "options": {
                                         "type": "array",
                                         "items": {
