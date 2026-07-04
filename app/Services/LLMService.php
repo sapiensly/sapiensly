@@ -10,6 +10,7 @@ use App\Models\Message;
 use App\Models\User;
 use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
+use App\Support\CurrentDateTime;
 use Generator;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\AnonymousAgent;
@@ -507,6 +508,11 @@ EOT;
     private function buildAgent(Agent $agent, array $messages, array $tools = [], ?string $systemPrompt = null, bool $platformTools = true): AnonymousAgent
     {
         $instructions = $systemPrompt ?? $agent->prompt_template ?? '';
+
+        // Ground every agent (DB agents, chatbots, RAG, team orchestration) in
+        // the current UTC datetime — a model has no clock, and this is the one
+        // chokepoint all of them funnel through.
+        $instructions = CurrentDateTime::promptLine()."\n\n".$instructions;
 
         // Every internal agent run gets the MCP catalogue as built-in platform
         // tools, scoped to the agent's owner. Skipped for routing/triage runs,

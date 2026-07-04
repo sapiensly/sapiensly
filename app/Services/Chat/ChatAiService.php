@@ -39,6 +39,7 @@ use App\Services\ToolConfigService;
 use App\Services\ToolExecutionService;
 use App\Services\Tools\McpClient;
 use App\Support\Chat\ConsultationLog;
+use App\Support\CurrentDateTime;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -443,6 +444,9 @@ class ChatAiService
                     $instructions .= "\n\n".$this->capabilityGuidance($configuredTools);
                 }
             }
+
+            // Ground the chat in the current UTC datetime — a model has no clock.
+            $instructions = CurrentDateTime::promptLine()."\n\n".$instructions;
 
             $sdkAgent = new ChatAgent(
                 instructions: $instructions,

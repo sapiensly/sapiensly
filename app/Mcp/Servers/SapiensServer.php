@@ -109,6 +109,7 @@ class SapiensServer extends Server
     public const TOOLS = [
         // Identity & context.
         Tools\Account\WhoamiTool::class,
+        Tools\Account\CurrentDatetimeTool::class,
         Tools\Account\GuideTool::class,
         Tools\Account\ListTeamMembersTool::class,
         Tools\Account\GetAiSpendTool::class,

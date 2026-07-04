@@ -35,12 +35,15 @@ use App\Ai\Tools\Builder\TargetPlanStepsTool;
 use App\Ai\Tools\Builder\TestIntegrationConnectionTool;
 use App\Ai\Tools\Builder\ValidateManifestTool;
 use App\Ai\Tools\Builder\VerifyWorkflowTool;
+use App\Ai\Tools\Platform\McpBridgeTool;
+use App\Ai\Tools\RuntimeToolFactory;
 use App\Events\Builder\BuilderActivity;
 use App\Events\Builder\BuilderStreamChunk;
 use App\Events\Builder\BuilderStreamComplete;
 use App\Events\Builder\BuilderStreamError;
 use App\Events\Builder\BuilderTurnQueued;
 use App\Jobs\RunBuilderAiJob;
+use App\Mcp\Tools\Account\CurrentDatetimeTool;
 use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
@@ -63,6 +66,7 @@ use App\Services\Tools\McpClient;
 use App\Services\Workflows\WorkflowAssertionEvaluator;
 use App\Services\Workflows\WorkflowEngine;
 use App\Support\Branding\OrganizationBrand;
+use App\Support\CurrentDateTime;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -196,6 +200,10 @@ class BuilderAiService
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
             new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
             new SampleMcpToolTool(app(McpClient::class), $conversation->user),
+            // The clock every model must ground time-relative reasoning on
+            // (dashboards, date filters, "last N days"). Not in the Builder's
+            // PlatformToolsFactory path, so bridged in explicitly.
+            RuntimeToolFactory::named('current_datetime', new McpBridgeTool(CurrentDatetimeTool::class, $conversation->user)),
         ];
 
         $history = $this->buildHistory($conversation);
@@ -397,6 +405,10 @@ class BuilderAiService
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
             new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
             new SampleMcpToolTool(app(McpClient::class), $conversation->user),
+            // The clock every model must ground time-relative reasoning on
+            // (dashboards, date filters, "last N days"). Not in the Builder's
+            // PlatformToolsFactory path, so bridged in explicitly.
+            RuntimeToolFactory::named('current_datetime', new McpBridgeTool(CurrentDatetimeTool::class, $conversation->user)),
         ];
 
         // History excludes the placeholder we're about to fill. reorder()
@@ -1310,8 +1322,11 @@ class BuilderAiService
     private function systemPrompt(App $app): string
     {
         $brandbook = $this->brandbookSection($app);
+        $now = CurrentDateTime::promptLine();
 
         return <<<PROMPT
+{$now}
+
 You are the Builder AI inside Sapiensly. Your job is to help the tenant edit a low-code App by modifying its JSON manifest.
 
 App details:

@@ -18,6 +18,7 @@ use App\Services\Apps\AppAccessContext;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\AppActionExecutor;
+use App\Support\CurrentDateTime;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Messages\AssistantMessage;
@@ -312,8 +313,11 @@ class RuntimeAgentService
         $agent = $manifest['agent'] ?? [];
         $name = $agent['name'] ?? 'Assistant';
         $instructions = trim((string) ($agent['instructions'] ?? ''));
+        $now = CurrentDateTime::promptLine();
 
         return <<<PROMPT
+{$now}
+
 You are {$name}, the assistant embedded in the "{$app->name}" app. You help the people who use this app.
 
 {$instructions}

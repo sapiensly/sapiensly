@@ -2,6 +2,7 @@
 
 namespace App\Services\Runtime;
 
+use App\Ai\Tools\Platform\McpBridgeTool;
 use App\Ai\Tools\Runtime\Agent\AggregateObjectTool;
 use App\Ai\Tools\Runtime\Agent\DescribeCapabilitiesTool;
 use App\Ai\Tools\Runtime\Agent\ProposeCreateRecordTool;
@@ -10,6 +11,7 @@ use App\Ai\Tools\Runtime\Agent\ProposeRunWorkflowTool;
 use App\Ai\Tools\Runtime\Agent\ProposeUpdateRecordTool;
 use App\Ai\Tools\Runtime\Agent\QueryObjectTool;
 use App\Ai\Tools\RuntimeToolFactory;
+use App\Mcp\Tools\Account\CurrentDatetimeTool;
 use App\Models\App;
 use App\Services\Apps\AppAccessContext;
 use App\Services\Records\AppDataOverview;
@@ -54,7 +56,14 @@ class RuntimeAgentToolset
     {
         $access ??= AppAccessContext::bypass();
 
-        return [...$this->readTools($app, $manifest, $access, $context), ...$this->writeTools($manifest, $proposals, $access)];
+        return [
+            // The clock, so the app's agent grounds time-relative answers ("in
+            // the last 7 days") instead of guessing. This toolset is sandboxed
+            // off the PlatformToolsFactory path, so bridge it in explicitly.
+            RuntimeToolFactory::named('current_datetime', new McpBridgeTool(CurrentDatetimeTool::class, $app->user)),
+            ...$this->readTools($app, $manifest, $access, $context),
+            ...$this->writeTools($manifest, $proposals, $access),
+        ];
     }
 
     /**
