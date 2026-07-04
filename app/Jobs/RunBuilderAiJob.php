@@ -8,6 +8,8 @@ use App\Models\BuilderMessage;
 use App\Services\Builder\BuilderAiService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -173,9 +175,23 @@ class RunBuilderAiJob implements ShouldQueue
             }
         }
 
-        $reason = $checkpointError !== null
-            ? 'The turn was interrupted and the saved progress could not be applied: '.$checkpointError
-            : ($e?->getMessage() ?? 'The Builder AI job did not finish in time.');
+        // A plain timeout with nothing new to checkpoint (e.g. the turn was
+        // doing direct writes like seeding records, which persist outside the
+        // manifest) should read like the checkpoint-recovery nudge, not the raw
+        // "…has timed out." exception — anything applied in prior turns is still
+        // there, so the user just resumes.
+        $isTimeout = $e instanceof TimeoutExceededException
+            || $e instanceof MaxAttemptsExceededException
+            || ($e !== null && str_contains($e->getMessage(), 'timed out'))
+            || ($e !== null && str_contains($e->getMessage(), 'attempted too many times'));
+
+        if ($checkpointError !== null) {
+            $reason = 'The turn was interrupted and the saved progress could not be applied: '.$checkpointError;
+        } elseif ($isTimeout) {
+            $reason = 'I ran out of time before finishing this step, but your progress so far is saved. Send "continúa" to keep going — and for a big build, ask for it in smaller pieces.';
+        } else {
+            $reason = $e?->getMessage() ?? 'The Builder AI job did not finish in time.';
+        }
         $message->status = 'error';
         $message->content = $reason;
         $message->save();
