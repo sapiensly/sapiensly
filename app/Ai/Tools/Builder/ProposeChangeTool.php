@@ -6,6 +6,7 @@ use App\Models\App;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestIdFiller;
 use App\Services\Manifest\ManifestPatch;
+use App\Services\Manifest\ManifestSchemaCatalog;
 use App\Services\Manifest\ManifestValidator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
@@ -175,7 +176,7 @@ DESC;
         if (! $validation->valid) {
             return [
                 'ok' => false,
-                'errors' => $validation->errorsArray(),
+                'errors' => $this->withSchemaHints($validation->errorsArray(), $draft),
             ];
         }
 
@@ -219,6 +220,66 @@ DESC;
         }
 
         return $response;
+    }
+
+    /**
+     * Attach the exact parameter contract of the typed node nearest to each
+     * failing path (up to 3), so the model fixes the SHAPE in one round instead
+     * of guessing — the validation error says what's wrong; the hint shows what
+     * right looks like (required/optional props + allowed enum values).
+     *
+     * @param  list<array<string, mixed>>  $errors
+     * @param  array<string, mixed>  $draft
+     * @return list<array<string, mixed>>
+     */
+    private function withSchemaHints(array $errors, array $draft): array
+    {
+        $catalog = new ManifestSchemaCatalog($this->validator);
+        $hinted = 0;
+
+        foreach ($errors as $i => $error) {
+            if ($hinted >= 3) {
+                break;
+            }
+            $type = $this->nearestTypedNode($draft, (string) ($error['path'] ?? ''));
+            if ($type === null) {
+                continue;
+            }
+            foreach (['block', 'field', 'action', 'step', 'trigger'] as $category) {
+                $params = $catalog->params($category, $type);
+                if ($params !== null) {
+                    $errors[$i]['hint'] = ['category' => $category, 'type' => $type, 'expected_params' => $params];
+                    $hinted++;
+                    break;
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Walk a JSON-pointer path into the draft and return the `type` of the
+     * deepest typed node passed through (a block/field/action/step) — the node
+     * whose schema the failing property most likely belongs to.
+     *
+     * @param  array<string, mixed>  $draft
+     */
+    private function nearestTypedNode(array $draft, string $path): ?string
+    {
+        $node = $draft;
+        $lastType = null;
+        foreach (array_filter(explode('/', $path), fn (string $s): bool => $s !== '') as $segment) {
+            if (! is_array($node) || ! array_key_exists($segment, $node)) {
+                break;
+            }
+            $node = $node[$segment];
+            if (is_array($node) && isset($node['type']) && is_string($node['type'])) {
+                $lastType = $node['type'];
+            }
+        }
+
+        return $lastType;
     }
 
     /**

@@ -1488,3 +1488,21 @@ it('resumeAfterTimeout refuses without budget or without an active plan', functi
 
     Queue::assertNotPushed(RunBuilderAiJob::class);
 });
+
+it('validation failures carry a schema hint for the nearest typed node', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+
+    // A chart missing its required data_source/aggregation.
+    $result = $propose->recordProposal([[
+        'op' => 'add', 'path' => '/pages/-', 'value' => [
+            'slug' => 'panel', 'name' => 'Panel', 'path' => '/panel',
+            'blocks' => [['type' => 'chart', 'chart_type' => 'bar']],
+        ],
+    ]], 'bad chart');
+
+    expect($result['ok'])->toBeFalse();
+    $withHint = collect($result['errors'])->first(fn ($e) => isset($e['hint']));
+    expect($withHint)->not->toBeNull()
+        ->and($withHint['hint']['type'])->toBe('chart')
+        ->and($withHint['hint']['expected_params']['required'])->toContain('data_source');
+});
