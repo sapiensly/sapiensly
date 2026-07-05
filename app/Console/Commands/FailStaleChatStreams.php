@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Events\Chat\ChatStreamError;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -43,19 +44,32 @@ class FailStaleChatStreams extends Command
             ->leftJoin('platform.users as u', 'u.id', '=', 'c.user_id')
             ->whereIn('m.status', ['pending', 'streaming'])
             ->where('m.created_at', '<', $cutoff)
-            ->get(['m.id', 'u.locale']);
+            ->get(['m.id', 'm.chat_id', 'u.locale']);
 
         $fallbackLocale = (string) config('app.fallback_locale', 'en');
         $failed = 0;
         foreach ($stale->groupBy(fn (object $row) => $row->locale ?? $fallbackLocale) as $locale => $rows) {
+            $reason = __(self::ERROR_MESSAGE, [], $locale);
+
             $failed += DB::connection('pgsql')
                 ->table('tenant.chat_messages')
                 ->whereIn('id', $rows->pluck('id')->all())
                 ->update([
                     'status' => 'error',
-                    'error' => __(self::ERROR_MESSAGE, [], $locale),
+                    'error' => $reason,
                     'updated_at' => now(),
                 ]);
+
+            // Tell any OPEN chat UI too — without the broadcast the DB flip
+            // only shows after a manual reload. Best-effort: a Reverb outage
+            // must not fail the sweep.
+            foreach ($rows as $row) {
+                try {
+                    broadcast(new ChatStreamError((string) $row->chat_id, (string) $row->id, $reason));
+                } catch (\Throwable) {
+                    // The reload path still shows the persisted error.
+                }
+            }
         }
 
         $this->info("Marked {$failed} stale streaming message(s) as error (cutoff: {$capSeconds}s).");

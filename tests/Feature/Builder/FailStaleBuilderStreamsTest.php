@@ -1,9 +1,11 @@
 <?php
 
+use App\Events\Builder\BuilderStreamError;
 use App\Models\App;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\User;
+use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     $this->user = User::factory()->create(['email_verified_at' => now()]);
@@ -37,6 +39,20 @@ it('marks builder messages stuck streaming/pending past the cap as errors', func
     expect($streaming->fresh()->status)->toBe('error')
         ->and($streaming->fresh()->content)->not->toBeEmpty()
         ->and($pending->fresh()->status)->toBe('error');
+});
+
+it('broadcasts the error to the open builder UI, not just the database', function () {
+    Event::fake([BuilderStreamError::class]);
+    $stale = staleBuilderMessage($this->conv, 'streaming');
+
+    $this->artisan('builder:fail-stale-streams')->assertSuccessful();
+
+    Event::assertDispatched(
+        BuilderStreamError::class,
+        fn ($e) => $e->conversationId === $this->conv->id
+            && $e->messageId === $stale->id
+            && $e->error !== '',
+    );
 });
 
 it('leaves live streams and finished builder messages untouched', function () {

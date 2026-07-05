@@ -1,8 +1,10 @@
 <?php
 
+use App\Events\Chat\ChatStreamError;
 use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Models\User;
+use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     $this->user = User::factory()->create(['email_verified_at' => now()]);
@@ -31,6 +33,23 @@ it('marks pending and streaming messages older than the cap as errors, keeping p
         ->and($stale->error)->not->toBeEmpty()
         ->and($stale->content)->toBe('Partial analysis so far…');
     expect($stalePending->refresh()->status)->toBe('error');
+});
+
+it('broadcasts the error to the open chat UI, not just the database', function () {
+    Event::fake([ChatStreamError::class]);
+    $chat = Chat::factory()->forUser($this->user)->create();
+    $stale = ChatMessage::factory()->assistant()->create([
+        'chat_id' => $chat->id,
+        'status' => 'streaming',
+        'created_at' => now()->subHours(2),
+    ]);
+
+    $this->artisan('chat:fail-stale-streams')->assertSuccessful();
+
+    Event::assertDispatched(
+        ChatStreamError::class,
+        fn ($e) => $e->chatId === $chat->id && $e->messageId === $stale->id && $e->error !== '',
+    );
 });
 
 it('leaves live streams and finished messages untouched', function () {
