@@ -82,6 +82,7 @@ use Laravel\Ai\Streaming\Events\Error as StreamingError;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\TextStart;
 use Laravel\Ai\Streaming\Events\ToolCall;
+use Laravel\Ai\Streaming\Events\ToolResult as StreamingToolResult;
 use RuntimeException;
 
 /**
@@ -538,6 +539,11 @@ class BuilderAiService
             ));
 
             $sawText = false;
+            // Turn timeline: the gap BEFORE a ToolCall is model time (thinking +
+            // emitting the call); the gap between a ToolCall and its ToolResult
+            // is OUR execution (server work / MCP round-trip). Logged per event
+            // so a slow build can be read straight from the production log.
+            $lastMark = microtime(true);
             foreach ($stream as $event) {
                 // Provider/stream errors arrive as an Error EVENT, not an
                 // exception — OpenRouter (unlike Anthropic) reports SSE-level and
@@ -555,6 +561,15 @@ class BuilderAiService
                 // doing (reading the manifest, simulating a query, proposing a
                 // change…) instead of an opaque pause before a patch appears.
                 if ($event instanceof ToolCall) {
+                    $now = microtime(true);
+                    Log::info('Builder turn timing: tool call', [
+                        'message_id' => $placeholder->id,
+                        'tool' => $event->toolCall->name,
+                        'model_seconds' => round($now - $lastMark, 1),
+                        't' => round($now - $startedAt, 1),
+                    ]);
+                    $lastMark = $now;
+
                     $this->safeBroadcast(fn () => BuilderActivity::dispatch(
                         $conversation->id,
                         $placeholder->id,
@@ -562,6 +577,20 @@ class BuilderAiService
                         $resolvedModel,
                         $event->toolCall->name,
                     ));
+
+                    continue;
+                }
+
+                if ($event instanceof StreamingToolResult) {
+                    $now = microtime(true);
+                    Log::info('Builder turn timing: tool finished', [
+                        'message_id' => $placeholder->id,
+                        'tool' => $event->toolResult->name,
+                        'tool_seconds' => round($now - $lastMark, 1),
+                        't' => round($now - $startedAt, 1),
+                        'successful' => $event->successful,
+                    ]);
+                    $lastMark = $now;
 
                     continue;
                 }
