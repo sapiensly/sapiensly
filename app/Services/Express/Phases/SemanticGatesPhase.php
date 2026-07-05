@@ -1,0 +1,217 @@
+<?php
+
+namespace App\Services\Express\Phases;
+
+use App\Ai\Tools\Builder\PlanDashboardTool;
+use App\Models\PipelineRun;
+use App\Services\Ai\AiDefaults;
+use App\Services\Express\Contracts\ExpressPhase;
+use App\Services\Express\ExpressContext;
+use App\Services\Express\GateRunner;
+use App\Services\Manifest\AppScaffolder;
+use App\Support\Branding\ColorPalette;
+use App\Support\Branding\OrganizationBrand;
+use Illuminate\Support\Str;
+
+/**
+ * G-2: the three semantic gates — the ONLY places the user's model shapes the
+ * dashboard. (a) overrides to the suggested spec (best-of-2 with a
+ * deterministic compile+lint judge for slow-class models), (b) voice (title +
+ * purpose), (c) insight bodies narrated from the computed facts. Every gate
+ * degrades to the suggestion's defaults; a hung model costs 45s, never the
+ * build.
+ */
+class SemanticGatesPhase implements ExpressPhase
+{
+    public function __construct(
+        private readonly GateRunner $gates,
+        private readonly AppScaffolder $scaffolder,
+        private readonly AiDefaults $aiDefaults,
+    ) {}
+
+    public function name(): string
+    {
+        return 'semantic_gates';
+    }
+
+    public function announce(ExpressContext $context): string
+    {
+        return '✍️ Ajustando el spec y redactando los insights…';
+    }
+
+    public function run(ExpressContext $context, PipelineRun $run): void
+    {
+        $spec = $context->spec ?? [];
+
+        // --- G-2a: overrides -------------------------------------------------
+        $overridesInstructions = <<<'TXT'
+Revisas el SPEC SUGERIDO de un dashboard contra el PEDIDO del usuario. Devuelve
+SOLO los cambios necesarios (accept=true y overrides={} si la sugerencia ya
+responde el pedido). overrides puede traer: title, kpis, charts (listas
+COMPLETAS que reemplazan la parte), date_field_id. Solo usa field_ids que
+existan en el spec sugerido. No cambies lo que ya está bien.
+TXT;
+        $overridesSchema = fn ($schema) => [
+            'accept' => $schema->boolean(),
+            'overrides' => $schema->object()->description('Partes a reemplazar: title?, kpis?, charts?, date_field_id?.'),
+        ];
+        $overridesPrompt = json_encode([
+            'pedido' => $context->prompt,
+            'spec_sugerido' => $spec,
+            'sustituciones_ya_declaradas' => $context->substitutions,
+        ], JSON_UNESCAPED_UNICODE);
+        $overridesDefault = ['accept' => true, 'overrides' => []];
+
+        $candidates = [];
+        $attempts = $this->isSlowClass($context) ? 2 : 1;
+        for ($i = 0; $i < $attempts; $i++) {
+            $result = $this->gates->run(
+                $run, $attempts > 1 ? "spec_overrides_{$i}" : 'spec_overrides',
+                $overridesInstructions, $overridesPrompt, $overridesSchema, $overridesDefault,
+                $context->user, $context->modelOverride,
+            );
+            $candidates[] = $result['output'];
+        }
+        $context->semantic['overrides'] = $this->judgeOverrides($context, $candidates);
+
+        // --- G-2b: voice ------------------------------------------------------
+        $voice = $this->gates->run(
+            $run, 'voice',
+            'Escribe el título (conciso, ejecutivo) y el propósito (1 frase: audiencia + preguntas que responde) de este dashboard, en el idioma del pedido.',
+            json_encode(['pedido' => $context->prompt, 'objeto' => $spec['title'] ?? ''], JSON_UNESCAPED_UNICODE),
+            fn ($schema) => ['title' => $schema->string(), 'purpose' => $schema->string()],
+            fn () => ['title' => (string) ($spec['title'] ?? 'Dashboard'), 'purpose' => ''],
+            $context->user, $context->modelOverride,
+        );
+        $context->semantic['voice'] = $voice['output'];
+
+        // --- G-2c: insights ---------------------------------------------------
+        $suggested = array_values($spec['insights'] ?? []);
+        $insights = $this->gates->run(
+            $run, 'insights',
+            <<<'TXT'
+Redacta los cuerpos de las tarjetas de insight de un dashboard usando SOLO los
+HECHOS COMPUTADOS (números reales). Mantén variant y title de cada tarjeta
+sugerida (puedes afinar el title), reescribe body con una conclusión concreta
+y accionable (1-2 frases, con el número). Nada de datos inventados. Mismo
+idioma del pedido. Devuelve exactamente el mismo número de tarjetas.
+TXT,
+            json_encode([
+                'pedido' => $context->prompt,
+                'tarjetas_sugeridas' => $suggested,
+                'hechos_computados' => $context->facts,
+            ], JSON_UNESCAPED_UNICODE),
+            fn ($schema) => ['insights' => $schema->array()->description('[{variant, title, body}] mismo orden y cantidad.')],
+            fn () => ['insights' => $this->factualFallbackInsights($suggested, $context->facts)],
+            $context->user, $context->modelOverride,
+        );
+
+        $bodies = array_values(array_filter($insights['output']['insights'] ?? [], 'is_array'));
+        $context->semantic['insights'] = count($bodies) === count($suggested) && $suggested !== []
+            ? $this->mergeInsights($suggested, $bodies)
+            : $suggested;
+    }
+
+    /**
+     * Deterministic judge: the first candidate whose overrides still compile
+     * and pass the dashboard lints wins; none → no overrides (suggestion
+     * as-is). Plausible-but-broken deltas die here, not on the user's screen.
+     *
+     * @param  list<array<string, mixed>>  $candidates
+     * @return array<string, mixed>
+     */
+    private function judgeOverrides(ExpressContext $context, array $candidates): array
+    {
+        $primary = collect($context->objects)->firstWhere('slug', $context->spec['object_slug'] ?? '');
+        foreach ($candidates as $candidate) {
+            $overrides = is_array($candidate['overrides'] ?? null) ? $candidate['overrides'] : [];
+            if ($overrides === []) {
+                continue;
+            }
+            if ($primary !== null && $this->compiles($context, $primary, $overrides)) {
+                return $overrides;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $primary
+     * @param  array<string, mixed>  $overrides
+     */
+    private function compiles(ExpressContext $context, array $primary, array $overrides): bool
+    {
+        try {
+            $args = array_merge($context->spec, $overrides, ['object_slug' => $primary['slug']]);
+            $built = $this->scaffolder->buildDashboardFromSpec(
+                $args, $primary, [],
+                ColorPalette::fromAccent(OrganizationBrand::DEFAULT_ACCENT),
+                'es',
+            );
+
+            if (($built['ok'] ?? false) !== true) {
+                return false;
+            }
+
+            return PlanDashboardTool::lint($built['purpose'], $built['plan_rows'])['ok'];
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function isSlowClass(ExpressContext $context): bool
+    {
+        try {
+            $model = Str::lower($this->aiDefaults->model('builder', $context->modelOverride));
+        } catch (\Throwable) {
+            $model = Str::lower((string) $context->modelOverride);
+        }
+
+        foreach (config('express.slow_models', []) as $needle) {
+            if ($needle !== '' && str_contains($model, (string) $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Fallback insight bodies: the suggester's scaffolds with the real numbers
+     * interpolated — factual even without a model.
+     *
+     * @param  list<array<string, mixed>>  $suggested
+     * @param  array<string, mixed>  $facts
+     * @return list<array<string, mixed>>
+     */
+    private function factualFallbackInsights(array $suggested, array $facts): array
+    {
+        $factLine = 'Registros analizados: '.($facts['row_count'] ?? 0).'.';
+        $top = collect($facts['top_values'] ?? [])->first();
+        if (is_array($top)) {
+            $factLine .= " Valor dominante: {$top['top']} ({$top['share_pct']}%).";
+        }
+
+        return array_map(function (array $card) use ($factLine): array {
+            $card['body'] = trim(($card['body'] ?? '').' '.$factLine);
+
+            return $card;
+        }, $suggested);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $suggested
+     * @param  list<array<string, mixed>>  $written
+     * @return list<array<string, mixed>>
+     */
+    private function mergeInsights(array $suggested, array $written): array
+    {
+        return collect($suggested)->map(function (array $card, int $i) use ($written): array {
+            $card['title'] = (string) ($written[$i]['title'] ?? $card['title']);
+            $card['body'] = (string) ($written[$i]['body'] ?? $card['body'] ?? '');
+
+            return $card;
+        })->values()->all();
+    }
+}
