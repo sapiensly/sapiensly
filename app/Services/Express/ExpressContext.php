@@ -22,6 +22,9 @@ class ExpressContext
     /** @var list<array<string, mixed>> catalog tools of the chosen integration */
     public array $catalogTools = [];
 
+    /** @var array<string, array<string, mixed>> observed row shapes by tool ([] fields = summary-only, avoid) */
+    public array $knownShapes = [];
+
     /** @var list<string> MCP tool names G-1 chose to read */
     public array $chosenTools = [];
 

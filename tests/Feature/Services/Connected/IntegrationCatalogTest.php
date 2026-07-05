@@ -2,6 +2,8 @@
 
 use App\Models\Integration;
 use App\Models\User;
+use App\Services\Connected\ConnectedObjectAuthoring;
+use App\Services\Connected\ConnectedObjectModeler;
 use App\Services\Connected\IntegrationCatalog;
 use App\Services\Tools\McpClient;
 use App\Support\Tenancy\TenantCache;
@@ -59,4 +61,19 @@ it('round-trips observed row shapes per tool', function () {
     expect($shapes)->toHaveKeys(['search-tickets-tool', 'weekly-aggregates-tool'])
         ->and($shapes['search-tickets-tool']['collection_path'])->toBe('tickets')
         ->and($shapes['search-tickets-tool']['fields'])->toHaveCount(2);
+});
+
+it('remembers a summary-only tool as an empty shape after a no-rows read', function () {
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andReturn([['name' => 'overview-tool', 'description' => '', 'input_schema' => []]]);
+    $mcp->shouldReceive('callToolData')->andReturn(['totals' => ['open' => 5], 'scope' => 'x']);
+    $catalog = new IntegrationCatalog($mcp, app(TenantCache::class));
+
+    $authoring = new ConnectedObjectAuthoring(
+        $mcp, new ConnectedObjectModeler, $catalog,
+    );
+    $result = $authoring->author($this->user, $this->integration, ['tool_name' => 'overview-tool'], ['objects' => []]);
+
+    expect($result['ok'])->toBeFalse()
+        ->and($catalog->knownShapes($this->integration)['overview-tool']['fields'])->toBe([]);
 });

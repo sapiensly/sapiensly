@@ -32,6 +32,7 @@ it('runs a benchmark scenario end-to-end and writes the report', function () {
     ]);
 
     $catalog = Mockery::mock(IntegrationCatalog::class);
+    $catalog->shouldReceive('knownShapes')->andReturn([]);
     $catalog->shouldReceive('tools')->andReturn([
         ['name' => 'get-tickets-time-series-tool', 'description' => 'Weekly tickets', 'input_schema' => []],
     ]);

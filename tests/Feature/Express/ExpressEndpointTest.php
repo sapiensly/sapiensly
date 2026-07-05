@@ -77,6 +77,7 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
     ]);
 
     $catalog = Mockery::mock(IntegrationCatalog::class);
+    $catalog->shouldReceive('knownShapes')->andReturn([]);
     $catalog->shouldReceive('tools')->andReturn([
         ['name' => 'get-tickets-time-series-tool', 'description' => 'Weekly tickets', 'input_schema' => []],
     ]);

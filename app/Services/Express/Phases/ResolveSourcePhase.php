@@ -60,6 +60,7 @@ class ResolveSourcePhase implements ExpressPhase
             if ($tools !== []) {
                 $context->integration = $integration;
                 $context->catalogTools = $tools;
+                $context->knownShapes = $this->catalog->knownShapes($integration);
 
                 return;
             }

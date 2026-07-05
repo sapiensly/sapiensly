@@ -108,6 +108,7 @@ function xph_rows(): array
 
 it('resolve_source picks the authorized MCP integration and loads its catalog', function () {
     $catalog = Mockery::mock(IntegrationCatalog::class);
+    $catalog->shouldReceive('knownShapes')->andReturn([]);
     $catalog->shouldReceive('tools')->andReturn(xph_catalog_tools());
 
     $ctx = xph_ctx($this);
@@ -289,6 +290,7 @@ it('compile merges everything, enforces lints and applies the page as a version'
 
 it('runs the whole chain end-to-end through ExpressPipeline', function () {
     $catalog = Mockery::mock(IntegrationCatalog::class);
+    $catalog->shouldReceive('knownShapes')->andReturn([]);
     $catalog->shouldReceive('tools')->andReturn(xph_catalog_tools());
 
     $object = xph_object('tickets_semanales', $this->integration->id);
@@ -330,4 +332,43 @@ it('runs the whole chain end-to-end through ExpressPipeline', function () {
     $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
     expect($manifest['pages'])->toHaveCount(1)
         ->and($manifest['objects'])->toHaveCount(1);
+});
+
+it('fit_check vetoes tools known to return no rows, even if the model picks them', function () {
+    ExpressGateAgent::fake([[
+        'tools' => ['get-tickets-overview-tool', 'get-tickets-time-series-tool'],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this);
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = array_merge(xph_catalog_tools(), [
+        ['name' => 'get-tickets-overview-tool', 'description' => 'Totals summary', 'input_schema' => []],
+    ]);
+    // Observed on a previous run: overview returns no rows (summary-only).
+    $ctx->knownShapes = ['get-tickets-overview-tool' => ['fields' => []]];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->toBe(['get-tickets-time-series-tool']);
+});
+
+it('the heuristic fallback also skips no-rows tools', function () {
+    ExpressGateAgent::fake([
+        fn () => throw new RuntimeException('down'),
+        fn () => throw new RuntimeException('down'),
+    ]);
+
+    $ctx = xph_ctx($this, 'analiza los tickets');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-tickets-overview-tool', 'description' => 'tickets totals', 'input_schema' => []],
+        ['name' => 'get-tickets-time-series-tool', 'description' => 'tickets weekly series', 'input_schema' => []],
+    ];
+    $ctx->knownShapes = ['get-tickets-overview-tool' => ['fields' => []]];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->not->toContain('get-tickets-overview-tool')
+        ->and($ctx->chosenTools)->toContain('get-tickets-time-series-tool');
 });

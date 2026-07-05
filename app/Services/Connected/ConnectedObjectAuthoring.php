@@ -76,6 +76,11 @@ class ConnectedObjectAuthoring
 
         [$rows, $collectionPath] = $this->extractRows($decoded, $spec['collection_path'] ?? null);
         if ($rows === []) {
+            // Remember the miss: an empty shape marks a summary-only tool so
+            // the NEXT run's fit-check can avoid it instead of re-paying the
+            // wasted acquisition.
+            $this->catalog->rememberShape($integration, $toolName, null, []);
+
             return ['ok' => false, 'error' => "The MCP tool '{$toolName}' returned no rows to model the object from. Result keys: ".implode(', ', array_keys($decoded)).'.'];
         }
 

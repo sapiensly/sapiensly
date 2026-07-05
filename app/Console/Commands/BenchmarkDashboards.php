@@ -94,9 +94,11 @@ class BenchmarkDashboards extends Command
                     (string) count($context->objects),
                     $tokens > 0 ? (string) $tokens : '—',
                     $fallbacks !== '' ? $fallbacks : '—',
+                    $run->error !== null ? mb_substr($run->error, 0, 60) : '—',
                 ];
                 $report[$key] = [
                     'status' => $run->status,
+                    'error' => $run->error,
                     'seconds' => $seconds,
                     'run_id' => $run->id,
                     'page' => $context->page,
@@ -111,7 +113,7 @@ class BenchmarkDashboards extends Command
             });
         }
 
-        $this->table(['Escenario', 'Estado', 'Tiempo', 'Página', 'Objetos', 'Tokens', 'Fallbacks'], $rows);
+        $this->table(['Escenario', 'Estado', 'Tiempo', 'Página', 'Objetos', 'Tokens', 'Fallbacks', 'Error'], $rows);
 
         $succeeded = collect($report)->where('status', 'succeeded');
         $expectedHalts = collect($report)->only(['incontestable'])->where('status', 'halted_unanswerable');

@@ -35,4 +35,15 @@ class ExpressGateAgent implements Agent, HasStructuredOutput
     {
         return ($this->schemaFn)($schema);
     }
+
+    /**
+     * Hard output cap. Gates answer structured questions measured in tens of
+     * tokens; benchmark telemetry caught a slow model rambling 1.8k tokens
+     * (72s) into an insights reply. The SDK prefers this method over a
+     * MaxTokens attribute.
+     */
+    public function maxTokens(): int
+    {
+        return 900;
+    }
 }

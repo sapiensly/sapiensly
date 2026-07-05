@@ -34,11 +34,19 @@ class FitCheckPhase implements ExpressPhase
 
     public function run(ExpressContext $context, PipelineRun $run): void
     {
-        $catalog = collect($context->catalogTools)->map(fn (array $t): array => [
-            'name' => $t['name'],
-            'description' => $t['description'] ?? '',
-            'arguments' => $t['arguments'] ?? [],
-        ])->values()->all();
+        // Tools observed to return NO rows (summary-only) are excluded from
+        // the menu entirely — a repeat pick is a wasted acquisition.
+        $noRows = collect($context->knownShapes)
+            ->filter(fn (array $shape): bool => ($shape['fields'] ?? null) === [])
+            ->keys()->all();
+
+        $catalog = collect($context->catalogTools)
+            ->reject(fn (array $t): bool => in_array($t['name'], $noRows, true))
+            ->map(fn (array $t): array => [
+                'name' => $t['name'],
+                'description' => $t['description'] ?? '',
+                'arguments' => $t['arguments'] ?? [],
+            ])->values()->all();
 
         $result = $this->gates->run(
             $run,
@@ -84,7 +92,7 @@ TXT,
             );
         }
 
-        $known = array_column($context->catalogTools, 'name');
+        $known = array_diff(array_column($context->catalogTools, 'name'), $noRows);
         $chosen = collect($out['tools'] ?? [])
             ->filter(fn ($t) => is_string($t) && in_array($t, $known, true))
             ->unique()->take(self::MAX_TOOLS)->values()->all();
@@ -113,12 +121,18 @@ TXT,
             ->filter(fn ($w) => mb_strlen((string) $w) > 3)
             ->unique()->values();
 
-        $scored = collect($context->catalogTools)->map(function (array $tool) use ($words): array {
-            $haystack = Str::lower(Str::ascii(($tool['name'] ?? '').' '.($tool['description'] ?? '')));
-            $score = $words->filter(fn ($w) => str_contains($haystack, (string) $w))->count();
+        $noRows = collect($context->knownShapes)
+            ->filter(fn (array $shape): bool => ($shape['fields'] ?? null) === [])
+            ->keys()->all();
 
-            return ['name' => $tool['name'], 'score' => $score];
-        })->sortByDesc('score')->values();
+        $scored = collect($context->catalogTools)
+            ->reject(fn (array $t): bool => in_array($t['name'], $noRows, true))
+            ->map(function (array $tool) use ($words): array {
+                $haystack = Str::lower(Str::ascii(($tool['name'] ?? '').' '.($tool['description'] ?? '')));
+                $score = $words->filter(fn ($w) => str_contains($haystack, (string) $w))->count();
+
+                return ['name' => $tool['name'], 'score' => $score];
+            })->sortByDesc('score')->values();
 
         $tools = $scored->where('score', '>', 0)->take(self::MAX_TOOLS)->pluck('name')->all();
 
