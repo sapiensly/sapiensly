@@ -5,6 +5,7 @@ namespace App\Services\Connected;
 use App\Models\Integration;
 use App\Models\User;
 use App\Services\Integrations\IntegrationCaller;
+use App\Services\Records\ExpressionResolver;
 use App\Services\Tools\McpClient;
 use Illuminate\Support\Arr;
 
@@ -41,6 +42,7 @@ class ConnectedObjectReader
     public function __construct(
         private readonly IntegrationCaller $caller,
         private readonly McpClient $mcp,
+        private readonly ExpressionResolver $expressions,
     ) {}
 
     /**
@@ -155,7 +157,10 @@ class ConnectedObjectReader
             'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
             'auth_config' => $integration->auth_config ?? [],
         ];
-        $arguments = is_array($op['arguments'] ?? null) ? $op['arguments'] : [];
+        // Operation arguments may hold {{…}} expressions ({{today()}},
+        // {{days_ago(30)}}) so a live window ROLLS instead of freezing at the
+        // date the object was authored. Resolved per read, clock-only context.
+        $arguments = $this->resolveArguments(is_array($op['arguments'] ?? null) ? $op['arguments'] : []);
 
         try {
             $decoded = $this->mcp->callToolData($config, $actor, $toolName, $arguments, self::MCP_MAX_CHARS);
@@ -182,6 +187,26 @@ class ConnectedObjectReader
         );
 
         return ['ok' => true, 'rows' => $rows];
+    }
+
+    /**
+     * Resolve {{…}} expression strings inside operation arguments (recursively)
+     * against an empty context — only clock/pure functions apply here.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function resolveArguments(array $arguments): array
+    {
+        foreach ($arguments as $key => $value) {
+            if (is_array($value)) {
+                $arguments[$key] = $this->resolveArguments($value);
+            } elseif (is_string($value) && str_contains($value, '{{')) {
+                $arguments[$key] = $this->expressions->resolve($value, []);
+            }
+        }
+
+        return $arguments;
     }
 
     /**

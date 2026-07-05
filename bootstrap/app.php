@@ -19,12 +19,15 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Middleware\HandleCors;
+use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Middleware\ThrottleRequestsWithRedis;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Psr\Log\LogLevel;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
@@ -92,5 +95,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // A job killed by its wall-clock timeout surfaces as MaxAttemptsExceeded
+        // on redelivery — for the AI turn jobs that's the RESCUE path working
+        // (failed() banks the checkpoint and auto-resumes), not an incident.
+        // Keep it in the log, but not at ERROR.
+        $exceptions->level(MaxAttemptsExceededException::class, LogLevel::WARNING);
+        $exceptions->level(TimeoutExceededException::class, LogLevel::WARNING);
     })->create();

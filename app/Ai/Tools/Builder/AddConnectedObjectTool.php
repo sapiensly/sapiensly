@@ -9,6 +9,7 @@ use App\Services\Connected\IntegrationCatalog;
 use App\Services\Tools\McpClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -148,7 +149,11 @@ DESC;
                 'id_path' => $modeled['id_path'],
                 'operations' => ['list' => array_filter([
                     'mcp_tool' => $toolName,
-                    'arguments' => $arguments !== [] ? $arguments : null,
+                    // Stored arguments get today-anchored literal dates
+                    // rewritten to rolling expressions ({{today()}},
+                    // {{days_ago(N)}}) so the window doesn't freeze at the
+                    // authoring date; the sampling call above used literals.
+                    'arguments' => $arguments !== [] ? $this->relativizeDateArguments($arguments) : null,
                     'collection_path' => $collectionPath,
                 ], fn ($v) => $v !== null)],
                 'field_map' => $modeled['field_map'],
@@ -219,6 +224,45 @@ DESC;
         }
 
         return [[], null];
+    }
+
+    /**
+     * Rewrite a today-anchored literal date window to rolling expressions the
+     * reader resolves per read: a value equal to today (UTC) becomes
+     * {{today()}}, and past dates become {{days_ago(N)}} — but ONLY when the
+     * window is anchored at today (some date equals today); a fully historical
+     * window is deliberate and stays literal.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function relativizeDateArguments(array $arguments): array
+    {
+        $today = now()->utc()->startOfDay();
+        $isDate = fn ($v): bool => is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) === 1;
+
+        $anchoredAtToday = collect($arguments)
+            ->contains(fn ($v): bool => $isDate($v) && $v === $today->toDateString());
+        if (! $anchoredAtToday) {
+            return $arguments;
+        }
+
+        foreach ($arguments as $key => $value) {
+            if (! $isDate($value)) {
+                continue;
+            }
+            if ($value === $today->toDateString()) {
+                $arguments[$key] = '{{today()}}';
+
+                continue;
+            }
+            $days = $today->diffInDays(Carbon::parse($value)->startOfDay(), false);
+            if ($days < 0) {
+                $arguments[$key] = '{{days_ago('.abs((int) $days).')}}';
+            }
+        }
+
+        return $arguments;
     }
 
     /**

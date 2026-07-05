@@ -5,6 +5,7 @@ use App\Models\User;
 use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Integrations\IntegrationCaller;
 use App\Services\Manifest\ManifestValidator;
+use App\Services\Records\ExpressionResolver;
 use App\Services\Tools\McpClient;
 use Illuminate\Support\Str;
 
@@ -61,7 +62,7 @@ it('reads with the acting viewer so a per-user OAuth source resolves their token
             ['ticket_id' => 'T2', 'status' => 'cerrado', 'metrics' => ['resolution_minutes' => 90]],
         ]]);
 
-    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp);
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
     $result = $reader->list(mcpTicketObject($this->integration->id), $this->integration, [], $viewer);
 
     expect($result['ok'])->toBeTrue()
@@ -76,7 +77,7 @@ it('turns a per-user OAuth failure into an authorize-the-connection message', fu
     $mcp = Mockery::mock(McpClient::class);
     $mcp->shouldReceive('callToolData')->once()->andThrow(new RuntimeException('OAuth 2.0 MCP tools require a user context to resolve the token.'));
 
-    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp);
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
     $result = $reader->list(mcpTicketObject($this->integration->id), $this->integration);
 
     expect($result['ok'])->toBeFalse()
@@ -87,7 +88,7 @@ it('reports did-not-return-JSON-rows when the tool answers in prose only', funct
     $mcp = Mockery::mock(McpClient::class);
     $mcp->shouldReceive('callToolData')->once()->andReturnNull();
 
-    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp);
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
     $result = $reader->list(mcpTicketObject($this->integration->id), $this->integration);
 
     expect($result['ok'])->toBeFalse()
@@ -107,4 +108,29 @@ it('accepts a connected object with an mcp_tool source in the manifest schema', 
     ];
 
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('resolves rolling-window expressions in operation arguments per read', function () {
+    $today = now()->utc()->toDateString();
+    $monthAgo = now()->utc()->subDays(30)->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = [
+        'from' => '{{days_ago(30)}}',
+        'to' => '{{today()}}',
+        'granularity' => 'weekly',
+    ];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $monthAgo
+            && $args['to'] === $today
+            && $args['granularity'] === 'weekly')
+        ->andReturn(['tickets' => []]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list($object, $this->integration, [], $this->user);
+
+    expect($result['ok'])->toBeTrue();
 });

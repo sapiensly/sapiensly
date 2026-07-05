@@ -148,3 +148,51 @@ it('refuses a non-MCP integration and an empty result set with clear reasons', f
     expect($result['ok'])->toBeFalse()
         ->and($result['errors'][0]['message'])->toContain('returned no rows');
 });
+
+it('stores today-anchored date windows as rolling expressions, calling with literals', function () {
+    $today = now()->utc()->toDateString();
+    $monthAgo = now()->utc()->subDays(30)->toDateString();
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andReturn([['name' => 'series-tool', 'description' => '', 'input_schema' => []]]);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        // The sampling call itself uses the LITERAL dates the model passed.
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $monthAgo && $args['to'] === $today)
+        ->andReturn(['series' => [['id' => 'W1', 'total' => 5]]]);
+
+    [$tool, $propose] = aco_tool($this, $mcp);
+    $result = json_decode($tool->handle(new ToolRequest([
+        'integration_id' => $this->integration->id,
+        'tool_name' => 'series-tool',
+        'arguments' => ['from' => $monthAgo, 'to' => $today, 'granularity' => 'weekly'],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue();
+
+    // The STORED operation rolls: the window follows the clock, not the
+    // authoring date.
+    $stored = $propose->currentManifest()['objects'][0]['source']['operations']['list']['arguments'];
+    expect($stored['from'])->toBe('{{days_ago(30)}}')
+        ->and($stored['to'])->toBe('{{today()}}')
+        ->and($stored['granularity'])->toBe('weekly');
+});
+
+it('leaves a fully historical window literal (deliberate range)', function () {
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andReturn([['name' => 'series-tool', 'description' => '', 'input_schema' => []]]);
+    $mcp->shouldReceive('callToolData')->andReturn(['series' => [['id' => 'W1', 'total' => 5]]]);
+
+    [$tool, $propose] = aco_tool($this, $mcp);
+    $result = json_decode($tool->handle(new ToolRequest([
+        'integration_id' => $this->integration->id,
+        'tool_name' => 'series-tool',
+        'arguments' => ['from' => '2025-01-01', 'to' => '2025-03-31'],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue();
+
+    $stored = $propose->currentManifest()['objects'][0]['source']['operations']['list']['arguments'];
+    expect($stored['from'])->toBe('2025-01-01')
+        ->and($stored['to'])->toBe('2025-03-31');
+});
