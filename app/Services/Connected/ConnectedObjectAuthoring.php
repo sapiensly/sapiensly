@@ -58,6 +58,12 @@ class ConnectedObjectAuthoring
                 is_array($spec['arguments'] ?? null) ? $spec['arguments'] : [],
                 $tool['input_schema'],
             );
+            // Fill REQUIRED params the caller didn't provide (the Express
+            // pipeline names only the tool): date-ish params get a rolling
+            // 30-day window, enums a sensible member, bounded numbers their
+            // maximum. Without this, a from/to-requiring tool errors on the
+            // very first read.
+            $arguments = $this->fillRequiredArguments($arguments, $tool['input_schema']);
 
             $decoded = $this->mcp->callToolData($config, $user, $toolName, $arguments);
         } catch (\Throwable $e) {
@@ -184,6 +190,63 @@ class ConnectedObjectAuthoring
             if ($days < 0) {
                 $arguments[$key] = '{{days_ago('.abs((int) $days).')}}';
             }
+        }
+
+        return $arguments;
+    }
+
+    /**
+     * Synthesize values for required input_schema params that are missing:
+     * start-ish dates → 30 days ago, end-ish dates → today (the stored window
+     * then rolls via relativizeDateArguments), enums → prefer a weekly-ish
+     * member else the first, bounded integers → their maximum, booleans →
+     * false. Anything unrecognizable is left absent — the tool's own error
+     * then names it.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $inputSchema
+     * @return array<string, mixed>
+     */
+    private function fillRequiredArguments(array $arguments, array $inputSchema): array
+    {
+        $required = is_array($inputSchema['required'] ?? null) ? $inputSchema['required'] : [];
+        $properties = is_array($inputSchema['properties'] ?? null) ? $inputSchema['properties'] : [];
+
+        foreach ($required as $name) {
+            if (! is_string($name) || array_key_exists($name, $arguments)) {
+                continue;
+            }
+            $spec = is_array($properties[$name] ?? null) ? $properties[$name] : [];
+            $type = $spec['type'] ?? 'string';
+            $enum = is_array($spec['enum'] ?? null) ? $spec['enum'] : [];
+
+            if ($enum !== []) {
+                $weekly = collect($enum)->first(fn ($v) => is_string($v) && preg_match('/week|semana/i', $v) === 1);
+                $arguments[$name] = $weekly ?? $enum[0];
+
+                continue;
+            }
+            if (preg_match('/^(from|start|since|desde|start_date|date_from)$/i', $name) === 1
+                || ($spec['format'] ?? null) === 'date' && preg_match('/from|start|since/i', $name) === 1) {
+                $arguments[$name] = now()->utc()->subDays(30)->toDateString();
+
+                continue;
+            }
+            if (preg_match('/^(to|until|end|hasta|end_date|date_to)$/i', $name) === 1) {
+                $arguments[$name] = now()->utc()->toDateString();
+
+                continue;
+            }
+            if (in_array($type, ['integer', 'number'], true)) {
+                $arguments[$name] = $spec['maximum'] ?? $spec['minimum'] ?? 100;
+
+                continue;
+            }
+            if ($type === 'boolean') {
+                $arguments[$name] = false;
+            }
+            // Unrecognizable required string → leave absent; the tool's error
+            // message will name it and the run reports it honestly.
         }
 
         return $arguments;

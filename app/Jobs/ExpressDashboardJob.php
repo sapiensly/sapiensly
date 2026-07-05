@@ -151,7 +151,13 @@ class ExpressDashboardJob implements ShouldQueue
             return ['none', trim($progressLog."\n\n⏹ Build detenido por el usuario.")];
         }
 
-        return ['error', 'El build Express falló: '.($run->error ?? 'error desconocido').'. El detalle quedó en el registro del pipeline ('.$run->id.').'];
+        $detail = collect($context->notes)
+            ->map(fn (string $n): string => '- '.$n)
+            ->implode("\n");
+
+        return ['error', 'El build Express falló: '.($run->error ?? 'error desconocido').'.'
+            .($detail !== '' ? "\n\n**Detalle:**\n".$detail : '')
+            ."\n\n_Registro: {$run->id}_"];
     }
 
     public function failed(?Throwable $e): void

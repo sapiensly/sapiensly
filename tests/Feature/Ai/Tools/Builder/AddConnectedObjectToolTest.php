@@ -198,3 +198,44 @@ it('leaves a fully historical window literal (deliberate range)', function () {
     expect($stored['from'])->toBe('2025-01-01')
         ->and($stored['to'])->toBe('2025-03-31');
 });
+
+it('fills required schema params the caller omitted with a rolling window', function () {
+    $today = now()->utc()->toDateString();
+    $monthAgo = now()->utc()->subDays(30)->toDateString();
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andReturn([[
+        'name' => 'series-tool',
+        'description' => '',
+        'input_schema' => [
+            'required' => ['from', 'to', 'granularity'],
+            'properties' => [
+                'from' => ['type' => 'string', 'format' => 'date'],
+                'to' => ['type' => 'string', 'format' => 'date'],
+                'granularity' => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly']],
+            ],
+        ],
+    ]]);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        // The Express pipeline names only the tool — the synthesized required
+        // args must arrive: rolling window + the weekly-ish enum member.
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $monthAgo
+            && $args['to'] === $today
+            && $args['granularity'] === 'weekly')
+        ->andReturn(['series' => [['id' => 'W1', 'total' => 5]]]);
+
+    [$tool, $propose] = aco_tool($this, $mcp);
+    $result = json_decode($tool->handle(new ToolRequest([
+        'integration_id' => $this->integration->id,
+        'tool_name' => 'series-tool',
+    ])), true);
+
+    expect($result['ok'])->toBeTrue();
+
+    // Stored window rolls (today-anchored → expressions).
+    $stored = $propose->currentManifest()['objects'][0]['source']['operations']['list']['arguments'];
+    expect($stored['from'])->toBe('{{days_ago(30)}}')
+        ->and($stored['to'])->toBe('{{today()}}')
+        ->and($stored['granularity'])->toBe('weekly');
+});
