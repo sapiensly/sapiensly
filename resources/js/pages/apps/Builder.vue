@@ -1679,9 +1679,16 @@ function subscribe() {
         (payload: { message: Message }) => {
             liveActivity.value = null;
             liveSteps.value = [];
-            messages.value = messages.value.map((m) =>
-                m.id === payload.message.id ? payload.message : m,
-            );
+            // Update in place, or APPEND when the server minted a new message
+            // (the Express report arrives as its own message so it never
+            // replaces the progress narration).
+            messages.value = messages.value.some(
+                (m) => m.id === payload.message.id,
+            )
+                ? messages.value.map((m) =>
+                      m.id === payload.message.id ? payload.message : m,
+                  )
+                : [...messages.value, payload.message];
             // Server already created a new AppVersion if the user pre-approved
             // — partial reload to refresh the preview and the build plan
             // (its step statuses advanced this turn).

@@ -140,11 +140,20 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
     $run->refresh();
     $placeholder->refresh();
 
+    // The progress narration survives as its own message; the report is NEW.
     expect($run->status)->toBe('succeeded')
-        ->and($placeholder->status)->toBe('applied')
-        ->and($placeholder->content)->toContain('Dashboard listo: Panel de Tickets')
-        ->and($placeholder->content)->toContain('CSAT')          // honest substitution
-        ->and($placeholder->applied_version_id)->not->toBeNull();
+        ->and($placeholder->status)->toBe('none')
+        ->and($placeholder->content)->toContain('Compilando');
+
+    $report = BuilderMessage::query()
+        ->where('conversation_id', $this->conv->id)
+        ->orderByDesc('created_at')->orderByDesc('id')
+        ->first();
+    expect($report->id)->not->toBe($placeholder->id)
+        ->and($report->status)->toBe('applied')
+        ->and($report->content)->toContain('Dashboard listo: Panel de Tickets')
+        ->and($report->content)->toContain('CSAT')          // honest substitution
+        ->and($report->applied_version_id)->not->toBeNull();
 
     $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
     expect($manifest['pages'])->toHaveCount(1);

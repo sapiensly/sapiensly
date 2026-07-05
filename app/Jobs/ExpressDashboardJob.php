@@ -4,7 +4,6 @@ namespace App\Jobs;
 
 use App\Events\Builder\BuilderStreamChunk;
 use App\Events\Builder\BuilderStreamComplete;
-use App\Events\Builder\BuilderStreamError;
 use App\Models\BuilderMessage;
 use App\Models\PipelineRun;
 use App\Services\Builder\BuilderCancellation;
@@ -86,17 +85,28 @@ class ExpressDashboardJob implements ShouldQueue
 
         [$status, $report] = $this->report($run, $context, $buffer);
 
-        $message->forceFill([
+        // The progress narration STAYS as its own message; the report arrives
+        // as a NEW one — finishing (or failing) never erases what happened.
+        $message->forceFill(['status' => 'none'])->save();
+        try {
+            BuilderStreamComplete::dispatch($message->refresh());
+        } catch (Throwable) {
+            // UI catches up from the DB.
+        }
+
+        $reportMessage = BuilderMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'assistant',
             'content' => $report,
             'status' => $status,
             'applied_version_id' => $context->page['version_id'] ?? null,
             'change_summary' => $context->page !== null
                 ? "Dashboard «{$context->page['name']}» construido con Express"
                 : null,
-        ])->save();
+        ]);
 
         try {
-            BuilderStreamComplete::dispatch($message->refresh());
+            BuilderStreamComplete::dispatch($reportMessage);
         } catch (Throwable) {
             // UI catches up from the DB.
         }
@@ -148,7 +158,7 @@ class ExpressDashboardJob implements ShouldQueue
         }
 
         if ($run->status === 'stopped') {
-            return ['none', trim($progressLog."\n\n⏹ Build detenido por el usuario.")];
+            return ['none', '⏹ Build detenido por el usuario. El progreso ya aplicado se conserva.'];
         }
 
         $detail = collect($context->notes)
@@ -175,9 +185,17 @@ class ExpressDashboardJob implements ShouldQueue
 
         if ($message !== null && in_array($message->status, ['streaming', 'pending'], true)) {
             $reason = 'El build Express se interrumpió: '.($e?->getMessage() ?? 'el proceso se detuvo').'.';
-            $this->finalize($message, 'error', $reason);
+            // The progress narration stays; the interruption arrives as a NEW
+            // error message instead of overwriting what already happened.
+            $this->finalize($message, 'none', $message->content ?: '…');
+            $errorMessage = BuilderMessage::create([
+                'conversation_id' => $message->conversation_id,
+                'role' => 'assistant',
+                'content' => $reason,
+                'status' => 'error',
+            ]);
             try {
-                broadcast(new BuilderStreamError($message->conversation_id, $message->id, $reason));
+                BuilderStreamComplete::dispatch($errorMessage);
             } catch (Throwable) {
                 // swallow
             }
