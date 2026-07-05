@@ -42,7 +42,11 @@ optionally `sector` (support | sales_crm | ecommerce_retail | saas_subscriptions
 charts and insight conclusions), profile (each field's analytic role + live
 stats + viz hints), brand (accent + palette ramp + chart colors)}. Map the
 blueprint's KPIs/charts to the profiled fields, then build with ONE
-add_dashboard_page call.
+add_dashboard_page call. FIT CHECK (rule 1d-fit): before building, compare what
+the user asked for against the profiled fields — substitute honest proxies for
+missing metrics and SAY SO in your reply; if the source can't answer the asked
+topic at all, don't build a filler board — propose the dashboards this data CAN
+answer and ask.
 DESC;
     }
 
