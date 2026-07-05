@@ -5,6 +5,7 @@ use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Models\App;
 use App\Models\Integration;
 use App\Models\User;
+use App\Services\Connected\ConnectedObjectAuthoring;
 use App\Services\Connected\ConnectedObjectModeler;
 use App\Services\Connected\IntegrationCatalog;
 use App\Services\Manifest\AppManifestService;
@@ -54,7 +55,8 @@ beforeEach(function () {
 function aco_tool($test, McpClient $mcp): array
 {
     $propose = new ProposeChangeTool($test->testApp->fresh(), $test->manifestService, app(ManifestValidator::class));
-    $tool = new AddConnectedObjectTool($propose, $mcp, new ConnectedObjectModeler, new IntegrationCatalog($mcp, app(TenantCache::class)), $test->user);
+    $authoring = new ConnectedObjectAuthoring($mcp, new ConnectedObjectModeler, new IntegrationCatalog($mcp, app(TenantCache::class)));
+    $tool = new AddConnectedObjectTool($propose, $authoring, $test->user);
 
     return [$tool, $propose];
 }

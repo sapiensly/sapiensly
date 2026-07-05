@@ -1,0 +1,246 @@
+<?php
+
+namespace App\Services\Connected;
+
+use App\Models\Integration;
+use App\Models\User;
+use App\Services\Tools\McpClient;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
+
+/**
+ * The server-side heart of add_connected_object, extracted so the Express
+ * pipeline can author connected objects WITHOUT the tool wrapper (no turn
+ * accumulator): call the MCP tool as the acting user, clamp arguments to the
+ * input_schema, infer the fields from the real rows, and return the finished
+ * manifest node + the sampled rows (the pipeline reuses them for computed
+ * facts). Callers decide how to bank: the builder tool records a proposal,
+ * the pipeline batches ops into one applied version.
+ */
+class ConnectedObjectAuthoring
+{
+    public function __construct(
+        private readonly McpClient $mcp,
+        private readonly ConnectedObjectModeler $modeler,
+        private readonly IntegrationCatalog $catalog,
+    ) {}
+
+    /**
+     * @param  array{tool_name: string, arguments?: array<string, mixed>, collection_path?: ?string, id_path?: ?string, object_name?: ?string}  $spec
+     * @param  array<string, mixed>  $manifest  current draft (slug uniqueness)
+     * @return array{ok: bool, object?: array<string, mixed>, rows?: list<array<string, mixed>>, clamped?: array<string, mixed>, date_field_ids?: list<string>, summary?: string, error?: string}
+     */
+    public function author(User $user, Integration $integration, array $spec, array $manifest): array
+    {
+        $toolName = trim((string) ($spec['tool_name'] ?? ''));
+        if ($toolName === '') {
+            return ['ok' => false, 'error' => '`tool_name` is required.'];
+        }
+
+        $config = [
+            'endpoint' => $integration->base_url,
+            'integration_id' => $integration->id,
+            'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
+            'auth_config' => $integration->auth_config ?? [],
+        ];
+
+        try {
+            $serverTools = $this->catalog->tools($integration, $user);
+            $tool = collect($serverTools)->firstWhere('name', $toolName);
+            if ($tool === null) {
+                $names = implode(', ', array_column($serverTools, 'name'));
+
+                return ['ok' => false, 'error' => "The MCP server has no tool named '{$toolName}'. Available: {$names}."];
+            }
+
+            [$arguments, $clamped] = $this->clampArguments(
+                is_array($spec['arguments'] ?? null) ? $spec['arguments'] : [],
+                $tool['input_schema'],
+            );
+
+            $decoded = $this->mcp->callToolData($config, $user, $toolName, $arguments);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        if ($decoded === null) {
+            return ['ok' => false, 'error' => "The MCP tool '{$toolName}' did not return JSON rows."];
+        }
+
+        [$rows, $collectionPath] = $this->extractRows($decoded, $spec['collection_path'] ?? null);
+        if ($rows === []) {
+            return ['ok' => false, 'error' => "The MCP tool '{$toolName}' returned no rows to model the object from. Result keys: ".implode(', ', array_keys($decoded)).'.'];
+        }
+
+        $modeled = $this->modeler->model($rows, is_string($spec['id_path'] ?? null) ? $spec['id_path'] : null);
+        if ($modeled['fields'] === []) {
+            return ['ok' => false, 'error' => "Could not infer any fields from the rows of '{$toolName}'."];
+        }
+
+        $name = trim((string) ($spec['object_name'] ?? '')) ?: Str::headline((string) preg_replace('/[-_]?tool$/i', '', $toolName));
+        $slug = $this->uniqueObjectSlug($name, $manifest);
+
+        $object = [
+            'id' => 'obj_'.strtolower((string) Str::ulid()),
+            'slug' => $slug,
+            'name' => $name,
+            'fields' => $modeled['fields'],
+            'source' => array_filter([
+                'type' => 'connected',
+                'integration_id' => $integration->id,
+                'id_path' => $modeled['id_path'],
+                'operations' => ['list' => array_filter([
+                    'mcp_tool' => $toolName,
+                    'arguments' => $arguments !== [] ? $this->relativizeDateArguments($arguments) : null,
+                    'collection_path' => $collectionPath,
+                ], fn ($v) => $v !== null)],
+                'field_map' => $modeled['field_map'],
+            ], fn ($v) => $v !== null),
+        ];
+
+        // Feed the catalog so the NEXT build sees this tool's row shape in its
+        // first discovery — zero sampling rounds.
+        $this->catalog->rememberShape(
+            $integration,
+            $toolName,
+            $collectionPath,
+            collect($modeled['fields'])->map(fn (array $f): array => [
+                'path' => collect($modeled['field_map'])->firstWhere('field_id', $f['id'])['external_path'] ?? $f['slug'],
+                'type' => $f['type'],
+            ])->values()->all(),
+        );
+
+        return [
+            'ok' => true,
+            'object' => $object,
+            'rows' => $rows,
+            'clamped' => $clamped,
+            'date_field_ids' => collect($modeled['fields'])
+                ->filter(fn (array $f): bool => in_array($f['type'], ['date', 'datetime'], true))
+                ->pluck('id')->values()->all(),
+            'summary' => "Creé el objeto conectado «{$name}» (live desde {$toolName})",
+        ];
+    }
+
+    /**
+     * Pull the row list out of the decoded tool result: an explicit dot path,
+     * a top-level list, or the first array value that is a list of assoc rows.
+     *
+     * @param  array<mixed>  $decoded
+     * @return array{0: list<array<string, mixed>>, 1: ?string}
+     */
+    private function extractRows(array $decoded, mixed $explicitPath): array
+    {
+        if (is_string($explicitPath) && trim($explicitPath) !== '') {
+            $path = trim($explicitPath);
+            $rows = Arr::get($decoded, $path, []);
+
+            return [is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [], $path];
+        }
+
+        if (array_is_list($decoded)) {
+            return [array_values(array_filter($decoded, 'is_array')), null];
+        }
+
+        foreach ($decoded as $key => $value) {
+            if (is_array($value) && array_is_list($value) && $value !== [] && is_array($value[0])) {
+                return [array_values(array_filter($value, 'is_array')), (string) $key];
+            }
+        }
+
+        return [[], null];
+    }
+
+    /**
+     * Rewrite a today-anchored literal date window to rolling expressions the
+     * reader resolves per read; a fully historical window is deliberate and
+     * stays literal.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function relativizeDateArguments(array $arguments): array
+    {
+        $today = now()->utc()->startOfDay();
+        $isDate = fn ($v): bool => is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) === 1;
+
+        $anchoredAtToday = collect($arguments)
+            ->contains(fn ($v): bool => $isDate($v) && $v === $today->toDateString());
+        if (! $anchoredAtToday) {
+            return $arguments;
+        }
+
+        foreach ($arguments as $key => $value) {
+            if (! $isDate($value)) {
+                continue;
+            }
+            if ($value === $today->toDateString()) {
+                $arguments[$key] = '{{today()}}';
+
+                continue;
+            }
+            $days = $today->diffInDays(Carbon::parse($value)->startOfDay(), false);
+            if ($days < 0) {
+                $arguments[$key] = '{{days_ago('.abs((int) $days).')}}';
+            }
+        }
+
+        return $arguments;
+    }
+
+    /**
+     * Clamp numeric arguments to the tool input_schema's minimum/maximum so a
+     * mis-sized value degrades to the nearest allowed one instead of erroring
+     * on every future live read.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $inputSchema
+     * @return array{0: array<string, mixed>, 1: array<string, array{from: mixed, to: mixed}>}
+     */
+    private function clampArguments(array $arguments, array $inputSchema): array
+    {
+        $clamped = [];
+        $properties = is_array($inputSchema['properties'] ?? null) ? $inputSchema['properties'] : [];
+
+        foreach ($arguments as $key => $value) {
+            $spec = $properties[$key] ?? null;
+            if (! is_array($spec) || ! is_numeric($value)) {
+                continue;
+            }
+            $bounded = $value;
+            if (isset($spec['maximum']) && is_numeric($spec['maximum']) && $bounded > $spec['maximum']) {
+                $bounded = $spec['maximum'];
+            }
+            if (isset($spec['minimum']) && is_numeric($spec['minimum']) && $bounded < $spec['minimum']) {
+                $bounded = $spec['minimum'];
+            }
+            if ($bounded !== $value) {
+                $clamped[$key] = ['from' => $value, 'to' => $bounded];
+                $arguments[$key] = $bounded;
+            }
+        }
+
+        return [$arguments, $clamped];
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     */
+    private function uniqueObjectSlug(string $name, array $manifest): string
+    {
+        $slug = strtolower(trim((string) preg_replace('/[^a-z0-9_]+/', '_', strtolower(Str::ascii($name))), '_')) ?: 'connected';
+        if (preg_match('/^[a-z]/', $slug) !== 1) {
+            $slug = 'o_'.$slug;
+        }
+
+        $taken = array_filter(array_map(fn ($o) => $o['slug'] ?? null, $manifest['objects'] ?? []));
+        $candidate = $slug;
+        $n = 2;
+        while (in_array($candidate, $taken, true)) {
+            $candidate = $slug.'_'.$n++;
+        }
+
+        return $candidate;
+    }
+}

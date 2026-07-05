@@ -57,7 +57,7 @@ use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
-use App\Services\Connected\ConnectedObjectModeler;
+use App\Services\Connected\ConnectedObjectAuthoring;
 use App\Services\Connected\IntegrationCatalog;
 use App\Services\Connectors\ConnectorActionResolver;
 use App\Services\Integrations\IntegrationCaller;
@@ -209,7 +209,7 @@ class BuilderAiService
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
             new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
             new SampleMcpToolTool(app(McpClient::class), $conversation->user),
-            new AddConnectedObjectTool($proposeTool, app(McpClient::class), app(ConnectedObjectModeler::class), app(IntegrationCatalog::class), $conversation->user),
+            new AddConnectedObjectTool($proposeTool, app(ConnectedObjectAuthoring::class), $conversation->user),
             // The clock every model must ground time-relative reasoning on
             // (dashboards, date filters, "last N days"). Not in the Builder's
             // PlatformToolsFactory path, so bridged in explicitly.
@@ -417,7 +417,7 @@ class BuilderAiService
             new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
             new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
             new SampleMcpToolTool(app(McpClient::class), $conversation->user),
-            new AddConnectedObjectTool($proposeTool, app(McpClient::class), app(ConnectedObjectModeler::class), app(IntegrationCatalog::class), $conversation->user),
+            new AddConnectedObjectTool($proposeTool, app(ConnectedObjectAuthoring::class), $conversation->user),
             // The clock every model must ground time-relative reasoning on
             // (dashboards, date filters, "last N days"). Not in the Builder's
             // PlatformToolsFactory path, so bridged in explicitly.
