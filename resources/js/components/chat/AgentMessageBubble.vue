@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ThinkingCursor from '@/components/ThinkingCursor.vue';
 import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
 import ToolActivityChips from '@/components/chat/ToolActivityChips.vue';
@@ -135,14 +134,14 @@ function renderMarkdown(content: string | null): string {
                     />
                 </template>
 
-                <ThinkingCursor
+                <span
                     v-if="
                         message.status === 'pending' ||
                         message.status === 'streaming'
                     "
-                    :size="18"
+                    class="inline-block h-[18px] w-[3px] translate-y-1 animate-pulse rounded-full"
                     :class="{ 'ml-0.5': message.content }"
-                    :style="{ color: accent }"
+                    :style="{ backgroundColor: accent }"
                 />
 
                 <!-- Data pills -->
