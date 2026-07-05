@@ -1053,7 +1053,7 @@ class BuilderAiService
 
         $this->queueAutoTurn(
             $conversation,
-            '(auto-reanudación) El turno anterior se quedó sin tiempo pero el progreso está guardado. Continúa exactamente donde quedó con el siguiente paso pendiente (si hay un plan, márcalo con target_plan_steps).',
+            '(auto-reanudación) El turno anterior se quedó sin tiempo pero el progreso está guardado. El manifiesto actual ES el estado válido: NO borres, dupliques ni rehagas nada de lo ya aplicado — lee el manifiesto y construye únicamente lo que FALTA (si hay un plan, márcalo con target_plan_steps). Para un dashboard: si los objetos ya existen, ve directo a prepare_dashboard → add_dashboard_page {use_suggestion: true, overrides}.',
             $modelOverride,
             max($autonomousRemaining, self::AUTONOMOUS_MAX_TURNS),
             $resumeRemaining - 1,
