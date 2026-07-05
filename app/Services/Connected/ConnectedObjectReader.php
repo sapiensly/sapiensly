@@ -25,6 +25,19 @@ class ConnectedObjectReader
      */
     private const MCP_MAX_CHARS = 2_000_000;
 
+    /**
+     * Per-instance memo of list() results. A dashboard page resolves a dozen
+     * blocks over the SAME connected object with the same operation — without
+     * this every KPI and chart re-fetched the identical external list (13 MCP
+     * round-trips per page view). Keyed by everything that changes the raw
+     * read: object, integration, operation + pushed-down params, and the acting
+     * user. The instance lives for one request, so the memo can't go stale
+     * across requests or leak between viewers.
+     *
+     * @var array<string, array{ok: bool, rows: list<array<string, mixed>>, error?: string}>
+     */
+    private array $memo = [];
+
     public function __construct(
         private readonly IntegrationCaller $caller,
         private readonly McpClient $mcp,
@@ -50,11 +63,19 @@ class ConnectedObjectReader
         // desk live) calls a tool instead of a REST endpoint. The mapping
         // (field_map/id_path) and in-memory aggregation downstream are identical.
         if ($integration->is_mcp || ! empty($op['mcp_tool'])) {
-            return $this->listViaMcp($object, $integration, $op, $source, $actor);
+            $key = $this->memoKey($object, $integration, $op, [], $actor);
+
+            return $this->memo[$key] ??= $this->listViaMcp($object, $integration, $op, $source, $actor);
         }
 
         if (empty($op['path'])) {
             return ['ok' => false, 'rows' => [], 'error' => 'No list operation is configured for this object.'];
+        }
+
+        $externalQuery = $this->buildExternalQuery($op, $source, $query);
+        $key = $this->memoKey($object, $integration, $op, $externalQuery, $actor);
+        if (isset($this->memo[$key])) {
+            return $this->memo[$key];
         }
 
         try {
@@ -62,14 +83,14 @@ class ConnectedObjectReader
                 $integration,
                 (string) ($op['method'] ?? 'GET'),
                 (string) $op['path'],
-                ['query' => $this->buildExternalQuery($op, $source, $query)],
+                ['query' => $externalQuery],
             );
         } catch (\Throwable $e) {
-            return ['ok' => false, 'rows' => [], 'error' => $e->getMessage()];
+            return $this->memo[$key] = ['ok' => false, 'rows' => [], 'error' => $e->getMessage()];
         }
 
         if (! $response->successful()) {
-            return ['ok' => false, 'rows' => [], 'error' => "External system returned HTTP {$response->status()}."];
+            return $this->memo[$key] = ['ok' => false, 'rows' => [], 'error' => "External system returned HTTP {$response->status()}."];
         }
 
         $json = $response->json() ?? [];
@@ -84,7 +105,23 @@ class ConnectedObjectReader
             array_values($raw),
         );
 
-        return ['ok' => true, 'rows' => $rows];
+        return $this->memo[$key] = ['ok' => true, 'rows' => $rows];
+    }
+
+    /**
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $op
+     * @param  array<string, mixed>  $externalQuery
+     */
+    private function memoKey(array $object, Integration $integration, array $op, array $externalQuery, ?User $actor): string
+    {
+        return md5(json_encode([
+            $object['id'] ?? $object['slug'] ?? '',
+            $integration->id,
+            $op,
+            $externalQuery,
+            $actor?->id,
+        ]));
     }
 
     /**

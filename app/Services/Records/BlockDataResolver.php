@@ -42,6 +42,11 @@ class BlockDataResolver
      */
     public function resolve(App $app, array $blocks, array $manifest, array $context = []): array
     {
+        // Remember the top-level page blocks across recursion: a filter_bar
+        // resolves its date-range meta by scanning the whole page for the
+        // date-driven data source it governs.
+        $context['__page_blocks'] ??= $blocks;
+
         $data = [];
 
         foreach ($blocks as $block) {
@@ -138,6 +143,10 @@ class BlockDataResolver
             }
 
             return ['items' => $items];
+        }
+
+        if ($block['type'] === 'filter_bar') {
+            return $this->filterBarMeta($app, $block, $manifest, $context);
         }
 
         if ($block['type'] === 'form' || $block['type'] === 'multi_step_form') {
@@ -421,6 +430,149 @@ class BlockDataResolver
         }
 
         return $this->records->aggregate($app, $query, $aggregation, $fieldId, $manifest, $context);
+    }
+
+    /**
+     * Server meta for a filter_bar with a date_range control: the ACTUAL span
+     * of data the dashboard is showing under the active preset — row count and
+     * min/max of the governing date field. This is what makes the window
+     * honest: an external source that caps its list (e.g. "latest 100") or demo
+     * data clustered on one day is visible at a glance instead of looking like
+     * a broken filter. Best-effort: any failure resolves to null (no meta), the
+     * bar itself never errors.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>|null
+     */
+    private function filterBarMeta(App $app, array $block, array $manifest, array $context): ?array
+    {
+        $control = collect($block['controls'] ?? [])->first(fn ($c) => ($c['type'] ?? null) === 'date_range');
+        if (! is_array($control)) {
+            return null;
+        }
+
+        try {
+            // The data source this bar governs: the first block on the page
+            // whose filter uses range_start() on a date field.
+            $target = $this->findDateGovernedSource($context['__page_blocks'] ?? []);
+            if ($target === null) {
+                return null;
+            }
+            [$objectId, $condition] = $target;
+
+            $object = $this->findObject($manifest, $objectId);
+            $slug = $object !== null ? $this->fieldSlug($object, (string) $condition['field_id']) : null;
+            if ($object === null || $slug === null) {
+                return null;
+            }
+
+            // Only the date condition — the span reflects the page's window,
+            // not any one block's extra filters. The connected read is memoised,
+            // so this adds no extra external call.
+            $rows = $this->queryRows($app, ['object_id' => $objectId, 'filter' => $condition], $manifest, $context);
+
+            $timestamps = [];
+            foreach ($rows as $row) {
+                $ts = InMemoryRowFilter::timestamp($row['data'][$slug] ?? null);
+                if ($ts !== null) {
+                    $timestamps[] = $ts;
+                }
+            }
+
+            return ['date_range' => [
+                'param' => $control['param'] ?? 'range',
+                'count' => count($rows),
+                'min' => $timestamps === [] ? null : date('Y-m-d', min($timestamps)),
+                'max' => $timestamps === [] ? null : date('Y-m-d', max($timestamps)),
+            ]];
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Find the first data-bearing block (recursing through layout nodes and
+     * metric_grid items) whose filter contains a range_start() condition —
+     * the source a date_range filter bar governs.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return array{0: string, 1: array<string, mixed>}|null [object_id, date condition]
+     */
+    private function findDateGovernedSource(array $blocks): ?array
+    {
+        foreach ($blocks as $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+
+            $nested = match ($block['type'] ?? null) {
+                'container', 'modal' => $block['blocks'] ?? [],
+                'tabs' => collect($block['tabs'] ?? [])->flatMap(fn ($t) => $t['blocks'] ?? [])->all(),
+                'accordion' => collect($block['sections'] ?? [])->flatMap(fn ($s) => $s['blocks'] ?? [])->all(),
+                'split_view' => array_merge($block['left_blocks'] ?? [], $block['right_blocks'] ?? []),
+                default => [],
+            };
+            if ($nested !== []) {
+                $found = $this->findDateGovernedSource($nested);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+
+            $candidates = [];
+            if (is_array($block['data_source'] ?? null)) {
+                $candidates[] = $block['data_source'];
+            }
+            if (is_array($block['query'] ?? null)) {
+                $candidates[] = $block['query'];
+            }
+            foreach ($block['items'] ?? [] as $item) {
+                if (is_array($item['query'] ?? null)) {
+                    $candidates[] = $item['query'];
+                }
+            }
+
+            foreach ($candidates as $source) {
+                $objectId = $source['object_id'] ?? null;
+                $condition = is_array($source['filter'] ?? null) ? $this->findRangeCondition($source['filter']) : null;
+                if (is_string($objectId) && $condition !== null) {
+                    return [$objectId, $condition];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Locate the range_start() condition inside a filter tree.
+     *
+     * @param  array<string, mixed>  $filter
+     * @return array<string, mixed>|null
+     */
+    private function findRangeCondition(array $filter): ?array
+    {
+        if (str_contains((string) ($filter['value_expression'] ?? ''), 'range_start')
+            && is_string($filter['field_id'] ?? null)) {
+            return $filter;
+        }
+
+        foreach ($filter['conditions'] ?? [] as $cond) {
+            if (is_array($cond)) {
+                $found = $this->findRangeCondition($cond);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+        }
+
+        if (is_array($filter['condition'] ?? null)) {
+            return $this->findRangeCondition($filter['condition']);
+        }
+
+        return null;
     }
 
     /**

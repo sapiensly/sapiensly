@@ -29,6 +29,8 @@ class InMemoryRowFilter
 
     private const NUMERIC_TYPES = ['number', 'currency', 'rating', 'slider'];
 
+    private const TEMPORAL_TYPES = ['date', 'datetime'];
+
     public function __construct(private readonly ExpressionResolver $expressions) {}
 
     /**
@@ -57,10 +59,16 @@ class InMemoryRowFilter
 
         $sort = $query['sort'][0] ?? null;
         if (is_array($sort) && isset($fields[$sort['field_id'] ?? ''])) {
-            $slug = $fields[$sort['field_id']]['slug'];
+            $field = $fields[$sort['field_id']];
+            $slug = $field['slug'];
             $desc = ($sort['direction'] ?? 'asc') === 'desc';
-            usort($rows, function (array $a, array $b) use ($slug, $desc): int {
-                $cmp = ($a['data'][$slug] ?? null) <=> ($b['data'][$slug] ?? null);
+            $temporal = in_array($field['type'], self::TEMPORAL_TYPES, true);
+            usort($rows, function (array $a, array $b) use ($slug, $desc, $temporal): int {
+                $av = $a['data'][$slug] ?? null;
+                $bv = $b['data'][$slug] ?? null;
+                $cmp = $temporal
+                    ? (self::timestamp($av) <=> self::timestamp($bv))
+                    : ($av <=> $bv);
 
                 return $desc ? -$cmp : $cmp;
             });
@@ -141,13 +149,38 @@ class InMemoryRowFilter
         }
 
         $numeric = in_array($field['type'], self::NUMERIC_TYPES, true);
-        $cast = function (mixed $v) use ($numeric): mixed {
+        // A date/datetime field compares as a point in time, not as a string:
+        // connected rows arrive in whatever format the external system uses
+        // ("2026-07-05T01:00:00Z", "05/07/2026 10:30", epoch seconds…), and a
+        // lexicographic compare against range_start()'s "YYYY-MM-DD" is wrong
+        // for every non-ISO shape — the date presets then silently no-op.
+        $temporal = in_array($field['type'], self::TEMPORAL_TYPES, true);
+        $cast = function (mixed $v) use ($numeric, $temporal): mixed {
             if ($numeric && is_numeric($v)) {
                 return $v + 0;
+            }
+            if ($temporal) {
+                $ts = self::timestamp($v);
+                if ($ts !== null) {
+                    return $ts;
+                }
             }
 
             return is_scalar($v) ? (string) $v : $v;
         };
+
+        // When either side of a temporal comparison can't be parsed, fall back
+        // to plain casting for BOTH so the two sides stay comparable.
+        if ($temporal && in_array($op, ['gt', 'gte', 'lt', 'lte', 'between', 'eq', 'neq'], true)) {
+            $values = $op === 'between' ? (is_array($value) ? $value : []) : [$value];
+            $allParse = self::timestamp($actual) !== null;
+            foreach ($values as $v) {
+                $allParse = $allParse && self::timestamp($v) !== null;
+            }
+            if (! $allParse) {
+                $cast = fn (mixed $v): mixed => is_scalar($v) ? (string) $v : $v;
+            }
+        }
 
         return match ($op) {
             'eq' => $cast($actual) == $cast($value),
@@ -166,5 +199,35 @@ class InMemoryRowFilter
                 && $cast($actual) >= $cast($value[0]) && $cast($actual) <= $cast($value[1]),
             default => true,
         };
+    }
+
+    /**
+     * Best-effort parse of a temporal value to a unix timestamp. Accepts
+     * anything strtotime understands (ISO 8601, "05/07/2026 10:30", "July 5
+     * 2026"…) plus bare epoch numbers in seconds or milliseconds. Null when the
+     * value is empty or unparseable — the caller then falls back to string
+     * comparison rather than comparing garbage.
+     */
+    public static function timestamp(mixed $value): ?int
+    {
+        if ($value === null || $value === '' || is_bool($value) || is_array($value)) {
+            return null;
+        }
+
+        if (is_int($value) || is_float($value) || (is_string($value) && is_numeric($value))) {
+            $n = (float) $value;
+            if ($n >= 1e12) {
+                return (int) ($n / 1000);   // epoch milliseconds
+            }
+            if ($n >= 1e8) {
+                return (int) $n;            // epoch seconds (≥ 1973)
+            }
+
+            return null;                    // small number — not a date
+        }
+
+        $ts = strtotime((string) $value);
+
+        return $ts === false ? null : $ts;
     }
 }

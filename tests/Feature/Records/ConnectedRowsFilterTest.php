@@ -106,6 +106,71 @@ it('aggregates KPIs over the filtered live subset', function () {
     expect($data['blk_livesum']['value'])->toBe(120); // both
 });
 
+it('filters temporal fields as points in time, whatever format the source uses', function () {
+    // Same two tickets, but the external system speaks epoch seconds and prose
+    // dates — a lexicographic compare against range_start()'s "YYYY-MM-DD"
+    // would silently no-op (every prose date > "2026-…" as a string).
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')->andReturn(['tickets' => [
+        ['ticket_id' => 'T-epoch-recent', 'created_on' => now()->subDays(3)->getTimestamp(), 'minutes' => 10],
+        ['ticket_id' => 'T-prose-old', 'created_on' => now()->subDays(90)->format('F j, Y'), 'minutes' => 20],
+    ]]);
+    $this->app->instance(McpClient::class, $mcp);
+    $resolver = app(BlockDataResolver::class);
+
+    $block = [
+        'id' => 'blk_temporaltb', 'type' => 'table',
+        'data_source' => $this->rangedSource,
+        'columns' => [['id' => 'col_d', 'field_id' => 'fld_datecreated']],
+    ];
+
+    $data = $resolver->resolve($this->testApp, [$block], $this->manifest, ['params' => []]);
+    expect($data['blk_temporaltb']['rows'])->toHaveCount(1)
+        ->and($data['blk_temporaltb']['rows'][0]['id'])->toBe('T-epoch-recent');
+});
+
+it('memoises the external read across the blocks of one page', function () {
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')->once()->andReturn(['tickets' => [
+        ['ticket_id' => 'T1', 'created_on' => now()->subDays(2)->toDateString(), 'minutes' => 30],
+    ]]);
+    $this->app->instance(McpClient::class, $mcp);
+    $resolver = app(BlockDataResolver::class);
+
+    $blocks = [
+        ['id' => 'blk_memotable1', 'type' => 'table', 'data_source' => $this->rangedSource,
+            'columns' => [['id' => 'col_a', 'field_id' => 'fld_datecreated']]],
+        ['id' => 'blk_memostat11', 'type' => 'stat', 'label' => 'Total',
+            'query' => $this->rangedSource, 'aggregation' => 'count'],
+        ['id' => 'blk_memochart1', 'type' => 'chart', 'chart_type' => 'line',
+            'x_field_id' => 'fld_datecreated', 'aggregation' => 'count',
+            'data_source' => $this->rangedSource],
+    ];
+
+    $data = $resolver->resolve($this->testApp, $blocks, $this->manifest, ['params' => []]);
+    expect($data['blk_memotable1']['rows'])->toHaveCount(1)
+        ->and($data['blk_memostat11']['value'])->toBe(1);
+});
+
+it('gives a date_range filter bar the actual span of the governed data', function () {
+    $blocks = [
+        ['id' => 'blk_rangebar11', 'type' => 'filter_bar',
+            'controls' => [['type' => 'date_range', 'param' => 'range', 'default' => '30d']]],
+        ['id' => 'blk_spanchart1', 'type' => 'chart', 'chart_type' => 'line',
+            'x_field_id' => 'fld_datecreated', 'aggregation' => 'count',
+            'data_source' => $this->rangedSource],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, $blocks, $this->manifest, ['params' => ['range' => 'all']]);
+
+    $meta = $data['blk_rangebar11']['date_range'] ?? null;
+    expect($meta)->not->toBeNull()
+        ->and($meta['param'])->toBe('range')
+        ->and($meta['count'])->toBe(2)
+        ->and($meta['min'])->toBe(now()->subDays(60)->toDateString())
+        ->and($meta['max'])->toBe(now()->subDays(5)->toDateString());
+});
+
 it('threads the viewing user to the MCP read so per-user OAuth resolves', function () {
     $seen = null;
     $mcp = Mockery::mock(McpClient::class);

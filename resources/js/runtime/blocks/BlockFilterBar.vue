@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { inject, ref } from 'vue';
+import { computed, inject, ref } from 'vue';
 import type { ObjectDef } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 
@@ -40,6 +40,78 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+
+// Server meta: the ACTUAL span of data shown under the active window (count +
+// min/max of the governing date field) — surfaces a capped or clustered
+// external source instead of letting it read as a broken filter.
+interface DateRangeMeta {
+    param: string;
+    count: number;
+    min: string | null;
+    max: string | null;
+}
+const rangeMeta = computed<DateRangeMeta | null>(() => {
+    const meta = (props.data as { date_range?: DateRangeMeta } | null)
+        ?.date_range;
+    return meta && typeof meta.count === 'number' ? meta : null;
+});
+
+const dateFmt = new Intl.DateTimeFormat(props.locale || 'es-MX', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+});
+const fmt = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
+
+// The requested window for the active preset, mirroring the server's
+// range_start() (UTC day arithmetic).
+function windowLabel(param: string): string | null {
+    const preset = values.value[param];
+    if (!preset || preset === 'all') {
+        return preset === 'all' ? 'todo el histórico' : null;
+    }
+    const days: Record<string, number> = {
+        today: 0,
+        '7d': 7,
+        '30d': 30,
+        '90d': 90,
+        '1y': 365,
+    };
+    if (!(preset in days)) {
+        return null;
+    }
+    const now = new Date();
+    const end = fmt(now.toISOString().slice(0, 10));
+    if (preset === 'today') {
+        return `hoy (${end})`;
+    }
+    const start = new Date(now.getTime() - days[preset] * 86_400_000);
+    return `${fmt(start.toISOString().slice(0, 10))} – ${end}`;
+}
+
+// One caption per date_range control: requested window + actual data span.
+function rangeCaption(c: Control): string | null {
+    if (c.type !== 'date_range') {
+        return null;
+    }
+    const parts: string[] = [];
+    const win = windowLabel(c.param);
+    if (win) {
+        parts.push(win);
+    }
+    const meta = rangeMeta.value;
+    if (meta && meta.param === c.param) {
+        parts.push(
+            meta.count === 0
+                ? 'sin registros en la ventana'
+                : meta.min && meta.max
+                  ? `${meta.count} registros, del ${fmt(meta.min)} al ${fmt(meta.max)}`
+                  : `${meta.count} registros`,
+        );
+    }
+    return parts.length ? parts.join(' · ') : null;
+}
 
 // Server-provided current filter values → SSR-safe initial state.
 const pageParams = inject<Record<string, unknown>>('pageParams', {});
@@ -133,33 +205,40 @@ function onSelect(param: string, event: Event) {
                 ]"
                 @input="onSearch(c.param, $event)"
             />
-            <div
-                v-else-if="c.type === 'date_range'"
-                class="inline-flex flex-wrap gap-0.5 rounded-xs border border-medium bg-surface p-0.5"
-            >
-                <button
-                    v-for="p in presetsFor(c)"
-                    :key="p.value"
-                    type="button"
-                    :class="[
-                        'rounded-xs px-2.5 py-1 text-xs font-medium transition-colors',
-                        values[c.param] === p.value
-                            ? 'text-white'
-                            : [t.textMuted, 'hover:bg-navy'],
-                    ]"
-                    :style="
-                        values[c.param] === p.value
-                            ? {
-                                  background: 'var(--sp-accent, #10b981)',
-                                  color: 'var(--sp-accent-contrast, #fff)',
-                              }
-                            : undefined
-                    "
-                    @click="onPreset(c.param, p.value)"
+            <template v-else-if="c.type === 'date_range'">
+                <div
+                    class="inline-flex flex-wrap gap-0.5 rounded-xs border border-medium bg-surface p-0.5"
                 >
-                    {{ p.label }}
-                </button>
-            </div>
+                    <button
+                        v-for="p in presetsFor(c)"
+                        :key="p.value"
+                        type="button"
+                        :class="[
+                            'rounded-xs px-2.5 py-1 text-xs font-medium transition-colors',
+                            values[c.param] === p.value
+                                ? 'text-white'
+                                : [t.textMuted, 'hover:bg-navy'],
+                        ]"
+                        :style="
+                            values[c.param] === p.value
+                                ? {
+                                      background: 'var(--sp-accent, #10b981)',
+                                      color: 'var(--sp-accent-contrast, #fff)',
+                                  }
+                                : undefined
+                        "
+                        @click="onPreset(c.param, p.value)"
+                    >
+                        {{ p.label }}
+                    </button>
+                </div>
+                <span
+                    v-if="rangeCaption(c)"
+                    :class="['text-[11px] tabular-nums', t.textMuted]"
+                >
+                    {{ rangeCaption(c) }}
+                </span>
+            </template>
             <select
                 v-else
                 :value="values[c.param]"
