@@ -117,8 +117,9 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
     ExpressGateAgent::fake([
         ['tools' => ['get-tickets-time-series-tool'], 'substitutions' => [['asked' => 'CSAT', 'using' => 'SLA', 'reason' => 'no existe']], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => []],
         ['accept' => true, 'overrides' => []],
-        ['title' => 'Panel de Tickets', 'purpose' => 'Volumen semanal.'],
         fn ($prompt) => [
+            'title' => 'Panel de Tickets',
+            'purpose' => 'Volumen semanal.',
             'insights' => collect(json_decode($prompt, true)['tarjetas_sugeridas'])
                 ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'Dato real.'])
                 ->values()->all(),

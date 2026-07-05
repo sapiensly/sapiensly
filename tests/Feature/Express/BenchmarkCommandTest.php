@@ -68,8 +68,9 @@ it('runs a benchmark scenario end-to-end and writes the report', function () {
     ExpressGateAgent::fake([
         ['tools' => ['get-tickets-time-series-tool'], 'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => []],
         ['accept' => true, 'overrides' => []],
-        ['title' => 'Panel Bench', 'purpose' => 'Prueba.'],
         fn ($prompt) => [
+            'title' => 'Panel Bench',
+            'purpose' => 'Prueba.',
             'insights' => collect(json_decode($prompt, true)['tarjetas_sugeridas'])
                 ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'Dato.'])
                 ->values()->all(),

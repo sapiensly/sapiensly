@@ -62,78 +62,83 @@ TXT;
         ], JSON_UNESCAPED_UNICODE);
         $overridesDefault = ['accept' => true, 'overrides' => []];
 
-        $candidates = [];
+        // Early-exit best-of-N: judge each candidate AS IT ARRIVES — an
+        // accepted suggestion or a compiling delta skips the second model
+        // call entirely (each one costs 20-45s on a slow model).
         $attempts = $this->isSlowClass($context) ? 2 : 1;
+        $chosen = [];
         for ($i = 0; $i < $attempts; $i++) {
             $result = $this->gates->run(
-                $run, $attempts > 1 ? "spec_overrides_{$i}" : 'spec_overrides',
+                $run, $i > 0 ? "spec_overrides_{$i}" : 'spec_overrides',
                 $overridesInstructions, $overridesPrompt, $overridesSchema, $overridesDefault,
                 $context->user, $context->modelOverride,
             );
-            $candidates[] = $result['output'];
+            $overrides = is_array($result['output']['overrides'] ?? null) ? $result['output']['overrides'] : [];
+            if ($overrides === []) {
+                break; // suggestion accepted as-is
+            }
+            if ($this->overridesCompile($context, $overrides)) {
+                $chosen = $overrides;
+                break;
+            }
         }
-        $context->semantic['overrides'] = $this->judgeOverrides($context, $candidates);
+        $context->semantic['overrides'] = $chosen;
 
-        // --- G-2b: voice ------------------------------------------------------
-        $voice = $this->gates->run(
-            $run, 'voice',
-            'Escribe el título (conciso, ejecutivo) y el propósito (1 frase: audiencia + preguntas que responde) de este dashboard, en el idioma del pedido.',
-            json_encode(['pedido' => $context->prompt, 'objeto' => $spec['title'] ?? ''], JSON_UNESCAPED_UNICODE),
-            fn ($schema) => ['title' => $schema->string(), 'purpose' => $schema->string()],
-            fn () => ['title' => (string) ($spec['title'] ?? 'Dashboard'), 'purpose' => ''],
-            $context->user, $context->modelOverride,
-        );
-        $context->semantic['voice'] = $voice['output'];
-
-        // --- G-2c: insights ---------------------------------------------------
+        // --- G-2b+c fused: voice AND insights in ONE call — a whole slow-model
+        // round-trip saved versus separate gates.
         $suggested = array_values($spec['insights'] ?? []);
-        $insights = $this->gates->run(
-            $run, 'insights',
+        $voiceInsights = $this->gates->run(
+            $run, 'voice_insights',
             <<<'TXT'
-Redacta los cuerpos de las tarjetas de insight de un dashboard usando SOLO los
-HECHOS COMPUTADOS (números reales). Mantén variant y title de cada tarjeta
-sugerida (puedes afinar el title), reescribe body con una conclusión concreta
-y accionable (1-2 frases, con el número). Nada de datos inventados. Mismo
-idioma del pedido. Devuelve exactamente el mismo número de tarjetas.
+Dos tareas sobre un dashboard, en el idioma del pedido. (1) VOZ: escribe title
+(conciso, ejecutivo) y purpose (1 frase: audiencia + preguntas que responde).
+(2) INSIGHTS: redacta los body de las tarjetas usando SOLO los HECHOS
+COMPUTADOS (números reales) — mantén variant y title de cada tarjeta sugerida
+(puedes afinar el title), body con una conclusión concreta y accionable (1-2
+frases, con el número). Nada de datos inventados. Devuelve exactamente el
+mismo número de tarjetas.
 TXT,
             json_encode([
                 'pedido' => $context->prompt,
+                'titulo_sugerido' => $spec['title'] ?? '',
                 'tarjetas_sugeridas' => $suggested,
                 'hechos_computados' => $context->facts,
             ], JSON_UNESCAPED_UNICODE),
-            fn ($schema) => ['insights' => $schema->array()->description('[{variant, title, body}] mismo orden y cantidad.')],
-            fn () => ['insights' => $this->factualFallbackInsights($suggested, $context->facts)],
+            fn ($schema) => [
+                'title' => $schema->string(),
+                'purpose' => $schema->string(),
+                'insights' => $schema->array()->description('[{variant, title, body}] mismo orden y cantidad.'),
+            ],
+            fn () => [
+                'title' => (string) ($spec['title'] ?? 'Dashboard'),
+                'purpose' => '',
+                'insights' => $this->factualFallbackInsights($suggested, $context->facts),
+            ],
             $context->user, $context->modelOverride,
         );
 
-        $bodies = array_values(array_filter($insights['output']['insights'] ?? [], 'is_array'));
+        $context->semantic['voice'] = [
+            'title' => (string) ($voiceInsights['output']['title'] ?? ($spec['title'] ?? 'Dashboard')),
+            'purpose' => (string) ($voiceInsights['output']['purpose'] ?? ''),
+        ];
+        $bodies = array_values(array_filter($voiceInsights['output']['insights'] ?? [], 'is_array'));
         $context->semantic['insights'] = count($bodies) === count($suggested) && $suggested !== []
             ? $this->mergeInsights($suggested, $bodies)
             : $suggested;
     }
 
     /**
-     * Deterministic judge: the first candidate whose overrides still compile
-     * and pass the dashboard lints wins; none → no overrides (suggestion
-     * as-is). Plausible-but-broken deltas die here, not on the user's screen.
+     * Deterministic judge for ONE candidate: its overrides must still compile
+     * and pass the dashboard lints. Plausible-but-broken deltas die here, not
+     * on the user's screen.
      *
-     * @param  list<array<string, mixed>>  $candidates
-     * @return array<string, mixed>
+     * @param  array<string, mixed>  $overrides
      */
-    private function judgeOverrides(ExpressContext $context, array $candidates): array
+    private function overridesCompile(ExpressContext $context, array $overrides): bool
     {
         $primary = collect($context->objects)->firstWhere('slug', $context->spec['object_slug'] ?? '');
-        foreach ($candidates as $candidate) {
-            $overrides = is_array($candidate['overrides'] ?? null) ? $candidate['overrides'] : [];
-            if ($overrides === []) {
-                continue;
-            }
-            if ($primary !== null && $this->compiles($context, $primary, $overrides)) {
-                return $overrides;
-            }
-        }
 
-        return [];
+        return $primary !== null && $this->compiles($context, $primary, $overrides);
     }
 
     /**

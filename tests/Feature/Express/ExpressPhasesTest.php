@@ -224,8 +224,9 @@ it('semantic gates fill voice and factual insights, judging overrides determinis
     // reject it and keep the suggestion as-is.
     ExpressGateAgent::fake([
         ['accept' => false, 'overrides' => ['charts' => [['label' => 'X', 'chart_type' => 'line', 'aggregation' => 'count', 'x_field_id' => 'fld_nope']]]],
-        ['title' => 'Panel Ejecutivo de Tickets', 'purpose' => 'Dirección: volumen y SLA.'],
         fn ($prompt) => [
+            'title' => 'Panel Ejecutivo de Tickets',
+            'purpose' => 'Dirección: volumen y SLA.',
             'insights' => collect(json_decode($prompt, true)['tarjetas_sugeridas'])
                 ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'El 66% del volumen viene de Envíos.'])
                 ->values()->all(),
@@ -299,8 +300,9 @@ it('runs the whole chain end-to-end through ExpressPipeline', function () {
     ExpressGateAgent::fake([
         ['tools' => ['get-tickets-time-series-tool'], 'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => []],
         ['accept' => true, 'overrides' => []],
-        ['title' => 'Panel de Tickets', 'purpose' => 'Volumen y SLA por semana.'],
         fn ($prompt) => [
+            'title' => 'Panel de Tickets',
+            'purpose' => 'Volumen y SLA por semana.',
             'insights' => collect(json_decode($prompt, true)['tarjetas_sugeridas'])
                 ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'Hecho real.'])
                 ->values()->all(),
@@ -323,7 +325,7 @@ it('runs the whole chain end-to-end through ExpressPipeline', function () {
 
     expect($result->status)->toBe('succeeded')
         ->and($result->result['page']['name'])->toBe('Panel de Tickets')
-        ->and($result->gates)->toHaveKeys(['fit_check', 'spec_overrides', 'voice', 'insights']);
+        ->and($result->gates)->toHaveKeys(['fit_check', 'spec_overrides', 'voice_insights']);
 
     $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
     expect($manifest['pages'])->toHaveCount(1)
