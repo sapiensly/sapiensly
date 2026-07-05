@@ -155,6 +155,19 @@ class ConnectedObjectAuthoring
             }
         }
 
+        // One level deeper: aggregate tools often nest the list inside a
+        // wrapper object ({by_dimension: {status: [...]}}, {data: {rows: [...]}}).
+        foreach ($decoded as $key => $value) {
+            if (! is_array($value) || array_is_list($value)) {
+                continue;
+            }
+            foreach ($value as $childKey => $child) {
+                if (is_array($child) && array_is_list($child) && $child !== [] && is_array($child[0])) {
+                    return [array_values(array_filter($child, 'is_array')), $key.'.'.$childKey];
+                }
+            }
+        }
+
         return [[], null];
     }
 

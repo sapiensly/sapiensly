@@ -46,12 +46,17 @@ class FitCheckPhase implements ExpressPhase
             <<<'TXT'
 Eres el fit-check de un constructor de dashboards. Recibes el PEDIDO del
 usuario y el CATÁLOGO de tools de datos de su conexión. Decide qué tools leer
-(las mínimas que respondan el pedido, máx 4, prefiere agregados sobre crudos),
-qué piezas pedidas no existen pero tienen un proxy honesto (dilo), y qué
-piezas no se pueden responder con estos datos. core_unanswerable=true SOLO si
-el TEMA CENTRAL del pedido no se puede responder en absoluto — en ese caso
-llena alternatives con 1-2 dashboards que estos datos SÍ responden. Nunca
-inventes tools que no estén en el catálogo.
+(las mínimas que respondan el pedido, máx 4). REGLAS DE ELECCIÓN: (1) SOLO
+tools cuyo DOMINIO coincide con el tema del pedido — para un pedido de tickets
+elige tools de tickets, nunca de sellers/entregas/otros dominios aunque suenen
+útiles; (2) si el pedido menciona series por semana/tiempo, INCLUYE el tool de
+serie temporal; (3) prefiere tools que devuelven LISTAS de filas (series,
+breakdowns por dimensión) sobre resúmenes de totales; (4) menos es más — 2
+tools correctos superan a 4 dudosos. Declara qué piezas pedidas no existen
+pero tienen proxy honesto, y qué piezas no se pueden responder.
+core_unanswerable=true SOLO si el TEMA CENTRAL del pedido no se puede
+responder en absoluto — llena alternatives con 1-2 dashboards que estos datos
+SÍ responden. Nunca inventes tools que no estén en el catálogo.
 TXT,
             json_encode(['pedido' => $context->prompt, 'catalogo' => $catalog], JSON_UNESCAPED_UNICODE),
             fn ($schema) => [

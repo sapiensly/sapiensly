@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\Tools\Builder\AddDashboardPageTool;
+use App\Ai\Tools\Builder\PlanDashboardTool;
 use App\Ai\Tools\Builder\PrepareDashboardTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Models\App;
@@ -10,6 +11,8 @@ use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
+use App\Support\Branding\ColorPalette;
+use App\Support\Branding\OrganizationBrand;
 use Illuminate\Support\Str;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
@@ -267,4 +270,46 @@ it('still demands kpis/charts when use_suggestion is not set', function () {
 
     expect($result['ok'])->toBeFalse()
         ->and($result['errors'][0]['message'])->toContain('use_suggestion');
+});
+
+it('suggests a compilable spec for an aggregate object whose only string is a name (the t3 failure)', function () {
+    // Exactly the prod shape that produced a chartless spec: no date field,
+    // numbers + a "nombre" string (excluded by the strict categorical filter).
+    $object = [
+        'id' => 'obj_sellerscomp', 'slug' => 'sellers', 'name' => 'Sellers',
+        'fields' => [
+            ['id' => 'fld_nombresel', 'slug' => 'nombre', 'name' => 'Nombre', 'type' => 'string'],
+            ['id' => 'fld_promedios', 'slug' => 'promedio_dias', 'name' => 'Promedio Días', 'type' => 'number'],
+            ['id' => 'fld_p95dias00', 'slug' => 'p95', 'name' => 'P95', 'type' => 'number'],
+        ],
+    ];
+
+    $spec = (new DashboardSpecSuggester)->suggest($object, 'es');
+    expect($spec['charts'])->not->toBeEmpty();
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec + ['object_slug' => 'sellers'], $object, [],
+        ColorPalette::fromAccent(OrganizationBrand::DEFAULT_ACCENT), 'es',
+    );
+    expect($built['ok'])->toBeTrue();
+    expect(PlanDashboardTool::lint($built['purpose'], $built['plan_rows'])['ok'])->toBeTrue();
+});
+
+it('suggests a compilable spec even for a numbers-only object', function () {
+    $object = [
+        'id' => 'obj_numsonly0', 'slug' => 'totales', 'name' => 'Totales',
+        'fields' => [
+            ['id' => 'fld_total0001', 'slug' => 'total', 'name' => 'Total', 'type' => 'number'],
+            ['id' => 'fld_backlog01', 'slug' => 'backlog', 'name' => 'Backlog', 'type' => 'number'],
+        ],
+    ];
+
+    $spec = (new DashboardSpecSuggester)->suggest($object, 'es');
+    expect($spec['charts'])->not->toBeEmpty();
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec + ['object_slug' => 'totales'], $object, [],
+        ColorPalette::fromAccent(OrganizationBrand::DEFAULT_ACCENT), 'es',
+    );
+    expect($built['ok'])->toBeTrue();
 });

@@ -55,12 +55,18 @@ class SuggestSpecPhase implements ExpressPhase
     {
         return collect($objects)
             ->sortByDesc(function (array $o): int {
-                $fields = $o['fields'] ?? [];
-                $hasDate = collect($fields)->contains(
+                $fields = collect($o['fields'] ?? []);
+                $hasDate = $fields->contains(
                     fn ($f) => in_array($f['type'] ?? '', ['date', 'datetime'], true)
                 );
+                // A categorical axis is worth more than raw field count: an
+                // object with categories yields breakdowns; a numbers-only
+                // comparison table yields a chartless board.
+                $hasCategory = $fields->contains(
+                    fn ($f) => in_array($f['type'] ?? '', ['string', 'single_select'], true)
+                );
 
-                return ($hasDate ? 100 : 0) + count($fields);
+                return ($hasDate ? 100 : 0) + ($hasCategory ? 50 : 0) + $fields->count();
             })
             ->first();
     }

@@ -81,7 +81,7 @@ class DashboardSpecSuggester
      */
     private function categoricalFields(array $fields): array
     {
-        return array_values(array_filter($fields, function (array $f): bool {
+        $strict = array_values(array_filter($fields, function (array $f): bool {
             $type = $f['type'] ?? '';
             if ($type === 'single_select') {
                 return true;
@@ -92,6 +92,18 @@ class DashboardSpecSuggester
 
             return preg_match('/id$|folio|number|codigo|code|email|phone|tel|url|nombre$|name$|title|titulo|descri|comment|nota|body/i', (string) ($f['slug'] ?? '')) !== 1;
         }));
+        if ($strict !== []) {
+            return $strict;
+        }
+
+        // Aggregate rows often carry ONLY a name-ish string ("nombre" in a
+        // sellers comparison) — there, the name IS the category. Relax to any
+        // string field rather than suggesting a chartless dashboard; the
+        // chart-level `limit` keeps even a high-cardinality miss safe.
+        return array_values(array_filter(
+            $fields,
+            fn (array $f): bool => ($f['type'] ?? '') === 'string',
+        ));
     }
 
     /**
@@ -205,6 +217,19 @@ class DashboardSpecSuggester
                 'series_field_id' => $cat['id'],
                 'stacked' => true,
             ];
+        }
+
+        // Last resort: a numbers-only object (no date, no strings) still gets
+        // a bar per numeric — a chartless dashboard spec is never suggested.
+        if ($charts === []) {
+            foreach (array_slice($numerics, 0, 3) as $i => $num) {
+                $charts[] = [
+                    'label' => (string) ($num['name'] ?? $num['slug']),
+                    'chart_type' => self::CATEGORY_CHART_TYPES[$i % count(self::CATEGORY_CHART_TYPES)] === 'donut' ? 'bar' : self::CATEGORY_CHART_TYPES[$i % count(self::CATEGORY_CHART_TYPES)],
+                    'aggregation' => 'avg',
+                    'y_field_id' => $num['id'],
+                ];
+            }
         }
 
         return $charts;

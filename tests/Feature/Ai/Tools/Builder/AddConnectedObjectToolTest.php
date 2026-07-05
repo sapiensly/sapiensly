@@ -239,3 +239,27 @@ it('fills required schema params the caller omitted with a rolling window', func
         ->and($stored['to'])->toBe('{{today()}}')
         ->and($stored['granularity'])->toBe('weekly');
 });
+
+it('digs one level deeper for the rows list (nested by_dimension wrappers)', function () {
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andReturn([['name' => 'vm-metrics-tool', 'description' => '', 'input_schema' => []]]);
+    $mcp->shouldReceive('callToolData')->andReturn([
+        'scope' => 'x', 'totals' => ['total' => 9],
+        'by_dimension' => ['status' => [
+            ['key' => 'abierto', 'count' => 5],
+            ['key' => 'cerrado', 'count' => 4],
+        ]],
+    ]);
+
+    [$tool, $propose] = aco_tool($this, $mcp);
+    $result = json_decode($tool->handle(new ToolRequest([
+        'integration_id' => $this->integration->id,
+        'tool_name' => 'vm-metrics-tool',
+    ])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['sampled_rows'])->toBe(2);
+
+    $stored = $propose->currentManifest()['objects'][0]['source']['operations']['list'];
+    expect($stored['collection_path'])->toBe('by_dimension.status');
+});
