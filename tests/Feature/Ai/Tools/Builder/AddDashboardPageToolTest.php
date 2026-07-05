@@ -7,6 +7,7 @@ use App\Models\App;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\DashboardSpecSuggester;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use Illuminate\Support\Str;
@@ -209,4 +210,61 @@ it('prepare_dashboard fuses blueprint, profile and brand into one response', fun
         ->and(collect($result['profile']['fields'])->pluck('id'))->toContain('fld_hoursfield')
         ->and($result['brand']['accent'])->toStartWith('#')
         ->and($result['brand']['ramp'])->toHaveKeys(['600', '900']);
+});
+
+it('suggests a complete lint-worthy spec from the schema alone', function () {
+    $manifest = adp_manifest($this->testApp->id);
+    $spec = (new DashboardSpecSuggester)->suggest($manifest['objects'][0], 'es');
+
+    expect($spec['date_field_id'])->toBe('fld_datefield')
+        ->and($spec['kpis'][0]['aggregation'])->toBe('count')
+        ->and(count($spec['kpis']))->toBeGreaterThanOrEqual(2)
+        ->and(count($spec['charts']))->toBeGreaterThanOrEqual(3)
+        ->and(collect($spec['charts'])->pluck('chart_type')->unique()->count())
+        ->toBe(count($spec['charts'])) // structural variety: no repeated type
+        ->and($spec['insights'])->not->toBeEmpty();
+
+    // Categorical breakdowns always carry a limit — an unknown-cardinality
+    // string can never explode a chart.
+    foreach ($spec['charts'] as $chart) {
+        if (isset($chart['group_by_field_id']) && ! isset($chart['y_field_id'])) {
+            expect($chart['limit'])->toBe(10);
+        }
+    }
+});
+
+it('compiles the suggested spec via use_suggestion with tiny overrides', function () {
+    [$tool, $propose] = adp_tool($this);
+
+    $result = json_decode($tool->handle(new ToolRequest([
+        'object_slug' => 'tickets',
+        'use_suggestion' => true,
+        'overrides' => [
+            'title' => 'Panel Ejecutivo de Soporte',
+            'insights' => [
+                ['variant' => 'risk', 'title' => 'Riesgo SLA', 'body' => 'El 12% de los tickets incumple su primera respuesta.'],
+            ],
+        ],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['page']['path'])->not->toBeEmpty();
+
+    $draft = $propose->currentManifest();
+    $page = collect($draft['pages'])->firstWhere('slug', $result['page']['slug']);
+    $flat = json_encode($page);
+
+    expect($page['name'])->toBe('Panel Ejecutivo de Soporte')     // override applied
+        ->and($flat)->toContain('Riesgo SLA')                      // overridden insights
+        ->and($flat)->toContain('range_start')                     // date filter wired
+        ->and($flat)->toContain('metric_grid');                    // KPI band compiled
+});
+
+it('still demands kpis/charts when use_suggestion is not set', function () {
+    [$tool] = adp_tool($this);
+
+    $result = json_decode($tool->handle(new ToolRequest(['object_slug' => 'tickets'])), true);
+
+    expect($result['ok'])->toBeFalse()
+        ->and($result['errors'][0]['message'])->toContain('use_suggestion');
 });

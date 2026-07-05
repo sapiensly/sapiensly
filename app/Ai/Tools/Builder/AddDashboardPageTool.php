@@ -5,6 +5,7 @@ namespace App\Ai\Tools\Builder;
 use App\Models\App;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\DashboardSpecSuggester;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -52,9 +53,14 @@ donut|radar|scatter|treemap|sankey|box, aggregation: count|sum|avg|min|max,
 y_field_id? (needed for sum/avg/min/max), group_by_field_id?, x_field_id?,
 bucket?, series_field_id?, stacked?, filter?, limit?}); `insights` (0-4 of
 {variant: conclusion|recommendation|risk|positive|insight, title, body?,
-compute?}); `include_hero?`; `include_date_filter?`. Vary chart_type (never one
-form 3×; percentiles go in KPIs, not charts). Returns {ok, page:{slug, path}}
-or {ok:false, errors} naming exactly what to fix.
+compute?}); `include_hero?`; `include_date_filter?`. FAST PATH: pass `use_suggestion: true`
+(with `object_slug`) to compile the deterministic spec prepare_dashboard showed
+as suggested_spec, plus `overrides` ({title?, purpose?, date_field_id?, kpis?,
+charts?, insights?, …} — each key you send REPLACES that part of the
+suggestion). Prefer the fast path with small overrides (real insight bodies, a
+better title) — your output stays ~100 tokens. Vary chart_type when authoring
+manually (never one form 3×; percentiles go in KPIs, not charts). Returns {ok,
+page:{slug, path}} or {ok:false, errors} naming exactly what to fix.
 DESC;
     }
 
@@ -71,11 +77,13 @@ DESC;
             'date_field_id' => $schema->string()
                 ->description('Date/datetime field driving the range filter and time axes. Defaults to the first date field, else sys_created_at.'),
             'kpis' => $schema->array()
-                ->description('1-8 KPI items: {label, aggregation, field_id?, format?, icon?, filter?, compare?, delta_good?}.')
-                ->required(),
+                ->description('1-8 KPI items: {label, aggregation, field_id?, format?, icon?, filter?, compare?, delta_good?}. Required unless use_suggestion is true.'),
             'charts' => $schema->array()
-                ->description('1-10 charts: {label, chart_type, aggregation, y_field_id?, group_by_field_id?, x_field_id?, bucket?, series_field_id?, stacked?, filter?, limit?}. Vary the chart types.')
-                ->required(),
+                ->description('1-10 charts: {label, chart_type, aggregation, y_field_id?, group_by_field_id?, x_field_id?, bucket?, series_field_id?, stacked?, filter?, limit?}. Vary the chart types. Required unless use_suggestion is true.'),
+            'use_suggestion' => $schema->boolean()
+                ->description('Compile the deterministic suggested_spec from prepare_dashboard (recomputed server-side — no need to echo it back).'),
+            'overrides' => $schema->object()
+                ->description('With use_suggestion: parts to replace in the suggestion (title, purpose, date_field_id, kpis, charts, insights, include_hero, include_date_filter). Each key you send replaces that whole part.'),
             'insights' => $schema->array()
                 ->description('0-4 insight cards: {variant, title, body?, compute?}. At least one is required by the dashboard lints.'),
             'include_hero' => $schema->boolean()
@@ -100,10 +108,29 @@ DESC;
 
         $object = collect($base['objects'] ?? [])->firstWhere('slug', $slug);
         if ($object === null) {
-            return $this->fail("No object with slug '{$slug}' exists. Create it first (add_object, or a live connected object via propose_change).");
+            return $this->fail("No object with slug '{$slug}' exists. Create it first (add_connected_object for an MCP source, or add_object).");
         }
 
         $lang = AppScaffolder::langForLocale($base['settings']['default_locale'] ?? null);
+
+        // FAST PATH: recompute the deterministic suggestion (same derivation
+        // prepare_dashboard showed) and let tiny overrides replace parts — the
+        // model no longer has to GENERATE the whole spec, which is the stretch
+        // that killed slow-model turns.
+        if (($args['use_suggestion'] ?? false) === true) {
+            $spec = (new DashboardSpecSuggester)->suggest($object, $lang);
+            $overrides = is_array($args['overrides'] ?? null) ? $args['overrides'] : [];
+            foreach (['title', 'purpose', 'date_field_id', 'kpis', 'charts', 'insights', 'include_hero', 'include_date_filter'] as $key) {
+                if (array_key_exists($key, $overrides)) {
+                    $spec[$key] = $overrides[$key];
+                }
+            }
+            $args = $spec + ['object_slug' => $slug] + $args;
+        }
+
+        if (empty($args['kpis']) || empty($args['charts'])) {
+            return $this->fail('Pass `kpis` and `charts`, or set `use_suggestion: true` to compile the suggested spec.');
+        }
         $takenSlugs = array_values(array_filter(array_map(fn ($p) => $p['slug'] ?? null, $base['pages'] ?? [])));
         $palette = ColorPalette::fromAccent((string) ($base['settings']['accent'] ?? OrganizationBrand::DEFAULT_ACCENT));
 

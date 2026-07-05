@@ -4,6 +4,8 @@ namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\DashboardSpecSuggester;
 use App\Services\Records\RecordQueryService;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
@@ -87,12 +89,26 @@ DESC;
         $brandbook = $this->appModel->organization?->brandbook() ?? OrganizationBrand::fromArray(null);
         $accent = $brandbook->effectiveAccent();
 
+        // A complete, deterministic spec derived from the schema — the model
+        // can accept it via add_dashboard_page {use_suggestion:true, overrides}
+        // instead of authoring the whole spec (the generation stretch that
+        // killed slow-model turns).
+        $manifest = $this->proposeTool?->currentManifest()
+            ?? $this->manifestService->getActiveManifest($this->appModel);
+        $object = collect($manifest['objects'] ?? [])->firstWhere('id', $objectId);
+        $suggestedSpec = is_array($object)
+            ? (new DashboardSpecSuggester)->suggest($object, AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null))
+            : null;
+
         return json_encode([
             'ok' => ! isset($profile['error']),
             'blueprint' => $blueprint,
             'profile' => $profile,
             'brand' => ['accent' => $accent] + ColorPalette::fromAccent($accent),
-            'next' => 'Map the blueprint KPIs/charts to the profiled fields and build with ONE add_dashboard_page call.',
+            'suggested_spec' => $suggestedSpec,
+            'next' => $suggestedSpec !== null
+                ? 'FAST PATH: if suggested_spec fits the request (check it against rule 1d-fit), call add_dashboard_page {object_slug, use_suggestion: true, overrides: {…only what to change — title, insight bodies with REAL conclusions, added/removed kpis or charts…}}. Author a full spec only when the suggestion misses the request.'
+                : 'Map the blueprint KPIs/charts to the profiled fields and build with ONE add_dashboard_page call.',
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 }
