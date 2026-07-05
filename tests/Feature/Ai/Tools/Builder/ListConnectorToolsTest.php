@@ -7,7 +7,10 @@ use App\Enums\ToolType;
 use App\Models\Integration;
 use App\Models\Tool;
 use App\Models\User;
+use App\Services\Connected\IntegrationCatalog;
 use App\Services\Connectors\ConnectorActionResolver;
+use App\Services\Tools\McpClient;
+use App\Support\Tenancy\TenantCache;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
 beforeEach(function () {
@@ -82,4 +85,63 @@ it('requires an integration_id', function () {
     $result = json_decode($tool->handle(new ToolRequest([])), true);
 
     expect($result['ok'])->toBeFalse();
+});
+
+it('attaches the MCP catalog (tools + known shapes) to authorized MCP connections', function () {
+    $mcpIntegration = Integration::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'base_url' => 'https://mcp.example.com/v1',
+        'is_mcp' => true,
+        'auth_type' => 'bearer',
+        'auth_config' => ['token' => 'TKN'],
+        'status' => 'active',
+        'name' => 'YuhuGo',
+    ]);
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->once()->andReturn([[
+        'name' => 'search-tickets-tool',
+        'description' => 'Search tickets',
+        'input_schema' => ['properties' => ['limit' => ['type' => 'integer', 'maximum' => 100]]],
+    ]]);
+
+    $catalog = new IntegrationCatalog($mcp, app(TenantCache::class));
+    $catalog->rememberShape($mcpIntegration, 'search-tickets-tool', 'tickets', [
+        ['path' => 'status', 'type' => 'string'],
+    ]);
+
+    $tool = new ListAvailableIntegrationsTool($this->user, $catalog);
+    $result = json_decode($tool->handle(new ToolRequest([])), true);
+
+    $row = collect($result['integrations'])->firstWhere('id', $mcpIntegration->id);
+    expect($row['mcp_tools'][0]['name'])->toBe('search-tickets-tool')
+        ->and($row['mcp_tools'][0]['arguments']['limit']['maximum'])->toBe(100)
+        // The bulky raw input_schema is stripped from the listing payload.
+        ->and($row['mcp_tools'][0])->not->toHaveKey('input_schema')
+        ->and($row['known_shapes']['search-tickets-tool']['collection_path'])->toBe('tickets');
+});
+
+it('degrades to the plain listing when the MCP server is unreachable', function () {
+    $mcpIntegration = Integration::factory()->create([
+        'user_id' => $this->user->id,
+        'organization_id' => $this->user->organization_id,
+        'base_url' => 'https://mcp.example.com/v1',
+        'is_mcp' => true,
+        'auth_type' => 'bearer',
+        'auth_config' => ['token' => 'TKN'],
+        'status' => 'active',
+    ]);
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andThrow(new RuntimeException('MCP server returned HTTP 502 for tools/list.'));
+    $catalog = new IntegrationCatalog($mcp, app(TenantCache::class));
+
+    $tool = new ListAvailableIntegrationsTool($this->user, $catalog);
+    $result = json_decode($tool->handle(new ToolRequest([])), true);
+
+    $row = collect($result['integrations'])->firstWhere('id', $mcpIntegration->id);
+    expect($row['authorized'])->toBeTrue()
+        ->and($row)->not->toHaveKey('mcp_tools')
+        ->and($row['mcp_tools_error'])->toContain('502');
 });

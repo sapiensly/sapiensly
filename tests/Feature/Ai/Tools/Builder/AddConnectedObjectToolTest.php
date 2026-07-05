@@ -6,9 +6,11 @@ use App\Models\App;
 use App\Models\Integration;
 use App\Models\User;
 use App\Services\Connected\ConnectedObjectModeler;
+use App\Services\Connected\IntegrationCatalog;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Tools\McpClient;
+use App\Support\Tenancy\TenantCache;
 use Illuminate\Support\Str;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
@@ -52,7 +54,7 @@ beforeEach(function () {
 function aco_tool($test, McpClient $mcp): array
 {
     $propose = new ProposeChangeTool($test->testApp->fresh(), $test->manifestService, app(ManifestValidator::class));
-    $tool = new AddConnectedObjectTool($propose, $mcp, new ConnectedObjectModeler, $test->user);
+    $tool = new AddConnectedObjectTool($propose, $mcp, new ConnectedObjectModeler, new IntegrationCatalog($mcp, app(TenantCache::class)), $test->user);
 
     return [$tool, $propose];
 }

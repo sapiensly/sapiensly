@@ -5,6 +5,7 @@ namespace App\Ai\Tools\Builder;
 use App\Models\Integration;
 use App\Models\User;
 use App\Services\Connected\ConnectedObjectModeler;
+use App\Services\Connected\IntegrationCatalog;
 use App\Services\Tools\McpClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Arr;
@@ -27,6 +28,7 @@ class AddConnectedObjectTool implements Tool
         private ProposeChangeTool $proposeTool,
         private McpClient $mcp,
         private ConnectedObjectModeler $modeler,
+        private IntegrationCatalog $catalog,
         private User $user,
     ) {}
 
@@ -100,7 +102,7 @@ DESC;
         $toolName = trim((string) ($args['tool_name'] ?? ''));
 
         try {
-            $serverTools = $this->mcp->listTools($config, $this->user);
+            $serverTools = $this->catalog->tools($integration, $this->user);
             $tool = collect($serverTools)->firstWhere('name', $toolName);
             if ($tool === null) {
                 $names = implode(', ', array_column($serverTools, 'name'));
@@ -161,6 +163,18 @@ DESC;
         if (($result['ok'] ?? false) !== true) {
             return json_encode($result, JSON_THROW_ON_ERROR);
         }
+
+        // Feed the catalog so the NEXT build sees this tool's row shape in its
+        // first list_available_integrations result — zero sampling rounds.
+        $this->catalog->rememberShape(
+            $integration,
+            $toolName,
+            $collectionPath,
+            collect($modeled['fields'])->map(fn (array $f): array => [
+                'path' => collect($modeled['field_map'])->firstWhere('field_id', $f['id'])['external_path'] ?? $f['slug'],
+                'type' => $f['type'],
+            ])->values()->all(),
+        );
 
         $dateFieldIds = collect($modeled['fields'])
             ->filter(fn (array $f): bool => in_array($f['type'], ['date', 'datetime'], true))
