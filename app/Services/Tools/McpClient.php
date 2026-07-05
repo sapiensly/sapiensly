@@ -128,6 +128,108 @@ class McpClient
     }
 
     /**
+     * Call an MCP tool and return its result as decoded structured data — the
+     * MACHINE path (connected-object reads), where `callTool`'s flattened text
+     * is meant for a human/model to read. Tolerant of how a server frames its
+     * rows: the spec's `structuredContent`, a JSON text block (bare or fenced in
+     * a ```json block), or JSON padded with a prose summary. Returns null only
+     * when the tool answered in prose with no JSON at all — the caller then
+     * reports "did not return JSON rows" rather than silently showing nothing.
+     *
+     * @param  array<string, mixed>  $config  Decrypted MCP tool config.
+     * @param  array<string, mixed>  $arguments
+     * @return array<mixed>|null
+     *
+     * @throws \RuntimeException On connection, auth, or protocol failure.
+     */
+    public function callToolData(array $config, ?User $user, string $name, array $arguments, int $maxChars = 2_000_000): ?array
+    {
+        $endpoint = (string) ($config['endpoint'] ?? '');
+        if ($endpoint === '') {
+            throw new \RuntimeException('This MCP tool has no server endpoint.');
+        }
+
+        $this->ssrfGuard->assertHostAllowed($endpoint);
+        $authHeaders = $this->authResolver->resolveHeaders($config, $user);
+        $session = $this->session($endpoint, $authHeaders);
+
+        $call = $this->rpc($endpoint, $authHeaders, $session, 'tools/call', [
+            'name' => $name,
+            'arguments' => empty($arguments) ? new \stdClass : $arguments,
+        ], 3);
+
+        return $this->decodeToolData($call['result'], $maxChars);
+    }
+
+    /**
+     * Extract structured rows from a tools/call result, tolerant of framing:
+     * (1) the MCP spec's `structuredContent`; (2) a `text` content block that is
+     * JSON — bare or wrapped in a ```json fence``` / prose; (3) the flattened
+     * text as a whole. Null when no JSON is present anywhere.
+     *
+     * @param  array<string, mixed>  $result
+     * @return array<mixed>|null
+     */
+    private function decodeToolData(array $result, int $maxChars): ?array
+    {
+        if (isset($result['structuredContent']) && is_array($result['structuredContent'])) {
+            return $result['structuredContent'];
+        }
+
+        foreach ($result['content'] ?? [] as $block) {
+            if (! is_array($block) || ($block['type'] ?? null) !== 'text' || ! isset($block['text'])) {
+                continue;
+            }
+            $decoded = $this->decodeJsonLoose(mb_substr((string) $block['text'], 0, $maxChars));
+            if ($decoded !== null) {
+                return $decoded;
+            }
+        }
+
+        return $this->decodeJsonLoose($this->stringifyToolResult($result, $maxChars));
+    }
+
+    /**
+     * Decode JSON that may be padded: try the whole string, then a ```json
+     * fenced``` span, then the outermost {…}/[…] region. Null if none parses.
+     *
+     * @return array<mixed>|null
+     */
+    private function decodeJsonLoose(string $text): ?array
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return null;
+        }
+
+        $decoded = json_decode($text, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        if (preg_match('/```(?:json)?\s*(.+?)\s*```/is', $text, $m)) {
+            $decoded = json_decode(trim($m[1]), true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        $start = strcspn($text, '{[');
+        if ($start < strlen($text)) {
+            $close = $text[$start] === '{' ? '}' : ']';
+            $end = strrpos($text, $close);
+            if ($end !== false && $end > $start) {
+                $decoded = json_decode(substr($text, $start, $end - $start + 1), true);
+                if (is_array($decoded)) {
+                    return $decoded;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Flatten an MCP tools/call result (content blocks) into plain text, capped
      * at $maxChars. Sampling passes the small default (a preview for the model);
      * the connected-object reader passes a larger bound so a data list isn't

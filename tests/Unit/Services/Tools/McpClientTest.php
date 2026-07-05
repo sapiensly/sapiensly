@@ -72,6 +72,76 @@ it('calls a tool and returns its text content', function () {
     expect($out)->toBe('The sum is 42.');
 });
 
+/**
+ * The connected-object read path (callToolData) must recover structured rows
+ * however a server frames them — the runtime bug where a live dashboard errored
+ * "did not return JSON rows" because the tool wrapped its JSON in structured
+ * content / a prose summary / a ```json fence``` that strict json_decode rejected.
+ */
+function fakeToolCall(array $result): void
+{
+    Http::fake([
+        'https://mcp.example.invalid/mcp' => Http::sequence()
+            ->push(['result' => []], 200, ['Mcp-Session-Id' => 's1'])
+            ->push('', 202)
+            ->push(['result' => $result], 200),
+    ]);
+}
+
+function callData(McpClient $client): ?array
+{
+    return $client->callToolData(
+        ['endpoint' => 'https://mcp.example.invalid/mcp', 'auth_type' => 'none'],
+        null,
+        'search_tickets',
+        ['limit' => 500],
+    );
+}
+
+it('reads rows from the MCP spec structuredContent field', function () {
+    fakeToolCall([
+        'content' => [['type' => 'text', 'text' => 'Found 2 tickets in the last 30 days.']],
+        'structuredContent' => ['tickets' => [['id' => 'T1'], ['id' => 'T2']]],
+    ]);
+
+    expect(callData($this->client))->toBe(['tickets' => [['id' => 'T1'], ['id' => 'T2']]]);
+});
+
+it('reads rows from a bare JSON text block', function () {
+    fakeToolCall(['content' => [['type' => 'text', 'text' => json_encode(['tickets' => [['id' => 'T1']]])]]]);
+
+    expect(callData($this->client))->toBe(['tickets' => [['id' => 'T1']]]);
+});
+
+it('reads rows from JSON wrapped in a fenced code block', function () {
+    $text = "Here are the tickets:\n```json\n".json_encode(['tickets' => [['id' => 'T9']]])."\n```";
+    fakeToolCall(['content' => [['type' => 'text', 'text' => $text]]]);
+
+    expect(callData($this->client))->toBe(['tickets' => [['id' => 'T9']]]);
+});
+
+it('reads rows from JSON padded with a prose summary', function () {
+    $text = 'Summary: 1 open ticket. '.json_encode(['tickets' => [['id' => 'T7']]]).' — end of report.';
+    fakeToolCall(['content' => [['type' => 'text', 'text' => $text]]]);
+
+    expect(callData($this->client))->toBe(['tickets' => [['id' => 'T7']]]);
+});
+
+it('finds the JSON block among several content blocks', function () {
+    fakeToolCall(['content' => [
+        ['type' => 'text', 'text' => 'The support desk returned these records:'],
+        ['type' => 'text', 'text' => json_encode(['tickets' => [['id' => 'T4']]])],
+    ]]);
+
+    expect(callData($this->client))->toBe(['tickets' => [['id' => 'T4']]]);
+});
+
+it('returns null when the tool answers in prose with no JSON', function () {
+    fakeToolCall(['content' => [['type' => 'text', 'text' => 'No tickets were found for that period.']]]);
+
+    expect(callData($this->client))->toBeNull();
+});
+
 it('raises a clear error when the server rejects credentials', function () {
     Http::fake(['*' => Http::response(['error' => 'unauthorized'], 401)]);
 

@@ -10,8 +10,8 @@ use Illuminate\Support\Str;
 
 /**
  * Read-path slice for an MCP-backed connected object: a dashboard reads a
- * support desk (etc.) LIVE by calling an MCP tool, mapping the JSON rows through
- * the shared field_map/id_path — no seeding, org-level credentials (null user).
+ * support desk (etc.) LIVE by calling an MCP tool as the acting viewer, mapping
+ * the structured rows through the shared field_map/id_path — no seeding.
  */
 beforeEach(function () {
     $this->user = User::factory()->create();
@@ -50,16 +50,16 @@ function mcpTicketObject(string $integrationId): array
 it('reads with the acting viewer so a per-user OAuth source resolves their token', function () {
     $viewer = $this->user;
     $mcp = Mockery::mock(McpClient::class);
-    $mcp->shouldReceive('callTool')
+    $mcp->shouldReceive('callToolData')
         ->once()
-        ->withArgs(fn ($config, $user, $name, $args) => $name === 'list_tickets'
+        ->withArgs(fn ($config, $user, $name, $args, $max = null) => $name === 'list_tickets'
             && $user?->is($viewer) === true                 // the viewer, not null
             && ($args['limit'] ?? null) === 500
             && ($config['integration_id'] ?? null) === $this->integration->id)
-        ->andReturn(json_encode(['tickets' => [
+        ->andReturn(['tickets' => [
             ['ticket_id' => 'T1', 'status' => 'abierto', 'metrics' => ['resolution_minutes' => 30]],
             ['ticket_id' => 'T2', 'status' => 'cerrado', 'metrics' => ['resolution_minutes' => 90]],
-        ]]));
+        ]]);
 
     $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp);
     $result = $reader->list(mcpTicketObject($this->integration->id), $this->integration, [], $viewer);
@@ -74,13 +74,24 @@ it('reads with the acting viewer so a per-user OAuth source resolves their token
 
 it('turns a per-user OAuth failure into an authorize-the-connection message', function () {
     $mcp = Mockery::mock(McpClient::class);
-    $mcp->shouldReceive('callTool')->once()->andThrow(new RuntimeException('OAuth 2.0 MCP tools require a user context to resolve the token.'));
+    $mcp->shouldReceive('callToolData')->once()->andThrow(new RuntimeException('OAuth 2.0 MCP tools require a user context to resolve the token.'));
 
     $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp);
     $result = $reader->list(mcpTicketObject($this->integration->id), $this->integration);
 
     expect($result['ok'])->toBeFalse()
         ->and($result['error'])->toContain('authorize the connection');
+});
+
+it('reports did-not-return-JSON-rows when the tool answers in prose only', function () {
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')->once()->andReturnNull();
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp);
+    $result = $reader->list(mcpTicketObject($this->integration->id), $this->integration);
+
+    expect($result['ok'])->toBeFalse()
+        ->and($result['error'])->toContain('did not return JSON rows');
 });
 
 it('accepts a connected object with an mcp_tool source in the manifest schema', function () {

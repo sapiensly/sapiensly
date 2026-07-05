@@ -56,10 +56,10 @@ beforeEach(function () {
 
     // The MCP tool always returns one recent and one old ticket.
     $mcp = Mockery::mock(McpClient::class);
-    $mcp->shouldReceive('callTool')->andReturn(json_encode(['tickets' => [
+    $mcp->shouldReceive('callToolData')->andReturn(['tickets' => [
         ['ticket_id' => 'T-recent', 'created_on' => now()->subDays(5)->toDateString(), 'minutes' => 30],
         ['ticket_id' => 'T-old', 'created_on' => now()->subDays(60)->toDateString(), 'minutes' => 90],
-    ]]));
+    ]]);
     $this->app->instance(McpClient::class, $mcp);
 
     $this->resolver = app(BlockDataResolver::class);
@@ -109,11 +109,11 @@ it('aggregates KPIs over the filtered live subset', function () {
 it('threads the viewing user to the MCP read so per-user OAuth resolves', function () {
     $seen = null;
     $mcp = Mockery::mock(McpClient::class);
-    $mcp->shouldReceive('callTool')
-        ->andReturnUsing(function ($config, $user, $name, $args) use (&$seen) {
+    $mcp->shouldReceive('callToolData')
+        ->andReturnUsing(function ($config, $user, $name, $args, $max = null) use (&$seen) {
             $seen = $user;
 
-            return json_encode(['tickets' => []]);
+            return ['tickets' => []];
         });
     $this->app->instance(McpClient::class, $mcp);
     $resolver = app(BlockDataResolver::class);

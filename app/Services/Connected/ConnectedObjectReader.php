@@ -89,8 +89,9 @@ class ConnectedObjectReader
 
     /**
      * List rows from an MCP integration: call the operation's `mcp_tool` (with
-     * its static `arguments`) as the integration itself (org-level auth — no
-     * per-user token), parse the JSON result, extract the row array via
+     * its static `arguments`) as the acting viewer — a per-user OAuth server
+     * reads with that member's token — decode the structured result (tolerant of
+     * structuredContent / JSON-in-text framing), extract the row array via
      * `collection_path`, and map each through the shared field_map/id_path. The
      * data-source query (filter/sort/paging) is NOT pushed down — an MCP tool
      * has no generic param surface — so pass a server-side limit in `arguments`
@@ -120,13 +121,12 @@ class ConnectedObjectReader
         $arguments = is_array($op['arguments'] ?? null) ? $op['arguments'] : [];
 
         try {
-            $text = $this->mcp->callTool($config, $actor, $toolName, $arguments, self::MCP_MAX_CHARS);
+            $decoded = $this->mcp->callToolData($config, $actor, $toolName, $arguments, self::MCP_MAX_CHARS);
         } catch (\Throwable $e) {
             return ['ok' => false, 'rows' => [], 'error' => $this->readableAuthError($e->getMessage())];
         }
 
-        $decoded = json_decode($text, true);
-        if (! is_array($decoded)) {
+        if ($decoded === null) {
             return ['ok' => false, 'rows' => [], 'error' => 'The MCP tool did not return JSON rows.'];
         }
 
