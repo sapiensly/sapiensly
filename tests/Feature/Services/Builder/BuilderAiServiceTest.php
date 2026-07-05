@@ -1520,3 +1520,56 @@ it('validation failures carry a schema hint for the nearest typed node', functio
         ->and($withHint['hint']['type'])->toBe('chart')
         ->and($withHint['hint']['expected_params']['required'])->toContain('data_source');
 });
+
+it('applyCheckpoint closes the targeted plan step against the banked version', function () {
+    // The production trace: T1 targets step A, times out, and its checkpoint
+    // banks the version. Without bookkeeping here, A stayed in_progress and the
+    // NEXT turn's apply was mis-attributed to it, stranding step B forever.
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'objeto', 'detail' => null, 'status' => 'in_progress', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+        ['id' => 'stp_b', 'title' => 'dashboard', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+    ]]]);
+
+    $message = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => '',
+        'status' => 'streaming',
+        'proposed_patch' => [['op' => 'replace', 'path' => '/name', 'value' => 'Con objeto']],
+        'change_summary' => 'Creé el objeto conectado',
+    ]);
+
+    $version = $this->service->applyCheckpoint($message);
+
+    expect($version)->not->toBeNull();
+    $plan = $conv->refresh()->build_plan;
+    expect($plan['steps'][0]['status'])->toBe('done')
+        ->and($plan['steps'][0]['applied_version_id'])->toBe($version->id)
+        ->and($plan['steps'][0]['closed_by_summary'])->toBe('Creé el objeto conectado')
+        ->and($plan['steps'][1]['status'])->toBe('pending')
+        ->and($plan['status'])->toBe('active');
+});
+
+it('an untargeted apply still advances the plan to the first open step', function () {
+    // The resumed turn skipped target_plan_steps and applied the dashboard —
+    // the version must close the first open step, completing the plan, so the
+    // autonomous chain ends with "plan complete" instead of a phantom turn.
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'objeto', 'detail' => null, 'status' => 'done', 'applied_version_id' => 'apv_prev', 'version_number' => 2, 'closed_by_summary' => 'obj', 'error' => null],
+        ['id' => 'stp_b', 'title' => 'dashboard', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+    ]]]);
+
+    $message = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => '',
+        'status' => 'streaming',
+        'proposed_patch' => [['op' => 'replace', 'path' => '/name', 'value' => 'Con dashboard']],
+        'change_summary' => 'Agregué el dashboard',
+    ]);
+
+    $version = $this->service->applyCheckpoint($message);
+
+    $plan = $conv->refresh()->build_plan;
+    expect($plan['steps'][1]['status'])->toBe('done')
+        ->and($plan['steps'][1]['applied_version_id'])->toBe($version->id)
+        ->and($plan['status'])->toBe('done');
+});

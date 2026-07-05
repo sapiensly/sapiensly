@@ -109,3 +109,35 @@ it('never recomputes an abandoned plan back to active', function () {
 
     expect($plan['status'])->toBe('abandoned');
 });
+
+it('closeApplied falls back to the first open step when nothing was targeted', function () {
+    // The exact production trace: T1 targeted step A but its version applied
+    // via the timeout checkpoint (which used to skip bookkeeping); the resumed
+    // T2 skipped target_plan_steps and applied the dashboard. The apply must
+    // advance the plan anyway — first open step, in order.
+    $plan = BuildPlan::reconcile(null, null, [['title' => 'A'], ['title' => 'B']]);
+    $idA = $plan['steps'][0]['id'];
+    $idB = $plan['steps'][1]['id'];
+
+    // No step in_progress → the version closes A (first pending).
+    $plan = BuildPlan::closeApplied($plan, 'apv_1', 2, 'obj');
+    expect(collect($plan['steps'])->keyBy('id')[$idA]['status'])->toBe('done')
+        ->and(collect($plan['steps'])->keyBy('id')[$idA]['version_number'])->toBe(2)
+        ->and(collect($plan['steps'])->keyBy('id')[$idB]['status'])->toBe('pending')
+        ->and($plan['status'])->toBe('active');
+
+    // Next untargeted apply closes B → plan done.
+    $plan = BuildPlan::closeApplied($plan, 'apv_2', 3, 'dash');
+    expect(collect($plan['steps'])->keyBy('id')[$idB]['status'])->toBe('done')
+        ->and($plan['status'])->toBe('done');
+});
+
+it('closeApplied prefers the targeted step over the fallback', function () {
+    $plan = BuildPlan::reconcile(null, null, [['title' => 'A'], ['title' => 'B']]);
+    $idB = $plan['steps'][1]['id'];
+
+    // B is explicitly in_progress → the version closes B, NOT first-pending A.
+    $plan = BuildPlan::closeApplied(BuildPlan::markInProgress($plan, [$idB]), 'apv_9', 5, 'hecho B');
+    expect($plan['steps'][0]['status'])->toBe('pending')
+        ->and($plan['steps'][1]['status'])->toBe('done');
+});

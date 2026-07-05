@@ -842,16 +842,23 @@ class BuilderAiService
     {
         $conversation->refresh();
         $plan = $conversation->build_plan;
-        if (! is_array($plan)) {
+        if (! is_array($plan) || ($plan['status'] ?? null) !== 'active') {
             return [];
         }
 
         $targeted = BuildPlan::inProgressIds($plan);
-        if ($targeted === []) {
+        $applied = ($commit['status'] ?? null) === 'applied' && ($commit['applied_version_id'] ?? null) !== null;
+
+        // Without an applied version, only targeted steps carry bookkeeping
+        // (fail / reset). An APPLIED version always advances the plan — even
+        // when the model skipped target_plan_steps, closeApplied attributes it
+        // to the first open step.
+        if ($targeted === [] && ! $applied) {
             return [];
         }
 
-        if (($commit['status'] ?? null) === 'applied' && ($commit['applied_version_id'] ?? null) !== null) {
+        if ($applied) {
+            $statusBefore = collect($plan['steps'] ?? [])->pluck('status', 'id')->all();
             $versionNumber = AppVersion::query()->whereKey($commit['applied_version_id'])->value('version_number');
             $plan = BuildPlan::closeApplied(
                 $plan,
@@ -859,7 +866,19 @@ class BuilderAiService
                 $versionNumber !== null ? (int) $versionNumber : null,
                 $commit['change_summary'] ?? null,
             );
-        } elseif (($commit['error'] ?? null) !== null) {
+            $closed = collect($plan['steps'] ?? [])
+                ->filter(fn (array $s): bool => ($s['status'] ?? null) === 'done'
+                    && ($statusBefore[$s['id'] ?? ''] ?? null) !== 'done')
+                ->pluck('id')
+                ->values()
+                ->all();
+
+            $conversation->update(['build_plan' => $plan]);
+
+            return $closed;
+        }
+
+        if (($commit['error'] ?? null) !== null) {
             $plan = BuildPlan::failInProgress($plan, mb_substr((string) $commit['error'], 0, 500));
         } else {
             $plan = BuildPlan::resetInProgress($plan);
@@ -1330,6 +1349,17 @@ class BuilderAiService
         $message->update([
             'status' => 'applied',
             'applied_version_id' => $version->id,
+        ]);
+
+        // The banked version is plan progress like any normal apply: close the
+        // targeted (or first open) step against it. Without this, the resumed
+        // turn's own apply got mis-attributed to THIS step (still in_progress),
+        // stranding the real next step as pending — the autonomous chain then
+        // re-did finished work, proposed nothing and paused.
+        $this->applyPlanProgress($message->conversation, [
+            'status' => 'applied',
+            'applied_version_id' => $version->id,
+            'change_summary' => $message->change_summary,
         ]);
 
         Log::info('Builder AI checkpoint recovered after interrupted turn', [

@@ -115,24 +115,48 @@ class BuildPlan
     /**
      * Close every in_progress step against the version that just applied. This
      * is the deterministic progress gate: a step only becomes 'done' because a
-     * real version landed, not because the model said so.
+     * real version landed, not because the model said so. When NO step was
+     * targeted (the model applied real work but skipped target_plan_steps —
+     * observed with slow models on auto-resumed turns), the version closes the
+     * FIRST open step instead: an applied version while a plan is active is
+     * plan progress, and leaving it unattributed strands the plan (the next
+     * autonomous turn then re-does a finished step, proposes nothing and
+     * pauses).
      *
      * @param  array<string, mixed>  $plan
      * @return array<string, mixed>
      */
     public static function closeApplied(array $plan, string $versionId, ?int $versionNumber, ?string $summary): array
     {
-        $plan['steps'] = array_map(function (array $step) use ($versionId, $versionNumber, $summary): array {
-            if (($step['status'] ?? null) === 'in_progress') {
-                $step['status'] = 'done';
-                $step['applied_version_id'] = $versionId;
-                $step['version_number'] = $versionNumber;
-                $step['closed_by_summary'] = $summary;
-                $step['error'] = null;
-            }
+        $close = function (array $step) use ($versionId, $versionNumber, $summary): array {
+            $step['status'] = 'done';
+            $step['applied_version_id'] = $versionId;
+            $step['version_number'] = $versionNumber;
+            $step['closed_by_summary'] = $summary;
+            $step['error'] = null;
 
             return $step;
-        }, $plan['steps'] ?? []);
+        };
+
+        $closedAny = false;
+        $steps = $plan['steps'] ?? [];
+        foreach ($steps as $i => $step) {
+            if (($step['status'] ?? null) === 'in_progress') {
+                $steps[$i] = $close($step);
+                $closedAny = true;
+            }
+        }
+
+        if (! $closedAny) {
+            foreach ($steps as $i => $step) {
+                if (in_array($step['status'] ?? 'pending', self::TARGETABLE, true)) {
+                    $steps[$i] = $close($step);
+                    break;
+                }
+            }
+        }
+
+        $plan['steps'] = $steps;
 
         return self::withDerivedStatus($plan);
     }

@@ -186,9 +186,17 @@ class RunBuilderAiJob implements ShouldQueue
                         $this->resumeRemaining,
                     );
 
+                    // applyCheckpoint already closed the plan step this banked
+                    // version completes — if that was the LAST step, the build
+                    // is done and neither a resume nor "continúa" applies.
+                    $plan = $message->conversation()->first()?->build_plan;
+                    $planDone = is_array($plan) && ($plan['status'] ?? null) === 'done';
+
                     $note = $resumed
                         ? "I ran out of time on this step, but I saved the progress ({$message->change_summary}) and I'm resuming automatically…"
-                        : "I ran out of time, but I saved the progress so far ({$message->change_summary}). Send \"continúa\" to keep going.";
+                        : ($planDone
+                            ? "I ran out of time right at the end, but I saved the final piece ({$message->change_summary}) — the build plan is complete."
+                            : "I ran out of time, but I saved the progress so far ({$message->change_summary}). Send \"continúa\" to keep going.");
                     $message->content = $message->content ?: $note;
                     $message->save();
                     try {
