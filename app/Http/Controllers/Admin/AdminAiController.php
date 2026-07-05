@@ -327,8 +327,12 @@ class AdminAiController extends Controller
 
         return response()->json([
             'models' => $this->aiProviderService->fetchOpenRouterModels($apiKey, $credentials['url'] ?? null),
+            // Chat capability only: the OCR pricing rows (cloudflare-ai,
+            // mistral-ocr) live under this driver too but are not pickable
+            // chat models — without the filter they leak into the selection.
             'enabled' => AiCatalogModel::query()
                 ->where('driver', 'openrouter')
+                ->where('capability', 'chat')
                 ->pluck('model_id')
                 ->values()
                 ->all(),

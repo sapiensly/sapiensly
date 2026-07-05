@@ -50,6 +50,7 @@ class GateRunner
         $model = null;
         $output = null;
         $error = null;
+        $tokens = null;
 
         try {
             // Resolution is best-effort: a missing provider config surfaces as
@@ -73,6 +74,12 @@ class GateRunner
                     $decoded = $response instanceof Arrayable ? $response->toArray() : null;
                     if (is_array($decoded) && $decoded !== []) {
                         $output = $decoded;
+                    }
+                    if (isset($response->usage)) {
+                        $tokens = [
+                            'in' => $response->usage->promptTokens,
+                            'out' => $response->usage->completionTokens,
+                        ];
                     }
                     try {
                         $this->usage->record('express', $model, $user, $user->organization_id, $response->usage ?? null);
@@ -99,6 +106,7 @@ class GateRunner
             'model' => $model,
             'latency_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             'fallback_used' => $fallback,
+            'tokens' => $tokens,
             'error' => $fallback ? $error : null,
         ]);
 

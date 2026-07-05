@@ -31,7 +31,7 @@ function mcpId(string $prefix): string
     return $prefix.'_'.strtolower((string) Str::ulid());
 }
 
-function seedManifest(App $app, User $user): array
+function sapiensServerManifest(App $app, User $user): array
 {
     $objId = mcpId('obj');
     $manifest = [
@@ -74,7 +74,7 @@ beforeEach(function () {
 });
 
 it('read_manifest returns the active manifest for a visible app', function () {
-    seedManifest($this->testApp, $this->user);
+    sapiensServerManifest($this->testApp, $this->user);
 
     SapiensServer::actingAs($this->user)
         ->tool(ReadManifestTool::class, ['app_slug' => $this->testApp->slug])
@@ -86,7 +86,7 @@ it('read_manifest returns the active manifest for a visible app', function () {
 it('read_manifest errors for an app the caller cannot see', function () {
     $otherUser = User::factory()->create();
     $other = App::factory()->create(['user_id' => $otherUser->id, 'visibility' => 'private']);
-    seedManifest($other, $otherUser);
+    sapiensServerManifest($other, $otherUser);
 
     SapiensServer::actingAs($this->user)
         ->tool(ReadManifestTool::class, ['app_slug' => $other->slug])
@@ -94,7 +94,7 @@ it('read_manifest errors for an app the caller cannot see', function () {
 });
 
 it('query_records requires a valid object_id', function () {
-    seedManifest($this->testApp, $this->user);
+    sapiensServerManifest($this->testApp, $this->user);
 
     SapiensServer::actingAs($this->user)
         ->tool(QueryRecordsTool::class, ['app_slug' => $this->testApp->slug, 'object_id' => 'obj_missing'])
