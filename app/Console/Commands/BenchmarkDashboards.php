@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Express\DashboardExpressPhases;
 use App\Services\Express\ExpressContext;
 use App\Services\Express\ExpressPipeline;
+use App\Support\Tenancy\TenantContext;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -57,6 +58,10 @@ class BenchmarkDashboards extends Command
         $scenarios = $only === []
             ? self::SCENARIOS
             : array_intersect_key(self::SCENARIOS, array_flip($only));
+
+        // CLI has no BindTenantContext middleware — set the RLS scope for the
+        // app's owner explicitly or every tenant-table write fails closed.
+        app(TenantContext::class)->set($app->organization_id, $app->user_id);
 
         $rows = [];
         $report = [];
