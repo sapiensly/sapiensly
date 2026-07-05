@@ -85,6 +85,11 @@ class GetBuilderConversationTool extends SapiensTool
                     'integration_proposal' => $m->integration_proposal,
                     'applied_version_id' => $m->applied_version_id,
                     'has_attachment' => $m->attachment_path !== null ? true : null,
+                    // Per-turn tool timeline ({event: call|result, tool,
+                    // model_seconds|tool_seconds, t}) persisted live during the
+                    // turn — shows where a slow build spent its wall-clock, even
+                    // if the turn later timed out or was killed.
+                    'timeline' => is_array($m->timeline) && $m->timeline !== [] ? $m->timeline : null,
                     'created_at' => $m->created_at?->toIso8601String(),
                 ], fn ($v) => $v !== null && $v !== '');
             })->values(),

@@ -542,8 +542,21 @@ class BuilderAiService
             // Turn timeline: the gap BEFORE a ToolCall is model time (thinking +
             // emitting the call); the gap between a ToolCall and its ToolResult
             // is OUR execution (server work / MCP round-trip). Logged per event
-            // so a slow build can be read straight from the production log.
+            // AND persisted incrementally on the message (surviving a timeout /
+            // hard kill), so a slow build's spend is readable via the MCP
+            // (get_builder_conversation) — not just from worker logs.
             $lastMark = microtime(true);
+            $timeline = [];
+            $recordTiming = function (array $entry) use (&$timeline, $placeholder): void {
+                $timeline[] = $entry;
+                try {
+                    // Query-builder update (no cast layer) → encode explicitly.
+                    BuilderMessage::query()->whereKey($placeholder->id)
+                        ->update(['timeline' => json_encode($timeline)]);
+                } catch (\Throwable) {
+                    // Telemetry only — never let it break the turn.
+                }
+            };
             foreach ($stream as $event) {
                 // Provider/stream errors arrive as an Error EVENT, not an
                 // exception — OpenRouter (unlike Anthropic) reports SSE-level and
@@ -562,12 +575,14 @@ class BuilderAiService
                 // change…) instead of an opaque pause before a patch appears.
                 if ($event instanceof ToolCall) {
                     $now = microtime(true);
-                    Log::info('Builder turn timing: tool call', [
-                        'message_id' => $placeholder->id,
+                    $entry = [
+                        'event' => 'call',
                         'tool' => $event->toolCall->name,
                         'model_seconds' => round($now - $lastMark, 1),
                         't' => round($now - $startedAt, 1),
-                    ]);
+                    ];
+                    Log::info('Builder turn timing: tool call', ['message_id' => $placeholder->id] + $entry);
+                    $recordTiming($entry);
                     $lastMark = $now;
 
                     $this->safeBroadcast(fn () => BuilderActivity::dispatch(
@@ -583,13 +598,15 @@ class BuilderAiService
 
                 if ($event instanceof StreamingToolResult) {
                     $now = microtime(true);
-                    Log::info('Builder turn timing: tool finished', [
-                        'message_id' => $placeholder->id,
+                    $entry = [
+                        'event' => 'result',
                         'tool' => $event->toolResult->name,
                         'tool_seconds' => round($now - $lastMark, 1),
                         't' => round($now - $startedAt, 1),
                         'successful' => $event->successful,
-                    ]);
+                    ];
+                    Log::info('Builder turn timing: tool finished', ['message_id' => $placeholder->id] + $entry);
+                    $recordTiming($entry);
                     $lastMark = $now;
 
                     continue;

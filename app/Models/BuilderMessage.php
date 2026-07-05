@@ -26,6 +26,7 @@ class BuilderMessage extends Model
         'attachment_mime',
         'attachment_disk',
         'plan_step_ids',
+        'timeline',
     ];
 
     protected function casts(): array
@@ -35,6 +36,7 @@ class BuilderMessage extends Model
             'plan' => 'array',
             'integration_proposal' => 'array',
             'plan_step_ids' => 'array',
+            'timeline' => 'array',
         ];
     }
 

@@ -230,3 +230,24 @@ it('continue_builder_conversation requires conversation_id or app_slug', functio
         ->tool(ContinueBuilderConversationTool::class, ['message' => 'sigue'])
         ->assertHasErrors();
 });
+
+it('get_builder_conversation exposes the per-turn tool timeline', function () {
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+    BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => 'Listo',
+        'status' => 'applied',
+        'timeline' => [
+            ['event' => 'call', 'tool' => 'prepare_dashboard', 'model_seconds' => 41.2, 't' => 55.0],
+            ['event' => 'result', 'tool' => 'prepare_dashboard', 'tool_seconds' => 3.6, 't' => 58.6, 'successful' => true],
+        ],
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetBuilderConversationTool::class, ['conversation_id' => $conv->id])
+        ->assertOk()
+        ->assertSee('timeline')
+        ->assertSee('prepare_dashboard')
+        ->assertSee('model_seconds');
+});
