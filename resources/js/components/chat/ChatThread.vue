@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ThinkingCursor from '@/components/ThinkingCursor.vue';
 import ActionCard from '@/components/chat/ActionCard.vue';
 import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import AgentMessageBubble from '@/components/chat/AgentMessageBubble.vue';
@@ -357,12 +358,13 @@ function isLast(index: number): boolean {
                                                 "
                                             />
                                         </template>
-                                        <span
+                                        <ThinkingCursor
                                             v-if="
                                                 m.status === 'pending' ||
                                                 m.status === 'streaming'
                                             "
-                                            class="inline-block h-[18px] w-[3px] translate-y-1 animate-pulse rounded-full bg-accent-blue"
+                                            :size="18"
+                                            class="text-accent-blue"
                                             :class="{ 'ml-0.5': m.content }"
                                         />
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ThinkingCursor from '@/components/ThinkingCursor.vue';
 import { normalizeChatMarkdown } from '@/lib/markdown';
 import type { ConsultationDto } from '@/types/chatModule';
 import { ChevronDown, Loader2, Users } from '@lucide/vue';
@@ -106,10 +107,11 @@ watch(
                     class="sp-chat-prose prose prose-sm inline max-w-none text-ink dark:prose-invert"
                     v-html="renderMarkdown(consultation.answer)"
                 />
-                <span
+                <ThinkingCursor
                     v-if="consultation.pending"
-                    class="ml-0.5 inline-block h-3 w-[2px] animate-pulse rounded-sm align-text-bottom"
-                    :style="{ backgroundColor: accent }"
+                    :size="12"
+                    class="ml-0.5"
+                    :style="{ color: accent }"
                 />
             </div>
         </div>

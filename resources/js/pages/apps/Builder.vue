@@ -7,6 +7,7 @@ import SchemaView from '@/components/apps/SchemaView.vue';
 import SlashCommandMenu from '@/components/apps/SlashCommandMenu.vue';
 import WireframeImportDialog from '@/components/apps/WireframeImportDialog.vue';
 import AppWorkflowsTab from '@/components/apps/workflows/AppWorkflowsTab.vue';
+import ThinkingCursor from '@/components/ThinkingCursor.vue';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -2237,8 +2238,9 @@ function statusTone(status: Message['status']): string {
                                         v-if="liveActivity"
                                         class="flex items-center gap-1.5 text-xs text-ink"
                                     >
-                                        <Loader2
-                                            class="size-3 animate-spin text-accent-blue"
+                                        <ThinkingCursor
+                                            :size="13"
+                                            class="text-accent-blue"
                                         />
                                         <span>{{ activityStatus }}</span>
                                     </div>
@@ -2247,9 +2249,10 @@ function statusTone(status: Message['status']): string {
                                     v-if="m.content"
                                     v-html="renderAssistantContent(m.content)"
                                 />
-                                <span
+                                <ThinkingCursor
                                     v-if="m.status === 'streaming'"
-                                    class="ml-0.5 inline-block h-3 w-1 animate-pulse bg-accent-blue align-middle"
+                                    :size="14"
+                                    class="ml-0.5 text-accent-blue"
                                 />
 
                                 <!-- Which build-plan steps this turn closed. -->

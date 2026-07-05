@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import ThinkingCursor from '@/components/ThinkingCursor.vue';
 import ToolCallIndicator from '@/components/chat/ToolCallIndicator.vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import type { KnowledgeBaseRef, Message, ToolCall } from '@/types/chat';
 import { normalizeChatMarkdown } from '@/lib/markdown';
+import type { KnowledgeBaseRef, Message, ToolCall } from '@/types/chat';
 import { Bot, User } from '@lucide/vue';
 import { marked } from 'marked';
 import { computed } from 'vue';
@@ -127,9 +128,10 @@ const renderedContent = computed(() => {
                 />
 
                 <!-- Streaming cursor -->
-                <span
+                <ThinkingCursor
                     v-if="isStreaming && !isUser"
-                    class="inline-block h-4 w-1 animate-pulse bg-current"
+                    :size="16"
+                    class="ml-0.5"
                 />
 
                 <p v-if="formattedTime" class="mt-1 text-xs opacity-70">
