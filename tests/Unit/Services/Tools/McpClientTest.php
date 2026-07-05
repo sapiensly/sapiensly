@@ -6,6 +6,7 @@ use App\Services\Tools\McpAuthResolver;
 use App\Services\Tools\McpClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
@@ -141,6 +142,27 @@ it('returns null when the tool answers in prose with no JSON', function () {
 
     expect(callData($this->client))->toBeNull();
 });
+
+it('logs a raw preview when the tool result has no decodable JSON', function () {
+    Log::spy();
+    fakeToolCall(['content' => [['type' => 'text', 'text' => 'Plain prose, nothing structured here.']]]);
+
+    callData($this->client);
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn ($message, $context) => str_contains($message, 'no decodable JSON')
+            && str_contains($context['preview'], 'Plain prose')
+            && $context['content_types'] === ['text']);
+});
+
+it('surfaces a tool-level isError as the tool error, not as missing JSON', function () {
+    fakeToolCall([
+        'isError' => true,
+        'content' => [['type' => 'text', 'text' => 'Unknown argument "limit" — use "per_page".']],
+    ]);
+
+    callData($this->client);
+})->throws(RuntimeException::class, 'Unknown argument "limit"');
 
 it('raises a clear error when the server rejects credentials', function () {
     Http::fake(['*' => Http::response(['error' => 'unauthorized'], 401)]);

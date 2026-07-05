@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Integrations\Support\SsrfGuard;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Minimal Model Context Protocol client over Streamable HTTP. Performs the
@@ -158,6 +159,16 @@ class McpClient
             'arguments' => empty($arguments) ? new \stdClass : $arguments,
         ], 3);
 
+        // A tool-level failure (isError) arrives as a SUCCESSFUL call whose
+        // content is the error prose — e.g. the tool rejecting an argument.
+        // Surface that message; treating it as data would mis-report it as
+        // "did not return JSON rows" and hide the actual cause.
+        if (($call['result']['isError'] ?? false) === true) {
+            $message = trim($this->stringifyToolResult($call['result'], 500));
+
+            throw new \RuntimeException("The MCP tool '{$name}' returned an error: ".($message !== '' ? $message : 'unknown error'));
+        }
+
         return $this->decodeToolData($call['result'], $maxChars);
     }
 
@@ -186,7 +197,25 @@ class McpClient
             }
         }
 
-        return $this->decodeJsonLoose($this->stringifyToolResult($result, $maxChars));
+        $flattened = $this->stringifyToolResult($result, $maxChars);
+        $decoded = $this->decodeJsonLoose($flattened);
+
+        // No JSON anywhere: log what the tool ACTUALLY said so the failure is
+        // diagnosable from production logs (the block error alone — "did not
+        // return JSON rows" — says nothing about the response's real shape).
+        if ($decoded === null) {
+            Log::warning('MCP tool result had no decodable JSON', [
+                'result_keys' => array_keys($result),
+                'content_types' => array_values(array_map(
+                    fn ($b) => is_array($b) ? ($b['type'] ?? 'unknown') : gettype($b),
+                    is_array($result['content'] ?? null) ? $result['content'] : [],
+                )),
+                'flattened_chars' => mb_strlen($flattened),
+                'preview' => mb_substr($flattened, 0, 400),
+            ]);
+        }
+
+        return $decoded;
     }
 
     /**
