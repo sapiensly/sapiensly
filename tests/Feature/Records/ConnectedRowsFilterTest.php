@@ -105,3 +105,27 @@ it('aggregates KPIs over the filtered live subset', function () {
     $data = $this->resolver->resolve($this->testApp, [$block], $this->manifest, ['params' => ['range' => 'all']]);
     expect($data['blk_livesum']['value'])->toBe(120); // both
 });
+
+it('threads the viewing user to the MCP read so per-user OAuth resolves', function () {
+    $seen = null;
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callTool')
+        ->andReturnUsing(function ($config, $user, $name, $args) use (&$seen) {
+            $seen = $user;
+
+            return json_encode(['tickets' => []]);
+        });
+    $this->app->instance(McpClient::class, $mcp);
+    $resolver = app(BlockDataResolver::class);
+
+    $block = [
+        'id' => 'blk_actortable', 'type' => 'table',
+        'data_source' => ['object_id' => 'obj_livetickets'],
+        'columns' => [['id' => 'col_c', 'field_id' => 'fld_datecreated']],
+    ];
+
+    $resolver->resolve($this->testApp, [$block], $this->manifest, ['__actor' => $this->user]);
+
+    expect($seen)->not->toBeNull()
+        ->and($seen->is($this->user))->toBeTrue();
+});

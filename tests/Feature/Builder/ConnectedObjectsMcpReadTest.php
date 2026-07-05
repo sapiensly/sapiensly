@@ -47,12 +47,13 @@ function mcpTicketObject(string $integrationId): array
     ];
 }
 
-it('lists MCP-connected rows by calling the tool and mapping the result', function () {
+it('reads with the acting viewer so a per-user OAuth source resolves their token', function () {
+    $viewer = $this->user;
     $mcp = Mockery::mock(McpClient::class);
     $mcp->shouldReceive('callTool')
         ->once()
         ->withArgs(fn ($config, $user, $name, $args) => $name === 'list_tickets'
-            && $user === null                              // org-level auth, not per-user
+            && $user?->is($viewer) === true                 // the viewer, not null
             && ($args['limit'] ?? null) === 500
             && ($config['integration_id'] ?? null) === $this->integration->id)
         ->andReturn(json_encode(['tickets' => [
@@ -61,7 +62,7 @@ it('lists MCP-connected rows by calling the tool and mapping the result', functi
         ]]));
 
     $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp);
-    $result = $reader->list(mcpTicketObject($this->integration->id), $this->integration);
+    $result = $reader->list(mcpTicketObject($this->integration->id), $this->integration, [], $viewer);
 
     expect($result['ok'])->toBeTrue()
         ->and($result['rows'])->toHaveCount(2)
@@ -71,15 +72,15 @@ it('lists MCP-connected rows by calling the tool and mapping the result', functi
         ->and($result['rows'][1]['status'])->toBe('cerrado');
 });
 
-it('surfaces an MCP tool error as a failed read instead of throwing', function () {
+it('turns a per-user OAuth failure into an authorize-the-connection message', function () {
     $mcp = Mockery::mock(McpClient::class);
-    $mcp->shouldReceive('callTool')->once()->andThrow(new RuntimeException('MCP server error: unauthorized'));
+    $mcp->shouldReceive('callTool')->once()->andThrow(new RuntimeException('OAuth 2.0 MCP tools require a user context to resolve the token.'));
 
     $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp);
     $result = $reader->list(mcpTicketObject($this->integration->id), $this->integration);
 
     expect($result['ok'])->toBeFalse()
-        ->and($result['error'])->toContain('unauthorized');
+        ->and($result['error'])->toContain('authorize the connection');
 });
 
 it('accepts a connected object with an mcp_tool source in the manifest schema', function () {

@@ -955,13 +955,16 @@ class BuilderAiService
     }
 
     /**
-     * Resume a build whose turn was cut off by the wall-clock timeout, when the
-     * checkpoint banked REAL progress and an active plan has pending steps —
-     * with slow models a timeout is the expected rhythm, not an exception, so
-     * the platform re-queues the next turn itself instead of asking the user to
-     * type "continúa". Bounded by $resumeRemaining (consecutive timeout
-     * resumes); a successful turn re-earns the budget. Returns whether a resume
-     * was queued (the caller words the timeout note accordingly).
+     * Resume a build whose turn was cut off by the wall-clock timeout, once its
+     * checkpoint banked REAL progress (the caller only invokes this after a new
+     * version landed). With slow models a timeout is the expected rhythm, not an
+     * exception, so the platform re-queues the next turn itself instead of
+     * asking the user to type "continúa" — whether or not the model set an
+     * explicit build_plan (a connected-dashboard build is naturally two banked
+     * turns: object, then compiled page). Only an EXPLICITLY finished plan stops
+     * it. Bounded by $resumeRemaining consecutive timeout-resumes; a resume turn
+     * that banks nothing new never reaches here, so it self-terminates. Returns
+     * whether a resume was queued (the caller words the timeout note).
      */
     public function resumeAfterTimeout(BuilderMessage $finished, ?string $modelOverride, int $autonomousRemaining, int $resumeRemaining): bool
     {
@@ -972,13 +975,15 @@ class BuilderAiService
         $conversation = $finished->conversation;
         $conversation->refresh();
         $plan = $conversation->build_plan;
-        if (! is_array($plan) || ($plan['status'] ?? null) !== 'active') {
+        // A plan the model marked complete/abandoned means the build is done —
+        // don't resume over it. No plan, or an active one, resumes.
+        if (is_array($plan) && in_array($plan['status'] ?? 'active', ['done', 'abandoned'], true)) {
             return false;
         }
 
         $this->queueAutoTurn(
             $conversation,
-            '(auto-reanudación) El turno anterior se quedó sin tiempo pero el progreso está guardado. Continúa desde ahí con el siguiente paso pendiente del plan.',
+            '(auto-reanudación) El turno anterior se quedó sin tiempo pero el progreso está guardado. Continúa exactamente donde quedó con el siguiente paso pendiente (si hay un plan, márcalo con target_plan_steps).',
             $modelOverride,
             max($autonomousRemaining, self::AUTONOMOUS_MAX_TURNS),
             $resumeRemaining - 1,

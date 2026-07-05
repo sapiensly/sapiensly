@@ -96,6 +96,9 @@ class AppRuntimeController extends Controller
             'current_user' => ['id' => $user->id, 'email' => $user->email],
             'params' => $params,
             '__access' => $access,
+            // The viewer resolves a connected object's live read — a per-user
+            // OAuth MCP source (e.g. YuhuGo) reads with THIS user's token.
+            '__actor' => $user,
         ];
 
         // Drop blocks whose visibility rule excludes them BEFORE resolving their

@@ -1469,7 +1469,7 @@ it('resumeAfterTimeout re-queues the build with a decremented resume budget', fu
         && $job->autonomousRemaining === BuilderAiService::AUTONOMOUS_MAX_TURNS);
 });
 
-it('resumeAfterTimeout refuses without budget or without an active plan', function () {
+it('resumeAfterTimeout resumes a banked-progress build even without an explicit plan', function () {
     Queue::fake();
     $conv = $this->service->startConversation($this->testApp, $this->user);
     $finished = BuilderMessage::create([
@@ -1477,14 +1477,28 @@ it('resumeAfterTimeout refuses without budget or without an active plan', functi
         'status' => 'applied', 'applied_version_id' => 'apv_x', 'plan_step_ids' => null,
     ]);
 
-    // No plan at all → manual resume.
-    expect($this->service->resumeAfterTimeout($finished, null, 0, 2))->toBeFalse();
+    // No plan, but the checkpoint banked a version → the platform resumes
+    // (a connected-dashboard build is naturally object-then-page).
+    expect($this->service->resumeAfterTimeout($finished, null, 0, 2))->toBeTrue();
+    Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->autoQueued === true && $job->resumeRemaining === 1);
+});
 
-    // Active plan but the consecutive-resume budget is spent.
-    $conv->update(['build_plan' => ['schema' => 1, 'status' => 'active', 'steps' => [
-        ['id' => 'stp_a', 'title' => 'A', 'status' => 'pending'],
+it('resumeAfterTimeout refuses without budget or over a finished plan', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => '',
+        'status' => 'applied', 'applied_version_id' => 'apv_x', 'plan_step_ids' => null,
+    ]);
+
+    // The consecutive-resume budget is spent.
+    expect($this->service->resumeAfterTimeout($finished, null, 0, 0))->toBeFalse();
+
+    // A plan the model marked done → the build is complete, don't resume over it.
+    $conv->update(['build_plan' => ['schema' => 1, 'status' => 'done', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'status' => 'done'],
     ]]]);
-    expect($this->service->resumeAfterTimeout($finished->fresh(), null, 0, 0))->toBeFalse();
+    expect($this->service->resumeAfterTimeout($finished->fresh(), null, 0, 2))->toBeFalse();
 
     Queue::assertNotPushed(RunBuilderAiJob::class);
 });

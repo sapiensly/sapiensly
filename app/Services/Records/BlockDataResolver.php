@@ -4,6 +4,7 @@ namespace App\Services\Records;
 
 use App\Models\App;
 use App\Models\Record;
+use App\Models\User;
 use App\Services\Apps\AppAccessContext;
 use App\Services\Connected\ConnectedIntegrationResolver;
 use App\Services\Connected\ConnectedObjectReader;
@@ -483,7 +484,12 @@ class BlockDataResolver
             throw new RuntimeException('This connected object needs an authorized connection.');
         }
 
-        $result = $this->connected->list($object, $integration, $dataSource);
+        // The acting viewer, threaded so a per-user OAuth MCP source reads with
+        // their token (null → the integration's own credentials for static /
+        // service auth).
+        $actor = $context['__actor'] ?? null;
+
+        $result = $this->connected->list($object, $integration, $dataSource, $actor instanceof User ? $actor : null);
         if (! ($result['ok'] ?? false)) {
             throw new RuntimeException($result['error'] ?? 'Could not read from the connected system.');
         }

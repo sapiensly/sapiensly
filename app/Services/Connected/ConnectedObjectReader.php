@@ -3,6 +3,7 @@
 namespace App\Services\Connected;
 
 use App\Models\Integration;
+use App\Models\User;
 use App\Services\Integrations\IntegrationCaller;
 use App\Services\Tools\McpClient;
 use Illuminate\Support\Arr;
@@ -36,7 +37,7 @@ class ConnectedObjectReader
      *                                       the mapping — unmapped capabilities degrade gracefully (no-op).
      * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
      */
-    public function list(array $object, Integration $integration, array $query = []): array
+    public function list(array $object, Integration $integration, array $query = [], ?User $actor = null): array
     {
         $source = $object['source'] ?? [];
         $op = $source['operations']['list'] ?? null;
@@ -49,7 +50,7 @@ class ConnectedObjectReader
         // desk live) calls a tool instead of a REST endpoint. The mapping
         // (field_map/id_path) and in-memory aggregation downstream are identical.
         if ($integration->is_mcp || ! empty($op['mcp_tool'])) {
-            return $this->listViaMcp($object, $integration, $op, $source);
+            return $this->listViaMcp($object, $integration, $op, $source, $actor);
         }
 
         if (empty($op['path'])) {
@@ -100,7 +101,7 @@ class ConnectedObjectReader
      * @param  array<string, mixed>  $source
      * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
      */
-    private function listViaMcp(array $object, Integration $integration, array $op, array $source): array
+    private function listViaMcp(array $object, Integration $integration, array $op, array $source, ?User $actor = null): array
     {
         $toolName = trim((string) ($op['mcp_tool'] ?? ''));
         if ($toolName === '') {
@@ -110,19 +111,18 @@ class ConnectedObjectReader
         $config = [
             'endpoint' => $integration->base_url,
             'integration_id' => $integration->id,
-            // Read with the integration's own credentials: OAuth connections
-            // resolve a service token via McpAuthResolver; static schemes pass
-            // through their auth_config. A per-user-only OAuth connection has no
-            // org token and will surface an auth error here.
+            // Auth resolves against the acting viewer where given: a per-user
+            // OAuth MCP (e.g. YuhuGo) reads with THAT user's token; static /
+            // service schemes pass through auth_config and ignore the user.
             'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
             'auth_config' => $integration->auth_config ?? [],
         ];
         $arguments = is_array($op['arguments'] ?? null) ? $op['arguments'] : [];
 
         try {
-            $text = $this->mcp->callTool($config, null, $toolName, $arguments, self::MCP_MAX_CHARS);
+            $text = $this->mcp->callTool($config, $actor, $toolName, $arguments, self::MCP_MAX_CHARS);
         } catch (\Throwable $e) {
-            return ['ok' => false, 'rows' => [], 'error' => $e->getMessage()];
+            return ['ok' => false, 'rows' => [], 'error' => $this->readableAuthError($e->getMessage())];
         }
 
         $decoded = json_decode($text, true);
@@ -145,6 +145,26 @@ class ConnectedObjectReader
         );
 
         return ['ok' => true, 'rows' => $rows];
+    }
+
+    /**
+     * Turn a raw MCP auth failure into a viewer-facing reason. A per-user OAuth
+     * source (no/expired token for THIS viewer) is the common case — the block
+     * error card then tells them to authorize the connection instead of showing
+     * the internal "requires a user context to resolve the token".
+     */
+    private function readableAuthError(string $raw): string
+    {
+        $lower = mb_strtolower($raw);
+        if (str_contains($lower, 'user context')
+            || str_contains($lower, 'resolve the token')
+            || str_contains($lower, 're-authorize')
+            || str_contains($lower, 'reauthorize')
+            || str_contains($lower, 'unauthorized')) {
+            return 'This live source needs you to authorize the connection — open the integration and connect it, then reload.';
+        }
+
+        return $raw;
     }
 
     /**

@@ -227,6 +227,9 @@ class AppBuilderController extends Controller
             'current_user' => ['id' => $user->id, 'email' => $user->email],
             'params' => $params,
             '__access' => $access,
+            // Preview a live connected object as the builder author — a per-user
+            // OAuth MCP source reads with their token, matching the runtime.
+            '__actor' => $user,
         ];
 
         // Drop blocks the role or a visibility expression hides BEFORE resolving
