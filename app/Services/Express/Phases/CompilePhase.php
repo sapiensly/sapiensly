@@ -98,6 +98,7 @@ class CompilePhase implements ExpressPhase
             'path' => $page['path'],
             'name' => $page['name'],
             'version' => $version->version_number,
+            'version_id' => $version->id,
         ];
     }
 }

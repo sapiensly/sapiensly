@@ -232,6 +232,7 @@ interface Props {
     } | null;
     models?: Array<{ id: string; label: string }>;
     defaultModel?: string;
+    expressEnabled?: boolean;
     versions?: Array<{
         id: string;
         version: number;
@@ -1354,6 +1355,31 @@ watch(aiIsThinking, (thinking) => {
         stopping.value = false;
     }
 });
+
+// L4 Dashboard Express: run the deterministic pipeline on the current input.
+// The server narrates progress into a normal assistant message, so the
+// existing streaming UI (and Detener) just work.
+async function expressBuild() {
+    const prompt = input.value.trim();
+    if (!prompt || sending.value || aiIsThinking.value) {
+        return;
+    }
+    sending.value = true;
+    try {
+        const { data } = await axios.post(
+            `/apps/${props.app.id}/builder/express`,
+            { conversation_id: conversationId.value, prompt, model: selectedModel.value || undefined },
+        );
+        if (data?.ok) {
+            input.value = '';
+            messages.value = data.messages;
+        }
+    } catch (e) {
+        console.error('[Builder] express build failed', e);
+    } finally {
+        sending.value = false;
+    }
+}
 
 async function send() {
     let text = input.value.trim();
@@ -2674,6 +2700,17 @@ function statusTone(status: Message['status']): string {
                                     </button>
                                 </div>
 
+                                <button
+                                    v-if="expressEnabled && !aiIsThinking"
+                                    type="button"
+                                    @click="expressBuild"
+                                    :disabled="sending || !input.trim()"
+                                    :title="t('apps.builder.express_hint')"
+                                    class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/50 bg-accent-blue/10 px-3.5 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
+                                >
+                                    <Zap class="size-3.5" />
+                                    {{ t('apps.builder.express_build') }}
+                                </button>
                                 <button
                                     v-if="!aiIsThinking"
                                     type="submit"

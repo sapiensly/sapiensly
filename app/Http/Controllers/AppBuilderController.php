@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Ai\BuilderAgent;
+use App\Jobs\ExpressDashboardJob;
 use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
 use App\Models\AppSetting;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
+use App\Models\PipelineRun;
 use App\Models\Record;
 use App\Services\AiProviderService;
 use App\Services\Apps\AppAccessResolver;
@@ -129,6 +131,7 @@ class AppBuilderController extends Controller
             'app' => $app->only(['id', 'slug', 'name', 'description', 'kind']),
             'models' => $this->chatModels(),
             'defaultModel' => BuilderAiService::defaultModel(),
+            'expressEnabled' => (bool) config('express.enabled'),
             'manifest' => $manifest,
             'preview' => $preview,
             'schema' => $schema,
@@ -357,6 +360,56 @@ class AppBuilderController extends Controller
      * fire RunBuilderAiJob with the attachment path so Claude reasons about
      * the image alongside the chat.
      */
+    /**
+     * L4 Dashboard Express: run the deterministic pipeline for this prompt.
+     * PHP owns the flow; the model answers bounded gate questions. The run
+     * narrates into a normal assistant placeholder (streaming UI, Detener and
+     * the reaper all apply) and closes with the honest report.
+     */
+    public function expressDashboard(Request $request, App $app): JsonResponse
+    {
+        abort_unless((bool) config('express.enabled'), 404);
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'conversation_id' => ['required', 'string'],
+            'prompt' => ['required', 'string', 'max:5000'],
+            'model' => ['nullable', 'string', Rule::in(array_column($this->chatModels(), 'id'))],
+        ]);
+
+        $conversation = $this->loadConversation($app, $data['conversation_id'], $request->user()->id);
+        app(BuilderCancellation::class)->clear($conversation);
+
+        BuilderMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'user',
+            'content' => $data['prompt'],
+            'status' => 'none',
+        ]);
+        $placeholder = BuilderMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'assistant',
+            'content' => '',
+            'status' => 'streaming',
+        ]);
+
+        $run = PipelineRun::create([
+            'app_id' => $app->id,
+            'conversation_id' => $conversation->id,
+            'kind' => 'dashboard_express',
+            'prompt' => $data['prompt'],
+        ]);
+
+        ExpressDashboardJob::dispatch($placeholder->id, $run->id, $data['prompt'], $data['model'] ?? null);
+
+        return response()->json([
+            'ok' => true,
+            'run_id' => $run->id,
+            'message_id' => $placeholder->id,
+            'messages' => $conversation->refresh()->messages->map(fn (BuilderMessage $m) => $this->messageDto($m))->all(),
+        ]);
+    }
+
     /**
      * Detener build: raise the cooperative stop flag for this conversation.
      * The running turn finalizes within seconds (banking any accumulated

@@ -580,6 +580,8 @@
     "apps.builder.thinking": "Pensando…",
     "apps.builder.stop_build": "Detener",
     "apps.builder.stopping": "Deteniendo…",
+    "apps.builder.express_build": "Dashboard",
+    "apps.builder.express_hint": "Construir un dashboard con el pipeline Express (rápido y determinista)",
     "apps.builder.send": "Enviar",
     "apps.builder.new_conversation": "Nueva conversación",
     "apps.builder.new_conversation_confirm": "¿Iniciar una conversación nueva? La actual se archivará, pero los cambios al manifest que ya aprobaste se mantienen.",
