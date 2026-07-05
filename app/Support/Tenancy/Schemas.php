@@ -68,6 +68,7 @@ final class Schemas
         // Builder / workflow runtime
         'builder_conversations',
         'builder_messages',
+        'pipeline_runs',
         'workflow_runs',
         'workflow_step_runs',
         'workflow_proposals',
