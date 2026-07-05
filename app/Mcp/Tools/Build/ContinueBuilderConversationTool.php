@@ -9,6 +9,7 @@ use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\User;
 use App\Services\Builder\BuilderAiService;
+use App\Services\Builder\BuilderCancellation;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Laravel\Mcp\Request;
@@ -53,6 +54,9 @@ class ContinueBuilderConversationTool extends SapiensTool
         // synchronous run here would outlive the MCP transport timeout and get
         // killed mid-turn, freezing the placeholder in `streaming` and applying
         // nothing (the failure mode this tool used to hit).
+        // A new user turn re-arms the machinery: clear any standing stop flag.
+        app(BuilderCancellation::class)->clear($conversation);
+
         BuilderMessage::create([
             'conversation_id' => $conversation->id,
             'role' => 'user',

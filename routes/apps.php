@@ -23,6 +23,7 @@ Route::middleware([
     // `builder-ai` throttle (per-user + per-org/min + per-org/day cost ceiling).
     // The 429 fires at HTTP admission, so a throttled request never enqueues a job.
     Route::post('/apps/{app}/builder/messages', [AppBuilderController::class, 'sendMessage'])->middleware('throttle:builder-ai')->name('apps.builder.messages');
+    Route::post('/apps/{app}/builder/stop', [AppBuilderController::class, 'stopBuild'])->name('apps.builder.stop');
     Route::post('/apps/{app}/builder/visual-review', [AppBuilderController::class, 'visualReview'])->middleware('throttle:builder-ai')->name('apps.builder.visual-review');
     Route::post('/apps/{app}/builder/wireframe-import', [AppBuilderController::class, 'wireframeImport'])->middleware('throttle:builder-ai')->name('apps.builder.wireframe-import');
     Route::post('/apps/{app}/builder/design', [AppBuilderController::class, 'updateDesign'])->name('apps.builder.design');

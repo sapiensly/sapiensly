@@ -100,6 +100,7 @@ import {
     Settings2,
     ShieldCheck,
     Sparkles,
+    Square,
     Wand2,
     Workflow as WorkflowIcon,
     X,
@@ -1329,6 +1330,30 @@ const aiIsThinking = computed(() =>
         (m) => m.role === 'assistant' && m.status === 'streaming',
     ),
 );
+
+// Detener build: raises the cooperative stop flag server-side. The running
+// turn finalizes within seconds (keeping any progress it already banked) and
+// the autonomous/resume chain refuses to queue further turns until the next
+// user message. The pill flips back when the stream's completion event lands.
+const stopping = ref(false);
+async function stopBuild() {
+    if (stopping.value) {
+        return;
+    }
+    stopping.value = true;
+    try {
+        await axios.post(`/apps/${props.app.id}/builder/stop`, {
+            conversation_id: conversationId.value,
+        });
+    } catch {
+        stopping.value = false; // let the user retry
+    }
+}
+watch(aiIsThinking, (thinking) => {
+    if (!thinking) {
+        stopping.value = false;
+    }
+});
 
 async function send() {
     let text = input.value.trim();
@@ -2663,11 +2688,28 @@ function statusTone(status: Message['status']): string {
                                 </button>
                                 <div
                                     v-else
-                                    class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/40 bg-accent-blue/10 px-3.5 py-1.5 text-xs font-medium text-accent-blue"
+                                    class="inline-flex items-center gap-2"
                                     aria-live="polite"
                                 >
-                                    <Loader2 class="size-3.5 animate-spin" />
-                                    {{ t('apps.builder.thinking') }}
+                                    <span
+                                        class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/40 bg-accent-blue/10 px-3.5 py-1.5 text-xs font-medium text-accent-blue"
+                                    >
+                                        <Loader2 class="size-3.5 animate-spin" />
+                                        {{ t('apps.builder.thinking') }}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        @click="stopBuild"
+                                        :disabled="stopping"
+                                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:border-red-400 hover:text-red-500 disabled:opacity-60"
+                                    >
+                                        <Square class="size-3" />
+                                        {{
+                                            stopping
+                                                ? t('apps.builder.stopping')
+                                                : t('apps.builder.stop_build')
+                                        }}
+                                    </button>
                                 </div>
                             </div>
                         </form>

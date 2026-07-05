@@ -6,6 +6,7 @@ use App\Events\Builder\BuilderStreamComplete;
 use App\Events\Builder\BuilderStreamError;
 use App\Models\BuilderMessage;
 use App\Services\Builder\BuilderAiService;
+use App\Services\Builder\BuilderCancellation;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\MaxAttemptsExceededException;
@@ -115,6 +116,20 @@ class RunBuilderAiJob implements ShouldQueue
             Log::warning('RunBuilderAiJob: placeholder message disappeared', [
                 'message_id' => $this->placeholderMessageId,
             ]);
+
+            return;
+        }
+
+        // An auto-queued turn picked up AFTER the user pressed Detener aborts
+        // before spending a token; a user-initiated turn always runs (sending
+        // a new message clears the flag anyway).
+        if ($this->autoQueued && app(BuilderCancellation::class)->requested($message->conversation)) {
+            $message->update(['status' => 'none', 'content' => '⏹ Build detenido por el usuario.']);
+            try {
+                BuilderStreamComplete::dispatch($message->refresh());
+            } catch (Throwable) {
+                // UI catches up via DB on reload.
+            }
 
             return;
         }

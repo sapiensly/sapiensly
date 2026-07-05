@@ -14,6 +14,7 @@ use App\Services\AiProviderService;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Builder\BuilderAiService;
+use App\Services\Builder\BuilderCancellation;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\InvalidManifestException;
@@ -283,6 +284,10 @@ class AppBuilderController extends Controller
 
         $conversation = $this->loadConversation($app, $data['conversation_id'], $request->user()->id);
 
+        // A new user message re-arms the build machinery: clear any standing
+        // Detener flag so this turn (and its chain) can run.
+        app(BuilderCancellation::class)->clear($conversation);
+
         // Persist the attachment first (if any) so the user message that's
         // about to be created can reference its path. Resolve the tenant
         // disk before doing the upload so we surface a clean 503 instead of
@@ -352,6 +357,26 @@ class AppBuilderController extends Controller
      * fire RunBuilderAiJob with the attachment path so Claude reasons about
      * the image alongside the chat.
      */
+    /**
+     * Detener build: raise the cooperative stop flag for this conversation.
+     * The running turn finalizes within seconds (banking any accumulated
+     * proposal), and the autonomous / resume chain refuses to queue further
+     * turns until the user sends a new message (which clears the flag).
+     */
+    public function stopBuild(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'conversation_id' => ['required', 'string'],
+        ]);
+
+        $conversation = $this->loadConversation($app, $data['conversation_id'], $request->user()->id);
+        app(BuilderCancellation::class)->request($conversation);
+
+        return response()->json(['ok' => true, 'message' => 'Deteniendo el build — el progreso ya aplicado se conserva.']);
+    }
+
     public function visualReview(Request $request, App $app): JsonResponse
     {
         $this->assertCanAccess($request, $app);

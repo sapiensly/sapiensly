@@ -578,6 +578,8 @@
     "apps.builder.panel_options": "Opciones del panel",
     "apps.builder.input_thinking": "Pensando…",
     "apps.builder.thinking": "Pensando…",
+    "apps.builder.stop_build": "Detener",
+    "apps.builder.stopping": "Deteniendo…",
     "apps.builder.send": "Enviar",
     "apps.builder.new_conversation": "Nueva conversación",
     "apps.builder.new_conversation_confirm": "¿Iniciar una conversación nueva? La actual se archivará, pero los cambios al manifest que ya aprobaste se mantienen.",

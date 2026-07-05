@@ -552,6 +552,13 @@ class BuilderAiService
             // (get_builder_conversation) — not just from worker logs.
             $lastMark = microtime(true);
             $timeline = [];
+            // Cooperative stop: the Detener button raises a flag this loop
+            // polls (every tool call + every ~3s of streaming). On stop we
+            // break out and fall through to the NORMAL commit path, so any
+            // accumulated proposal still banks — stopping never loses work.
+            $cancellation = app(BuilderCancellation::class);
+            $stoppedByUser = false;
+            $lastCancelCheck = microtime(true);
             $recordTiming = function (array $entry) use (&$timeline, $placeholder): void {
                 $timeline[] = $entry;
                 try {
@@ -579,6 +586,12 @@ class BuilderAiService
                 // doing (reading the manifest, simulating a query, proposing a
                 // change…) instead of an opaque pause before a patch appears.
                 if ($event instanceof ToolCall) {
+                    if ($cancellation->requested($conversation)) {
+                        $stoppedByUser = true;
+                        break;
+                    }
+                    $lastCancelCheck = microtime(true);
+
                     $now = microtime(true);
                     $entry = [
                         'event' => 'call',
@@ -651,6 +664,13 @@ class BuilderAiService
                         ));
                     }
                     $sawText = true;
+                    if (microtime(true) - $lastCancelCheck > 3.0) {
+                        $lastCancelCheck = microtime(true);
+                        if ($cancellation->requested($conversation)) {
+                            $stoppedByUser = true;
+                            break;
+                        }
+                    }
                     $buffer .= $event->delta;
                     $this->safeBroadcast(fn () => BuilderStreamChunk::dispatch(
                         $conversation->id,
@@ -660,9 +680,15 @@ class BuilderAiService
                 }
             }
 
+            if ($stoppedByUser) {
+                $buffer = rtrim($buffer)."\n\n⏹ **Build detenido por el usuario.**"
+                    .($proposeTool->lastProposal() !== null ? ' El progreso acumulado hasta aquí se aplicó.' : '');
+            }
+
             Log::info('Builder AI stream finished', [
                 'conversation_id' => $conversation->id,
                 'message_id' => $placeholder->id,
+                'stopped_by_user' => $stoppedByUser,
                 'duration_seconds' => round(microtime(true) - $startedAt, 2),
                 'response_length' => strlen($buffer),
                 'has_proposal' => $proposeTool->lastProposal() !== null,
@@ -1044,6 +1070,12 @@ class BuilderAiService
 
         $conversation = $finished->conversation;
         $conversation->refresh();
+
+        // The user pressed Detener — a stopped chain must stay stopped.
+        if (app(BuilderCancellation::class)->requested($conversation)) {
+            return false;
+        }
+
         $plan = $conversation->build_plan;
         // A plan the model marked complete/abandoned means the build is done —
         // don't resume over it. No plan, or an active one, resumes.
@@ -1075,6 +1107,12 @@ class BuilderAiService
 
         $conversation = $finished->conversation;
         $conversation->refresh();
+
+        // The user pressed Detener — refuse to queue anything further. Covers
+        // continueFromPlan too (it delegates here).
+        if (app(BuilderCancellation::class)->requested($conversation)) {
+            return;
+        }
 
         $decision = $this->autonomousDecision(
             $conversation->build_plan,
