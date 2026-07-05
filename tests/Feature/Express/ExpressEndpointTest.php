@@ -123,6 +123,7 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
                 ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'Dato real.'])
                 ->values()->all(),
         ],
+        ['fixes' => []], // the sync-queued G-3 verifier finds nothing to fix
     ]);
 
     $placeholder = BuilderMessage::create([

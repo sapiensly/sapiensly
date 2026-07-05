@@ -18,6 +18,7 @@ use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
 use App\Services\Builder\WireframeImporter;
+use App\Services\Express\ExpressIntentRouter;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\InvalidManifestException;
 use App\Services\Records\AppDataOverview;
@@ -291,6 +292,14 @@ class AppBuilderController extends Controller
         // Detener flag so this turn (and its chain) can run.
         app(BuilderCancellation::class)->clear($conversation);
 
+        // G-0 autoroute: a clear "build me a dashboard" over a live MCP source
+        // runs the Express pipeline instead of a free-form agentic turn.
+        // Attachment turns never reroute (an image is chat context).
+        if (! $request->hasFile('attachment')
+            && app(ExpressIntentRouter::class)->shouldRunExpress($data['message'], $app)) {
+            return $this->startExpressRun($app, $conversation, $data['message'], $data['model'] ?? null);
+        }
+
         // Persist the attachment first (if any) so the user message that's
         // about to be created can reference its path. Resolve the tenant
         // disk before doing the upload so we surface a clean 503 instead of
@@ -378,12 +387,23 @@ class AppBuilderController extends Controller
         ]);
 
         $conversation = $this->loadConversation($app, $data['conversation_id'], $request->user()->id);
+
+        return $this->startExpressRun($app, $conversation, $data['prompt'], $data['model'] ?? null);
+    }
+
+    /**
+     * Shared Express launcher: persists the user turn + placeholder, creates
+     * the PipelineRun and queues the job. Used by the explicit endpoint and by
+     * the G-0 autoroute in sendMessage.
+     */
+    private function startExpressRun(App $app, BuilderConversation $conversation, string $prompt, ?string $model): JsonResponse
+    {
         app(BuilderCancellation::class)->clear($conversation);
 
         BuilderMessage::create([
             'conversation_id' => $conversation->id,
             'role' => 'user',
-            'content' => $data['prompt'],
+            'content' => $prompt,
             'status' => 'none',
         ]);
         $placeholder = BuilderMessage::create([
@@ -397,10 +417,10 @@ class AppBuilderController extends Controller
             'app_id' => $app->id,
             'conversation_id' => $conversation->id,
             'kind' => 'dashboard_express',
-            'prompt' => $data['prompt'],
+            'prompt' => $prompt,
         ]);
 
-        ExpressDashboardJob::dispatch($placeholder->id, $run->id, $data['prompt'], $data['model'] ?? null);
+        ExpressDashboardJob::dispatch($placeholder->id, $run->id, $prompt, $model);
 
         return response()->json([
             'ok' => true,

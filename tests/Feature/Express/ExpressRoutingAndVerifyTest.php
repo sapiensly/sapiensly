@@ -1,0 +1,174 @@
+<?php
+
+use App\Ai\ExpressGateAgent;
+use App\Jobs\ExpressDashboardJob;
+use App\Jobs\RunBuilderAiJob;
+use App\Jobs\VerifyExpressDashboardJob;
+use App\Models\App;
+use App\Models\BuilderConversation;
+use App\Models\Integration;
+use App\Models\PipelineRun;
+use App\Models\User;
+use App\Services\Express\ExpressIntentRouter;
+use App\Services\Express\GateRunner;
+use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\DashboardSpecSuggester;
+use App\Support\Branding\ColorPalette;
+use App\Support\Branding\OrganizationBrand;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
+
+beforeEach(function () {
+    $this->user = User::factory()->create(['email_verified_at' => now()]);
+    $this->testApp = App::factory()->create(['user_id' => $this->user->id, 'visibility' => 'private']);
+    $this->conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+    app(AppManifestService::class)->createVersion($this->testApp, xrv_manifest($this->testApp->id), $this->user);
+});
+
+function xrv_manifest(string $appId): array
+{
+    $mk = fn (string $x) => 'fld_'.strtolower((string) Str::ulid()).$x;
+    $ids = ['d' => $mk('a'), 'c' => $mk('b'), 'n' => $mk('c')];
+
+    return [
+        'schema_version' => '1.0.0',
+        'id' => $appId,
+        'slug' => 'xr_'.strtolower(Str::random(6)),
+        'name' => 'Express',
+        'version' => 1,
+        'objects' => [[
+            'id' => 'obj_'.strtolower((string) Str::ulid()),
+            'slug' => 'tickets_semanales',
+            'name' => 'Tickets Semanales',
+            'fields' => [
+                ['id' => $ids['d'], 'slug' => 'semana', 'name' => 'Semana', 'type' => 'date'],
+                ['id' => $ids['c'], 'slug' => 'categoria', 'name' => 'Categoría', 'type' => 'string'],
+                ['id' => $ids['n'], 'slug' => 'total', 'name' => 'Total', 'type' => 'number'],
+            ],
+        ]],
+        'pages' => [],
+        'settings' => ['default_locale' => 'es-MX'],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+}
+
+it('routes a clear dashboard-build message to Express when a source exists', function () {
+    config(['express.enabled' => true, 'express.autoroute' => true]);
+    Integration::factory()->forUser($this->user)->create([
+        'is_mcp' => true, 'status' => 'active', 'auth_type' => 'bearer', 'auth_config' => ['token' => 'T'],
+        'base_url' => 'https://mcp.example.com/v1',
+    ]);
+
+    $router = app(ExpressIntentRouter::class);
+
+    expect($router->shouldRunExpress('crea un dashboard de tickets con KPIs', $this->testApp))->toBeTrue()
+        ->and($router->shouldRunExpress('¿por qué falla el dashboard?', $this->testApp))->toBeFalse()
+        ->and($router->shouldRunExpress('agrega un campo al objeto', $this->testApp))->toBeFalse()
+        ->and($router->shouldRunExpress('quiero un dashboard pero construido conversando paso a paso', $this->testApp))->toBeFalse();
+});
+
+it('does not route without a live MCP source or with the flags off', function () {
+    config(['express.enabled' => true, 'express.autoroute' => true]);
+    $router = app(ExpressIntentRouter::class);
+    expect($router->shouldRunExpress('crea un dashboard de tickets', $this->testApp))->toBeFalse();
+
+    Integration::factory()->forUser($this->user)->create([
+        'is_mcp' => true, 'status' => 'active', 'auth_type' => 'bearer', 'auth_config' => ['token' => 'T'],
+        'base_url' => 'https://mcp.example.com/v1',
+    ]);
+    config(['express.autoroute' => false]);
+    expect($router->shouldRunExpress('crea un dashboard de tickets', $this->testApp))->toBeFalse();
+});
+
+it('sendMessage autoroutes to Express instead of an agentic turn', function () {
+    config(['express.enabled' => true, 'express.autoroute' => true]);
+    Integration::factory()->forUser($this->user)->create([
+        'is_mcp' => true, 'status' => 'active', 'auth_type' => 'bearer', 'auth_config' => ['token' => 'T'],
+        'base_url' => 'https://mcp.example.com/v1',
+    ]);
+    Queue::fake();
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/messages", [
+            'conversation_id' => $this->conv->id,
+            'message' => 'crea un dashboard de análisis de tickets',
+        ])
+        ->assertOk();
+
+    Queue::assertPushed(ExpressDashboardJob::class);
+    Queue::assertNotPushed(RunBuilderAiJob::class);
+
+    // A normal message still runs the agentic turn.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/messages", [
+            'conversation_id' => $this->conv->id,
+            'message' => 'cambia el color del botón',
+        ])
+        ->assertOk();
+    Queue::assertPushed(RunBuilderAiJob::class);
+});
+
+it('the verifier applies only menu-valid fixes as a new version', function () {
+    // Compile a real dashboard page onto the manifest (as Express would).
+    $manifests = app(AppManifestService::class);
+    $manifest = $manifests->getActiveManifest($this->testApp->fresh());
+    $object = $manifest['objects'][0];
+    $spec = (new DashboardSpecSuggester)->suggest($object, 'es');
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec + ['object_slug' => $object['slug']],
+        $object, [],
+        ColorPalette::fromAccent(OrganizationBrand::DEFAULT_ACCENT),
+        'es',
+    );
+    expect($built['ok'])->toBeTrue();
+    $version = $manifests->applyPatch($this->testApp->fresh(), [['op' => 'add', 'path' => '/pages/-', 'value' => $built['page']]], $this->user, 'page');
+
+    $run = PipelineRun::create([
+        'app_id' => $this->testApp->id,
+        'conversation_id' => $this->conv->id,
+        'prompt' => 'dashboard de tickets',
+        'status' => 'succeeded',
+        'result' => ['page' => ['slug' => $built['page']['slug']]],
+    ]);
+
+    // Find a chart block + an insight block to target.
+    $flat = [];
+    $walk = function (array $blocks) use (&$walk, &$flat) {
+        foreach ($blocks as $b) {
+            $flat[] = $b;
+            if (is_array($b['blocks'] ?? null)) {
+                $walk($b['blocks']);
+            }
+        }
+    };
+    $walk($built['page']['blocks']);
+    $chart = collect($flat)->firstWhere('type', 'chart');
+    $insight = collect($flat)->firstWhere('type', 'insight');
+
+    ExpressGateAgent::fake([[
+        'fixes' => [
+            ['action' => 'rename_block', 'block_id' => $chart['id'], 'value' => 'Volumen semanal (afinado)'],
+            ['action' => 'change_chart_type', 'block_id' => $chart['id'], 'value' => 'area'],
+            ['action' => 'remove_block', 'block_id' => $insight['id']],
+            ['action' => 'remove_block', 'block_id' => 'blk_no_existe'],           // invalid id
+            ['action' => 'change_chart_type', 'block_id' => $insight['id'], 'value' => 'line'], // not a chart
+        ],
+    ]]);
+
+    (new VerifyExpressDashboardJob($run->id))->handle(app(GateRunner::class), $manifests);
+
+    $after = $manifests->getActiveManifest($this->testApp->fresh());
+    $page = collect($after['pages'])->firstWhere('slug', $built['page']['slug']);
+    $json = json_encode($page, JSON_UNESCAPED_UNICODE);
+
+    expect($json)->toContain('Volumen semanal (afinado)')
+        ->and($json)->not->toContain($insight['id'])
+        ->and(collect($after['pages'])->count())->toBe(1);
+
+    // A new version landed on top of the page version.
+    expect($this->testApp->fresh()->currentVersion->version_number)
+        ->toBeGreaterThan($version->version_number);
+});

@@ -100,6 +100,13 @@ class ExpressDashboardJob implements ShouldQueue
         } catch (Throwable) {
             // UI catches up from the DB.
         }
+
+        // G-3: adversarial verification runs AFTER v1 is on screen — it only
+        // raises the ceiling, so its latency (and its model) never gate the
+        // user's first look.
+        if ($run->status === 'succeeded') {
+            VerifyExpressDashboardJob::dispatch($run->id);
+        }
     }
 
     /**
