@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Express\SemanticProfile;
+use App\Support\Icons\IconCatalog;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Enums\Lab;
@@ -1229,7 +1230,7 @@ class AppScaffolder
                 'aggregation' => $agg,
                 'field_id' => $needsField ? ($kpi['field_id'] ?? null) : null,
                 'format' => $kpi['format'] ?? null,
-                'icon' => $kpi['icon'] ?? null,
+                'icon' => $this->renderableIcon($kpi['icon'] ?? null),
                 'compare' => $compare,
                 'delta_good' => $kpi['delta_good'] ?? null,
             ], fn ($v) => $v !== null);
@@ -1505,6 +1506,25 @@ class AppScaffolder
             'plan_rows' => $planRows,
             'purpose' => trim((string) ($spec['purpose'] ?? '')) ?: "Vista ejecutiva de {$object['name']}: KPIs, tendencias y conclusiones.",
         ];
+    }
+
+    /**
+     * An icon the runtime can actually draw: a catalog name (normalized), an
+     * emoji, or nothing. A slug-like name outside the registry would render
+     * as raw text beside the KPI ("thumbs-down" shipped once) — dropped.
+     */
+    private function renderableIcon(mixed $icon): ?string
+    {
+        if (! is_string($icon) || trim($icon) === '') {
+            return null;
+        }
+        $icon = trim($icon);
+        $normalized = strtolower((string) preg_replace('/[\s_]+/', '-', $icon));
+        if (in_array($normalized, IconCatalog::NAMES, true)) {
+            return $normalized;
+        }
+
+        return preg_match('/^[a-z0-9]+(-[a-z0-9]+)*$/i', $icon) === 1 ? null : $icon;
     }
 
     /**

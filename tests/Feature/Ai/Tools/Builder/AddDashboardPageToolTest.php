@@ -640,6 +640,32 @@ it('blocks the unambiguous lies for hand-authored specs too: count-of-buckets, s
     expect($built['ok'])->toBeTrue();
 });
 
+it('only ships icons the runtime can draw: catalog names normalized, emojis kept, unknown slugs dropped', function () {
+    // Prod nps5 showed "minus-circle" / "thumbs-down" as raw TEXT beside the
+    // KPI value — plausible Lucide names outside the registry.
+    $spec = adp_spec();
+    $spec['kpis'] = [
+        ['label' => 'A', 'aggregation' => 'count', 'icon' => 'thumbs-down'],       // now in catalog
+        ['label' => 'B', 'aggregation' => 'count', 'icon' => 'Alert Triangle'],    // normalizes to alert-triangle
+        ['label' => 'C', 'aggregation' => 'count', 'icon' => 'circle-gauge-pro'],  // unknown slug → dropped
+        ['label' => 'D', 'aggregation' => 'count', 'icon' => '🎯'],                // emoji → kept
+    ];
+
+    $manifest = $this->manifestService->getActiveManifest($this->testApp->fresh());
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $manifest['objects'][0], [], null, 'es',
+    );
+
+    expect($built['ok'])->toBeTrue();
+    $byLabel = collect($built['page']['blocks'])->firstWhere('type', 'metric_grid')['items'];
+    $icon = fn (string $label) => collect($byLabel)->firstWhere('label', $label)['icon'] ?? null;
+
+    expect($icon('A'))->toBe('thumbs-down')
+        ->and($icon('B'))->toBe('alert-triangle')
+        ->and($icon('C'))->toBeNull()
+        ->and($icon('D'))->toBe('🎯');
+});
+
 it('re-forms a lone short chart so its own lints never kill the compile', function () {
     // Prod: a spec whose only chart was a donut compiled into a single-short-
     // block row, failed the compiler's OWN lint and the whole build died. The

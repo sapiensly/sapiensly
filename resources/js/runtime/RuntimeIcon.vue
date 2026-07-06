@@ -20,6 +20,17 @@ const props = withDefaults(
 );
 
 const component = computed(() => resolveIcon(props.name));
+
+// The raw-text fallback exists for EMOJIS. A kebab-case ascii word is an icon
+// NAME that failed to resolve — printing it ("thumbs-down" beside a KPI) is
+// worse than showing nothing.
+const fallbackText = computed(() => {
+    const n = props.name?.trim();
+    if (!n || component.value) {
+        return null;
+    }
+    return /^[a-z0-9]+([-_ ][a-z0-9]+)*$/i.test(n) ? null : n;
+});
 </script>
 
 <template>
@@ -30,9 +41,9 @@ const component = computed(() => resolveIcon(props.name));
         :class="$props.class"
     />
     <span
-        v-else-if="name"
+        v-else-if="fallbackText"
         :class="$props.class"
         :style="{ fontSize: size + 'px', lineHeight: 1 }"
-        >{{ name }}</span
+        >{{ fallbackText }}</span
     >
 </template>
