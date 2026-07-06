@@ -372,3 +372,72 @@ it('the heuristic fallback also skips no-rows tools', function () {
     expect($ctx->chosenTools)->not->toContain('get-tickets-overview-tool')
         ->and($ctx->chosenTools)->toContain('get-tickets-time-series-tool');
 });
+
+it('halts when the model itself cannot map most requested pieces to any tool', function () {
+    // The stochastic-bool failure: core_unanswerable=false but the piece
+    // mapping shows 3 of 3 pieces unmapped — the server decides, not the bool.
+    ExpressGateAgent::fake([[
+        'tools' => ['get-orders-tool'],
+        'pieces' => [
+            ['asked' => 'revenue mensual', 'tool' => null],
+            ['asked' => 'margen por producto', 'tool' => null],
+            ['asked' => 'flujo de caja', 'tool' => null],
+        ],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'dashboard financiero con revenue mensual, margen y flujo de caja');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    try {
+        (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+        $this->fail('Expected ExpressHalt');
+    } catch (ExpressHalt $halt) {
+        expect($halt->status)->toBe('halted_unanswerable')
+            ->and($halt->userMessage)->toContain('revenue mensual');
+    }
+});
+
+it('halts when every chosen tool is off-topic for the request', function () {
+    // The observed filler board: a "financial projection" built from delivery
+    // (OTD) tools — zero topical overlap between request and chosen tools.
+    ExpressGateAgent::fake([[
+        'tools' => ['get-orders-tool'],
+        'pieces' => [['asked' => 'revenue mensual', 'tool' => 'get-orders-tool']],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'dashboard financiero de revenue, margen y proyección de caja');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    try {
+        (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+        $this->fail('Expected ExpressHalt');
+    } catch (ExpressHalt $halt) {
+        expect($halt->status)->toBe('halted_unanswerable')
+            ->and($halt->userMessage)->toContain('no tratan el tema');
+    }
+});
+
+it('declared proxies in the piece mapping become honest substitutions', function () {
+    ExpressGateAgent::fake([[
+        'tools' => ['get-tickets-time-series-tool'],
+        'pieces' => [
+            ['asked' => 'volumen de tickets', 'tool' => 'get-tickets-time-series-tool'],
+            ['asked' => 'CSAT promedio', 'tool' => null, 'proxy' => 'SLA incumplidos'],
+        ],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'dashboard de tickets con volumen y CSAT');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->toBe(['get-tickets-time-series-tool'])
+        ->and($ctx->substitutions[0]['asked'])->toBe('CSAT promedio')
+        ->and($ctx->substitutions[0]['using'])->toBe('SLA incumplidos');
+});

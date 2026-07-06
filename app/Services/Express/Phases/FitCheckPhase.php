@@ -7,6 +7,7 @@ use App\Services\Express\Contracts\ExpressPhase;
 use App\Services\Express\ExpressContext;
 use App\Services\Express\ExpressHalt;
 use App\Services\Express\GateRunner;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
@@ -60,8 +61,11 @@ elige tools de tickets, nunca de sellers/entregas/otros dominios aunque suenen
 útiles; (2) si el pedido menciona series por semana/tiempo, INCLUYE el tool de
 serie temporal; (3) prefiere tools que devuelven LISTAS de filas (series,
 breakdowns por dimensión) sobre resúmenes de totales; (4) menos es más — 2
-tools correctos superan a 4 dudosos. Declara qué piezas pedidas no existen
-pero tienen proxy honesto, y qué piezas no se pueden responder.
+tools correctos superan a 4 dudosos. OBLIGATORIO: desglosa el
+pedido en sus piezas (cada KPI/gráfica/dimensión pedida) y mapea CADA una en
+`pieces` al tool exacto que la responde, o null (con proxy solo si existe una
+métrica sustituta REAL). Declara además qué piezas tienen proxy honesto y qué
+piezas no se pueden responder.
 core_unanswerable=true SOLO si el TEMA CENTRAL del pedido no se puede
 responder en absoluto — llena alternatives con 1-2 dashboards que estos datos
 SÍ responden. Nunca inventes tools que no estén en el catálogo.
@@ -69,6 +73,7 @@ TXT,
             json_encode(['pedido' => $context->prompt, 'catalogo' => $catalog], JSON_UNESCAPED_UNICODE),
             fn ($schema) => [
                 'tools' => $schema->array()->description('Nombres exactos de tools del catálogo a leer (1-4).'),
+                'pieces' => $schema->array()->description('OBLIGATORIO: una entrada por CADA pieza pedida: [{asked, tool: nombre exacto del tool que la responde o null, proxy: métrica sustituta honesta si tool es null y existe una}].'),
                 'substitutions' => $schema->array()->description('[{asked, using, reason}] proxies honestos.'),
                 'unanswerable' => $schema->array()->description('[{asked, reason}] piezas pedidas sin respuesta en estos datos.'),
                 'core_unanswerable' => $schema->boolean(),
@@ -101,12 +106,117 @@ TXT,
         $context->substitutions = array_values(array_filter($out['substitutions'] ?? [], 'is_array'));
         $context->unanswerable = array_values(array_filter($out['unanswerable'] ?? [], 'is_array'));
 
+        // Deterministic backstop #1 — the piece mapping decides, not the bool.
+        // Trusting core_unanswerable alone proved stochastic: the same model
+        // halted one run and built a "financial" board from delivery data the
+        // next, declaring zero substitutions. Pieces the model itself could
+        // not map to any tool (and gave no proxy for) are unanswerable by its
+        // own account; a majority of them means the CORE is unanswerable.
+        $pieces = array_values(array_filter($out['pieces'] ?? [], 'is_array'));
+        if ($pieces !== []) {
+            $unmapped = [];
+            foreach ($pieces as $piece) {
+                $tool = trim((string) ($piece['tool'] ?? ''));
+                $proxy = trim((string) ($piece['proxy'] ?? ''));
+                if ($tool !== '' && in_array($tool, $known, true)) {
+                    continue;
+                }
+                if ($proxy !== '') {
+                    $context->substitutions[] = [
+                        'asked' => (string) ($piece['asked'] ?? '?'),
+                        'using' => $proxy,
+                        'reason' => 'proxy declarado por el fit-check',
+                    ];
+
+                    continue;
+                }
+                $unmapped[] = (string) ($piece['asked'] ?? '?');
+                $context->unanswerable[] = [
+                    'asked' => (string) ($piece['asked'] ?? '?'),
+                    'reason' => 'ningún tool de la fuente la cubre',
+                ];
+            }
+
+            if (count($unmapped) * 2 > count($pieces)) {
+                throw new ExpressHalt(
+                    'halted_unanswerable',
+                    'Esta conexión no puede responder la mayor parte de tu pedido (sin datos para: '.implode(', ', $unmapped).').
+
+Los datos disponibles cubren: '.$this->sourceDomains($context).'.
+
+Dime qué construyo sobre eso (o conecta otra fuente).',
+                );
+            }
+        }
+
+        // Deterministic backstop #2 — zero topical overlap. If NONE of the
+        // chosen tools shares a single topic word with the request, the model
+        // is building filler from another domain (observed: an OTD/delivery
+        // tool powering a "financial projection" board). Halt honestly.
+        if ($context->chosenTools !== [] && $this->allChosenOffTopic($context)) {
+            throw new ExpressHalt(
+                'halted_unanswerable',
+                'Los datos de esta conexión no tratan el tema de tu pedido.
+
+Lo que sí cubren: '.$this->sourceDomains($context).'.
+
+Dime qué construyo sobre eso (o conecta otra fuente).',
+            );
+        }
+
         foreach ($context->substitutions as $sub) {
             $context->note('Sustitución: '.($sub['asked'] ?? '?').' → '.($sub['using'] ?? '?').' ('.($sub['reason'] ?? '').')');
         }
         foreach ($context->unanswerable as $miss) {
             $context->note('No respondible con esta fuente: '.($miss['asked'] ?? '?').' ('.($miss['reason'] ?? '').')');
         }
+    }
+
+    /**
+     * True when every chosen tool scores ZERO topic-word overlap with the
+     * request (name + description) — the signature of an off-domain build.
+     */
+    private function allChosenOffTopic(ExpressContext $context): bool
+    {
+        $words = $this->topicWords($context->prompt);
+        if ($words->isEmpty()) {
+            return false;
+        }
+
+        $byName = collect($context->catalogTools)->keyBy('name');
+        foreach ($context->chosenTools as $name) {
+            $tool = $byName->get($name);
+            if ($tool === null) {
+                continue;
+            }
+            $haystack = Str::lower(Str::ascii(($tool['name'] ?? '').' '.($tool['description'] ?? '')));
+            if ($words->contains(fn ($w) => str_contains($haystack, (string) $w))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @return Collection<int, string>
+     */
+    private function topicWords(string $prompt)
+    {
+        $stop = ['crea', 'dashboard', 'tablero', 'reporte', 'quiero', 'necesito', 'para', 'con', 'una', 'las', 'los', 'del', 'que', 'analisis', 'analizar', 'grafica', 'graficas', 'kpis', 'insights', 'filtro', 'fecha', 'datos', 'reales', 'vista', 'ejecutiva', 'build', 'create', 'make'];
+
+        return collect(preg_split('/[^a-z0-9áéíóúñ]+/i', Str::lower(Str::ascii($prompt))))
+            ->filter(fn ($w) => mb_strlen((string) $w) > 3 && ! in_array((string) $w, $stop, true))
+            ->unique()->values();
+    }
+
+    /** Human list of what the source's tools are about, from their names. */
+    private function sourceDomains(ExpressContext $context): string
+    {
+        return collect($context->catalogTools)
+            ->flatMap(fn (array $t) => preg_split('/[-_]/', (string) $t['name']))
+            ->filter(fn ($w) => mb_strlen((string) $w) > 3 && ! in_array($w, ['tool', 'get', 'list', 'search', 'global', 'with', 'status', 'report', 'metrics'], true))
+            ->unique()->take(10)->implode(', ');
     }
 
     /**
