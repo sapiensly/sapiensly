@@ -32,7 +32,7 @@ class CompilePhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return '🏗️ Compilando y aplicando el dashboard…';
+        return 'Compilando y aplicando el dashboard…';
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void

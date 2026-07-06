@@ -30,7 +30,7 @@ class FitCheckPhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return '🧭 Comparando tu pedido contra lo que la fuente puede responder…';
+        return 'Comparando tu pedido contra lo que la fuente puede responder…';
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void

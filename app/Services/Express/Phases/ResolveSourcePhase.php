@@ -28,7 +28,7 @@ class ResolveSourcePhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return '🔌 Localizando la fuente de datos…';
+        return 'Localizando la fuente de datos…';
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void

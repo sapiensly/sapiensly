@@ -1356,6 +1356,52 @@ watch(aiIsThinking, (thinking) => {
     }
 });
 
+// Express progress messages are plain step lines all ending in an ellipsis;
+// render them as the same steps UI the Apps progress trail uses (blue checks,
+// spinner on the running step) instead of raw text.
+function progressLines(m: Message): string[] {
+    if (m.role !== 'assistant' || !m.content) {
+        return [];
+    }
+    const lines = m.content
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+    if (lines.length === 0 || !lines.every((l) => l.endsWith('…'))) {
+        return [];
+    }
+    // A single ellipsis line only counts while it is actually streaming —
+    // avoids hijacking a one-line prose reply that happens to end in "…".
+    if (lines.length === 1 && m.status !== 'streaming') {
+        return [];
+    }
+    return lines;
+}
+
+// Message timestamps: time for today, day + time otherwise.
+const timeFmt = new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+});
+const dayTimeFmt = new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+});
+function messageTime(m: Message): string | null {
+    if (!m.created_at) {
+        return null;
+    }
+    const d = new Date(m.created_at);
+    if (Number.isNaN(d.getTime())) {
+        return null;
+    }
+    return d.toDateString() === new Date().toDateString()
+        ? timeFmt.format(d)
+        : dayTimeFmt.format(d);
+}
+
 // L4 Dashboard Express: run the deterministic pipeline on the current input.
 // The server narrates progress into a normal assistant message, so the
 // existing streaming UI (and Detener) just work.
@@ -2268,6 +2314,12 @@ function statusTone(status: Message['status']): string {
                                 </a>
                                 <div v-if="m.content">{{ m.content }}</div>
                                 <span v-else-if="!m.attachment_url">…</span>
+                                <div
+                                    v-if="messageTime(m)"
+                                    class="text-right text-[10px] text-ink-muted/70"
+                                >
+                                    {{ messageTime(m) }}
+                                </div>
                             </div>
                             <div
                                 v-else
@@ -2301,12 +2353,47 @@ function statusTone(status: Message['status']): string {
                                         <span>{{ activityStatus }}</span>
                                     </div>
                                 </div>
+                                <!-- Express progress: same steps style as the
+                                     Apps activity trail — blue checks on done
+                                     steps, spinner on the one running. -->
                                 <div
-                                    v-if="m.content"
+                                    v-if="progressLines(m).length"
+                                    class="space-y-1"
+                                >
+                                    <div
+                                        v-for="(line, i) in progressLines(m)"
+                                        :key="i"
+                                        class="flex items-center gap-1.5 text-xs"
+                                        :class="
+                                            m.status === 'streaming' &&
+                                            i === progressLines(m).length - 1
+                                                ? 'text-ink'
+                                                : 'text-ink-muted'
+                                        "
+                                    >
+                                        <Loader2
+                                            v-if="
+                                                m.status === 'streaming' &&
+                                                i === progressLines(m).length - 1
+                                            "
+                                            class="size-3 shrink-0 animate-spin text-accent-blue"
+                                        />
+                                        <Check
+                                            v-else
+                                            class="size-3 shrink-0 text-accent-blue"
+                                        />
+                                        <span>{{ line }}</span>
+                                    </div>
+                                </div>
+                                <div
+                                    v-else-if="m.content"
                                     v-html="renderAssistantContent(m.content)"
                                 />
                                 <span
-                                    v-if="m.status === 'streaming'"
+                                    v-if="
+                                        m.status === 'streaming' &&
+                                        !progressLines(m).length
+                                    "
                                     class="ml-0.5 inline-block h-3 w-1 animate-pulse bg-accent-blue align-middle"
                                 />
 
@@ -2327,6 +2414,12 @@ function statusTone(status: Message['status']): string {
                                         class="rounded-pill bg-emerald-500/10 px-2 py-0.5 text-emerald-600"
                                         >{{ title }}</span
                                     >
+                                </div>
+                                <div
+                                    v-if="messageTime(m)"
+                                    class="mt-1 text-right text-[10px] text-ink-muted/70"
+                                >
+                                    {{ messageTime(m) }}
                                 </div>
                             </div>
 

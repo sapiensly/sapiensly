@@ -30,7 +30,7 @@ class AcquireObjectsPhase implements ExpressPhase
     {
         $n = count($context->chosenTools);
 
-        return "📦 Modelando {$n} objeto(s) conectado(s) desde la fuente…";
+        return "Modelando {$n} objeto(s) conectado(s) desde la fuente…";
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void

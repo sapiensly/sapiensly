@@ -30,7 +30,7 @@ class SuggestSpecPhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return '📐 Derivando el spec del dashboard desde los datos…';
+        return 'Derivando el spec del dashboard desde los datos…';
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void
