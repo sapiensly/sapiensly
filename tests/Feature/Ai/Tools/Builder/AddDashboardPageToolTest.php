@@ -592,6 +592,41 @@ it('charts the object\'s namesake metric, not its first additive (nps_time_serie
         ->and($spec['kpis'][0]['aggregation'])->toBe('avg');
 });
 
+it('never groups a "statistics per dimension" chart by the bucket label either (nps11 compile-kill)', function () {
+    // Prod nps11: the trend-chart guard against grouping by the bucket label
+    // only covered the "concentration breakdown" section — a SEPARATE
+    // section (statistics shown per dimension, e.g. avg_csat/avg_ces) used
+    // categoricals directly and produced "Avg Csat por period label", which
+    // then failed the compiler's own legality guard and killed the ENTIRE
+    // build with no recovery (a suggester-level illegality, not a model
+    // mistake — the retry-without-overrides path can't help since the
+    // suggested spec itself was already illegal).
+    $series = [
+        'id' => 'obj_npstseries0', 'slug' => 'nps_time_series', 'name' => 'Nps Time Series',
+        'fields' => [
+            ['id' => 'fld_period0000', 'slug' => 'period_start', 'name' => 'Period Start', 'type' => 'date'],
+            ['id' => 'fld_plabel0000', 'slug' => 'period_label', 'name' => 'Period Label', 'type' => 'string'],
+            ['id' => 'fld_responses0', 'slug' => 'responses', 'name' => 'Responses', 'type' => 'number'],
+            ['id' => 'fld_npsscore00', 'slug' => 'nps_score', 'name' => 'Nps Score', 'type' => 'number'],
+            ['id' => 'fld_avgcsat000', 'slug' => 'avg_csat', 'name' => 'Avg Csat', 'type' => 'number'],
+            ['id' => 'fld_avgces0000', 'slug' => 'avg_ces', 'name' => 'Avg Ces', 'type' => 'number'],
+        ],
+        'source' => ['type' => 'connected', 'operations' => ['list' => ['mcp_tool' => 't', 'collection_path' => 'series']]],
+    ];
+
+    $spec = (new DashboardSpecSuggester)->suggest($series, 'es');
+
+    expect(collect($spec['charts'])->pluck('group_by_field_id')->filter())->not->toContain('fld_plabel0000');
+
+    // And the spec the suggester emits must compile clean end to end (the
+    // real failure mode: a suggester output the compiler's OWN legality
+    // guard rejects).
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $series, [], null, 'es',
+    );
+    expect($built['ok'])->toBeTrue();
+});
+
 it('blocks the unambiguous lies for hand-authored specs too: count-of-buckets, summed scores, label breakdowns', function () {
     // Prod nps5 (agentic path): a bar chart COUNTED weekly pre-aggregated rows
     // grouped by period_label (every bar = 1 week, labeled "por Segmento") —

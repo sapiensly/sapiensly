@@ -431,6 +431,20 @@ class DashboardSpecSuggester
     private function suggestCharts(string $grain, ?array $dateField, array $categoricals, array $numerics, array $measureTypes, array $stats, bool $es, array $object = []): array
     {
         $charts = [];
+
+        // On a time series, the bucket's label column is the TIME AXIS in
+        // costume — grouping by it re-plots the trend as bars (observed:
+        // «Por period label» AND «Avg Csat por period label» duplicating the
+        // weekly evolution; the latter came from a section below that used
+        // $categoricals directly, unfiltered — filtering once, up front, for
+        // every section closes that gap structurally instead of per-section.
+        if ($grain === SemanticProfile::GRAIN_TIME_SERIES) {
+            $categoricals = array_values(array_filter(
+                $categoricals,
+                fn (array $f): bool => preg_match('/label|bucket|period|semana|week/i', (string) ($f['slug'] ?? '')) !== 1,
+            ));
+        }
+
         $additives = array_values(array_filter(
             $numerics,
             fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE,
@@ -503,13 +517,6 @@ class DashboardSpecSuggester
         foreach ($categoricals as $i => $field) {
             if (count($charts) >= self::MAX_CHARTS - 1) {
                 break;
-            }
-            // On a time series, the bucket's label column is the TIME AXIS in
-            // costume — grouping by it re-plots the trend as bars (observed:
-            // «Por period label» duplicating the weekly evolution).
-            if ($grain === SemanticProfile::GRAIN_TIME_SERIES
-                && preg_match('/label|bucket|period|semana|week/i', (string) ($field['slug'] ?? '')) === 1) {
-                continue;
             }
             $distinct = $stats !== [] ? ($stats[$field['id']]['distinct'] ?? null) : null;
             if ($distinct !== null && $distinct < 2) {
