@@ -110,6 +110,7 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
         'rows' => [
             ['id' => 'W1', 'semana' => now()->utc()->subDays(3)->toDateString(), 'categoria' => 'Envíos', 'total' => 12],
             ['id' => 'W2', 'semana' => now()->utc()->subDays(10)->toDateString(), 'categoria' => 'Pagos', 'total' => 7],
+            ['id' => 'W3', 'semana' => now()->utc()->subDays(17)->toDateString(), 'categoria' => 'Envíos', 'total' => 9],
         ],
         'clamped' => [], 'date_field_ids' => [$ids['d']], 'summary' => 'Creé «Tickets Semanales»',
     ]);

@@ -231,7 +231,7 @@ it('suggests a complete lint-worthy spec from the schema alone', function () {
     // string can never explode a chart.
     foreach ($spec['charts'] as $chart) {
         if (isset($chart['group_by_field_id']) && ! isset($chart['y_field_id'])) {
-            expect($chart['limit'])->toBe(10);
+            expect($chart['limit'])->toBe(12);
         }
     }
 });
@@ -312,4 +312,80 @@ it('suggests a compilable spec even for a numbers-only object', function () {
         ColorPalette::fromAccent(OrganizationBrand::DEFAULT_ACCENT), 'es',
     );
     expect($built['ok'])->toBeTrue();
+});
+
+it('never lies on pre-aggregated rows: no count-of-weeks total, no summed percentages, no folded statistics', function () {
+    // The exact YuhuGo weekly-series shape that produced "Total tickets: 5"
+    // (a count of WEEKS) in production.
+    $object = [
+        'id' => 'obj_wkseries0', 'slug' => 'serie', 'name' => 'Serie Semanal',
+        'fields' => [
+            ['id' => 'fld_bucket00', 'slug' => 'bucket_start', 'name' => 'Semana', 'type' => 'date'],
+            ['id' => 'fld_totalt00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+            ['id' => 'fld_otdpct00', 'slug' => 'otd_pct', 'name' => 'OTD %', 'type' => 'number'],
+            ['id' => 'fld_avgmin00', 'slug' => 'avg_minutes', 'name' => 'Avg Minutos', 'type' => 'number'],
+        ],
+        'source' => [
+            'operations' => ['list' => ['mcp_tool' => 't', 'collection_path' => 'series']],
+            'field_map' => [
+                ['field_id' => 'fld_bucket00', 'external_path' => 'bucket_start'],
+                ['field_id' => 'fld_totalt00', 'external_path' => 'total_tickets'],
+                ['field_id' => 'fld_otdpct00', 'external_path' => 'otd_pct'],
+                ['field_id' => 'fld_avgmin00', 'external_path' => 'avg_minutes'],
+            ],
+        ],
+    ];
+    $rows = collect(range(0, 4))->map(fn ($i) => [
+        'bucket_start' => now()->utc()->subWeeks($i)->toDateString(),
+        'total_tickets' => 10 + $i, 'otd_pct' => 90.5 - $i, 'avg_minutes' => 30 + $i,
+    ])->all();
+
+    $spec = (new DashboardSpecSuggester)->suggest($object, 'es', $rows);
+
+    $kpis = collect($spec['kpis']);
+    // No count KPI at all (counting rows counts weeks).
+    expect($kpis->pluck('aggregation'))->not->toContain('count');
+    // Headline total = SUM of the additive column.
+    expect($kpis->first()['aggregation'])->toBe('sum')
+        ->and($kpis->first()['field_id'])->toBe('fld_totalt00');
+    // The percentage is never summed; the pre-computed average never folds.
+    $otd = $kpis->firstWhere('field_id', 'fld_otdpct00');
+    expect($otd['aggregation'])->toBe('avg');
+    expect($kpis->pluck('field_id'))->not->toContain('fld_avgmin00');
+
+    // The trend chart sums the additive series — it does not count buckets.
+    $trend = collect($spec['charts'])->firstWhere('chart_type', 'line');
+    expect($trend['aggregation'])->toBe('sum')
+        ->and($trend['y_field_id'])->toBe('fld_totalt00');
+});
+
+it('adapts charts to real cardinality and skips degenerate columns', function () {
+    $object = [
+        'id' => 'obj_dimbrk00', 'slug' => 'brk', 'name' => 'Breakdown',
+        'fields' => [
+            ['id' => 'fld_key0000', 'slug' => 'key', 'name' => 'Motivo', 'type' => 'string'],
+            ['id' => 'fld_const00', 'slug' => 'canal', 'name' => 'Canal', 'type' => 'string'],
+            ['id' => 'fld_count00', 'slug' => 'count', 'name' => 'Count', 'type' => 'number'],
+        ],
+        'source' => [
+            'operations' => ['list' => ['mcp_tool' => 't', 'collection_path' => 'breakdown']],
+            'field_map' => [
+                ['field_id' => 'fld_key0000', 'external_path' => 'key'],
+                ['field_id' => 'fld_const00', 'external_path' => 'canal'],
+                ['field_id' => 'fld_count00', 'external_path' => 'count'],
+            ],
+        ],
+    ];
+    // 11 distinct motivos → too many slices for a donut; canal is constant.
+    $rows = collect(range(1, 11))->map(fn ($i) => [
+        'key' => "Motivo {$i}", 'canal' => 'web', 'count' => $i * 3,
+    ])->all();
+
+    $spec = (new DashboardSpecSuggester)->suggest($object, 'es', $rows);
+
+    $breakdown = collect($spec['charts'])->firstWhere('group_by_field_id', 'fld_key0000');
+    expect($breakdown['chart_type'])->toBe('hbar')      // 11 > 8 → horizontal
+        ->and($breakdown['aggregation'])->toBe('sum');  // slices sized by the additive
+    // The constant column never becomes a chart.
+    expect(collect($spec['charts'])->pluck('group_by_field_id'))->not->toContain('fld_const00');
 });

@@ -43,7 +43,7 @@ class SuggestSpecPhase implements ExpressPhase
         $manifest = $this->manifests->getActiveManifest($context->app->fresh());
         $lang = AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null);
 
-        $context->spec = $this->suggester->suggest($primary, $lang) + ['object_slug' => $primary['slug']];
+        $context->spec = $this->suggester->suggest($primary, $lang, $context->rowsByObject[$primary['id']] ?? []) + ['object_slug' => $primary['slug']];
         $context->facts = $this->facts->build($primary, $context->rowsByObject[$primary['id']] ?? []);
     }
 

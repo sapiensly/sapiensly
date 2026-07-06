@@ -2,20 +2,27 @@
 
 namespace App\Services\Manifest;
 
+use App\Services\Express\SemanticProfile;
 use Illuminate\Support\Str;
 
 /**
- * Derives a COMPLETE add_dashboard_page spec (KPIs, varied charts, insight
- * scaffolds, the date field) from an object's schema alone — optimization L2.
- * The timing telemetry showed slow models dying in >190s stretches GENERATING
- * the dashboard spec; deriving the same content mechanically lets the model
- * answer prepare_dashboard with `use_suggestion: true` + tiny overrides
- * (~100 tokens) instead of authoring ~2,000. Purely schema-based on purpose:
- * both prepare_dashboard (to show it) and add_dashboard_page (to apply it)
- * recompute it deterministically, so no state passes between tools; categorical
- * charts carry a `limit` so an unknown-cardinality string can never explode a
- * breakdown. The model stays responsible for the HUMAN parts — title, purpose
- * and real insight prose — via overrides.
+ * Derives a COMPLETE add_dashboard_page spec (KPIs, charts, insight scaffolds,
+ * the date field) from an object's schema AND its sampled rows — optimization
+ * L2 plus the Q1/Q2 quality layer. Two guarantees the schema-only version
+ * could not make:
+ *
+ *  - Numbers MEAN something: grain + measure-type classification (via
+ *    SemanticProfile) drives an aggregation-legality matrix, so a
+ *    pre-aggregated weekly series never gets a count(rows) "total" (that
+ *    counts WEEKS), percentages are never summed, and pre-computed statistics
+ *    (avg_/p50_) are shown per dimension, never re-aggregated.
+ *  - Charts FIT the data: cardinality picks the breakdown form (donut 2-8,
+ *    hbar 9+ with a limit), mostly-null or constant columns are skipped, and
+ *    a time chart only exists when the data spans enough buckets to draw.
+ *
+ * Deterministic and side-effect free on purpose: prepare_dashboard (to show
+ * it) and add_dashboard_page (to apply it) recompute it identically. Without
+ * rows it degrades to name-based semantics — still lie-free, less informed.
  */
 class DashboardSpecSuggester
 {
@@ -23,31 +30,48 @@ class DashboardSpecSuggester
 
     private const MAX_CHARTS = 7;
 
-    /** Breakdown chart types, applied round-robin so variety is structural. */
-    private const CATEGORY_CHART_TYPES = ['donut', 'bar', 'hbar', 'radar', 'treemap'];
+    private const BREAKDOWN_LIMIT = 12;
 
-    private const CATEGORY_LIMIT = 10;
+    public function __construct(private readonly SemanticProfile $semantics = new SemanticProfile) {}
 
     /**
      * @param  array<string, mixed>  $object  manifest object_definition
+     * @param  list<array<string, mixed>>  $rows  sampled external rows (optional but recommended)
      * @return array<string, mixed> spec in add_dashboard_page's input shape
      */
-    public function suggest(array $object, string $lang = 'es'): array
+    public function suggest(array $object, string $lang = 'es', array $rows = []): array
     {
         $es = $lang !== 'en';
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
 
+        $grain = $this->semantics->grainOf($object, $rows);
+        $stats = $rows !== [] ? $this->semantics->columnStats($object, $rows) : [];
+
+        $usable = fn (array $f): bool => $stats === []
+            || (($stats[$f['id']]['null_rate'] ?? 0) <= 0.6 && ! ($stats[$f['id']]['all_equal'] ?? false));
+
         $dateField = $this->pickDateField($fields);
-        $categoricals = $this->categoricalFields($fields);
-        $numerics = array_values(array_filter($fields, fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)));
-        $booleans = array_values(array_filter($fields, fn (array $f): bool => ($f['type'] ?? '') === 'boolean'));
+        $categoricals = array_values(array_filter($this->categoricalFields($fields), $usable));
+        $numerics = array_values(array_filter(
+            $fields,
+            fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true) && $usable($f),
+        ));
+        $booleans = array_values(array_filter(
+            $fields,
+            fn (array $f): bool => ($f['type'] ?? '') === 'boolean' && $usable($f),
+        ));
+
+        $measureTypes = [];
+        foreach ($numerics as $field) {
+            $measureTypes[$field['id']] = $this->semantics->measureTypeOf($field, $stats[$field['id']]['values'] ?? []);
+        }
 
         return array_filter([
             'object_slug' => $object['slug'] ?? null,
             'title' => ($es ? 'Análisis de ' : 'Analysis of ').($object['name'] ?? $object['slug'] ?? ''),
             'date_field_id' => $dateField['id'] ?? null,
-            'kpis' => $this->suggestKpis($object, $numerics, $booleans, $es),
-            'charts' => $this->suggestCharts($dateField, $categoricals, $numerics, $es),
+            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es),
+            'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es),
             'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es),
         ], fn ($v) => $v !== null);
     }
@@ -64,7 +88,7 @@ class DashboardSpecSuggester
         }
 
         foreach ($temporal as $field) {
-            if (preg_match('/creat|fecha|date|week|semana|time/i', (string) ($field['slug'] ?? '')) === 1) {
+            if (preg_match('/creat|fecha|date|week|semana|bucket|time/i', (string) ($field['slug'] ?? '')) === 1) {
                 return $field;
             }
         }
@@ -74,7 +98,8 @@ class DashboardSpecSuggester
 
     /**
      * Category candidates: selects always; strings that don't look like ids,
-     * names or free text (the chart's `limit` keeps even a mis-guess safe).
+     * names or free text. When the strict filter leaves nothing, any string
+     * counts (in aggregate rows the name IS the category).
      *
      * @param  list<array<string, mixed>>  $fields
      * @return list<array<string, mixed>>
@@ -96,10 +121,6 @@ class DashboardSpecSuggester
             return $strict;
         }
 
-        // Aggregate rows often carry ONLY a name-ish string ("nombre" in a
-        // sellers comparison) — there, the name IS the category. Relax to any
-        // string field rather than suggesting a chartless dashboard; the
-        // chart-level `limit` keeps even a high-cardinality miss safe.
         return array_values(array_filter(
             $fields,
             fn (array $f): bool => ($f['type'] ?? '') === 'string',
@@ -107,27 +128,66 @@ class DashboardSpecSuggester
     }
 
     /**
+     * KPIs whose numbers are legal for this grain: count(rows) only when a row
+     * IS a record; pre-aggregated grains lead with the SUM of the primary
+     * additive measure; ratios average (never sum); statistics never fold.
+     *
      * @param  array<string, mixed>  $object
      * @param  list<array<string, mixed>>  $numerics
+     * @param  array<string, string>  $measureTypes  field_id → measure type
      * @param  list<array<string, mixed>>  $booleans
      * @return list<array<string, mixed>>
      */
-    private function suggestKpis(array $object, array $numerics, array $booleans, bool $es): array
+    private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es): array
     {
-        $kpis = [[
-            'label' => ($es ? 'Total ' : 'Total ').Str::lower((string) ($object['name'] ?? 'registros')),
-            'aggregation' => 'count',
-            'icon' => 'inbox',
-        ]];
+        $kpis = [];
+
+        if ($this->semantics->countIsMeaningful($grain)) {
+            $kpis[] = [
+                'label' => ($es ? 'Total ' : 'Total ').Str::lower((string) ($object['name'] ?? 'registros')),
+                'aggregation' => 'count',
+                'icon' => 'inbox',
+            ];
+        } else {
+            // Pre-aggregated grain: the headline total is the SUM of the
+            // primary additive column (total_tickets across weeks IS the
+            // ticket total — count(rows) would count WEEKS).
+            $primary = collect($numerics)->first(
+                fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE
+                    && preg_match('/total|count|tickets|orders|volumen|cantidad/i', (string) $f['slug']) === 1,
+            ) ?? collect($numerics)->first(
+                fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE,
+            );
+            if ($primary !== null) {
+                $kpis[] = [
+                    'label' => ($es ? 'Total ' : 'Total ').Str::lower((string) ($primary['name'] ?? $primary['slug'])),
+                    'aggregation' => 'sum',
+                    'field_id' => $primary['id'],
+                    'icon' => 'inbox',
+                ];
+            }
+        }
 
         foreach ($numerics as $field) {
             if (count($kpis) >= self::MAX_KPIS) {
                 break;
             }
+            $type = $measureTypes[$field['id']] ?? SemanticProfile::MEASURE_ADDITIVE;
+            $legal = $this->semantics->legalKpiAggregations($type, $grain);
+            if ($legal === []) {
+                continue; // statistics live in charts, per dimension
+            }
+            if (collect($kpis)->contains(fn (array $k): bool => ($k['field_id'] ?? null) === $field['id'])) {
+                continue;
+            }
+
             $slug = (string) ($field['slug'] ?? '');
             $name = (string) ($field['name'] ?? $slug);
 
-            if (preg_match('/minut|hora|hour|time|dur|dias|days/i', $slug) === 1) {
+            // Duration-like RAW measurements → median + P95 (the SLO pair).
+            if ($grain === SemanticProfile::GRAIN_RAW
+                && preg_match('/minut|hora|hour|time|dur|dias|days/i', $slug) === 1
+                && in_array('median', $legal, true)) {
                 $kpis[] = ['label' => ($es ? 'Mediana ' : 'Median ').$name, 'aggregation' => 'median', 'field_id' => $field['id'], 'icon' => 'clock', 'delta_good' => 'down'];
                 if (count($kpis) < self::MAX_KPIS) {
                     $kpis[] = ['label' => 'P95 '.$name, 'aggregation' => 'p95', 'field_id' => $field['id'], 'icon' => 'gauge', 'delta_good' => 'down'];
@@ -136,17 +196,29 @@ class DashboardSpecSuggester
                 continue;
             }
 
-            $rateLike = preg_match('/csat|rating|score|nps|satisf|promedio|avg|rate|pct|percent/i', $slug) === 1;
-            $kpis[] = [
-                'label' => ($rateLike ? ($es ? 'Promedio ' : 'Average ') : ($es ? 'Suma ' : 'Sum of ')).$name,
-                'aggregation' => $rateLike ? 'avg' : 'sum',
-                'field_id' => $field['id'],
-                'icon' => $rateLike ? 'star' : 'sigma',
-            ];
+            if ($type === SemanticProfile::MEASURE_RATIO) {
+                $kpis[] = [
+                    'label' => ($es ? 'Promedio ' : 'Average ').$name,
+                    'aggregation' => 'avg',
+                    'field_id' => $field['id'],
+                    'icon' => 'star',
+                ];
+
+                continue;
+            }
+
+            if (in_array('sum', $legal, true)) {
+                $kpis[] = [
+                    'label' => ($es ? 'Suma ' : 'Sum of ').$name,
+                    'aggregation' => 'sum',
+                    'field_id' => $field['id'],
+                    'icon' => 'sigma',
+                ];
+            }
         }
 
         foreach ($booleans as $field) {
-            if (count($kpis) >= self::MAX_KPIS) {
+            if (count($kpis) >= self::MAX_KPIS || ! $this->semantics->countIsMeaningful($grain)) {
                 break;
             }
             $kpis[] = [
@@ -158,75 +230,175 @@ class DashboardSpecSuggester
             ];
         }
 
+        // A pre-aggregated object with ONLY statistics (a percentile table)
+        // still deserves a headline: the extreme of the leading statistic.
+        if ($kpis === [] && $numerics !== []) {
+            $lead = $numerics[0];
+            $kpis[] = [
+                'label' => ($es ? 'Máx ' : 'Max ').(string) ($lead['name'] ?? $lead['slug']),
+                'aggregation' => 'max',
+                'field_id' => $lead['id'],
+                'icon' => 'gauge',
+            ];
+        }
+
         return $kpis;
     }
 
     /**
+     * Charts that fit the data's shape. Story order: magnitude/trend first,
+     * concentration next, comparisons last.
+     *
      * @param  array<string, mixed>|null  $dateField
      * @param  list<array<string, mixed>>  $categoricals
      * @param  list<array<string, mixed>>  $numerics
+     * @param  array<string, string>  $measureTypes
+     * @param  array<string, array{values: list<mixed>, distinct: int, null_rate: float, all_equal: bool}>  $stats
      * @return list<array<string, mixed>>
      */
-    private function suggestCharts(?array $dateField, array $categoricals, array $numerics, bool $es): array
+    private function suggestCharts(string $grain, ?array $dateField, array $categoricals, array $numerics, array $measureTypes, array $stats, bool $es): array
     {
         $charts = [];
+        $additives = array_values(array_filter(
+            $numerics,
+            fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE,
+        ));
+        $statistics = array_values(array_filter(
+            $numerics,
+            fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_STATISTIC,
+        ));
+        $ratios = array_values(array_filter(
+            $numerics,
+            fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_RATIO,
+        ));
 
-        if ($dateField !== null) {
-            $charts[] = [
-                'label' => $es ? 'Volumen por semana' : 'Weekly volume',
+        // 1) Trend. Skip when the sampled data can't draw one (< 3 buckets).
+        //    On pre-aggregated rows the y is the SUM of the primary additive —
+        //    count(x) would count buckets: the chart-shaped "Total: 5" lie.
+        $spanDays = $dateField !== null && $stats !== []
+            ? $this->semantics->temporalSpanDays($stats[$dateField['id']]['values'] ?? [])
+            : null;
+        $bucketCount = $dateField !== null && $stats !== []
+            ? ($stats[$dateField['id']]['distinct'] ?? 0)
+            : null;
+
+        if ($dateField !== null && ($bucketCount === null || $bucketCount >= 3)) {
+            $bucket = match (true) {
+                $spanDays !== null && $spanDays <= 14 => 'day',
+                $spanDays !== null && $spanDays > 120 => 'month',
+                default => 'week',
+            };
+            $trend = [
+                'label' => $es ? 'Tendencia en el tiempo' : 'Trend over time',
                 'chart_type' => 'line',
-                'aggregation' => 'count',
                 'x_field_id' => $dateField['id'],
-                'bucket' => 'week',
+                'bucket' => $bucket,
             ];
+            if ($grain === SemanticProfile::GRAIN_RAW) {
+                $trend['aggregation'] = 'count';
+                $trend['label'] = $es ? 'Volumen en el tiempo' : 'Volume over time';
+            } elseif ($additives !== []) {
+                $trend['aggregation'] = 'sum';
+                $trend['y_field_id'] = $additives[0]['id'];
+                $trend['label'] = ($es ? 'Evolución de ' : 'Evolution of ').Str::lower((string) ($additives[0]['name'] ?? $additives[0]['slug']));
+            } elseif ($ratios !== []) {
+                $trend['aggregation'] = 'avg';
+                $trend['y_field_id'] = $ratios[0]['id'];
+                $trend['label'] = ($es ? 'Evolución de ' : 'Evolution of ').Str::lower((string) ($ratios[0]['name'] ?? $ratios[0]['slug']));
+            } else {
+                $trend = null;
+            }
+            if ($trend !== null) {
+                $charts[] = $trend;
+            }
         }
 
+        // 2) Concentration: breakdowns per categorical, form chosen by REAL
+        //    cardinality (donut needs few slices; many go horizontal, capped).
+        $breakdownTypes = ['donut', 'bar', 'treemap'];
         foreach ($categoricals as $i => $field) {
             if (count($charts) >= self::MAX_CHARTS - 1) {
                 break;
             }
-            $charts[] = [
+            $distinct = $stats !== [] ? ($stats[$field['id']]['distinct'] ?? null) : null;
+            if ($distinct !== null && $distinct < 2) {
+                continue; // one slice is not a breakdown
+            }
+
+            $chart = [
                 'label' => ($es ? 'Por ' : 'By ').Str::lower((string) ($field['name'] ?? $field['slug'])),
-                'chart_type' => self::CATEGORY_CHART_TYPES[$i % count(self::CATEGORY_CHART_TYPES)],
-                'aggregation' => 'count',
                 'group_by_field_id' => $field['id'],
-                'limit' => self::CATEGORY_LIMIT,
+                'limit' => self::BREAKDOWN_LIMIT,
+                'chart_type' => ($distinct !== null && $distinct > 8)
+                    ? 'hbar'
+                    : $breakdownTypes[$i % count($breakdownTypes)],
             ];
+            if ($grain === SemanticProfile::GRAIN_RAW) {
+                $chart['aggregation'] = 'count';
+            } elseif ($additives !== []) {
+                $chart['aggregation'] = 'sum';
+                $chart['y_field_id'] = $additives[0]['id'];
+            } else {
+                continue; // nothing legal to size the slices with
+            }
+            $charts[] = $chart;
         }
 
-        if ($numerics !== [] && $categoricals !== [] && count($charts) < self::MAX_CHARTS) {
+        // 3) Statistics per dimension: shown, never folded. avg over one row
+        //    per group is the identity, so the number rendered IS the value.
+        if ($statistics !== [] && $categoricals !== []) {
+            foreach (array_slice($statistics, 0, 2) as $stat) {
+                if (count($charts) >= self::MAX_CHARTS) {
+                    break;
+                }
+                $charts[] = [
+                    'label' => (string) ($stat['name'] ?? $stat['slug']).($es ? ' por ' : ' by ').Str::lower((string) ($categoricals[0]['name'] ?? $categoricals[0]['slug'])),
+                    'chart_type' => 'hbar',
+                    'aggregation' => 'avg',
+                    'y_field_id' => $stat['id'],
+                    'group_by_field_id' => $categoricals[0]['id'],
+                    'limit' => self::BREAKDOWN_LIMIT,
+                ];
+            }
+        }
+
+        // 4) Distribution on RAW rows only — a box plot needs raw points.
+        if ($grain === SemanticProfile::GRAIN_RAW && $numerics !== [] && $categoricals !== [] && count($charts) < self::MAX_CHARTS) {
             $num = $numerics[0];
-            $cat = $categoricals[0];
             $charts[] = [
-                'label' => (string) ($num['name'] ?? $num['slug']).($es ? ' por ' : ' by ').Str::lower((string) ($cat['name'] ?? $cat['slug'])),
+                'label' => (string) ($num['name'] ?? $num['slug']).($es ? ' por ' : ' by ').Str::lower((string) ($categoricals[0]['name'] ?? $categoricals[0]['slug'])),
                 'chart_type' => 'box',
                 'aggregation' => 'avg',
                 'y_field_id' => $num['id'],
-                'group_by_field_id' => $cat['id'],
+                'group_by_field_id' => $categoricals[0]['id'],
             ];
         }
 
-        if ($dateField !== null && $categoricals !== [] && count($charts) < self::MAX_CHARTS) {
+        // 5) Stacked composition over time needs record-level rows.
+        if ($grain === SemanticProfile::GRAIN_RAW && $dateField !== null && $categoricals !== [] && count($charts) < self::MAX_CHARTS) {
             $cat = $categoricals[0];
-            $charts[] = [
-                'label' => ($es ? 'Tendencia semanal por ' : 'Weekly trend by ').Str::lower((string) ($cat['name'] ?? $cat['slug'])),
-                'chart_type' => 'area',
-                'aggregation' => 'count',
-                'x_field_id' => $dateField['id'],
-                'bucket' => 'week',
-                'series_field_id' => $cat['id'],
-                'stacked' => true,
-            ];
+            $distinct = $stats !== [] ? ($stats[$cat['id']]['distinct'] ?? 5) : 5;
+            if ($distinct >= 2 && $distinct <= 8) {
+                $charts[] = [
+                    'label' => ($es ? 'Tendencia semanal por ' : 'Weekly trend by ').Str::lower((string) ($cat['name'] ?? $cat['slug'])),
+                    'chart_type' => 'area',
+                    'aggregation' => 'count',
+                    'x_field_id' => $dateField['id'],
+                    'bucket' => 'week',
+                    'series_field_id' => $cat['id'],
+                    'stacked' => true,
+                ];
+            }
         }
 
-        // Last resort: a numbers-only object (no date, no strings) still gets
-        // a bar per numeric — a chartless dashboard spec is never suggested.
+        // Last resort: a numbers-only object still gets a legal bar per
+        // numeric — a chartless spec is never suggested.
         if ($charts === []) {
             foreach (array_slice($numerics, 0, 3) as $i => $num) {
                 $charts[] = [
                     'label' => (string) ($num['name'] ?? $num['slug']),
-                    'chart_type' => self::CATEGORY_CHART_TYPES[$i % count(self::CATEGORY_CHART_TYPES)] === 'donut' ? 'bar' : self::CATEGORY_CHART_TYPES[$i % count(self::CATEGORY_CHART_TYPES)],
-                    'aggregation' => 'avg',
+                    'chart_type' => $i === 0 ? 'bar' : ($i === 1 ? 'hbar' : 'radar'),
+                    'aggregation' => ($measureTypes[$num['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE ? 'sum' : 'avg',
                     'y_field_id' => $num['id'],
                 ];
             }
@@ -238,7 +410,7 @@ class DashboardSpecSuggester
     /**
      * Insight SCAFFOLDS: correct variants + live computes; the bodies are
      * deliberately plain statements the model should override with real
-     * conclusions (that override is ~50 tokens — the cheap part).
+     * conclusions.
      *
      * @param  array<string, mixed>  $object
      * @param  list<array<string, mixed>>  $categoricals
