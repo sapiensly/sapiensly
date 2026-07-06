@@ -4,8 +4,10 @@ namespace App\Console\Commands;
 
 use App\Models\App;
 use App\Models\BuilderConversation;
+use App\Models\Integration;
 use App\Models\PipelineRun;
 use App\Models\User;
+use App\Services\Connected\IntegrationCatalog;
 use App\Services\Express\DashboardExpressPhases;
 use App\Services\Express\ExpressContext;
 use App\Services\Express\ExpressPipeline;
@@ -17,6 +19,7 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * The acceptance harness for L4 Express: runs the benchmark prompt suite
@@ -26,17 +29,22 @@ use Illuminate\Support\Facades\Storage;
  * scenario. The "beats agentic Claude on all 3 axes" claim gets measured
  * here, not declared. Results also land as JSON under storage/app/benchmarks.
  */
-#[Signature('benchmark:dashboards {app_slug} {--user=} {--scenario=*} {--judge : score each built dashboard 1-5 with an LLM judge} {--keep : keep the created pages/objects (default rolls nothing back; pages accumulate)}')]
+#[Signature('benchmark:dashboards {app_slug} {--user=} {--scenario=*} {--prompt=* : run these custom prompts as scenarios instead of the derived suite} {--judge : score each built dashboard 1-5 with an LLM judge} {--keep : keep the created pages/objects (default rolls nothing back; pages accumulate)}')]
 #[Description('Run the Express dashboard benchmark suite against an app with a live MCP source.')]
 class BenchmarkDashboards extends Command
 {
-    /** @var array<string, string> scenario key → prompt */
-    private const SCENARIOS = [
-        'tickets' => 'Crea un dashboard de análisis agregado de tickets: KPIs de volumen, backlog y tiempos de resolución (mediana y P95), gráficas variadas por estado/prioridad/categoría, insights reales y filtro de fecha.',
-        'semanal' => 'Quiero un tablero ejecutivo con la serie semanal de tickets y su tendencia, desglose por categoría y los principales motivos a deflectar.',
-        'sla' => 'Dashboard de calidad de servicio: incumplimientos de SLA, tiempos de respuesta por prioridad y dónde se concentra el riesgo.',
-        'sin_csat' => 'Dashboard de satisfacción del cliente: CSAT promedio, CSAT por categoría y su evolución semanal.',
-        'incontestable' => 'Crea un dashboard financiero con revenue mensual, margen por producto y proyección de flujo de caja.',
+    /**
+     * Candidate off-domain topics for the deliberate-halt scenario: the first
+     * whose keywords never appear in the source's tool names is guaranteed
+     * unanswerable BY that source.
+     *
+     * @var array<string, list<string>>
+     */
+    private const OFF_DOMAIN_CANDIDATES = [
+        'finanzas corporativas con revenue mensual, margen por producto y proyección de flujo de caja' => ['finan', 'revenue', 'margen', 'cash', 'flujo'],
+        'nómina y vacaciones de empleados con headcount por equipo' => ['nomina', 'payroll', 'vacacion', 'headcount', 'empleado'],
+        'campañas de marketing con CTR, CPC y conversión por canal pagado' => ['marketing', 'campaign', 'ctr', 'cpc', 'ads'],
+        'clima organizacional y rotación de personal' => ['clima', 'rotacion', 'attrition', 'enps'],
     ];
 
     public function handle(ExpressPipeline $pipeline, QualityAudit $audit, GateRunner $gates): int
@@ -57,10 +65,21 @@ class BenchmarkDashboards extends Command
             return self::FAILURE;
         }
 
+        $scenarios = $this->buildScenarios($user);
+        if ($scenarios === []) {
+            $this->error('No authorized MCP integration with tools — nothing to benchmark against.');
+
+            return self::FAILURE;
+        }
         $only = (array) $this->option('scenario');
-        $scenarios = $only === []
-            ? self::SCENARIOS
-            : array_intersect_key(self::SCENARIOS, array_flip($only));
+        if ($only !== []) {
+            $scenarios = array_intersect_key($scenarios, array_flip($only));
+        }
+
+        $this->components->info('Escenarios (derivados de la fuente):');
+        foreach ($scenarios as $key => $prompt) {
+            $this->components->twoColumnDetail($key, Str::limit($prompt, 90));
+        }
 
         // CLI has no BindTenantContext middleware — set the RLS scope for the
         // app's owner explicitly or every tenant-table write fails closed.
@@ -153,6 +172,76 @@ class BenchmarkDashboards extends Command
         $this->components->info("Reporte: storage/app/{$path}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The scenario suite, derived from what the source ACTUALLY covers so the
+     * benchmark makes sense on any domain (tickets, NPS, OTD, inventory…) —
+     * the original hardcoded ticket prompts read absurd against other apps.
+     * --prompt overrides everything with custom scenarios; the deliberate
+     * halt keeps its 'incontestable' key so the summary check still works.
+     *
+     * @return array<string, string>
+     */
+    private function buildScenarios(User $user): array
+    {
+        $custom = array_values(array_filter((array) $this->option('prompt'), fn ($p) => is_string($p) && trim($p) !== ''));
+        if ($custom !== []) {
+            $scenarios = [];
+            foreach ($custom as $i => $prompt) {
+                $scenarios['custom_'.($i + 1)] = trim($prompt);
+            }
+
+            return $scenarios;
+        }
+
+        $integration = Integration::query()
+            ->forAccountContext($user)
+            ->where('is_mcp', true)
+            ->where('status', '!=', 'draft')
+            ->orderBy('name')
+            ->first();
+        if ($integration === null) {
+            return [];
+        }
+
+        try {
+            $tools = app(IntegrationCatalog::class)->tools($integration, $user);
+        } catch (\Throwable) {
+            return [];
+        }
+        if ($tools === []) {
+            return [];
+        }
+
+        // Domain words: the significant tokens of the tool names, most
+        // frequent first ("tickets", "nps", "otd", "sellers"...).
+        $generic = ['tool', 'get', 'list', 'search', 'global', 'with', 'status', 'report', 'metrics', 'time', 'series', 'daily', 'weekly', 'overview', 'compare', 'dimension', 'by'];
+        $words = collect($tools)
+            ->flatMap(fn (array $t) => preg_split('/[-_]/', (string) $t['name']))
+            ->map(fn ($w) => Str::lower((string) $w))
+            ->filter(fn (string $w) => mb_strlen($w) >= 3 && ! in_array($w, $generic, true))
+            ->countBy()->sortDesc()->keys();
+        $primary = (string) ($words->first() ?? 'operación');
+        $secondary = (string) ($words->skip(1)->first() ?? $primary);
+
+        // Deliberate halt: the first off-domain topic with ZERO keyword
+        // overlap against the tool names.
+        $haystack = Str::lower(collect($tools)->pluck('name')->implode(' '));
+        $offDomain = 'finanzas corporativas con revenue mensual y proyección de flujo de caja';
+        foreach (self::OFF_DOMAIN_CANDIDATES as $topic => $keywords) {
+            if (collect($keywords)->every(fn (string $k) => ! str_contains($haystack, $k))) {
+                $offDomain = $topic;
+                break;
+            }
+        }
+
+        return [
+            'general' => "Crea un dashboard ejecutivo de análisis de {$primary}: métricas clave, tendencias, desgloses relevantes, insights con conclusiones reales y filtro de fecha.",
+            'tendencia' => "Quiero un tablero con la evolución semanal de {$primary} y sus principales desgloses por dimensión.",
+            'diagnostico' => "Dashboard de diagnóstico de {$secondary}: dónde se concentran los problemas u oportunidades y qué acciones tomar.",
+            'incontestable' => "Crea un dashboard de {$offDomain}.",
+        ];
     }
 
     /**
