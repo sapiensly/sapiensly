@@ -38,6 +38,8 @@ class AiUsageRecorder
         string $status = 'success',
         bool $estimated = false,
         ?float $cost = null,
+        ?string $appId = null,
+        ?string $conversationId = null,
     ): void {
         try {
             $usage ??= new Usage;
@@ -47,6 +49,10 @@ class AiUsageRecorder
                 'organization_id' => $organizationId ?? $user?->organization_id,
                 'user_id' => $user?->id,
                 'module' => $module,
+                // Which build this call served — null for calls with no app
+                // subject (chat, embeddings, standalone agents).
+                'app_id' => $appId,
+                'conversation_id' => $conversationId,
                 'driver' => $this->sources->driver($model),
                 'model' => $model,
                 'input_tokens' => $usage->promptTokens,

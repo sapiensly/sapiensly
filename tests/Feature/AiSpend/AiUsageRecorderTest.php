@@ -122,3 +122,29 @@ it('never throws when recording fails', function () {
 
     expect(AiUsageEvent::query()->count())->toBe(1);
 });
+
+it('tags the app + conversation on a builder call, in both ledgers', function () {
+    $user = User::factory()->create();
+
+    app(AiUsageRecorder::class)->record(
+        'builder', 'claude-test', $user, null, new Usage(promptTokens: 1000),
+        appId: 'app_01buildtarget00', conversationId: 'cnv_01buildturn0001',
+    );
+
+    $event = AiUsageEvent::query()->firstOrFail();
+    expect($event->app_id)->toBe('app_01buildtarget00')
+        ->and($event->conversation_id)->toBe('cnv_01buildturn0001');
+
+    // The platform ledger (system-paid) carries the same subject.
+    $ledger = SystemAiUsageEvent::query()->firstOrFail();
+    expect($ledger->app_id)->toBe('app_01buildtarget00')
+        ->and($ledger->conversation_id)->toBe('cnv_01buildturn0001');
+});
+
+it('leaves the subject null for a call with no app (chat)', function () {
+    app(AiUsageRecorder::class)->record('chat', 'claude-test', User::factory()->create(), null, new Usage(promptTokens: 10));
+
+    $event = AiUsageEvent::query()->firstOrFail();
+    expect($event->app_id)->toBeNull()
+        ->and($event->conversation_id)->toBeNull();
+});

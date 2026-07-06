@@ -82,7 +82,10 @@ class GateRunner
                         ];
                     }
                     try {
-                        $this->usage->record('express', $model, $user, $user->organization_id, $response->usage ?? null);
+                        $this->usage->record(
+                            'express', $model, $user, $user->organization_id, $response->usage ?? null,
+                            appId: $run->app_id, conversationId: $run->conversation_id,
+                        );
                     } catch (\Throwable) {
                         // Usage accounting is best-effort.
                     }

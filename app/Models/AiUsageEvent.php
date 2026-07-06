@@ -18,6 +18,8 @@ class AiUsageEvent extends Model
         'organization_id',
         'user_id',
         'module',
+        'app_id',
+        'conversation_id',
         'driver',
         'model',
         'source',

@@ -696,6 +696,7 @@ class BuilderAiService
 
             app(AiUsageRecorder::class)->record(
                 'builder', $resolvedModel, $conversation->user, $app->organization_id, $stream->usage ?? null,
+                appId: $app->id, conversationId: $conversation->id,
             );
 
             // apply=false (MCP "leave pending for review"): keep the accumulated
@@ -1368,6 +1369,7 @@ class BuilderAiService
 
             app(AiUsageRecorder::class)->record(
                 'builder', $model, $conversation->user, $conversation->organization_id, $stream->usage ?? null,
+                appId: $conversation->app_id, conversationId: $conversation->id,
             );
 
             if (trim($correction) === '') {
