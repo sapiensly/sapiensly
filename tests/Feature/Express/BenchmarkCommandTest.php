@@ -90,5 +90,8 @@ it('runs a benchmark scenario end-to-end and writes the report', function () {
     expect($files)->toHaveCount(1);
     $report = json_decode(Storage::disk('local')->get($files[0]), true);
     expect($report['tickets']['status'])->toBe('succeeded')
-        ->and($report['tickets']['page']['path'])->not->toBeEmpty();
+        ->and($report['tickets']['page']['path'])->not->toBeEmpty()
+        // Q5: the deterministic quality audit ships with every scenario.
+        ->and($report['tickets']['quality'])->toHaveKeys(['sanity_issues', 'blocks_audited', 'judge_score'])
+        ->and($report['tickets']['quality']['judge_score'])->toBeNull(); // --judge off
 });
