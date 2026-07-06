@@ -305,18 +305,73 @@ const REGISTRY: Record<string, Component> = {
 /** The canonical icon names, for catalogs/tests. */
 export const ICON_NAMES: string[] = Object.keys(REGISTRY);
 
+function normalizeIconName(name: string): string {
+    return name
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_]+/g, '-');
+}
+
 /**
- * Resolve an `icon` string to a Lucide component, or null if it's not a known
- * name (the caller then renders the string as text, so emojis still work).
+ * Resolve an `icon` string to a Lucide component EAGERLY (no async), or null.
+ * Only checks the curated REGISTRY above — for anything else, see
+ * `resolveIconLazy`. Kept for callers that render icons synchronously.
  */
 export function resolveIcon(name: string | null | undefined): Component | null {
     if (!name) {
         return null;
     }
-    const key = name
-        .trim()
-        .toLowerCase()
-        .replace(/[\s_]+/g, '-');
 
-    return REGISTRY[key] ?? null;
+    return REGISTRY[normalizeIconName(name)] ?? null;
+}
+
+/**
+ * Every real Lucide icon module, keyed by its full path — built with
+ * `import.meta.glob` (a Vite build-time feature, NOT a runtime dynamic
+ * import) so the ~1,700-file directory is genuinely enumerated at build
+ * time; a plain `import(`…/${name}.mjs`)` with a variable does NOT expand a
+ * glob reaching into node_modules (verified: it only bundled the icons
+ * already reachable through the eager REGISTRY below, silently 404-ing on
+ * every other real icon). Each entry lazy-loads as its own tiny chunk.
+ */
+const LUCIDE_MODULES = import.meta.glob(
+    '/node_modules/@lucide/vue/dist/esm/icons/*.mjs',
+) as Record<string, () => Promise<{ default?: Component }>>;
+
+/**
+ * Resolve ANY real Lucide icon by name, not just the curated REGISTRY —
+ * so a model's plausible guess ("chart-column", "circle-alert") renders
+ * instead of silently falling back to plain text just because it's outside
+ * our hand-picked set. The curated REGISTRY still resolves instantly (no
+ * network/chunk fetch); only names outside it pay for a lazy import, and an
+ * invalid name resolves to null (caught), same as today's "unknown →
+ * nothing" for icon-shaped strings.
+ */
+export async function resolveIconLazy(
+    name: string | null | undefined,
+): Promise<Component | null> {
+    if (!name) {
+        return null;
+    }
+    const key = normalizeIconName(name);
+    const eager = REGISTRY[key];
+    if (eager) {
+        return eager;
+    }
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(key)) {
+        return null; // not icon-shaped (e.g. an emoji) — never worth a fetch attempt
+    }
+
+    const loader =
+        LUCIDE_MODULES[`/node_modules/@lucide/vue/dist/esm/icons/${key}.mjs`];
+    if (!loader) {
+        return null; // not a real Lucide icon name
+    }
+    try {
+        const mod = await loader();
+
+        return mod.default ?? null;
+    } catch {
+        return null;
+    }
 }

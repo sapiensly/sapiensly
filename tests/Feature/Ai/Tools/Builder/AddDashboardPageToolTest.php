@@ -645,10 +645,11 @@ it('only ships icons the runtime can draw: catalog names normalized, emojis kept
     // KPI value — plausible Lucide names outside the registry.
     $spec = adp_spec();
     $spec['kpis'] = [
-        ['label' => 'A', 'aggregation' => 'count', 'icon' => 'thumbs-down'],       // now in catalog
+        ['label' => 'A', 'aggregation' => 'count', 'icon' => 'thumbs-down'],       // curated
         ['label' => 'B', 'aggregation' => 'count', 'icon' => 'Alert Triangle'],    // normalizes to alert-triangle
-        ['label' => 'C', 'aggregation' => 'count', 'icon' => 'circle-gauge-pro'],  // unknown slug → dropped
+        ['label' => 'C', 'aggregation' => 'count', 'icon' => 'circle-gauge-pro'],  // not a real Lucide icon → dropped
         ['label' => 'D', 'aggregation' => 'count', 'icon' => '🎯'],                // emoji → kept
+        ['label' => 'E', 'aggregation' => 'count', 'icon' => 'chart-column'],      // real Lucide icon, NOT curated → kept (lazy tier)
     ];
 
     $manifest = $this->manifestService->getActiveManifest($this->testApp->fresh());
@@ -663,7 +664,8 @@ it('only ships icons the runtime can draw: catalog names normalized, emojis kept
     expect($icon('A'))->toBe('thumbs-down')
         ->and($icon('B'))->toBe('alert-triangle')
         ->and($icon('C'))->toBeNull()
-        ->and($icon('D'))->toBe('🎯');
+        ->and($icon('D'))->toBe('🎯')
+        ->and($icon('E'))->toBe('chart-column');
 });
 
 it('re-forms a lone short chart so its own lints never kill the compile', function () {

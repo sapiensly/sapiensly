@@ -1509,9 +1509,11 @@ class AppScaffolder
     }
 
     /**
-     * An icon the runtime can actually draw: a catalog name (normalized), an
-     * emoji, or nothing. A slug-like name outside the registry would render
-     * as raw text beside the KPI ("thumbs-down" shipped once) — dropped.
+     * An icon the runtime can actually draw: a real Lucide name (normalized —
+     * curated or not, ALL_NAMES covers both), an emoji, or nothing. A
+     * slug-like name outside even the FULL Lucide set would render as raw
+     * text beside the KPI ("thumbs-down" shipped once before it was added) —
+     * dropped.
      */
     private function renderableIcon(mixed $icon): ?string
     {
@@ -1520,7 +1522,7 @@ class AppScaffolder
         }
         $icon = trim($icon);
         $normalized = strtolower((string) preg_replace('/[\s_]+/', '-', $icon));
-        if (in_array($normalized, IconCatalog::NAMES, true)) {
+        if (in_array($normalized, IconCatalog::ALL_NAMES, true)) {
             return $normalized;
         }
 

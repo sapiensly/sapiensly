@@ -9,8 +9,10 @@ use Laravel\Ai\Tools\Request;
 
 /**
  * The named icons the runtime can render anywhere a block accepts an `icon`.
- * Hard-coded to the renderer's registry so the model only emits names that
- * actually draw (an unknown name would fall back to plain text).
+ * Returns a curated shortlist (instant, no async fetch) — but the runtime
+ * actually renders ANY real Lucide icon (~1,700, lazy-loaded on demand), so a
+ * model isn't limited to this list: a plausible lucide.dev kebab-case name
+ * works too (an unknown one falls back to plain text).
  */
 class ListAvailableIconsTool implements Tool
 {
@@ -21,7 +23,7 @@ class ListAvailableIconsTool implements Tool
 
     public function description(): string
     {
-        return 'List the named icons you can use for any block `icon` field (button, feature_grid item, stat, metric_grid item, insight, flow step, table action column, page/nav icon). Use these kebab-case names for crisp, consistent UI icons — they render as Lucide icons and inherit the surface colour. An emoji also works as an `icon`, but prefer a named icon for UI chrome. Unknown names fall back to plain text, so pick from this list.';
+        return 'List commonly-used named icons for any block `icon` field (button, feature_grid item, stat, metric_grid item, insight, flow step, table action column, page/nav icon). Use these kebab-case names for crisp, consistent UI icons — they render as Lucide icons and inherit the surface colour. Beyond this shortlist, ANY real Lucide icon name also works (see lucide.dev/icons) — a sensible guess renders fine; an unknown name falls back to plain text. An emoji also works as an `icon`, but prefer a named icon for UI chrome.';
     }
 
     public function schema(JsonSchema $schema): array
@@ -34,7 +36,7 @@ class ListAvailableIconsTool implements Tool
         return json_encode([
             'icons' => IconCatalog::NAMES,
             'count' => count(IconCatalog::NAMES),
-            'note' => 'Use a name verbatim (e.g. "shopping-cart") in any block `icon`. Emojis are also accepted. Named icons inherit the current text/accent colour and size to the block context.',
+            'note' => 'This is a curated shortlist, not the full set — any real Lucide icon name (kebab-case, e.g. "chart-column", "circle-alert") also renders; see lucide.dev/icons. Emojis are also accepted. Named icons inherit the current text/accent colour and size to the block context.',
         ], JSON_THROW_ON_ERROR);
     }
 }

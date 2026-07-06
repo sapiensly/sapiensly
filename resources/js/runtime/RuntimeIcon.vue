@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { resolveIcon } from './icons';
+import type { Component } from 'vue';
+import { computed, ref, watchEffect } from 'vue';
+import { resolveIcon, resolveIconLazy } from './icons';
 
 /**
  * Renders an app `icon` string: a known Lucide name → the icon component (sized
  * via `size`, inheriting currentColor); any other non-empty string → raw text at
  * the same visual size (so an emoji still renders). Empty → nothing. One
  * component everywhere a block shows an icon, so named icons work widely.
+ *
+ * Two tiers: the curated REGISTRY resolves instantly (no flash — used for
+ * common icons everywhere). Anything else is looked up against the FULL
+ * Lucide set on demand; while that lookup is in flight the icon is simply
+ * absent (never the raw name), then pops in once resolved. Not attempted on
+ * the server (SSR renders the eager tier only; the client fills in the rest
+ * on hydration) — acceptable since icons are decorative, not content.
  */
 const props = withDefaults(
     defineProps<{
@@ -19,11 +27,28 @@ const props = withDefaults(
     { size: 20 },
 );
 
-const component = computed(() => resolveIcon(props.name));
+const eager = computed(() => resolveIcon(props.name));
+const lazy = ref<Component | null>(null);
+
+watchEffect(() => {
+    lazy.value = null;
+    const name = props.name;
+    if (eager.value || !name || typeof window === 'undefined') {
+        return;
+    }
+    resolveIconLazy(name).then((resolved) => {
+        if (props.name === name) {
+            // still the same icon by the time the lazy chunk arrived
+            lazy.value = resolved;
+        }
+    });
+});
+
+const component = computed(() => eager.value ?? lazy.value);
 
 // The raw-text fallback exists for EMOJIS. A kebab-case ascii word is an icon
-// NAME that failed to resolve — printing it ("thumbs-down" beside a KPI) is
-// worse than showing nothing.
+// NAME — either still resolving (lazy tier) or truly unknown — printing it
+// ("thumbs-down" beside a KPI) is worse than showing nothing either way.
 const fallbackText = computed(() => {
     const n = props.name?.trim();
     if (!n || component.value) {
