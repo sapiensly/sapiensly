@@ -37,13 +37,16 @@ class ExpressGateAgent implements Agent, HasStructuredOutput
     }
 
     /**
-     * Hard output cap. Gates answer structured questions measured in tens of
-     * tokens; benchmark telemetry caught a slow model rambling 1.8k tokens
-     * (72s) into an insights reply. The SDK prefers this method over a
+     * Output cap. Bounds a runaway reply without strangling reasoning models:
+     * on DeepSeek the REASONING tokens count against max_tokens, and a 900
+     * cap was observed truncating the fit-check at exactly 900 (reasoning ate
+     * the budget, no room left for the JSON) — degrading gates to fallbacks.
+     * Observed reasoning burn peaks ~3k; 4000 leaves headroom while still
+     * capping a pathological loop. The SDK prefers this method over a
      * MaxTokens attribute.
      */
     public function maxTokens(): int
     {
-        return 900;
+        return 4000;
     }
 }
