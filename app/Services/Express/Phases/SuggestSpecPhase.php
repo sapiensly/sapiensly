@@ -45,6 +45,13 @@ class SuggestSpecPhase implements ExpressPhase
 
         $context->spec = $this->suggester->suggest($primary, $lang, $context->rowsByObject[$primary['id']] ?? []) + ['object_slug' => $primary['slug']];
         $context->facts = $this->facts->build($primary, $context->rowsByObject[$primary['id']] ?? []);
+
+        // Joined story: when several objects carry a time axis, the insights
+        // can point at the same week from different angles.
+        $cross = $this->facts->crossFacts($context->objects, $context->rowsByObject);
+        if ($cross !== []) {
+            $context->facts['cross'] = $cross;
+        }
     }
 
     /**

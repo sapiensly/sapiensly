@@ -60,3 +60,39 @@ it('skips empty columns and high-cardinality strings', function () {
     expect($facts)->not->toHaveKey('top_values')
         ->and($facts['row_count'])->toBe(30);
 });
+
+it('joins weekly peaks across objects into cross facts', function () {
+    $mkObject = fn (string $id, string $name, string $numSlug) => [
+        'id' => $id, 'slug' => $name, 'name' => $name,
+        'fields' => [
+            ['id' => $id.'_d', 'slug' => 'semana', 'name' => 'Semana', 'type' => 'date'],
+            ['id' => $id.'_n', 'slug' => $numSlug, 'name' => $numSlug, 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => $id.'_d', 'external_path' => 'semana'],
+            ['field_id' => $id.'_n', 'external_path' => $numSlug],
+        ]],
+    ];
+    $peakWeek = now()->utc()->startOfWeek()->subWeeks(2);
+    $rows = fn (int $peakValue) => [
+        ['semana' => $peakWeek->toDateString(), 'v' => $peakValue],
+        ['semana' => $peakWeek->copy()->addWeek()->toDateString(), 'v' => 3],
+        ['semana' => $peakWeek->copy()->addWeeks(2)->toDateString(), 'v' => 2],
+    ];
+
+    $a = $mkObject('obj_a', 'Tickets', 'v');
+    $b = $mkObject('obj_b', 'NPS Detractores', 'v');
+
+    $facts = (new ComputedFactsBuilder)->crossFacts(
+        [$a, $b],
+        ['obj_a' => $rows(90), 'obj_b' => $rows(70)],
+    );
+
+    expect($facts)->toHaveCount(3)   // one peak per object + the coincidence
+        ->and(implode(' ', $facts))->toContain('COINCIDEN');
+});
+
+it('returns no cross facts with a single time series', function () {
+    $facts = (new ComputedFactsBuilder)->crossFacts([], []);
+    expect($facts)->toBe([]);
+});

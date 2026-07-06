@@ -52,6 +52,7 @@ function adp_manifest(string $appId): array
             ],
         ]],
         'pages' => [],
+        'settings' => ['default_locale' => 'es-MX'],
         'permissions' => [
             'roles' => [['id' => adp_id('rol'), 'slug' => 'admin', 'name' => 'Admin']],
         ],
@@ -388,4 +389,25 @@ it('adapts charts to real cardinality and skips degenerate columns', function ()
         ->and($breakdown['aggregation'])->toBe('sum');  // slices sized by the additive
     // The constant column never becomes a chart.
     expect(collect($spec['charts'])->pluck('group_by_field_id'))->not->toContain('fld_const00');
+});
+
+it('chapters the board with narrative headings when trend and breakdown coexist', function () {
+    [$tool, $propose] = adp_tool($this);
+
+    $result = json_decode($tool->handle(new ToolRequest([
+        'object_slug' => 'tickets',
+        'use_suggestion' => true,
+    ])), true);
+    expect($result['ok'])->toBeTrue();
+
+    $page = collect($propose->currentManifest()['pages'])->firstWhere('slug', $result['page']['slug']);
+    $headings = collect($page['blocks'])->where('type', 'heading')->pluck('content')->values();
+
+    expect($headings)->toContain('Tendencia')
+        ->and($headings)->toContain('Desglose')
+        ->and($headings)->toContain('Lecturas clave');
+
+    // Story order: the heading sequence reads trend → breakdown → readings.
+    expect($headings->search('Tendencia'))->toBeLessThan($headings->search('Desglose'))
+        ->and($headings->search('Desglose'))->toBeLessThan($headings->search('Lecturas clave'));
 });

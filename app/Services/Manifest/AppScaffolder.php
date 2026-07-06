@@ -1296,7 +1296,39 @@ class AppScaffolder
         ];
         $planRows[] = ['blocks' => [['type' => 'metric_grid']]];
 
+        // Narrative sections: short headings that make the board read as a
+        // story (trend → breakdown → readings) instead of a pile of charts.
+        // Emitted only when both a temporal and a categorical group exist, so
+        // a small board isn't over-chaptered. Overridable via spec.sections.
+        $sections = is_array($spec['sections'] ?? null) ? $spec['sections'] : [];
+        $sectionLabels = [
+            'trend' => (string) ($sections['trend'] ?? ($lang === 'es' ? 'Tendencia' : 'Trend')),
+            'breakdown' => (string) ($sections['breakdown'] ?? ($lang === 'es' ? 'Desglose' : 'Breakdown')),
+            'insights' => (string) ($sections['insights'] ?? ($lang === 'es' ? 'Lecturas clave' : 'Key readings')),
+        ];
+        $rowIsTemporal = fn (array $row): bool => collect($row)->contains(
+            fn (array $b): bool => isset($b['x_field_id']) || isset($b['bucket']),
+        );
+        $temporalRows = collect($chartRows)->filter($rowIsTemporal)->count();
+        $useSections = $temporalRows > 0 && $temporalRows < count($chartRows);
+        if ($useSections) {
+            // Story order: every trend row precedes every breakdown row, so
+            // each chapter heading is emitted exactly once.
+            $chartRows = array_merge(
+                array_values(array_filter($chartRows, $rowIsTemporal)),
+                array_values(array_filter($chartRows, fn (array $r): bool => ! $rowIsTemporal($r))),
+            );
+        }
+        $emittedSection = null;
+
         foreach ($chartRows as $row) {
+            if ($useSections) {
+                $section = $rowIsTemporal($row) ? 'trend' : 'breakdown';
+                if ($section !== $emittedSection) {
+                    $blocks[] = ['id' => $this->id('blk'), 'type' => 'heading', 'level' => 3, 'content' => $sectionLabels[$section]];
+                    $emittedSection = $section;
+                }
+            }
             $blocks[] = [
                 'id' => $this->id('cn'),
                 'type' => 'container',
@@ -1304,14 +1336,19 @@ class AppScaffolder
                 'gap' => 'md',
                 'blocks' => array_values($row),
             ];
-            $planRows[] = ['blocks' => array_map(fn (array $b): array => array_filter([
+            $planRows[] = ['section' => $useSections ? $sectionLabels[$rowIsTemporal($row) ? 'trend' : 'breakdown'] : null] + ['blocks' => array_map(fn (array $b): array => array_filter([
                 'type' => 'chart',
                 'chart_type' => $b['chart_type'],
                 'col_span' => $b['style']['col_span'] ?? null,
             ], fn ($v) => $v !== null), $row)];
         }
 
+        $emittedInsightsHeading = false;
         foreach (array_chunk($insights, 3) as $chunk) {
+            if ($useSections && ! $emittedInsightsHeading && $insights !== []) {
+                $blocks[] = ['id' => $this->id('blk'), 'type' => 'heading', 'level' => 3, 'content' => $sectionLabels['insights']];
+                $emittedInsightsHeading = true;
+            }
             $insightBlocks = array_map(fn (array $ins): array => array_filter([
                 'id' => $this->id('in'),
                 'type' => 'insight',

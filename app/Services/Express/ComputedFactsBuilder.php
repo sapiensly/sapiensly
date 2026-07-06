@@ -110,4 +110,87 @@ class ComputedFactsBuilder
 
         return $facts;
     }
+
+    /**
+     * Cross-object facts: when the build acquired SEVERAL objects with a time
+     * axis, align their weekly peaks so the insights can tell a JOINED story
+     * ("la semana pico de tickets coincide con el NPS más bajo") instead of
+     * narrating each object in isolation.
+     *
+     * @param  list<array<string, mixed>>  $objects
+     * @param  array<string, list<array<string, mixed>>>  $rowsByObject
+     * @return list<string>
+     */
+    public function crossFacts(array $objects, array $rowsByObject): array
+    {
+        $series = [];
+        foreach ($objects as $object) {
+            $rows = $rowsByObject[$object['id'] ?? ''] ?? [];
+            if ($rows === []) {
+                continue;
+            }
+            $peak = $this->weeklyPeak($object, $rows);
+            if ($peak !== null) {
+                $series[] = ['object' => (string) ($object['name'] ?? $object['slug'] ?? ''), ...$peak];
+            }
+        }
+        if (count($series) < 2) {
+            return [];
+        }
+
+        $facts = [];
+        foreach ($series as $entry) {
+            $facts[] = "Semana pico de {$entry['metric']} en {$entry['object']}: {$entry['week']} ({$entry['value']}).";
+        }
+        $weeks = collect($series)->pluck('week')->unique();
+        if ($weeks->count() === 1) {
+            $facts[] = 'Los picos de todas las métricas COINCIDEN en la semana '.$weeks->first().' — un mismo evento parece explicarlos.';
+        }
+
+        return $facts;
+    }
+
+    /**
+     * The ISO week (and value) where the object's primary numeric peaks.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{metric: string, week: string, value: float|int}|null
+     */
+    private function weeklyPeak(array $object, array $rows): ?array
+    {
+        $fields = collect($object['fields'] ?? []);
+        $dateField = $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true));
+        $numField = $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true));
+        if ($dateField === null || $numField === null) {
+            return null;
+        }
+
+        $pathByFieldId = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $datePath = $pathByFieldId[$dateField['id']] ?? $dateField['slug'];
+        $numPath = $pathByFieldId[$numField['id']] ?? $numField['slug'];
+
+        $byWeek = [];
+        foreach ($rows as $row) {
+            $ts = InMemoryRowFilter::timestamp(data_get($row, $datePath));
+            $value = data_get($row, $numPath);
+            if ($ts === null || ! is_numeric($value)) {
+                continue;
+            }
+            $week = date('o-\WW', $ts);
+            $byWeek[$week] = ($byWeek[$week] ?? 0) + (float) $value;
+        }
+        if (count($byWeek) < 2) {
+            return null;
+        }
+
+        arsort($byWeek);
+        $week = (string) array_key_first($byWeek);
+
+        return [
+            'metric' => (string) ($numField['name'] ?? $numField['slug']),
+            'week' => $week,
+            'value' => round($byWeek[$week], 2),
+        ];
+    }
 }
