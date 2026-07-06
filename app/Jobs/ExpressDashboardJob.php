@@ -111,6 +111,14 @@ class ExpressDashboardJob implements ShouldQueue
             // UI catches up from the DB.
         }
 
+        // Persist the rendered-number summary so the adversarial verifier
+        // judges NUMBERS, not just labels.
+        if ($context->renderedSummary !== []) {
+            $result = $run->result ?? [];
+            $result['rendered'] = array_slice($context->renderedSummary, 0, 40);
+            $run->forceFill(['result' => $result])->save();
+        }
+
         // G-3: adversarial verification runs AFTER v1 is on screen — it only
         // raises the ceiling, so its latency (and its model) never gate the
         // user's first look.

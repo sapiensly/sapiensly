@@ -65,15 +65,20 @@ class VerifyExpressDashboardJob implements ShouldQueue
             $run,
             'verify',
             <<<'TXT'
-Eres un revisor adversarial de dashboards. Recibes el PEDIDO original y el
-RESUMEN de la página construida. Busca: gráficas redundantes, labels confusos
-o genéricos, un chart_type que no le queda a su dato. Devuelve fixes SOLO del
+Eres un revisor adversarial de dashboards. Recibes el PEDIDO original, el
+RESUMEN de la página construida y los NÚMEROS reales que renderizó. Busca:
+gráficas redundantes, labels confusos o genéricos, un chart_type que no le
+queda a su dato, y números que no cuadran con su label. Devuelve fixes SOLO del
 menú: remove_block (bloque redundante), rename_block (label mejor),
 change_chart_type (uno de: bar,hbar,line,area,pie,donut,radar,scatter,
 treemap,sankey,box). Máximo 5 fixes; lista vacía si la página está bien.
 Nunca inventes block_ids.
 TXT,
-            json_encode(['pedido' => $run->prompt, 'pagina' => $summary], JSON_UNESCAPED_UNICODE),
+            json_encode([
+                'pedido' => $run->prompt,
+                'pagina' => $summary,
+                'numeros_renderizados' => array_slice($run->result['rendered'] ?? [], 0, 40),
+            ], JSON_UNESCAPED_UNICODE),
             fn ($schema) => [
                 'fixes' => $schema->array()->description('[{action: remove_block|rename_block|change_chart_type, block_id, value?}]'),
             ],

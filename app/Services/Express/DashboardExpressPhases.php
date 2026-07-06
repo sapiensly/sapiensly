@@ -9,6 +9,7 @@ use App\Services\Express\Phases\FitCheckPhase;
 use App\Services\Express\Phases\ResolveSourcePhase;
 use App\Services\Express\Phases\SemanticGatesPhase;
 use App\Services\Express\Phases\SuggestSpecPhase;
+use App\Services\Express\Phases\VerifyRenderPhase;
 
 /**
  * The canonical dashboard pipeline: source → fit → objects → spec → semantics
@@ -29,6 +30,7 @@ class DashboardExpressPhases
             app(SuggestSpecPhase::class),
             app(SemanticGatesPhase::class),
             app(CompilePhase::class),
+            app(VerifyRenderPhase::class),
         ];
     }
 }

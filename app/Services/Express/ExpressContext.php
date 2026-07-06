@@ -52,6 +52,9 @@ class ExpressContext
     /** @var array<string, mixed>|null the compiled page {slug, path, name} */
     public ?array $page = null;
 
+    /** @var list<array<string, mixed>> rendered-number summary from the render audit */
+    public array $renderedSummary = [];
+
     /** @var list<string> plain-language notes for the final report */
     public array $notes = [];
 
