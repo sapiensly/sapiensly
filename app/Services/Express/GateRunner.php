@@ -88,6 +88,13 @@ class GateRunner
                     }
                 } catch (\Throwable $e) {
                     $error = $e->getMessage();
+                    // A TIMEOUT means the provider is hung — retrying burns
+                    // another full timeout window for the same outcome
+                    // (observed: 2×45s = 90s wasted on one gate). Fall straight
+                    // to the deterministic default instead.
+                    if (str_contains($error, 'timed out') || str_contains($error, 'cURL error 28')) {
+                        break;
+                    }
                 }
             }
         } catch (\Throwable $e) {

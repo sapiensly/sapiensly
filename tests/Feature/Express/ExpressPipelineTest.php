@@ -159,3 +159,29 @@ it('GateRunner degrades to the default when the model errors twice', function ()
         ->and($result['output']['title'])->toBe('Análisis de Tickets')
         ->and($run->fresh()->gates['voice']['fallback_used'])->toBeTrue();
 });
+
+it('GateRunner skips the retry when the first attempt timed out', function () {
+    $calls = 0;
+    ExpressGateAgent::fake([
+        function () use (&$calls) {
+            $calls++;
+            throw new RuntimeException('cURL error 28: Operation timed out after 45002 milliseconds');
+        },
+        function () use (&$calls) {
+            $calls++;
+            throw new RuntimeException('should never be reached');
+        },
+    ]);
+    $run = xp_run($this);
+
+    $result = app(GateRunner::class)->run(
+        $run, 'fit_check', 'x', 'y',
+        fn ($schema) => ['a' => $schema->string()],
+        ['a' => 'default'],
+        $this->user,
+    );
+
+    expect($result['fallback_used'])->toBeTrue()
+        ->and($result['output']['a'])->toBe('default')
+        ->and($calls)->toBe(1); // no second 45s window burned
+});
