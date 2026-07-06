@@ -326,26 +326,21 @@ export function resolveIcon(name: string | null | undefined): Component | null {
 }
 
 /**
- * Every real Lucide icon module, keyed by its full path — built with
- * `import.meta.glob` (a Vite build-time feature, NOT a runtime dynamic
- * import) so the ~1,700-file directory is genuinely enumerated at build
- * time; a plain `import(`…/${name}.mjs`)` with a variable does NOT expand a
- * glob reaching into node_modules (verified: it only bundled the icons
- * already reachable through the eager REGISTRY below, silently 404-ing on
- * every other real icon). Each entry lazy-loads as its own tiny chunk.
+ * The full Lucide set, loaded lazily as ONE chunk on first miss and cached for
+ * the rest of the session. See ./lucide-full for why this is a single import
+ * rather than a per-icon `import.meta.glob` (the glob exploded into ~1,700
+ * micro-chunks and, on an imperfect deploy, hundreds of 404s).
  */
-const LUCIDE_MODULES = import.meta.glob(
-    '/node_modules/@lucide/vue/dist/esm/icons/*.mjs',
-) as Record<string, () => Promise<{ default?: Component }>>;
+let fullSet: Promise<typeof import('./lucide-full')> | null = null;
 
 /**
  * Resolve ANY real Lucide icon by name, not just the curated REGISTRY —
  * so a model's plausible guess ("chart-column", "circle-alert") renders
  * instead of silently falling back to plain text just because it's outside
  * our hand-picked set. The curated REGISTRY still resolves instantly (no
- * network/chunk fetch); only names outside it pay for a lazy import, and an
- * invalid name resolves to null (caught), same as today's "unknown →
- * nothing" for icon-shaped strings.
+ * fetch); the first name outside it triggers a single lazy chunk load, and an
+ * invalid name resolves to null, same as today's "unknown → nothing" for
+ * icon-shaped strings.
  */
 export async function resolveIconLazy(
     name: string | null | undefined,
@@ -359,18 +354,14 @@ export async function resolveIconLazy(
         return eager;
     }
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(key)) {
-        return null; // not icon-shaped (e.g. an emoji) — never worth a fetch attempt
+        return null; // not icon-shaped (e.g. an emoji) — never worth a load
     }
 
-    const loader =
-        LUCIDE_MODULES[`/node_modules/@lucide/vue/dist/esm/icons/${key}.mjs`];
-    if (!loader) {
-        return null; // not a real Lucide icon name
-    }
     try {
-        const mod = await loader();
+        fullSet ??= import('./lucide-full');
+        const mod = await fullSet;
 
-        return mod.default ?? null;
+        return mod.lookupLucide(key);
     } catch {
         return null;
     }
