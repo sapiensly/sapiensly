@@ -563,6 +563,35 @@ it('suggestMulti gives every acquired object a voice: secondary trend, breakdown
     expect($spec['include_date_filter'])->toBeTrue();
 });
 
+it('charts the object\'s namesake metric, not its first additive (nps_time_series → nps_score)', function () {
+    // Prod nps4: the NPS series charted `responses` and grouped by
+    // period_label (the time axis in costume) — the requested score never
+    // rendered despite being the object's own name.
+    $series = [
+        'id' => 'obj_npstseries0', 'slug' => 'nps_time_series', 'name' => 'Nps Time Series',
+        'fields' => [
+            ['id' => 'fld_period0000', 'slug' => 'period_start', 'name' => 'Period Start', 'type' => 'date'],
+            ['id' => 'fld_plabel0000', 'slug' => 'period_label', 'name' => 'Period Label', 'type' => 'string'],
+            ['id' => 'fld_responses0', 'slug' => 'responses', 'name' => 'Responses', 'type' => 'number'],
+            ['id' => 'fld_npsscore00', 'slug' => 'nps_score', 'name' => 'Nps Score', 'type' => 'number'],
+        ],
+        'source' => ['type' => 'connected', 'operations' => ['list' => ['mcp_tool' => 't', 'collection_path' => 'series']]],
+    ];
+
+    $spec = (new DashboardSpecSuggester)->suggest($series, 'es');
+
+    $trend = collect($spec['charts'])->first(fn (array $c): bool => isset($c['x_field_id']));
+    expect($trend['y_field_id'])->toBe('fld_npsscore00')
+        ->and($trend['aggregation'])->toBe('avg');
+
+    // The bucket label is the time axis in costume — never a breakdown.
+    expect(collect($spec['charts'])->firstWhere('group_by_field_id', 'fld_plabel0000'))->toBeNull();
+
+    // The headline KPI is the namesake score's average, not a generic sum.
+    expect($spec['kpis'][0]['field_id'])->toBe('fld_npsscore00')
+        ->and($spec['kpis'][0]['aggregation'])->toBe('avg');
+});
+
 it('re-forms a lone short chart so its own lints never kill the compile', function () {
     // Prod: a spec whose only chart was a donut compiled into a single-short-
     // block row, failed the compiler's OWN lint and the whole build died. The

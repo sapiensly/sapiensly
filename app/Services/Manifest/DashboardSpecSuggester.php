@@ -116,6 +116,31 @@ class DashboardSpecSuggester
     }
 
     /**
+     * Numeric fields named like the object itself (nps_time_series →
+     * nps_score) — the measure the user almost certainly means when they
+     * name the object's topic.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $numerics
+     * @return list<array<string, mixed>>
+     */
+    private function topicalMeasures(array $object, array $numerics): array
+    {
+        $tokens = collect(preg_split('/[^a-z0-9]+/i', Str::lower(Str::ascii(($object['slug'] ?? '').' '.($object['name'] ?? '')))) ?: [])
+            ->filter(fn ($t) => mb_strlen((string) $t) >= 3 && ! in_array($t, ['time', 'series', 'weekly', 'daily', 'monthly', 'data', 'the', 'por', 'del'], true))
+            ->unique()->values();
+        if ($tokens->isEmpty()) {
+            return [];
+        }
+
+        return array_values(array_filter($numerics, function (array $f) use ($tokens): bool {
+            $slug = Str::lower((string) ($f['slug'] ?? ''));
+
+            return $tokens->contains(fn (string $t): bool => str_contains($slug, $t));
+        }));
+    }
+
+    /**
      * Every secondary's mini-spec leads with the same forms (line trend,
      * donut breakdown), so a naive merge repeats a chart_type past the
      * variety lint's cap of 2. Re-form the newcomer when its type is taken.
@@ -203,7 +228,7 @@ class DashboardSpecSuggester
             // empty (observed: an entire benchmark scenario scored 1/5).
             'include_date_filter' => $dateField !== null,
             'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es),
-            'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es),
+            'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object),
             'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es),
         ], fn ($v) => $v !== null && $v !== '');
     }
@@ -281,6 +306,21 @@ class DashboardSpecSuggester
                 'icon' => 'inbox',
             ];
         } else {
+            // The object's namesake ratio leads when there is one: an NPS
+            // series headlines with the average nps_score, not with the sum
+            // of a generic additive.
+            $namesake = collect($this->topicalMeasures($object, $numerics))->first(
+                fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_RATIO,
+            );
+            if ($namesake !== null) {
+                $kpis[] = [
+                    'label' => ($es ? 'Promedio ' : 'Average ').(string) ($namesake['name'] ?? $namesake['slug']),
+                    'aggregation' => 'avg',
+                    'field_id' => $namesake['id'],
+                    'icon' => 'star',
+                ];
+            }
+
             // Pre-aggregated grain: the headline total is the SUM of the
             // primary additive column (total_tickets across weeks IS the
             // ticket total — count(rows) would count WEEKS).
@@ -388,7 +428,7 @@ class DashboardSpecSuggester
      * @param  array<string, array{values: list<mixed>, distinct: int, null_rate: float, all_equal: bool}>  $stats
      * @return list<array<string, mixed>>
      */
-    private function suggestCharts(string $grain, ?array $dateField, array $categoricals, array $numerics, array $measureTypes, array $stats, bool $es): array
+    private function suggestCharts(string $grain, ?array $dateField, array $categoricals, array $numerics, array $measureTypes, array $stats, bool $es, array $object = []): array
     {
         $charts = [];
         $additives = array_values(array_filter(
@@ -429,16 +469,28 @@ class DashboardSpecSuggester
             if ($grain === SemanticProfile::GRAIN_RAW) {
                 $trend['aggregation'] = 'count';
                 $trend['label'] = $es ? 'Volumen en el tiempo' : 'Volume over time';
-            } elseif ($additives !== []) {
-                $trend['aggregation'] = 'sum';
-                $trend['y_field_id'] = $additives[0]['id'];
-                $trend['label'] = ($es ? 'Evolución de ' : 'Evolution of ').Str::lower((string) ($additives[0]['name'] ?? $additives[0]['slug']));
-            } elseif ($ratios !== []) {
-                $trend['aggregation'] = 'avg';
-                $trend['y_field_id'] = $ratios[0]['id'];
-                $trend['label'] = ($es ? 'Evolución de ' : 'Evolution of ').Str::lower((string) ($ratios[0]['name'] ?? $ratios[0]['slug']));
             } else {
-                $trend = null;
+                // The measure the user means is usually the one the OBJECT is
+                // named after: nps_time_series → nps_score, not its first
+                // additive (a prod NPS board charted `responses` and the
+                // requested score never rendered). Topical ratio first, then
+                // topical additive, then the generic order.
+                $topical = $this->topicalMeasures($object, $numerics);
+                $pick = collect([
+                    [collect($topical)->first(fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_RATIO), 'avg'],
+                    [collect($topical)->first(fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE), 'sum'],
+                    [$additives[0] ?? null, 'sum'],
+                    [$ratios[0] ?? null, 'avg'],
+                ])->first(fn (array $c): bool => $c[0] !== null);
+
+                if ($pick !== null) {
+                    [$field, $agg] = $pick;
+                    $trend['aggregation'] = $agg;
+                    $trend['y_field_id'] = $field['id'];
+                    $trend['label'] = ($es ? 'Evolución de ' : 'Evolution of ').Str::lower((string) ($field['name'] ?? $field['slug']));
+                } else {
+                    $trend = null;
+                }
             }
             if ($trend !== null) {
                 $charts[] = $trend;
@@ -451,6 +503,13 @@ class DashboardSpecSuggester
         foreach ($categoricals as $i => $field) {
             if (count($charts) >= self::MAX_CHARTS - 1) {
                 break;
+            }
+            // On a time series, the bucket's label column is the TIME AXIS in
+            // costume — grouping by it re-plots the trend as bars (observed:
+            // «Por period label» duplicating the weekly evolution).
+            if ($grain === SemanticProfile::GRAIN_TIME_SERIES
+                && preg_match('/label|bucket|period|semana|week/i', (string) ($field['slug'] ?? '')) === 1) {
+                continue;
             }
             $distinct = $stats !== [] ? ($stats[$field['id']]['distinct'] ?? null) : null;
             if ($distinct !== null && $distinct < 2) {
