@@ -65,6 +65,12 @@ class DashboardSpecSuggester
         foreach ($numerics as $field) {
             $measureTypes[$field['id']] = $this->semantics->measureTypeOf($field, $stats[$field['id']]['values'] ?? []);
         }
+        // Numeric identifiers are labels, not measures — out of KPIs, charts
+        // and last-resort bars alike.
+        $numerics = array_values(array_filter(
+            $numerics,
+            fn (array $f): bool => ($measureTypes[$f['id']] ?? '') !== SemanticProfile::MEASURE_IDENTIFIER,
+        ));
 
         return array_filter([
             'object_slug' => $object['slug'] ?? null,

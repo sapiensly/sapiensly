@@ -89,7 +89,8 @@ class ConnectedObjectAuthoring
             return ['ok' => false, 'error' => "Could not infer any fields from the rows of '{$toolName}'."];
         }
 
-        $name = trim((string) ($spec['object_name'] ?? '')) ?: Str::headline((string) preg_replace('/[-_]?tool$/i', '', $toolName));
+        $name = trim((string) ($spec['object_name'] ?? ''))
+            ?: Str::headline((string) preg_replace(['/^get[-_]/i', '/[-_]?tool$/i'], '', $toolName));
         $slug = $this->uniqueObjectSlug($name, $manifest);
 
         $object = [

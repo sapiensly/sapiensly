@@ -38,9 +38,13 @@ class SemanticProfile
 
     public const MEASURE_STATISTIC = 'statistic';
 
+    public const MEASURE_IDENTIFIER = 'identifier';
+
     private const STATISTIC_NAME = '/(^|_)(avg|average|promedio|mean|median|mediana|p\d{2,3}|min|max|std|desviacion|stddev)(_|$)/i';
 
-    private const RATIO_NAME = '/(pct|percent|porcentaje|rate|ratio|tasa|_share|nps$|csat$|score$)/i';
+    private const RATIO_NAME = '/(pct|percent|porcentaje|rate|ratio|tasa|_share|nps$|csat$|ces$|score$)/i';
+
+    private const IDENTIFIER_NAME = '/(^|_)id$|^id(_|$)|_id_|folio|codigo|(^|_)code$|telefono|phone/i';
 
     private const ADDITIVE_NAME = '/(count|total|cantidad|monto|amount|revenue|ingreso|volumen|tickets?|orders?|unidades|qty)/i';
 
@@ -88,6 +92,13 @@ class SemanticProfile
     {
         $slug = (string) ($field['slug'] ?? '');
 
+        // A numeric id is a LABEL wearing a number costume — summing contact
+        // ids produced a straight-faced "Suma Id" KPI in production. No
+        // aggregation of an identifier means anything.
+        if (preg_match(self::IDENTIFIER_NAME, $slug) === 1) {
+            return self::MEASURE_IDENTIFIER;
+        }
+
         if (preg_match(self::STATISTIC_NAME, $slug) === 1) {
             return self::MEASURE_STATISTIC;
         }
@@ -121,6 +132,10 @@ class SemanticProfile
      */
     public function legalKpiAggregations(string $measureType, string $grain): array
     {
+        if ($measureType === self::MEASURE_IDENTIFIER) {
+            return []; // ids never aggregate — on any grain
+        }
+
         if ($measureType === self::MEASURE_STATISTIC) {
             // A statistic of statistics is noise — except on RAW rows, where
             // the column IS the raw measurement despite its name.

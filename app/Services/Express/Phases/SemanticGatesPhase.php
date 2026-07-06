@@ -91,7 +91,9 @@ TXT;
             $run, 'voice_insights',
             <<<'TXT'
 Dos tareas sobre un dashboard, en el idioma del pedido. (1) VOZ: escribe title
-(conciso, ejecutivo) y purpose (1 frase: audiencia + preguntas que responde).
+(máximo 8 palabras, lenguaje de negocio — NUNCA nombres técnicos de tools,
+endpoints ni placeholders) y purpose (1 frase: audiencia + preguntas que
+responde).
 (2) INSIGHTS: redacta los body de las tarjetas usando SOLO los HECHOS
 COMPUTADOS (números reales) — mantén variant y title de cada tarjeta sugerida
 (puedes afinar el title), body con una conclusión concreta y accionable (1-2

@@ -117,7 +117,22 @@ class CompilePhase implements ExpressPhase
     private function clampLine(string $value, int $max): string
     {
         $line = trim((string) preg_split('/\r?\n/', trim($value))[0]);
+        // No markup-ish characters in a human title (a prod title ended
+        // "…for <targe…": an angle bracket sliced mid-word by the cap).
+        $line = trim((string) preg_replace('/[<>`|{}]+/', ' ', $line));
+        $line = trim((string) preg_replace('/\s{2,}/', ' ', $line));
 
-        return Str::limit($line, $max, '…');
+        if (mb_strlen($line) <= $max) {
+            return $line;
+        }
+
+        // Cut at a word boundary, not mid-word.
+        $cut = mb_substr($line, 0, $max);
+        $lastSpace = mb_strrpos($cut, ' ');
+        if ($lastSpace !== false && $lastSpace > (int) ($max * 0.6)) {
+            $cut = mb_substr($cut, 0, $lastSpace);
+        }
+
+        return rtrim($cut, ' :,-–—').'…';
     }
 }

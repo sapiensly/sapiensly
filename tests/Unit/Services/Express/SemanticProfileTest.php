@@ -94,3 +94,14 @@ it('computes column stats: distinct, null rate, constants', function () {
         ->and($stats['f2']['null_rate'])->toBe(0.75)
         ->and($stats['f3']['all_equal'])->toBeTrue();
 });
+
+it('classifies numeric ids and short score acronyms so they never aggregate wrong', function () {
+    // Both observed in production: "Suma Id" (summed contact ids) and
+    // "Suma Ces" (summed a 1-7 effort score).
+    expect($this->semantics->measureTypeOf(['slug' => 'contact_id']))->toBe(SemanticProfile::MEASURE_IDENTIFIER)
+        ->and($this->semantics->measureTypeOf(['slug' => 'id']))->toBe(SemanticProfile::MEASURE_IDENTIFIER)
+        ->and($this->semantics->measureTypeOf(['slug' => 'ces']))->toBe(SemanticProfile::MEASURE_RATIO);
+
+    expect($this->semantics->legalKpiAggregations(SemanticProfile::MEASURE_IDENTIFIER, SemanticProfile::GRAIN_RAW))
+        ->toBe([]);
+});

@@ -411,3 +411,28 @@ it('chapters the board with narrative headings when trend and breakdown coexist'
     expect($headings->search('Tendencia'))->toBeLessThan($headings->search('Desglose'))
         ->and($headings->search('Desglose'))->toBeLessThan($headings->search('Lecturas clave'));
 });
+
+it('never aggregates numeric identifiers into KPIs or charts', function () {
+    // The nps2 production shape: raw survey rows carrying a numeric contact id.
+    $object = [
+        'id' => 'obj_npsraw00', 'slug' => 'nps_comments', 'name' => 'Nps Comments',
+        'fields' => [
+            ['id' => 'fld_when0000', 'slug' => 'responded_at', 'name' => 'Respondido', 'type' => 'datetime'],
+            ['id' => 'fld_npsval00', 'slug' => 'nps', 'name' => 'Nps', 'type' => 'number'],
+            ['id' => 'fld_cesval00', 'slug' => 'ces', 'name' => 'Ces', 'type' => 'number'],
+            ['id' => 'fld_cid00000', 'slug' => 'contact_id', 'name' => 'Id', 'type' => 'number'],
+            ['id' => 'fld_segment0', 'slug' => 'segment', 'name' => 'Segment', 'type' => 'string'],
+        ],
+    ];
+
+    $spec = (new DashboardSpecSuggester)->suggest($object, 'es');
+
+    $fieldsUsed = collect($spec['kpis'])->pluck('field_id')
+        ->merge(collect($spec['charts'])->pluck('y_field_id'))
+        ->filter();
+    expect($fieldsUsed)->not->toContain('fld_cid00000');
+
+    // CES averages, never sums.
+    $ces = collect($spec['kpis'])->firstWhere('field_id', 'fld_cesval00');
+    expect($ces['aggregation'])->toBe('avg');
+});

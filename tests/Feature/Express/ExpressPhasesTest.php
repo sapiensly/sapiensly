@@ -527,3 +527,42 @@ it('does not halt an NPS request when the source has NPS tools (3-letter acronym
 
     expect($ctx->chosenTools)->toBe(['get-nps-time-series-tool']);
 });
+
+it('titles are sanitized: no markup junk, cut at word boundaries', function () {
+    ExpressGateAgent::fake([
+        ['accept' => true, 'overrides' => []],
+        fn ($prompt) => [
+            'title' => 'Dashboard de NPS: Get NPS Comments Analysis & Diagnostics for <target_audience> con métricas extendidas de comportamiento y diagnóstico',
+            'purpose' => 'Dirección.',
+            'insights' => collect(json_decode($prompt, true)['tarjetas_sugeridas'])
+                ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'Dato.'])
+                ->values()->all(),
+        ],
+    ]);
+
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    app(AppManifestService::class)->applyPatch(
+        $this->testApp->fresh(),
+        [['op' => 'add', 'path' => '/objects/-', 'value' => $object]],
+        $this->user, 'obj',
+    );
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+
+    app()->call(function (SuggestSpecPhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+    app()->call(function (SemanticGatesPhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+    app()->call(function (CompilePhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+
+    expect($ctx->page['name'])->not->toContain('<')
+        ->and($ctx->page['name'])->not->toContain('>')
+        ->and(mb_strlen($ctx->page['name']))->toBeLessThanOrEqual(96)
+        // Word-boundary cut: never ends mid-word like "targe…".
+        ->and($ctx->page['name'])->toMatch('/(\s|\S{2,})…$|[^…]$/u');
+});
