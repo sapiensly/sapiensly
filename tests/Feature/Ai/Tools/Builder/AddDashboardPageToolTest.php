@@ -437,6 +437,132 @@ it('never aggregates numeric identifiers into KPIs or charts', function () {
     expect($ces['aggregation'])->toBe('avg');
 });
 
+/** A connected weekly-series object (like the acquired nps_score series). */
+function adp_series_object(bool $withDate = true): array
+{
+    return [
+        'id' => 'obj_npsseries0',
+        'slug' => 'nps_semanal',
+        'name' => 'NPS Semanal',
+        'fields' => array_values(array_filter([
+            $withDate ? ['id' => 'fld_npsweek00', 'slug' => 'bucket_start', 'name' => 'Semana', 'type' => 'date'] : null,
+            ['id' => 'fld_npsscore0', 'slug' => 'nps', 'name' => 'NPS', 'type' => 'number'],
+            ['id' => 'fld_npsseg000', 'slug' => 'segmento', 'name' => 'Segmento', 'type' => 'string'],
+        ])),
+        'source' => ['type' => 'connected', 'integration_id' => 'int_x', 'operations' => ['list' => ['mcp_tool' => 't', 'collection_path' => 'series']]],
+    ];
+}
+
+it('compiles multi-object boards: each block reads ITS object and wires ITS date field', function () {
+    $manifest = $this->manifestService->getActiveManifest($this->testApp->fresh());
+    $series = adp_series_object();
+
+    $spec = adp_spec();
+    $spec['charts'][] = [
+        'label' => 'Evolución del NPS', 'chart_type' => 'area', 'aggregation' => 'avg',
+        'x_field_id' => 'fld_npsweek00', 'y_field_id' => 'fld_npsscore0', 'object_slug' => 'nps_semanal',
+    ];
+    $spec['kpis'][] = ['label' => 'NPS promedio', 'aggregation' => 'avg', 'field_id' => 'fld_npsscore0', 'object_slug' => 'nps_semanal'];
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $manifest['objects'][0], [], null, 'es', [$series],
+    );
+
+    expect($built['ok'])->toBeTrue()
+        ->and(PlanDashboardTool::lint($built['purpose'], $built['plan_rows'])['ok'])->toBeTrue();
+
+    $charts = collect($built['page']['blocks'])->where('type', 'container')
+        ->flatMap(fn (array $c) => $c['blocks'])->where('type', 'chart');
+    $npsChart = $charts->firstWhere('y_field_id', 'fld_npsscore0');
+    expect($npsChart['data_source']['object_id'])->toBe('obj_npsseries0')
+        ->and(json_encode($npsChart['data_source']['filter']))->toContain('fld_npsweek00')
+        ->and(json_encode($npsChart['data_source']['filter']))->toContain('range_start');
+
+    // The primary's charts keep reading the primary with ITS date field.
+    $primaryChart = $charts->firstWhere('chart_type', 'line');
+    expect($primaryChart['data_source']['object_id'])->toBe('obj_ticketsobj')
+        ->and(json_encode($primaryChart['data_source']['filter']))->toContain('fld_datefield');
+
+    // The secondary KPI queries the secondary.
+    $kpiItems = collect($built['page']['blocks'])->firstWhere('type', 'metric_grid')['items'];
+    expect(collect($kpiItems)->firstWhere('label', 'NPS promedio')['query']['object_id'])->toBe('obj_npsseries0');
+});
+
+it('never wires the range filter into a dateless CONNECTED object (no sys_created_at ghost)', function () {
+    $manifest = $this->manifestService->getActiveManifest($this->testApp->fresh());
+    $series = adp_series_object(withDate: false);
+
+    $spec = adp_spec();
+    $spec['charts'][] = [
+        'label' => 'NPS por segmento', 'chart_type' => 'treemap', 'aggregation' => 'avg',
+        'y_field_id' => 'fld_npsscore0', 'group_by_field_id' => 'fld_npsseg000', 'object_slug' => 'nps_semanal',
+    ];
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $manifest['objects'][0], [], null, 'es', [$series],
+    );
+
+    expect($built['ok'])->toBeTrue();
+    $charts = collect($built['page']['blocks'])->where('type', 'container')
+        ->flatMap(fn (array $c) => $c['blocks'])->where('type', 'chart');
+    $npsChart = $charts->firstWhere('group_by_field_id', 'fld_npsseg000');
+
+    // Its rows lack sys_created_at, so a range condition would delete them
+    // all — the block simply doesn't listen to the filter.
+    expect(json_encode($npsChart['data_source']))->not->toContain('sys_created_at')
+        ->and(json_encode($npsChart['data_source']))->not->toContain('range_start');
+});
+
+it('names the unknown object_slug instead of silently reading the primary', function () {
+    $manifest = $this->manifestService->getActiveManifest($this->testApp->fresh());
+
+    $spec = adp_spec();
+    $spec['charts'][] = ['label' => 'X', 'chart_type' => 'bar', 'aggregation' => 'count', 'object_slug' => 'no_existe'];
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $manifest['objects'][0], [], null, 'es',
+    );
+
+    expect($built['ok'])->toBeFalse()
+        ->and(json_encode($built['errors']))->toContain('no_existe');
+});
+
+it('suggestMulti gives every acquired object a voice: secondary trend, breakdown and KPI tagged with object_slug', function () {
+    // The nps3 gap: 4 objects acquired, 1 rendered — the requested weekly
+    // nps_score evolution lived in a secondary object and never made the board.
+    $primary = [
+        'id' => 'obj_comments00', 'slug' => 'comentarios', 'name' => 'Comentarios NPS',
+        'fields' => [
+            ['id' => 'fld_seg000', 'slug' => 'segmento', 'name' => 'Segmento', 'type' => 'string'],
+            ['id' => 'fld_com000', 'slug' => 'comentario', 'name' => 'Comentario', 'type' => 'string'],
+        ],
+        'source' => ['type' => 'connected', 'operations' => ['list' => ['mcp_tool' => 'c', 'collection_path' => 'rows']]],
+    ];
+    $series = adp_series_object();
+
+    $weeks = collect(range(0, 3))->map(fn (int $i) => [
+        'bucket_start' => now()->utc()->subWeeks($i)->toDateString(), 'nps' => 40 + $i, 'segmento' => 'promoter',
+    ])->all();
+
+    $spec = (new DashboardSpecSuggester)->suggestMulti(
+        [$primary, $series], 'es',
+        ['obj_npsseries0' => $weeks],
+    );
+
+    $npsTrend = collect($spec['charts'])->firstWhere('object_slug', 'nps_semanal');
+    expect($npsTrend)->not->toBeNull()
+        ->and($npsTrend['x_field_id'])->toBe('fld_npsweek00')
+        ->and($npsTrend['y_field_id'])->toBe('fld_npsscore0')
+        ->and($npsTrend['aggregation'])->toBe('avg')
+        ->and($npsTrend['label'])->toContain('NPS Semanal');
+
+    expect(collect($spec['kpis'])->firstWhere('object_slug', 'nps_semanal'))->not->toBeNull();
+
+    // The primary is dateless, but the temporal secondary makes the range
+    // filter worth having (the compiler wires only who can listen).
+    expect($spec['include_date_filter'])->toBeTrue();
+});
+
 it('re-forms a lone short chart so its own lints never kill the compile', function () {
     // Prod: a spec whose only chart was a donut compiled into a single-short-
     // block row, failed the compiler's OWN lint and the whole build died. The

@@ -38,8 +38,12 @@ class AddDashboardPageTool implements Tool
     public function description(): string
     {
         return <<<'DESC'
-Build a COMPLETE, professional dashboard page for ONE object in a single step —
-USE THIS for every dashboard/report instead of hand-writing blocks op-by-op.
+Build a COMPLETE, professional dashboard page in a single step — USE THIS for
+every dashboard/report instead of hand-writing blocks op-by-op. `object_slug`
+names the PRIMARY object; any kpi/chart may add its own `object_slug` to read
+a DIFFERENT existing object (multi-object boards: e.g. the weekly series from
+one object, breakdowns from another — each block's date filter wires to its
+own object's date field).
 You declare the analytical content; the server compiles the layout (KPI band
 first, balanced chart rows with column weights, insights, a Hoy/7d/30d/90d/Año
 date-range filter wired into every block, a compact brand hero) and validates
@@ -77,9 +81,9 @@ DESC;
             'date_field_id' => $schema->string()
                 ->description('Date/datetime field driving the range filter and time axes. Defaults to the first date field, else sys_created_at.'),
             'kpis' => $schema->array()
-                ->description('1-8 KPI items: {label, aggregation, field_id?, format?, icon?, filter?, compare?, delta_good?}. Required unless use_suggestion is true.'),
+                ->description('1-8 KPI items: {label, aggregation, field_id?, object_slug? (read a different existing object), format?, icon?, filter?, compare?, delta_good?}. Required unless use_suggestion is true.'),
             'charts' => $schema->array()
-                ->description('1-10 charts: {label, chart_type, aggregation, y_field_id?, group_by_field_id?, x_field_id?, bucket?, series_field_id?, stacked?, filter?, limit?}. Vary the chart types. Required unless use_suggestion is true.'),
+                ->description('1-10 charts: {label, chart_type, aggregation, y_field_id?, group_by_field_id?, x_field_id?, bucket?, series_field_id?, stacked?, filter?, limit?, object_slug? (read a different existing object)}. Vary the chart types. Required unless use_suggestion is true.'),
             'use_suggestion' => $schema->boolean()
                 ->description('Compile the deterministic suggested_spec from prepare_dashboard (recomputed server-side — no need to echo it back).'),
             'overrides' => $schema->object()
@@ -133,8 +137,11 @@ DESC;
         }
         $takenSlugs = array_values(array_filter(array_map(fn ($p) => $p['slug'] ?? null, $base['pages'] ?? [])));
         $palette = ColorPalette::fromAccent((string) ($base['settings']['accent'] ?? OrganizationBrand::DEFAULT_ACCENT));
+        $extraObjects = collect($base['objects'] ?? [])
+            ->filter(fn ($o) => is_array($o) && ($o['slug'] ?? null) !== $slug)
+            ->values()->all();
 
-        $built = $this->scaffolder->buildDashboardFromSpec($args, $object, $takenSlugs, $palette, $lang);
+        $built = $this->scaffolder->buildDashboardFromSpec($args, $object, $takenSlugs, $palette, $lang, $extraObjects);
         if (($built['ok'] ?? false) !== true) {
             return json_encode(['ok' => false, 'errors' => $built['errors'] ?? []], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
         }

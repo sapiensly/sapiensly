@@ -75,15 +75,20 @@ class CompilePhase implements ExpressPhase
         $lang = AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null);
         $takenSlugs = array_values(array_filter(array_map(fn ($p) => $p['slug'] ?? null, $manifest['pages'] ?? [])));
         $palette = ColorPalette::fromAccent((string) ($manifest['settings']['accent'] ?? OrganizationBrand::DEFAULT_ACCENT));
+        // Multi-object boards: any other manifest object is addressable per
+        // kpi/chart via object_slug.
+        $extraObjects = collect($manifest['objects'] ?? [])
+            ->filter(fn ($o) => is_array($o) && ($o['slug'] ?? null) !== $objectSlug)
+            ->values()->all();
 
-        $built = $this->scaffolder->buildDashboardFromSpec($args, $object, $takenSlugs, $palette, $lang);
+        $built = $this->scaffolder->buildDashboardFromSpec($args, $object, $takenSlugs, $palette, $lang, $extraObjects);
         if (($built['ok'] ?? false) !== true) {
             // The semantic overrides were already judged, so a compile failure
             // here means the SUGGESTION itself broke — retry without overrides
             // before giving up.
             $built = $this->scaffolder->buildDashboardFromSpec(
                 array_merge($spec, ['insights' => $insights]),
-                $object, $takenSlugs, $palette, $lang,
+                $object, $takenSlugs, $palette, $lang, $extraObjects,
             );
             if (($built['ok'] ?? false) !== true) {
                 throw new \RuntimeException('Dashboard compile failed: '.json_encode($built['errors'] ?? [], JSON_UNESCAPED_UNICODE));

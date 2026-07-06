@@ -49,7 +49,8 @@ Revisas el SPEC SUGERIDO de un dashboard contra el PEDIDO del usuario. Devuelve
 SOLO los cambios necesarios (accept=true y overrides={} si la sugerencia ya
 responde el pedido). overrides puede traer: title, kpis, charts (listas
 COMPLETAS que reemplazan la parte), date_field_id. Solo usa field_ids que
-existan en el spec sugerido. No cambies lo que ya está bien.
+existan en el spec sugerido, y CONSERVA el object_slug de cada kpi/chart que
+lo traiga — ese bloque lee OTRO objeto y sin su slug apunta al equivocado.
 TXT;
         $overridesSchema = fn ($schema) => [
             'accept' => $schema->boolean(),
@@ -151,10 +152,13 @@ TXT,
     {
         try {
             $args = array_merge($context->spec, $overrides, ['object_slug' => $primary['slug']]);
+            $extras = collect($context->objects)
+                ->filter(fn ($o) => is_array($o) && ($o['slug'] ?? null) !== $primary['slug'])
+                ->values()->all();
             $built = $this->scaffolder->buildDashboardFromSpec(
                 $args, $primary, [],
                 ColorPalette::fromAccent(OrganizationBrand::DEFAULT_ACCENT),
-                'es',
+                'es', $extras,
             );
 
             if (($built['ok'] ?? false) !== true) {

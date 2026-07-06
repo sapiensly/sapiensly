@@ -527,6 +527,79 @@ it('clamps a rambling model title so the compile never dies on maxLength', funct
         ->and($ctx->page['name'])->not->toContain("\n");
 });
 
+it('composes a multi-object board: the secondary series renders with its own object_id', function () {
+    ExpressGateAgent::fake([
+        ['accept' => true, 'overrides' => []],
+        fn ($prompt) => [
+            'title' => 'NPS y Tickets',
+            'purpose' => 'Dirección.',
+            'insights' => collect(json_decode($prompt, true)['tarjetas_sugeridas'])
+                ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'Dato real.'])
+                ->values()->all(),
+        ],
+    ]);
+
+    $primary = xph_object('tickets_semanales', $this->integration->id);
+    $mk = fn (string $suffix) => 'fld_'.strtolower((string) Str::ulid()).$suffix;
+    $ids = ['date' => $mk('x'), 'nps' => $mk('y')];
+    $series = [
+        'id' => 'obj_'.strtolower((string) Str::ulid()),
+        'slug' => 'nps_semanal',
+        'name' => 'NPS Semanal',
+        'fields' => [
+            ['id' => $ids['date'], 'slug' => 'bucket_start', 'name' => 'Semana', 'type' => 'date'],
+            ['id' => $ids['nps'], 'slug' => 'nps', 'name' => 'NPS', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected',
+            'integration_id' => $this->integration->id,
+            'operations' => ['list' => ['mcp_tool' => 'get-nps-series-tool', 'collection_path' => 'series']],
+            'field_map' => [
+                ['field_id' => $ids['date'], 'external_path' => 'bucket_start'],
+                ['field_id' => $ids['nps'], 'external_path' => 'nps'],
+            ],
+        ],
+    ];
+
+    app(AppManifestService::class)->applyPatch(
+        $this->testApp->fresh(),
+        [['op' => 'add', 'path' => '/objects/-', 'value' => $primary], ['op' => 'add', 'path' => '/objects/-', 'value' => $series]],
+        $this->user, 'objs',
+    );
+
+    $ctx = xph_ctx($this, 'dashboard de tickets y evolución del nps');
+    $ctx->objects = [$primary, $series];
+    $ctx->rowsByObject[$primary['id']] = xph_rows();
+    $ctx->rowsByObject[$series['id']] = collect(range(0, 3))->map(fn (int $i) => [
+        'bucket_start' => now()->utc()->subWeeks($i)->toDateString(), 'nps' => 40 + $i,
+    ])->all();
+
+    app()->call(function (SuggestSpecPhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+    app()->call(function (SemanticGatesPhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+    app()->call(function (CompilePhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+
+    expect($ctx->page)->not->toBeNull();
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $page = collect($manifest['pages'])->firstWhere('slug', $ctx->page['slug']);
+    $objectIdsRead = collect($page['blocks'])->where('type', 'container')
+        ->flatMap(fn (array $c) => $c['blocks'])->where('type', 'chart')
+        ->pluck('data_source.object_id')->unique()->values();
+
+    // BOTH objects render — before this, secondaries were acquired and ignored.
+    expect($objectIdsRead)->toContain($primary['id'])
+        ->and($objectIdsRead)->toContain($series['id']);
+
+    // The secondary facts reached the insight gate's prompt material.
+    expect(json_encode($ctx->facts, JSON_UNESCAPED_UNICODE))->toContain('objetos_secundarios');
+});
+
 it('formats object alternatives in the halt message as readable lines', function () {
     ExpressGateAgent::fake([[
         'tools' => [], 'substitutions' => [], 'unanswerable' => [],

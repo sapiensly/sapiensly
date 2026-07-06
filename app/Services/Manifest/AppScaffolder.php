@@ -1036,22 +1036,38 @@ class AppScaffolder
      * the returned `plan_rows` with PlanDashboardTool::lint before proposing.
      *
      * @param  array<string, mixed>  $spec  {title?, purpose?, date_field_id?, kpis: [...], charts: [...], insights?: [...], include_hero?, include_date_filter?}
-     * @param  array<string, mixed>  $object  the manifest object node the dashboard reads
+     * @param  array<string, mixed>  $object  the PRIMARY manifest object node (the default when an item names no object_slug)
      * @param  list<string>  $takenPageSlugs
      * @param  array{ramp: array<string, string>}|null  $palette  brand palette for the hero gradient
+     * @param  list<array<string, mixed>>  $extraObjects  other manifest objects addressable per kpi/chart via `object_slug`
      * @return array{ok: bool, page?: array<string, mixed>, plan_rows?: list<array<string, mixed>>, purpose?: string, errors?: list<array{path: string, message: string, code: string}>}
      */
-    public function buildDashboardFromSpec(array $spec, array $object, array $takenPageSlugs, ?array $palette, string $lang = 'en'): array
+    public function buildDashboardFromSpec(array $spec, array $object, array $takenPageSlugs, ?array $palette, string $lang = 'en', array $extraObjects = []): array
     {
-        $fieldById = [];
-        foreach ($object['fields'] ?? [] as $f) {
-            $fieldById[$f['id']] = $f;
+        $primarySlug = (string) ($object['slug'] ?? '');
+        $objectsBySlug = [$primarySlug => $object];
+        foreach ($extraObjects as $extra) {
+            $slug = is_array($extra) ? (string) ($extra['slug'] ?? '') : '';
+            if ($slug !== '' && ! isset($objectsBySlug[$slug])) {
+                $objectsBySlug[$slug] = $extra;
+            }
         }
-        $fieldById['sys_created_at'] = ['id' => 'sys_created_at', 'slug' => 'sys_created_at', 'type' => 'datetime', 'name' => 'Created at'];
-        $fieldById['sys_updated_at'] = ['id' => 'sys_updated_at', 'slug' => 'sys_updated_at', 'type' => 'datetime', 'name' => 'Updated at'];
+
+        $fieldsBySlug = [];
+        foreach ($objectsBySlug as $slug => $obj) {
+            $map = [];
+            foreach ($obj['fields'] ?? [] as $f) {
+                $map[$f['id']] = $f;
+            }
+            $map['sys_created_at'] = ['id' => 'sys_created_at', 'slug' => 'sys_created_at', 'type' => 'datetime', 'name' => 'Created at'];
+            $map['sys_updated_at'] = ['id' => 'sys_updated_at', 'slug' => 'sys_updated_at', 'type' => 'datetime', 'name' => 'Updated at'];
+            $fieldsBySlug[$slug] = $map;
+        }
 
         $errors = [];
-        $fieldType = function (?string $id, string $path, bool $required = false) use ($fieldById, $object, &$errors): ?string {
+        $fieldType = function (?string $id, string $path, bool $required = false, ?array $on = null) use ($fieldsBySlug, $object, $primarySlug, &$errors): ?string {
+            $slug = (string) (($on ?? $object)['slug'] ?? $primarySlug);
+            $fieldById = $fieldsBySlug[$slug] ?? $fieldsBySlug[$primarySlug];
             if ($id === null || $id === '') {
                 if ($required) {
                     $errors[] = ['path' => $path, 'message' => 'field_id is required here.', 'code' => 'missing_field'];
@@ -1060,12 +1076,24 @@ class AppScaffolder
                 return null;
             }
             if (! isset($fieldById[$id])) {
-                $errors[] = ['path' => $path, 'message' => "Field '{$id}' does not exist on object '{$object['slug']}'. Use the ids from read_manifest/profile_object.", 'code' => 'unknown_field'];
+                $errors[] = ['path' => $path, 'message' => "Field '{$id}' does not exist on object '{$slug}'. Use the ids from read_manifest/profile_object.", 'code' => 'unknown_field'];
 
                 return null;
             }
 
             return $fieldById[$id]['type'];
+        };
+
+        // Which object an item reads: its own object_slug, else the primary.
+        $resolveObject = function (array $item, string $path) use ($objectsBySlug, $primarySlug, &$errors): ?array {
+            $slug = trim((string) ($item['object_slug'] ?? '')) ?: $primarySlug;
+            if (! isset($objectsBySlug[$slug])) {
+                $errors[] = ['path' => $path.'/object_slug', 'message' => "No object with slug '{$slug}' exists in this app.", 'code' => 'unknown_object'];
+
+                return null;
+            }
+
+            return $objectsBySlug[$slug];
         };
 
         $kpis = array_values(is_array($spec['kpis'] ?? null) ? $spec['kpis'] : []);
@@ -1079,37 +1107,59 @@ class AppScaffolder
         }
 
         // The date field that drives the range filter (and default time axes).
+        // The spec's date_field_id applies to the PRIMARY; every other object
+        // wires the shared `range` param to its OWN first temporal field. A
+        // connected object without a real one gets NO range condition at all:
+        // sys_created_at is a records-only column, and filtering connected
+        // rows by it silently deletes every row.
         $dateFieldId = is_string($spec['date_field_id'] ?? null) && $spec['date_field_id'] !== '' ? $spec['date_field_id'] : null;
         if ($dateFieldId !== null) {
             $type = $fieldType($dateFieldId, '/date_field_id');
             if ($type !== null && ! in_array($type, self::DATE_TYPES, true)) {
                 $errors[] = ['path' => '/date_field_id', 'message' => "Field '{$dateFieldId}' is {$type}, not a date/datetime.", 'code' => 'wrong_type'];
             }
-        } else {
-            foreach ($object['fields'] ?? [] as $f) {
-                if (in_array($f['type'], self::DATE_TYPES, true)) {
-                    $dateFieldId = $f['id'];
-                    break;
-                }
-            }
-            $dateFieldId ??= 'sys_created_at';
         }
         $withDateFilter = (bool) ($spec['include_date_filter'] ?? true);
 
+        $rangeBySlug = [];
+        foreach ($objectsBySlug as $slug => $obj) {
+            $fieldId = $slug === $primarySlug ? $dateFieldId : null;
+            if ($fieldId === null) {
+                foreach ($obj['fields'] ?? [] as $f) {
+                    if (in_array($f['type'], self::DATE_TYPES, true)) {
+                        $fieldId = $f['id'];
+                        break;
+                    }
+                }
+            }
+            if ($fieldId === null && ($obj['source']['type'] ?? '') !== 'connected') {
+                $fieldId = 'sys_created_at';
+            }
+            $rangeBySlug[$slug] = $fieldId === null
+                ? null
+                : ['op' => 'gte', 'field_id' => $fieldId, 'value_expression' => "{{range_start(default(params.range, '30d'))}}"];
+        }
+
         // Merge the range filter into a block's own filter (empty preset ⇒ the
         // condition resolves empty and is skipped server-side ⇒ "Todo").
-        $rangeCondition = ['op' => 'gte', 'field_id' => $dateFieldId, 'value_expression' => "{{range_start(default(params.range, '30d'))}}"];
-        $withRange = function (?array $own) use ($withDateFilter, $rangeCondition): ?array {
-            if (! $withDateFilter) {
+        $rangeWired = false;
+        $withRange = function (?array $own, array $obj) use ($withDateFilter, $rangeBySlug, $primarySlug, &$rangeWired): ?array {
+            $range = $rangeBySlug[(string) ($obj['slug'] ?? $primarySlug)] ?? null;
+            if (! $withDateFilter || $range === null) {
                 return $own;
             }
+            $rangeWired = true;
 
-            return $own === null ? $rangeCondition : ['op' => 'and', 'conditions' => [$own, $rangeCondition]];
+            return $own === null ? $range : ['op' => 'and', 'conditions' => [$own, $range]];
         };
 
         // --- KPI band ---------------------------------------------------------
         $items = [];
         foreach ($kpis as $i => $kpi) {
+            $kpiObject = $resolveObject(is_array($kpi) ? $kpi : [], "/kpis/{$i}");
+            if ($kpiObject === null) {
+                continue;
+            }
             $agg = (string) ($kpi['aggregation'] ?? 'count');
             if (! in_array($agg, self::KPI_AGGS, true)) {
                 $errors[] = ['path' => "/kpis/{$i}/aggregation", 'message' => "Unknown aggregation '{$agg}'. Valid: ".implode('|', self::KPI_AGGS).'.', 'code' => 'bad_aggregation'];
@@ -1117,20 +1167,20 @@ class AppScaffolder
                 continue;
             }
             $needsField = $agg !== 'count';
-            $type = $fieldType($kpi['field_id'] ?? null, "/kpis/{$i}/field_id", $needsField);
+            $type = $fieldType($kpi['field_id'] ?? null, "/kpis/{$i}/field_id", $needsField, $kpiObject);
             if ($type !== null && $agg !== 'count' && $agg !== 'distinct_count' && ! in_array($type, self::NUMERIC_TYPES, true)) {
                 $errors[] = ['path' => "/kpis/{$i}/field_id", 'message' => "'{$agg}' needs a numeric field; '{$kpi['field_id']}' is {$type}.", 'code' => 'wrong_type'];
             }
 
             $ownFilter = is_array($kpi['filter'] ?? null) ? $kpi['filter'] : null;
             $query = array_filter([
-                'object_id' => $object['id'],
-                'filter' => $withRange($ownFilter),
+                'object_id' => $kpiObject['id'],
+                'filter' => $withRange($ownFilter, $kpiObject),
             ], fn ($v) => $v !== null);
 
             $compare = is_array($kpi['compare'] ?? null) ? $kpi['compare'] : null;
             if ($compare !== null && ! isset($compare['object_id'])) {
-                $compare['object_id'] = $object['id'];
+                $compare['object_id'] = $kpiObject['id'];
             }
 
             $items[] = array_filter([
@@ -1149,6 +1199,10 @@ class AppScaffolder
         // --- Charts -----------------------------------------------------------
         $chartBlocks = [];
         foreach ($charts as $i => $chart) {
+            $chartObject = $resolveObject(is_array($chart) ? $chart : [], "/charts/{$i}");
+            if ($chartObject === null) {
+                continue;
+            }
             $chartType = (string) ($chart['chart_type'] ?? '');
             $agg = (string) ($chart['aggregation'] ?? 'count');
             if (in_array($agg, ['median', 'p90', 'p95', 'distinct_count'], true)) {
@@ -1161,12 +1215,12 @@ class AppScaffolder
 
                 continue;
             }
-            $yType = $fieldType($chart['y_field_id'] ?? null, "/charts/{$i}/y_field_id", $agg !== 'count');
+            $yType = $fieldType($chart['y_field_id'] ?? null, "/charts/{$i}/y_field_id", $agg !== 'count', $chartObject);
             if ($yType !== null && ! in_array($yType, self::NUMERIC_TYPES, true)) {
                 $errors[] = ['path' => "/charts/{$i}/y_field_id", 'message' => "'{$agg}' needs a numeric y_field_id; '{$chart['y_field_id']}' is {$yType}.", 'code' => 'wrong_type'];
             }
-            $groupType = $fieldType($chart['group_by_field_id'] ?? null, "/charts/{$i}/group_by_field_id");
-            $xType = $fieldType($chart['x_field_id'] ?? null, "/charts/{$i}/x_field_id");
+            $groupType = $fieldType($chart['group_by_field_id'] ?? null, "/charts/{$i}/group_by_field_id", false, $chartObject);
+            $xType = $fieldType($chart['x_field_id'] ?? null, "/charts/{$i}/x_field_id", false, $chartObject);
 
             // A date axis gets a bucket so the series reads chronologically.
             $bucket = $chart['bucket'] ?? null;
@@ -1178,8 +1232,8 @@ class AppScaffolder
 
             $ownFilter = is_array($chart['filter'] ?? null) ? $chart['filter'] : null;
             $dataSource = array_filter([
-                'object_id' => $object['id'],
-                'filter' => $withRange($ownFilter),
+                'object_id' => $chartObject['id'],
+                'filter' => $withRange($ownFilter, $chartObject),
                 'limit' => is_numeric($chart['limit'] ?? null) ? (int) $chart['limit'] : self::DASHBOARD_ROW_LIMIT,
             ], fn ($v) => $v !== null);
 
@@ -1292,7 +1346,9 @@ class AppScaffolder
             $blocks[] = ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $title];
         }
 
-        if ($withDateFilter) {
+        if ($withDateFilter && $rangeWired) {
+            // Only when at least one block actually listens to it — a filter
+            // bar over unwired blocks is a control that does nothing.
             $blocks[] = [
                 'id' => $this->id('blk'),
                 'type' => 'filter_bar',

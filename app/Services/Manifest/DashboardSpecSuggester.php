@@ -34,6 +34,127 @@ class DashboardSpecSuggester
 
     public function __construct(private readonly SemanticProfile $semantics = new SemanticProfile) {}
 
+    /** With several objects, how much of the board the primary keeps. */
+    private const PRIMARY_KPIS = 4;
+
+    private const PRIMARY_CHARTS = 4;
+
+    private const MAX_SECONDARIES = 3;
+
+    /**
+     * Multi-object composition: the PRIMARY (first) object drives the board's
+     * skeleton, and each additional object with rows contributes its strongest
+     * pieces — its trend chart (with several time-axed objects that series is
+     * usually THE thing the user asked for) and its leading breakdown, plus
+     * its headline KPI — each tagged with object_slug so the compiler reads
+     * every block from its own object. Observed gap this closes: a 4-object
+     * NPS build used only the comments object, and the requested weekly
+     * nps_score evolution never rendered despite being acquired.
+     *
+     * @param  list<array<string, mixed>>  $objects  ordered primary-first
+     * @param  array<string, list<array<string, mixed>>>  $rowsByObject  keyed by object id
+     * @return array<string, mixed> spec in add_dashboard_page's input shape
+     */
+    public function suggestMulti(array $objects, string $lang = 'es', array $rowsByObject = []): array
+    {
+        $objects = array_values(array_filter($objects, 'is_array'));
+        if ($objects === []) {
+            return [];
+        }
+
+        $primary = $objects[0];
+        $spec = $this->suggest($primary, $lang, $rowsByObject[$primary['id'] ?? ''] ?? []);
+        $secondaries = array_values(array_filter(
+            array_slice($objects, 1),
+            fn (array $o): bool => ($rowsByObject[$o['id'] ?? ''] ?? []) !== [],
+        ));
+        if ($secondaries === []) {
+            return $spec;
+        }
+
+        // Make room for the guests: the primary keeps its strongest pieces
+        // (the suggester already orders by story importance).
+        $spec['kpis'] = array_slice($spec['kpis'] ?? [], 0, self::PRIMARY_KPIS);
+        $spec['charts'] = array_slice($spec['charts'] ?? [], 0, self::PRIMARY_CHARTS);
+
+        foreach (array_slice($secondaries, 0, self::MAX_SECONDARIES) as $secondary) {
+            $slug = $secondary['slug'] ?? null;
+            if ($slug === null) {
+                continue;
+            }
+            $mini = $this->suggest($secondary, $lang, $rowsByObject[$secondary['id'] ?? ''] ?? []);
+            $name = (string) ($secondary['name'] ?? $slug);
+
+            $charts = collect($mini['charts'] ?? []);
+            $trend = $charts->first(fn (array $c): bool => isset($c['x_field_id']));
+            $breakdown = $charts->first(fn (array $c): bool => isset($c['group_by_field_id']) && ! isset($c['x_field_id']));
+            foreach ([$trend, $breakdown] as $chart) {
+                if ($chart === null || count($spec['charts']) >= self::MAX_CHARTS) {
+                    continue;
+                }
+                $chart['object_slug'] = $slug;
+                $chart['label'] = $this->labelWithObject((string) ($chart['label'] ?? ''), $name);
+                $spec['charts'][] = $this->varyForm($chart, $spec['charts']);
+            }
+
+            $kpi = ($mini['kpis'] ?? [])[0] ?? null;
+            if ($kpi !== null && count($spec['kpis']) < self::MAX_KPIS) {
+                $kpi['object_slug'] = $slug;
+                $kpi['label'] = $this->labelWithObject((string) ($kpi['label'] ?? ''), $name);
+                $spec['kpis'][] = $kpi;
+            }
+
+            // One temporal contributor is enough to make the range filter
+            // worth having, even when the primary itself is dateless (the
+            // compiler wires only the objects that can honestly listen).
+            if (($mini['date_field_id'] ?? null) !== null) {
+                $spec['include_date_filter'] = true;
+            }
+        }
+
+        return $spec;
+    }
+
+    /**
+     * Every secondary's mini-spec leads with the same forms (line trend,
+     * donut breakdown), so a naive merge repeats a chart_type past the
+     * variety lint's cap of 2. Re-form the newcomer when its type is taken.
+     *
+     * @param  array<string, mixed>  $chart
+     * @param  list<array<string, mixed>>  $existing
+     * @return array<string, mixed>
+     */
+    private function varyForm(array $chart, array $existing): array
+    {
+        $counts = array_count_values(array_map(fn (array $c): string => (string) ($c['chart_type'] ?? ''), $existing));
+        $type = (string) ($chart['chart_type'] ?? 'bar');
+        if (($counts[$type] ?? 0) < 2) {
+            return $chart;
+        }
+
+        $alternatives = in_array($type, ['line', 'area'], true)
+            ? ['area', 'line', 'bar']
+            : ['hbar', 'treemap', 'bar', 'donut'];
+        foreach ($alternatives as $alt) {
+            if ($alt !== $type && ($counts[$alt] ?? 0) < 2) {
+                $chart['chart_type'] = $alt;
+                break;
+            }
+        }
+
+        return $chart;
+    }
+
+    /** "Evolución de nps score · NPS Semanal" — say whose number it is. */
+    private function labelWithObject(string $label, string $objectName): string
+    {
+        if ($objectName === '' || mb_stripos($label, $objectName) !== false) {
+            return $label;
+        }
+
+        return trim($label.' · '.$objectName);
+    }
+
     /**
      * @param  array<string, mixed>  $object  manifest object_definition
      * @param  list<array<string, mixed>>  $rows  sampled external rows (optional but recommended)
