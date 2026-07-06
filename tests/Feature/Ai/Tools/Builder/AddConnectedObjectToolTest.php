@@ -263,3 +263,33 @@ it('digs one level deeper for the rows list (nested by_dimension wrappers)', fun
     $stored = $propose->currentManifest()['objects'][0]['source']['operations']['list'];
     expect($stored['collection_path'])->toBe('by_dimension.status');
 });
+
+it('fills fecha_desde/fecha_hasta style required params too', function () {
+    $today = now()->utc()->toDateString();
+    $monthAgo = now()->utc()->subDays(30)->toDateString();
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andReturn([[
+        'name' => 'ordenes-tool', 'description' => '',
+        'input_schema' => [
+            'required' => ['fecha_desde', 'fecha_hasta'],
+            'properties' => [
+                'fecha_desde' => ['type' => 'string', 'format' => 'date'],
+                'fecha_hasta' => ['type' => 'string', 'format' => 'date'],
+            ],
+        ],
+    ]]);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['fecha_desde'] === $monthAgo
+            && $args['fecha_hasta'] === $today)
+        ->andReturn(['ordenes' => [['id' => 'O1', 'total' => 5]]]);
+
+    [$tool] = aco_tool($this, $mcp);
+    $result = json_decode($tool->handle(new ToolRequest([
+        'integration_id' => $this->integration->id,
+        'tool_name' => 'ordenes-tool',
+    ])), true);
+
+    expect($result['ok'])->toBeTrue();
+});

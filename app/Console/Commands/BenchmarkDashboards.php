@@ -279,7 +279,11 @@ sentido. Sé estricto y di los porqués concretos.
 TXT,
                 json_encode([
                     'pedido' => $run->prompt,
-                    'resumen' => $run->result['rendered'] ?? [],
+                    'titulo' => $context->page['name'] ?? '',
+                    // The re-audit's rendered numbers — result['rendered'] is
+                    // only written by the queued job, and an empty resumen made
+                    // the judge score a healthy board 1/5 for "no data".
+                    'resumen' => array_slice($sanity['summary'] ?? [], 0, 40),
                     'sustituciones' => $context->substitutions,
                     'notas' => $context->notes,
                 ], JSON_UNESCAPED_UNICODE),

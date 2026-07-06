@@ -436,3 +436,28 @@ it('never aggregates numeric identifiers into KPIs or charts', function () {
     $ces = collect($spec['kpis'])->firstWhere('field_id', 'fld_cesval00');
     expect($ces['aggregation'])->toBe('avg');
 });
+
+it('disables the date filter when the object has no temporal field', function () {
+    // The board-emptying bug: no date field → compiler defaults the range
+    // filter to sys_created_at, which connected rows don't carry → every row
+    // filtered out → a whole scenario rendered empty and scored 1/5.
+    $object = [
+        'id' => 'obj_sellcmp0', 'slug' => 'sellers', 'name' => 'Sellers',
+        'fields' => [
+            ['id' => 'fld_nomsell0', 'slug' => 'nombre', 'name' => 'Nombre', 'type' => 'string'],
+            ['id' => 'fld_promdia0', 'slug' => 'promedio_dias', 'name' => 'Promedio Días', 'type' => 'number'],
+        ],
+    ];
+
+    $spec = (new DashboardSpecSuggester)->suggest($object, 'es');
+    expect($spec['include_date_filter'])->toBeFalse();
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec + ['object_slug' => 'sellers'], $object, [],
+        ColorPalette::fromAccent(OrganizationBrand::DEFAULT_ACCENT), 'es',
+    );
+    expect($built['ok'])->toBeTrue()
+        // No range_start anywhere: nothing filters on a field the rows lack.
+        ->and(json_encode($built['page']))->not->toContain('range_start')
+        ->and(json_encode($built['page']))->not->toContain('sys_created_at');
+});

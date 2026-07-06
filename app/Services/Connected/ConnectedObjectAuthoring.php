@@ -245,13 +245,15 @@ class ConnectedObjectAuthoring
 
                 continue;
             }
-            if (preg_match('/^(from|start|since|desde|start_date|date_from)$/i', $name) === 1
-                || ($spec['format'] ?? null) === 'date' && preg_match('/from|start|since/i', $name) === 1) {
+            // Contain-style: fecha_desde / date_from / start_date all count
+            // (an exact-match regex left fecha_desde unfilled and the tool
+            // rejected every read in a benchmark run).
+            if (preg_match('/(^|_)(from|start|since|desde)(_|$)|_from$|^fecha_desde$/i', $name) === 1) {
                 $arguments[$name] = now()->utc()->subDays(30)->toDateString();
 
                 continue;
             }
-            if (preg_match('/^(to|until|end|hasta|end_date|date_to)$/i', $name) === 1) {
+            if (preg_match('/(^|_)(to|until|end|hasta)(_|$)|_to$|^fecha_hasta$/i', $name) === 1) {
                 $arguments[$name] = now()->utc()->toDateString();
 
                 continue;

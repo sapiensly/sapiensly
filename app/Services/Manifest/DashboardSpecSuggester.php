@@ -76,10 +76,15 @@ class DashboardSpecSuggester
             'object_slug' => $object['slug'] ?? null,
             'title' => ($es ? 'Análisis de ' : 'Analysis of ').($object['name'] ?? $object['slug'] ?? ''),
             'date_field_id' => $dateField['id'] ?? null,
+            // Without a real temporal field the compiler would fall back to
+            // sys_created_at — which connected rows DON'T carry, so the range
+            // filter silently deletes every row and the whole board renders
+            // empty (observed: an entire benchmark scenario scored 1/5).
+            'include_date_filter' => $dateField !== null,
             'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es),
             'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es),
             'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es),
-        ], fn ($v) => $v !== null);
+        ], fn ($v) => $v !== null && $v !== '');
     }
 
     /**
