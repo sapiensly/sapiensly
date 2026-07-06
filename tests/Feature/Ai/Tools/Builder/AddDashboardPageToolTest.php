@@ -592,6 +592,54 @@ it('charts the object\'s namesake metric, not its first additive (nps_time_serie
         ->and($spec['kpis'][0]['aggregation'])->toBe('avg');
 });
 
+it('blocks the unambiguous lies for hand-authored specs too: count-of-buckets, summed scores, label breakdowns', function () {
+    // Prod nps5 (agentic path): a bar chart COUNTED weekly pre-aggregated rows
+    // grouped by period_label (every bar = 1 week, labeled "por Segmento") —
+    // Express suggests only legal specs, but the compiler must refuse the lie
+    // no matter who authors it.
+    $series = [
+        'id' => 'obj_npstseries0', 'slug' => 'nps_time_series', 'name' => 'Nps Time Series',
+        'fields' => [
+            ['id' => 'fld_period0000', 'slug' => 'period_start', 'name' => 'Period Start', 'type' => 'date'],
+            ['id' => 'fld_plabel0000', 'slug' => 'period_label', 'name' => 'Period Label', 'type' => 'string'],
+            ['id' => 'fld_responses0', 'slug' => 'responses', 'name' => 'Responses', 'type' => 'number'],
+            ['id' => 'fld_npsscore00', 'slug' => 'nps_score', 'name' => 'Nps Score', 'type' => 'number'],
+        ],
+        'source' => ['type' => 'connected', 'operations' => ['list' => ['mcp_tool' => 't', 'collection_path' => 'series']]],
+    ];
+
+    $spec = [
+        'object_slug' => 'nps_time_series',
+        'kpis' => [
+            ['label' => 'NPS', 'aggregation' => 'avg', 'field_id' => 'fld_npsscore00'],          // legal
+            ['label' => 'Suma NPS', 'aggregation' => 'sum', 'field_id' => 'fld_npsscore00'],     // summed score
+            ['label' => 'Semanas', 'aggregation' => 'count'],                                    // counts buckets
+        ],
+        'charts' => [
+            ['label' => 'Evolución', 'chart_type' => 'line', 'aggregation' => 'avg', 'x_field_id' => 'fld_period0000', 'y_field_id' => 'fld_npsscore00'], // legal
+            ['label' => 'Distribución por Segmento', 'chart_type' => 'bar', 'aggregation' => 'count', 'group_by_field_id' => 'fld_plabel0000'],           // the nps5 lie
+        ],
+        'insights' => [['variant' => 'conclusion', 'title' => 'x', 'body' => 'y']],
+    ];
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec($spec, $series, [], null, 'es');
+
+    expect($built['ok'])->toBeFalse();
+    $errors = json_encode($built['errors']);
+    expect($errors)->toContain('Never SUM')
+        ->and($errors)->toContain('BUCKETS')
+        ->and($errors)->toContain('illegal_aggregation');
+
+    // The same spec without the lies compiles.
+    $spec['kpis'] = [$spec['kpis'][0], ['label' => 'Respuestas', 'aggregation' => 'sum', 'field_id' => 'fld_responses0']];
+    $spec['charts'] = [
+        $spec['charts'][0],
+        ['label' => 'Respuestas por semana', 'chart_type' => 'bar', 'aggregation' => 'sum', 'y_field_id' => 'fld_responses0', 'x_field_id' => 'fld_period0000'],
+    ];
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec($spec, $series, [], null, 'es');
+    expect($built['ok'])->toBeTrue();
+});
+
 it('re-forms a lone short chart so its own lints never kill the compile', function () {
     // Prod: a spec whose only chart was a donut compiled into a single-short-
     // block row, failed the compiler's OWN lint and the whole build died. The

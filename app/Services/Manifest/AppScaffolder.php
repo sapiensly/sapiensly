@@ -7,6 +7,7 @@ use App\Ai\Tools\Builder\PlanDashboardTool;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
+use App\Services\Express\SemanticProfile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Enums\Lab;
@@ -118,6 +119,7 @@ class AppScaffolder
     public function __construct(
         private readonly AiDefaults $aiDefaults,
         private readonly AiProviderService $providers,
+        private readonly SemanticProfile $semantics = new SemanticProfile,
     ) {}
 
     /**
@@ -1096,6 +1098,40 @@ class AppScaffolder
             return $objectsBySlug[$slug];
         };
 
+        // Aggregation legality, enforced for EVERY caller — Express suggests
+        // only legal specs, but a hand-authored spec once shipped a bar chart
+        // COUNTING pre-aggregated weekly rows (every bar = 1 week) and summed
+        // scores. Only the unambiguous lies are blocked; the errors name the
+        // honest alternative.
+        $grainBySlug = [];
+        foreach ($objectsBySlug as $slug => $obj) {
+            $grainBySlug[$slug] = $this->semantics->grainOf($obj);
+        }
+        $legalAggregation = function (array $obj, string $agg, ?string $fieldId, string $path) use (&$errors, $grainBySlug, $fieldsBySlug, $primarySlug): bool {
+            $slug = (string) ($obj['slug'] ?? $primarySlug);
+            $grain = $grainBySlug[$slug] ?? SemanticProfile::GRAIN_RAW;
+            $field = $fieldId !== null ? ($fieldsBySlug[$slug][$fieldId] ?? null) : null;
+            $measure = $field !== null ? $this->semantics->measureTypeOf($field) : null;
+
+            if ($agg === 'count' && $grain !== SemanticProfile::GRAIN_RAW) {
+                $errors[] = ['path' => $path, 'message' => "count on '{$slug}' counts pre-aggregated BUCKETS, not records — sum an additive column of the object instead.", 'code' => 'illegal_aggregation'];
+
+                return false;
+            }
+            if ($measure === SemanticProfile::MEASURE_IDENTIFIER) {
+                $errors[] = ['path' => $path, 'message' => "'{$field['slug']}' is an identifier — no aggregation of an id means anything. Aggregate a real measure or drop this item.", 'code' => 'illegal_aggregation'];
+
+                return false;
+            }
+            if ($agg === 'sum' && in_array($measure, [SemanticProfile::MEASURE_RATIO, SemanticProfile::MEASURE_STATISTIC], true)) {
+                $errors[] = ['path' => $path, 'message' => "Never SUM '{$field['slug']}' (a percentage/score/statistic) — use avg, min or max.", 'code' => 'illegal_aggregation'];
+
+                return false;
+            }
+
+            return true;
+        };
+
         $kpis = array_values(is_array($spec['kpis'] ?? null) ? $spec['kpis'] : []);
         $charts = array_values(is_array($spec['charts'] ?? null) ? $spec['charts'] : []);
         $insights = array_values(is_array($spec['insights'] ?? null) ? $spec['insights'] : []);
@@ -1171,6 +1207,9 @@ class AppScaffolder
             if ($type !== null && $agg !== 'count' && $agg !== 'distinct_count' && ! in_array($type, self::NUMERIC_TYPES, true)) {
                 $errors[] = ['path' => "/kpis/{$i}/field_id", 'message' => "'{$agg}' needs a numeric field; '{$kpi['field_id']}' is {$type}.", 'code' => 'wrong_type'];
             }
+            if (! $legalAggregation($kpiObject, $agg, $needsField ? ($kpi['field_id'] ?? null) : null, "/kpis/{$i}")) {
+                continue;
+            }
 
             $ownFilter = is_array($kpi['filter'] ?? null) ? $kpi['filter'] : null;
             $query = array_filter([
@@ -1219,8 +1258,24 @@ class AppScaffolder
             if ($yType !== null && ! in_array($yType, self::NUMERIC_TYPES, true)) {
                 $errors[] = ['path' => "/charts/{$i}/y_field_id", 'message' => "'{$agg}' needs a numeric y_field_id; '{$chart['y_field_id']}' is {$yType}.", 'code' => 'wrong_type'];
             }
+            if (! $legalAggregation($chartObject, $agg, $chart['y_field_id'] ?? null, "/charts/{$i}")) {
+                continue;
+            }
             $groupType = $fieldType($chart['group_by_field_id'] ?? null, "/charts/{$i}/group_by_field_id", false, $chartObject);
             $xType = $fieldType($chart['x_field_id'] ?? null, "/charts/{$i}/x_field_id", false, $chartObject);
+
+            // Grouping a time series by its bucket-LABEL column re-plots the
+            // trend as unordered bars (shipped once: «Distribución por
+            // Segmento» grouped by period_label — every bar one week).
+            $groupId = $chart['group_by_field_id'] ?? null;
+            $groupSlug = $groupId !== null ? (string) ($fieldsBySlug[(string) ($chartObject['slug'] ?? $primarySlug)][$groupId]['slug'] ?? '') : '';
+            if ($groupSlug !== ''
+                && ($grainBySlug[(string) ($chartObject['slug'] ?? $primarySlug)] ?? '') === SemanticProfile::GRAIN_TIME_SERIES
+                && preg_match('/label|bucket|period|semana|week/i', $groupSlug) === 1) {
+                $errors[] = ['path' => "/charts/{$i}/group_by_field_id", 'message' => "'{$groupSlug}' is the series' bucket label (the time axis in costume) — chart the trend with x_field_id on the object's date field instead.", 'code' => 'illegal_aggregation'];
+
+                continue;
+            }
 
             // A date axis gets a bucket so the series reads chronologically.
             $bucket = $chart['bucket'] ?? null;
