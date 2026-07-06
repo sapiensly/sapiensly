@@ -36,9 +36,12 @@ class ComputedFactsBuilder
         foreach ($fields as $field) {
             $type = $field['type'] ?? 'string';
             $name = (string) ($field['name'] ?? $field['slug']);
+            // Scalars only: external rows sometimes carry an array under a
+            // field inferred as string (tags, nested leftovers) and casting
+            // one to string is a fatal in-pipeline error.
             $values = array_values(array_filter(
                 array_map(fn (array $r) => $valueOf($r, $field), $rows),
-                fn ($v) => $v !== null && $v !== '',
+                fn ($v) => is_scalar($v) && $v !== '',
             ));
             if ($values === []) {
                 continue;

@@ -20,6 +20,10 @@ use Illuminate\Support\Str;
  */
 class ConnectedObjectAuthoring
 {
+    private const DATE_FROM_PARAM = '/(^|_)(from|start|since|desde)(_|$)|_from$|^fecha_desde$/i';
+
+    private const DATE_TO_PARAM = '/(^|_)(to|until|end|hasta)(_|$)|_to$|^fecha_hasta$/i';
+
     public function __construct(
         private readonly McpClient $mcp,
         private readonly ConnectedObjectModeler $modeler,
@@ -65,7 +69,21 @@ class ConnectedObjectAuthoring
             // very first read.
             $arguments = $this->fillRequiredArguments($arguments, $tool['input_schema']);
 
-            $decoded = $this->mcp->callToolData($config, $user, $toolName, $arguments);
+            try {
+                $decoded = $this->mcp->callToolData($config, $user, $toolName, $arguments);
+            } catch (\Throwable $e) {
+                // "At least one of sku/fecha_desde/fecha_hasta…" constraints
+                // live only in the tool's ERROR message — the date params are
+                // optional in the schema, so fillRequiredArguments never sees
+                // them. One retry with a synthesized rolling window over the
+                // optional date-ish params before giving up.
+                $withDates = $this->fillDateArguments($arguments, $tool['input_schema']);
+                if ($withDates === $arguments) {
+                    throw $e;
+                }
+                $decoded = $this->mcp->callToolData($config, $user, $toolName, $withDates);
+                $arguments = $withDates;
+            }
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -248,12 +266,12 @@ class ConnectedObjectAuthoring
             // Contain-style: fecha_desde / date_from / start_date all count
             // (an exact-match regex left fecha_desde unfilled and the tool
             // rejected every read in a benchmark run).
-            if (preg_match('/(^|_)(from|start|since|desde)(_|$)|_from$|^fecha_desde$/i', $name) === 1) {
+            if (preg_match(self::DATE_FROM_PARAM, $name) === 1) {
                 $arguments[$name] = now()->utc()->subDays(30)->toDateString();
 
                 continue;
             }
-            if (preg_match('/(^|_)(to|until|end|hasta)(_|$)|_to$|^fecha_hasta$/i', $name) === 1) {
+            if (preg_match(self::DATE_TO_PARAM, $name) === 1) {
                 $arguments[$name] = now()->utc()->toDateString();
 
                 continue;
@@ -268,6 +286,33 @@ class ConnectedObjectAuthoring
             }
             // Unrecognizable required string → leave absent; the tool's error
             // message will name it and the run reports it honestly.
+        }
+
+        return $arguments;
+    }
+
+    /**
+     * Fill EVERY missing date-ish param (required or not) with the rolling
+     * 30-day window — the retry path for tools whose "provide at least one
+     * filter" constraint is enforced only at call time.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $inputSchema
+     * @return array<string, mixed>
+     */
+    private function fillDateArguments(array $arguments, array $inputSchema): array
+    {
+        $properties = is_array($inputSchema['properties'] ?? null) ? $inputSchema['properties'] : [];
+
+        foreach (array_keys($properties) as $name) {
+            if (! is_string($name) || array_key_exists($name, $arguments)) {
+                continue;
+            }
+            if (preg_match(self::DATE_FROM_PARAM, $name) === 1) {
+                $arguments[$name] = now()->utc()->subDays(30)->toDateString();
+            } elseif (preg_match(self::DATE_TO_PARAM, $name) === 1) {
+                $arguments[$name] = now()->utc()->toDateString();
+            }
         }
 
         return $arguments;

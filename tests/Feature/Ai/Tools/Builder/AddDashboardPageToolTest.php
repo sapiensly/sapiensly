@@ -437,6 +437,28 @@ it('never aggregates numeric identifiers into KPIs or charts', function () {
     expect($ces['aggregation'])->toBe('avg');
 });
 
+it('re-forms a lone short chart so its own lints never kill the compile', function () {
+    // Prod: a spec whose only chart was a donut compiled into a single-short-
+    // block row, failed the compiler's OWN lint and the whole build died. The
+    // compiler must emit lint-clean layouts by construction.
+    $spec = adp_spec();
+    $spec['charts'] = [
+        ['label' => 'Por estado', 'chart_type' => 'donut', 'aggregation' => 'count', 'group_by_field_id' => 'fld_statefield'],
+    ];
+
+    $manifest = $this->manifestService->getActiveManifest($this->testApp->fresh());
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $manifest['objects'][0], [], null, 'es',
+    );
+
+    expect($built['ok'])->toBeTrue()
+        ->and(PlanDashboardTool::lint($built['purpose'], $built['plan_rows'])['ok'])->toBeTrue();
+
+    $chart = collect($built['page']['blocks'])->firstWhere('type', 'container')['blocks'][0];
+    expect($chart['chart_type'])->toBe('bar')
+        ->and($chart['group_by_field_id'])->toBe('fld_statefield');
+});
+
 it('disables the date filter when the object has no temporal field', function () {
     // The board-emptying bug: no date field → compiler defaults the range
     // filter to sys_created_at, which connected rows don't carry → every row

@@ -421,6 +421,52 @@ it('halts when every chosen tool is off-topic for the request', function () {
     }
 });
 
+it('halts on an off-domain request even when the gate skips the piece mapping', function () {
+    // The prod miss: a 44-token fit-check answer with pieces=[] bypassed the
+    // mapping backstop, and the topic veto was defeated by ONE shared generic
+    // word ("producto") — a finance board got built from delivery data and the
+    // judge correctly scored it 1/5. With no mapping, the pieces are derived
+    // from the request's own fragments and the same majority rule applies.
+    ExpressGateAgent::fake([[
+        'tools' => ['get-global-otd-time-series-tool'],
+        'pieces' => [],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'Crea un dashboard de finanzas corporativas con revenue mensual, margen por producto y proyección de flujo de caja.');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-global-otd-time-series-tool', 'description' => 'Serie semanal de productos entregados a tiempo (OTD)', 'input_schema' => []],
+        ['name' => 'get-orders-tool', 'description' => 'Orders list', 'input_schema' => []],
+    ];
+
+    try {
+        (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+        $this->fail('Expected ExpressHalt');
+    } catch (ExpressHalt $halt) {
+        expect($halt->status)->toBe('halted_unanswerable')
+            ->and($halt->userMessage)->toContain('flujo de caja');
+    }
+});
+
+it('does not halt an on-domain request whose fragments are analytical phrasing', function () {
+    // "métricas clave, tendencias y desgloses relevantes" describes ANY
+    // dashboard — those fragments must not read as unanswered data asks.
+    ExpressGateAgent::fake([[
+        'tools' => ['get-tickets-time-series-tool'],
+        'pieces' => [],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'Crea un dashboard ejecutivo de análisis de tickets: métricas clave, tendencias, desgloses relevantes y filtro de fecha.');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->toBe(['get-tickets-time-series-tool']);
+});
+
 it('declared proxies in the piece mapping become honest substitutions', function () {
     ExpressGateAgent::fake([[
         'tools' => ['get-tickets-time-series-tool'],

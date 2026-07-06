@@ -61,6 +61,31 @@ it('skips empty columns and high-cardinality strings', function () {
         ->and($facts['row_count'])->toBe(30);
 });
 
+it('survives array values under a string field (prod: Array to string conversion)', function () {
+    // A field inferred as string whose rows sometimes carry an array (tags,
+    // nested leftovers) crashed the whole tendencia benchmark scenario.
+    $object = [
+        'name' => 'X', 'slug' => 'x',
+        'fields' => [
+            ['id' => 'f_cat', 'slug' => 'categoria', 'name' => 'Categoría', 'type' => 'string'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'f_cat', 'external_path' => 'categoria'],
+        ]],
+    ];
+    $rows = [
+        ['categoria' => 'Envíos'],
+        ['categoria' => ['nested', 'array']],
+        ['categoria' => 'Envíos'],
+        ['categoria' => 'Pagos'],
+    ];
+
+    $facts = (new ComputedFactsBuilder)->build($object, $rows);
+
+    expect($facts['top_values']['Categoría']['top'])->toBe('Envíos')
+        ->and($facts['top_values']['Categoría']['count'])->toBe(2);
+});
+
 it('joins weekly peaks across objects into cross facts', function () {
     $mkObject = fn (string $id, string $name, string $numSlug) => [
         'id' => $id, 'slug' => $name, 'name' => $name,

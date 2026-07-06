@@ -293,3 +293,48 @@ it('fills fecha_desde/fecha_hasta style required params too', function () {
 
     expect($result['ok'])->toBeTrue();
 });
+
+it('retries with a date window when the tool enforces at-least-one-filter only at call time', function () {
+    // Prod: fecha_desde/fecha_hasta were OPTIONAL in the schema, but the tool
+    // rejected every no-filter read with "Debes proporcionar al menos uno
+    // de: sku, fecha_desde, fecha_hasta…" — a constraint that lives only in
+    // the error message. One retry with the rolling window recovers it.
+    $today = now()->utc()->toDateString();
+    $monthAgo = now()->utc()->subDays(30)->toDateString();
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andReturn([[
+        'name' => 'ordenes-metrics-tool', 'description' => '',
+        'input_schema' => [
+            'properties' => [
+                'sku' => ['type' => 'string'],
+                'fecha_desde' => ['type' => 'string', 'format' => 'date'],
+                'fecha_hasta' => ['type' => 'string', 'format' => 'date'],
+            ],
+        ],
+    ]]);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args === [])
+        ->andThrow(new RuntimeException('Debes proporcionar al menos uno de: `sku`, `fecha_desde`, `fecha_hasta`.'));
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => ($args['fecha_desde'] ?? null) === $monthAgo
+            && ($args['fecha_hasta'] ?? null) === $today
+            && ! array_key_exists('sku', $args))
+        ->andReturn(['ordenes' => [['id' => 'O1', 'total' => 5]]]);
+
+    [$tool, $propose] = aco_tool($this, $mcp);
+    $result = json_decode($tool->handle(new ToolRequest([
+        'integration_id' => $this->integration->id,
+        'tool_name' => 'ordenes-metrics-tool',
+    ])), true);
+
+    expect($result['ok'])->toBeTrue();
+
+    // The banked operation keeps the window (relativized), so future live
+    // reads don't re-hit the constraint.
+    $object = $propose->currentManifest()['objects'][0];
+    expect($object['source']['operations']['list']['arguments']['fecha_hasta'])->toBe('{{today()}}')
+        ->and($object['source']['operations']['list']['arguments']['fecha_desde'])->toBe('{{days_ago(30)}}');
+});

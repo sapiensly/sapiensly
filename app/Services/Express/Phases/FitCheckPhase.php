@@ -163,6 +163,12 @@ Los datos disponibles cubren: '.$this->sourceDomains($context).'.
 Dime qué construyo sobre eso (o conecta otra fuente).',
                 );
             }
+        } else {
+            // Deterministic backstop #1b — the gate SKIPPED the mandatory
+            // mapping (observed: a 44-token answer with no pieces built a
+            // "finance" board from delivery data). Derive the pieces from the
+            // request itself and apply the same majority rule.
+            $this->haltIfDerivedPiecesUnmapped($context);
         }
 
         // Deterministic backstop #2 — zero topical overlap. If NONE of the
@@ -189,6 +195,53 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
                 continue; // a nameless miss is noise, not information
             }
             $context->note('No respondible con esta fuente: '.$asked.' ('.($miss['reason'] ?? '').')');
+        }
+    }
+
+    /**
+     * When the model returns NO piece mapping, split the request into
+     * comma/«y»-separated fragments and treat each multi-word fragment as an
+     * asked piece: one none of whose topic words appears in any chosen tool
+     * is unanswered, and an unmapped majority halts — the same rule as the
+     * declared mapping. Deliberately conservative: fragments need ≥2 topic
+     * words to count (single words are qualifiers, not data asks) and the
+     * check needs ≥2 such fragments, so a vague one-line prompt is exempt.
+     */
+    private function haltIfDerivedPiecesUnmapped(ExpressContext $context): void
+    {
+        $fragments = collect(preg_split('/[,;:.]|\s+y\s+|\s+e\s+/iu', Str::lower(Str::ascii($context->prompt))) ?: [])
+            ->map(fn ($f) => trim((string) $f))
+            ->map(fn (string $f): array => ['text' => $f, 'words' => $this->topicWords($f)])
+            ->filter(fn (array $f): bool => $f['words']->count() >= 2)
+            ->values();
+        if ($fragments->count() < 2) {
+            return;
+        }
+
+        $byName = collect($context->catalogTools)->keyBy('name');
+        $haystack = collect($context->chosenTools)
+            ->map(fn (string $n) => $byName->get($n))
+            ->filter()
+            ->map(fn (array $t): string => Str::lower(Str::ascii(($t['name'] ?? '').' '.($t['description'] ?? ''))))
+            ->implode(' ');
+        // Stem-tolerant both ways: "producto" matches "productos" in the tool,
+        // and the tool's "detractor" matches "detractores" in the prompt.
+        $haystackWords = collect(preg_split('/[^a-z0-9]+/', $haystack) ?: [])
+            ->filter(fn ($w) => mb_strlen((string) $w) >= 4)->unique()->values();
+        $covers = fn (string $w): bool => str_contains($haystack, $w)
+            || $haystackWords->contains(fn (string $hw): bool => str_contains($w, $hw));
+
+        $unmapped = $fragments->reject(fn (array $f): bool => $f['words']->contains(fn ($w) => $covers((string) $w)));
+
+        if ($unmapped->count() * 2 > $fragments->count()) {
+            throw new ExpressHalt(
+                'halted_unanswerable',
+                'Esta conexión no puede responder la mayor parte de tu pedido (sin datos para: '.$unmapped->pluck('text')->implode(', ').').
+
+Los datos disponibles cubren: '.$this->sourceDomains($context).'.
+
+Dime qué construyo sobre eso (o conecta otra fuente).',
+            );
         }
     }
 
@@ -223,7 +276,13 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      */
     private function topicWords(string $prompt)
     {
-        $stop = ['crea', 'dashboard', 'tablero', 'reporte', 'quiero', 'necesito', 'para', 'con', 'una', 'las', 'los', 'del', 'que', 'como', 'por', 'sus', 'este', 'esta', 'analisis', 'analizar', 'grafica', 'graficas', 'kpis', 'kpi', 'insights', 'filtro', 'fecha', 'datos', 'reales', 'vista', 'ejecutiva', 'build', 'create', 'make', 'the', 'and', 'for'];
+        $stop = [
+            'crea', 'dashboard', 'tablero', 'reporte', 'quiero', 'necesito', 'para', 'con', 'una', 'las', 'los', 'del', 'que', 'como', 'por', 'sus', 'este', 'esta', 'analisis', 'analizar', 'analiza', 'grafica', 'graficas', 'kpis', 'kpi', 'insights', 'filtro', 'fecha', 'datos', 'reales', 'vista', 'ejecutiva', 'ejecutivo', 'build', 'create', 'make', 'the', 'and', 'for',
+            // Analytical phrasing, not data asks — "métricas clave, tendencias
+            // y desgloses relevantes" describes ANY dashboard; these words must
+            // not count as topical evidence for or against a source.
+            'muestrame', 'muestra', 'dame', 'hazme', 'metricas', 'metrica', 'clave', 'tendencia', 'tendencias', 'evolucion', 'semanal', 'mensual', 'diario', 'diaria', 'desglose', 'desgloses', 'dimension', 'dimensiones', 'relevantes', 'principales', 'conclusiones', 'recomendaciones', 'acciones', 'tomar', 'donde', 'concentran', 'problemas', 'oportunidades', 'diagnostico', 'resumen', 'general', 'picos', 'caidas', 'tiempo', 'periodo',
+        ];
 
         // >= 3, not > 3: three-letter acronyms ARE the topic in this domain
         // (nps, otd, sla, ots) — dropping them made the overlap backstop kill

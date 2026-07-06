@@ -289,7 +289,7 @@ TXT,
                 ], JSON_UNESCAPED_UNICODE),
                 fn ($schema) => [
                     'score' => $schema->integer()->min(1)->max(5),
-                    'reasons' => $schema->string(),
+                    'reasons' => $schema->string()->description('OBLIGATORIO: 2-4 porqués concretos citando números del resumen — un score sin porqués no sirve para diagnosticar.'),
                 ],
                 ['score' => 0, 'reasons' => 'judge unavailable'],
                 $user,

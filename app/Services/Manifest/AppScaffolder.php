@@ -1254,6 +1254,19 @@ class AppScaffolder
                 }
             }
             if (! $placed) {
+                if (count($short) === 1) {
+                    // Nowhere to pair it and nothing to stack it with: a lone
+                    // donut/pie fails the lone-short-block lint and would kill
+                    // the whole compile. The same breakdown reads fine as bars
+                    // at full width — pick a form not already at the variety cap.
+                    $used = array_count_values(array_column($chartBlocks, 'chart_type'));
+                    foreach (['bar', 'hbar', 'treemap'] as $roomier) {
+                        if (($used[$roomier] ?? 0) < 2) {
+                            $short[0]['chart_type'] = $roomier;
+                            break;
+                        }
+                    }
+                }
                 $chartRows[] = array_splice($short, 0);
             }
         }
