@@ -1,6 +1,6 @@
 <?php
 
-use App\Events\Builder\BuilderStreamError;
+use App\Events\Builder\BuilderStreamComplete;
 use App\Models\App;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
@@ -30,7 +30,7 @@ function staleBuilderMessage(BuilderConversation $conv, string $status): Builder
     return $m;
 }
 
-it('marks builder messages stuck streaming/pending past the cap as errors', function () {
+it('flips a narration-less stale placeholder to the error in place', function () {
     $streaming = staleBuilderMessage($this->conv, 'streaming');
     $pending = staleBuilderMessage($this->conv, 'pending');
 
@@ -41,18 +41,34 @@ it('marks builder messages stuck streaming/pending past the cap as errors', func
         ->and($pending->fresh()->status)->toBe('error');
 });
 
-it('broadcasts the error to the open builder UI, not just the database', function () {
-    Event::fake([BuilderStreamError::class]);
-    $stale = staleBuilderMessage($this->conv, 'streaming');
+it('keeps the progress narration and appends the error as a NEW message', function () {
+    $placeholder = staleBuilderMessage($this->conv, 'streaming');
+    BuilderMessage::where('id', $placeholder->id)->update([
+        'content' => "🔌 Localizando la fuente…\n📦 Modelando 4 objeto(s)…",
+    ]);
 
     $this->artisan('builder:fail-stale-streams')->assertSuccessful();
 
-    Event::assertDispatched(
-        BuilderStreamError::class,
-        fn ($e) => $e->conversationId === $this->conv->id
-            && $e->messageId === $stale->id
-            && $e->error !== '',
-    );
+    $placeholder->refresh();
+    expect($placeholder->status)->toBe('none')
+        ->and($placeholder->content)->toContain('Modelando 4 objeto(s)');
+
+    $error = BuilderMessage::where('conversation_id', $this->conv->id)
+        ->where('status', 'error')->first();
+    expect($error)->not->toBeNull()
+        ->and($error->id)->not->toBe($placeholder->id)
+        ->and($error->content)->toContain('interrupted');
+});
+
+it('broadcasts completions so the open UI resolves without a reload', function () {
+    Event::fake([BuilderStreamComplete::class]);
+    $placeholder = staleBuilderMessage($this->conv, 'streaming');
+    BuilderMessage::where('id', $placeholder->id)->update(['content' => 'progreso…']);
+
+    $this->artisan('builder:fail-stale-streams')->assertSuccessful();
+
+    // Two completions: the kept narration + the appended error message.
+    Event::assertDispatched(BuilderStreamComplete::class, 2);
 });
 
 it('leaves live streams and finished builder messages untouched', function () {
