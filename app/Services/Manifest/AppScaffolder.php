@@ -1278,6 +1278,18 @@ class AppScaffolder
                 continue;
             }
 
+            // A part-of-whole chart needs a category to slice by. A pie/donut
+            // with no group_by (and no series) is a single 100% slice —
+            // observed: a «Respuestas por Periodo» donut of sum(responses) that
+            // said nothing. Point the model at a breakdown dimension or a bar.
+            if (in_array($chartType, ['pie', 'donut'], true)
+                && ($groupId === null || $groupId === '')
+                && ($chart['series_field_id'] ?? null) === null) {
+                $errors[] = ['path' => "/charts/{$i}/group_by_field_id", 'message' => "A {$chartType} needs a category to slice by — set group_by_field_id to a real dimension (status, segment, vertical…), or use a line/bar over time instead.", 'code' => 'degenerate_chart'];
+
+                continue;
+            }
+
             // A date axis gets a bucket so the series reads chronologically.
             $bucket = $chart['bucket'] ?? null;
             if ($bucket === null

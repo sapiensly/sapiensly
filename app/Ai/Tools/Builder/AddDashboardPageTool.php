@@ -63,8 +63,9 @@ as suggested_spec, plus `overrides` ({title?, purpose?, date_field_id?, kpis?,
 charts?, insights?, …} — each key you send REPLACES that part of the
 suggestion). Prefer the fast path with small overrides (real insight bodies, a
 better title) — your output stays ~100 tokens. Vary chart_type when authoring
-manually (never one form 3×; percentiles go in KPIs, not charts). Returns {ok,
-page:{slug, path}} or {ok:false, errors} naming exactly what to fix.
+manually (never one form 3×; percentiles go in KPIs, not charts; a pie/donut
+needs a group_by_field_id to slice by — without one it's a single 100% slice).
+Returns {ok, page:{slug, path}} or {ok:false, errors} naming exactly what to fix.
 DESC;
     }
 

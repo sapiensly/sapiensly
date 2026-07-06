@@ -675,6 +675,43 @@ it('blocks the unambiguous lies for hand-authored specs too: count-of-buckets, s
     expect($built['ok'])->toBeTrue();
 });
 
+it('rejects a part-of-whole chart with no category to slice by (the GLM degenerate donut)', function () {
+    // Prod nps_glm_5v: a donut of sum(responses) with no group_by — a single
+    // 100% slice that says nothing. A pie/donut needs a slicing dimension.
+    $series = [
+        'id' => 'obj_npstseries0', 'slug' => 'nps_time_series', 'name' => 'Nps Time Series',
+        'fields' => [
+            ['id' => 'fld_period0000', 'slug' => 'period_start', 'name' => 'Period Start', 'type' => 'date'],
+            ['id' => 'fld_responses0', 'slug' => 'responses', 'name' => 'Responses', 'type' => 'number'],
+            ['id' => 'fld_npsscore00', 'slug' => 'nps_score', 'name' => 'Nps Score', 'type' => 'number'],
+            ['id' => 'fld_segment000', 'slug' => 'segment', 'name' => 'Segment', 'type' => 'string'],
+        ],
+        'source' => ['type' => 'connected', 'operations' => ['list' => ['mcp_tool' => 't', 'collection_path' => 'series']]],
+    ];
+    $base = [
+        'object_slug' => 'nps_time_series',
+        'kpis' => [['label' => 'NPS', 'aggregation' => 'avg', 'field_id' => 'fld_npsscore00']],
+        'insights' => [['variant' => 'conclusion', 'title' => 'x', 'body' => 'y']],
+    ];
+
+    // Degenerate: donut of a total with nothing to slice by → rejected.
+    $bad = $base + ['charts' => [
+        ['label' => 'Evolución', 'chart_type' => 'line', 'aggregation' => 'avg', 'x_field_id' => 'fld_period0000', 'y_field_id' => 'fld_npsscore00'],
+        ['label' => 'Respuestas por Periodo', 'chart_type' => 'donut', 'aggregation' => 'sum', 'y_field_id' => 'fld_responses0'],
+    ]];
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec($bad, $series, [], null, 'es');
+    expect($built['ok'])->toBeFalse()
+        ->and(json_encode($built['errors']))->toContain('degenerate_chart');
+
+    // Give the donut a real dimension to slice by → compiles.
+    $good = $base + ['charts' => [
+        ['label' => 'Evolución', 'chart_type' => 'line', 'aggregation' => 'avg', 'x_field_id' => 'fld_period0000', 'y_field_id' => 'fld_npsscore00'],
+        ['label' => 'Respuestas por segmento', 'chart_type' => 'donut', 'aggregation' => 'sum', 'y_field_id' => 'fld_responses0', 'group_by_field_id' => 'fld_segment000'],
+    ]];
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec($good, $series, [], null, 'es');
+    expect($built['ok'])->toBeTrue();
+});
+
 it('only ships icons the runtime can draw: catalog names normalized, emojis kept, unknown slugs dropped', function () {
     // Prod nps5 showed "minus-circle" / "thumbs-down" as raw TEXT beside the
     // KPI value — plausible Lucide names outside the registry.
