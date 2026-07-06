@@ -12,6 +12,7 @@ use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\PipelineRun;
 use App\Models\Record;
+use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\BlockVisibilityFilter;
@@ -128,10 +129,22 @@ class AppBuilderController extends Controller
         $preview = $this->buildPreview($app, $request->user(), $manifest, $request->query('page'), $previewParams);
         $schema = $this->buildSchema($app, $manifest);
 
+        $models = $this->chatModels();
+        $modelIds = array_column($models, 'id');
+        $defaultModel = BuilderAiService::defaultModel();
+        // The configured builder backup, surfaced so the composer can offer a
+        // one-tap primary↔backup switch. Only when it's a distinct, selectable
+        // model (present in the picker list) — otherwise the switch hides.
+        $backupModel = app(AiDefaults::class)->fallback('builder');
+        if ($backupModel === $defaultModel || ! in_array($backupModel, $modelIds, true)) {
+            $backupModel = null;
+        }
+
         return Inertia::render('apps/Builder', [
             'app' => $app->only(['id', 'slug', 'name', 'description', 'kind']),
-            'models' => $this->chatModels(),
-            'defaultModel' => BuilderAiService::defaultModel(),
+            'models' => $models,
+            'defaultModel' => $defaultModel,
+            'backupModel' => $backupModel,
             'expressEnabled' => (bool) config('express.enabled'),
             'manifest' => $manifest,
             'preview' => $preview,

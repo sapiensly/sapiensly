@@ -95,6 +95,7 @@ import {
     PanelLeftOpen,
     Paperclip,
     Plus,
+    Repeat2,
     RotateCcw,
     Send,
     Settings2,
@@ -232,6 +233,7 @@ interface Props {
     } | null;
     models?: Array<{ id: string; label: string }>;
     defaultModel?: string;
+    backupModel?: string | null;
     expressEnabled?: boolean;
     versions?: Array<{
         id: string;
@@ -256,6 +258,31 @@ const selectedModelLabel = computed(
         props.models?.find((m) => m.id === selectedModel.value)?.label ??
         selectedModel.value,
 );
+
+// One-tap primary↔backup switch. Only offered when the admin configured a
+// distinct, selectable backup model — the full picker (gear) stays for
+// anything else. The pill in the status bar becomes the toggle.
+const primaryModelId = computed(() => props.defaultModel ?? '');
+const backupModelId = computed(() => props.backupModel ?? '');
+const canToggleModel = computed(
+    () =>
+        !!primaryModelId.value &&
+        !!backupModelId.value &&
+        primaryModelId.value !== backupModelId.value,
+);
+const isOnBackupModel = computed(
+    () => canToggleModel.value && selectedModel.value === backupModelId.value,
+);
+function toggleModel() {
+    if (!canToggleModel.value || sending.value || aiIsThinking.value) {
+        return;
+    }
+    // Flip to the "other" configured model — from anywhere (even a third model
+    // picked via the gear) a tap lands on primary, then alternates.
+    selectedModel.value = isOnBackupModel.value
+        ? primaryModelId.value
+        : backupModelId.value;
+}
 
 // Pull the raw locale dicts and current UI locale so we can render chips in
 // the language the user is currently chatting in — which may differ from
@@ -1414,7 +1441,11 @@ async function expressBuild() {
     try {
         const { data } = await axios.post(
             `/apps/${props.app.id}/builder/express`,
-            { conversation_id: conversationId.value, prompt, model: selectedModel.value || undefined },
+            {
+                conversation_id: conversationId.value,
+                prompt,
+                model: selectedModel.value || undefined,
+            },
         );
         if (data?.ok) {
             input.value = '';
@@ -2374,7 +2405,8 @@ function statusTone(status: Message['status']): string {
                                         <Loader2
                                             v-if="
                                                 m.status === 'streaming' &&
-                                                i === progressLines(m).length - 1
+                                                i ===
+                                                    progressLines(m).length - 1
                                             "
                                             class="size-3 shrink-0 animate-spin text-accent-blue"
                                         />
@@ -2618,6 +2650,36 @@ function statusTone(status: Message['status']): string {
                             <span class="truncate text-ink-muted">{{
                                 activityStatus
                             }}</span>
+
+                            <!-- One-tap primary↔backup model switch. Hidden
+                                 unless the admin configured a distinct backup;
+                                 the full picker (gear) still lives by the input. -->
+                            <button
+                                v-if="canToggleModel"
+                                type="button"
+                                :disabled="sending || aiIsThinking"
+                                @click="toggleModel"
+                                :title="
+                                    t('apps.builder.model_switch_hint', {
+                                        target: isOnBackupModel
+                                            ? modelLabel(primaryModelId)
+                                            : modelLabel(backupModelId),
+                                    })
+                                "
+                                class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-pill border border-medium px-2 py-0.5 font-medium transition-colors hover:border-strong hover:text-ink disabled:opacity-50"
+                                :class="
+                                    isOnBackupModel
+                                        ? 'border-amber-400/40 text-amber-300'
+                                        : 'text-ink-muted'
+                                "
+                            >
+                                <Repeat2 class="size-3.5" />
+                                {{
+                                    isOnBackupModel
+                                        ? t('apps.builder.model_backup')
+                                        : t('apps.builder.model_primary')
+                                }}
+                            </button>
                         </div>
 
                         <form class="relative" @submit.prevent="send">
@@ -2831,7 +2893,9 @@ function statusTone(status: Message['status']): string {
                                     <span
                                         class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/40 bg-accent-blue/10 px-3.5 py-1.5 text-xs font-medium text-accent-blue"
                                     >
-                                        <Loader2 class="size-3.5 animate-spin" />
+                                        <Loader2
+                                            class="size-3.5 animate-spin"
+                                        />
                                         {{ t('apps.builder.thinking') }}
                                     </span>
                                     <button

@@ -77,9 +77,33 @@ it('renders the builder page and starts a conversation lazily', function () {
             ->has('conversation.messages')
             ->has('models')
             ->where('defaultModel', 'claude-haiku-4-5-20251001')
+            // No distinct builder backup configured → the switch stays hidden.
+            ->where('backupModel', null)
         );
 
     expect(BuilderConversation::query()->where('app_id', $this->testApp->id)->count())->toBe(1);
+});
+
+it('exposes the configured builder backup model for the primary↔backup switch', function () {
+    // The admin configured a distinct primary + backup, both selectable (in the
+    // picker catalog) — the backup is surfaced so the composer offers the switch.
+    $primary = AiCatalogModel::firstOrCreate(
+        ['driver' => 'anthropic', 'model_id' => 'claude-primary-test', 'capability' => 'chat'],
+        ['label' => 'Claude Primary', 'is_enabled' => true, 'sort_order' => 0],
+    );
+    $backup = AiCatalogModel::firstOrCreate(
+        ['driver' => 'anthropic', 'model_id' => 'claude-backup-test', 'capability' => 'chat'],
+        ['label' => 'Claude Backup', 'is_enabled' => true, 'sort_order' => 1],
+    );
+    AppSetting::setValue('admin_v2.ai.builder.primary', (string) $primary->id);
+    AppSetting::setValue('admin_v2.ai.builder.fallback', (string) $backup->id);
+
+    $this->actingAs($this->user)
+        ->get("/apps/{$this->testApp->id}/builder")
+        ->assertInertia(fn ($page) => $page
+            ->where('defaultModel', 'claude-primary-test')
+            ->where('backupModel', 'claude-backup-test')
+        );
 });
 
 it('reuses the active conversation across visits', function () {
