@@ -223,19 +223,24 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      */
     private function topicWords(string $prompt)
     {
-        $stop = ['crea', 'dashboard', 'tablero', 'reporte', 'quiero', 'necesito', 'para', 'con', 'una', 'las', 'los', 'del', 'que', 'analisis', 'analizar', 'grafica', 'graficas', 'kpis', 'insights', 'filtro', 'fecha', 'datos', 'reales', 'vista', 'ejecutiva', 'build', 'create', 'make'];
+        $stop = ['crea', 'dashboard', 'tablero', 'reporte', 'quiero', 'necesito', 'para', 'con', 'una', 'las', 'los', 'del', 'que', 'como', 'por', 'sus', 'este', 'esta', 'analisis', 'analizar', 'grafica', 'graficas', 'kpis', 'kpi', 'insights', 'filtro', 'fecha', 'datos', 'reales', 'vista', 'ejecutiva', 'build', 'create', 'make', 'the', 'and', 'for'];
 
+        // >= 3, not > 3: three-letter acronyms ARE the topic in this domain
+        // (nps, otd, sla, ots) — dropping them made the overlap backstop kill
+        // a legitimate NPS build.
         return collect(preg_split('/[^a-z0-9áéíóúñ]+/i', Str::lower(Str::ascii($prompt))))
-            ->filter(fn ($w) => mb_strlen((string) $w) > 3 && ! in_array((string) $w, $stop, true))
+            ->filter(fn ($w) => mb_strlen((string) $w) >= 3 && ! in_array((string) $w, $stop, true))
             ->unique()->values();
     }
 
     /** Human list of what the source's tools are about, from their names. */
     private function sourceDomains(ExpressContext $context): string
     {
+        $generic = ['tool', 'get', 'list', 'search', 'global', 'with', 'status', 'report', 'metrics', 'user', 'profile', 'current', 'compare', 'live', 'dimension', 'time', 'series', 'daily', 'weekly', 'overview', 'contact', 'promise', 'by'];
+
         return collect($context->catalogTools)
             ->flatMap(fn (array $t) => preg_split('/[-_]/', (string) $t['name']))
-            ->filter(fn ($w) => mb_strlen((string) $w) > 3 && ! in_array($w, ['tool', 'get', 'list', 'search', 'global', 'with', 'status', 'report', 'metrics'], true))
+            ->filter(fn ($w) => mb_strlen((string) $w) >= 3 && ! in_array($w, $generic, true))
             ->unique()->take(10)->implode(', ');
     }
 
@@ -247,9 +252,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      */
     private function heuristicDefault(ExpressContext $context): array
     {
-        $words = collect(preg_split('/[^a-z0-9áéíóúñ]+/i', Str::lower(Str::ascii($context->prompt))))
-            ->filter(fn ($w) => mb_strlen((string) $w) > 3)
-            ->unique()->values();
+        $words = $this->topicWords($context->prompt);
 
         $noRows = collect($context->knownShapes)
             ->filter(fn (array $shape): bool => ($shape['fields'] ?? null) === [])

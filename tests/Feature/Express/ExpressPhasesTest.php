@@ -504,3 +504,26 @@ it('formats object alternatives in the halt message as readable lines', function
             ->and($halt->userMessage)->not->toContain('{"dashboard"');
     }
 });
+
+it('does not halt an NPS request when the source has NPS tools (3-letter acronyms count)', function () {
+    // The prod false positive: "analizar el comportamiento del nps de yuhu" —
+    // 'nps' (3 letters) was dropped from the topic words, so the correctly
+    // chosen get-nps-* tools scored zero overlap and the backstop killed a
+    // legitimate build.
+    ExpressGateAgent::fake([[
+        'tools' => ['get-nps-time-series-tool'],
+        'pieces' => [['asked' => 'comportamiento del NPS', 'tool' => 'get-nps-time-series-tool']],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'crea un dashboard que permita analizar el comportamiento del nps de yuhu');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-nps-time-series-tool', 'description' => 'NPS survey scores over time', 'input_schema' => []],
+        ['name' => 'get-orders-tool', 'description' => 'Orders list', 'input_schema' => []],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->toBe(['get-nps-time-series-tool']);
+});
