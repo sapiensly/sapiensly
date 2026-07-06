@@ -10,6 +10,7 @@ use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
+use Illuminate\Support\Str;
 
 /**
  * F-4: merge the suggestion with the semantic gate outputs, compile the page
@@ -47,12 +48,22 @@ class CompilePhase implements ExpressPhase
         $insights = $context->semantic['insights'] ?? ($spec['insights'] ?? []);
 
         $args = array_merge($spec, $overrides);
-        $args['insights'] = $insights;
+        // Model-authored strings get clamped to the manifest's limits — a slow
+        // model once returned a 1,207-char paragraph AS the title, failing the
+        // whole compile against page name maxLength 100.
+        $args['insights'] = array_map(function (array $card): array {
+            $card['title'] = Str::limit(trim((string) ($card['title'] ?? '')), 120, '…');
+            if (isset($card['body'])) {
+                $card['body'] = Str::limit(trim((string) $card['body']), 600, '…');
+            }
+
+            return $card;
+        }, array_values(array_filter($insights, 'is_array')));
         if (trim((string) ($voice['title'] ?? '')) !== '') {
-            $args['title'] = trim((string) $voice['title']);
+            $args['title'] = $this->clampLine((string) $voice['title'], 95);
         }
         if (trim((string) ($voice['purpose'] ?? '')) !== '') {
-            $args['purpose'] = trim((string) $voice['purpose']);
+            $args['purpose'] = $this->clampLine((string) $voice['purpose'], 300);
         }
 
         $objectSlug = (string) ($spec['object_slug'] ?? '');
@@ -100,5 +111,13 @@ class CompilePhase implements ExpressPhase
             'version' => $version->version_number,
             'version_id' => $version->id,
         ];
+    }
+
+    /** First line only, hard-capped — titles are titles, not paragraphs. */
+    private function clampLine(string $value, int $max): string
+    {
+        $line = trim((string) preg_split('/\r?\n/', trim($value))[0]);
+
+        return Str::limit($line, $max, '…');
     }
 }

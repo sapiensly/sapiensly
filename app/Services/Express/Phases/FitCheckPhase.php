@@ -88,7 +88,23 @@ TXT,
 
         if (($out['core_unanswerable'] ?? false) === true) {
             $alternatives = collect($out['alternatives'] ?? [])
-                ->map(fn ($a) => is_string($a) ? $a : json_encode($a, JSON_UNESCAPED_UNICODE))
+                ->map(function ($a): string {
+                    if (is_string($a)) {
+                        return $a;
+                    }
+                    if (is_array($a)) {
+                        // Models answer objects with varying keys — surface the
+                        // human parts, never raw JSON.
+                        $label = collect(['dashboard', 'label', 'title', 'nombre'])
+                            ->map(fn ($k) => $a[$k] ?? null)->filter()->first();
+                        $why = collect(['relevancia', 'reason', 'descripcion', 'description'])
+                            ->map(fn ($k) => $a[$k] ?? null)->filter()->first();
+
+                        return trim(($label ?? '').($why ? ' — '.$why : '')) ?: json_encode($a, JSON_UNESCAPED_UNICODE);
+                    }
+
+                    return (string) $a;
+                })
                 ->implode("\n- ");
 
             throw new ExpressHalt(
@@ -168,7 +184,11 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             $context->note('Sustitución: '.($sub['asked'] ?? '?').' → '.($sub['using'] ?? '?').' ('.($sub['reason'] ?? '').')');
         }
         foreach ($context->unanswerable as $miss) {
-            $context->note('No respondible con esta fuente: '.($miss['asked'] ?? '?').' ('.($miss['reason'] ?? '').')');
+            $asked = trim((string) ($miss['asked'] ?? ''));
+            if ($asked === '' || $asked === '?') {
+                continue; // a nameless miss is noise, not information
+            }
+            $context->note('No respondible con esta fuente: '.$asked.' ('.($miss['reason'] ?? '').')');
         }
     }
 

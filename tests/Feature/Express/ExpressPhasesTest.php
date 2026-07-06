@@ -441,3 +441,66 @@ it('declared proxies in the piece mapping become honest substitutions', function
         ->and($ctx->substitutions[0]['asked'])->toBe('CSAT promedio')
         ->and($ctx->substitutions[0]['using'])->toBe('SLA incumplidos');
 });
+
+it('clamps a rambling model title so the compile never dies on maxLength', function () {
+    // The prod sla failure: a 1,207-char paragraph AS the title → page name
+    // maxLength 100 violated → whole build failed.
+    ExpressGateAgent::fake([
+        ['accept' => true, 'overrides' => []],
+        fn ($prompt) => [
+            'title' => str_repeat('Dashboard de Calidad de Servicio con Cumplimiento SLA ', 25)."\nsegunda línea",
+            'purpose' => str_repeat('propósito muy largo ', 40),
+            'insights' => collect(json_decode($prompt, true)['tarjetas_sugeridas'])
+                ->map(fn ($c) => ['variant' => $c['variant'], 'title' => str_repeat('t', 300), 'body' => str_repeat('b', 2000)])
+                ->values()->all(),
+        ],
+    ]);
+
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    app(AppManifestService::class)->applyPatch(
+        $this->testApp->fresh(),
+        [['op' => 'add', 'path' => '/objects/-', 'value' => $object]],
+        $this->user, 'obj',
+    );
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+
+    app()->call(function (SuggestSpecPhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+    app()->call(function (SemanticGatesPhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+    app()->call(function (CompilePhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+
+    expect($ctx->page)->not->toBeNull()
+        ->and(mb_strlen($ctx->page['name']))->toBeLessThanOrEqual(96)
+        ->and($ctx->page['name'])->not->toContain("\n");
+});
+
+it('formats object alternatives in the halt message as readable lines', function () {
+    ExpressGateAgent::fake([[
+        'tools' => [], 'substitutions' => [], 'unanswerable' => [],
+        'core_unanswerable' => true,
+        'alternatives' => [
+            ['dashboard' => 'Dashboard de Órdenes de Venta', 'relevancia' => 'lo más cercano a revenue'],
+            'Dashboard de Entregas OTD',
+        ],
+    ]]);
+
+    $ctx = xph_ctx($this, 'dashboard financiero');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    try {
+        (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+        $this->fail('Expected ExpressHalt');
+    } catch (ExpressHalt $halt) {
+        expect($halt->userMessage)->toContain('Dashboard de Órdenes de Venta — lo más cercano a revenue')
+            ->and($halt->userMessage)->toContain('Dashboard de Entregas OTD')
+            ->and($halt->userMessage)->not->toContain('{"dashboard"');
+    }
+});
