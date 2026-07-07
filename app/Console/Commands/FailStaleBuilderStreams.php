@@ -47,9 +47,31 @@ class FailStaleBuilderStreams extends Command
             ->table('tenant.builder_messages as m')
             ->leftJoin('tenant.builder_conversations as c', 'c.id', '=', 'm.conversation_id')
             ->leftJoin('platform.users as u', 'u.id', '=', 'c.user_id')
-            ->whereIn('m.status', ['pending', 'streaming'])
+            ->where('m.role', 'assistant')
             ->where('m.created_at', '<', $cutoff)
-            ->get(['m.id', 'm.conversation_id', 'm.content', 'u.locale']);
+            ->where(function ($q) {
+                // A turn still mid-stream (the worker never finalized it).
+                $q->whereIn('m.status', ['pending', 'streaming'])
+                    // OR a finalization that half-landed: the placeholder was
+                    // flipped to `none` (kept-narration) but its report/error
+                    // never followed — so a narrated `none` that is still the
+                    // NEWEST message in its conversation is orphaned. Observed
+                    // on an Express build killed between the status flip and
+                    // the report insert; the pending/streaming sweep can't see
+                    // it because the status already moved on.
+                    ->orWhere(function ($orphan) {
+                        $orphan->where('m.status', 'none')
+                            ->whereRaw("trim(m.content) <> ''")
+                            ->whereNotExists(function ($sub) {
+                                // No later message (ULID ids sort in time order).
+                                $sub->select(DB::raw('1'))
+                                    ->from('tenant.builder_messages as later')
+                                    ->whereColumn('later.conversation_id', 'm.conversation_id')
+                                    ->whereColumn('later.id', '>', 'm.id');
+                            });
+                    });
+            })
+            ->get(['m.id', 'm.conversation_id', 'm.content', 'm.status', 'u.locale']);
 
         $fallbackLocale = (string) config('app.fallback_locale', 'en');
         $failed = 0;

@@ -60,6 +60,45 @@ it('keeps the progress narration and appends the error as a NEW message', functi
         ->and($error->content)->toContain('interrupted');
 });
 
+it('resolves a narrated `none` placeholder orphaned by a half-finalized turn', function () {
+    // Express killed between flipping the placeholder to `none` and inserting
+    // the report: the placeholder is `none` with narration and no report
+    // behind it — invisible to the pending/streaming sweep.
+    $orphan = staleBuilderMessage($this->conv, 'none');
+    BuilderMessage::where('id', $orphan->id)->update([
+        'content' => "Localizando la fuente…\nAjustando el spec y redactando los insights…",
+    ]);
+
+    $this->artisan('builder:fail-stale-streams')->assertSuccessful();
+
+    $orphan->refresh();
+    expect($orphan->status)->toBe('none')
+        ->and($orphan->content)->toContain('Ajustando el spec');
+
+    $error = BuilderMessage::where('conversation_id', $this->conv->id)
+        ->where('status', 'error')->first();
+    expect($error)->not->toBeNull()
+        ->and($error->id)->not->toBe($orphan->id)
+        ->and($error->content)->toContain('interrupted');
+});
+
+it('leaves a `none` placeholder that already has its report message alone', function () {
+    $placeholder = staleBuilderMessage($this->conv, 'none');
+    BuilderMessage::where('id', $placeholder->id)->update(['content' => 'progreso…']);
+    // The report DID land — a later message → not an orphan.
+    BuilderMessage::create([
+        'conversation_id' => $this->conv->id,
+        'role' => 'assistant',
+        'content' => 'Dashboard listo',
+        'status' => 'applied',
+    ]);
+
+    $this->artisan('builder:fail-stale-streams')->assertSuccessful();
+
+    expect(BuilderMessage::where('conversation_id', $this->conv->id)->where('status', 'error')->count())->toBe(0)
+        ->and($placeholder->fresh()->status)->toBe('none');
+});
+
 it('broadcasts completions so the open UI resolves without a reload', function () {
     Event::fake([BuilderStreamComplete::class]);
     $placeholder = staleBuilderMessage($this->conv, 'streaming');

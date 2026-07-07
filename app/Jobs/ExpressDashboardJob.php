@@ -12,6 +12,7 @@ use App\Services\Express\ExpressContext;
 use App\Services\Express\ExpressPipeline;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -87,25 +88,28 @@ class ExpressDashboardJob implements ShouldQueue
 
         // The progress narration STAYS as its own message; the report arrives
         // as a NEW one — finishing (or failing) never erases what happened.
-        $message->forceFill(['status' => 'none'])->save();
+        // Both writes are ONE transaction so a hard worker kill between them
+        // can't leave the placeholder flipped to `none` with no report behind
+        // it (an orphan invisible to the pending/streaming reaper): either both
+        // land, or neither does and the placeholder stays `streaming` for the
+        // reaper to resolve.
+        $reportMessage = DB::transaction(function () use ($message, $conversation, $report, $status, $context): BuilderMessage {
+            $message->forceFill(['status' => 'none'])->save();
+
+            return BuilderMessage::create([
+                'conversation_id' => $conversation->id,
+                'role' => 'assistant',
+                'content' => $report,
+                'status' => $status,
+                'applied_version_id' => $context->page['version_id'] ?? null,
+                'change_summary' => $context->page !== null
+                    ? "Dashboard «{$context->page['name']}» construido con Express"
+                    : null,
+            ]);
+        });
+
         try {
             BuilderStreamComplete::dispatch($message->refresh());
-        } catch (Throwable) {
-            // UI catches up from the DB.
-        }
-
-        $reportMessage = BuilderMessage::create([
-            'conversation_id' => $conversation->id,
-            'role' => 'assistant',
-            'content' => $report,
-            'status' => $status,
-            'applied_version_id' => $context->page['version_id'] ?? null,
-            'change_summary' => $context->page !== null
-                ? "Dashboard «{$context->page['name']}» construido con Express"
-                : null,
-        ]);
-
-        try {
             BuilderStreamComplete::dispatch($reportMessage);
         } catch (Throwable) {
             // UI catches up from the DB.
