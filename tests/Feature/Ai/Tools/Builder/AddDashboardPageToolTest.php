@@ -196,6 +196,31 @@ it('omits the filter bar and range wiring when include_date_filter is false', fu
     expect(json_encode($page))->not->toContain('range_start');
 });
 
+it('opens a LOCAL-object dashboard on 30d but a CONNECTED one on the full range', function () {
+    // The empty-on-open bug: a connected object's live data is often historical,
+    // so a 30d default lands in a gap. Local records are recent → 30d is fine.
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $local = $manifest['objects'][0]; // tickets — no source.type
+
+    $localBuilt = app(AppScaffolder::class)->buildDashboardFromSpec(
+        adp_spec(), $local, [], null, 'es',
+    );
+    $localFilter = collect($localBuilt['page']['blocks'])->firstWhere('type', 'filter_bar');
+    expect($localFilter['controls'][0]['default'])->toBe('30d')
+        ->and(json_encode($localBuilt['page']))->toContain("default(params.range, '30d')");
+
+    // A connected series → default 'all' (never opens empty).
+    $series = adp_series_object();
+    $connectedBuilt = app(AppScaffolder::class)->buildDashboardFromSpec(
+        (new DashboardSpecSuggester)->suggest($series, 'es') + ['object_slug' => 'nps_semanal'],
+        $series, [], null, 'es',
+    );
+    $connFilter = collect($connectedBuilt['page']['blocks'])->firstWhere('type', 'filter_bar');
+    expect($connFilter['controls'][0]['default'])->toBe('all')
+        ->and(json_encode($connectedBuilt['page']))->toContain("default(params.range, 'all')")
+        ->and(json_encode($connectedBuilt['page']))->not->toContain("default(params.range, '30d')");
+});
+
 it('prepare_dashboard fuses blueprint, profile and brand into one response', function () {
     $tool = new PrepareDashboardTool(
         $this->testApp->fresh(),

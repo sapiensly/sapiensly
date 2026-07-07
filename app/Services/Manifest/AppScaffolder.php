@@ -1158,6 +1158,16 @@ class AppScaffolder
         }
         $withDateFilter = (bool) ($spec['include_date_filter'] ?? true);
 
+        // Connected objects carry LIVE, often HISTORICAL data — a 30-day default
+        // window frequently lands in a gap and the board opens empty ("sin
+        // registros en la ventana"). Default those to the full range so the
+        // dashboard opens populated; the presets still let the user narrow.
+        // Local records are usually recent, so 30d stays the sensible default.
+        $anyConnected = collect($objectsBySlug)->contains(
+            fn (array $o): bool => ($o['source']['type'] ?? '') === 'connected',
+        );
+        $defaultRange = $anyConnected ? 'all' : '30d';
+
         $rangeBySlug = [];
         foreach ($objectsBySlug as $slug => $obj) {
             $fieldId = $slug === $primarySlug ? $dateFieldId : null;
@@ -1174,7 +1184,7 @@ class AppScaffolder
             }
             $rangeBySlug[$slug] = $fieldId === null
                 ? null
-                : ['op' => 'gte', 'field_id' => $fieldId, 'value_expression' => "{{range_start(default(params.range, '30d'))}}"];
+                : ['op' => 'gte', 'field_id' => $fieldId, 'value_expression' => "{{range_start(default(params.range, '{$defaultRange}'))}}"];
         }
 
         // Merge the range filter into a block's own filter (empty preset ⇒ the
@@ -1420,7 +1430,9 @@ class AppScaffolder
             $blocks[] = [
                 'id' => $this->id('blk'),
                 'type' => 'filter_bar',
-                'controls' => [['param' => 'range', 'type' => 'date_range', 'default' => '30d']],
+                // Matches the range condition's default so the active preset on
+                // open reflects the window the blocks actually query.
+                'controls' => [['param' => 'range', 'type' => 'date_range', 'default' => $defaultRange]],
             ];
             $planRows[] = ['blocks' => [['type' => 'filter_bar']]];
         }
