@@ -292,6 +292,44 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             ->unique()->values();
     }
 
+    /**
+     * Topic words that actually DISCRIMINATE one tool from another. A word in
+     * (nearly) EVERY catalog tool is a namespace/org term, not a topic — "yuhu"
+     * in "get-nps-yuhu-tool" AND "get-tickets-yuhu-tool" tells you nothing about
+     * which to read. Dropping those before scoring stops the fallback padding an
+     * NPS board with ticket tools that only matched the org name. If every word
+     * is ubiquitous (a single-domain source), keep the full set rather than
+     * scoring on nothing.
+     *
+     * @return Collection<int, string>
+     */
+    private function discriminatingTopicWords(ExpressContext $context)
+    {
+        $words = $this->topicWords($context->prompt);
+        $tools = collect($context->catalogTools);
+        $n = $tools->count();
+        if ($n < 3 || $words->isEmpty()) {
+            return $words; // too few tools to judge ubiquity meaningfully
+        }
+
+        $haystacks = $tools
+            ->map(fn (array $t): string => Str::lower(Str::ascii(($t['name'] ?? '').' '.($t['description'] ?? ''))))
+            ->all();
+
+        $discriminating = $words->filter(function (string $word) use ($haystacks, $n): bool {
+            $hits = 0;
+            foreach ($haystacks as $haystack) {
+                if (str_contains($haystack, $word)) {
+                    $hits++;
+                }
+            }
+
+            return $hits / $n <= 0.7; // drop words present in >70% of tools
+        })->values();
+
+        return $discriminating->isNotEmpty() ? $discriminating : $words;
+    }
+
     /** Human list of what the source's tools are about, from their names. */
     private function sourceDomains(ExpressContext $context): string
     {
@@ -311,7 +349,12 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      */
     private function heuristicDefault(ExpressContext $context): array
     {
-        $words = $this->topicWords($context->prompt);
+        // Conservative by design — this runs when the gate DEFAULTED (the model
+        // didn't answer), so score on DISCRIMINATING words only: better a small
+        // on-topic board than one padded with off-domain tools that merely share
+        // the org name (observed: a defaulted fit_check dragging ticket tools
+        // into an NPS build).
+        $words = $this->discriminatingTopicWords($context);
 
         $noRows = collect($context->knownShapes)
             ->filter(fn (array $shape): bool => ($shape['fields'] ?? null) === [])

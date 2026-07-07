@@ -180,6 +180,28 @@ it('fit_check degrades to keyword matching when the gate fails twice', function 
     expect($ctx->chosenTools)->toBe(['get-tickets-time-series-tool']);
 });
 
+it('a defaulted fit_check drops org-name-only matches and stays on topic', function () {
+    // Prod nps_glm_dsh_1: GLM let the gate default; every tool carries the org
+    // name "yuhu", so scoring on it pulled ticket tools into an NPS build. The
+    // conservative fallback drops the ubiquitous org word and scores on "nps".
+    ExpressGateAgent::fake([
+        fn () => throw new RuntimeException('down'),
+        fn () => throw new RuntimeException('down'),
+    ]);
+
+    $ctx = xph_ctx($this, 'crea un dashboard para analizar el nps de yuhu');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-nps-time-series-yuhu-tool', 'description' => 'NPS semanal de Yuhu', 'input_schema' => []],
+        ['name' => 'get-tickets-time-series-yuhu-tool', 'description' => 'Tickets semanales de Yuhu', 'input_schema' => []],
+        ['name' => 'search-tickets-yuhu-tool', 'description' => 'Buscar tickets de Yuhu', 'input_schema' => []],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->toBe(['get-nps-time-series-yuhu-tool']); // ticket tools dropped
+});
+
 it('acquire_objects banks the survivors as ONE version and notes the failures', function () {
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
     $object = xph_object('tickets_semanales', $this->integration->id);
@@ -290,6 +312,32 @@ it('semantic gates fill voice and factual insights, judging overrides determinis
     expect($ctx->semantic['overrides'])->toBe([])   // judged out
         ->and($ctx->semantic['voice']['title'])->toBe('Panel Ejecutivo de Tickets')
         ->and($ctx->semantic['insights'][0]['body'])->toContain('66%');
+});
+
+it('the insight fallback gives each card a DISTINCT real fact, not one filler line', function () {
+    // When voice_insights defaults, every card used to get the same "Registros
+    // analizados: N" stamp (on a weekly series, N is just the bucket count).
+    // Now each card draws a distinct computed fact: a measure avg, a rate, a
+    // category concentration.
+    ExpressGateAgent::fake([
+        ['accept' => true, 'overrides' => []], // overrides accepted as-is
+        fn () => throw new RuntimeException('down'), // voice_insights defaults…
+        fn () => throw new RuntimeException('down'),
+    ]);
+
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+
+    app()->call(fn (SuggestSpecPhase $p) => $p->run($ctx, xph_run($this)));
+    app()->call(fn (SemanticGatesPhase $p) => $p->run($ctx, xph_run($this)));
+
+    $all = collect($ctx->semantic['insights'])->pluck('body')->implode(' || ');
+    expect($all)->toContain('promedio')             // a numeric measure fact
+        ->and($all)->toContain('% de los registros') // a boolean rate fact
+        ->and($all)->toContain('concentra')          // a category concentration fact
+        ->and($all)->not->toContain('Registros analizados'); // no generic filler
 });
 
 it('compile merges everything, enforces lints and applies the page as a version', function () {
