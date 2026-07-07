@@ -618,6 +618,13 @@ it('never groups a "statistics per dimension" chart by the bucket label either (
 
     expect(collect($spec['charts'])->pluck('group_by_field_id')->filter())->not->toContain('fld_plabel0000');
 
+    // The INSIGHT scaffolds read the same filtered set — no «Concentración por
+    // bucket label» card (prod otd_glm: the insight scaffold got the unfiltered
+    // categoricals and narrated a concentration by the time axis).
+    $insightText = collect($spec['insights'])->map(fn ($i) => ($i['title'] ?? '').' '.($i['body'] ?? ''))->implode(' ');
+    expect(mb_strtolower($insightText))->not->toContain('bucket label')
+        ->and(mb_strtolower($insightText))->not->toContain('period label');
+
     // And the spec the suggester emits must compile clean end to end (the
     // real failure mode: a suggester output the compiler's OWN legality
     // guard rejects).

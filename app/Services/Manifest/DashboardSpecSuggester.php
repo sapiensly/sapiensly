@@ -197,7 +197,15 @@ class DashboardSpecSuggester
             || (($stats[$f['id']]['null_rate'] ?? 0) <= 0.6 && ! ($stats[$f['id']]['all_equal'] ?? false));
 
         $dateField = $this->pickDateField($fields);
-        $categoricals = array_values(array_filter($this->categoricalFields($fields), $usable));
+        // On a time series, the bucket's LABEL column is the time axis in
+        // costume — not a real category. Filter it out ONCE here so charts,
+        // stat-per-dimension and INSIGHT scaffolds all share the clean set
+        // (a stray «Concentración por bucket label» insight shipped when the
+        // insight scaffold got the unfiltered list).
+        $categoricals = $this->realCategoricals(
+            array_values(array_filter($this->categoricalFields($fields), $usable)),
+            $grain,
+        );
         $numerics = array_values(array_filter(
             $fields,
             fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true) && $usable($f),
@@ -281,6 +289,28 @@ class DashboardSpecSuggester
         return array_values(array_filter(
             $fields,
             fn (array $f): bool => ($f['type'] ?? '') === 'string',
+        ));
+    }
+
+    /**
+     * Real breakdown dimensions: on a time series, drop the bucket-LABEL column
+     * (period_label, bucket_label, semana…) — it is the time axis wearing a
+     * string costume, not a category. Grouping/concentrating by it re-plots the
+     * trend or narrates nonsense ("Concentración por bucket label"). Every
+     * section (charts, stat-per-dimension, insight scaffolds) reads from here.
+     *
+     * @param  list<array<string, mixed>>  $categoricals
+     * @return list<array<string, mixed>>
+     */
+    private function realCategoricals(array $categoricals, string $grain): array
+    {
+        if ($grain !== SemanticProfile::GRAIN_TIME_SERIES) {
+            return $categoricals;
+        }
+
+        return array_values(array_filter(
+            $categoricals,
+            fn (array $f): bool => preg_match('/label|bucket|period|semana|week/i', (string) ($f['slug'] ?? '')) !== 1,
         ));
     }
 
@@ -431,19 +461,6 @@ class DashboardSpecSuggester
     private function suggestCharts(string $grain, ?array $dateField, array $categoricals, array $numerics, array $measureTypes, array $stats, bool $es, array $object = []): array
     {
         $charts = [];
-
-        // On a time series, the bucket's label column is the TIME AXIS in
-        // costume — grouping by it re-plots the trend as bars (observed:
-        // «Por period label» AND «Avg Csat por period label» duplicating the
-        // weekly evolution; the latter came from a section below that used
-        // $categoricals directly, unfiltered — filtering once, up front, for
-        // every section closes that gap structurally instead of per-section.
-        if ($grain === SemanticProfile::GRAIN_TIME_SERIES) {
-            $categoricals = array_values(array_filter(
-                $categoricals,
-                fn (array $f): bool => preg_match('/label|bucket|period|semana|week/i', (string) ($f['slug'] ?? '')) !== 1,
-            ));
-        }
 
         $additives = array_values(array_filter(
             $numerics,
