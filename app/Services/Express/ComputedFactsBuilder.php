@@ -73,6 +73,15 @@ class ComputedFactsBuilder
             }
 
             if ($type === 'string') {
+                // A bucket LABEL (period_label, bucket_label, semana…) is the
+                // time axis in a string costume — its "dominant value" is just
+                // the busiest week, which the fallback insight then narrates as
+                // «Valor dominante: 2026-W16», meaningless. Never a top-value.
+                // Same guard the suggester applies to categoricals/insights.
+                if (preg_match('/label|bucket|period|semana|week/i', (string) ($field['slug'] ?? '')) === 1) {
+                    continue;
+                }
+
                 $counts = array_count_values(array_map(fn ($v) => (string) $v, $values));
                 arsort($counts);
                 $distinct = count($counts);

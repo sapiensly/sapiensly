@@ -61,6 +61,33 @@ it('skips empty columns and high-cardinality strings', function () {
         ->and($facts['row_count'])->toBe(30);
 });
 
+it('never makes a bucket label a top value (no «dominant value: 2026-W16»)', function () {
+    // Prod nps_glm_dsh: the fallback insight narrated a WEEK as the dominant
+    // value because top_values ran on period_label (the time axis in costume).
+    $object = [
+        'name' => 'Nps Time Series', 'slug' => 'nps_time_series',
+        'fields' => [
+            ['id' => 'f_pl', 'slug' => 'period_label', 'name' => 'Period Label', 'type' => 'string'],
+            ['id' => 'f_seg', 'slug' => 'segment', 'name' => 'Segment', 'type' => 'string'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'f_pl', 'external_path' => 'period_label'],
+            ['field_id' => 'f_seg', 'external_path' => 'segment'],
+        ]],
+    ];
+    $rows = [
+        ['period_label' => '2026-W16', 'segment' => 'promoter'],
+        ['period_label' => '2026-W17', 'segment' => 'promoter'],
+        ['period_label' => '2026-W18', 'segment' => 'detractor'],
+    ];
+
+    $facts = (new ComputedFactsBuilder)->build($object, $rows);
+
+    // The real category is a top value; the bucket label is NOT.
+    expect($facts['top_values'])->toHaveKey('Segment')
+        ->and($facts['top_values'])->not->toHaveKey('Period Label');
+});
+
 it('survives array values under a string field (prod: Array to string conversion)', function () {
     // A field inferred as string whose rows sometimes carry an array (tags,
     // nested leftovers) crashed the whole tendencia benchmark scenario.
