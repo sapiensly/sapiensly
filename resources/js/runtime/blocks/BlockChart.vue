@@ -226,6 +226,19 @@ const totalValue = computed(() =>
     series.value.reduce((a, s) => a + s.value, 0),
 );
 
+// Unique per-block id so multiple charts' gradient defs never collide
+// (block ids are minted by the compiler, so this is stable per chart).
+const gradientId = computed(() => `sp-area-${props.block.id ?? 'chart'}`);
+
+// Caption under the donut's center total: what the slices sum TO (the measure
+// name), else a neutral "total". Count charts read as records.
+const donutCenterLabel = computed(() => {
+    if (props.block.aggregation === 'count') {
+        return 'total';
+    }
+    return yField.value?.name ?? 'total';
+});
+
 // Pick a colour for a value of an arbitrary field (honours single_select option
 // colours), used for the series legend in stacked/grouped charts.
 function paletteColorFor(
@@ -1474,6 +1487,32 @@ const boxPlot = computed(() => {
                             r="36"
                             fill="var(--sp-bg-secondary, #ffffff)"
                         />
+                        <!-- Donut center total: the sum the slice %s are of -->
+                        <template v-if="block.chart_type === 'donut'">
+                            <text
+                                x="80"
+                                y="79"
+                                text-anchor="middle"
+                                fill="currentColor"
+                                style="font-size: 17px; font-weight: 700"
+                            >
+                                {{ formatNumber(totalValue) }}
+                            </text>
+                            <text
+                                x="80"
+                                y="92"
+                                text-anchor="middle"
+                                fill="currentColor"
+                                fill-opacity="0.5"
+                                style="
+                                    font-size: 7px;
+                                    letter-spacing: 0.08em;
+                                    text-transform: uppercase;
+                                "
+                            >
+                                {{ donutCenterLabel }}
+                            </text>
+                        </template>
                     </svg>
                     <ul class="flex-1 space-y-1 text-xs">
                         <li
@@ -1540,6 +1579,30 @@ const boxPlot = computed(() => {
                         preserveAspectRatio="xMidYMid meet"
                         :class="t.text"
                     >
+                        <!-- Soft vertical gradient for the area fill (line + area
+                             alike) — the colour fades to transparent downward. -->
+                        <defs>
+                            <linearGradient
+                                v-for="(s, gi) in lineChart.series"
+                                :key="'grad' + gi"
+                                :id="`${gradientId}-${gi}`"
+                                x1="0"
+                                y1="0"
+                                x2="0"
+                                y2="1"
+                            >
+                                <stop
+                                    offset="0%"
+                                    :stop-color="s.color"
+                                    stop-opacity="0.28"
+                                />
+                                <stop
+                                    offset="100%"
+                                    :stop-color="s.color"
+                                    stop-opacity="0"
+                                />
+                            </linearGradient>
+                        </defs>
                         <!-- horizontal gridlines + y-axis ticks -->
                         <g
                             v-for="(tk, i) in lineChart.yTicks"
@@ -1571,10 +1634,13 @@ const boxPlot = computed(() => {
                             :key="'s' + si"
                         >
                             <path
-                                v-if="block.chart_type === 'area'"
+                                v-if="
+                                    s.area &&
+                                    (lineChart.single ||
+                                        block.chart_type === 'area')
+                                "
                                 :d="s.area"
-                                :fill="s.color"
-                                fill-opacity="0.12"
+                                :fill="`url(#${gradientId}-${si})`"
                             />
                             <path
                                 :d="s.line"

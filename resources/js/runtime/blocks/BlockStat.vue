@@ -17,6 +17,17 @@ const props = defineProps<{
 const theme = useRuntimeTheme();
 const t = themeTokens(theme);
 
+// Semantic icon tint: positive metric → emerald, watch-metric → amber, else muted.
+const iconTint = computed(() => {
+    if (props.block.delta_good === 'up') {
+        return 'text-emerald-500';
+    }
+    if (props.block.delta_good === 'down') {
+        return 'text-amber-500';
+    }
+    return t.textSubtle;
+});
+
 const value = computed(() => props.data?.value ?? 0);
 
 const sparkObject = computed<ObjectDef | undefined>(() =>
@@ -66,7 +77,7 @@ const formatted = computed(() => {
                 v-if="block.icon"
                 :name="block.icon"
                 :size="16"
-                :class="t.textSubtle"
+                :class="iconTint"
             />
         </div>
         <div class="mt-2 flex items-end justify-between gap-3">
