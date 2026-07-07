@@ -185,3 +185,61 @@ it('leaves the source window untouched when the block has no range filter', func
 
     expect($result['ok'])->toBeTrue();
 });
+
+it('INJECTS from/to when the object omits them but the tool schema declares them', function () {
+    // The nps_fable_dsh root cause: the weekly series called the tool with only
+    // {granularity: weekly}, so the tool's adaptive default (12 weeks) capped it
+    // — "Año" showed ~13 rows. The tool DOES accept from/to, so we inject them.
+    $yearAgo = now()->utc()->subYear()->toDateString();
+    $today = now()->utc()->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['mcp_tool'] = 'get-nps-time-series-tool';
+    $object['source']['operations']['list']['arguments'] = ['granularity' => 'weekly']; // NO window
+
+    $query = ['filter' => ['op' => 'gte', 'field_id' => 'fld_datefield', 'value_expression' => "{{range_start(default(params.range, '1y'))}}"]];
+    $context = ['params' => (object) ['range' => '1y']];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->once()->andReturn([
+        ['name' => 'get-nps-time-series-tool', 'description' => '', 'input_schema' => ['type' => 'object', 'properties' => [
+            'granularity' => ['type' => 'string'], 'from' => ['type' => 'string'], 'to' => ['type' => 'string'],
+        ]]],
+    ]);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $yearAgo   // injected
+            && $args['to'] === $today
+            && $args['granularity'] === 'weekly')
+        ->andReturn(['tickets' => []]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list($object, $this->integration, $query, $this->user, $context);
+
+    expect($result['ok'])->toBeTrue();
+});
+
+it('does NOT inject a window the tool schema does not declare (no blind guessing)', function () {
+    // A tool with no from/to in its schema must not receive one — injecting an
+    // unknown property could make a strict tool reject the whole call.
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = ['limit' => 500]; // no window, tool has none
+
+    $query = ['filter' => ['op' => 'gte', 'field_id' => 'fld_datefield', 'value_expression' => "{{range_start(default(params.range, '1y'))}}"]];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->once()->andReturn([
+        ['name' => 'list_tickets', 'description' => '', 'input_schema' => ['type' => 'object', 'properties' => [
+            'limit' => ['type' => 'integer'], 'status' => ['type' => 'string'],
+        ]]],
+    ]);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args === ['limit' => 500]) // untouched
+        ->andReturn(['tickets' => []]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list($object, $this->integration, $query, $this->user, ['params' => (object) ['range' => '1y']]);
+
+    expect($result['ok'])->toBeTrue();
+});

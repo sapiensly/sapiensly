@@ -39,6 +39,15 @@ class ConnectedObjectReader
      */
     private array $memo = [];
 
+    /**
+     * Per-request memo of each MCP endpoint's tool input-schema param names,
+     * keyed by config+viewer then tool name — one tools/list per source, reused
+     * across every block's date-range push-down.
+     *
+     * @var array<string, array<string, list<string>>>
+     */
+    private array $toolSchemas = [];
+
     public function __construct(
         private readonly IntegrationCaller $caller,
         private readonly McpClient $mcp,
@@ -67,15 +76,16 @@ class ConnectedObjectReader
         // desk live) calls a tool instead of a REST endpoint. The mapping
         // (field_map/id_path) and in-memory aggregation downstream are identical.
         if ($integration->is_mcp || ! empty($op['mcp_tool'])) {
+            $config = $this->mcpConfig($integration);
             // Resolve {{…}} argument expressions against the request context, then
             // best-effort push the picked date-range window down into the tool's
             // start-date argument. The resolved arguments key the memo, so two
             // different presets don't collide on one cached read.
             $arguments = $this->resolveArguments(is_array($op['arguments'] ?? null) ? $op['arguments'] : [], $context);
-            $arguments = $this->pushDownDateRange($arguments, $query, $context);
+            $arguments = $this->pushDownDateRange($arguments, $query, $context, $op, $config, $actor);
             $key = $this->memoKey($object, $integration, $op, $arguments, $actor);
 
-            return $this->memo[$key] ??= $this->listViaMcp($object, $integration, $op, $source, $arguments, $actor);
+            return $this->memo[$key] ??= $this->listViaMcp($object, $integration, $op, $source, $arguments, $config, $actor);
         }
 
         if (empty($op['path'])) {
@@ -119,6 +129,23 @@ class ConnectedObjectReader
     }
 
     /**
+     * The McpClient config for an integration: endpoint + auth. Auth resolves
+     * against the acting viewer where given (a per-user OAuth MCP reads with
+     * THAT user's token; static/service schemes pass through auth_config).
+     *
+     * @return array<string, mixed>
+     */
+    private function mcpConfig(Integration $integration): array
+    {
+        return [
+            'endpoint' => $integration->base_url,
+            'integration_id' => $integration->id,
+            'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
+            'auth_config' => $integration->auth_config ?? [],
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $object
      * @param  array<string, mixed>  $op
      * @param  array<string, mixed>  $externalQuery
@@ -148,24 +175,15 @@ class ConnectedObjectReader
      * @param  array<string, mixed>  $op
      * @param  array<string, mixed>  $source
      * @param  array<string, mixed>  $arguments  already resolved + range-pushed by list()
+     * @param  array<string, mixed>  $config  the MCP client config (from mcpConfig)
      * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
      */
-    private function listViaMcp(array $object, Integration $integration, array $op, array $source, array $arguments, ?User $actor = null): array
+    private function listViaMcp(array $object, Integration $integration, array $op, array $source, array $arguments, array $config, ?User $actor = null): array
     {
         $toolName = trim((string) ($op['mcp_tool'] ?? ''));
         if ($toolName === '') {
             return ['ok' => false, 'rows' => [], 'error' => 'No MCP tool is configured for this object\'s list operation.'];
         }
-
-        $config = [
-            'endpoint' => $integration->base_url,
-            'integration_id' => $integration->id,
-            // Auth resolves against the acting viewer where given: a per-user
-            // OAuth MCP (e.g. YuhuGo) reads with THAT user's token; static /
-            // service schemes pass through auth_config and ignore the user.
-            'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
-            'auth_config' => $integration->auth_config ?? [],
-        ];
 
         try {
             $decoded = $this->mcp->callToolData($config, $actor, $toolName, $arguments, self::MCP_MAX_CHARS);
@@ -206,6 +224,16 @@ class ConnectedObjectReader
     ];
 
     /**
+     * The mirror END-of-window argument names. Only ever set to "today" (never a
+     * value from the block), so a widened fetch runs from the picked window
+     * start through now.
+     */
+    private const DATE_TO_ARG_KEYS = [
+        'to', 'to_date', 'date_to', 'end', 'end_date', 'until',
+        'before', 'hasta', 'fecha_fin', 'fecha_hasta',
+    ];
+
+    /**
      * Resolve {{…}} expression strings inside operation arguments (recursively)
      * against the render context — clock/pure functions plus params (so a
      * range-tied argument like {{range_start(default(params.range,'1y'))}} the
@@ -229,26 +257,34 @@ class ConnectedObjectReader
     }
 
     /**
-     * Best-effort: widen (or narrow) the MCP source's FETCH window to the
-     * dashboard's active date-range preset. A connected object bakes its own
-     * fetch window into the tool arguments at build time (e.g. `from:
-     * {{days_ago(183)}}`), so the in-memory date filter can only ever TRIM what
-     * that fixed window returned — picking "Año" over a 6-month bake shows
-     * nothing new. Here we read the window the block's own date filter asks for
-     * (its {{range_start(…)}} leaf, resolved against the request params) and, if
-     * the tool exposes a start-date argument, override it with that date. So the
-     * preset the viewer picks re-fetches the matching span at the source.
+     * Best-effort: widen the MCP source's FETCH window to the dashboard's active
+     * date-range preset. A connected object bakes its fetch window into the tool
+     * arguments at build time — or, worse, OMITS a window entirely and rides the
+     * tool's adaptive default (get-nps-time-series-tool defaults weekly to 12
+     * buckets, so "Año" showed only ~13 rows). The in-memory date filter can
+     * only TRIM what the source returned, never widen it.
      *
-     * No-ops (arguments returned unchanged) when: the block has no range-start
-     * filter, the preset resolves empty, or the tool has no start-date argument
-     * — in which case the baked window and the in-memory trim stand as before.
+     * We read the window the block's own date filter asks for (its
+     * {{range_start(…)}} leaf, resolved against the request params) and apply it
+     * to the tool's start-date argument two ways:
+     *   1. OVERRIDE — the object already sets a start-date arg (from/desde/…):
+     *      replace its value with the picked window start.
+     *   2. INJECT — the object sets none, but the tool's input SCHEMA declares
+     *      one: add it (plus the mirror end-date = today). Schema-gated so we
+     *      never send a parameter a strict tool would reject; if the schema
+     *      can't be read we simply skip injection.
+     *
+     * No-ops when: the block has no range-start filter, the preset resolves
+     * empty, or neither an existing arg nor the schema offers a start-date key.
      *
      * @param  array<string, mixed>  $arguments
      * @param  array<string, mixed>  $query  the block's data-source query
      * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $op  the list operation (carries mcp_tool)
+     * @param  array<string, mixed>  $config  the MCP client config
      * @return array<string, mixed>
      */
-    private function pushDownDateRange(array $arguments, array $query, array $context): array
+    private function pushDownDateRange(array $arguments, array $query, array $context, array $op, array $config, ?User $actor): array
     {
         $expr = $this->findRangeStartExpression($query['filter'] ?? null);
         if ($expr === null) {
@@ -260,6 +296,7 @@ class ConnectedObjectReader
             return $arguments; // empty preset ⇒ leave the source's own widest window
         }
 
+        // 1) Override an existing start-date argument.
         foreach (self::DATE_FROM_ARG_KEYS as $key) {
             if (array_key_exists($key, $arguments)) {
                 $arguments[$key] = $start;
@@ -268,7 +305,72 @@ class ConnectedObjectReader
             }
         }
 
+        // 2) Inject one the tool declares but the object never set.
+        $params = $this->toolParamNames($config, $actor, trim((string) ($op['mcp_tool'] ?? '')));
+        if ($params === []) {
+            return $arguments; // schema unavailable ⇒ don't guess
+        }
+        $fromKey = $this->firstDeclared(self::DATE_FROM_ARG_KEYS, $params);
+        if ($fromKey === null) {
+            return $arguments;
+        }
+        $arguments[$fromKey] = $start;
+        $toKey = $this->firstDeclared(self::DATE_TO_ARG_KEYS, $params);
+        if ($toKey !== null && ! array_key_exists($toKey, $arguments)) {
+            $arguments[$toKey] = $this->expressions->resolve('{{today()}}', $context);
+        }
+
         return $arguments;
+    }
+
+    /**
+     * The first of $candidates that appears in $declared (case-insensitive).
+     *
+     * @param  list<string>  $candidates
+     * @param  list<string>  $declared
+     */
+    private function firstDeclared(array $candidates, array $declared): ?string
+    {
+        $lower = array_map('strtolower', $declared);
+        foreach ($candidates as $candidate) {
+            $i = array_search(strtolower($candidate), $lower, true);
+            if ($i !== false) {
+                return $declared[$i]; // return the tool's own casing
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The input-schema property names a tool declares, memoised per config+viewer
+     * for the request. A tools/list round-trip that fails (auth, transport)
+     * degrades to [] — injection is then skipped, never fatal.
+     *
+     * @param  array<string, mixed>  $config
+     * @return list<string>
+     */
+    private function toolParamNames(array $config, ?User $actor, string $toolName): array
+    {
+        if ($toolName === '') {
+            return [];
+        }
+        $key = md5(json_encode([$config['integration_id'] ?? $config['endpoint'] ?? '', $actor?->id]));
+        if (! isset($this->toolSchemas[$key])) {
+            try {
+                $tools = $this->mcp->listTools($config, $actor);
+            } catch (\Throwable) {
+                $tools = [];
+            }
+            $schemas = [];
+            foreach ($tools as $tool) {
+                $props = $tool['input_schema']['properties'] ?? null;
+                $schemas[(string) ($tool['name'] ?? '')] = is_array($props) ? array_map('strval', array_keys($props)) : [];
+            }
+            $this->toolSchemas[$key] = $schemas;
+        }
+
+        return $this->toolSchemas[$key][$toolName] ?? [];
     }
 
     /**
