@@ -57,7 +57,8 @@ donut|radar|scatter|treemap|sankey|box, aggregation: count|sum|avg|min|max,
 y_field_id? (needed for sum/avg/min/max), group_by_field_id?, x_field_id?,
 bucket?, series_field_id?, stacked?, filter?, limit?}); `insights` (0-4 of
 {variant: conclusion|recommendation|risk|positive|insight, title, body?,
-compute?}); `include_hero?`; `include_date_filter?`. FAST PATH: pass `use_suggestion: true`
+compute?, metric_label?} — metric_label is the short unit under a compute's big
+figure, e.g. 'semanas'/'pico retrasos'); `include_hero?`; `include_date_filter?`. FAST PATH: pass `use_suggestion: true`
 (with `object_slug`) to compile the deterministic spec prepare_dashboard showed
 as suggested_spec, plus `overrides` ({title?, purpose?, date_field_id?, kpis?,
 charts?, insights?, …} — each key you send REPLACES that part of the
@@ -90,7 +91,7 @@ DESC;
             'overrides' => $schema->object()
                 ->description('With use_suggestion: parts to replace in the suggestion (title, purpose, date_field_id, kpis, charts, insights, include_hero, include_date_filter). Each key you send replaces that whole part.'),
             'insights' => $schema->array()
-                ->description('0-4 insight cards: {variant, title, body?, compute?}. At least one is required by the dashboard lints.'),
+                ->description('0-4 insight cards: {variant, title, body?, compute?, metric_label?}. metric_label is a short unit under the big figure (e.g. "semanas"). At least one card is required by the dashboard lints.'),
             'include_hero' => $schema->boolean()
                 ->description('Open with a compact left-aligned brand hero (default true).'),
             'include_date_filter' => $schema->boolean()

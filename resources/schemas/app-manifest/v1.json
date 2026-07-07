@@ -1010,8 +1010,9 @@
                         "variant": { "enum": ["insight", "recommendation", "conclusion", "positive", "warning", "risk"], "default": "insight", "description": "Tone of the card — drives its colour and default icon." },
                         "title": { "type": "string", "minLength": 1, "maxLength": 200 },
                         "body": { "type": "string", "maxLength": 2000 },
-                        "icon": { "type": "string", "maxLength": 40, "description": "Optional emoji override; otherwise a default per variant is used." },
+                        "icon": { "type": "string", "maxLength": 40, "description": "Optional icon override (a Lucide name or an emoji); otherwise a default per variant is used." },
                         "metric": { "type": "string", "maxLength": 60, "description": "Optional highlighted figure shown large (e.g. '+34%'). For a LIVE figure use `compute` instead — it overrides this." },
+                        "metric_label": { "type": "string", "maxLength": 40, "description": "Optional short caption under the big figure naming its unit/basis (e.g. 'semanas', 'pico retrasos'). Filter-safe: describes the number's KIND, never a value." },
                         "compute": {
                             "type": "object",
                             "additionalProperties": false,

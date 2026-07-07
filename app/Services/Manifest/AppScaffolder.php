@@ -1529,6 +1529,7 @@ class AppScaffolder
                 'variant' => $ins['variant'] ?? 'insight',
                 'title' => (string) ($ins['title'] ?? 'Insight'),
                 'body' => $ins['body'] ?? null,
+                'metric_label' => isset($ins['metric_label']) ? (string) $ins['metric_label'] : null,
                 'compute' => is_array($ins['compute'] ?? null) ? $ins['compute'] : null,
             ], fn ($v) => $v !== null), $chunk);
             $blocks[] = [

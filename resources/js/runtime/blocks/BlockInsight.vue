@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type { ObjectDef } from '../types/manifest';
+import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { computeTrend } from './trend';
 
 type Variant =
@@ -29,6 +30,7 @@ interface InsightBlock {
     body?: string;
     icon?: string;
     metric?: string;
+    metric_label?: string;
     compute?: InsightCompute;
 }
 
@@ -47,19 +49,22 @@ const props = defineProps<{
     defaultCurrency?: string;
 }>();
 
+// Lucide names (not emojis) for a clean executive eyebrow that inherits the
+// variant colour; a block.icon override still wins (and may be an emoji).
 const VARIANTS: Record<
     Variant,
     { color: string; icon: string; label: string }
 > = {
-    insight: { color: '#3B82F6', icon: '💡', label: 'Insight' },
-    recommendation: { color: '#8B5CF6', icon: '🎯', label: 'Recomendación' },
-    conclusion: { color: '#0EA5E9', icon: '📌', label: 'Conclusión' },
-    positive: { color: '#10B981', icon: '✅', label: 'Positivo' },
-    warning: { color: '#F59E0B', icon: '⚠️', label: 'Atención' },
-    risk: { color: '#EF4444', icon: '🚩', label: 'Riesgo' },
+    insight: { color: '#3B82F6', icon: 'lightbulb', label: 'Insight' },
+    recommendation: { color: '#6366F1', icon: 'target', label: 'Recomendación' },
+    conclusion: { color: '#3B82F6', icon: 'bar-chart', label: 'Conclusión' },
+    positive: { color: '#10B981', icon: 'check-circle', label: 'Positivo' },
+    warning: { color: '#F59E0B', icon: 'alert-triangle', label: 'Atención' },
+    risk: { color: '#EF4444', icon: 'flag', label: 'Riesgo' },
 };
 
 const v = computed(() => VARIANTS[props.block.variant ?? 'insight']);
+const t = themeTokens(useRuntimeTheme());
 
 // A computed figure (block.compute) overrides any static `metric`.
 const hasComputed = computed(
@@ -106,45 +111,54 @@ const displayMetric = computed(
 
 <template>
     <div
-        class="flex gap-4 rounded-xl border border-l-4 p-5"
+        class="flex items-start gap-5 rounded-2xl border p-6"
         :style="{
-            borderColor: 'color-mix(in srgb, currentColor 12%, transparent)',
-            borderLeftColor: v.color,
-            backgroundColor: `color-mix(in srgb, ${v.color} 7%, transparent)`,
+            borderColor: `color-mix(in srgb, ${v.color} 16%, transparent)`,
+            backgroundColor: `color-mix(in srgb, ${v.color} 6%, transparent)`,
         }"
     >
-        <div><RuntimeIcon :name="block.icon || v.icon" :size="24" /></div>
         <div class="min-w-0 flex-1">
             <div
-                class="text-[11px] font-semibold tracking-wider uppercase"
+                class="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.12em] uppercase"
                 :style="{ color: v.color }"
             >
-                {{ v.label }}
+                <RuntimeIcon :name="block.icon || v.icon" :size="15" />
+                <span>{{ v.label }}</span>
             </div>
-            <h3 class="mt-0.5 text-base leading-snug font-semibold">
+            <h3
+                class="mt-2.5 text-lg leading-snug font-bold"
+                :class="t.text"
+            >
                 {{ block.title }}
             </h3>
             <p
                 v-if="block.body"
-                class="mt-1.5 text-sm leading-relaxed"
-                :style="{ opacity: 0.8 }"
+                class="mt-2 text-sm leading-relaxed"
+                :class="t.textMuted"
             >
                 {{ block.body }}
             </p>
         </div>
         <div
             v-if="displayMetric"
-            class="flex shrink-0 flex-col items-end self-center"
+            class="flex shrink-0 flex-col items-end pt-6 text-right"
         >
             <span
-                class="text-2xl font-bold tracking-tight"
+                class="text-5xl leading-none font-extrabold tracking-tight tabular-nums"
                 :style="{ color: v.color }"
             >
                 {{ displayMetric }}
             </span>
             <span
+                v-if="block.metric_label"
+                class="mt-2 text-xs font-medium"
+                :class="t.textMuted"
+            >
+                {{ block.metric_label }}
+            </span>
+            <span
                 v-if="trend"
-                class="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold"
+                class="mt-2 inline-flex items-center gap-1 text-xs font-semibold"
                 :class="
                     trend.dir === 'flat'
                         ? 'opacity-60'

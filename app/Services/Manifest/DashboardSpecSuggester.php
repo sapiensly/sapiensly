@@ -641,6 +641,7 @@ class DashboardSpecSuggester
             'body' => $es
                 ? 'Registros dentro de la ventana seleccionada — compara contra el periodo anterior para leer la tendencia.'
                 : 'Records inside the selected window — compare with the previous period to read the trend.',
+            'metric_label' => $es ? 'registros' : 'records',
             'compute' => ['query' => ['object_id' => $objectId], 'aggregation' => 'count'],
         ]];
 
@@ -652,6 +653,7 @@ class DashboardSpecSuggester
                 'body' => $es
                     ? 'Casos con esta marca activa en la ventana — priorízalos para evitar escalamientos.'
                     : 'Cases with this flag set inside the window — prioritise them to avoid escalations.',
+                'metric_label' => $es ? 'casos' : 'cases',
                 'compute' => [
                     'query' => ['object_id' => $objectId, 'filter' => ['op' => 'eq', 'field_id' => $flag['id'], 'value' => true]],
                     'aggregation' => 'count',
