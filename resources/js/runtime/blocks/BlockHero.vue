@@ -47,6 +47,8 @@ const props = defineProps<{
 const { execute } = useActionExecutor();
 
 // The hero's live headline figure (its `stat`), formatted per its own format.
+// The `unit` (a trailing % / currency symbol) is split out so the template can
+// render it smaller than the number — the executive "96.7%" treatment.
 const heroStat = computed(() => {
     const stat = props.block.stat;
     const value = props.data?.stat?.value;
@@ -55,11 +57,12 @@ const heroStat = computed(() => {
     }
     const locale = props.locale ?? 'es-MX';
     let display: string;
+    let unit: string | null = null;
     if (stat.format === 'percentage') {
         display = new Intl.NumberFormat(locale, {
-            style: 'percent',
             maximumFractionDigits: 1,
-        }).format(value);
+        }).format(value * 100);
+        unit = '%';
     } else if (stat.format === 'currency') {
         display = new Intl.NumberFormat(locale, {
             style: 'currency',
@@ -68,7 +71,7 @@ const heroStat = computed(() => {
     } else {
         display = new Intl.NumberFormat(locale).format(value);
     }
-    return { display, label: stat.label ?? '' };
+    return { display, unit, label: stat.label ?? '' };
 });
 
 const appSlug = inject<string>('appSlug', deriveSlugFromUrl());
@@ -101,6 +104,22 @@ const sectionStyle = computed(() => {
 const hasCustomBackground = computed(
     () => !!(props.block.style?.gradient || props.block.style?.background),
 );
+
+// Faint graph-paper grid over the gradient — the signature texture of the
+// executive dashboard hero. Skipped for image backgrounds (the photo IS the
+// texture). Masked to fade toward the bottom so it never fights the title.
+const showGrid = computed(() => !props.block.background_image);
+const gridStyle = {
+    backgroundImage:
+        'linear-gradient(to right, rgba(255,255,255,0.9) 1px, transparent 1px),' +
+        'linear-gradient(to bottom, rgba(255,255,255,0.9) 1px, transparent 1px)',
+    backgroundSize: '34px 34px',
+    // Fade the grid out toward the lower-left where the title sits.
+    maskImage:
+        'radial-gradient(120% 130% at 100% 0%, black 20%, transparent 75%)',
+    WebkitMaskImage:
+        'radial-gradient(120% 130% at 100% 0%, black 20%, transparent 75%)',
+};
 
 // A small min_height signals a dashboard banner rather than a landing hero:
 // slim padding, smaller type, tighter gap — so it introduces the page without
@@ -152,6 +171,24 @@ async function clickCta() {
             class="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/70"
         ></div>
 
+        <!-- Graph-paper texture + a soft top-right highlight for depth. -->
+        <template v-if="showGrid">
+            <div
+                class="pointer-events-none absolute inset-0 opacity-[0.12]"
+                :style="gridStyle"
+            ></div>
+            <div
+                class="pointer-events-none absolute inset-0"
+                style="
+                    background: radial-gradient(
+                        90% 120% at 100% 0%,
+                        rgba(255, 255, 255, 0.18),
+                        transparent 60%
+                    );
+                "
+            ></div>
+        </template>
+
         <div
             class="relative z-10 flex w-full items-center justify-between gap-6"
         >
@@ -198,17 +235,24 @@ async function clickCta() {
                 </div>
             </div>
 
-            <!-- Live headline figure, floated as a glassy card on the right. -->
+            <!-- Live headline figure, floated as a frosted-glass card. -->
             <div
                 v-if="heroStat"
-                class="hidden shrink-0 rounded-sp-sm border border-white/20 bg-white/10 px-5 py-3 text-right backdrop-blur-sm sm:block"
+                class="hidden shrink-0 rounded-2xl border border-white/25 bg-white/12 px-6 py-4 text-right shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25)] backdrop-blur-md sm:block"
             >
-                <p class="text-3xl font-bold tracking-tight text-white">
-                    {{ heroStat.display }}
+                <p
+                    class="text-4xl leading-none font-extrabold tracking-tight text-white tabular-nums"
+                >
+                    {{ heroStat.display
+                    }}<span
+                        v-if="heroStat.unit"
+                        class="ml-0.5 text-2xl font-bold text-white/80"
+                        >{{ heroStat.unit }}</span
+                    >
                 </p>
                 <p
                     v-if="heroStat.label"
-                    class="mt-0.5 text-[10px] font-semibold tracking-[0.1em] text-white/70 uppercase"
+                    class="mt-1.5 text-[10px] font-semibold tracking-[0.12em] text-white/70 uppercase"
                 >
                     {{ heroStat.label }}
                 </p>
