@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\ResolveStoppedBuildJob;
 use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
 use App\Models\BuilderConversation;
@@ -104,6 +105,54 @@ it('exposes the stop endpoint and clears the flag on the next message', function
 
     expect($this->cancellation->requested($this->conv))->toBeFalse();
     Queue::assertPushed(RunBuilderAiJob::class);
+});
+
+it('backs Detener with a resolver job when a turn is still streaming', function () {
+    Queue::fake();
+    $placeholder = BuilderMessage::create([
+        'conversation_id' => $this->conv->id, 'role' => 'assistant',
+        'content' => 'Modelando 4 objeto(s)…', 'status' => 'streaming',
+    ]);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/stop", ['conversation_id' => $this->conv->id])
+        ->assertOk();
+
+    Queue::assertPushed(ResolveStoppedBuildJob::class, function (ResolveStoppedBuildJob $job) use ($placeholder) {
+        return $job->placeholderId === $placeholder->id;
+    });
+});
+
+it('resolver closes a DEAD turn stuck streaming, keeping the narration', function () {
+    $placeholder = BuilderMessage::create([
+        'conversation_id' => $this->conv->id, 'role' => 'assistant',
+        'content' => 'Ajustando el spec…', 'status' => 'streaming',
+    ]);
+
+    (new ResolveStoppedBuildJob($this->conv->id, $placeholder->id))->handle();
+
+    $placeholder->refresh();
+    expect($placeholder->status)->toBe('none')
+        ->and($placeholder->content)->toContain('Ajustando el spec'); // narration kept
+
+    $stop = BuilderMessage::where('conversation_id', $this->conv->id)
+        ->where('id', '!=', $placeholder->id)->first();
+    expect($stop)->not->toBeNull()
+        ->and($stop->content)->toContain('detenido por el usuario');
+});
+
+it('resolver no-ops when a LIVE turn already finalized within the grace', function () {
+    // The live turn banked and closed itself → status left streaming/pending.
+    $placeholder = BuilderMessage::create([
+        'conversation_id' => $this->conv->id, 'role' => 'assistant',
+        'content' => 'Listo', 'status' => 'applied',
+    ]);
+
+    (new ResolveStoppedBuildJob($this->conv->id, $placeholder->id))->handle();
+
+    // Untouched, and no extra stop message appended.
+    expect($placeholder->fresh()->status)->toBe('applied')
+        ->and(BuilderMessage::where('conversation_id', $this->conv->id)->count())->toBe(1);
 });
 
 it('rejects stopping a conversation the caller does not own', function () {

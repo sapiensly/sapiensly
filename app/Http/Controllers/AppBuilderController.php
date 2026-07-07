@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Ai\BuilderAgent;
 use App\Jobs\ExpressDashboardJob;
+use App\Jobs\ResolveStoppedBuildJob;
 use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
 use App\Models\AppSetting;
@@ -459,6 +460,21 @@ class AppBuilderController extends Controller
 
         $conversation = $this->loadConversation($app, $data['conversation_id'], $request->user()->id);
         app(BuilderCancellation::class)->request($conversation);
+
+        // A LIVE turn polls the flag and finalizes itself (banking progress).
+        // But a turn whose worker already died can't — so back Detener with a
+        // short-grace resolver: if the newest turn is still streaming after the
+        // grace, it was dead and this closes it with the stop message in
+        // seconds instead of waiting ~10 min for the global stale reaper.
+        $placeholder = BuilderMessage::query()
+            ->where('conversation_id', $conversation->id)
+            ->whereIn('status', ['streaming', 'pending'])
+            ->latest()
+            ->first();
+        if ($placeholder !== null) {
+            ResolveStoppedBuildJob::dispatch($conversation->id, $placeholder->id)
+                ->delay(now()->addSeconds(15));
+        }
 
         return response()->json(['ok' => true, 'message' => 'Deteniendo el build — el progreso ya aplicado se conserva.']);
     }
