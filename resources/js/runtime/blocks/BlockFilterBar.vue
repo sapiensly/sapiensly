@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
 import { computed, inject, ref } from 'vue';
+import RuntimeIcon from '../RuntimeIcon.vue';
 import type { ObjectDef } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 
@@ -93,28 +94,40 @@ function windowLabel(param: string): string | null {
     return `${fmt(start.toISOString().slice(0, 10))} – ${end}`;
 }
 
-// One caption per date_range control: requested window + actual data span.
+// One caption per date_range control. When the server reports the ACTUAL data
+// span (meta), lead with that real span — "20 abr 2026 – 29 jun 2026 · 11
+// registros" — since it's what the viewer is actually looking at (a capped or
+// clustered source rarely fills the requested window). Only when there's no meta
+// (e.g. a not-yet-loaded or record-less block) do we fall back to the requested
+// window so the bar never reads blank.
 function rangeCaption(c: Control): string | null {
     if (c.type !== 'date_range') {
         return null;
     }
-    const parts: string[] = [];
-    const win = windowLabel(c.param);
-    if (win) {
-        parts.push(win);
-    }
     const meta = rangeMeta.value;
     if (meta && meta.param === c.param) {
-        parts.push(
-            meta.count === 0
-                ? 'sin registros en la ventana'
-                : meta.min && meta.max
-                  ? `${meta.count} registros, del ${fmt(meta.min)} al ${fmt(meta.max)}`
-                  : `${meta.count} registros`,
-        );
+        if (meta.count === 0) {
+            return 'sin registros en la ventana';
+        }
+        const span =
+            meta.min && meta.max ? `${fmt(meta.min)} – ${fmt(meta.max)} · ` : '';
+        const noun = meta.count === 1 ? 'registro' : 'registros';
+        return `${span}${meta.count} ${noun}`;
     }
-    return parts.length ? parts.join(' · ') : null;
+    return windowLabel(c.param);
 }
+
+// The single caption shown on the right of the bar: the first date_range
+// control's, with a clock glyph — mirrors the executive filter-bar mockup.
+const primaryRangeCaption = computed<string | null>(() => {
+    for (const c of props.block.controls) {
+        const caption = rangeCaption(c);
+        if (caption) {
+            return caption;
+        }
+    }
+    return null;
+});
 
 // Server-provided current filter values → SSR-safe initial state.
 const pageParams = inject<Record<string, unknown>>('pageParams', {});
@@ -176,7 +189,7 @@ function onSelect(param: string, event: Event) {
 <template>
     <div
         :class="[
-            'flex flex-wrap items-end gap-3 rounded-sp-sm border p-3',
+            'flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-4 py-3',
             t.surface,
         ]"
     >
@@ -189,64 +202,59 @@ function onSelect(param: string, event: Event) {
         >
             {{ block.label }}
         </span>
-        <div
-            v-for="c in block.controls"
-            :key="c.param"
-            class="flex flex-col gap-1"
-        >
-            <label v-if="c.label" :class="['text-[11px]', t.textMuted]">{{
-                c.label
-            }}</label>
+        <template v-for="c in block.controls" :key="c.param">
+            <label
+                v-if="c.label && c.type !== 'date_range'"
+                :class="['self-center text-[11px]', t.textMuted]"
+                >{{ c.label }}</label
+            >
             <input
                 v-if="c.type === 'search'"
                 type="search"
                 :value="values[c.param]"
                 :placeholder="c.placeholder ?? 'Search…'"
                 :class="[
-                    'min-w-[12rem] rounded-xs border border-medium bg-surface px-2.5 py-1.5 text-sm',
+                    'min-w-[12rem] rounded-full border border-medium bg-surface px-3.5 py-1.5 text-sm',
                     t.text,
                 ]"
                 @input="onSearch(c.param, $event)"
             />
-            <template v-else-if="c.type === 'date_range'">
-                <div
-                    class="inline-flex flex-wrap gap-0.5 rounded-xs border border-medium bg-surface p-0.5"
+            <!-- Segmented pill group: a soft rounded track, accent-filled active
+                 pill with a lift shadow. The active colour follows the org brand
+                 (--sp-accent), so a blue-branded board reads exactly like the
+                 executive mockup. -->
+            <div
+                v-else-if="c.type === 'date_range'"
+                class="inline-flex flex-wrap items-center gap-1 rounded-full bg-surface p-1"
+            >
+                <button
+                    v-for="p in presetsFor(c)"
+                    :key="p.value"
+                    type="button"
+                    :class="[
+                        'rounded-full px-4 py-1.5 text-sm font-semibold transition-all',
+                        values[c.param] === p.value
+                            ? 'shadow-sm'
+                            : [t.textMuted, 'hover:bg-navy'],
+                    ]"
+                    :style="
+                        values[c.param] === p.value
+                            ? {
+                                  background: 'var(--sp-accent, #2563eb)',
+                                  color: 'var(--sp-accent-contrast, #fff)',
+                              }
+                            : undefined
+                    "
+                    @click="onPreset(c.param, p.value)"
                 >
-                    <button
-                        v-for="p in presetsFor(c)"
-                        :key="p.value"
-                        type="button"
-                        :class="[
-                            'rounded-xs px-2.5 py-1 text-xs font-medium transition-colors',
-                            values[c.param] === p.value
-                                ? 'text-white'
-                                : [t.textMuted, 'hover:bg-navy'],
-                        ]"
-                        :style="
-                            values[c.param] === p.value
-                                ? {
-                                      background: 'var(--sp-accent, #10b981)',
-                                      color: 'var(--sp-accent-contrast, #fff)',
-                                  }
-                                : undefined
-                        "
-                        @click="onPreset(c.param, p.value)"
-                    >
-                        {{ p.label }}
-                    </button>
-                </div>
-                <span
-                    v-if="rangeCaption(c)"
-                    :class="['text-[11px] tabular-nums', t.textMuted]"
-                >
-                    {{ rangeCaption(c) }}
-                </span>
-            </template>
+                    {{ p.label }}
+                </button>
+            </div>
             <select
                 v-else
                 :value="values[c.param]"
                 :class="[
-                    'rounded-xs border border-medium bg-surface px-2.5 py-1.5 text-sm',
+                    'rounded-full border border-medium bg-surface px-3.5 py-1.5 text-sm',
                     t.text,
                 ]"
                 @change="onSelect(c.param, $event)"
@@ -260,6 +268,16 @@ function onSelect(param: string, event: Event) {
                     {{ o.label }}
                 </option>
             </select>
-        </div>
+        </template>
+        <span
+            v-if="primaryRangeCaption"
+            :class="[
+                'ml-auto inline-flex items-center gap-1.5 text-xs tabular-nums',
+                t.textMuted,
+            ]"
+        >
+            <RuntimeIcon name="clock" :size="14" />
+            {{ primaryRangeCaption }}
+        </span>
     </div>
 </template>
