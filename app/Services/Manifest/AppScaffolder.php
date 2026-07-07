@@ -1419,9 +1419,24 @@ class AppScaffolder
                 'id' => $this->id('hro'),
                 'type' => 'hero',
                 'title' => $title,
+                'eyebrow' => $lang === 'es' ? 'Reporte' : 'Report',
+                'eyebrow_icon' => 'bar-chart',
                 'align' => 'left',
                 'min_height' => 120,
             ];
+            // Float the headline KPI (the first one) into the hero as a live
+            // figure — the executive-summary number, resolved with the same
+            // date filter as the band below.
+            $lead = $items[0] ?? null;
+            if (is_array($lead) && isset($lead['query'], $lead['aggregation'])) {
+                $hero['stat'] = array_filter([
+                    'label' => (string) ($lead['label'] ?? ''),
+                    'query' => $lead['query'],
+                    'aggregation' => $lead['aggregation'],
+                    'field_id' => $lead['field_id'] ?? null,
+                    'format' => $lead['format'] ?? null,
+                ], fn ($v) => $v !== null && $v !== '');
+            }
             if (is_array($palette['ramp'] ?? null) && isset($palette['ramp']['900'], $palette['ramp']['600'])) {
                 $hero['style'] = ['gradient' => ['from' => $palette['ramp']['900'], 'to' => $palette['ramp']['600'], 'direction' => 'to-br']];
             }

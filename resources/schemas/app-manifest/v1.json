@@ -1435,11 +1435,26 @@
                         "id": true, "visibility": true, "style": true,
                         "type": { "const": "hero" },
                         "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+                        "eyebrow": { "type": "string", "maxLength": 80, "description": "Small uppercase label above the title (e.g. 'REPORTE OPERATIVO · YUHU'). Optional leading icon via eyebrow_icon." },
+                        "eyebrow_icon": { "type": "string", "maxLength": 40, "description": "Optional icon name shown before the eyebrow label." },
                         "subtitle": { "type": "string", "maxLength": 500 },
                         "background_image": { "type": "string", "maxLength": 2000 },
                         "overlay": { "type": "boolean", "default": true },
                         "align": { "enum": ["left", "center"], "default": "center" },
                         "min_height": { "type": "integer", "minimum": 96, "maximum": 900 },
+                        "stat": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "description": "An optional headline figure shown as a card floated in the hero (a live-resolved KPI). Mirrors a metric_grid item.",
+                            "required": ["label", "query", "aggregation"],
+                            "properties": {
+                                "label": { "type": "string", "maxLength": 60 },
+                                "query": { "$ref": "#/$defs/query" },
+                                "aggregation": { "enum": ["count", "sum", "avg", "min", "max", "median", "p90", "p95", "distinct_count"] },
+                                "field_id": { "type": "string" },
+                                "format": { "enum": ["number", "currency", "percentage", "duration"] }
+                            }
+                        },
                         "cta": {
                             "type": "object",
                             "additionalProperties": false,

@@ -120,6 +120,16 @@ class BlockDataResolver
             return $this->kpiPayload($app, $block, $manifest, $context);
         }
 
+        // A hero can carry ONE live headline figure (its `stat`), resolved like
+        // a KPI so the banner shows a real current number.
+        if ($block['type'] === 'hero' && is_array($block['stat'] ?? null)) {
+            try {
+                return ['stat' => $this->kpiPayload($app, $block['stat'], $manifest, $context)];
+            } catch (Throwable $e) {
+                return ['stat' => ['error' => $e->getMessage()]];
+            }
+        }
+
         // A computed insight: aggregate a live figure (and optional comparison)
         // so the card states a real, current number instead of hand-written
         // prose. Routes through aggregateBlock, so it works over connected

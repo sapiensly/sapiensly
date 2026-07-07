@@ -196,6 +196,21 @@ it('omits the filter bar and range wiring when include_date_filter is false', fu
     expect(json_encode($page))->not->toContain('range_start');
 });
 
+it('gives the hero an eyebrow and floats the headline KPI as a live stat', function () {
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(adp_spec(), $manifest['objects'][0], [], null, 'es');
+
+    $hero = collect($built['page']['blocks'])->firstWhere('type', 'hero');
+    expect($hero['eyebrow'])->toBe('Reporte')
+        ->and($hero['eyebrow_icon'])->toBe('bar-chart');
+
+    // The hero stat mirrors the FIRST KPI, resolved with the same range filter.
+    $firstKpi = collect($built['page']['blocks'])->firstWhere('type', 'metric_grid')['items'][0];
+    expect($hero['stat']['aggregation'])->toBe($firstKpi['aggregation'])
+        ->and($hero['stat']['query'])->toBe($firstKpi['query'])
+        ->and(json_encode($hero['stat']['query']))->toContain('range_start');
+});
+
 it('captions each KPI with its aggregation basis (subtitle), filter-safe', function () {
     $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
     $built = app(AppScaffolder::class)->buildDashboardFromSpec(adp_spec(), $manifest['objects'][0], [], null, 'es');
