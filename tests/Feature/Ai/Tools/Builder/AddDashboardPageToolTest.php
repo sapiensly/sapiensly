@@ -738,6 +738,44 @@ it('blocks the unambiguous lies for hand-authored specs too: count-of-buckets, s
     expect($built['ok'])->toBeTrue();
 });
 
+it('rejects a count-over-time chart on a recency-capped source (mode:latest)', function () {
+    // Prod nps_fable_dsh: a `count` line over Nps Comments (mode:latest). The
+    // source only ever returns its most-recent N rows, so per-bucket counts are
+    // the sampling window in disguise (older buckets empty, newest full), not a
+    // real volume trend.
+    $comments = [
+        'id' => 'obj_npscomments0', 'slug' => 'nps_comments', 'name' => 'Nps Comments',
+        'fields' => [
+            ['id' => 'fld_respondedat', 'slug' => 'responded_at', 'name' => 'Responded', 'type' => 'datetime'],
+            ['id' => 'fld_npsvalue000', 'slug' => 'nps', 'name' => 'Nps', 'type' => 'number'],
+            ['id' => 'fld_segment0000', 'slug' => 'segment', 'name' => 'Segment', 'type' => 'string'],
+        ],
+        'source' => ['type' => 'connected', 'operations' => ['list' => ['mcp_tool' => 't', 'arguments' => ['mode' => 'latest'], 'collection_path' => 'comments']]],
+    ];
+    $spec = [
+        'object_slug' => 'nps_comments',
+        'kpis' => [['label' => 'Comentarios', 'aggregation' => 'count']],
+        'charts' => [
+            ['label' => 'Volumen', 'chart_type' => 'line', 'aggregation' => 'count', 'x_field_id' => 'fld_respondedat'],
+        ],
+        'insights' => [['variant' => 'conclusion', 'title' => 'x', 'body' => 'y']],
+    ];
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec($spec, $comments, [], null, 'es');
+    expect($built['ok'])->toBeFalse()
+        ->and(json_encode($built['errors']))->toContain('recency-capped sample')
+        ->and(json_encode($built['errors']))->toContain('illegal_aggregation');
+
+    // Non-temporal breakdowns over the SAME capped object are fine — only the
+    // count-over-TIME reading is a lie.
+    $spec['charts'] = [
+        ['label' => 'NPS por segmento', 'chart_type' => 'hbar', 'aggregation' => 'avg', 'y_field_id' => 'fld_npsvalue000', 'group_by_field_id' => 'fld_segment0000'],
+        ['label' => 'Distribución', 'chart_type' => 'donut', 'aggregation' => 'count', 'group_by_field_id' => 'fld_segment0000'],
+    ];
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec($spec, $comments, [], null, 'es');
+    expect($built['ok'])->toBeTrue();
+});
+
 it('rejects a part-of-whole chart with no category to slice by (the GLM degenerate donut)', function () {
     // Prod nps_glm_5v: a donut of sum(responses) with no group_by — a single
     // 100% slice that says nothing. A pie/donut needs a slicing dimension.

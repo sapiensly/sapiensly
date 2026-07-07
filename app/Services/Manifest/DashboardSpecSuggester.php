@@ -170,6 +170,22 @@ class DashboardSpecSuggester
         return $chart;
     }
 
+    /**
+     * A connected list operation that returns only its most-recent N rows
+     * (mode:latest/recent) is a recency-capped SAMPLE, not the full series —
+     * counting it over time plots the sampling window, not a trend. Mirrors the
+     * penalty SuggestSpecPhase applies when ranking objects, and the compiler's
+     * count-over-time guard.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function isCappedSample(array $object): bool
+    {
+        $mode = strtolower((string) ($object['source']['operations']['list']['arguments']['mode'] ?? ''));
+
+        return in_array($mode, ['latest', 'recent'], true);
+    }
+
     /** "Evolución de nps score · NPS Semanal" — say whose number it is. */
     private function labelWithObject(string $label, string $objectName): string
     {
@@ -344,7 +360,10 @@ class DashboardSpecSuggester
             );
             if ($namesake !== null) {
                 $kpis[] = [
-                    'label' => ($es ? 'Promedio ' : 'Average ').(string) ($namesake['name'] ?? $namesake['slug']),
+                    // Clean field name; the aggregation basis ("promedio del
+                    // periodo") is carried by the KPI subtitle the compiler
+                    // fills, so a "Promedio …" prefix would just be redundant.
+                    'label' => (string) ($namesake['name'] ?? $namesake['slug']),
                     'aggregation' => 'avg',
                     'field_id' => $namesake['id'],
                     'icon' => 'star',
@@ -400,7 +419,8 @@ class DashboardSpecSuggester
 
             if ($type === SemanticProfile::MEASURE_RATIO) {
                 $kpis[] = [
-                    'label' => ($es ? 'Promedio ' : 'Average ').$name,
+                    // Field name only — the subtitle names it as an average.
+                    'label' => $name,
                     'aggregation' => 'avg',
                     'field_id' => $field['id'],
                     'icon' => 'star',
@@ -411,7 +431,8 @@ class DashboardSpecSuggester
 
             if (in_array('sum', $legal, true)) {
                 $kpis[] = [
-                    'label' => ($es ? 'Suma ' : 'Sum of ').$name,
+                    // Field name only — the subtitle names it as an accumulated total.
+                    'label' => $name,
                     'aggregation' => 'sum',
                     'field_id' => $field['id'],
                     'icon' => 'sigma',
@@ -498,8 +519,15 @@ class DashboardSpecSuggester
                 'bucket' => $bucket,
             ];
             if ($grain === SemanticProfile::GRAIN_RAW) {
-                $trend['aggregation'] = 'count';
-                $trend['label'] = $es ? 'Volumen en el tiempo' : 'Volume over time';
+                // A capped sample counted over time is the sampling window in
+                // disguise (older buckets read empty, the newest full) — skip
+                // the volume line rather than ship a misleading trend.
+                if ($this->isCappedSample($object)) {
+                    $trend = null;
+                } else {
+                    $trend['aggregation'] = 'count';
+                    $trend['label'] = $es ? 'Volumen en el tiempo' : 'Volume over time';
+                }
             } else {
                 // The measure the user means is usually the one the OBJECT is
                 // named after: nps_time_series → nps_score, not its first
@@ -589,8 +617,10 @@ class DashboardSpecSuggester
             ];
         }
 
-        // 5) Stacked composition over time needs record-level rows.
-        if ($grain === SemanticProfile::GRAIN_RAW && $dateField !== null && $categoricals !== [] && count($charts) < self::MAX_CHARTS) {
+        // 5) Stacked composition over time needs record-level rows — and a
+        //    source that returns them ALL. Over a recency-capped sample its
+        //    per-week counts are the sampling window, not real composition.
+        if ($grain === SemanticProfile::GRAIN_RAW && $dateField !== null && $categoricals !== [] && ! $this->isCappedSample($object) && count($charts) < self::MAX_CHARTS) {
             $cat = $categoricals[0];
             $distinct = $stats !== [] ? ($stats[$cat['id']]['distinct'] ?? 5) : 5;
             if ($distinct >= 2 && $distinct <= 8) {

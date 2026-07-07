@@ -1285,6 +1285,23 @@ class AppScaffolder
             $groupType = $fieldType($chart['group_by_field_id'] ?? null, "/charts/{$i}/group_by_field_id", false, $chartObject);
             $xType = $fieldType($chart['x_field_id'] ?? null, "/charts/{$i}/x_field_id", false, $chartObject);
 
+            // A count-over-time chart over a recency-capped source (mode:latest/
+            // recent) is a misleading trend: the source only ever returns its
+            // most-recent N rows, so the per-bucket counts are an artefact of the
+            // cap (older buckets read as empty, the newest as full), not a real
+            // volume trend. Observed: a `count` line over Nps Comments (latest)
+            // that plotted the sampling window, not the data. Chart a real
+            // measure of the value, or use this object for a non-temporal cut.
+            $hasDateAxis = ($xType !== null && in_array($xType, self::DATE_TYPES, true))
+                || ($groupType !== null && in_array($groupType, self::DATE_TYPES, true));
+            $chartMode = strtolower((string) ($chartObject['source']['operations']['list']['arguments']['mode'] ?? ''));
+            if ($agg === 'count' && $hasDateAxis && in_array($chartMode, ['latest', 'recent'], true)) {
+                $chartObjSlug = (string) ($chartObject['slug'] ?? $chartObject['name'] ?? 'this object');
+                $errors[] = ['path' => "/charts/{$i}", 'message' => "'{$chartObjSlug}' returns only a recency-capped sample (mode:{$chartMode}), so counting it over time plots the sampling window, not a real trend. Chart sum/avg of a value column, or use this object for a non-temporal breakdown.", 'code' => 'illegal_aggregation'];
+
+                continue;
+            }
+
             // Grouping a time series by its bucket-LABEL column re-plots the
             // trend as unordered bars (shipped once: «Distribución por
             // Segmento» grouped by period_label — every bar one week).
