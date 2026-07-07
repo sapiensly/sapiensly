@@ -124,6 +124,7 @@ class SapiensServer extends Server
         // Builder chat sessions (debug / resume the in-app AI app-builder).
         Tools\Build\ListBuilderConversationsTool::class,
         Tools\Build\GetBuilderConversationTool::class,
+        Tools\Build\GetBuildCostTool::class,
         Tools\Build\ContinueBuilderConversationTool::class,
         Tools\Build\AddObjectTool::class,
         Tools\Build\AddFieldTool::class,

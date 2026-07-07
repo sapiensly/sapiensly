@@ -121,6 +121,57 @@ class AiUsageReport
     }
 
     /**
+     * Spend for a single BUILD — every AI call tagged with this app_id (and
+     * optionally one conversation), across the builder and the Express dashboard
+     * pipeline. RLS-scoped: reads the tenant meter, which carries both own- and
+     * system-paid calls that had tenant context, so the total is the real cost
+     * of the build regardless of who paid. Shaped for attribution, not the
+     * dashboard: totals + per-model + per-conversation, no daily series.
+     *
+     * @return array<string, mixed>
+     */
+    public function forApp(string $appId, ?string $conversationId = null, int $days = 90): array
+    {
+        $since = Carbon::today()->subDays($days - 1);
+
+        $query = AiUsageEvent::query()
+            ->where('app_id', $appId)
+            ->where('created_at', '>=', $since);
+        if ($conversationId !== null) {
+            $query->where('conversation_id', $conversationId);
+        }
+
+        $rows = $query
+            ->selectRaw('module, model, source, conversation_id, cost, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens')
+            ->get();
+
+        $sum = fn (Collection $g): array => [
+            'cost' => round((float) $g->sum('cost'), 4),
+            'calls' => $g->count(),
+            'input_tokens' => (int) $g->sum('input_tokens'),
+            'output_tokens' => (int) $g->sum('output_tokens'),
+            'cache_read_tokens' => (int) $g->sum('cache_read_tokens'),
+            'reasoning_tokens' => (int) $g->sum('reasoning_tokens'),
+        ];
+
+        return [
+            'app_id' => $appId,
+            'conversation_id' => $conversationId,
+            'range_days' => $days,
+            'totals' => $sum($rows),
+            'by_model' => $rows->groupBy('model')
+                ->map(fn (Collection $g, string $model): array => ['model' => $model] + $sum($g))
+                ->sortByDesc('cost')->values()->all(),
+            'by_conversation' => $rows->groupBy(fn (object $r): string => (string) ($r->conversation_id ?? ''))
+                ->map(fn (Collection $g, string $cid): array => ['conversation_id' => $cid !== '' ? $cid : null] + $sum($g))
+                ->sortByDesc('cost')->values()->all(),
+            'by_service' => $rows->groupBy(fn (object $r): string => $this->serviceFor($r->module))
+                ->map(fn (Collection $g, string $svc): array => ['service' => $svc] + $sum($g))
+                ->sortByDesc('cost')->values()->all(),
+        ];
+    }
+
+    /**
      * Shared shaping of a flat row set into totals + breakdowns + a daily series.
      *
      * @param  Collection<int, object>  $rows
