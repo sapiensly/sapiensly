@@ -196,6 +196,21 @@ it('omits the filter bar and range wiring when include_date_filter is false', fu
     expect(json_encode($page))->not->toContain('range_start');
 });
 
+it('captions each KPI with its aggregation basis (subtitle), filter-safe', function () {
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(adp_spec(), $manifest['objects'][0], [], null, 'es');
+
+    $items = collect($built['page']['blocks'])->firstWhere('type', 'metric_grid')['items'];
+    // adp_spec has a count, a median and an avg KPI.
+    $byAgg = collect($items)->keyBy('aggregation');
+    expect($byAgg['count']['subtitle'])->toBe('conteo en la ventana')
+        ->and($byAgg['median']['subtitle'])->toBe('mediana del periodo')
+        ->and($byAgg['avg']['subtitle'])->toBe('promedio del periodo');
+
+    // The whole page still validates (subtitle is a registered item property).
+    expect(app(ManifestValidator::class))->not->toBeNull();
+});
+
 it('opens a LOCAL-object dashboard on 30d but a CONNECTED one on the full range', function () {
     // The empty-on-open bug: a connected object's live data is often historical,
     // so a 30d default lands in a gap. Local records are recent → 30d is fine.

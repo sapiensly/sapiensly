@@ -1243,7 +1243,13 @@ class AppScaffolder
                 'icon' => $this->renderableIcon($kpi['icon'] ?? null),
                 'compare' => $compare,
                 'delta_good' => $kpi['delta_good'] ?? null,
-            ], fn ($v) => $v !== null);
+                // An honest caption naming the aggregation basis (a promedio vs a
+                // suma vs a mediana reads very differently), filter-safe because
+                // it describes the number's KIND, not a value that goes stale.
+                'subtitle' => (string) ($kpi['subtitle'] ?? '') !== ''
+                    ? (string) $kpi['subtitle']
+                    : $this->kpiSubtitle($agg, $lang),
+            ], fn ($v) => $v !== null && $v !== '');
         }
 
         // --- Charts -----------------------------------------------------------
@@ -1530,6 +1536,30 @@ class AppScaffolder
             'plan_rows' => $planRows,
             'purpose' => trim((string) ($spec['purpose'] ?? '')) ?: "Vista ejecutiva de {$object['name']}: KPIs, tendencias y conclusiones.",
         ];
+    }
+
+    /**
+     * A short caption naming what the KPI number IS — its aggregation basis.
+     * The card label is often just the field name ("Otd Pct Global"); this
+     * disambiguates promedio vs suma vs mediana. Filter-safe by design: it
+     * describes the number's KIND, never a value that would go stale on filter.
+     */
+    private function kpiSubtitle(string $aggregation, string $lang): string
+    {
+        $es = $lang !== 'en';
+
+        return match ($aggregation) {
+            'count' => $es ? 'conteo en la ventana' : 'count in window',
+            'sum' => $es ? 'acumulado en la ventana' : 'total in window',
+            'avg' => $es ? 'promedio del periodo' : 'period average',
+            'median' => $es ? 'mediana del periodo' : 'period median',
+            'p90' => $es ? 'percentil 90 del periodo' : 'period p90',
+            'p95' => $es ? 'percentil 95 del periodo' : 'period p95',
+            'min' => $es ? 'mínimo del periodo' : 'period minimum',
+            'max' => $es ? 'máximo del periodo' : 'period maximum',
+            'distinct_count' => $es ? 'valores distintos' : 'distinct values',
+            default => '',
+        };
     }
 
     /**

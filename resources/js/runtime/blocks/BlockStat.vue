@@ -94,6 +94,9 @@ const formatted = computed(() => {
                 :color="block.spark.color"
             />
         </div>
+        <p v-if="block.subtitle" :class="['mt-1 text-[11px]', t.textMuted]">
+            {{ block.subtitle }}
+        </p>
         <div
             v-if="trend || block.compare_label"
             class="mt-1.5 flex items-center justify-between gap-2"

@@ -17,6 +17,7 @@ interface MetricItem {
     icon?: string;
     delta_good?: 'up' | 'down';
     compare_label?: string;
+    subtitle?: string;
     spark?: SparkSpec;
 }
 
@@ -143,6 +144,9 @@ function format(item: MetricItem, raw: number | undefined): string {
                     :color="item.spark.color"
                 />
             </div>
+            <p v-if="item.subtitle" :class="['mt-1 text-[11px]', t.textMuted]">
+                {{ item.subtitle }}
+            </p>
             <div
                 v-if="trendFor(item) || item.compare_label"
                 class="mt-1 flex items-center justify-between gap-2"

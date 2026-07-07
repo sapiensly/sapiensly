@@ -159,6 +159,7 @@ export interface BlockStat extends BlockBase {
     icon?: string;
     delta_good?: 'up' | 'down';
     compare_label?: string;
+    subtitle?: string;
     spark?: SparkSpec;
 }
 
