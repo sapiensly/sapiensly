@@ -31,7 +31,10 @@ class VerifyExpressDashboardJob implements ShouldQueue
 
     public int $tries = 1;
 
-    public function __construct(public string $runId) {}
+    public function __construct(
+        public string $runId,
+        public ?string $modelOverride = null,
+    ) {}
 
     public function viaQueue(): string
     {
@@ -84,7 +87,11 @@ TXT,
             ],
             ['fixes' => []],
             $user,
-            config('express.plumbing_model'),
+            // A dedicated (cheaper) plumbing model verifies when one is
+            // configured; otherwise reuse the model the user built with, so a
+            // GLM build's verify stays on GLM instead of silently falling to
+            // the expensive builder default.
+            $this->verifyModel(),
         );
 
         $fixes = $this->validFixes($result['output']['fixes'] ?? [], $summary);
@@ -102,6 +109,20 @@ TXT,
         );
 
         Log::info('Express verifier applied fixes', ['run_id' => $run->id, 'fixes' => $fixes]);
+    }
+
+    /**
+     * The model the verify gate runs on: a dedicated plumbing model when the
+     * platform configured one (option B — a cheaper, independent second
+     * opinion), else the model the user built with. Never the builder default
+     * on its own: a GLM build shouldn't have its verify silently billed on the
+     * expensive primary just because DASHBOARD_EXPRESS_PLUMBING_MODEL is unset.
+     */
+    private function verifyModel(): ?string
+    {
+        $plumbing = trim((string) config('express.plumbing_model'));
+
+        return $plumbing !== '' ? $plumbing : $this->modelOverride;
     }
 
     /**

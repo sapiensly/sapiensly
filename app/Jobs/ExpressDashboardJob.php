@@ -121,9 +121,11 @@ class ExpressDashboardJob implements ShouldQueue
 
         // G-3: adversarial verification runs AFTER v1 is on screen — it only
         // raises the ceiling, so its latency (and its model) never gate the
-        // user's first look.
+        // user's first look. Carry the user's chosen model so the verifier
+        // falls back to it (not the builder default) when no plumbing model
+        // is configured.
         if ($run->status === 'succeeded') {
-            VerifyExpressDashboardJob::dispatch($run->id);
+            VerifyExpressDashboardJob::dispatch($run->id, $this->modelOverride);
         }
     }
 
