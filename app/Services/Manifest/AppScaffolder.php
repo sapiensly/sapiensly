@@ -1160,13 +1160,17 @@ class AppScaffolder
 
         // Connected objects carry LIVE, often HISTORICAL data — a 30-day default
         // window frequently lands in a gap and the board opens empty ("sin
-        // registros en la ventana"). Default those to the full range so the
-        // dashboard opens populated; the presets still let the user narrow.
-        // Local records are usually recent, so 30d stays the sensible default.
+        // registros en la ventana"). Default those to a year (the widest preset)
+        // so the dashboard opens populated; the presets still let the user narrow.
+        // '1y' — not the old unbounded 'all' — because a connected source's fetch
+        // window is fixed at build time: 'all' only clears the in-memory filter,
+        // it can't widen the source, so it read as a no-op. The reader now pushes
+        // the selected range down into the source's date arguments, so '1y'
+        // actually re-fetches a year. Local records are recent, so 30d stays.
         $anyConnected = collect($objectsBySlug)->contains(
             fn (array $o): bool => ($o['source']['type'] ?? '') === 'connected',
         );
-        $defaultRange = $anyConnected ? 'all' : '30d';
+        $defaultRange = $anyConnected ? '1y' : '30d';
 
         $rangeBySlug = [];
         foreach ($objectsBySlug as $slug => $obj) {

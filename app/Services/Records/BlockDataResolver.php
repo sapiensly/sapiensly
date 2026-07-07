@@ -651,7 +651,11 @@ class BlockDataResolver
         // service auth).
         $actor = $context['__actor'] ?? null;
 
-        $result = $this->connected->list($object, $integration, $dataSource, $actor instanceof User ? $actor : null);
+        // The render context (params) is threaded into the reader so a live
+        // source with a start-date argument can have its FETCH window widened to
+        // the picked date-range preset — the in-memory filter below can only trim
+        // what the source already returned, never widen it.
+        $result = $this->connected->list($object, $integration, $dataSource, $actor instanceof User ? $actor : null, $context);
         if (! ($result['ok'] ?? false)) {
             throw new RuntimeException($result['error'] ?? 'Could not read from the connected system.');
         }

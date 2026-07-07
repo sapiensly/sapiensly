@@ -134,3 +134,54 @@ it('resolves rolling-window expressions in operation arguments per read', functi
 
     expect($result['ok'])->toBeTrue();
 });
+
+it('pushes the picked date-range preset down into the source start-date argument', function () {
+    // The object bakes a fixed 6-month fetch window; the dashboard's date filter
+    // asks for a year. Without the push-down "Año" would show the same ~6 months.
+    $yearAgo = now()->utc()->subYear()->toDateString();
+    $today = now()->utc()->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = [
+        'from' => '{{days_ago(183)}}',
+        'to' => '{{today()}}',
+        'granularity' => 'weekly',
+    ];
+
+    // The block's data-source filter as the compiler wires it for a connected
+    // dashboard (a range_start gte leaf), plus the request context choosing 1y.
+    $query = ['filter' => ['op' => 'gte', 'field_id' => 'fld_datefield', 'value_expression' => "{{range_start(default(params.range, '1y'))}}"]];
+    $context = ['params' => (object) ['range' => '1y']];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $yearAgo   // widened to the preset, not the 183d bake
+            && $args['to'] === $today
+            && $args['granularity'] === 'weekly')
+        ->andReturn(['tickets' => []]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list($object, $this->integration, $query, $this->user, $context);
+
+    expect($result['ok'])->toBeTrue();
+});
+
+it('leaves the source window untouched when the block has no range filter', function () {
+    // No range_start leaf ⇒ the baked window stands; nothing to push down.
+    $sixMonthsAgo = now()->utc()->subDays(183)->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = ['from' => '{{days_ago(183)}}', 'to' => '{{today()}}'];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $sixMonthsAgo)
+        ->andReturn(['tickets' => []]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list($object, $this->integration, ['filter' => ['op' => 'eq', 'field_id' => 'fld_statusfield', 'value' => 'abierto']], $this->user, ['params' => (object) ['range' => '1y']]);
+
+    expect($result['ok'])->toBeTrue();
+});

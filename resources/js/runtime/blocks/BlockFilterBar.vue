@@ -14,14 +14,17 @@ interface Control {
 }
 
 // Preset windows for a date_range control. Each value maps server-side (via the
-// range_start() expression function) to a window-start date; 'all' clears it.
+// range_start() expression function) to a window-start date. 'Año' is the widest
+// preset: an unbounded 'Todo' is a trap on connected sources, whose fetch window
+// is fixed at build time — clearing the in-memory filter can't widen the source,
+// so 'Todo' would silently show the same rows as 'Año' (or fewer). See the reader
+// range push-down that makes 'Año' actually re-fetch a year of connected data.
 const DATE_RANGE_PRESETS: { value: string; label: string }[] = [
     { value: 'today', label: 'Hoy' },
     { value: '7d', label: '7 días' },
     { value: '30d', label: '30 días' },
     { value: '90d', label: '90 días' },
     { value: '1y', label: 'Año' },
-    { value: 'all', label: 'Todo' },
 ];
 
 interface FilterBarBlock {

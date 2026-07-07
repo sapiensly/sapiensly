@@ -50,9 +50,11 @@ class ConnectedObjectReader
      * @param  array<string, mixed>  $query  the block's data-source query (filter/sort/limit/offset), pushed
      *                                       down to the external API's params where the list operation declares
      *                                       the mapping — unmapped capabilities degrade gracefully (no-op).
+     * @param  array<string, mixed>  $context  render context (params) — lets a date-range preset drive the
+     *                                         source's start-date argument (best-effort push-down for MCP).
      * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
      */
-    public function list(array $object, Integration $integration, array $query = [], ?User $actor = null): array
+    public function list(array $object, Integration $integration, array $query = [], ?User $actor = null, array $context = []): array
     {
         $source = $object['source'] ?? [];
         $op = $source['operations']['list'] ?? null;
@@ -65,9 +67,15 @@ class ConnectedObjectReader
         // desk live) calls a tool instead of a REST endpoint. The mapping
         // (field_map/id_path) and in-memory aggregation downstream are identical.
         if ($integration->is_mcp || ! empty($op['mcp_tool'])) {
-            $key = $this->memoKey($object, $integration, $op, [], $actor);
+            // Resolve {{…}} argument expressions against the request context, then
+            // best-effort push the picked date-range window down into the tool's
+            // start-date argument. The resolved arguments key the memo, so two
+            // different presets don't collide on one cached read.
+            $arguments = $this->resolveArguments(is_array($op['arguments'] ?? null) ? $op['arguments'] : [], $context);
+            $arguments = $this->pushDownDateRange($arguments, $query, $context);
+            $key = $this->memoKey($object, $integration, $op, $arguments, $actor);
 
-            return $this->memo[$key] ??= $this->listViaMcp($object, $integration, $op, $source, $actor);
+            return $this->memo[$key] ??= $this->listViaMcp($object, $integration, $op, $source, $arguments, $actor);
         }
 
         if (empty($op['path'])) {
@@ -139,9 +147,10 @@ class ConnectedObjectReader
      * @param  array<string, mixed>  $object
      * @param  array<string, mixed>  $op
      * @param  array<string, mixed>  $source
+     * @param  array<string, mixed>  $arguments  already resolved + range-pushed by list()
      * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
      */
-    private function listViaMcp(array $object, Integration $integration, array $op, array $source, ?User $actor = null): array
+    private function listViaMcp(array $object, Integration $integration, array $op, array $source, array $arguments, ?User $actor = null): array
     {
         $toolName = trim((string) ($op['mcp_tool'] ?? ''));
         if ($toolName === '') {
@@ -157,10 +166,6 @@ class ConnectedObjectReader
             'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
             'auth_config' => $integration->auth_config ?? [],
         ];
-        // Operation arguments may hold {{…}} expressions ({{today()}},
-        // {{days_ago(30)}}) so a live window ROLLS instead of freezing at the
-        // date the object was authored. Resolved per read, clock-only context.
-        $arguments = $this->resolveArguments(is_array($op['arguments'] ?? null) ? $op['arguments'] : []);
 
         try {
             $decoded = $this->mcp->callToolData($config, $actor, $toolName, $arguments, self::MCP_MAX_CHARS);
@@ -190,23 +195,112 @@ class ConnectedObjectReader
     }
 
     /**
+     * Argument keys a start-date window pushes down onto. A live list tool names
+     * its lower date bound in one of a few conventional ways; we override that
+     * one key so the dashboard's date-range preset drives the actual fetch. Kept
+     * to unambiguous START-of-window names (never a bare `date`/`to`/`end`).
+     */
+    private const DATE_FROM_ARG_KEYS = [
+        'from', 'from_date', 'date_from', 'start', 'start_date', 'since',
+        'after', 'desde', 'fecha_inicio', 'fecha_desde',
+    ];
+
+    /**
      * Resolve {{…}} expression strings inside operation arguments (recursively)
-     * against an empty context — only clock/pure functions apply here.
+     * against the render context — clock/pure functions plus params (so a
+     * range-tied argument like {{range_start(default(params.range,'1y'))}} the
+     * compiler wired resolves to the picked preset, not an empty default).
      *
      * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $context
      * @return array<string, mixed>
      */
-    private function resolveArguments(array $arguments): array
+    private function resolveArguments(array $arguments, array $context = []): array
     {
         foreach ($arguments as $key => $value) {
             if (is_array($value)) {
-                $arguments[$key] = $this->resolveArguments($value);
+                $arguments[$key] = $this->resolveArguments($value, $context);
             } elseif (is_string($value) && str_contains($value, '{{')) {
-                $arguments[$key] = $this->expressions->resolve($value, []);
+                $arguments[$key] = $this->expressions->resolve($value, $context);
             }
         }
 
         return $arguments;
+    }
+
+    /**
+     * Best-effort: widen (or narrow) the MCP source's FETCH window to the
+     * dashboard's active date-range preset. A connected object bakes its own
+     * fetch window into the tool arguments at build time (e.g. `from:
+     * {{days_ago(183)}}`), so the in-memory date filter can only ever TRIM what
+     * that fixed window returned — picking "Año" over a 6-month bake shows
+     * nothing new. Here we read the window the block's own date filter asks for
+     * (its {{range_start(…)}} leaf, resolved against the request params) and, if
+     * the tool exposes a start-date argument, override it with that date. So the
+     * preset the viewer picks re-fetches the matching span at the source.
+     *
+     * No-ops (arguments returned unchanged) when: the block has no range-start
+     * filter, the preset resolves empty, or the tool has no start-date argument
+     * — in which case the baked window and the in-memory trim stand as before.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $query  the block's data-source query
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function pushDownDateRange(array $arguments, array $query, array $context): array
+    {
+        $expr = $this->findRangeStartExpression($query['filter'] ?? null);
+        if ($expr === null) {
+            return $arguments;
+        }
+
+        $start = $this->expressions->resolve($expr, $context);
+        if (! is_string($start) || trim($start) === '') {
+            return $arguments; // empty preset ⇒ leave the source's own widest window
+        }
+
+        foreach (self::DATE_FROM_ARG_KEYS as $key) {
+            if (array_key_exists($key, $arguments)) {
+                $arguments[$key] = $start;
+
+                return $arguments;
+            }
+        }
+
+        return $arguments;
+    }
+
+    /**
+     * Find the {{range_start(…)}} value_expression the compiler wired as the
+     * date-range gte leaf, walking and/or/not groups. Returns the raw expression
+     * string (resolved by the caller against the live params), or null when the
+     * filter carries no range-start window.
+     */
+    private function findRangeStartExpression(mixed $filter): ?string
+    {
+        if (! is_array($filter)) {
+            return null;
+        }
+
+        $op = $filter['op'] ?? null;
+        if (in_array($op, ['and', 'or', 'not'], true)) {
+            foreach ($filter['conditions'] ?? [] as $condition) {
+                $found = $this->findRangeStartExpression($condition);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+
+            return null;
+        }
+
+        $expr = $filter['value_expression'] ?? null;
+        if (is_string($expr) && str_contains($expr, 'range_start')) {
+            return $expr;
+        }
+
+        return null;
     }
 
     /**

@@ -239,15 +239,16 @@ it('opens a LOCAL-object dashboard on 30d but a CONNECTED one on the full range'
     expect($localFilter['controls'][0]['default'])->toBe('30d')
         ->and(json_encode($localBuilt['page']))->toContain("default(params.range, '30d')");
 
-    // A connected series → default 'all' (never opens empty).
+    // A connected series → default '1y', the widest preset (never opens empty;
+    // the reader pushes this window down into the source's start-date argument).
     $series = adp_series_object();
     $connectedBuilt = app(AppScaffolder::class)->buildDashboardFromSpec(
         (new DashboardSpecSuggester)->suggest($series, 'es') + ['object_slug' => 'nps_semanal'],
         $series, [], null, 'es',
     );
     $connFilter = collect($connectedBuilt['page']['blocks'])->firstWhere('type', 'filter_bar');
-    expect($connFilter['controls'][0]['default'])->toBe('all')
-        ->and(json_encode($connectedBuilt['page']))->toContain("default(params.range, 'all')")
+    expect($connFilter['controls'][0]['default'])->toBe('1y')
+        ->and(json_encode($connectedBuilt['page']))->toContain("default(params.range, '1y')")
         ->and(json_encode($connectedBuilt['page']))->not->toContain("default(params.range, '30d')");
 });
 
