@@ -4,6 +4,8 @@ use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Build\GetBuildCostTool;
 use App\Models\AiUsageEvent;
 use App\Models\App;
+use App\Models\BuilderConversation;
+use App\Models\PipelineRun;
 use App\Models\User;
 
 /**
@@ -82,4 +84,42 @@ it('notes when a build has no tagged calls yet', function () {
         ->tool(GetBuildCostTool::class, ['app_slug' => 'cost_target'])
         ->assertOk()
         ->assertSee('unattributed');
+});
+
+it('include_gates surfaces which model ran each Express gate', function () {
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+    PipelineRun::create([
+        'app_id' => $this->testApp->id,
+        'conversation_id' => $conv->id,
+        'kind' => 'dashboard_express',
+        'prompt' => 'dashboard de OTD',
+        'status' => 'succeeded',
+        'gates' => [
+            'fit_check' => ['model' => 'z-ai/glm-5v-turbo', 'latency_ms' => 4454, 'fallback_used' => false],
+            'voice_insights' => ['model' => 'z-ai/glm-5v-turbo', 'latency_ms' => 8000, 'fallback_used' => false],
+            'verify' => ['model' => 'anthropic/claude-fable-5', 'latency_ms' => 3000, 'fallback_used' => false],
+        ],
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetBuildCostTool::class, ['app_slug' => 'cost_target', 'include_gates' => true])
+        ->assertOk()
+        ->assertSee('pipeline_runs')
+        ->assertSee('fit_check')
+        ->assertSee('z-ai/glm-5v-turbo')
+        // The forensic payoff: the verify gate ran on a DIFFERENT model.
+        ->assertSee('anthropic/claude-fable-5');
+});
+
+it('omits pipeline_runs unless include_gates is set', function () {
+    BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetBuildCostTool::class, ['app_slug' => 'cost_target'])
+        ->assertOk()
+        ->assertDontSee('pipeline_runs');
 });

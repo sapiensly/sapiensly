@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools\Build;
 
 use App\Mcp\Tools\SapiensTool;
+use App\Models\PipelineRun;
 use App\Models\User;
 use App\Services\Ai\AiUsageReport;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -11,7 +12,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('The real AI cost of building an app: every model call tagged with this app — across the builder and the Express dashboard pipeline — rolled up into total cost, calls and tokens, with a per-model, per-conversation and per-service (Apps/Express) split. Pass app_slug (whole app, every build) or add conversation_id to scope to one build session. Cost covers both own-key and platform-paid calls. Only calls made after usage tagging shipped are attributed.')]
+#[Description('The real AI cost of building an app: every model call tagged with this app — across the builder and the Express dashboard pipeline — rolled up into total cost, calls and tokens, with a per-model, per-conversation and per-service (Apps/Express) split. Pass app_slug (whole app, every build) or add conversation_id to scope to one build session. Cost covers both own-key and platform-paid calls. Only calls made after usage tagging shipped are attributed. Set include_gates:true to also see, for each Express run, which MODEL ran each gate (fit_check, spec_overrides, voice_insights, verify…) with its latency and whether it fell back — the forensic view for "why did this build bill the wrong model?".')]
 class GetBuildCostTool extends SapiensTool
 {
     protected const ABILITY = 'apps:build';
@@ -22,6 +23,7 @@ class GetBuildCostTool extends SapiensTool
             'app_slug' => ['required', 'string'],
             'conversation_id' => ['nullable', 'string'],
             'days' => ['sometimes', 'integer', 'min:1', 'max:365'],
+            'include_gates' => ['sometimes', 'boolean'],
         ]);
 
         /** @var User $user */
@@ -48,7 +50,49 @@ class GetBuildCostTool extends SapiensTool
             $report['note'] = 'No tagged AI calls found for this app in the window. Usage attribution began when the app_id/conversation_id tagging shipped — earlier builds are unattributed.';
         }
 
+        if (($validated['include_gates'] ?? false) === true) {
+            $report['pipeline_runs'] = $this->gateTelemetry($app->id, $validated['conversation_id'] ?? null);
+        }
+
         return Response::json($report);
+    }
+
+    /**
+     * Per-gate model telemetry for the app's Express runs (RLS-scoped) — which
+     * MODEL answered each gate, its latency, and whether it fell back to the
+     * deterministic default. Only Express builds have pipeline runs; agentic
+     * builds return an empty list.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function gateTelemetry(string $appId, ?string $conversationId): array
+    {
+        $query = PipelineRun::query()
+            ->where('app_id', $appId)
+            ->latest();
+        if ($conversationId !== null) {
+            $query->where('conversation_id', $conversationId);
+        }
+
+        return $query->limit(20)->get()->map(function (PipelineRun $run): array {
+            $gates = collect(is_array($run->gates) ? $run->gates : [])
+                ->map(fn ($g): array => array_filter([
+                    'model' => is_array($g) ? ($g['model'] ?? null) : null,
+                    'latency_ms' => is_array($g) ? ($g['latency_ms'] ?? null) : null,
+                    'fallback_used' => is_array($g) ? ($g['fallback_used'] ?? null) : null,
+                    'tokens' => is_array($g) ? ($g['tokens'] ?? null) : null,
+                    'error' => is_array($g) ? ($g['error'] ?? null) : null,
+                ], fn ($v) => $v !== null))
+                ->all();
+
+            return array_filter([
+                'run_id' => $run->id,
+                'conversation_id' => $run->conversation_id,
+                'status' => $run->status,
+                'created_at' => $run->created_at?->toIso8601String(),
+                'gates' => $gates,
+            ], fn ($v) => $v !== null && $v !== []);
+        })->all();
     }
 
     /**
@@ -63,6 +107,8 @@ class GetBuildCostTool extends SapiensTool
                 ->description('Optional: scope to one builder conversation (from list_builder_conversations) instead of the whole app.'),
             'days' => $schema->integer()
                 ->description('Look-back window in days (default 90, max 365) — a bound on how far back to sum calls.'),
+            'include_gates' => $schema->boolean()
+                ->description('Also return each Express run\'s per-gate model + latency + fallback telemetry (pipeline_runs.gates) — the forensic view of which model ran each gate.'),
         ];
     }
 }
