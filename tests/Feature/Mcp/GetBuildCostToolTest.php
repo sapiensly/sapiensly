@@ -113,6 +113,24 @@ it('include_gates surfaces which model ran each Express gate', function () {
         ->assertSee('anthropic/claude-fable-5');
 });
 
+it('accepts include_gates as the string "true" (MCP clients send it stringified)', function () {
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+    PipelineRun::create([
+        'app_id' => $this->testApp->id, 'conversation_id' => $conv->id,
+        'kind' => 'dashboard_express', 'prompt' => 'x', 'status' => 'succeeded',
+        'gates' => ['fit_check' => ['model' => 'z-ai/glm-5v-turbo']],
+    ]);
+
+    // A strict `boolean` rule 422'd on the string form — the coercion path.
+    SapiensServer::actingAs($this->user)
+        ->tool(GetBuildCostTool::class, ['app_slug' => 'cost_target', 'include_gates' => 'true'])
+        ->assertOk()
+        ->assertSee('pipeline_runs')
+        ->assertSee('fit_check');
+});
+
 it('omits pipeline_runs unless include_gates is set', function () {
     BuilderConversation::create([
         'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',

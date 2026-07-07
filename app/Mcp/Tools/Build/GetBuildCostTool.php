@@ -23,8 +23,12 @@ class GetBuildCostTool extends SapiensTool
             'app_slug' => ['required', 'string'],
             'conversation_id' => ['nullable', 'string'],
             'days' => ['sometimes', 'integer', 'min:1', 'max:365'],
-            'include_gates' => ['sometimes', 'boolean'],
+            // Not a strict `boolean` rule: MCP clients often send the flag as
+            // the string "true"/"false", which Laravel's boolean rule rejects.
+            // Accept anything and coerce below.
+            'include_gates' => ['sometimes'],
         ]);
+        $includeGates = filter_var($validated['include_gates'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         /** @var User $user */
         $user = $request->user();
@@ -50,7 +54,7 @@ class GetBuildCostTool extends SapiensTool
             $report['note'] = 'No tagged AI calls found for this app in the window. Usage attribution began when the app_id/conversation_id tagging shipped — earlier builds are unattributed.';
         }
 
-        if (($validated['include_gates'] ?? false) === true) {
+        if ($includeGates) {
             $report['pipeline_runs'] = $this->gateTelemetry($app->id, $validated['conversation_id'] ?? null);
         }
 
