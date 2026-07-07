@@ -6,6 +6,7 @@ use App\Models\PipelineRun;
 use App\Services\Express\ComputedFactsBuilder;
 use App\Services\Express\Contracts\ExpressPhase;
 use App\Services\Express\ExpressContext;
+use App\Services\Express\SemanticProfile;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
@@ -21,6 +22,7 @@ class SuggestSpecPhase implements ExpressPhase
         private readonly DashboardSpecSuggester $suggester,
         private readonly ComputedFactsBuilder $facts,
         private readonly AppManifestService $manifests,
+        private readonly SemanticProfile $semantics = new SemanticProfile,
     ) {}
 
     public function name(): string
@@ -98,7 +100,25 @@ class SuggestSpecPhase implements ExpressPhase
                     fn ($f) => in_array($f['type'] ?? '', ['string', 'single_select'], true)
                 );
 
-                return ($hasDate ? 100 : 0) + ($hasCategory ? 50 : 0) + $fields->count();
+                // A pre-aggregated time series is the analytical SPINE — it
+                // carries the full history compactly, so it makes the best
+                // primary. Without this bonus a fields-heavy RAW object wins on
+                // count alone (observed: a 20-record `mode:latest` comments
+                // object beat a 5,202-row weekly series by 8 points, making a
+                // one-day sample the whole dashboard's headline).
+                $isTimeSeries = $this->semantics->grainOf($o) === SemanticProfile::GRAIN_TIME_SERIES;
+
+                // A list operation that caps to a recent SAMPLE (mode:latest)
+                // is a poor primary — its counts/spans describe the sample, not
+                // the data. Demote it below anything with real coverage.
+                $mode = strtolower((string) ($o['source']['operations']['list']['arguments']['mode'] ?? ''));
+                $isCappedSample = in_array($mode, ['latest', 'recent'], true);
+
+                return ($hasDate ? 100 : 0)
+                    + ($hasCategory ? 50 : 0)
+                    + ($isTimeSeries ? 120 : 0)
+                    - ($isCappedSample ? 200 : 0)
+                    + $fields->count();
             })
             ->values()->all();
     }

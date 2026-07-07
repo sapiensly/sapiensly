@@ -220,6 +220,47 @@ it('suggest_spec derives the spec + facts from the primary object', function () 
         ->and($ctx->facts['row_count'])->toBe(3);
 });
 
+it('picks the time-series as primary over a fields-heavy mode:latest sample', function () {
+    // Prod nps_fable_dsh: a 20-record `mode:latest` comments object (18 fields)
+    // beat the 5,202-row weekly series (10 fields) on field count and became
+    // the primary — so the whole board headlined a one-day sample.
+    $mk = fn (string $s) => 'fld_'.strtolower((string) Str::ulid()).$s;
+    $series = xph_object('nps_semanal', $this->integration->id); // collection "series" → time_series
+
+    // A comments-like RAW object: a date, many string fields, mode:latest.
+    $cid = ['dt' => $mk('a'), 'nps' => $mk('b'), 'seg' => $mk('c'), 'fam' => $mk('d'), 'ver' => $mk('e'), 'acc' => $mk('f'), 'com' => $mk('g')];
+    $comments = [
+        'id' => 'obj_'.strtolower((string) Str::ulid()),
+        'slug' => 'nps_comments', 'name' => 'Nps Comments',
+        'fields' => [
+            ['id' => $cid['dt'], 'slug' => 'responded_at', 'name' => 'Responded', 'type' => 'datetime'],
+            ['id' => $cid['nps'], 'slug' => 'nps', 'name' => 'Nps', 'type' => 'number'],
+            ['id' => $cid['seg'], 'slug' => 'segment', 'name' => 'Segment', 'type' => 'string'],
+            ['id' => $cid['fam'], 'slug' => 'family', 'name' => 'Family', 'type' => 'string'],
+            ['id' => $cid['ver'], 'slug' => 'vertical', 'name' => 'Vertical', 'type' => 'string'],
+            ['id' => $cid['acc'], 'slug' => 'account_name', 'name' => 'Account', 'type' => 'string'],
+            ['id' => $cid['com'], 'slug' => 'comment', 'name' => 'Comment', 'type' => 'string'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => $this->integration->id,
+            'operations' => ['list' => ['mcp_tool' => 'get-nps-comments-tool', 'arguments' => ['mode' => 'latest'], 'collection_path' => 'comments']],
+            'field_map' => [],
+        ],
+    ];
+
+    $ctx = xph_ctx($this);
+    $ctx->objects = [$comments, $series]; // comments first + more fields
+    $ctx->rowsByObject[$series['id']] = xph_rows();
+    $ctx->rowsByObject[$comments['id']] = [['responded_at' => now()->toIso8601String(), 'nps' => 9, 'segment' => 'promoter']];
+
+    app()->call(function (SuggestSpecPhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+
+    // The weekly series wins the headline; the capped sample is demoted.
+    expect($ctx->spec['object_slug'])->toBe('nps_semanal');
+});
+
 it('semantic gates fill voice and factual insights, judging overrides deterministically', function () {
     // Overrides candidate references a nonexistent field → the judge must
     // reject it and keep the suggestion as-is.
