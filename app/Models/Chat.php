@@ -70,7 +70,7 @@ class Chat extends Model
 
     public function messages(): HasMany
     {
-        return $this->hasMany(ChatMessage::class, 'chat_id')->orderBy('created_at');
+        return $this->hasMany(ChatMessage::class, 'chat_id')->orderBy('created_at')->orderBy('id');
     }
 
     public function participants(): HasMany

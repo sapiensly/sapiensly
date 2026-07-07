@@ -49,6 +49,6 @@ class DebateRound extends Model
 
     public function turns(): HasMany
     {
-        return $this->hasMany(DebateTurn::class, 'debate_round_id')->orderBy('created_at');
+        return $this->hasMany(DebateTurn::class, 'debate_round_id')->orderBy('created_at')->orderBy('id');
     }
 }

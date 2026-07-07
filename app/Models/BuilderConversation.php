@@ -45,7 +45,7 @@ class BuilderConversation extends Model
 
     public function messages(): HasMany
     {
-        return $this->hasMany(BuilderMessage::class, 'conversation_id')->orderBy('created_at');
+        return $this->hasMany(BuilderMessage::class, 'conversation_id')->orderBy('created_at')->orderBy('id');
     }
 
     /**

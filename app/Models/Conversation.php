@@ -40,7 +40,7 @@ class Conversation extends Model
 
     public function messages(): HasMany
     {
-        return $this->hasMany(Message::class)->orderBy('created_at');
+        return $this->hasMany(Message::class)->orderBy('created_at')->orderBy('id');
     }
 
     public function latestMessage(): HasMany

@@ -70,12 +70,12 @@ class WidgetConversation extends Model
 
     public function messages(): HasMany
     {
-        return $this->hasMany(WidgetMessage::class)->orderBy('created_at');
+        return $this->hasMany(WidgetMessage::class)->orderBy('created_at')->orderBy('id');
     }
 
     public function attachments(): HasMany
     {
-        return $this->hasMany(WidgetAttachment::class)->orderBy('created_at');
+        return $this->hasMany(WidgetAttachment::class)->orderBy('created_at')->orderBy('id');
     }
 
     public function lastMessage(): ?WidgetMessage
