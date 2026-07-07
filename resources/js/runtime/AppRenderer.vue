@@ -264,17 +264,23 @@ const GRADIENT_DIR: Record<string, string> = {
     'to-tr': 'to top right',
 };
 
+// A hero paints its OWN background (rounded, with its grid/highlight) inside
+// BlockHero — so the generic wrapper must never repaint the gradient/colour on
+// a square, un-rounded div behind it (its corners bled past the hero's radius).
+function selfPaintsBackground(block: AnyBlock): boolean {
+    return block.type === 'hero';
+}
+
 function hasWrapper(block: AnyBlock): boolean {
     const s = block.style;
+    if (!s) return false;
+    const bg = !selfPaintsBackground(block) && (!!s.background || !!s.color || !!s.gradient);
     return (
-        !!s &&
-        (!!s.background ||
-            !!s.color ||
-            !!s.gradient ||
-            !!s.full_bleed ||
-            (!!s.padding && s.padding !== 'none') ||
-            (!!s.margin && s.margin !== 'none') ||
-            (!!s.max_width && s.max_width !== 'full'))
+        bg ||
+        !!s.full_bleed ||
+        (!!s.padding && s.padding !== 'none') ||
+        (!!s.margin && s.margin !== 'none') ||
+        (!!s.max_width && s.max_width !== 'full')
     );
 }
 
@@ -285,7 +291,9 @@ function wrapperClass(block: AnyBlock): string {
         PADDING[s.padding ?? ''] ?? '',
         MARGIN[s.margin ?? ''] ?? '',
     ];
-    if (s.background || s.color || s.gradient) classes.push('sp-styled');
+    if (!selfPaintsBackground(block) && (s.background || s.color || s.gradient)) {
+        classes.push('sp-styled');
+    }
     // full_bleed only makes sense at page level; inside a panel it overflows.
     if (s.full_bleed && !props.nested) classes.push('sp-bleed');
     return classes.filter(Boolean).join(' ');
@@ -293,7 +301,7 @@ function wrapperClass(block: AnyBlock): string {
 
 function wrapperStyle(block: AnyBlock): Record<string, string> | undefined {
     const s = block.style;
-    if (!s) return undefined;
+    if (!s || selfPaintsBackground(block)) return undefined; // hero paints its own bg
     const out: Record<string, string> = {};
 
     // Background: a gradient (preferred when set) or a flat colour. The text
