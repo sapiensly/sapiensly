@@ -213,11 +213,30 @@ class ExpressDashboardJob implements ShouldQueue
             ])->save();
         }
 
-        if ($message !== null && in_array($message->status, ['streaming', 'pending'], true)) {
-            $reason = 'El build Express se interrumpió: '.($e?->getMessage() ?? 'el proceso se detuvo').'.';
-            // The progress narration stays; the interruption arrives as a NEW
-            // error message instead of overwriting what already happened.
-            $this->finalize($message, 'none', $message->content ?: '…');
+        if ($message === null) {
+            return;
+        }
+
+        // Surface the interruption unless the turn already ended with an
+        // explanation. "Ended" = the placeholder is applied/error, OR a later
+        // message (report/error) already follows it. Crucially we ALSO cover a
+        // placeholder that a partial finalization flipped to `none` with nothing
+        // behind it — the exact silent freeze observed on a hard-killed acquire,
+        // where the streaming/pending guard alone let the failure vanish.
+        $alreadyResolved = ! in_array($message->status, ['streaming', 'pending', 'none'], true)
+            || BuilderMessage::query()
+                ->where('conversation_id', $message->conversation_id)
+                ->where('id', '>', $message->id)
+                ->exists();
+        if ($alreadyResolved) {
+            return;
+        }
+
+        $reason = 'El build Express se interrumpió: '.($e?->getMessage() ?? 'el proceso se detuvo').'.';
+        $hasNarration = trim((string) $message->content) !== '';
+        if ($hasNarration) {
+            // The progress narration stays; the interruption is a NEW message.
+            $this->finalize($message, 'none', $message->content);
             $errorMessage = BuilderMessage::create([
                 'conversation_id' => $message->conversation_id,
                 'role' => 'assistant',
@@ -229,6 +248,9 @@ class ExpressDashboardJob implements ShouldQueue
             } catch (Throwable) {
                 // swallow
             }
+        } else {
+            // Nothing narrated — the placeholder itself becomes the error.
+            $this->finalize($message, 'error', $reason);
         }
     }
 

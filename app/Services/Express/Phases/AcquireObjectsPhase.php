@@ -43,9 +43,18 @@ class AcquireObjectsPhase implements ExpressPhase
         $ops = [];
         $summaries = [];
         foreach ($context->chosenTools as $toolName) {
-            $authored = $this->authoring->author($context->user, $context->integration, [
-                'tool_name' => $toolName,
-            ], $manifest);
+            // One tool that throws (a slow/oversized source, a transport error)
+            // must not abort the whole build — note it and move on, exactly like
+            // an ok:false. Only ZERO successes fails the run (below).
+            try {
+                $authored = $this->authoring->author($context->user, $context->integration, [
+                    'tool_name' => $toolName,
+                ], $manifest);
+            } catch (\Throwable $e) {
+                $context->note("El tool {$toolName} no se pudo leer: ".$e->getMessage());
+
+                continue;
+            }
 
             if (($authored['ok'] ?? false) !== true) {
                 $context->note("El tool {$toolName} no se pudo leer: ".($authored['error'] ?? 'error desconocido'));

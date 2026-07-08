@@ -226,6 +226,29 @@ it('acquire_objects banks the survivors as ONE version and notes the failures', 
     expect(collect($manifest['objects'])->pluck('slug'))->toContain('tickets_semanales');
 });
 
+it('acquire_objects survives a tool that THROWS — noted and skipped, not fatal', function () {
+    // Prod: authoring "tickets" from the source threw (slow/oversized). Without
+    // a per-tool guard the whole build died; now the bad tool is skipped and the
+    // survivor still banks.
+    $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    $authoring->shouldReceive('author')
+        ->twice()
+        ->andReturnUsing(
+            fn () => throw new RuntimeException('source read exploded'),
+            fn () => ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «Tickets Semanales»'],
+        );
+
+    $ctx = xph_ctx($this);
+    $ctx->integration = $this->integration;
+    $ctx->chosenTools = ['get-tickets-time-series-tool', 'get-orders-tool'];
+
+    (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->objects)->toHaveCount(1)
+        ->and(implode(' ', $ctx->notes))->toContain('source read exploded');
+});
+
 it('suggest_spec derives the spec + facts from the primary object', function () {
     $ctx = xph_ctx($this);
     $object = xph_object('tickets_semanales', $this->integration->id);

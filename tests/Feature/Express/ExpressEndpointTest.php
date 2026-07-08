@@ -179,3 +179,45 @@ it('aborts before spending anything when Detener was pressed first', function ()
     expect($run->fresh()->status)->toBe('stopped')
         ->and($placeholder->fresh()->content)->toContain('detenido');
 });
+
+it('surfaces an error when a hard-killed run left the placeholder a silent «none»', function () {
+    // Prod app_…59t9: the worker died in acquire → the placeholder was left at
+    // `none` with only progress narration and NO report. failed() must still
+    // append a user-facing error (the streaming/pending guard alone let it
+    // vanish until the 10-min reaper).
+    $placeholder = BuilderMessage::create([
+        'conversation_id' => $this->conv->id, 'role' => 'assistant',
+        'content' => "Localizando la fuente de datos…\nComparando tu pedido…",
+        'status' => 'none', // a partial finalization already moved it off streaming
+    ]);
+    $run = PipelineRun::create([
+        'app_id' => $this->testApp->id, 'conversation_id' => $this->conv->id, 'prompt' => 'x', 'status' => 'running',
+    ]);
+
+    (new ExpressDashboardJob($placeholder->id, $run->id, 'x'))->failed(new RuntimeException('worker killed'));
+
+    // Narration kept; a NEW error message explains the interruption.
+    expect($placeholder->fresh()->content)->toContain('Localizando');
+    $error = BuilderMessage::where('conversation_id', $this->conv->id)
+        ->where('id', '>', $placeholder->id)->first();
+    expect($error)->not->toBeNull()
+        ->and($error->status)->toBe('error')
+        ->and($error->content)->toContain('se interrumpió');
+});
+
+it('does NOT double-report when a failure report already followed the placeholder', function () {
+    $placeholder = BuilderMessage::create([
+        'conversation_id' => $this->conv->id, 'role' => 'assistant', 'content' => 'progreso…', 'status' => 'none',
+    ]);
+    BuilderMessage::create([
+        'conversation_id' => $this->conv->id, 'role' => 'assistant', 'content' => 'No pude terminar el dashboard.', 'status' => 'error',
+    ]);
+    $run = PipelineRun::create([
+        'app_id' => $this->testApp->id, 'conversation_id' => $this->conv->id, 'prompt' => 'x', 'status' => 'failed',
+    ]);
+
+    (new ExpressDashboardJob($placeholder->id, $run->id, 'x'))->failed(new RuntimeException('late kill'));
+
+    // Still exactly the two messages — the existing report stands, no duplicate.
+    expect(BuilderMessage::where('conversation_id', $this->conv->id)->count())->toBe(2);
+});
