@@ -353,6 +353,7 @@
     "apps.show.delete": "Eliminar app",
     "apps.show.delete_confirm": "¿Eliminar esta App y todos sus records? No se puede deshacer.",
     "apps.builder.title": "Builder",
+    "apps.builder.back": "Volver a mis apps",
     "apps.builder.chat_heading": "Chat del Builder",
     "apps.builder.preview_heading": "Vista en vivo",
     "apps.builder.preview_empty": "Aún no hay nada que previsualizar",

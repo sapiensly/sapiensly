@@ -17,6 +17,10 @@ Route::middleware([
     // No `create` page — the "New App" button POSTs to `store`, which creates an
     // empty app and redirects straight into the Builder (the first prompt names it).
     Route::resource('apps', AppController::class)->except(['edit', 'create']);
+    // Back-out of a brand-new app that was never touched (still unnamed, no
+    // build) removes it, so leaving the Builder immediately doesn't litter the
+    // grid with empty apps. No-op (redirect only) once the app has any content.
+    Route::delete('/apps/{app}/discard-empty', [AppController::class, 'discardEmpty'])->name('apps.discard-empty');
 
     // Builder AI surface — chat that edits the manifest via JSON Patches.
     Route::get('/apps/{app}/builder', [AppBuilderController::class, 'show'])->name('apps.builder');

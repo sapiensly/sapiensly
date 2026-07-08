@@ -189,6 +189,27 @@ class AppController extends Controller
         return redirect()->route('apps.index')->with('success', 'App deleted.');
     }
 
+    /**
+     * Delete a brand-new app ONLY if it's still pristine — the placeholder name
+     * (never prompted, so never named) and just its empty initial version. Called
+     * when the user backs out of the Builder without building anything, so the
+     * grid isn't littered with empty "Nueva app" entries. Server-authoritative:
+     * once the app has any content it's a no-op, so a stray call can't delete a
+     * real app.
+     */
+    public function discardEmpty(Request $request, App $app): RedirectResponse
+    {
+        $this->authorizeAccess($request, $app);
+
+        $pristine = $app->name === AppNaming::UNTITLED
+            && $app->versions()->count() <= 1;
+        if ($pristine) {
+            $app->delete();
+        }
+
+        return redirect()->route('apps.index');
+    }
+
     private function authorizeAccess(Request $request, App $app): void
     {
         abort_unless($app->isVisibleTo($request->user()), 403);

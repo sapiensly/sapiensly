@@ -51,7 +51,7 @@ import type {
     PageSummary,
 } from '@/runtime/types/manifest';
 import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import axios from 'axios';
 import { toast } from 'vue-sonner';
 // html2canvas-pro is a maintained fork that handles modern CSS color
@@ -220,6 +220,7 @@ interface Props {
         description: string | null;
         kind?: string | null;
     };
+    untitledName?: string;
     manifest: Record<string, unknown> | null;
     preview: Preview | null;
     schema: SchemaPayload | null;
@@ -311,6 +312,24 @@ function toggleModel() {
 const { t, messages: i18nMessages, locale: uiLocale } = useI18n();
 
 const messages = ref<Message[]>(props.conversation.messages);
+
+// A pristine new app — still the placeholder name and no message ever sent — is
+// auto-discarded when the user backs out, so leaving the Builder without
+// building anything doesn't litter the grid with empty apps. The server
+// re-checks (it only deletes a still-pristine app), so this is safe.
+const isPristine = computed(
+    () =>
+        !!props.untitledName &&
+        appMeta.name === props.untitledName &&
+        messages.value.length === 0,
+);
+function goBack(): void {
+    if (isPristine.value) {
+        router.delete(`/apps/${props.app.id}/discard-empty`);
+    } else {
+        router.visit(AppController.index().url);
+    }
+}
 // The persistent build plan (cross-turn step tracker). Reads straight from the
 // prop, so a partial reload of `conversation` after a turn refreshes it.
 const buildPlan = computed<BuildPlanData | null>(
@@ -2097,12 +2116,14 @@ function statusTone(status: Message['status']): string {
         <div class="flex min-h-0 flex-1 flex-col gap-4 px-7 py-5">
             <header class="flex items-center justify-between gap-4">
                 <div class="flex min-w-0 items-center gap-3">
-                    <Link
-                        :href="AppController.index().url"
+                    <button
+                        type="button"
+                        @click="goBack"
+                        :title="t('apps.builder.back')"
                         class="inline-flex size-7 shrink-0 items-center justify-center rounded-xs border border-medium bg-surface text-ink-muted transition-colors hover:border-strong hover:text-ink"
                     >
                         <ArrowLeft class="size-3.5" />
-                    </Link>
+                    </button>
                     <div class="min-w-0">
                         <h1
                             class="text-[18px] leading-tight font-semibold text-ink"

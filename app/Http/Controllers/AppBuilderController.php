@@ -145,6 +145,9 @@ class AppBuilderController extends Controller
 
         return Inertia::render('apps/Builder', [
             'app' => $app->only(['id', 'slug', 'name', 'description', 'kind']),
+            // The placeholder name a never-prompted app carries — the Builder
+            // uses it to auto-discard an untouched new app on back.
+            'untitledName' => AppNaming::UNTITLED,
             'models' => $models,
             'defaultModel' => $defaultModel,
             'backupModel' => $backupModel,

@@ -167,3 +167,24 @@ it('updates the name and description and syncs the manifest, keeping the slug fi
         ->and($manifest['description'])->toBe('Una sola frase de descripción.')
         ->and($manifest['slug'])->toBe('orig_app'); // manifest identity synced, slug intact
 });
+
+it('discards a pristine new app on back-out but never a touched one', function () {
+    // Pristine: the placeholder name + only its empty initial version → deleted.
+    $this->actingAs($this->user)->post('/apps'); // creates "Nueva app"
+    $pristine = App::query()->latest('id')->firstOrFail();
+    expect($pristine->name)->toBe('Nueva app');
+
+    $this->actingAs($this->user)
+        ->delete("/apps/{$pristine->id}/discard-empty")
+        ->assertRedirect('/apps');
+    expect(App::query()->where('id', $pristine->id)->exists())->toBeFalse();
+
+    // A NAMED app is never discarded — the guard makes it a no-op redirect.
+    $this->actingAs($this->user)->post('/apps', ['name' => 'Real', 'slug' => 'real_app']);
+    $named = App::query()->where('slug', 'real_app')->firstOrFail();
+
+    $this->actingAs($this->user)
+        ->delete("/apps/{$named->id}/discard-empty")
+        ->assertRedirect('/apps');
+    expect(App::query()->where('id', $named->id)->exists())->toBeTrue();
+});

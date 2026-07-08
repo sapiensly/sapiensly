@@ -353,6 +353,7 @@
     "apps.show.delete": "Delete app",
     "apps.show.delete_confirm": "Delete this App and every record under it? This cannot be undone.",
     "apps.builder.title": "Builder",
+    "apps.builder.back": "Back to my apps",
     "apps.builder.chat_heading": "Builder chat",
     "apps.builder.preview_heading": "Live preview",
     "apps.builder.preview_empty": "Nothing to preview yet",
