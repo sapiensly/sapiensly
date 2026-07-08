@@ -180,6 +180,48 @@ it('fit_check degrades to keyword matching when the gate fails twice', function 
     expect($ctx->chosenTools)->toBe(['get-tickets-time-series-tool']);
 });
 
+it('overrides a model fit_check that skipped clearly on-topic tools', function () {
+    // Prod yuhunps: GLM answered fit_check and picked TICKET tools for a
+    // "dashboard de nps" while the source exposes get-nps-* tools. The
+    // deterministic backstop prefers the on-topic tools the model ignored.
+    ExpressGateAgent::fake([[
+        'tools' => ['get-tickets-time-series-yuhu-tool'], // the model's wrong pick
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'crea un dashboard del nps de yuhu');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-nps-time-series-yuhu-tool', 'description' => 'NPS semanal de Yuhu', 'input_schema' => []],
+        ['name' => 'get-tickets-time-series-yuhu-tool', 'description' => 'Tickets semanales de Yuhu', 'input_schema' => []],
+        ['name' => 'search-tickets-yuhu-tool', 'description' => 'Buscar tickets de Yuhu', 'input_schema' => []],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->toBe(['get-nps-time-series-yuhu-tool']); // corrected to the nps tool
+});
+
+it('leaves a model fit_check pick alone when it already covers the topic', function () {
+    // The model DID pick an nps tool — don't second-guess a correct selection.
+    ExpressGateAgent::fake([[
+        'tools' => ['get-nps-by-dimension-yuhu-tool'],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'crea un dashboard del nps de yuhu');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-nps-time-series-yuhu-tool', 'description' => 'NPS semanal', 'input_schema' => []],
+        ['name' => 'get-nps-by-dimension-yuhu-tool', 'description' => 'NPS por dimensión', 'input_schema' => []],
+        ['name' => 'search-tickets-yuhu-tool', 'description' => 'Buscar tickets', 'input_schema' => []],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->toBe(['get-nps-by-dimension-yuhu-tool']); // untouched
+});
+
 it('a defaulted fit_check drops org-name-only matches and stays on topic', function () {
     // Prod nps_glm_dsh_1: GLM let the gate default; every tool carries the org
     // name "yuhu", so scoring on it pulled ticket tools into an NPS build. The

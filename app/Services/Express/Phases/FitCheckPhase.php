@@ -122,6 +122,17 @@ TXT,
         $context->substitutions = array_values(array_filter($out['substitutions'] ?? [], 'is_array'));
         $context->unanswerable = array_values(array_filter($out['unanswerable'] ?? [], 'is_array'));
 
+        // Deterministic backstop #0 — the model ignored on-topic tools. When the
+        // catalog names tools after a DISCRIMINATING prompt topic (the source
+        // exposes get-nps-* tools for an "nps" request) but the model chose NONE
+        // of them, prefer those tools. The inverse of the off-topic halt: a slow
+        // model that answered but picked the wrong subject is corrected, not
+        // trusted (observed: GLM built a ticket-VOLUME board for "dashboard de
+        // nps" while 7 nps tools sat unused). No-op when the model already
+        // covered the subject, or when a defaulted run's keyword scorer already
+        // picked the on-topic tools.
+        $this->preferOnTopicTools($context, $noRows);
+
         // Deterministic backstop #1 — the piece mapping decides, not the bool.
         // Trusting core_unanswerable alone proved stochastic: the same model
         // halted one run and built a "financial" board from delivery data the
@@ -328,6 +339,55 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         })->values();
 
         return $discriminating->isNotEmpty() ? $discriminating : $words;
+    }
+
+    /**
+     * Correct a model fit_check that skipped clearly on-topic tools. If the
+     * catalog exposes tools whose NAME carries a discriminating prompt topic
+     * (get-nps-* for "nps") but NONE of the chosen tools touch that topic, the
+     * model picked the wrong subject — replace its pick with the on-topic tools.
+     * Preserves the pick whenever it already covers the subject (by name OR
+     * description), so a correct or richer selection is never overridden.
+     *
+     * @param  list<string>  $noRows  tools known to return no rows (excluded)
+     */
+    private function preferOnTopicTools(ExpressContext $context, array $noRows): void
+    {
+        if ($context->chosenTools === []) {
+            return;
+        }
+        $words = $this->discriminatingTopicWords($context);
+        if ($words->isEmpty()) {
+            return;
+        }
+
+        $byName = collect($context->catalogTools)->keyBy('name');
+        $known = array_values(array_diff(array_column($context->catalogTools, 'name'), $noRows));
+
+        // Catalog tools whose NAME carries a discriminating topic word — the
+        // strong signal the source has that subject as a first-class tool.
+        $onTopic = collect($known)->filter(
+            fn (string $name): bool => $words->contains(
+                fn (string $w): bool => str_contains(Str::lower(Str::ascii($name)), $w),
+            ),
+        )->values();
+        if ($onTopic->isEmpty()) {
+            return; // the subject isn't a tool here — nothing to prefer
+        }
+
+        // Did the chosen set already touch the subject (name OR description)?
+        $chosenCoversTopic = collect($context->chosenTools)->contains(function (string $name) use ($byName, $words): bool {
+            $tool = $byName->get($name);
+            $haystack = Str::lower(Str::ascii(($tool['name'] ?? '').' '.($tool['description'] ?? '')));
+
+            return $words->contains(fn (string $w): bool => str_contains($haystack, $w));
+        });
+        if ($chosenCoversTopic) {
+            return; // the model covered the subject — leave its pick
+        }
+
+        $context->chosenTools = $onTopic->take(self::MAX_TOOLS)->all();
+        $context->note('El pedido menciona «'.$words->implode(', ').'»; la fuente expone tools que lo cubren y no estaban elegidos — se prefirieron: '.implode(', ', $context->chosenTools).'.');
     }
 
     /** Human list of what the source's tools are about, from their names. */
