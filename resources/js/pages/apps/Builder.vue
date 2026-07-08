@@ -1399,6 +1399,61 @@ const aiIsThinking = computed(() =>
     ),
 );
 
+// Live reasoning stopwatch: while a turn is streaming, tick a clock every second
+// so the progress bubble can show elapsed time next to its timestamp. The
+// interval runs ONLY while thinking, so an idle builder never re-renders on a
+// timer.
+const stopwatchNow = ref(Date.now());
+let stopwatchTimer: ReturnType<typeof setInterval> | null = null;
+watch(
+    aiIsThinking,
+    (thinking) => {
+        if (thinking && stopwatchTimer === null) {
+            stopwatchNow.value = Date.now();
+            stopwatchTimer = setInterval(() => {
+                stopwatchNow.value = Date.now();
+            }, 1000);
+        } else if (!thinking && stopwatchTimer !== null) {
+            clearInterval(stopwatchTimer);
+            stopwatchTimer = null;
+        }
+    },
+    { immediate: true },
+);
+onUnmounted(() => {
+    if (stopwatchTimer !== null) clearInterval(stopwatchTimer);
+});
+
+// Reasoning time (M:SS): ticks live while a turn streams, then FREEZES at the
+// total (updated_at − created_at, the finalization span) so the result stays
+// visible on the finished bubble — live and after a reload. Null when there's no
+// measurable duration (an instant/never-timed message).
+function reasoningElapsed(m: Message): string | null {
+    if (!m.created_at) {
+        return null;
+    }
+    const start = new Date(m.created_at).getTime();
+    if (Number.isNaN(start)) {
+        return null;
+    }
+
+    let end: number;
+    if (m.status === 'streaming') {
+        end = stopwatchNow.value; // live
+    } else {
+        const finalized = m.updated_at ? new Date(m.updated_at).getTime() : NaN;
+        if (Number.isNaN(finalized) || finalized <= start) {
+            return null; // no measurable reasoning span to show
+        }
+        end = finalized;
+    }
+
+    const secs = Math.max(0, Math.floor((end - start) / 1000));
+    const mins = Math.floor(secs / 60);
+    const rem = secs % 60;
+    return mins > 0 ? `${mins}m ${String(rem).padStart(2, '0')}s` : `${rem}s`;
+}
+
 // Detener build: raises the cooperative stop flag server-side. The running
 // turn finalizes within seconds (keeping any progress it already banked) and
 // the autonomous/resume chain refuses to queue further turns until the next
@@ -2490,6 +2545,13 @@ function statusTone(status: Message['status']): string {
                                         :text="m.content"
                                         :size="12"
                                     />
+                                    <span
+                                        v-if="reasoningElapsed(m)"
+                                        class="tabular-nums text-accent-blue"
+                                        :title="t('apps.builder.reasoning_time')"
+                                    >
+                                        {{ reasoningElapsed(m) }}
+                                    </span>
                                     <span>{{ messageTime(m) }}</span>
                                 </div>
                             </div>
