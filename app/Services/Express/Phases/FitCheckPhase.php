@@ -342,18 +342,19 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
     }
 
     /**
-     * Correct a model fit_check that skipped a dedicated on-topic tool. When the
-     * catalog NAMES tools after a prompt subject (get-nps-* for "nps") but NONE
-     * of the chosen tools is NAMED after it, the model picked the wrong subject —
-     * switch to the dedicated tools.
+     * PRIORITISE the tools a prompt names as its subject over mixing in
+     * off-subject ones. When the catalog NAMES tools after a prompt subject
+     * (get-nps-* for "nps"), the chosen set is reordered so those dedicated tools
+     * lead and fill the slots first — the model's subject picks, then MORE
+     * dedicated subject tools, and only leftover room (subject tools exhausted)
+     * keeps the model's off-subject picks. So an "nps" board fills with get-nps-*
+     * before any ticket tool; mixing is allowed, but only after the subject is
+     * covered. The model's tool COUNT (breadth) is preserved — never expanded.
      *
-     * Everything keys off tool NAMES, never descriptions: a subject word is only
-     * honoured if it actually NAMES some tool (not all — that's the org term),
-     * and the chosen set "covers" the subject only if a chosen tool is NAMED
-     * after it. A ticket tool that merely MENTIONS nps in its description
-     * (because it returns an nps field) is NOT a dedicated nps tool and must not
-     * suppress the switch — the exact loophole that let a ticket board stand for
-     * an "nps" prompt while 7 get-nps-* tools sat unused.
+     * Everything keys off tool NAMES, never descriptions: a subject word counts
+     * only if it NAMES some tool (not ~all — that's the org term), so a ticket
+     * tool that merely MENTIONS nps in its description (because it returns an nps
+     * field) is not treated as a dedicated nps tool.
      *
      * @param  list<string>  $noRows  tools known to return no rows (excluded)
      */
@@ -383,24 +384,30 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             return $hits > 0 && $hits / $count <= 0.7;
         })->values();
         if ($subjects->isEmpty()) {
-            return; // no subject is a dedicated tool here — nothing to prefer
+            return; // no subject is a dedicated tool here — nothing to prioritise
         }
 
-        // A chosen tool NAMED after a subject means the model covered it.
-        $chosenCoversSubject = collect($context->chosenTools)->contains(
-            fn (string $name): bool => $subjects->contains(fn (string $w): bool => str_contains(Str::lower(Str::ascii($name)), $w)),
+        $isSubject = fn (string $name): bool => $subjects->contains(
+            fn (string $w): bool => str_contains(Str::lower(Str::ascii($name)), $w),
         );
-        if ($chosenCoversSubject) {
-            return;
+
+        $chosenSubject = collect($context->chosenTools)->filter($isSubject)->values();
+        $chosenOther = collect($context->chosenTools)->reject($isSubject)->values();
+        $otherSubject = collect($known)->filter($isSubject)
+            ->reject(fn (string $n): bool => $chosenSubject->contains($n))->values();
+
+        // Fill with subject tools first (chosen, then the rest the source offers),
+        // and only then the model's off-subject picks — capped at its own count.
+        $target = min(count($context->chosenTools), self::MAX_TOOLS);
+        $prioritised = $chosenSubject->merge($otherSubject)->merge($chosenOther)
+            ->unique()->take($target)->values()->all();
+
+        $changed = array_diff($prioritised, $context->chosenTools) !== []
+            || array_diff($context->chosenTools, $prioritised) !== [];
+        $context->chosenTools = $prioritised;
+        if ($changed) {
+            $context->note('El pedido es sobre «'.$subjects->implode(', ').'»; se priorizaron los tools dedicados sobre mezclar otros: '.implode(', ', $prioritised).'.');
         }
-
-        // Prefer every tool NAMED after a subject the model skipped.
-        $onTopic = collect($known)->filter(
-            fn (string $name): bool => $subjects->contains(fn (string $w): bool => str_contains(Str::lower(Str::ascii($name)), $w)),
-        )->values();
-
-        $context->chosenTools = $onTopic->take(self::MAX_TOOLS)->all();
-        $context->note('El pedido menciona «'.$subjects->implode(', ').'»; la fuente tiene tools dedicados que no estaban elegidos — se prefirieron: '.implode(', ', $context->chosenTools).'.');
     }
 
     /** Human list of what the source's tools are about, from their names. */

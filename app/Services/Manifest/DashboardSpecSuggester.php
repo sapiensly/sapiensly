@@ -378,6 +378,19 @@ class DashboardSpecSuggester
      * @param  list<array<string, mixed>>  $booleans
      * @return list<array<string, mixed>>
      */
+    /**
+     * "Total X", but never doubled: a field already named "Total Tickets" becomes
+     * "Total tickets", not "Total total tickets".
+     */
+    private function totalLabel(string $name): string
+    {
+        $clean = trim($name);
+
+        return preg_match('/^(total|suma)\b/i', $clean) === 1
+            ? Str::ucfirst(Str::lower($clean))
+            : 'Total '.Str::lower($clean);
+    }
+
     private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es, array $promptTopics = []): array
     {
         $kpis = [];
@@ -398,7 +411,7 @@ class DashboardSpecSuggester
 
         if ($this->semantics->countIsMeaningful($grain)) {
             $kpis[] = [
-                'label' => ($es ? 'Total ' : 'Total ').Str::lower((string) ($object['name'] ?? 'registros')),
+                'label' => $this->totalLabel((string) ($object['name'] ?? 'registros')),
                 'aggregation' => 'count',
                 'icon' => 'inbox',
             ];
@@ -433,7 +446,7 @@ class DashboardSpecSuggester
             );
             if ($primary !== null && ($primary['id'] ?? null) !== ($requested['id'] ?? null)) {
                 $kpis[] = [
-                    'label' => ($es ? 'Total ' : 'Total ').Str::lower((string) ($primary['name'] ?? $primary['slug'])),
+                    'label' => $this->totalLabel((string) ($primary['name'] ?? $primary['slug'])),
                     'aggregation' => 'sum',
                     'field_id' => $primary['id'],
                     'icon' => 'inbox',

@@ -225,6 +225,30 @@ it('switches even when the chosen ticket tool MENTIONS the topic in its descript
     expect($ctx->chosenTools)->toBe(['get-nps-time-series-yuhu-tool']); // NAME wins over a mention
 });
 
+it('prioritizes dedicated subject tools over mixing in off-subject ones', function () {
+    // The model answered with a BLEND (1 nps + 1 ticket) for an "nps" prompt; the
+    // source has more get-nps-* tools. Prefer filling with nps tools before the
+    // ticket — the requested subject leads, mixing only if nps tools run out.
+    ExpressGateAgent::fake([[
+        'tools' => ['get-nps-time-series-yuhu-tool', 'get-tickets-time-series-yuhu-tool'],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'crea un dashboard del nps de yuhu');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-nps-time-series-yuhu-tool', 'description' => 'NPS semanal', 'input_schema' => []],
+        ['name' => 'get-nps-by-dimension-yuhu-tool', 'description' => 'NPS por dimensión', 'input_schema' => []],
+        ['name' => 'get-tickets-time-series-yuhu-tool', 'description' => 'Tickets semanales', 'input_schema' => []],
+        ['name' => 'search-tickets-yuhu-tool', 'description' => 'Buscar tickets', 'input_schema' => []],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    // 2 chosen → the 2nd slot goes to another nps tool, not the ticket.
+    expect($ctx->chosenTools)->toBe(['get-nps-time-series-yuhu-tool', 'get-nps-by-dimension-yuhu-tool']);
+});
+
 it('leaves a model fit_check pick alone when it already covers the topic', function () {
     // The model DID pick an nps tool — don't second-guess a correct selection.
     ExpressGateAgent::fake([[
