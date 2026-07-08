@@ -40,11 +40,11 @@ class ConnectedObjectReader
     private array $memo = [];
 
     /**
-     * Per-request memo of each MCP endpoint's tool input-schema param names,
-     * keyed by config+viewer then tool name — one tools/list per source, reused
-     * across every block's date-range push-down.
+     * Per-request memo of each MCP endpoint's tool input-schema properties (name
+     * → property schema), keyed by config+viewer then tool name — one tools/list
+     * per source, reused across every block's date-range/granularity push-down.
      *
-     * @var array<string, array<string, list<string>>>
+     * @var array<string, array<string, array<string, mixed>>>
      */
     private array $toolSchemas = [];
 
@@ -234,6 +234,17 @@ class ConnectedObjectReader
     ];
 
     /**
+     * Argument names that select the source's time GRAIN. A short date-range
+     * preset (today / 7d) wants DAILY resolution — a weekly series over 7 days
+     * is a single bucket — so when the picked window is small we switch this
+     * argument to the tool's daily value (schema-gated).
+     */
+    private const GRANULARITY_ARG_KEYS = [
+        'granularity', 'granularidad', 'interval', 'intervalo',
+        'period', 'periodo', 'frequency', 'frecuencia',
+    ];
+
+    /**
      * Resolve {{…}} expression strings inside operation arguments (recursively)
      * against the render context — clock/pure functions plus params (so a
      * range-tied argument like {{range_start(default(params.range,'1y'))}} the
@@ -296,31 +307,136 @@ class ConnectedObjectReader
             return $arguments; // empty preset ⇒ leave the source's own widest window
         }
 
-        // 1) Override an existing start-date argument.
-        foreach (self::DATE_FROM_ARG_KEYS as $key) {
-            if (array_key_exists($key, $arguments)) {
-                $arguments[$key] = $start;
+        $toolName = trim((string) ($op['mcp_tool'] ?? ''));
 
-                return $arguments;
+        // 1) The fetch WINDOW: override an existing start-date argument, else
+        //    inject one the tool declares but the object never set.
+        $fromKey = $this->firstExistingKey(self::DATE_FROM_ARG_KEYS, $arguments);
+        if ($fromKey !== null) {
+            $arguments[$fromKey] = $start;
+        } else {
+            $props = $this->toolProperties($config, $actor, $toolName);
+            $declaredFrom = $this->firstDeclared(self::DATE_FROM_ARG_KEYS, array_keys($props));
+            if ($declaredFrom !== null) {
+                $arguments[$declaredFrom] = $start;
+                $declaredTo = $this->firstDeclared(self::DATE_TO_ARG_KEYS, array_keys($props));
+                if ($declaredTo !== null && ! array_key_exists($declaredTo, $arguments)) {
+                    $arguments[$declaredTo] = $this->expressions->resolve('{{today()}}', $context);
+                }
             }
         }
 
-        // 2) Inject one the tool declares but the object never set.
-        $params = $this->toolParamNames($config, $actor, trim((string) ($op['mcp_tool'] ?? '')));
-        if ($params === []) {
-            return $arguments; // schema unavailable ⇒ don't guess
+        // 2) The GRAIN: a short window (Hoy / 7 días) wants DAILY resolution.
+        return $this->adaptGranularity($arguments, $start, $context, $config, $actor, $toolName);
+    }
+
+    /**
+     * When the picked window spans a week or less, switch the tool's granularity
+     * argument to its DAILY value — a weekly series over 7 days is one bucket, so
+     * a short range should ask the source for daily rows if it offers them. Only
+     * fires when the tool's schema declares a granularity param AND exposes a
+     * daily value for it ("check for a daily-frequency tool, then use it"); a
+     * 30-day-plus window keeps the object's baked grain.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $config
+     * @return array<string, mixed>
+     */
+    private function adaptGranularity(array $arguments, string $start, array $context, array $config, ?User $actor, string $toolName): array
+    {
+        $today = $this->expressions->resolve('{{today()}}', $context);
+        $span = $this->daysBetween($start, is_string($today) ? $today : null);
+        if ($span === null || $span > 8) {
+            return $arguments; // 30d+ keeps the source's baked grain
         }
-        $fromKey = $this->firstDeclared(self::DATE_FROM_ARG_KEYS, $params);
-        if ($fromKey === null) {
+
+        $props = $this->toolProperties($config, $actor, $toolName);
+        $granKey = $this->firstDeclared(self::GRANULARITY_ARG_KEYS, array_keys($props));
+        if ($granKey === null) {
             return $arguments;
         }
-        $arguments[$fromKey] = $start;
-        $toKey = $this->firstDeclared(self::DATE_TO_ARG_KEYS, $params);
-        if ($toKey !== null && ! array_key_exists($toKey, $arguments)) {
-            $arguments[$toKey] = $this->expressions->resolve('{{today()}}', $context);
+
+        $daily = $this->dailyGranularityValue(
+            is_array($props[$granKey] ?? null) ? $props[$granKey] : [],
+            $arguments[$granKey] ?? null,
+        );
+        if ($daily !== null) {
+            $arguments[$granKey] = $daily;
         }
 
         return $arguments;
+    }
+
+    /**
+     * The tool's DAILY granularity token. From the param's enum first (the only
+     * safe source of the exact accepted value); failing an enum, the daily
+     * sibling in the same LANGUAGE as the object's baked value. Null when the
+     * tool has no daily option (an enum without one) or we can't tell — never
+     * guess a token a strict tool might reject.
+     *
+     * @param  array<string, mixed>  $paramSchema
+     */
+    private function dailyGranularityValue(array $paramSchema, mixed $current): ?string
+    {
+        $enum = array_values(array_filter($paramSchema['enum'] ?? [], 'is_string'));
+        if ($enum !== []) {
+            foreach ($enum as $value) {
+                if (preg_match('/^(dai|d[ií]a|day)/i', $value) === 1) {
+                    return $value;
+                }
+            }
+
+            return null; // enum present, no daily option ⇒ no daily frequency
+        }
+
+        if (! is_string($current)) {
+            return null;
+        }
+        if (preg_match('/seman|mensual|anual|trimestr|d[ií]a/iu', $current) === 1) {
+            return 'diario';
+        }
+        if (preg_match('/week|month|year|quarter|dai|day/i', $current) === 1) {
+            return 'daily';
+        }
+
+        return null;
+    }
+
+    /**
+     * Absolute day span between two YYYY-MM-DD-ish dates, or null if either is
+     * unparseable.
+     */
+    private function daysBetween(string $from, ?string $to): ?int
+    {
+        if ($to === null || $to === '') {
+            return null;
+        }
+        $a = strtotime($from);
+        $b = strtotime($to);
+        if ($a === false || $b === false) {
+            return null;
+        }
+
+        return (int) round(abs($b - $a) / 86400);
+    }
+
+    /**
+     * The first of $candidates that is a key of $arguments (exact), returned in
+     * the arguments' own casing.
+     *
+     * @param  list<string>  $candidates
+     * @param  array<string, mixed>  $arguments
+     */
+    private function firstExistingKey(array $candidates, array $arguments): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (array_key_exists($candidate, $arguments)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -343,14 +459,15 @@ class ConnectedObjectReader
     }
 
     /**
-     * The input-schema property names a tool declares, memoised per config+viewer
-     * for the request. A tools/list round-trip that fails (auth, transport)
-     * degrades to [] — injection is then skipped, never fatal.
+     * The input-schema PROPERTIES a tool declares (name → property schema, so
+     * callers can read enums), memoised per config+viewer for the request. A
+     * tools/list round-trip that fails (auth, transport) degrades to [] — the
+     * push-down is then skipped, never fatal.
      *
      * @param  array<string, mixed>  $config
-     * @return list<string>
+     * @return array<string, mixed>
      */
-    private function toolParamNames(array $config, ?User $actor, string $toolName): array
+    private function toolProperties(array $config, ?User $actor, string $toolName): array
     {
         if ($toolName === '') {
             return [];
@@ -365,7 +482,7 @@ class ConnectedObjectReader
             $schemas = [];
             foreach ($tools as $tool) {
                 $props = $tool['input_schema']['properties'] ?? null;
-                $schemas[(string) ($tool['name'] ?? '')] = is_array($props) ? array_map('strval', array_keys($props)) : [];
+                $schemas[(string) ($tool['name'] ?? '')] = is_array($props) ? $props : [];
             }
             $this->toolSchemas[$key] = $schemas;
         }

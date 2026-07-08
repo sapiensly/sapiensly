@@ -219,6 +219,59 @@ it('INJECTS from/to when the object omits them but the tool schema declares them
     expect($result['ok'])->toBeTrue();
 });
 
+it('switches to DAILY granularity for a short range when the tool offers it', function () {
+    // "Hoy"/"7 días" over a WEEKLY series is one bucket — so a short window asks
+    // the source for daily rows if its granularity param exposes a daily value.
+    $weekAgo = now()->utc()->subDays(7)->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['mcp_tool'] = 'get-nps-time-series-tool';
+    $object['source']['operations']['list']['arguments'] = ['granularity' => 'weekly']; // baked weekly
+
+    $query = ['filter' => ['op' => 'gte', 'field_id' => 'fld_datefield', 'value_expression' => "{{range_start(default(params.range, '30d'))}}"]];
+    $context = ['params' => (object) ['range' => '7d']];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andReturn([
+        ['name' => 'get-nps-time-series-tool', 'description' => '', 'input_schema' => ['type' => 'object', 'properties' => [
+            'granularity' => ['type' => 'string', 'enum' => ['daily', 'weekly', 'monthly']],
+            'from' => ['type' => 'string'], 'to' => ['type' => 'string'],
+        ]]],
+    ]);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['granularity'] === 'daily' // switched
+            && $args['from'] === $weekAgo)                                                // window injected too
+        ->andReturn(['tickets' => []]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    expect($reader->list($object, $this->integration, $query, $this->user, $context)['ok'])->toBeTrue();
+});
+
+it('keeps the baked granularity when the tool has no daily option', function () {
+    // The tool's granularity enum offers no daily value → don't force one.
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['mcp_tool'] = 'get-monthly-tool';
+    $object['source']['operations']['list']['arguments'] = ['granularity' => 'monthly'];
+
+    $query = ['filter' => ['op' => 'gte', 'field_id' => 'fld_datefield', 'value_expression' => "{{range_start(default(params.range, '30d'))}}"]];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('listTools')->andReturn([
+        ['name' => 'get-monthly-tool', 'description' => '', 'input_schema' => ['type' => 'object', 'properties' => [
+            'granularity' => ['type' => 'string', 'enum' => ['monthly', 'quarterly']], // no daily
+            'from' => ['type' => 'string'], 'to' => ['type' => 'string'],
+        ]]],
+    ]);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['granularity'] === 'monthly') // untouched
+        ->andReturn(['tickets' => []]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    expect($reader->list($object, $this->integration, $query, $this->user, ['params' => (object) ['range' => '7d']])['ok'])->toBeTrue();
+});
+
 it('does NOT inject a window the tool schema does not declare (no blind guessing)', function () {
     // A tool with no from/to in its schema must not receive one — injecting an
     // unknown property could make a strict tool reject the whole call.

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
@@ -56,6 +57,22 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+
+// A short date-range preset (Hoy / 7 días) buckets by DAY regardless of the
+// chart's authored grain — a weekly bucket over 7 days is one bar. The reader
+// already asks the source for daily rows on a short window; this displays them
+// daily. Reactive to the active range (usePage updates on the filter's visit),
+// falling back to the chart's own bucket for 30d+ or a non-runtime context.
+const page = usePage();
+const activeRange = computed<string>(() => {
+    const params = page.props?.params as Record<string, unknown> | undefined;
+    return typeof params?.range === 'string' ? params.range : '';
+});
+const effectiveBucket = computed<ChartBlock['bucket']>(() =>
+    activeRange.value === 'today' || activeRange.value === '7d'
+        ? 'day'
+        : props.block.bucket,
+);
 
 // Shared hover tooltip for EVERY chart type: each mark toggles `tip` content on
 // mouseenter/leave while the card tracks the cursor, so one floating tooltip
@@ -190,7 +207,7 @@ function formatGroupKey(value: unknown, field: FieldDef | undefined): string {
     }
     // Date/datetime X (incl. sys_created_at) → truncate to the bucket (default day).
     if (isTemporal(field)) {
-        return bucketDate(value, props.block.bucket ?? 'day');
+        return bucketDate(value, effectiveBucket.value ?? 'day');
     }
     return String(value);
 }
