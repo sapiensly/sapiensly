@@ -84,8 +84,18 @@ class ConnectedObjectReader
             $arguments = $this->resolveArguments(is_array($op['arguments'] ?? null) ? $op['arguments'] : [], $context);
             $arguments = $this->pushDownDateRange($arguments, $query, $context, $op, $config, $actor);
             $key = $this->memoKey($object, $integration, $op, $arguments, $actor);
+            if (isset($this->memo[$key])) {
+                return $this->memo[$key];
+            }
 
-            return $this->memo[$key] ??= $this->listViaMcp($object, $integration, $op, $source, $arguments, $config, $actor);
+            $result = $this->listViaMcp($object, $integration, $op, $source, $arguments, $config, $actor);
+            // A widened window can overshoot a tool's own max range ("El rango
+            // máximo permitido es de 92 días") — the push-down asked for more than
+            // the source allows. Cap to the tool's stated maximum and retry once
+            // so the chart renders its widest legal window instead of an error.
+            $result = $this->retryWithinMaxRange($result, $arguments, $context, $object, $integration, $op, $source, $config, $actor);
+
+            return $this->memo[$key] = $result;
         }
 
         if (empty($op['path'])) {
@@ -328,6 +338,53 @@ class ConnectedObjectReader
 
         // 2) The GRAIN: a short window (Hoy / 7 días) wants DAILY resolution.
         return $this->adaptGranularity($arguments, $start, $context, $config, $actor, $toolName);
+    }
+
+    /**
+     * A source can cap how wide a window it will serve ("El rango máximo
+     * permitido es de 92 días"). When the pushed window overshot that, parse the
+     * stated maximum from the error, recompute the start date to sit just inside
+     * it, and retry ONCE — so a "1 año" preset over a 92-day source renders 92
+     * days of data, not an error card. No-op when the error isn't a range cap,
+     * carries no day count, or we didn't push a start-date argument.
+     *
+     * @param  array{ok: bool, rows: list<array<string, mixed>>, error?: string}  $result
+     * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $op
+     * @param  array<string, mixed>  $source
+     * @param  array<string, mixed>  $config
+     * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
+     */
+    private function retryWithinMaxRange(array $result, array $arguments, array $context, array $object, Integration $integration, array $op, array $source, array $config, ?User $actor): array
+    {
+        if (($result['ok'] ?? false) === true) {
+            return $result;
+        }
+        $error = (string) ($result['error'] ?? '');
+        if (preg_match('/m[áa]xim|permitid|l[íi]mite|limit|exceed|rango/iu', $error) !== 1
+            || preg_match('/(\d+)\s*(d[íi]as|days)/iu', $error, $m) !== 1) {
+            return $result;
+        }
+        $maxDays = (int) $m[1];
+        $fromKey = $this->firstExistingKey(self::DATE_FROM_ARG_KEYS, $arguments);
+        if ($maxDays < 1 || $fromKey === null) {
+            return $result; // not a windowed call we drove
+        }
+
+        $today = $this->expressions->resolve('{{today()}}', $context);
+        if (! is_string($today) || strtotime($today) === false) {
+            return $result;
+        }
+        // Sit a day inside the stated max to absorb inclusive/exclusive counting.
+        $capped = date('Y-m-d', (int) strtotime($today.' -'.max(1, $maxDays - 1).' days'));
+        if ($capped === ($arguments[$fromKey] ?? null)) {
+            return $result; // already at the cap — don't loop
+        }
+        $arguments[$fromKey] = $capped;
+
+        return $this->listViaMcp($object, $integration, $op, $source, $arguments, $config, $actor);
     }
 
     /**

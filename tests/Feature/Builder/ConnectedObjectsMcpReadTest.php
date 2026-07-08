@@ -219,6 +219,35 @@ it('INJECTS from/to when the object omits them but the tool schema declares them
     expect($result['ok'])->toBeTrue();
 });
 
+it('retries within the tool max range when the pushed window overshoots', function () {
+    // Prod: "Año" pushed a 365-day window into get-portafolio-ots-tool, whose
+    // cap is 92 days, so the tool errored and the chart failed. We parse the
+    // stated max and retry at the widest legal window instead.
+    $cappedFrom = now()->utc()->subDays(91)->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['mcp_tool'] = 'get-portafolio-ots-tool';
+    $object['source']['operations']['list']['arguments'] = ['from' => '{{days_ago(30)}}', 'to' => '{{today()}}'];
+
+    $query = ['filter' => ['op' => 'gte', 'field_id' => 'fld_datefield', 'value_expression' => "{{range_start(default(params.range, '30d'))}}"]];
+    $context = ['params' => (object) ['range' => '1y']]; // user picked Año → 365 days
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === now()->utc()->subYear()->toDateString())
+        ->andThrow(new RuntimeException("The MCP tool 'get-portafolio-ots-tool' returned an error: El rango máximo permitido es de 92 días."));
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $cappedFrom) // retried within the cap
+        ->andReturn(['tickets' => [['ticket_id' => 'T1', 'status' => 'ok', 'metrics' => ['resolution_minutes' => 5]]]]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list($object, $this->integration, $query, $this->user, $context);
+
+    expect($result['ok'])->toBeTrue()->and($result['rows'])->toHaveCount(1);
+});
+
 it('switches to DAILY granularity for a short range when the tool offers it', function () {
     // "Hoy"/"7 días" over a WEEKLY series is one bucket — so a short window asks
     // the source for daily rows if its granularity param exposes a daily value.
