@@ -375,3 +375,39 @@ it('opens the board on a window the sampled data actually spans', function () {
     $kpi = $longSpec['kpis'][0];
     expect(json_encode($kpi['compare']))->toContain("'1y'");
 });
+
+it('leads a dimension breakdown that carries statistics with the statistic, not the volume donut', function () {
+    // A resolution-time-by-category object: "avg_minutes por key" IS the
+    // story; the volume donut follows it.
+    $object = [
+        'id' => 'obj_restime0', 'slug' => 'tickets_resolution_time', 'name' => 'Tickets Resolution Time',
+        'fields' => [
+            ['id' => 'fld_key0rt00', 'slug' => 'key', 'name' => 'Key', 'type' => 'string'],
+            ['id' => 'fld_countrt0', 'slug' => 'count', 'name' => 'Count', 'type' => 'number'],
+            ['id' => 'fld_avgminrt', 'slug' => 'avg_minutes', 'name' => 'Avg Minutes', 'type' => 'number'],
+            ['id' => 'fld_p90minrt', 'slug' => 'p90_minutes', 'name' => 'P90 Minutes', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected',
+            'field_map' => [
+                ['field_id' => 'fld_key0rt00', 'external_path' => 'key'],
+                ['field_id' => 'fld_countrt0', 'external_path' => 'count'],
+                ['field_id' => 'fld_avgminrt', 'external_path' => 'avg_minutes'],
+                ['field_id' => 'fld_p90minrt', 'external_path' => 'p90_minutes'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'get-resolution-tool', 'collection_path' => 'by_dimension']],
+        ],
+    ];
+    $rows = [
+        ['key' => 'Envíos', 'count' => 40, 'avg_minutes' => 320.5, 'p90_minutes' => 900.0],
+        ['key' => 'Pagos', 'count' => 25, 'avg_minutes' => 180.2, 'p90_minutes' => 420.0],
+        ['key' => 'Cuenta', 'count' => 12, 'avg_minutes' => 95.7, 'p90_minutes' => 210.0],
+    ];
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows);
+
+    $first = $spec['charts'][0];
+    expect($first['chart_type'])->toBe('hbar')
+        ->and($first['y_field_id'])->toBe('fld_avgminrt')
+        ->and($first['aggregation'])->toBe('avg');
+});

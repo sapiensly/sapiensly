@@ -949,8 +949,17 @@ class DashboardSpecSuggester
             }
         }
 
-        // 2) Concentration: breakdowns per categorical, form chosen by REAL
-        //    cardinality (donut needs few slices; many go horizontal, capped).
+        // 2)+3) Concentration and statistics-per-dimension — order picked by
+        //    grain: on a DIMENSION breakdown carrying pre-computed statistics
+        //    (resolution time by category), the statistic IS the story, so
+        //    "avg_minutes por key" leads and the volume donut follows. On
+        //    every other shape, concentration first as before.
+        if ($grain === SemanticProfile::GRAIN_DIMENSION) {
+            $this->appendStatisticCharts($charts, $statistics, $categoricals, $es);
+        }
+
+        // Concentration: breakdowns per categorical, form chosen by REAL
+        // cardinality (donut needs few slices; many go horizontal, capped).
         $breakdownTypes = ['donut', 'bar', 'treemap'];
         foreach ($categoricals as $i => $field) {
             if (count($charts) >= self::MAX_CHARTS - 1) {
@@ -980,22 +989,8 @@ class DashboardSpecSuggester
             $charts[] = $chart;
         }
 
-        // 3) Statistics per dimension: shown, never folded. avg over one row
-        //    per group is the identity, so the number rendered IS the value.
-        if ($statistics !== [] && $categoricals !== []) {
-            foreach (array_slice($statistics, 0, 2) as $stat) {
-                if (count($charts) >= self::MAX_CHARTS) {
-                    break;
-                }
-                $charts[] = [
-                    'label' => (string) ($stat['name'] ?? $stat['slug']).($es ? ' por ' : ' by ').Str::lower((string) ($categoricals[0]['name'] ?? $categoricals[0]['slug'])),
-                    'chart_type' => 'hbar',
-                    'aggregation' => 'avg',
-                    'y_field_id' => $stat['id'],
-                    'group_by_field_id' => $categoricals[0]['id'],
-                    'limit' => self::BREAKDOWN_LIMIT,
-                ];
-            }
+        if ($grain !== SemanticProfile::GRAIN_DIMENSION) {
+            $this->appendStatisticCharts($charts, $statistics, $categoricals, $es);
         }
 
         // 4) Distribution on RAW rows only — a box plot needs raw points.
@@ -1094,6 +1089,36 @@ class DashboardSpecSuggester
         ));
 
         return $withAxis !== [] ? $withAxis : array_slice($charts, 0, 1);
+    }
+
+    /**
+     * Statistics per dimension: shown, never folded. avg over one row per
+     * group is the identity, so the number rendered IS the value. Appended
+     * before or after the concentration breakdowns depending on grain.
+     *
+     * @param  list<array<string, mixed>>  $charts
+     * @param  list<array<string, mixed>>  $statistics
+     * @param  list<array<string, mixed>>  $categoricals
+     */
+    private function appendStatisticCharts(array &$charts, array $statistics, array $categoricals, bool $es): void
+    {
+        if ($statistics === [] || $categoricals === []) {
+            return;
+        }
+
+        foreach (array_slice($statistics, 0, 2) as $stat) {
+            if (count($charts) >= self::MAX_CHARTS) {
+                break;
+            }
+            $charts[] = [
+                'label' => (string) ($stat['name'] ?? $stat['slug']).($es ? ' por ' : ' by ').Str::lower((string) ($categoricals[0]['name'] ?? $categoricals[0]['slug'])),
+                'chart_type' => 'hbar',
+                'aggregation' => 'avg',
+                'y_field_id' => $stat['id'],
+                'group_by_field_id' => $categoricals[0]['id'],
+                'limit' => self::BREAKDOWN_LIMIT,
+            ];
+        }
     }
 
     /**

@@ -109,6 +109,10 @@ const groupField = computed(() =>
 );
 const yField = computed(() => fieldOf(props.block.y_field_id));
 
+// A string column that is really the series' bucket label — mirror of the
+// backend suggester's bucketLabelField() heuristic.
+const PERIOD_LABEL_SLUG = /label|bucket|period|semana|week/i;
+
 // Aggregate rows into [{label, value}] series.
 const series = computed<{ label: string; value: number }[]>(() => {
     const rows = props.data?.rows ?? [];
@@ -159,6 +163,17 @@ const series = computed<{ label: string; value: number }[]>(() => {
         out.sort((a, b) =>
             a.label < b.label ? -1 : a.label > b.label ? 1 : 0,
         );
+    } else if (
+        (props.block.chart_type === 'bar' ||
+            props.block.chart_type === 'hbar') &&
+        groupSlug &&
+        !PERIOD_LABEL_SLUG.test(groupSlug)
+    ) {
+        // Categorical breakdowns read Pareto: biggest first (same order donut
+        // and treemap already use). Period-label categories (Semana 1…) are
+        // the time axis in a string costume and keep their chronological
+        // insertion order instead.
+        out.sort((a, b) => b.value - a.value);
     }
     return out;
 });
