@@ -1158,19 +1158,13 @@ class AppScaffolder
         }
         $withDateFilter = (bool) ($spec['include_date_filter'] ?? true);
 
-        // Connected objects carry LIVE, often HISTORICAL data — a 30-day default
-        // window frequently lands in a gap and the board opens empty ("sin
-        // registros en la ventana"). Default those to a year (the widest preset)
-        // so the dashboard opens populated; the presets still let the user narrow.
-        // '1y' — not the old unbounded 'all' — because a connected source's fetch
-        // window is fixed at build time: 'all' only clears the in-memory filter,
-        // it can't widen the source, so it read as a no-op. The reader now pushes
-        // the selected range down into the source's date arguments, so '1y'
-        // actually re-fetches a year. Local records are recent, so 30d stays.
-        $anyConnected = collect($objectsBySlug)->contains(
-            fn (array $o): bool => ($o['source']['type'] ?? '') === 'connected',
-        );
-        $defaultRange = $anyConnected ? '1y' : '30d';
+        // Every dashboard opens on the last 30 days — the product default. For
+        // connected sources this is honest now that the reader pushes the picked
+        // window into the source's date arguments (so 30d re-fetches a real
+        // 30-day window, not a fixed build-time bake), and the presets let the
+        // user widen to Año. A board over stale connected data can still open
+        // empty ("sin registros en la ventana"); widening the range resolves it.
+        $defaultRange = '30d';
 
         $rangeBySlug = [];
         foreach ($objectsBySlug as $slug => $obj) {
