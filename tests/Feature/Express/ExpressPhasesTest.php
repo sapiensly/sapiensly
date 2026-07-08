@@ -202,6 +202,29 @@ it('overrides a model fit_check that skipped clearly on-topic tools', function (
     expect($ctx->chosenTools)->toBe(['get-nps-time-series-yuhu-tool']); // corrected to the nps tool
 });
 
+it('switches even when the chosen ticket tool MENTIONS the topic in its description', function () {
+    // Prod loophole (app_…b1ekr): search-tickets-tool returns nps_score, so its
+    // DESCRIPTION mentions "nps" — but it is NOT a dedicated nps tool. The
+    // backstop keys off NAMES, so it still prefers the get-nps-* tool the model
+    // skipped instead of trusting the ticket tool's description.
+    ExpressGateAgent::fake([[
+        'tools' => ['search-tickets-yuhu-tool'],
+        'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'crea un dashboard del nps de yuhu');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-nps-time-series-yuhu-tool', 'description' => 'Serie semanal de NPS', 'input_schema' => []],
+        ['name' => 'search-tickets-yuhu-tool', 'description' => 'Busca tickets; incluye nps_score, csat_score, ces_score', 'input_schema' => []],
+        ['name' => 'search-conversations-yuhu-tool', 'description' => 'Busca conversaciones', 'input_schema' => []],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->toBe(['get-nps-time-series-yuhu-tool']); // NAME wins over a mention
+});
+
 it('leaves a model fit_check pick alone when it already covers the topic', function () {
     // The model DID pick an nps tool — don't second-guess a correct selection.
     ExpressGateAgent::fake([[

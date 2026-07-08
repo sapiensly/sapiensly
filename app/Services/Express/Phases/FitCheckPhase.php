@@ -342,12 +342,18 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
     }
 
     /**
-     * Correct a model fit_check that skipped clearly on-topic tools. If the
-     * catalog exposes tools whose NAME carries a discriminating prompt topic
-     * (get-nps-* for "nps") but NONE of the chosen tools touch that topic, the
-     * model picked the wrong subject — replace its pick with the on-topic tools.
-     * Preserves the pick whenever it already covers the subject (by name OR
-     * description), so a correct or richer selection is never overridden.
+     * Correct a model fit_check that skipped a dedicated on-topic tool. When the
+     * catalog NAMES tools after a prompt subject (get-nps-* for "nps") but NONE
+     * of the chosen tools is NAMED after it, the model picked the wrong subject —
+     * switch to the dedicated tools.
+     *
+     * Everything keys off tool NAMES, never descriptions: a subject word is only
+     * honoured if it actually NAMES some tool (not all — that's the org term),
+     * and the chosen set "covers" the subject only if a chosen tool is NAMED
+     * after it. A ticket tool that merely MENTIONS nps in its description
+     * (because it returns an nps field) is NOT a dedicated nps tool and must not
+     * suppress the switch — the exact loophole that let a ticket board stand for
+     * an "nps" prompt while 7 get-nps-* tools sat unused.
      *
      * @param  list<string>  $noRows  tools known to return no rows (excluded)
      */
@@ -356,38 +362,45 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         if ($context->chosenTools === []) {
             return;
         }
-        $words = $this->discriminatingTopicWords($context);
+        $words = $this->topicWords($context->prompt);
         if ($words->isEmpty()) {
             return;
         }
 
-        $byName = collect($context->catalogTools)->keyBy('name');
         $known = array_values(array_diff(array_column($context->catalogTools, 'name'), $noRows));
+        $names = collect($known)->map(fn (string $name): string => Str::lower(Str::ascii($name)))->all();
+        $count = count($names);
+        if ($count === 0) {
+            return;
+        }
 
-        // Catalog tools whose NAME carries a discriminating topic word — the
-        // strong signal the source has that subject as a first-class tool.
+        // Subject words that NAME some (but not ~all) tools: "nps" names the
+        // get-nps-* tools; "yuhu" names every tool (the org term) and is dropped;
+        // "informacion" names none and is dropped.
+        $subjects = $words->filter(function (string $word) use ($names, $count): bool {
+            $hits = collect($names)->filter(fn (string $n): bool => str_contains($n, $word))->count();
+
+            return $hits > 0 && $hits / $count <= 0.7;
+        })->values();
+        if ($subjects->isEmpty()) {
+            return; // no subject is a dedicated tool here — nothing to prefer
+        }
+
+        // A chosen tool NAMED after a subject means the model covered it.
+        $chosenCoversSubject = collect($context->chosenTools)->contains(
+            fn (string $name): bool => $subjects->contains(fn (string $w): bool => str_contains(Str::lower(Str::ascii($name)), $w)),
+        );
+        if ($chosenCoversSubject) {
+            return;
+        }
+
+        // Prefer every tool NAMED after a subject the model skipped.
         $onTopic = collect($known)->filter(
-            fn (string $name): bool => $words->contains(
-                fn (string $w): bool => str_contains(Str::lower(Str::ascii($name)), $w),
-            ),
+            fn (string $name): bool => $subjects->contains(fn (string $w): bool => str_contains(Str::lower(Str::ascii($name)), $w)),
         )->values();
-        if ($onTopic->isEmpty()) {
-            return; // the subject isn't a tool here — nothing to prefer
-        }
-
-        // Did the chosen set already touch the subject (name OR description)?
-        $chosenCoversTopic = collect($context->chosenTools)->contains(function (string $name) use ($byName, $words): bool {
-            $tool = $byName->get($name);
-            $haystack = Str::lower(Str::ascii(($tool['name'] ?? '').' '.($tool['description'] ?? '')));
-
-            return $words->contains(fn (string $w): bool => str_contains($haystack, $w));
-        });
-        if ($chosenCoversTopic) {
-            return; // the model covered the subject — leave its pick
-        }
 
         $context->chosenTools = $onTopic->take(self::MAX_TOOLS)->all();
-        $context->note('El pedido menciona «'.$words->implode(', ').'»; la fuente expone tools que lo cubren y no estaban elegidos — se prefirieron: '.implode(', ', $context->chosenTools).'.');
+        $context->note('El pedido menciona «'.$subjects->implode(', ').'»; la fuente tiene tools dedicados que no estaban elegidos — se prefirieron: '.implode(', ', $context->chosenTools).'.');
     }
 
     /** Human list of what the source's tools are about, from their names. */
