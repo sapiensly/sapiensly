@@ -10,6 +10,7 @@ use App\Services\Express\SemanticProfile;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
+use Illuminate\Support\Str;
 
 /**
  * F-3: derive the complete spec from the PRIMARY object's schema (the one
@@ -37,7 +38,13 @@ class SuggestSpecPhase implements ExpressPhase
 
     public function run(ExpressContext $context, PipelineRun $run): void
     {
-        $ordered = $this->orderByRichness($context->objects);
+        // The prompt's topic words drive the measure the board must FEATURE. NPS
+        // on this source isn't a tool — it's a field (`nps_score`) on the ticket
+        // object; without this, a "dashboard de nps" acquired the right entity
+        // (tickets) but headlined ticket VOLUME and never surfaced nps_score.
+        $topics = $this->promptTopics($context->prompt);
+
+        $ordered = $this->orderByRichness($context->objects, $topics);
         if ($ordered === []) {
             throw new \RuntimeException('No connected object available to build the dashboard from.');
         }
@@ -50,7 +57,7 @@ class SuggestSpecPhase implements ExpressPhase
         // drives the skeleton, the rest contribute their trend/breakdown/KPI
         // tagged with object_slug (before this, 3 of 4 acquired objects were
         // paid for and never rendered).
-        $context->spec = $this->suggester->suggestMulti($ordered, $lang, $context->rowsByObject) + ['object_slug' => $primary['slug']];
+        $context->spec = $this->suggester->suggestMulti($ordered, $lang, $context->rowsByObject, $topics) + ['object_slug' => $primary['slug']];
         $context->facts = $this->facts->build($primary, $context->rowsByObject[$primary['id']] ?? []);
 
         // Compact facts per contributing secondary, so the insight gate can
@@ -79,16 +86,70 @@ class SuggestSpecPhase implements ExpressPhase
     }
 
     /**
-     * Primary-first ordering: date + categorical axes make the richest
-     * canvas; the rest follow in descending usefulness.
+     * The prompt's topic words: what the user actually asked to see. Stopwords
+     * (build verbs, articles, generic analytics phrasing) are dropped so what
+     * remains is the subject — "…nps de yuhu" → ['nps', 'yuhu'] — which the
+     * ordering and the suggester use to feature the requested MEASURE even when
+     * it lives in a field rather than a tool.
+     *
+     * @return list<string>
+     */
+    private function promptTopics(string $prompt): array
+    {
+        $stop = [
+            'crea', 'crear', 'dashboard', 'tablero', 'reporte', 'quiero', 'necesito', 'para', 'con', 'una', 'uno',
+            'las', 'los', 'del', 'que', 'como', 'por', 'sus', 'este', 'esta', 'analisis', 'analizar', 'analiza',
+            'informacion', 'relevante', 'relacionada', 'relacionado', 'muestra', 'muestrame', 'dame', 'hazme',
+            'datos', 'vista', 'ejecutiva', 'ejecutivo', 'mas', 'info', 'build', 'create', 'make', 'the', 'and', 'for',
+        ];
+
+        return collect(preg_split('/[^a-z0-9áéíóúñ]+/i', Str::lower(Str::ascii($prompt))) ?: [])
+            ->filter(fn ($w) => mb_strlen((string) $w) >= 3 && ! in_array((string) $w, $stop, true))
+            ->unique()->values()->all();
+    }
+
+    /**
+     * True when the object carries a NUMERIC field whose slug matches a prompt
+     * topic — i.e. it holds the measure the user asked for (nps_score for "nps").
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<string>  $topics
+     */
+    private function hasTopicMeasure(array $object, array $topics): bool
+    {
+        if ($topics === []) {
+            return false;
+        }
+
+        return collect($object['fields'] ?? [])->contains(function ($f) use ($topics): bool {
+            if (! in_array($f['type'] ?? '', ['number', 'currency'], true)) {
+                return false;
+            }
+            $slug = Str::lower((string) ($f['slug'] ?? ''));
+
+            foreach ($topics as $topic) {
+                if ($topic !== '' && str_contains($slug, $topic)) {
+                    return true;
+                }
+            }
+
+            return false;
+        });
+    }
+
+    /**
+     * Primary-first ordering: the object holding the REQUESTED measure leads,
+     * then date + categorical axes make the richest canvas; the rest follow in
+     * descending usefulness.
      *
      * @param  list<array<string, mixed>>  $objects
+     * @param  list<string>  $topics
      * @return list<array<string, mixed>>
      */
-    private function orderByRichness(array $objects): array
+    private function orderByRichness(array $objects, array $topics = []): array
     {
         return collect($objects)
-            ->sortByDesc(function (array $o): int {
+            ->sortByDesc(function (array $o) use ($topics): int {
                 $fields = collect($o['fields'] ?? []);
                 $hasDate = $fields->contains(
                     fn ($f) => in_array($f['type'] ?? '', ['date', 'datetime'], true)
@@ -114,7 +175,14 @@ class SuggestSpecPhase implements ExpressPhase
                 $mode = strtolower((string) ($o['source']['operations']['list']['arguments']['mode'] ?? ''));
                 $isCappedSample = in_array($mode, ['latest', 'recent'], true);
 
-                return ($hasDate ? 100 : 0)
+                // The object that HOLDS the requested measure leads the board —
+                // an "nps" dashboard headlines the object carrying nps_score,
+                // even over a richer volume series. Strong enough to win, but
+                // still net-demoted if that object is a capped sample.
+                $hasTopicMeasure = $this->hasTopicMeasure($o, $topics);
+
+                return ($hasTopicMeasure ? 300 : 0)
+                    + ($hasDate ? 100 : 0)
                     + ($hasCategory ? 50 : 0)
                     + ($isTimeSeries ? 120 : 0)
                     - ($isCappedSample ? 200 : 0)

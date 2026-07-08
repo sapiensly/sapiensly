@@ -53,9 +53,10 @@ class DashboardSpecSuggester
      *
      * @param  list<array<string, mixed>>  $objects  ordered primary-first
      * @param  array<string, list<array<string, mixed>>>  $rowsByObject  keyed by object id
+     * @param  list<string>  $promptTopics  the request's subject words (e.g. ['nps']) — feature that measure
      * @return array<string, mixed> spec in add_dashboard_page's input shape
      */
-    public function suggestMulti(array $objects, string $lang = 'es', array $rowsByObject = []): array
+    public function suggestMulti(array $objects, string $lang = 'es', array $rowsByObject = [], array $promptTopics = []): array
     {
         $objects = array_values(array_filter($objects, 'is_array'));
         if ($objects === []) {
@@ -63,7 +64,7 @@ class DashboardSpecSuggester
         }
 
         $primary = $objects[0];
-        $spec = $this->suggest($primary, $lang, $rowsByObject[$primary['id'] ?? ''] ?? []);
+        $spec = $this->suggest($primary, $lang, $rowsByObject[$primary['id'] ?? ''] ?? [], $promptTopics);
         $secondaries = array_values(array_filter(
             array_slice($objects, 1),
             fn (array $o): bool => ($rowsByObject[$o['id'] ?? ''] ?? []) !== [],
@@ -82,7 +83,7 @@ class DashboardSpecSuggester
             if ($slug === null) {
                 continue;
             }
-            $mini = $this->suggest($secondary, $lang, $rowsByObject[$secondary['id'] ?? ''] ?? []);
+            $mini = $this->suggest($secondary, $lang, $rowsByObject[$secondary['id'] ?? ''] ?? [], $promptTopics);
             $name = (string) ($secondary['name'] ?? $slug);
 
             $charts = collect($mini['charts'] ?? []);
@@ -124,20 +125,55 @@ class DashboardSpecSuggester
      * @param  list<array<string, mixed>>  $numerics
      * @return list<array<string, mixed>>
      */
-    private function topicalMeasures(array $object, array $numerics): array
+    private function topicalMeasures(array $object, array $numerics, array $promptTopics = []): array
     {
-        $tokens = collect(preg_split('/[^a-z0-9]+/i', Str::lower(Str::ascii(($object['slug'] ?? '').' '.($object['name'] ?? '')))) ?: [])
+        $objectTokens = collect(preg_split('/[^a-z0-9]+/i', Str::lower(Str::ascii(($object['slug'] ?? '').' '.($object['name'] ?? '')))) ?: [])
             ->filter(fn ($t) => mb_strlen((string) $t) >= 3 && ! in_array($t, ['time', 'series', 'weekly', 'daily', 'monthly', 'data', 'the', 'por', 'del'], true))
             ->unique()->values();
+        $promptTokens = collect($promptTopics)
+            ->filter(fn ($t) => mb_strlen((string) $t) >= 3)->unique()->values();
+
+        $matches = fn (array $f, $tokens): bool => $tokens->contains(
+            fn (string $t): bool => $t !== '' && str_contains(Str::lower((string) ($f['slug'] ?? '')), $t),
+        );
+
+        // A measure the user NAMED in the prompt (nps → nps_score) leads over the
+        // object's own topic — that's the number they came for, wherever it
+        // lives. Then the object-topic measures, then nothing.
+        $byPrompt = array_values(array_filter($numerics, fn (array $f): bool => $matches($f, $promptTokens)));
+        $byObject = array_values(array_filter(
+            $numerics,
+            fn (array $f): bool => $matches($f, $objectTokens) && ! $matches($f, $promptTokens),
+        ));
+
+        return array_merge($byPrompt, $byObject);
+    }
+
+    /**
+     * The first numeric field whose slug matches a word the user put in the
+     * prompt — the measure they explicitly asked for (nps → nps_score). Null
+     * when the prompt names no measure that exists here. Identifiers are already
+     * out of $numerics, so any match is a real measure.
+     *
+     * @param  list<array<string, mixed>>  $numerics
+     * @param  list<string>  $promptTopics
+     * @return array<string, mixed>|null
+     */
+    private function requestedMeasure(array $numerics, array $promptTopics): ?array
+    {
+        $tokens = collect($promptTopics)->filter(fn ($t) => mb_strlen((string) $t) >= 3);
         if ($tokens->isEmpty()) {
-            return [];
+            return null;
         }
 
-        return array_values(array_filter($numerics, function (array $f) use ($tokens): bool {
-            $slug = Str::lower((string) ($f['slug'] ?? ''));
+        foreach ($numerics as $field) {
+            $slug = Str::lower((string) ($field['slug'] ?? ''));
+            if ($tokens->contains(fn (string $t): bool => $t !== '' && str_contains($slug, $t))) {
+                return $field;
+            }
+        }
 
-            return $tokens->contains(fn (string $t): bool => str_contains($slug, $t));
-        }));
+        return null;
     }
 
     /**
@@ -199,9 +235,10 @@ class DashboardSpecSuggester
     /**
      * @param  array<string, mixed>  $object  manifest object_definition
      * @param  list<array<string, mixed>>  $rows  sampled external rows (optional but recommended)
+     * @param  list<string>  $promptTopics  request subject words — a measure field matching one leads
      * @return array<string, mixed> spec in add_dashboard_page's input shape
      */
-    public function suggest(array $object, string $lang = 'es', array $rows = []): array
+    public function suggest(array $object, string $lang = 'es', array $rows = [], array $promptTopics = []): array
     {
         $es = $lang !== 'en';
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
@@ -251,8 +288,8 @@ class DashboardSpecSuggester
             // filter silently deletes every row and the whole board renders
             // empty (observed: an entire benchmark scenario scored 1/5).
             'include_date_filter' => $dateField !== null,
-            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es),
-            'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object),
+            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics),
+            'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object, $promptTopics),
             'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es),
         ], fn ($v) => $v !== null && $v !== '');
     }
@@ -341,9 +378,23 @@ class DashboardSpecSuggester
      * @param  list<array<string, mixed>>  $booleans
      * @return list<array<string, mixed>>
      */
-    private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es): array
+    private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es, array $promptTopics = []): array
     {
         $kpis = [];
+
+        // The measure the user NAMED headlines the band, whatever the object
+        // grain — a "dashboard de nps" over a ticket LIST must lead with
+        // avg(nps_score), not the ticket count. This is the number they asked
+        // for; it lives in a field, not a tool, so nothing else would surface it.
+        $requested = $this->requestedMeasure($numerics, $promptTopics);
+        if ($requested !== null) {
+            $kpis[] = [
+                'label' => (string) ($requested['name'] ?? $requested['slug']),
+                'aggregation' => ($measureTypes[$requested['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE ? 'sum' : 'avg',
+                'field_id' => $requested['id'],
+                'icon' => 'star',
+            ];
+        }
 
         if ($this->semantics->countIsMeaningful($grain)) {
             $kpis[] = [
@@ -355,8 +406,9 @@ class DashboardSpecSuggester
             // The object's namesake ratio leads when there is one: an NPS
             // series headlines with the average nps_score, not with the sum
             // of a generic additive.
-            $namesake = collect($this->topicalMeasures($object, $numerics))->first(
-                fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_RATIO,
+            $namesake = collect($this->topicalMeasures($object, $numerics, $promptTopics))->first(
+                fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_RATIO
+                    && ($f['id'] ?? null) !== ($requested['id'] ?? null),
             );
             if ($namesake !== null) {
                 $kpis[] = [
@@ -379,7 +431,7 @@ class DashboardSpecSuggester
             ) ?? collect($numerics)->first(
                 fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE,
             );
-            if ($primary !== null) {
+            if ($primary !== null && ($primary['id'] ?? null) !== ($requested['id'] ?? null)) {
                 $kpis[] = [
                     'label' => ($es ? 'Total ' : 'Total ').Str::lower((string) ($primary['name'] ?? $primary['slug'])),
                     'aggregation' => 'sum',
@@ -479,7 +531,7 @@ class DashboardSpecSuggester
      * @param  array<string, array{values: list<mixed>, distinct: int, null_rate: float, all_equal: bool}>  $stats
      * @return list<array<string, mixed>>
      */
-    private function suggestCharts(string $grain, ?array $dateField, array $categoricals, array $numerics, array $measureTypes, array $stats, bool $es, array $object = []): array
+    private function suggestCharts(string $grain, ?array $dateField, array $categoricals, array $numerics, array $measureTypes, array $stats, bool $es, array $object = [], array $promptTopics = []): array
     {
         $charts = [];
 
@@ -518,11 +570,19 @@ class DashboardSpecSuggester
                 'x_field_id' => $dateField['id'],
                 'bucket' => $bucket,
             ];
+            $requested = $this->requestedMeasure($numerics, $promptTopics);
             if ($grain === SemanticProfile::GRAIN_RAW) {
-                // A capped sample counted over time is the sampling window in
-                // disguise (older buckets read empty, the newest full) — skip
-                // the volume line rather than ship a misleading trend.
-                if ($this->isCappedSample($object)) {
+                if ($requested !== null) {
+                    // The user asked for this measure — its AVERAGE over time is
+                    // the trend they want, not a raw row count. (An "nps" board
+                    // over a ticket LIST charts avg(nps_score), not ticket volume.)
+                    $trend['aggregation'] = ($measureTypes[$requested['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE ? 'sum' : 'avg';
+                    $trend['y_field_id'] = $requested['id'];
+                    $trend['label'] = ($es ? 'Evolución de ' : 'Evolution of ').Str::lower((string) ($requested['name'] ?? $requested['slug']));
+                } elseif ($this->isCappedSample($object)) {
+                    // A capped sample counted over time is the sampling window in
+                    // disguise (older buckets read empty, the newest full) — skip
+                    // the volume line rather than ship a misleading trend.
                     $trend = null;
                 } else {
                     $trend['aggregation'] = 'count';
@@ -534,7 +594,7 @@ class DashboardSpecSuggester
                 // additive (a prod NPS board charted `responses` and the
                 // requested score never rendered). Topical ratio first, then
                 // topical additive, then the generic order.
-                $topical = $this->topicalMeasures($object, $numerics);
+                $topical = $this->topicalMeasures($object, $numerics, $promptTopics);
                 $pick = collect([
                     [collect($topical)->first(fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_RATIO), 'avg'],
                     [collect($topical)->first(fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE), 'sum'],

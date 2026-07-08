@@ -40,6 +40,46 @@ function dss_comments_rows(): array
     ])->all();
 }
 
+it('features a measure the prompt NAMED that lives in a field, not a tool (nps on a ticket list)', function () {
+    // Prod app_…thpsg: "dashboard de NPS de yuhu" acquired a ticket list that
+    // CARRIES nps_score as a field, but the board headlined ticket volume and
+    // never surfaced nps_score. The prompt topic now leads the band + trend.
+    $object = [
+        'id' => 'obj_tickets00', 'slug' => 'search_tickets', 'name' => 'Search Tickets',
+        'fields' => [
+            ['id' => 'fld_created0', 'slug' => 'created_at', 'name' => 'Created', 'type' => 'datetime'],
+            ['id' => 'fld_status00', 'slug' => 'status', 'name' => 'Status', 'type' => 'string'],
+            ['id' => 'fld_npsscore', 'slug' => 'nps_score', 'name' => 'Nps Score', 'type' => 'number'],
+            ['id' => 'fld_totaltix', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'fld_created0', 'external_path' => 'created_at'],
+            ['field_id' => 'fld_status00', 'external_path' => 'status'],
+            ['field_id' => 'fld_npsscore', 'external_path' => 'nps_score'],
+            ['field_id' => 'fld_totaltix', 'external_path' => 'total_tickets'],
+        ]],
+    ];
+    $rows = collect(range(0, 9))->map(fn (int $i) => [
+        'created_at' => now()->utc()->subDays($i)->toIso8601String(),
+        'status' => $i % 2 ? 'open' : 'closed',
+        'nps_score' => 6 + ($i % 5),
+        'total_tickets' => 10 + $i,
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['nps', 'yuhu']);
+
+    // A KPI averages nps_score — the measure the user asked for.
+    $npsKpi = collect($spec['kpis'])->firstWhere('field_id', 'fld_npsscore');
+    expect($npsKpi)->not->toBeNull()
+        ->and($npsKpi['aggregation'])->toBe('avg');
+
+    // The trend charts nps_score over time, not a raw ticket count.
+    $trend = collect($spec['charts'])->first(fn (array $c): bool => isset($c['x_field_id']));
+    expect($trend)->not->toBeNull()
+        ->and($trend['y_field_id'] ?? null)->toBe('fld_npsscore')
+        ->and($trend['aggregation'])->toBe('avg');
+});
+
 it('never charts a recency-capped source as a count-over-time trend', function () {
     $suggester = app(DashboardSpecSuggester::class);
 
