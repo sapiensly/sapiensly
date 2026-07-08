@@ -6,6 +6,7 @@ use App\Models\Chatbot;
 use App\Models\ChatbotAnalytics;
 use App\Models\WidgetConversation;
 use App\Models\WidgetMessage;
+use App\Support\Tenancy\TenantContext;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Collection;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ChatbotAnalyticsService
 {
+    public function __construct(private readonly TenantContext $tenant) {}
+
     /**
      * Get overview statistics for a chatbot.
      */
@@ -273,12 +276,24 @@ class ChatbotAnalyticsService
      */
     public function aggregateAllForDate(Carbon $date): int
     {
-        $chatbots = Chatbot::all();
+        // chatbot_analytics and widget_conversations are RLS-protected tenant
+        // tables; a scheduled command carries no request tenant context, so the
+        // reads returned zero rows (fail-closed) and the write was denied by the
+        // WITH CHECK policy. Scope each chatbot's aggregation to its owner —
+        // transaction-locally, correct under either pooler — so its rows are
+        // visible and the analytics row inserts. The prior scope is restored.
+        $priorOrg = $this->tenant->organizationId();
+        $priorUser = $this->tenant->userId();
         $count = 0;
 
-        foreach ($chatbots as $chatbot) {
-            $this->aggregateForDate($chatbot, $date);
-            $count++;
+        try {
+            foreach (Chatbot::all() as $chatbot) {
+                $this->tenant->set($chatbot->organization_id, $chatbot->user_id);
+                $this->tenant->runScoped(fn () => $this->aggregateForDate($chatbot, $date));
+                $count++;
+            }
+        } finally {
+            $this->tenant->set($priorOrg, $priorUser);
         }
 
         return $count;

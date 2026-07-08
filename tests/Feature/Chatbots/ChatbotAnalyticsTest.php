@@ -117,6 +117,24 @@ describe('analytics data endpoint', function () {
 });
 
 describe('ChatbotAnalyticsService', function () {
+    it('scopes each chatbot so the aggregated row carries its tenant (RLS fix)', function () {
+        // The scheduled aggregation ran with NO tenant context, so the RLS
+        // WITH CHECK on chatbot_analytics denied the insert. It now scopes each
+        // chatbot to its owner: the BEFORE-INSERT trigger stamps user_id from the
+        // scope GUC, which is exactly what the write needs to be admitted.
+        $session = WidgetSession::create(['chatbot_id' => $this->chatbot->id, 'session_token' => 'agg-tok']);
+        WidgetConversation::create([
+            'chatbot_id' => $this->chatbot->id, 'widget_session_id' => $session->id,
+            'message_count' => 2, 'created_at' => now(),
+        ]);
+
+        $this->analyticsService->aggregateAllForDate(now());
+
+        $row = ChatbotAnalytics::where('chatbot_id', $this->chatbot->id)->whereNull('hour')->first();
+        expect($row)->not->toBeNull()
+            ->and($row->user_id)->toBe($this->user->id); // stamped from the per-chatbot scope
+    });
+
     it('calculates overview statistics correctly', function () {
         // Create some sessions and conversations
         $session = WidgetSession::create([
