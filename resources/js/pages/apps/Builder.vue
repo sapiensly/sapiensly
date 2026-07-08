@@ -81,7 +81,6 @@ import {
     Eye,
     FileText,
     GripVertical,
-    Hourglass,
     ImagePlus,
     Layers,
     LayoutDashboard,
@@ -2525,17 +2524,10 @@ function statusTone(status: Message['status']): string {
                                     />
                                     <span
                                         v-if="reasoningElapsed(m)"
-                                        class="inline-flex items-center gap-0.5 tabular-nums text-accent-blue"
+                                        class="tabular-nums text-accent-blue"
                                         :title="t('apps.builder.reasoning_time')"
                                     >
-                                        <Hourglass
-                                            :class="[
-                                                'size-3',
-                                                m.status === 'streaming'
-                                                    ? 'animate-spin [animation-duration:2.5s]'
-                                                    : '',
-                                            ]"
-                                        />{{ reasoningElapsed(m) }}
+                                        {{ reasoningElapsed(m) }}
                                     </span>
                                     <span>{{ messageTime(m) }}</span>
                                 </div>
