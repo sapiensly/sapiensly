@@ -8,6 +8,7 @@ use App\Http\Requests\App\UpdateAppRequest;
 use App\Models\App;
 use App\Models\Record;
 use App\Services\Manifest\AppManifestService;
+use App\Support\Apps\AppNaming;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -32,27 +33,26 @@ class AppController extends Controller
         ]);
     }
 
-    public function create(): Response
-    {
-        return Inertia::render('apps/Create');
-    }
-
     public function store(StoreAppRequest $request): RedirectResponse
     {
         $user = $request->user();
         $visibility = $request->enum('visibility', Visibility::class) ?? Visibility::Private;
 
+        // Apps now start unnamed and open straight into the Builder — the first
+        // prompt names them (see AppBuilderController::nameAppFromFirstPrompt),
+        // like a chat titling itself. A caller may still pass a name; the slug is
+        // always auto-derived unique.
+        $name = trim((string) $request->string('name')) ?: AppNaming::UNTITLED;
+        $slug = AppNaming::uniqueSlug(trim((string) $request->string('slug')) ?: $name, $user->organization_id);
+
         $app = App::create([
             'user_id' => $user->id,
             // Scope the app to the owner's tenant (their org, or null in personal
             // context) REGARDLESS of visibility — `visibility` alone decides
-            // private-vs-organization sharing WITHIN that tenant. Nulling the org
-            // for a private app hid it from its own org-context owner, because
-            // isVisibleTo / forAccountContext filter by organization_id (a 403 on
-            // the post-create redirect to show).
+            // private-vs-organization sharing WITHIN that tenant.
             'organization_id' => $user->organization_id,
-            'slug' => $request->string('slug')->toString(),
-            'name' => $request->string('name')->toString(),
+            'slug' => $slug,
+            'name' => $name,
             'description' => $request->input('description'),
             'icon' => $request->input('icon'),
             'color' => $request->input('color'),
@@ -67,7 +67,7 @@ class AppController extends Controller
         );
 
         return redirect()
-            ->route('apps.show', $app)
+            ->route('apps.builder', $app)
             ->with('success', 'App created.');
     }
 

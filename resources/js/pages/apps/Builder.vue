@@ -115,6 +115,7 @@ import {
     onMounted,
     onUnmounted,
     provide,
+    reactive,
     ref,
     watch,
 } from 'vue';
@@ -244,6 +245,25 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+// Live app identity for the header: seeded from the page props, then refreshed
+// when the first prompt names the app (the messages endpoint returns the updated
+// app), so the name/description update in place without a reload.
+const appMeta = reactive({
+    name: props.app.name,
+    description: props.app.description,
+    slug: props.app.slug,
+});
+function applyAppMeta(app?: {
+    name?: string;
+    description?: string | null;
+    slug?: string;
+}): void {
+    if (!app) return;
+    if (typeof app.name === 'string') appMeta.name = app.name;
+    if (app.description !== undefined) appMeta.description = app.description;
+    if (typeof app.slug === 'string') appMeta.slug = app.slug;
+}
 
 // Model the AI uses for this conversation's turns. Defaults to the cheap/fast
 // model; the user can pick a stronger one for creative builds (e.g. websites).
@@ -1513,6 +1533,7 @@ async function send() {
             );
         }
         messages.value = response.data.messages;
+        applyAppMeta(response.data.app); // first prompt may have named the app
         // Now safe to release the blob URL — the server returned its own URL
         // for the persisted image which the message list already references.
         if (stagedPreview) {
@@ -2007,19 +2028,22 @@ function statusTone(status: Message['status']): string {
 </script>
 
 <template>
-    <Head :title="`${t('apps.builder.title')} · ${app.name}`" />
+    <Head :title="`${t('apps.builder.title')} · ${appMeta.name}`" />
 
-    <AppLayoutV2 :title="`${t('apps.builder.title')} · ${app.name}`" full-bleed>
+    <AppLayoutV2
+        :title="`${t('apps.builder.title')} · ${appMeta.name}`"
+        full-bleed
+    >
         <div class="flex min-h-0 flex-1 flex-col gap-4 px-7 py-5">
             <header class="flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
+                <div class="flex min-w-0 items-center gap-3">
                     <Link
-                        :href="AppController.show(app.id).url"
-                        class="inline-flex size-7 items-center justify-center rounded-xs border border-medium bg-surface text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                        :href="AppController.index().url"
+                        class="inline-flex size-7 shrink-0 items-center justify-center rounded-xs border border-medium bg-surface text-ink-muted transition-colors hover:border-strong hover:text-ink"
                     >
                         <ArrowLeft class="size-3.5" />
                     </Link>
-                    <div>
+                    <div class="min-w-0">
                         <h1
                             class="text-[18px] leading-tight font-semibold text-ink"
                         >
@@ -2028,14 +2052,23 @@ function statusTone(status: Message['status']): string {
                             />
                             {{ t('apps.builder.title') }}
                         </h1>
-                        <div class="flex items-center gap-2">
-                            <p class="text-xs text-ink-muted">{{ app.name }}</p>
+                        <div class="flex min-w-0 items-center gap-2">
+                            <p class="shrink-0 text-xs font-medium text-ink-muted">
+                                {{ appMeta.name }}
+                            </p>
                             <span
                                 v-if="app.kind === 'dashboard'"
-                                class="inline-flex items-center gap-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-1.5 py-0.5 text-[10px] tracking-wider text-accent-blue uppercase"
+                                class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-1.5 py-0.5 text-[10px] tracking-wider text-accent-blue uppercase"
                             >
                                 <LayoutDashboard class="size-3" />
                                 Dashboard
+                            </span>
+                            <span
+                                v-if="appMeta.description"
+                                class="truncate text-xs text-ink-subtle"
+                                :title="appMeta.description ?? undefined"
+                            >
+                                · {{ appMeta.description }}
                             </span>
                         </div>
                     </div>

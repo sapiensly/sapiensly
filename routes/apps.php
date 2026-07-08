@@ -14,7 +14,9 @@ Route::middleware([
     'auth',
     'verified',
 ])->group(function () {
-    Route::resource('apps', AppController::class)->except(['edit']);
+    // No `create` page — the "New App" button POSTs to `store`, which creates an
+    // empty app and redirects straight into the Builder (the first prompt names it).
+    Route::resource('apps', AppController::class)->except(['edit', 'create']);
 
     // Builder AI surface — chat that edits the manifest via JSON Patches.
     Route::get('/apps/{app}/builder', [AppBuilderController::class, 'show'])->name('apps.builder');

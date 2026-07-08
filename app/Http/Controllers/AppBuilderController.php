@@ -27,6 +27,7 @@ use App\Services\Records\AppDataOverview;
 use App\Services\Records\BlockDataResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Storage\TenantStorage;
+use App\Support\Apps\AppNaming;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
@@ -305,6 +306,11 @@ class AppBuilderController extends Controller
         // Detener flag so this turn (and its chain) can run.
         app(BuilderCancellation::class)->clear($conversation);
 
+        // First prompt names the app (like a chat titling itself), so it opens
+        // unnamed straight into the Builder. Runs before the autoroute so both
+        // paths carry the named app.
+        $this->nameAppFromFirstPrompt($app, $data['message']);
+
         // G-0 autoroute: a clear "build me a dashboard" over a live MCP source
         // runs the Express pipeline instead of a free-form agentic turn.
         // Attachment turns never reroute (an image is chat context).
@@ -364,6 +370,7 @@ class AppBuilderController extends Controller
 
         return response()->json([
             'conversation_id' => $conversation->id,
+            'app' => $this->appSummary($app),
             'messages' => $conversation->refresh()->messages->map(fn (BuilderMessage $m) => $this->messageDto($m))->all(),
             'latest_message_id' => $placeholder->id,
             'streaming' => true,
@@ -439,6 +446,7 @@ class AppBuilderController extends Controller
             'ok' => true,
             'run_id' => $run->id,
             'message_id' => $placeholder->id,
+            'app' => $this->appSummary($app),
             'messages' => $conversation->refresh()->messages->map(fn (BuilderMessage $m) => $this->messageDto($m))->all(),
         ]);
     }
@@ -1124,6 +1132,41 @@ class AppBuilderController extends Controller
         if ($message->conversation->app_id !== $app->id) {
             throw new HttpException(404, 'Message not found for this app.');
         }
+    }
+
+    /**
+     * Name a still-unnamed app from its first builder prompt: a human name, a
+     * unique slug and a one-line description, all derived synchronously so the
+     * Builder header and runtime slug update immediately. No-op once the app has
+     * a real name (renamed here before, or set by the user).
+     */
+    private function nameAppFromFirstPrompt(App $app, string $prompt): void
+    {
+        if ($app->name !== AppNaming::UNTITLED) {
+            return;
+        }
+        $name = AppNaming::nameFromPrompt($prompt);
+        if ($name === null) {
+            return; // nothing usable — keep the placeholder for the next turn
+        }
+
+        $app->name = $name;
+        $app->slug = AppNaming::uniqueSlug($name, $app->organization_id);
+        if (trim((string) $app->description) === '') {
+            $app->description = AppNaming::descriptionFromPrompt($prompt);
+        }
+        $app->save();
+    }
+
+    /**
+     * The app fields the Builder header binds to — returned on a naming turn so
+     * the client updates its name/slug/description without a reload.
+     *
+     * @return array<string, mixed>
+     */
+    private function appSummary(App $app): array
+    {
+        return $app->only(['id', 'slug', 'name', 'description', 'kind', 'visibility']);
     }
 
     /**

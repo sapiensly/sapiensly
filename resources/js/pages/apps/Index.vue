@@ -3,9 +3,23 @@ import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppCard from '@/components/apps/AppCard.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { AppWindow, Plus } from '@lucide/vue';
+import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+
+// A new app starts empty and opens straight into the Builder — the first prompt
+// names it. No create form: POST to store, which redirects to the Builder.
+const creating = ref(false);
+function createApp(): void {
+    if (creating.value) return;
+    creating.value = true;
+    router.post(
+        AppController.store().url,
+        {},
+        { onFinish: () => (creating.value = false) },
+    );
+}
 
 interface AppItem {
     id: string;
@@ -48,15 +62,15 @@ const { t } = useI18n();
                 :description="t('apps.index.description')"
             >
                 <template #actions>
-                    <Link :href="AppController.create().url">
-                        <button
-                            type="button"
-                            class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
-                        >
-                            <Plus class="size-3.5" />
-                            {{ t('apps.index.create_app') }}
-                        </button>
-                    </Link>
+                    <button
+                        type="button"
+                        @click="createApp"
+                        :disabled="creating"
+                        class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                    >
+                        <Plus class="size-3.5" />
+                        {{ t('apps.index.create_app') }}
+                    </button>
                 </template>
             </PageHeader>
 
@@ -82,18 +96,15 @@ const { t } = useI18n();
                 <p class="mt-1 text-xs text-ink-muted">
                     {{ t('apps.index.no_apps_description') }}
                 </p>
-                <Link
-                    :href="AppController.create().url"
-                    class="mt-4 inline-block"
+                <button
+                    type="button"
+                    @click="createApp"
+                    :disabled="creating"
+                    class="mt-4 inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                 >
-                    <button
-                        type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
-                    >
-                        <Plus class="size-3.5" />
-                        {{ t('apps.index.create_first') }}
-                    </button>
-                </Link>
+                    <Plus class="size-3.5" />
+                    {{ t('apps.index.create_first') }}
+                </button>
             </div>
         </div>
     </AppLayoutV2>

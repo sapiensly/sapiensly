@@ -22,14 +22,24 @@ it('renders the apps index for authenticated users', function () {
         ->assertInertia(fn ($page) => $page->component('apps/Index'));
 });
 
-it('renders the create form', function () {
-    $this->actingAs($this->user)
-        ->get('/apps/create')
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('apps/Create'));
+it('has no create form — the route is gone', function () {
+    // Apps now open straight into the Builder; there is no create page.
+    $this->actingAs($this->user)->get('/apps/create')->assertNotFound();
 });
 
-it('creates an app with an initial version and redirects to show', function () {
+it('creates an empty unnamed app and opens the Builder', function () {
+    // The "New App" button POSTs with no body: the app starts unnamed with an
+    // auto slug and redirects into the Builder (the first prompt names it).
+    $response = $this->actingAs($this->user)->post('/apps');
+
+    $app = App::query()->latest('id')->firstOrFail();
+    $response->assertRedirect("/apps/{$app->id}/builder");
+    expect($app->name)->toBe('Nueva app')
+        ->and($app->slug)->not->toBe('')
+        ->and($app->current_version_id)->not->toBeNull();
+});
+
+it('creates an app with an initial version and opens the Builder', function () {
     $response = $this->actingAs($this->user)
         ->post('/apps', [
             'name' => 'Mini CRM',
@@ -38,9 +48,8 @@ it('creates an app with an initial version and redirects to show', function () {
             'visibility' => 'private',
         ]);
 
-    $response->assertRedirect();
-
     $app = App::query()->where('slug', 'mini_crm')->firstOrFail();
+    $response->assertRedirect("/apps/{$app->id}/builder");
 
     expect($app->name)->toBe('Mini CRM')
         ->and($app->user_id)->toBe($this->user->id)

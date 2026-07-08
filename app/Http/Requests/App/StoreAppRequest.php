@@ -19,8 +19,10 @@ class StoreAppRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:100'],
-            'slug' => ['required', 'string', 'regex:/^[a-z][a-z0-9_]*$/', 'max:50'],
+            // Both optional now: an app starts unnamed and the first builder
+            // prompt names it; the slug is always auto-derived unique server-side.
+            'name' => ['nullable', 'string', 'max:100'],
+            'slug' => ['nullable', 'string', 'regex:/^[a-z][a-z0-9_]*$/', 'max:50'],
             'description' => ['nullable', 'string', 'max:500'],
             'icon' => ['nullable', 'string', 'max:50'],
             'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],

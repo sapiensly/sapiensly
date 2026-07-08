@@ -113,6 +113,25 @@ it('reuses the active conversation across visits', function () {
     expect(BuilderConversation::query()->where('app_id', $this->testApp->id)->count())->toBe(1);
 });
 
+it('names an unnamed app from its first builder prompt', function () {
+    Queue::fake();
+    $app = App::factory()->create(['user_id' => $this->user->id, 'visibility' => 'private', 'name' => 'Nueva app']);
+    app(AppManifestService::class)->createVersion($app, bldcm($app->id), $this->user);
+    $conv = BuilderConversation::create(['app_id' => $app->id, 'user_id' => $this->user->id, 'status' => 'active']);
+
+    $response = $this->actingAs($this->user)
+        ->postJson("/apps/{$app->id}/builder/messages", [
+            'conversation_id' => $conv->id,
+            'message' => 'crea un CRM de ventas para mi equipo',
+        ])->assertOk();
+
+    $app->refresh();
+    expect($app->name)->toBe('CRM de ventas para mi equipo')
+        ->and($app->slug)->toStartWith('crm')
+        ->and($app->description)->not->toBeNull();
+    $response->assertJsonPath('app.name', 'CRM de ventas para mi equipo');
+});
+
 it('blocks builder access to users who cannot see the App', function () {
     $other = User::factory()->create(['email_verified_at' => now()]);
     $this->actingAs($other)
