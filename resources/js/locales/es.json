@@ -1415,6 +1415,7 @@
     "system.integrations.auth.explainer.oauth2_auth_code": "Pega el client ID y secret de tu app OAuth. Cada usuario autoriza desde el tool que usa esta conexión.",
     "system.integrations.auth.oauth2.redirect_uri_hint": "Registra esta URL exacta como callback en la app OAuth de tu proveedor.",
     "common.copy": "Copiar",
+    "common.copied": "Copiado",
     "system.integrations.tabs.requests": "Requests",
     "system.integrations.tabs.environments": "Environments",
     "system.integrations.tabs.executions": "Ejecuciones",

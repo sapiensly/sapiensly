@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CopyButton from '@/components/chat/CopyButton.vue';
 import ToolCallIndicator from '@/components/chat/ToolCallIndicator.vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { KnowledgeBaseRef, Message, ToolCall } from '@/types/chat';
@@ -132,9 +133,14 @@ const renderedContent = computed(() => {
                     class="inline-block h-4 w-1 animate-pulse bg-current"
                 />
 
-                <p v-if="formattedTime" class="mt-1 text-xs opacity-70">
-                    {{ formattedTime }}
-                </p>
+                <div
+                    v-if="formattedTime || message.content"
+                    class="mt-1 flex items-center gap-1 text-xs opacity-70"
+                    :class="isUser ? 'justify-end' : ''"
+                >
+                    <CopyButton v-if="message.content" :text="message.content" />
+                    <span v-if="formattedTime">{{ formattedTime }}</span>
+                </div>
             </div>
         </div>
     </div>

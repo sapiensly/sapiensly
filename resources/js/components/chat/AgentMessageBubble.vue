@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AgentConsultationCard from '@/components/chat/AgentConsultationCard.vue';
 import ArtifactCard from '@/components/chat/ArtifactCard.vue';
+import CopyButton from '@/components/chat/CopyButton.vue';
 import ToolActivityChips from '@/components/chat/ToolActivityChips.vue';
 import type { Artifact } from '@/lib/artifacts';
 import { normalizeChatMarkdown } from '@/lib/markdown';
@@ -93,6 +94,12 @@ function renderMarkdown(content: string | null): string {
                 >
                     {{ pills.map(([k]) => k).join(' · ') }}
                 </span>
+                <CopyButton
+                    v-if="message.content && message.status === 'complete'"
+                    :text="message.content"
+                    :size="14"
+                    class="ml-auto text-ink-subtle"
+                />
             </div>
 
             <div

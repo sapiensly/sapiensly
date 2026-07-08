@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CopyButton from '@/components/chat/CopyButton.vue';
 import type { ChatAgentRef, ChatMessageDto } from '@/types/chatModule';
 import { FileText } from '@lucide/vue';
 import { computed } from 'vue';
@@ -87,6 +88,12 @@ function mentionSegments(
                         <template v-else>{{ seg.text }}</template>
                     </template>
                 </p>
+            </div>
+            <div
+                v-if="message.content"
+                class="mt-1 flex justify-end text-ink-subtle"
+            >
+                <CopyButton :text="message.content ?? ''" :size="13" />
             </div>
         </div>
     </div>

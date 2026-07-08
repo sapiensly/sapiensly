@@ -68,6 +68,7 @@ import BuilderIntegrationCard, {
 import BuilderPlanCard, {
     type Plan,
 } from '@/components/apps/builder/BuilderPlanCard.vue';
+import CopyButton from '@/components/chat/CopyButton.vue';
 import {
     ArrowLeft,
     BarChart3,
@@ -2389,9 +2390,14 @@ function statusTone(status: Message['status']): string {
                                 <span v-else-if="!m.attachment_url">…</span>
                                 <div
                                     v-if="messageTime(m)"
-                                    class="text-right text-[10px] text-ink-muted/70"
+                                    class="flex items-center justify-end gap-1 text-[10px] text-ink-muted/70"
                                 >
-                                    {{ messageTime(m) }}
+                                    <CopyButton
+                                        v-if="m.content"
+                                        :text="m.content"
+                                        :size="12"
+                                    />
+                                    <span>{{ messageTime(m) }}</span>
                                 </div>
                             </div>
                             <div
@@ -2493,6 +2499,11 @@ function statusTone(status: Message['status']): string {
                                     v-if="messageTime(m)"
                                     class="mt-1 flex items-center justify-end gap-1.5 text-[10px] text-ink-muted/70"
                                 >
+                                    <CopyButton
+                                        v-if="m.content && m.status !== 'streaming'"
+                                        :text="m.content"
+                                        :size="12"
+                                    />
                                     <span
                                         v-if="reasoningElapsed(m)"
                                         class="inline-flex items-center gap-0.5 tabular-nums text-accent-blue"
