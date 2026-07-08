@@ -143,26 +143,35 @@ class ExpressDashboardJob implements ShouldQueue
     {
         if ($run->status === 'succeeded' && $context->page !== null) {
             $lines = [
-                "## ⚡ Dashboard listo: {$context->page['name']}",
-                "**Página**: `{$context->page['path']}` (v{$context->page['version']})",
+                "## ✅ {$context->page['name']}",
+                '',
+                "Tu dashboard está listo en **`{$context->page['path']}`** (versión {$context->page['version']}).",
             ];
             if ($context->objects !== []) {
-                $lines[] = '**Objetos conectados**: '.collect($context->objects)->pluck('name')->implode(', ');
+                $sources = collect($context->objects)->pluck('name')->filter()->values();
+                $lines[] = '';
+                $lines[] = '**Datos en vivo:** '.$sources->join(', ', ' y ').'.';
             }
+
+            // Honest limitations the user asked about — kept; these are about the
+            // DATA, not how the build ran.
+            $caveats = [];
             foreach ($context->substitutions as $sub) {
-                $lines[] = '- ⚠️ Pediste **'.($sub['asked'] ?? '?').'** — no existe en la fuente; usé **'.($sub['using'] ?? '?').'** ('.($sub['reason'] ?? '').').';
+                $caveats[] = 'Para **'.($sub['asked'] ?? '?').'** usé **'.($sub['using'] ?? '?').'** ('.($sub['reason'] ?? '').').';
             }
             foreach ($context->unanswerable as $miss) {
-                $lines[] = '- ❌ **'.($miss['asked'] ?? '?').'** no se puede responder con esta fuente ('.($miss['reason'] ?? '').').';
+                $caveats[] = '**'.($miss['asked'] ?? '?').'** no está disponible en esta fuente.';
             }
-            $fallbacks = collect($run->gates ?? [])
-                ->filter(fn (array $g): bool => ($g['fallback_used'] ?? false) === true)
-                ->keys();
-            if ($fallbacks->isNotEmpty()) {
-                $lines[] = '_Compuertas resueltas con su default (el modelo no respondió a tiempo): '.$fallbacks->implode(', ').'._';
+            if ($caveats !== []) {
+                $lines[] = '';
+                $lines[] = 'Un par de notas sobre los datos:';
+                foreach ($caveats as $caveat) {
+                    $lines[] = '- '.$caveat;
+                }
             }
+
             $lines[] = '';
-            $lines[] = 'Dime qué ajusto — títulos, gráficas, insights — y lo refino.';
+            $lines[] = '¿Ajustamos algo? Dime qué cambiar —títulos, gráficas o insights— y lo refino.';
 
             return ['applied', implode("\n", $lines)];
         }
@@ -175,13 +184,20 @@ class ExpressDashboardJob implements ShouldQueue
             return ['none', '⏹ Build detenido por el usuario. El progreso ya aplicado se conserva.'];
         }
 
-        $detail = collect($context->notes)
-            ->map(fn (string $n): string => '- '.$n)
-            ->implode("\n");
+        // A clean, user-facing failure — no raw internal notes, no run id. The
+        // data-level caveats (what the source couldn't answer) are the only
+        // detail worth surfacing; the rest lives in the telemetry.
+        $lines = ['No pude terminar el dashboard esta vez.'];
+        foreach ($context->unanswerable as $miss) {
+            $asked = trim((string) ($miss['asked'] ?? ''));
+            if ($asked !== '' && $asked !== '?') {
+                $lines[] = '- **'.$asked.'** no está disponible en esta fuente.';
+            }
+        }
+        $lines[] = '';
+        $lines[] = 'Puedes intentarlo de nuevo, o dime qué construir y lo armamos paso a paso.';
 
-        return ['error', 'El build Express falló: '.($run->error ?? 'error desconocido').'.'
-            .($detail !== '' ? "\n\n**Detalle:**\n".$detail : '')
-            ."\n\n_Registro: {$run->id}_"];
+        return ['error', implode("\n", $lines)];
     }
 
     public function failed(?Throwable $e): void

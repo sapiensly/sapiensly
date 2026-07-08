@@ -154,8 +154,10 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
         ->first();
     expect($report->id)->not->toBe($placeholder->id)
         ->and($report->status)->toBe('applied')
-        ->and($report->content)->toContain('Dashboard listo: Panel de Tickets')
+        ->and($report->content)->toContain('Panel de Tickets')
         ->and($report->content)->toContain('CSAT')          // honest substitution
+        ->and($report->content)->not->toContain('Compuertas') // never expose gate/model internals
+        ->and($report->content)->not->toContain('fit_check')
         ->and($report->applied_version_id)->not->toBeNull();
 
     $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
