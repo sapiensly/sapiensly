@@ -102,6 +102,7 @@ import {
     ShieldCheck,
     Sparkles,
     Square,
+    Timer,
     Wand2,
     Workflow as WorkflowIcon,
     X,
@@ -1378,6 +1379,44 @@ const aiIsThinking = computed(() =>
     ),
 );
 
+// Live reasoning stopwatch: while a turn is streaming, tick a clock every second
+// so the progress bubble can show elapsed time next to its timestamp. The
+// interval runs ONLY while thinking, so an idle builder never re-renders on a
+// timer.
+const stopwatchNow = ref(Date.now());
+let stopwatchTimer: ReturnType<typeof setInterval> | null = null;
+watch(
+    aiIsThinking,
+    (thinking) => {
+        if (thinking && stopwatchTimer === null) {
+            stopwatchNow.value = Date.now();
+            stopwatchTimer = setInterval(() => {
+                stopwatchNow.value = Date.now();
+            }, 1000);
+        } else if (!thinking && stopwatchTimer !== null) {
+            clearInterval(stopwatchTimer);
+            stopwatchTimer = null;
+        }
+    },
+    { immediate: true },
+);
+onUnmounted(() => {
+    if (stopwatchTimer !== null) clearInterval(stopwatchTimer);
+});
+
+// Elapsed reasoning time (M:SS) for a still-streaming message; null otherwise.
+function reasoningElapsed(m: Message): string | null {
+    if (m.status !== 'streaming' || !m.created_at) {
+        return null;
+    }
+    const start = new Date(m.created_at).getTime();
+    if (Number.isNaN(start)) {
+        return null;
+    }
+    const secs = Math.max(0, Math.floor((stopwatchNow.value - start) / 1000));
+    return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+}
+
 // Detener build: raises the cooperative stop flag server-side. The running
 // turn finalizes within seconds (keeping any progress it already banked) and
 // the autonomous/resume chain refuses to queue further turns until the next
@@ -2452,9 +2491,18 @@ function statusTone(status: Message['status']): string {
                                 </div>
                                 <div
                                     v-if="messageTime(m)"
-                                    class="mt-1 text-right text-[10px] text-ink-muted/70"
+                                    class="mt-1 flex items-center justify-end gap-1.5 text-[10px] text-ink-muted/70"
                                 >
-                                    {{ messageTime(m) }}
+                                    <span
+                                        v-if="reasoningElapsed(m)"
+                                        class="inline-flex items-center gap-0.5 tabular-nums text-accent-blue"
+                                        :title="t('apps.builder.reasoning_time')"
+                                    >
+                                        <Timer class="size-3" />{{
+                                            reasoningElapsed(m)
+                                        }}
+                                    </span>
+                                    <span>{{ messageTime(m) }}</span>
                                 </div>
                             </div>
 
