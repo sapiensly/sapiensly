@@ -118,7 +118,11 @@ TXT,
             fn () => [
                 'title' => (string) ($spec['title'] ?? 'Dashboard'),
                 'purpose' => '',
-                'insights' => $this->factualFallbackInsights($suggested, $context->facts),
+                // The suggested cards already carry factual bodies — the
+                // suggester narrates them from the computed facts at
+                // suggest-time (FactNarrator), so the banked deterministic
+                // page has real numbers whether or not this gate answers.
+                'insights' => $suggested,
             ],
             $context->user, $context->modelOverride, $context,
         );
@@ -198,83 +202,6 @@ TXT,
         }
 
         return false;
-    }
-
-    /**
-     * Fallback insight bodies when the model didn't answer: give EACH card a
-     * DISTINCT real number drawn from the computed facts — a leading measure's
-     * average/max, a boolean rate, a category's concentration, a 7-day trend —
-     * instead of stamping every card with the same "Registros analizados: N"
-     * (uninformative, and on a weekly series N is just the bucket count). Only
-     * when the fact pool runs dry does a card fall back to the row-count line.
-     *
-     * @param  list<array<string, mixed>>  $suggested
-     * @param  array<string, mixed>  $facts
-     * @return list<array<string, mixed>>
-     */
-    private function factualFallbackInsights(array $suggested, array $facts): array
-    {
-        $pool = $this->factSentences($facts);
-        $generic = 'Registros analizados: '.($facts['row_count'] ?? 0).'.';
-
-        return collect($suggested)->map(function (array $card, int $i) use ($pool, $generic): array {
-            $fact = $pool[$i] ?? $generic;
-            $card['body'] = trim(($card['body'] ?? '').' '.$fact);
-
-            return $card;
-        })->values()->all();
-    }
-
-    /**
-     * A prioritised, DISTINCT set of one-line facts read straight from the
-     * computed aggregates: leading measures first (average + peak), then rates,
-     * then category concentration, then recent trend. Each is a real number the
-     * fallback can hand a card, so a model-less build still narrates specifics.
-     *
-     * @param  array<string, mixed>  $facts
-     * @return list<string>
-     */
-    private function factSentences(array $facts): array
-    {
-        $pool = [];
-        foreach ($facts['numeric'] ?? [] as $name => $n) {
-            if (! is_array($n)) {
-                continue;
-            }
-            $pool[] = "«{$name}»: promedio {$this->num($n['avg'] ?? null)}, máximo {$this->num($n['max'] ?? null)}.";
-        }
-        foreach ($facts['rates'] ?? [] as $name => $r) {
-            if (is_array($r) && isset($r['rate_pct'])) {
-                $pool[] = "«{$name}»: {$this->num($r['rate_pct'])}% de los registros.";
-            }
-        }
-        foreach ($facts['top_values'] ?? [] as $name => $t) {
-            if (is_array($t) && isset($t['top'])) {
-                $pool[] = "«{$name}»: «{$t['top']}» concentra {$this->num($t['share_pct'] ?? null)}% ({$this->num($t['count'] ?? null)}).";
-            }
-        }
-        foreach ($facts['trend'] ?? [] as $name => $tr) {
-            if (! is_array($tr) || ! isset($tr['last_7d'])) {
-                continue;
-            }
-            $dir = ($tr['direction'] ?? 0) > 0 ? 'al alza' : (($tr['direction'] ?? 0) < 0 ? 'a la baja' : 'estable');
-            $pool[] = "«{$name}»: {$this->num($tr['last_7d'])} en los últimos 7 días vs {$this->num($tr['previous_7d'] ?? 0)} previos ({$dir}).";
-        }
-
-        return array_values(array_unique($pool));
-    }
-
-    /** Compact number: integers plain, floats trimmed of trailing zeros. */
-    private function num(mixed $value): string
-    {
-        if (! is_numeric($value)) {
-            return (string) $value;
-        }
-        $float = (float) $value;
-
-        return $float === floor($float)
-            ? (string) (int) $float
-            : rtrim(rtrim(number_format($float, 2, '.', ''), '0'), '.');
     }
 
     /**

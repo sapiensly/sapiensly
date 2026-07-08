@@ -2,6 +2,8 @@
 
 namespace App\Services\Manifest;
 
+use App\Services\Express\ComputedFactsBuilder;
+use App\Services\Express\FactNarrator;
 use App\Services\Express\SemanticProfile;
 use Illuminate\Support\Str;
 
@@ -32,7 +34,11 @@ class DashboardSpecSuggester
 
     private const BREAKDOWN_LIMIT = 12;
 
-    public function __construct(private readonly SemanticProfile $semantics = new SemanticProfile) {}
+    public function __construct(
+        private readonly SemanticProfile $semantics = new SemanticProfile,
+        private readonly ComputedFactsBuilder $factsBuilder = new ComputedFactsBuilder,
+        private readonly FactNarrator $narrator = new FactNarrator,
+    ) {}
 
     /** With several objects, how much of the board the primary keeps. */
     private const PRIMARY_KPIS = 4;
@@ -418,9 +424,9 @@ class DashboardSpecSuggester
             // filter silently deletes every row and the whole board renders
             // empty (observed: an entire benchmark scenario scored 1/5).
             'include_date_filter' => $dateField !== null,
-            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics),
+            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics, $stats),
             'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object, $promptTopics),
-            'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es),
+            'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es, $rows),
         ], fn ($v) => $v !== null && $v !== '');
     }
 
@@ -521,7 +527,7 @@ class DashboardSpecSuggester
             : 'Total '.Str::lower($clean);
     }
 
-    private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es, array $promptTopics = []): array
+    private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es, array $promptTopics = [], array $stats = []): array
     {
         $kpis = [];
 
@@ -536,6 +542,7 @@ class DashboardSpecSuggester
                 'aggregation' => ($measureTypes[$requested['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE ? 'sum' : 'avg',
                 'field_id' => $requested['id'],
                 'icon' => 'star',
+                ...$this->kpiDisplay($requested, $stats),
             ];
         }
 
@@ -562,6 +569,7 @@ class DashboardSpecSuggester
                     'aggregation' => 'avg',
                     'field_id' => $namesake['id'],
                     'icon' => 'star',
+                    ...$this->kpiDisplay($namesake, $stats),
                 ];
             }
 
@@ -604,9 +612,10 @@ class DashboardSpecSuggester
             if ($grain === SemanticProfile::GRAIN_RAW
                 && preg_match('/minut|hora|hour|time|dur|dias|days/i', $slug) === 1
                 && in_array('median', $legal, true)) {
-                $kpis[] = ['label' => ($es ? 'Mediana ' : 'Median ').$name, 'aggregation' => 'median', 'field_id' => $field['id'], 'icon' => 'clock', 'delta_good' => 'down'];
+                $display = $this->kpiDisplay($field, $stats);
+                $kpis[] = ['label' => ($es ? 'Mediana ' : 'Median ').$name, 'aggregation' => 'median', 'field_id' => $field['id'], 'icon' => 'clock', 'delta_good' => 'down', ...$display];
                 if (count($kpis) < self::MAX_KPIS) {
-                    $kpis[] = ['label' => 'P95 '.$name, 'aggregation' => 'p95', 'field_id' => $field['id'], 'icon' => 'gauge', 'delta_good' => 'down'];
+                    $kpis[] = ['label' => 'P95 '.$name, 'aggregation' => 'p95', 'field_id' => $field['id'], 'icon' => 'gauge', 'delta_good' => 'down', ...$display];
                 }
 
                 continue;
@@ -619,6 +628,7 @@ class DashboardSpecSuggester
                     'aggregation' => 'avg',
                     'field_id' => $field['id'],
                     'icon' => 'star',
+                    ...$this->kpiDisplay($field, $stats),
                 ];
 
                 continue;
@@ -631,6 +641,7 @@ class DashboardSpecSuggester
                     'aggregation' => 'sum',
                     'field_id' => $field['id'],
                     'icon' => 'sigma',
+                    ...$this->kpiDisplay($field, $stats),
                 ];
             }
         }
@@ -661,6 +672,34 @@ class DashboardSpecSuggester
         }
 
         return $kpis;
+    }
+
+    /**
+     * Display decoration for a measure KPI. Fraction-scaled ratios (0..1) get
+     * the percentage display format — the renderer multiplies by 100, so 0.967
+     * shows as 96.7%. Values already on the 0-100 scale must NOT get that
+     * format (it would show 9670%); they stay plain and carry their unit on
+     * the caption instead ("promedio del periodo · %"), as do durations
+     * ("mediana del periodo · min") and currency (its own display format).
+     *
+     * @param  array<string, mixed>  $field
+     * @param  array<string, array{values: list<mixed>, distinct: int, null_rate: float, all_equal: bool}>  $stats
+     * @return array{format?: string, unit?: string}
+     */
+    private function kpiDisplay(array $field, array $stats): array
+    {
+        if (($field['type'] ?? '') === 'currency') {
+            return ['format' => 'currency'];
+        }
+
+        $values = $stats[$field['id'] ?? '']['values'] ?? [];
+        if ($this->semantics->percentScale($field, $values) === 'fraction') {
+            return ['format' => 'percentage'];
+        }
+
+        $unit = $this->semantics->unitOf($field);
+
+        return $unit !== null ? ['unit' => $unit] : [];
     }
 
     /**
@@ -953,16 +992,19 @@ class DashboardSpecSuggester
     }
 
     /**
-     * Insight SCAFFOLDS: correct variants + live computes; the bodies are
-     * deliberately plain statements the model should override with real
-     * conclusions.
+     * Insight cards: correct variants + live computes, and — when sampled rows
+     * exist — bodies NARRATED with real numbers from the computed facts
+     * (FactNarrator). Bank-first compiles the board BEFORE the model gates, so
+     * these bodies are what ships when the model can't answer; the semantic
+     * gate rewrites them only when it actually responds.
      *
      * @param  array<string, mixed>  $object
      * @param  list<array<string, mixed>>  $categoricals
      * @param  list<array<string, mixed>>  $booleans
+     * @param  list<array<string, mixed>>  $rows
      * @return list<array<string, mixed>>
      */
-    private function suggestInsights(array $object, array $categoricals, array $booleans, bool $es): array
+    private function suggestInsights(array $object, array $categoricals, array $booleans, bool $es, array $rows = []): array
     {
         $objectId = $object['id'] ?? null;
         $insights = [[
@@ -1000,6 +1042,12 @@ class DashboardSpecSuggester
                     ? 'El valor dominante concentra la mayor parte del volumen — candidato #1 a deflectar o automatizar.'
                     : 'The dominant value concentrates most of the volume — the #1 candidate to deflect or automate.',
             ];
+        }
+
+        // Stamp each card with a DISTINCT real number from the sampled rows —
+        // a board's conclusions carry figures from birth, model or no model.
+        if ($rows !== []) {
+            $insights = $this->narrator->narrate($insights, $this->factsBuilder->build($object, $rows));
         }
 
         return $insights;

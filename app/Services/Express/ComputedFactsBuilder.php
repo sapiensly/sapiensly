@@ -55,6 +55,7 @@ class ComputedFactsBuilder
                         'sum' => round(array_sum($numeric), 2),
                         'avg' => round(array_sum($numeric) / count($numeric), 2),
                         'median' => $numeric[intdiv(count($numeric), 2)],
+                        'min' => $numeric[0],
                         'max' => end($numeric),
                     ];
                 }

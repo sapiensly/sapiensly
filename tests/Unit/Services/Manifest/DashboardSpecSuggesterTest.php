@@ -236,3 +236,46 @@ it('falls back to a box distribution on raw rows with no date and no categorical
         ->and($spec['charts'][0]['chart_type'])->toBe('box')
         ->and($spec['charts'][0]['y_field_id'])->toBe('fld_score000');
 });
+
+it('narrates insight bodies with real numbers at suggest time', function () {
+    // Bank-first compiles the board BEFORE the model gates, so the suggested
+    // insight bodies ARE what ships when the model can't answer. They must be
+    // born factual (a prod board shipped the generic "Registros dentro de la
+    // ventana…" scaffold because the factual narration only lived in the
+    // gate's fallback, which the banked page never saw).
+    $spec = app(DashboardSpecSuggester::class)->suggest(dss_comments_object(null), 'es', dss_comments_rows());
+
+    $all = collect($spec['insights'])->pluck('body')->implode(' || ');
+    expect($all)->toContain('promedio')     // a numeric measure fact with real values
+        ->and($all)->toContain('concentra'); // a category concentration fact
+});
+
+it('decorates KPIs for honest display: fractions as percentage, 0-100 rates with a % unit', function () {
+    $object = [
+        'id' => 'obj_rates000', 'slug' => 'delivery_quality', 'name' => 'Delivery Quality',
+        'fields' => [
+            ['id' => 'fld_okfrac00', 'slug' => 'on_time_rate', 'name' => 'On Time Rate', 'type' => 'number'],
+            ['id' => 'fld_containp', 'slug' => 'containment_pct', 'name' => 'Containment Pct', 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'fld_okfrac00', 'external_path' => 'on_time_rate'],
+            ['field_id' => 'fld_containp', 'external_path' => 'containment_pct'],
+        ]],
+    ];
+    $rows = collect(range(0, 5))->map(fn (int $i) => [
+        'on_time_rate' => 0.85 + $i * 0.02,   // 0..1 fraction
+        'containment_pct' => 80.5 + $i * 1.5, // already percent-scaled
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows);
+
+    $fraction = collect($spec['kpis'])->firstWhere('field_id', 'fld_okfrac00');
+    expect($fraction['format'] ?? null)->toBe('percentage')
+        ->and($fraction['unit'] ?? null)->toBeNull();
+
+    // 0-100 values with the percentage format would render 8050% — they stay
+    // plain numbers and carry the % on the caption instead.
+    $percent = collect($spec['kpis'])->firstWhere('field_id', 'fld_containp');
+    expect($percent['format'] ?? null)->not->toBe('percentage')
+        ->and($percent['unit'] ?? null)->toBe('%');
+});

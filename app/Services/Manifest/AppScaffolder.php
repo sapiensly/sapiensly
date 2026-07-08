@@ -1244,9 +1244,12 @@ class AppScaffolder
                 // An honest caption naming the aggregation basis (a promedio vs a
                 // suma vs a mediana reads very differently), filter-safe because
                 // it describes the number's KIND, not a value that goes stale.
-                'subtitle' => (string) ($kpi['subtitle'] ?? '') !== ''
+                // A spec-provided `unit` (min, h, %) rides along — "mediana del
+                // periodo · min" says what the number is AND what it measures.
+                'subtitle' => trim(((string) ($kpi['subtitle'] ?? '') !== ''
                     ? (string) $kpi['subtitle']
-                    : $this->kpiSubtitle($agg, $lang),
+                    : $this->kpiSubtitle($agg, $lang))
+                    .((string) ($kpi['unit'] ?? '') !== '' ? ' · '.$kpi['unit'] : '')),
             ], fn ($v) => $v !== null && $v !== '');
         }
 

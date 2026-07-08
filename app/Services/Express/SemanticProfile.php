@@ -42,7 +42,7 @@ class SemanticProfile
 
     private const STATISTIC_NAME = '/(^|_)(avg|average|promedio|mean|median|mediana|p\d{2,3}|min|max|std|desviacion|stddev)(_|$)/i';
 
-    private const RATIO_NAME = '/(pct|percent|porcentaje|rate|ratio|tasa|_share|nps$|csat$|ces$|score$)/i';
+    private const RATIO_NAME = '/(pct|percent|porcentaje|rate|ratio|tasa|_share|por_100|per_100|por_cada|_x100|nps$|csat$|ces$|score$)/i';
 
     private const IDENTIFIER_NAME = '/(^|_)id$|^id(_|$)|_id_|folio|codigo|(^|_)code$|telefono|phone/i';
 
@@ -158,6 +158,89 @@ class SemanticProfile
     public function countIsMeaningful(string $grain): bool
     {
         return $grain === self::GRAIN_RAW;
+    }
+
+    /**
+     * How a ratio field is SCALED — the difference between an honest "96.7%"
+     * and a 9670% lie. The percentage display format multiplies by 100, so it
+     * is only correct for fractions:
+     *   'fraction' → every sampled value in 0..1 (0.967 = 96.7%);
+     *   'percent'  → values in 0..100 (96.7 already IS the percent — display
+     *                as a plain number, put the % in the caption);
+     *   null       → not a ratio, or the scale can't be told (NPS -100..100,
+     *                unbounded ratios, no samples).
+     *
+     * @param  array<string, mixed>  $field
+     * @param  list<mixed>  $values
+     */
+    public function percentScale(array $field, array $values = []): ?string
+    {
+        if ($this->measureTypeOf($field, $values) !== self::MEASURE_RATIO) {
+            return null;
+        }
+
+        $numeric = array_values(array_filter($values, 'is_numeric'));
+        if (count($numeric) < 3) {
+            return null; // too few samples to trust either reading
+        }
+
+        if (count(array_filter($numeric, fn ($v) => $v >= 0 && $v <= 1)) === count($numeric)) {
+            return 'fraction';
+        }
+        if (count(array_filter($numeric, fn ($v) => $v >= 0 && $v <= 100)) === count($numeric)) {
+            return 'percent';
+        }
+
+        return null;
+    }
+
+    /**
+     * The unit a field measures in, read from its name — ridden along on KPI
+     * captions ("mediana del periodo · min") so a bare number says what it is.
+     *
+     * @param  array<string, mixed>  $field
+     */
+    public function unitOf(array $field): ?string
+    {
+        if (($field['type'] ?? '') === 'currency') {
+            return null; // the currency display format already says it
+        }
+        $slug = (string) ($field['slug'] ?? '');
+
+        return match (true) {
+            preg_match('/minut|(^|_)mins?($|_)/i', $slug) === 1 => 'min',
+            preg_match('/hora|hour|(^|_)hrs?($|_)/i', $slug) === 1 => 'h',
+            preg_match('/dias|days/i', $slug) === 1 => 'días',
+            // Percent-NAMED fields carry their values on the 0-100 scale, so
+            // the number displays plain and the % rides the caption. (When the
+            // values are 0..1 fractions the caller uses the percentage display
+            // format instead and skips this unit.)
+            preg_match('/pct|percent|porcentaje/i', $slug) === 1 => '%',
+            default => null,
+        };
+    }
+
+    /**
+     * Which direction of change is GOOD for this measure — drives the KPI
+     * delta chip's colour. Backlogs, reopens, waits and durations should fall;
+     * revenue, satisfaction scores and containment should rise. Null when the
+     * measure is neutral volume (a bigger ticket count is neither good nor
+     * bad) — the chip then renders directionless.
+     *
+     * @param  array<string, mixed>  $field
+     */
+    public function deltaGoodOf(array $field): ?string
+    {
+        $slug = (string) ($field['slug'] ?? '');
+
+        if (preg_match('/backlog|reopen|pendiente|error|fail|queja|devol|churn|espera|demora|abandono|resol|respuesta|minut|hora|(^|_)dur/i', $slug) === 1) {
+            return 'down';
+        }
+        if (preg_match('/venta|revenue|ingreso|nps|csat|resuelt|containment|within|complet|satisf|conversion/i', $slug) === 1) {
+            return 'up';
+        }
+
+        return null;
     }
 
     /**

@@ -105,3 +105,41 @@ it('classifies numeric ids and short score acronyms so they never aggregate wron
     expect($this->semantics->legalKpiAggregations(SemanticProfile::MEASURE_IDENTIFIER, SemanticProfile::GRAIN_RAW))
         ->toBe([]);
 });
+
+it('classifies "per-100" ratio fields as ratios by name, not just by value shape', function () {
+    // Prod: ratios_tickets_por_100_productos only escaped a sum() because its
+    // sampled values happened to carry decimals — with integer samples the
+    // value hint stays silent and a per-100 rate would have been summed.
+    expect($this->semantics->measureTypeOf(['slug' => 'tickets_por_100_productos']))->toBe(SemanticProfile::MEASURE_RATIO)
+        ->and($this->semantics->measureTypeOf(['slug' => 'ratios_tickets_por_100_conversaciones']))->toBe(SemanticProfile::MEASURE_RATIO)
+        ->and($this->semantics->measureTypeOf(['slug' => 'items_per_100_orders']))->toBe(SemanticProfile::MEASURE_RATIO);
+});
+
+it('reads the percent scale: fractions format as percentage, 0-100 values never do', function () {
+    $pct = ['slug' => 'within_target_pct', 'type' => 'number'];
+
+    // 0..1 fractions → the ×100 display format is honest.
+    expect($this->semantics->percentScale($pct, [0.93, 0.88, 0.91]))->toBe('fraction');
+
+    // Already on the 0-100 scale → percentage format would show 9300%.
+    expect($this->semantics->percentScale($pct, [93.0, 88.5, 91.2]))->toBe('percent');
+
+    // Too few samples, out-of-range (NPS -100..100), or not a ratio → unknown.
+    expect($this->semantics->percentScale($pct, [0.9]))->toBeNull()
+        ->and($this->semantics->percentScale(['slug' => 'nps'], [45, -20, 60]))->toBeNull()
+        ->and($this->semantics->percentScale(['slug' => 'total_tickets'], [10, 20, 30]))->toBeNull();
+});
+
+it('names units from slugs and knows which delta direction is good', function () {
+    expect($this->semantics->unitOf(['slug' => 'avg_minutes']))->toBe('min')
+        ->and($this->semantics->unitOf(['slug' => 'resolution_hours']))->toBe('h')
+        ->and($this->semantics->unitOf(['slug' => 'containment_pct']))->toBe('%')
+        ->and($this->semantics->unitOf(['slug' => 'total_tickets']))->toBeNull()
+        ->and($this->semantics->unitOf(['slug' => 'monto', 'type' => 'currency']))->toBeNull();
+
+    expect($this->semantics->deltaGoodOf(['slug' => 'totals_backlog_open']))->toBe('down')
+        ->and($this->semantics->deltaGoodOf(['slug' => 'avg_resolution_minutes']))->toBe('down')
+        ->and($this->semantics->deltaGoodOf(['slug' => 'bot_containment_pct']))->toBe('up')
+        ->and($this->semantics->deltaGoodOf(['slug' => 'nps_score']))->toBe('up')
+        ->and($this->semantics->deltaGoodOf(['slug' => 'total_tickets']))->toBeNull();
+});
