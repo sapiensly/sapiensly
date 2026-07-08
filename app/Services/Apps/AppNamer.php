@@ -23,6 +23,9 @@ class AppNamer
     /** Seconds — well under the builder's client-side send timeout. */
     private const TIMEOUT = 7;
 
+    /** Description runs post-build in a queue job, off the request path — more slack. */
+    private const DESCRIPTION_TIMEOUT = 20;
+
     public function __construct(
         private readonly AiDefaults $aiDefaults,
         private readonly AiProviderService $providers,
@@ -56,6 +59,43 @@ class AppNamer
             Log::warning('App naming: short-summary model failed', ['error' => $e->getMessage()]);
 
             return $fallback;
+        }
+    }
+
+    /**
+     * A one-line app description written by the short-summary model FROM the
+     * finished dashboard (its title, sources, KPIs and charts) — so it says what
+     * the board actually SHOWS, not what the prompt asked for. Null on empty
+     * input or any model failure, so the caller can fall back.
+     */
+    public function describeDashboard(string $dashboardSummary, ?User $user): ?string
+    {
+        $summary = trim($dashboardSummary);
+        if ($summary === '') {
+            return null;
+        }
+
+        try {
+            $model = $this->aiDefaults->model('summary_short');
+            $agent = new ChatAgent(
+                instructions: 'Escribes la descripción de UNA sola frase (máx 20 palabras) de un dashboard, en el idioma de su contenido: qué muestra y a quién le sirve. Directa, sin comillas, sin empezar con "Este dashboard" ni "Dashboard de". Responde SOLO la frase.',
+                messages: [],
+                tools: [],
+            );
+            $response = $agent->prompt(
+                Str::limit($summary, 1500),
+                provider: $this->resolveProvider($model, $user),
+                model: $model,
+                timeout: self::DESCRIPTION_TIMEOUT,
+            );
+            $description = trim(strip_tags((string) ($response->text ?? '')));
+            $description = trim($description, " \t\n\r\0\x0B\"'`");
+
+            return $description !== '' ? Str::limit($description, 480) : null;
+        } catch (\Throwable $e) {
+            Log::warning('App description: short-summary model failed', ['error' => $e->getMessage()]);
+
+            return null;
         }
     }
 

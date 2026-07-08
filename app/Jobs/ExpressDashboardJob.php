@@ -6,6 +6,7 @@ use App\Events\Builder\BuilderStreamChunk;
 use App\Events\Builder\BuilderStreamComplete;
 use App\Models\BuilderMessage;
 use App\Models\PipelineRun;
+use App\Services\Apps\AppNamer;
 use App\Services\Builder\BuilderCancellation;
 use App\Services\Express\DashboardExpressPhases;
 use App\Services\Express\ExpressContext;
@@ -118,14 +119,18 @@ class ExpressDashboardJob implements ShouldQueue
             // UI catches up from the DB.
         }
 
-        // The app's DESCRIPTION comes from the FINISHED dashboard, not the raw
-        // prompt: fill it (once) from the voice gate's purpose — a one-line
-        // "audience + questions it answers" written after the spec exists — and
-        // sync it onto the manifest. Falls back to a prompt distillation only if
-        // the gate produced nothing.
+        // The app's DESCRIPTION describes the FINISHED dashboard, never the raw
+        // prompt. Prefer the voice gate's purpose (a one-line "audience +
+        // questions it answers", already AI-written post-spec); if that gate
+        // defaulted (slow model), write it with the short-summary model FROM the
+        // built dashboard's title/sources/KPIs/charts. Only a total model failure
+        // falls back to a prompt distillation. Synced onto the manifest.
         if ($run->status === 'succeeded' && $context->page !== null && trim((string) $app->description) === '') {
-            $purpose = trim((string) ($context->semantic['voice']['purpose'] ?? ''));
-            $description = $purpose !== '' ? $purpose : (string) AppNaming::descriptionFromPrompt($this->prompt);
+            $description = trim((string) ($context->semantic['voice']['purpose'] ?? ''));
+            if ($description === '') {
+                $description = (string) (app(AppNamer::class)->describeDashboard($this->dashboardSummary($context), $user)
+                    ?? AppNaming::descriptionFromPrompt($this->prompt));
+            }
             if ($description !== '') {
                 $app->forceFill(['description' => Str::limit($description, 480)])->save();
                 app(AppManifestService::class)->syncManifestIdentity($app->refresh());
@@ -148,6 +153,28 @@ class ExpressDashboardJob implements ShouldQueue
         if ($run->status === 'succeeded') {
             VerifyExpressDashboardJob::dispatch($run->id, $this->modelOverride);
         }
+    }
+
+    /**
+     * A compact description of what the built dashboard SHOWS — title, live
+     * sources, KPIs and charts — fed to the short-summary model to write the
+     * app description.
+     */
+    private function dashboardSummary(ExpressContext $context): string
+    {
+        $spec = $context->spec ?? [];
+        $title = trim((string) ($context->semantic['voice']['title'] ?? $context->page['name'] ?? $spec['title'] ?? ''));
+        $labels = fn (string $key): string => collect($spec[$key] ?? [])
+            ->pluck('label')->filter()->take(8)->implode(', ');
+
+        $parts = array_filter([
+            $title !== '' ? "Título: {$title}" : '',
+            ($sources = collect($context->objects)->pluck('name')->filter()->take(6)->implode(', ')) !== '' ? "Fuentes: {$sources}" : '',
+            ($kpis = $labels('kpis')) !== '' ? "KPIs: {$kpis}" : '',
+            ($charts = $labels('charts')) !== '' ? "Gráficas: {$charts}" : '',
+        ]);
+
+        return implode('. ', $parts);
     }
 
     /**

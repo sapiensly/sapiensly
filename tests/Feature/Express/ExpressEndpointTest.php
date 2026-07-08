@@ -8,6 +8,7 @@ use App\Models\BuilderMessage;
 use App\Models\Integration;
 use App\Models\PipelineRun;
 use App\Models\User;
+use App\Services\Apps\AppNamer;
 use App\Services\Builder\BuilderCancellation;
 use App\Services\Connected\ConnectedObjectAuthoring;
 use App\Services\Connected\IntegrationCatalog;
@@ -228,4 +229,76 @@ it('does NOT double-report when a failure report already followed the placeholde
 
     // Still exactly the two messages — the existing report stands, no duplicate.
     expect(BuilderMessage::where('conversation_id', $this->conv->id)->count())->toBe(2);
+});
+
+it('writes the description with the short-summary model when the voice gate defaulted', function () {
+    // Same build, but the voice gate returns NO purpose (slow-model default).
+    // The description must be written by the short-summary model over the built
+    // dashboard — never the raw prompt (the user's complaint).
+    $integration = Integration::factory()->forUser($this->user)->create([
+        'base_url' => 'https://mcp.example.com/v1', 'is_mcp' => true, 'auth_type' => 'bearer',
+        'auth_config' => ['token' => 'TKN'], 'status' => 'active',
+    ]);
+    $catalog = Mockery::mock(IntegrationCatalog::class);
+    $catalog->shouldReceive('knownShapes')->andReturn([]);
+    $catalog->shouldReceive('tools')->andReturn([['name' => 'get-tickets-time-series-tool', 'description' => 'Weekly tickets', 'input_schema' => []]]);
+    app()->instance(IntegrationCatalog::class, $catalog);
+
+    $mk = fn (string $x) => 'fld_'.strtolower((string) Str::ulid()).$x;
+    $ids = ['d' => $mk('a'), 'c' => $mk('b'), 'n' => $mk('c')];
+    $object = [
+        'id' => 'obj_'.strtolower((string) Str::ulid()), 'slug' => 'tickets_semanales', 'name' => 'Tickets Semanales',
+        'fields' => [
+            ['id' => $ids['d'], 'slug' => 'semana', 'name' => 'Semana', 'type' => 'date'],
+            ['id' => $ids['c'], 'slug' => 'categoria', 'name' => 'Categoría', 'type' => 'string'],
+            ['id' => $ids['n'], 'slug' => 'total', 'name' => 'Total', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => $integration->id, 'id_path' => 'id',
+            'operations' => ['list' => ['mcp_tool' => 'get-tickets-time-series-tool', 'collection_path' => 'series']],
+            'field_map' => [
+                ['field_id' => $ids['d'], 'external_path' => 'semana'],
+                ['field_id' => $ids['c'], 'external_path' => 'categoria'],
+                ['field_id' => $ids['n'], 'external_path' => 'total'],
+            ],
+        ],
+    ];
+    $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
+    $authoring->shouldReceive('author')->once()->andReturn([
+        'ok' => true, 'object' => $object,
+        'rows' => [
+            ['id' => 'W1', 'semana' => now()->utc()->subDays(3)->toDateString(), 'categoria' => 'Envíos', 'total' => 12],
+            ['id' => 'W2', 'semana' => now()->utc()->subDays(10)->toDateString(), 'categoria' => 'Pagos', 'total' => 7],
+            ['id' => 'W3', 'semana' => now()->utc()->subDays(17)->toDateString(), 'categoria' => 'Envíos', 'total' => 9],
+        ],
+        'clamped' => [], 'date_field_ids' => [$ids['d']], 'summary' => 'Creé «Tickets Semanales»',
+    ]);
+    app()->instance(ConnectedObjectAuthoring::class, $authoring);
+
+    ExpressGateAgent::fake([
+        ['tools' => ['get-tickets-time-series-tool'], 'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => []],
+        ['accept' => true, 'overrides' => []],
+        ['title' => 'Panel de Tickets', 'purpose' => '', 'insights' => []], // voice DEFAULTED — no purpose
+        ['fixes' => []],
+    ]);
+
+    // The short-summary model writes the description from the built dashboard.
+    $namer = Mockery::mock(AppNamer::class);
+    $namer->shouldReceive('describeDashboard')->once()->andReturn('Evolución semanal del volumen de tickets por categoría.');
+    app()->instance(AppNamer::class, $namer);
+
+    $this->testApp->update(['description' => null]);
+    $placeholder = BuilderMessage::create([
+        'conversation_id' => $this->conv->id, 'role' => 'assistant', 'content' => '', 'status' => 'streaming',
+    ]);
+    $run = PipelineRun::create([
+        'app_id' => $this->testApp->id, 'conversation_id' => $this->conv->id, 'prompt' => 'crea un dashboard de tickets de yuhu',
+    ]);
+
+    (new ExpressDashboardJob($placeholder->id, $run->id, 'crea un dashboard de tickets de yuhu'))
+        ->handle(app(ExpressPipeline::class), app(BuilderCancellation::class));
+
+    $this->testApp->refresh();
+    expect($this->testApp->description)->toBe('Evolución semanal del volumen de tickets por categoría.')
+        ->and($this->testApp->description)->not->toContain('crea un dashboard'); // never the raw prompt
 });
