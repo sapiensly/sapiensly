@@ -131,6 +131,9 @@ class ExpressDashboardJob implements ShouldQueue
                 $description = (string) (app(AppNamer::class)->describeDashboard($this->dashboardSummary($context), $user)
                     ?? AppNaming::descriptionFromPrompt($this->prompt));
             }
+            // Force a single sentence — the description is a one-liner, never a
+            // paragraph, whatever the source (voice gate, model, or prompt).
+            $description = AppNaming::firstSentence($description);
             if ($description !== '') {
                 $app->forceFill(['description' => Str::limit($description, 480)])->save();
                 app(AppManifestService::class)->syncManifestIdentity($app->refresh());

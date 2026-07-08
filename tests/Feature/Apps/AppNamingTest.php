@@ -27,6 +27,15 @@ it('returns null when there is nothing usable to name', function () {
         ->and(AppNaming::nameFromPrompt('crea un'))->toBeNull();
 });
 
+it('forces a description down to a single sentence', function () {
+    expect(AppNaming::firstSentence('Salud del NPS de Yuhu. Además muestra tickets por semana.'))
+        ->toBe('Salud del NPS de Yuhu.')
+        ->and(AppNaming::firstSentence('Evolución del NPS por segmento')) // no terminator → whole
+        ->toBe('Evolución del NPS por segmento')
+        ->and(AppNaming::firstSentence("Línea uno.\nLínea dos."))->toBe('Línea uno.')
+        ->and(AppNaming::firstSentence('  '))->toBe('');
+});
+
 it('builds a bounded, sentence-cased description from the prompt', function () {
     expect(AppNaming::descriptionFromPrompt('analiza el otd semanal de yuhu'))
         ->toBe('Analiza el otd semanal de yuhu');

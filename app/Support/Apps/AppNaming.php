@@ -50,6 +50,26 @@ class AppNaming
     }
 
     /**
+     * Force a description down to ONE sentence: keep everything up to (and
+     * including) the first sentence terminator that ends a sentence, drop the
+     * rest. A phrase with no terminator is returned whole (still one statement).
+     * Best-effort — a terminator inside "Dr." would cut early, but a one-line
+     * app description rarely carries abbreviations.
+     */
+    public static function firstSentence(string $text): string
+    {
+        $clean = self::clean($text);
+        if ($clean === '') {
+            return '';
+        }
+        if (preg_match('/^.*?[.!?…](?=\s|$)/u', $clean, $m) === 1) {
+            return trim($m[0]);
+        }
+
+        return $clean;
+    }
+
+    /**
      * A slug unique within the owner's tenant, derived from a base string. Uses
      * the manifest slug grammar (lowercase, digits, underscores; starts with a
      * letter) and suffixes _2, _3… on collision.
