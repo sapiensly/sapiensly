@@ -143,6 +143,7 @@ interface Message {
     attachment_url: string | null;
     attachment_mime: string | null;
     created_at: string | null;
+    updated_at?: string | null;
 }
 
 interface Preview {
@@ -1405,16 +1406,31 @@ onUnmounted(() => {
     if (stopwatchTimer !== null) clearInterval(stopwatchTimer);
 });
 
-// Elapsed reasoning time (M:SS) for a still-streaming message; null otherwise.
+// Reasoning time (M:SS): ticks live while a turn streams, then FREEZES at the
+// total (updated_at − created_at, the finalization span) so the result stays
+// visible on the finished bubble — live and after a reload. Null when there's no
+// measurable duration (an instant/never-timed message).
 function reasoningElapsed(m: Message): string | null {
-    if (m.status !== 'streaming' || !m.created_at) {
+    if (!m.created_at) {
         return null;
     }
     const start = new Date(m.created_at).getTime();
     if (Number.isNaN(start)) {
         return null;
     }
-    const secs = Math.max(0, Math.floor((stopwatchNow.value - start) / 1000));
+
+    let end: number;
+    if (m.status === 'streaming') {
+        end = stopwatchNow.value; // live
+    } else {
+        const finalized = m.updated_at ? new Date(m.updated_at).getTime() : NaN;
+        if (Number.isNaN(finalized) || finalized <= start) {
+            return null; // no measurable reasoning span to show
+        }
+        end = finalized;
+    }
+
+    const secs = Math.max(0, Math.floor((end - start) / 1000));
     return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
@@ -1787,16 +1803,19 @@ function subscribe() {
         (payload: { message: Message }) => {
             liveActivity.value = null;
             liveSteps.value = [];
+            // Stamp the finalization time if the payload didn't carry one, so the
+            // reasoning stopwatch can freeze at its total on the finished bubble.
+            const finished: Message = payload.message.updated_at
+                ? payload.message
+                : { ...payload.message, updated_at: new Date().toISOString() };
             // Update in place, or APPEND when the server minted a new message
             // (the Express report arrives as its own message so it never
             // replaces the progress narration).
-            messages.value = messages.value.some(
-                (m) => m.id === payload.message.id,
-            )
+            messages.value = messages.value.some((m) => m.id === finished.id)
                 ? messages.value.map((m) =>
-                      m.id === payload.message.id ? payload.message : m,
+                      m.id === finished.id ? finished : m,
                   )
-                : [...messages.value, payload.message];
+                : [...messages.value, finished];
             // Server already created a new AppVersion if the user pre-approved
             // — partial reload to refresh the preview and the build plan
             // (its step statuses advanced this turn).
@@ -2510,7 +2529,12 @@ function statusTone(status: Message['status']): string {
                                         :title="t('apps.builder.reasoning_time')"
                                     >
                                         <Hourglass
-                                            class="size-3 animate-spin [animation-duration:2.5s]"
+                                            :class="[
+                                                'size-3',
+                                                m.status === 'streaming'
+                                                    ? 'animate-spin [animation-duration:2.5s]'
+                                                    : '',
+                                            ]"
                                         />{{ reasoningElapsed(m) }}
                                     </span>
                                     <span>{{ messageTime(m) }}</span>

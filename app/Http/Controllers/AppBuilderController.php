@@ -1204,6 +1204,10 @@ class AppBuilderController extends Controller
             'attachment_url' => $attachmentUrl,
             'attachment_mime' => $m->attachment_mime,
             'created_at' => $m->created_at?->toIso8601String(),
+            // The last write ≈ when the turn finalized; the Builder uses
+            // updated_at − created_at as the frozen reasoning time on a
+            // completed bubble.
+            'updated_at' => $m->updated_at?->toIso8601String(),
         ];
     }
 }

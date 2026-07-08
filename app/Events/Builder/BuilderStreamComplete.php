@@ -49,6 +49,7 @@ class BuilderStreamComplete implements ShouldBroadcastNow
                 'status' => $this->message->status,
                 'applied_version_id' => $this->message->applied_version_id,
                 'created_at' => $this->message->created_at?->toIso8601String(),
+                'updated_at' => $this->message->updated_at?->toIso8601String(),
             ],
         ];
     }
