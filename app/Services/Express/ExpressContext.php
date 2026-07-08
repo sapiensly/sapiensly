@@ -49,6 +49,23 @@ class ExpressContext
     /** @var array<string, mixed> semantic gate outputs (title, purpose, insights, overrides) */
     public array $semantic = [];
 
+    /**
+     * Provider circuit-breaker: set true the instant ONE gate call hangs
+     * (a real provider timeout) in this run. Every later gate then skips the
+     * model entirely and uses its deterministic default — a hung provider costs
+     * ONE 45s window for the whole build, not 45s per gate.
+     */
+    public bool $providerHung = false;
+
+    /**
+     * Set true once the semantic gates actually shaped the dashboard (an
+     * accepted override, a model-written voice, or model-narrated insights).
+     * When it stays false — every gate fell back — the deterministic page
+     * already banked is the final one, so the refine step skips a redundant
+     * identical version.
+     */
+    public bool $semanticEnriched = false;
+
     /** @var array<string, mixed>|null the compiled page {slug, path, name} */
     public ?array $page = null;
 
@@ -71,7 +88,9 @@ class ExpressContext
     /** Emit a user-visible progress line (wired to the streaming placeholder). */
     public function progress(string $line): void
     {
-        if ($this->onProgress !== null) {
+        // A phase can announce '' to stay silent (e.g. the refine step when
+        // there's nothing to refine) — never surface a blank line.
+        if ($this->onProgress !== null && trim($line) !== '') {
             ($this->onProgress)($line);
         }
     }
@@ -79,5 +98,11 @@ class ExpressContext
     public function note(string $note): void
     {
         $this->notes[] = $note;
+    }
+
+    /** Trip the run-wide provider breaker after a gate hangs (see $providerHung). */
+    public function markProviderHung(): void
+    {
+        $this->providerHung = true;
     }
 }

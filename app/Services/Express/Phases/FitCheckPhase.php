@@ -82,6 +82,7 @@ TXT,
             fn () => $this->heuristicDefault($context),
             $context->user,
             $context->modelOverride,
+            $context,
         );
 
         $out = $result['output'];

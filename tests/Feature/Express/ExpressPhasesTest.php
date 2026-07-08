@@ -15,6 +15,7 @@ use App\Services\Express\GateRunner;
 use App\Services\Express\Phases\AcquireObjectsPhase;
 use App\Services\Express\Phases\CompilePhase;
 use App\Services\Express\Phases\FitCheckPhase;
+use App\Services\Express\Phases\RefineDashboardPhase;
 use App\Services\Express\Phases\ResolveSourcePhase;
 use App\Services\Express\Phases\SemanticGatesPhase;
 use App\Services\Express\Phases\SuggestSpecPhase;
@@ -515,24 +516,142 @@ it('runs the whole chain end-to-end through ExpressPipeline', function () {
     $ctx = xph_ctx($this);
     $run = xph_run($this);
 
+    // Canonical order: compile a deterministic dashboard FIRST, then let the
+    // gates enrich it, then refine in place (see DashboardExpressPhases).
     $phases = [
         new ResolveSourcePhase($catalog),
         app()->make(FitCheckPhase::class),
         new AcquireObjectsPhase($authoring, app(AppManifestService::class)),
         app()->make(SuggestSpecPhase::class),
-        app()->make(SemanticGatesPhase::class),
         app()->make(CompilePhase::class),
+        app()->make(SemanticGatesPhase::class),
+        app()->make(RefineDashboardPhase::class),
     ];
 
     $result = app(ExpressPipeline::class)->execute($run, $ctx, $phases);
 
+    // The refine folded the model's voice title in over the deterministic one.
     expect($result->status)->toBe('succeeded')
         ->and($result->result['page']['name'])->toBe('Panel de Tickets')
         ->and($result->gates)->toHaveKeys(['fit_check', 'spec_overrides', 'voice_insights']);
 
+    // Compile appended the page, refine REPLACED it — still exactly one page.
     $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
     expect($manifest['pages'])->toHaveCount(1)
         ->and($manifest['objects'])->toHaveCount(1);
+});
+
+it('trips the provider breaker on a gate timeout and SKIPS the remaining gates', function () {
+    // fit_check hangs (the exact prod symptom: cURL 28 at 45s). Every later
+    // gate must then short-circuit to its default without touching the model —
+    // a hung provider costs ONE 45s window, not 45s per gate.
+    ExpressGateAgent::fake([
+        fn () => throw new RuntimeException('cURL error 28: Operation timed out after 45001 milliseconds'),
+    ]);
+
+    $ctx = xph_ctx($this);
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+    $run = xph_run($this);
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, $run);
+    expect($ctx->providerHung)->toBeTrue();
+
+    app()->call(fn (SuggestSpecPhase $p) => $p->run($ctx, $run));
+    app()->call(fn (SemanticGatesPhase $p) => $p->run($ctx, $run));
+
+    // The gates after the hang were recorded as skipped (0ms, no model call),
+    // never enriched anything, and the build still has a usable spec to compile.
+    $gates = $run->fresh()->gates;
+    expect($gates['spec_overrides']['error'])->toContain('skipped')
+        ->and($gates['spec_overrides']['latency_ms'])->toBe(0)
+        ->and($gates['voice_insights']['error'])->toContain('skipped')
+        ->and($ctx->semanticEnriched)->toBeFalse();
+});
+
+it('banks a deterministic dashboard BEFORE the semantic gates run', function () {
+    // The safety net: compile runs with an EMPTY semantic bag (gates haven't
+    // run yet) and still banks a working page. Whatever kills the enrichment
+    // that follows can never cost the dashboard.
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    app(AppManifestService::class)->applyPatch(
+        $this->testApp->fresh(),
+        [['op' => 'add', 'path' => '/objects/-', 'value' => $object]],
+        $this->user, 'obj',
+    );
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+
+    app()->call(fn (SuggestSpecPhase $p) => $p->run($ctx, xph_run($this)));
+    expect($ctx->semantic)->toBe([]); // gates have NOT run
+
+    app()->call(fn (CompilePhase $p) => $p->run($ctx, xph_run($this)));
+
+    expect($ctx->page)->not->toBeNull();
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect(collect($manifest['pages'])->firstWhere('slug', $ctx->page['slug']))->not->toBeNull();
+});
+
+it('refine folds enriched voice into the banked page IN PLACE, keeping its URL', function () {
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    app(AppManifestService::class)->applyPatch(
+        $this->testApp->fresh(),
+        [['op' => 'add', 'path' => '/objects/-', 'value' => $object]],
+        $this->user, 'obj',
+    );
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+
+    app()->call(fn (SuggestSpecPhase $p) => $p->run($ctx, xph_run($this)));
+    app()->call(fn (CompilePhase $p) => $p->run($ctx, xph_run($this)));
+    $baselineSlug = $ctx->page['slug'];
+
+    // Gates produced a real voice title → refine must re-apply.
+    $ctx->semantic = [
+        'overrides' => [],
+        'voice' => ['title' => 'Panel Refinado', 'purpose' => 'Dirección: volumen semanal.'],
+        'insights' => $ctx->spec['insights'],
+    ];
+    $ctx->semanticEnriched = true;
+
+    app()->call(fn (RefineDashboardPhase $p) => $p->run($ctx, xph_run($this)));
+
+    expect($ctx->page['slug'])->toBe($baselineSlug)   // URL unchanged
+        ->and($ctx->page['name'])->toBe('Panel Refinado');
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect($manifest['pages'])->toHaveCount(1) // REPLACED, not appended
+        ->and(collect($manifest['pages'])->firstWhere('slug', $baselineSlug)['name'])->toBe('Panel Refinado');
+});
+
+it('refine is a silent no-op when the gates enriched nothing — no redundant version', function () {
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    app(AppManifestService::class)->applyPatch(
+        $this->testApp->fresh(),
+        [['op' => 'add', 'path' => '/objects/-', 'value' => $object]],
+        $this->user, 'obj',
+    );
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+
+    app()->call(fn (SuggestSpecPhase $p) => $p->run($ctx, xph_run($this)));
+    app()->call(fn (CompilePhase $p) => $p->run($ctx, xph_run($this)));
+    $versionsAfterCompile = $this->testApp->fresh()->versions()->count();
+
+    // Every gate fell back → nothing to refine.
+    $ctx->semanticEnriched = false;
+    app()->call(fn (RefineDashboardPhase $phase) => expect($phase->announce($ctx))->toBe(''));
+    app()->call(fn (RefineDashboardPhase $p) => $p->run($ctx, xph_run($this)));
+
+    expect($this->testApp->fresh()->versions()->count())->toBe($versionsAfterCompile);
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect($manifest['pages'])->toHaveCount(1);
 });
 
 it('fit_check vetoes tools known to return no rows, even if the model picks them', function () {

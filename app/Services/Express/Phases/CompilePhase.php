@@ -13,16 +13,18 @@ use App\Support\Branding\OrganizationBrand;
 use Illuminate\Support\Str;
 
 /**
- * F-4: merge the suggestion with the semantic gate outputs, compile the page
- * through the shared dashboard compiler, enforce the lints, and apply it as a
- * version. From here the user has a live dashboard on screen; everything
- * after (verification, chat refinements) only raises the ceiling.
+ * F-4: compile the dashboard through the shared compiler, enforce the lints,
+ * and apply it as a version. This runs BEFORE the semantic gates so the user
+ * gets a DETERMINISTIC dashboard banked first — whatever happens during the
+ * model enrichment that follows (a hung provider, an OOM, a deploy restart)
+ * can never cost the page. The gates then enrich in place ({@see
+ * RefineDashboardPhase}); everything after only raises the ceiling.
  */
 class CompilePhase implements ExpressPhase
 {
     public function __construct(
-        private readonly AppScaffolder $scaffolder,
-        private readonly AppManifestService $manifests,
+        protected readonly AppScaffolder $scaffolder,
+        protected readonly AppManifestService $manifests,
     ) {}
 
     public function name(): string
@@ -42,6 +44,22 @@ class CompilePhase implements ExpressPhase
             throw new \RuntimeException('The app lost its active manifest mid-run.');
         }
 
+        $page = $this->buildPage($context, $manifest);
+        $this->applyPage($context, $page);
+    }
+
+    /**
+     * Merge the spec with any semantic gate outputs present and compile+lint
+     * the page. On the first (pre-gate) pass $context->semantic is empty, so
+     * this yields the deterministic dashboard; on a refine pass it folds in the
+     * model's overrides/voice/insights. Throws when neither the merged nor the
+     * bare suggestion compiles.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>
+     */
+    protected function buildPage(ExpressContext $context, array $manifest): array
+    {
         $spec = $context->spec ?? [];
         $overrides = is_array($context->semantic['overrides'] ?? null) ? $context->semantic['overrides'] : [];
         $voice = is_array($context->semantic['voice'] ?? null) ? $context->semantic['voice'] : [];
@@ -101,7 +119,18 @@ class CompilePhase implements ExpressPhase
             throw new \RuntimeException('Dashboard lints failed: '.implode(' · ', $lint['issues']));
         }
 
-        $page = $built['page'];
+        return $built['page'];
+    }
+
+    /**
+     * Bank the freshly built page as a new version — appended to the manifest —
+     * and record its identity on the context. {@see RefineDashboardPhase}
+     * overrides this to REPLACE the already-banked page in place.
+     *
+     * @param  array<string, mixed>  $page
+     */
+    protected function applyPage(ExpressContext $context, array $page): void
+    {
         $version = $this->manifests->applyPatch(
             $context->app->fresh(),
             [['op' => 'add', 'path' => '/pages/-', 'value' => $page]],

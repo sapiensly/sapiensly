@@ -45,7 +45,27 @@ class GateRunner
         array|Closure $default,
         User $user,
         ?string $modelOverride = null,
+        ?ExpressContext $context = null,
     ): array {
+        // Circuit-breaker: a provider that already hung this run won't answer
+        // the next gate either — asking burns another full 45s window for the
+        // same fallback. Skip straight to the default (0s) and record why.
+        if ($context !== null && $context->providerHung) {
+            $output = is_callable($default) ? $default() : $default;
+            $run->recordGate($name, [
+                'model' => null,
+                'latency_ms' => 0,
+                'fallback_used' => true,
+                'tokens' => null,
+                'error' => 'skipped: provider hung earlier in this run',
+            ]);
+            Log::info('Express gate skipped — provider already hung this run', [
+                'run_id' => $run->id, 'gate' => $name,
+            ]);
+
+            return ['output' => $output, 'fallback_used' => true, 'model' => null];
+        }
+
         $startedAt = microtime(true);
         $model = null;
         $output = null;
@@ -94,8 +114,10 @@ class GateRunner
                     // A TIMEOUT means the provider is hung — retrying burns
                     // another full timeout window for the same outcome
                     // (observed: 2×45s = 90s wasted on one gate). Fall straight
-                    // to the deterministic default instead.
+                    // to the deterministic default AND trip the run-wide breaker
+                    // so the remaining gates skip the model entirely.
                     if (str_contains($error, 'timed out') || str_contains($error, 'cURL error 28')) {
+                        $context?->markProviderHung();
                         break;
                     }
                 }

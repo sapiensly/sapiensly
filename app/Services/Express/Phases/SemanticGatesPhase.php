@@ -72,7 +72,7 @@ TXT;
             $result = $this->gates->run(
                 $run, $i > 0 ? "spec_overrides_{$i}" : 'spec_overrides',
                 $overridesInstructions, $overridesPrompt, $overridesSchema, $overridesDefault,
-                $context->user, $context->modelOverride,
+                $context->user, $context->modelOverride, $context,
             );
             $overrides = is_array($result['output']['overrides'] ?? null) ? $result['output']['overrides'] : [];
             if ($overrides === []) {
@@ -84,6 +84,9 @@ TXT;
             }
         }
         $context->semantic['overrides'] = $chosen;
+        if ($chosen !== []) {
+            $context->semanticEnriched = true;
+        }
 
         // --- G-2b+c fused: voice AND insights in ONE call — a whole slow-model
         // round-trip saved versus separate gates.
@@ -117,7 +120,7 @@ TXT,
                 'purpose' => '',
                 'insights' => $this->factualFallbackInsights($suggested, $context->facts),
             ],
-            $context->user, $context->modelOverride,
+            $context->user, $context->modelOverride, $context,
         );
 
         $context->semantic['voice'] = [
@@ -125,9 +128,18 @@ TXT,
             'purpose' => (string) ($voiceInsights['output']['purpose'] ?? ''),
         ];
         $bodies = array_values(array_filter($voiceInsights['output']['insights'] ?? [], 'is_array'));
-        $context->semantic['insights'] = count($bodies) === count($suggested) && $suggested !== []
+        $modelWroteInsights = count($bodies) === count($suggested) && $suggested !== [];
+        $context->semantic['insights'] = $modelWroteInsights
             ? $this->mergeInsights($suggested, $bodies)
             : $suggested;
+
+        // A real voice line or model-narrated insight bodies also count as
+        // enrichment worth a second (refined) version over the deterministic one.
+        if (! $voiceInsights['fallback_used'] && ($modelWroteInsights
+            || trim((string) $context->semantic['voice']['purpose']) !== ''
+            || trim((string) $context->semantic['voice']['title']) !== trim((string) ($spec['title'] ?? '')))) {
+            $context->semanticEnriched = true;
+        }
     }
 
     /**
