@@ -6,6 +6,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     AppWindow,
     Building2,
+    Check,
     ChevronDown,
     Database,
     ExternalLink,
@@ -14,10 +15,12 @@ import {
     History,
     LayoutDashboard,
     Lock,
+    Pencil,
     Plus,
     Sparkles,
     Trash2,
     Workflow as WorkflowIcon,
+    X,
 } from '@lucide/vue';
 import { computed, ref, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -62,6 +65,39 @@ const props = defineProps<Props>();
 const { t } = useI18n();
 
 const tint = props.app.color ?? 'var(--sp-accent-blue)';
+
+// Inline edit of name + description (the slug is fixed — it's the runtime URL).
+const editing = ref(false);
+const editName = ref(props.app.name);
+const editDescription = ref(props.app.description ?? '');
+const savingEdit = ref(false);
+
+function startEdit(): void {
+    editName.value = props.app.name;
+    editDescription.value = props.app.description ?? '';
+    editing.value = true;
+}
+function cancelEdit(): void {
+    editing.value = false;
+}
+function saveEdit(): void {
+    const name = editName.value.trim();
+    if (name === '' || savingEdit.value) return;
+    savingEdit.value = true;
+    router.put(
+        AppController.update(props.app.id).url,
+        { name, description: editDescription.value.trim() || null },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                editing.value = false;
+            },
+            onFinish: () => {
+                savingEdit.value = false;
+            },
+        },
+    );
+}
 
 interface VisibilityPill {
     icon: Component;
@@ -142,25 +178,77 @@ function formatDate(value: string | null): string {
                     >
                         <AppWindow class="size-5" />
                     </div>
-                    <div class="min-w-0 space-y-1">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <h1 class="text-[22px] font-semibold leading-tight text-ink">
-                                {{ app.name }}
-                            </h1>
-                            <span
-                                :class="[
-                                    'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10px] uppercase tracking-wider',
-                                    visibilityPill.classes,
-                                ]"
-                            >
-                                <component :is="visibilityPill.icon" class="size-3" />
-                                {{ visibilityPill.label }}
-                            </span>
-                        </div>
-                        <p class="font-mono text-[11px] text-ink-subtle">/r/{{ app.slug }}</p>
-                        <p v-if="app.description" class="text-xs text-ink-muted">
-                            {{ app.description }}
-                        </p>
+                    <div class="min-w-0 flex-1 space-y-1">
+                        <template v-if="!editing">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                                    {{ app.name }}
+                                </h1>
+                                <span
+                                    :class="[
+                                        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10px] uppercase tracking-wider',
+                                        visibilityPill.classes,
+                                    ]"
+                                >
+                                    <component :is="visibilityPill.icon" class="size-3" />
+                                    {{ visibilityPill.label }}
+                                </span>
+                                <button
+                                    type="button"
+                                    @click="startEdit"
+                                    :title="t('apps.show.edit_details')"
+                                    class="inline-flex size-6 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-surface hover:text-ink"
+                                >
+                                    <Pencil class="size-3.5" />
+                                </button>
+                            </div>
+                            <p class="font-mono text-[11px] text-ink-subtle">/r/{{ app.slug }}</p>
+                            <p v-if="app.description" class="text-xs text-ink-muted">
+                                {{ app.description }}
+                            </p>
+                        </template>
+
+                        <template v-else>
+                            <input
+                                v-model="editName"
+                                type="text"
+                                maxlength="100"
+                                :placeholder="t('apps.show.name_placeholder')"
+                                class="w-full max-w-md rounded-md border border-medium bg-surface px-2.5 py-1.5 text-[18px] font-semibold text-ink focus:border-strong focus:outline-none"
+                                @keydown.enter="saveEdit"
+                                @keydown.esc="cancelEdit"
+                            />
+                            <p class="font-mono text-[11px] text-ink-subtle">
+                                /r/{{ app.slug }}
+                                <span class="ml-1 italic">· {{ t('apps.show.slug_locked') }}</span>
+                            </p>
+                            <textarea
+                                v-model="editDescription"
+                                rows="3"
+                                maxlength="500"
+                                :placeholder="t('apps.show.description_placeholder')"
+                                class="w-full max-w-xl rounded-md border border-medium bg-surface px-2.5 py-1.5 text-xs text-ink focus:border-strong focus:outline-none"
+                            />
+                            <div class="flex items-center gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    @click="saveEdit"
+                                    :disabled="savingEdit || !editName.trim()"
+                                    class="inline-flex items-center gap-1 rounded-pill bg-accent-blue px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
+                                >
+                                    <Check class="size-3.5" />
+                                    {{ t('common.save') }}
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="cancelEdit"
+                                    class="inline-flex items-center gap-1 rounded-pill border border-medium px-3 py-1 text-xs text-ink-muted transition-colors hover:text-ink"
+                                >
+                                    <X class="size-3.5" />
+                                    {{ t('common.cancel') }}
+                                </button>
+                            </div>
+                        </template>
                     </div>
                 </div>
 

@@ -4,6 +4,7 @@ use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Manifest\AppManifestService;
 
 beforeEach(function () {
     $this->user = User::factory()->create([
@@ -142,4 +143,27 @@ it('deletes an app', function () {
     $this->actingAs($this->user)->delete("/apps/{$app->id}")->assertRedirect('/apps');
 
     expect(App::query()->where('id', $app->id)->exists())->toBeFalse();
+});
+
+it('updates the name and description and syncs the manifest, keeping the slug fixed', function () {
+    $this->actingAs($this->user)->post('/apps', ['name' => 'Original', 'slug' => 'orig_app']);
+    $app = App::query()->where('slug', 'orig_app')->firstOrFail();
+
+    $this->actingAs($this->user)
+        ->put("/apps/{$app->id}", [
+            'name' => 'Nuevo nombre',
+            'description' => 'Una sola frase de descripción.',
+            'slug' => 'hacked_slug', // must be ignored — the slug is fixed
+        ])
+        ->assertRedirect();
+
+    $app->refresh();
+    expect($app->name)->toBe('Nuevo nombre')
+        ->and($app->description)->toBe('Una sola frase de descripción.')
+        ->and($app->slug)->toBe('orig_app'); // slug never changes
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($app);
+    expect($manifest['name'])->toBe('Nuevo nombre')
+        ->and($manifest['description'])->toBe('Una sola frase de descripción.')
+        ->and($manifest['slug'])->toBe('orig_app'); // manifest identity synced, slug intact
 });

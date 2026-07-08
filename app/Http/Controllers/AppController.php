@@ -171,7 +171,11 @@ class AppController extends Controller
     {
         $this->authorizeAccess($request, $app);
 
+        // The slug is fixed (it's the runtime URL); UpdateAppRequest doesn't
+        // accept it. Name/description edits are mirrored onto the active
+        // manifest so it never drifts from the App model.
         $app->update($request->validated());
+        $this->manifestService->syncManifestIdentity($app->refresh());
 
         return redirect()->route('apps.show', $app)->with('success', 'App updated.');
     }
