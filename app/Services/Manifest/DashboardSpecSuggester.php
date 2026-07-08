@@ -78,6 +78,16 @@ class DashboardSpecSuggester
         $spec['kpis'] = array_slice($spec['kpis'] ?? [], 0, self::PRIMARY_KPIS);
         $spec['charts'] = array_slice($spec['charts'] ?? [], 0, self::PRIMARY_CHARTS);
 
+        // Cross-object identity of everything already on the board, so three
+        // sources of "total tickets" land as ONE number plus each source's
+        // next-best DISTINCT metric — not the same figure three times.
+        $slugById = $this->fieldSlugIndex($primary);
+        $kpiIdentities = array_map(fn (array $k): ?array => $this->kpiIdentity($k, $slugById), $spec['kpis']);
+        $trendIdentities = collect($spec['charts'])
+            ->filter(fn (array $c): bool => isset($c['x_field_id']))
+            ->map(fn (array $c): ?array => $this->chartMeasureIdentity($c, $slugById))
+            ->all();
+
         foreach (array_slice($secondaries, 0, self::MAX_SECONDARIES) as $secondary) {
             $slug = $secondary['slug'] ?? null;
             if ($slug === null) {
@@ -85,10 +95,23 @@ class DashboardSpecSuggester
             }
             $mini = $this->suggest($secondary, $lang, $rowsByObject[$secondary['id'] ?? ''] ?? [], $promptTopics);
             $name = (string) ($secondary['name'] ?? $slug);
+            $miniSlugs = $this->fieldSlugIndex($secondary);
 
             $charts = collect($mini['charts'] ?? []);
             $trend = $charts->first(fn (array $c): bool => isset($c['x_field_id']));
             $breakdown = $charts->first(fn (array $c): bool => isset($c['group_by_field_id']) && ! isset($c['x_field_id']));
+
+            // A second trend of the SAME measure re-plots an existing line
+            // under another source's name — skip it; the breakdown still lands.
+            if ($trend !== null) {
+                $trendIdentity = $this->chartMeasureIdentity($trend, $miniSlugs);
+                if ($this->isDuplicateIdentity($trendIdentity, $trendIdentities)) {
+                    $trend = null;
+                } else {
+                    $trendIdentities[] = $trendIdentity;
+                }
+            }
+
             foreach ([$trend, $breakdown] as $chart) {
                 if ($chart === null || count($spec['charts']) >= self::MAX_CHARTS) {
                     continue;
@@ -98,11 +121,22 @@ class DashboardSpecSuggester
                 $spec['charts'][] = $this->varyForm($chart, $spec['charts']);
             }
 
-            $kpi = ($mini['kpis'] ?? [])[0] ?? null;
-            if ($kpi !== null && count($spec['kpis']) < self::MAX_KPIS) {
+            // The secondary's FIRST KPI whose measure isn't already on the
+            // band; when its headline duplicates (every ticket source leads
+            // with "total tickets"), its next metric is genuinely new info.
+            foreach ($mini['kpis'] ?? [] as $kpi) {
+                if (count($spec['kpis']) >= self::MAX_KPIS) {
+                    break;
+                }
+                $identity = $this->kpiIdentity($kpi, $miniSlugs);
+                if ($this->isDuplicateIdentity($identity, $kpiIdentities)) {
+                    continue;
+                }
                 $kpi['object_slug'] = $slug;
                 $kpi['label'] = $this->labelWithObject((string) ($kpi['label'] ?? ''), $name);
                 $spec['kpis'][] = $kpi;
+                $kpiIdentities[] = $identity;
+                break;
             }
 
             // One temporal contributor is enough to make the range filter
@@ -230,6 +264,102 @@ class DashboardSpecSuggester
         }
 
         return trim($label.' · '.$objectName);
+    }
+
+    /** @return array<string, string> field_id → slug for one object */
+    private function fieldSlugIndex(array $object): array
+    {
+        $index = [];
+        foreach ($object['fields'] ?? [] as $field) {
+            if (is_array($field) && isset($field['id'])) {
+                $index[$field['id']] = (string) ($field['slug'] ?? '');
+            }
+        }
+
+        return $index;
+    }
+
+    /**
+     * The cross-object identity of a measure: its slug's MEANINGFUL tokens
+     * (generic total/count words dropped) plus an aggregation class where
+     * count and sum collapse to "volume" — count(ticket rows) and
+     * sum(total_tickets) are the same headline arriving from two sources.
+     * Null when nothing meaningful remains (can't tell → never a duplicate).
+     *
+     * @return array{tokens: list<string>, agg: string}|null
+     */
+    private function measureIdentity(string $slugOrLabel, string $aggregation): ?array
+    {
+        $tokens = collect(preg_split('/[^a-z0-9]+/', Str::lower(Str::ascii($slugOrLabel))) ?: [])
+            ->filter(fn ($t) => mb_strlen((string) $t) >= 3
+                && ! in_array($t, ['total', 'totals', 'suma', 'num', 'numero', 'cantidad', 'count', 'del', 'the', 'por', 'per'], true))
+            ->unique()->sort()->values()->all();
+        if ($tokens === []) {
+            return null;
+        }
+
+        return [
+            'tokens' => $tokens,
+            'agg' => in_array($aggregation, ['count', 'sum'], true) ? 'volume' : $aggregation,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $kpi
+     * @param  array<string, string>  $slugById
+     * @return array{tokens: list<string>, agg: string}|null
+     */
+    private function kpiIdentity(array $kpi, array $slugById): ?array
+    {
+        $slug = $slugById[$kpi['field_id'] ?? ''] ?? '';
+
+        return $this->measureIdentity(
+            $slug !== '' ? $slug : (string) ($kpi['label'] ?? ''),
+            (string) ($kpi['aggregation'] ?? 'count'),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $chart
+     * @param  array<string, string>  $slugById
+     * @return array{tokens: list<string>, agg: string}|null
+     */
+    private function chartMeasureIdentity(array $chart, array $slugById): ?array
+    {
+        $slug = $slugById[$chart['y_field_id'] ?? ''] ?? '';
+        if ($slug === '') {
+            return null; // count trends carry no measure to collide on
+        }
+
+        return $this->measureIdentity($slug, (string) ($chart['aggregation'] ?? 'count'));
+    }
+
+    /**
+     * Duplicate when the aggregation class matches and either token set
+     * contains the other: totals_total_tickets ⇒ {tickets} is subsumed by
+     * tickets_creados ⇒ {creados, tickets} — same measure, extra qualifier.
+     *
+     * @param  array{tokens: list<string>, agg: string}|null  $candidate
+     * @param  list<array{tokens: list<string>, agg: string}|null>  $existing
+     */
+    private function isDuplicateIdentity(?array $candidate, array $existing): bool
+    {
+        if ($candidate === null) {
+            return false;
+        }
+
+        foreach ($existing as $identity) {
+            if ($identity === null || $identity['agg'] !== $candidate['agg']) {
+                continue;
+            }
+            $a = $candidate['tokens'];
+            $b = $identity['tokens'];
+            if (array_diff($a, $b) === [] || array_diff($b, $a) === []) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -607,13 +737,7 @@ class DashboardSpecSuggester
                 // additive (a prod NPS board charted `responses` and the
                 // requested score never rendered). Topical ratio first, then
                 // topical additive, then the generic order.
-                $topical = $this->topicalMeasures($object, $numerics, $promptTopics);
-                $pick = collect([
-                    [collect($topical)->first(fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_RATIO), 'avg'],
-                    [collect($topical)->first(fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE), 'sum'],
-                    [$additives[0] ?? null, 'sum'],
-                    [$ratios[0] ?? null, 'avg'],
-                ])->first(fn (array $c): bool => $c[0] !== null);
+                $pick = $this->leadMeasure($object, $numerics, $measureTypes, $promptTopics);
 
                 if ($pick !== null) {
                     [$field, $agg] = $pick;
@@ -709,20 +833,123 @@ class DashboardSpecSuggester
             }
         }
 
-        // Last resort: a numbers-only object still gets a legal bar per
-        // numeric — a chartless spec is never suggested.
-        if ($charts === []) {
-            foreach (array_slice($numerics, 0, 3) as $i => $num) {
+        // Last resort — but never an axis-less "chart-shaped number". The old
+        // fallback emitted up to 3 bare bar/hbar/radar blocks with no group_by
+        // and no x axis; each rendered as ONE aggregated value (and the radar,
+        // which needs ≥3 axes, rendered nothing at all). Prod: a weekly series
+        // with only 2 sampled buckets skipped its trend, had no real
+        // categoricals, and shipped three of those. Honest ladder instead:
+        if ($charts === [] && $numerics !== []) {
+            $lead = $this->leadMeasure($object, $numerics, $measureTypes, $promptTopics)
+                ?? [$numerics[0], ($measureTypes[$numerics[0]['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE ? 'sum' : 'avg'];
+            [$field, $agg] = $lead;
+            $label = (string) ($field['name'] ?? $field['slug']);
+            $bucketLabel = $this->bucketLabelField($object['fields'] ?? []);
+
+            if ($dateField !== null && $bucketLabel !== null) {
+                // A time axis exists but had too few buckets for a line — one
+                // bar per period IS the right picture (few periods, few bars).
+                // The bucket-label column is excluded from breakdowns precisely
+                // because it re-plots the trend; here that's exactly the point.
                 $charts[] = [
-                    'label' => (string) ($num['name'] ?? $num['slug']),
-                    'chart_type' => $i === 0 ? 'bar' : ($i === 1 ? 'hbar' : 'radar'),
-                    'aggregation' => ($measureTypes[$num['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE ? 'sum' : 'avg',
-                    'y_field_id' => $num['id'],
+                    'label' => $label.($es ? ' por periodo' : ' by period'),
+                    'chart_type' => 'bar',
+                    'aggregation' => $agg,
+                    'y_field_id' => $field['id'],
+                    'group_by_field_id' => $bucketLabel['id'],
+                    'limit' => self::BREAKDOWN_LIMIT,
+                ];
+            } elseif ($dateField !== null) {
+                $charts[] = [
+                    'label' => $label.($es ? ' por día' : ' by day'),
+                    'chart_type' => 'bar',
+                    'aggregation' => $agg,
+                    'y_field_id' => $field['id'],
+                    'x_field_id' => $dateField['id'],
+                    'bucket' => 'day',
+                ];
+            } elseif ($grain === SemanticProfile::GRAIN_RAW) {
+                // No axis anywhere on raw rows: a box of the lead measure is a
+                // legitimate distribution view (spread beats a single number).
+                $charts[] = [
+                    'label' => ($es ? 'Distribución de ' : 'Distribution of ').Str::lower($label),
+                    'chart_type' => 'box',
+                    'aggregation' => 'avg',
+                    'y_field_id' => $field['id'],
+                ];
+            } else {
+                // Truly nothing to slice by: ONE deliberate single-value bar —
+                // never three, never a radar.
+                $charts[] = [
+                    'label' => $label,
+                    'chart_type' => 'bar',
+                    'aggregation' => $agg,
+                    'y_field_id' => $field['id'],
                 ];
             }
         }
 
-        return $charts;
+        // Defence in depth: no chart leaves here axis-less (no x, no group_by)
+        // unless it's a box distribution — except the single deliberate
+        // fallback above when it's ALL there is (a chartless spec won't compile).
+        $withAxis = array_values(array_filter(
+            $charts,
+            fn (array $c): bool => isset($c['x_field_id']) || isset($c['group_by_field_id']) || ($c['chart_type'] ?? '') === 'box',
+        ));
+
+        return $withAxis !== [] ? $withAxis : array_slice($charts, 0, 1);
+    }
+
+    /**
+     * The measure that carries the object's story: its topical ratio first (an
+     * object literally named contact_rate leads with the rate), then the
+     * topical additive, then the first additive, then the first ratio. Null
+     * when none qualifies. Returns [field, aggregation].
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $numerics
+     * @param  array<string, string>  $measureTypes
+     * @param  list<string>  $promptTopics
+     * @return array{0: array<string, mixed>, 1: string}|null
+     */
+    private function leadMeasure(array $object, array $numerics, array $measureTypes, array $promptTopics): ?array
+    {
+        $ofType = fn (array $pool, string $type): ?array => collect($pool)->first(
+            fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === $type,
+        );
+        $topical = $this->topicalMeasures($object, $numerics, $promptTopics);
+
+        $pick = collect([
+            [$ofType($topical, SemanticProfile::MEASURE_RATIO), 'avg'],
+            [$ofType($topical, SemanticProfile::MEASURE_ADDITIVE), 'sum'],
+            [$ofType($numerics, SemanticProfile::MEASURE_ADDITIVE), 'sum'],
+            [$ofType($numerics, SemanticProfile::MEASURE_RATIO), 'avg'],
+        ])->first(fn (array $c): bool => $c[0] !== null);
+
+        return $pick === null ? null : [$pick[0], $pick[1]];
+    }
+
+    /**
+     * The bucket-label STRING column of a time series (period_label,
+     * bucket_label, semana…) — the time axis in a string costume. Excluded
+     * from breakdowns, but the correct axis for a bar-per-period fallback.
+     *
+     * @param  list<array<string, mixed>>  $fields
+     * @return array<string, mixed>|null
+     */
+    private function bucketLabelField(array $fields): ?array
+    {
+        foreach ($fields as $field) {
+            if (! is_array($field)) {
+                continue;
+            }
+            if (($field['type'] ?? '') === 'string'
+                && preg_match('/label|bucket|period|semana|week/i', (string) ($field['slug'] ?? '')) === 1) {
+                return $field;
+            }
+        }
+
+        return null;
     }
 
     /**

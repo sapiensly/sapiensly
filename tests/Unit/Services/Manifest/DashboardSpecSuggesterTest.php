@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\Manifest\DashboardSpecSuggester;
+use Illuminate\Support\Str;
 
 /**
  * The deterministic dashboard suggester (the Express path's author). These
@@ -106,4 +107,132 @@ it('labels a measure KPI with the clean field name, not a "Suma/Promedio" prefix
         ->and($npsKpi['label'])->toBe('Nps')
         ->and($npsKpi['label'])->not->toStartWith('Promedio ')
         ->and($npsKpi['label'])->not->toStartWith('Suma ');
+});
+
+/** A weekly pre-aggregated series like the prod contact-rate tool returns. */
+function dss_weekly_series(string $idSuffix, string $slug, string $measureSlug, int $weeks): array
+{
+    return [
+        'object' => [
+            'id' => 'obj_'.$idSuffix,
+            'slug' => $slug,
+            'name' => Str::headline($slug),
+            'fields' => [
+                ['id' => 'fld_pstart'.$idSuffix, 'slug' => 'period_start', 'name' => 'Period Start', 'type' => 'date'],
+                ['id' => 'fld_plabel'.$idSuffix, 'slug' => 'period_label', 'name' => 'Period Label', 'type' => 'string'],
+                ['id' => 'fld_measur'.$idSuffix, 'slug' => $measureSlug, 'name' => Str::headline($measureSlug), 'type' => 'number'],
+                ['id' => 'fld_orders'.$idSuffix, 'slug' => 'ordenes', 'name' => 'Ordenes', 'type' => 'number'],
+            ],
+            'source' => [
+                'type' => 'connected',
+                'field_map' => [
+                    ['field_id' => 'fld_pstart'.$idSuffix, 'external_path' => 'period_start'],
+                    ['field_id' => 'fld_plabel'.$idSuffix, 'external_path' => 'period_label'],
+                    ['field_id' => 'fld_measur'.$idSuffix, 'external_path' => $measureSlug],
+                    ['field_id' => 'fld_orders'.$idSuffix, 'external_path' => 'ordenes'],
+                ],
+                'operations' => ['list' => ['mcp_tool' => 'get-'.str_replace('_', '-', $slug).'-tool', 'collection_path' => 'series']],
+            ],
+        ],
+        'rows' => collect(range(0, $weeks - 1))->map(fn (int $w) => [
+            'period_start' => now()->utc()->subWeeks($w)->startOfWeek()->toDateString(),
+            'period_label' => 'Semana '.($w + 1),
+            $measureSlug => 100 + $w * 7,
+            'ordenes' => 40 + $w * 3,
+        ])->all(),
+    ];
+}
+
+it('a time series with too few buckets gets a bar per period, never axis-less charts or a radar', function () {
+    // Prod app dashyuhu: csc_contact_rate sampled only 2 weekly periods → the
+    // trend guard (< 3 buckets) skipped the line, period_label was filtered
+    // from breakdowns, and the old fallback shipped THREE charts with no
+    // group_by and no x axis (bar/hbar/radar) — each a single aggregated
+    // value, the radar rendering nothing at all.
+    ['object' => $object, 'rows' => $rows] = dss_weekly_series('cr', 'csc_contact_rate', 'tickets_creados', 2);
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets']);
+
+    expect($spec['charts'])->not->toBeEmpty();
+    foreach ($spec['charts'] as $chart) {
+        $hasAxis = isset($chart['x_field_id']) || isset($chart['group_by_field_id']) || ($chart['chart_type'] ?? '') === 'box';
+        expect($hasAxis)->toBeTrue()
+            ->and($chart['chart_type'])->not->toBe('radar');
+    }
+
+    // The honest form: the lead measure as one bar per period, on the
+    // bucket-label axis (few periods ⇒ few bars, still a real picture).
+    $perPeriod = collect($spec['charts'])->firstWhere('group_by_field_id', 'fld_plabelcr');
+    expect($perPeriod)->not->toBeNull()
+        ->and($perPeriod['chart_type'])->toBe('bar')
+        ->and($perPeriod['y_field_id'])->toBe('fld_measurcr');
+});
+
+it('deduplicates the same measure across objects: one tickets total, then each source\'s next metric', function () {
+    // Prod dashyuhu: three sources each headlined "total tickets" → the band
+    // showed three near-identical KPIs that could disagree with each other.
+    $primary = dss_weekly_series('p1', 'csc_contact_rate', 'tickets_creados', 6);
+    $secondary = [
+        'object' => [
+            'id' => 'obj_dim1', 'slug' => 'tickets_by_dimension', 'name' => 'Tickets By Dimension',
+            'fields' => [
+                ['id' => 'fld_key0dim1', 'slug' => 'key', 'name' => 'Key', 'type' => 'string'],
+                ['id' => 'fld_ttotdim1', 'slug' => 'totals_total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+                ['id' => 'fld_backdim1', 'slug' => 'totals_backlog_open', 'name' => 'Backlog Open', 'type' => 'number'],
+            ],
+            'source' => [
+                'type' => 'connected',
+                'field_map' => [
+                    ['field_id' => 'fld_key0dim1', 'external_path' => 'key'],
+                    ['field_id' => 'fld_ttotdim1', 'external_path' => 'totals.total_tickets'],
+                    ['field_id' => 'fld_backdim1', 'external_path' => 'totals.backlog_open'],
+                ],
+                'operations' => ['list' => ['mcp_tool' => 'get-tickets-by-dimension-tool', 'collection_path' => 'breakdown']],
+            ],
+        ],
+        'rows' => [
+            ['key' => 'Envíos', 'totals' => ['total_tickets' => 40, 'backlog_open' => 5]],
+            ['key' => 'Pagos', 'totals' => ['total_tickets' => 25, 'backlog_open' => 2]],
+            ['key' => 'Cuenta', 'totals' => ['total_tickets' => 12, 'backlog_open' => 1]],
+        ],
+    ];
+
+    $spec = app(DashboardSpecSuggester::class)->suggestMulti(
+        [$primary['object'], $secondary['object']],
+        'es',
+        [
+            $primary['object']['id'] => $primary['rows'],
+            $secondary['object']['id'] => $secondary['rows'],
+        ],
+        ['tickets'],
+    );
+
+    // Exactly ONE tickets-volume KPI on the whole band — the primary's.
+    $ticketVolume = collect($spec['kpis'])->filter(
+        fn (array $k): bool => in_array($k['aggregation'] ?? '', ['sum', 'count'], true)
+            && in_array($k['field_id'] ?? '', ['fld_measurp1', 'fld_ttotdim1'], true),
+    );
+    expect($ticketVolume)->toHaveCount(1);
+
+    // The secondary still contributes — its NEXT distinct metric (backlog).
+    $backlog = collect($spec['kpis'])->firstWhere('field_id', 'fld_backdim1');
+    expect($backlog)->not->toBeNull()
+        ->and($backlog['object_slug'] ?? null)->toBe('tickets_by_dimension');
+});
+
+it('falls back to a box distribution on raw rows with no date and no categorical', function () {
+    $object = [
+        'id' => 'obj_scores0', 'slug' => 'quality_scores', 'name' => 'Quality Scores',
+        'fields' => [
+            ['id' => 'fld_score000', 'slug' => 'inspection_minutes', 'name' => 'Inspection Minutes', 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [['field_id' => 'fld_score000', 'external_path' => 'inspection_minutes']]],
+    ];
+    $rows = collect(range(1, 8))->map(fn (int $i) => ['inspection_minutes' => $i * 3.5])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows);
+
+    expect($spec['charts'])->toHaveCount(1)
+        ->and($spec['charts'][0]['chart_type'])->toBe('box')
+        ->and($spec['charts'][0]['y_field_id'])->toBe('fld_score000');
 });
