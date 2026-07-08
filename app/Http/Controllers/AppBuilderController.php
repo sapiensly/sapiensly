@@ -146,7 +146,6 @@ class AppBuilderController extends Controller
             'models' => $models,
             'defaultModel' => $defaultModel,
             'backupModel' => $backupModel,
-            'expressEnabled' => (bool) config('express.enabled'),
             'manifest' => $manifest,
             'preview' => $preview,
             'schema' => $schema,
