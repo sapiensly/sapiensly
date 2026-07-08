@@ -333,3 +333,45 @@ it('keeps ONE KPI per measure inside a single band (count of rows vs sum of its 
     );
     expect($volumeKpis)->toHaveCount(1);
 });
+
+it('emits several trends over a multi-measure series, each with its own axis and form', function () {
+    // A pre-aggregated series carrying many measures (contact rate: tickets,
+    // ordenes, containment) used to spend its whole time story on ONE line.
+    ['object' => $object, 'rows' => $rows] = dss_weekly_series('mm', 'csc_contact_rate', 'tickets_creados', 26);
+    $object['fields'][] = ['id' => 'fld_containmm', 'slug' => 'containment_pct', 'name' => 'Containment Pct', 'type' => 'number'];
+    $object['source']['field_map'][] = ['field_id' => 'fld_containmm', 'external_path' => 'containment_pct'];
+    $rows = array_map(fn (array $r, int $i) => [...$r, 'containment_pct' => 70.5 + ($i % 10)], $rows, array_keys($rows));
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets']);
+
+    $trends = collect($spec['charts'])->filter(fn (array $c): bool => isset($c['x_field_id']))->values();
+    expect($trends->count())->toBeGreaterThanOrEqual(2);
+
+    // Distinct measures, varied forms, never more than 2 of a kind.
+    expect($trends->pluck('y_field_id')->unique()->count())->toBe($trends->count());
+    $typeCounts = $trends->pluck('chart_type')->countBy();
+    foreach ($typeCounts as $count) {
+        expect($count)->toBeLessThanOrEqual(2);
+    }
+});
+
+it('opens the board on a window the sampled data actually spans', function () {
+    // ~26 weeks of data filtered to the fixed 30-day default rendered an
+    // empty board; the span now picks the preset.
+    ['object' => $long, 'rows' => $longRows] = dss_weekly_series('dr1', 'ventas_mensuales', 'monto_total', 26);
+    $longSpec = app(DashboardSpecSuggester::class)->suggest($long, 'es', $longRows);
+    expect($longSpec['default_range'] ?? null)->toBe('1y');
+
+    ['object' => $mid, 'rows' => $midRows] = dss_weekly_series('dr2', 'ventas_trimestre', 'monto_total', 10);
+    $midSpec = app(DashboardSpecSuggester::class)->suggest($mid, 'es', $midRows);
+    expect($midSpec['default_range'] ?? null)->toBe('90d');
+
+    // A fresh 2-week window keeps the product default.
+    ['object' => $short, 'rows' => $shortRows] = dss_weekly_series('dr3', 'ventas_semana', 'monto_total', 2);
+    $shortSpec = app(DashboardSpecSuggester::class)->suggest($short, 'es', $shortRows);
+    expect($shortSpec['default_range'] ?? null)->toBe('30d');
+
+    // The KPI compare window defaults to the SAME preset the board opens on.
+    $kpi = $longSpec['kpis'][0];
+    expect(json_encode($kpi['compare']))->toContain("'1y'");
+});

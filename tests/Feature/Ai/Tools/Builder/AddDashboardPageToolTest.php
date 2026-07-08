@@ -890,3 +890,27 @@ it('disables the date filter when the object has no temporal field', function ()
         ->and(json_encode($built['page']))->not->toContain('range_start')
         ->and(json_encode($built['page']))->not->toContain('sys_created_at');
 });
+
+it('honours the spec default_range across the filter bar and every range expression', function () {
+    $manifest = adp_manifest($this->testApp->id);
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        [...adp_spec(), 'default_range' => '90d'],
+        $manifest['objects'][0], [], null, 'es',
+    );
+    expect($built['ok'])->toBeTrue();
+    $json = json_encode($built['page']);
+    expect($json)->toContain("default(params.range, '90d')")
+        ->and($json)->not->toContain("default(params.range, '30d')");
+    $filterBar = collect($built['page']['blocks'])->firstWhere('type', 'filter_bar');
+    expect($filterBar['controls'][0]['default'])->toBe('90d');
+
+    // A preset the filter bar doesn't offer falls back to the product default.
+    $fallback = app(AppScaffolder::class)->buildDashboardFromSpec(
+        [...adp_spec(), 'default_range' => '45d'],
+        $manifest['objects'][0], [], null, 'es',
+    );
+    expect($fallback['ok'])->toBeTrue();
+    $fallbackBar = collect($fallback['page']['blocks'])->firstWhere('type', 'filter_bar');
+    expect($fallbackBar['controls'][0]['default'])->toBe('30d');
+});

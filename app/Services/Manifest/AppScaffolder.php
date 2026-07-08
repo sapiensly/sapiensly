@@ -1158,13 +1158,15 @@ class AppScaffolder
         }
         $withDateFilter = (bool) ($spec['include_date_filter'] ?? true);
 
-        // Every dashboard opens on the last 30 days — the product default. For
-        // connected sources this is honest now that the reader pushes the picked
-        // window into the source's date arguments (so 30d re-fetches a real
-        // 30-day window, not a fixed build-time bake), and the presets let the
-        // user widen to Año. A board over stale connected data can still open
-        // empty ("sin registros en la ventana"); widening the range resolves it.
-        $defaultRange = '30d';
+        // Every dashboard opens on the last 30 days — the product default —
+        // unless the spec asks for another preset (`default_range`): the
+        // data-aware suggester widens it when the sampled rows span months, so
+        // a monthly/yearly series doesn't open as an empty board filtered to a
+        // window its data lives outside of. Validated against the filter bar's
+        // REAL presets; anything else falls back to 30d.
+        $defaultRange = in_array($spec['default_range'] ?? null, ['7d', '30d', '90d', '1y'], true)
+            ? (string) $spec['default_range']
+            : '30d';
 
         $rangeBySlug = [];
         foreach ($objectsBySlug as $slug => $obj) {

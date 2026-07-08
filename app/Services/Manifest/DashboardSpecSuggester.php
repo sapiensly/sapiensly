@@ -80,9 +80,19 @@ class DashboardSpecSuggester
         }
 
         // Make room for the guests: the primary keeps its strongest pieces
-        // (the suggester already orders by story importance).
+        // (the suggester already orders by story importance) — but its EXTRA
+        // trends (a multi-measure series emits up to three) step aside first:
+        // a guest object's trend+breakdown says more than the primary's third
+        // line. What gets displaced returns below if the guests leave room.
         $spec['kpis'] = array_slice($spec['kpis'] ?? [], 0, self::PRIMARY_KPIS);
-        $spec['charts'] = array_slice($spec['charts'] ?? [], 0, self::PRIMARY_CHARTS);
+        $primaryCharts = collect($spec['charts'] ?? []);
+        $primaryTrends = $primaryCharts->filter(fn (array $c): bool => isset($c['x_field_id']))->values();
+        $ordered = collect([$primaryTrends->first()])->filter()
+            ->concat($primaryCharts->reject(fn (array $c): bool => isset($c['x_field_id'])))
+            ->concat($primaryTrends->slice(1))
+            ->values()->all();
+        $spec['charts'] = array_slice($ordered, 0, self::PRIMARY_CHARTS);
+        $displaced = array_slice($ordered, self::PRIMARY_CHARTS);
 
         // Cross-object identity of everything already on the board, so three
         // sources of "total tickets" land as ONE number plus each source's
@@ -151,6 +161,14 @@ class DashboardSpecSuggester
             if (($mini['date_field_id'] ?? null) !== null) {
                 $spec['include_date_filter'] = true;
             }
+        }
+
+        // The primary pieces the guests displaced come back while there's room.
+        foreach ($displaced as $chart) {
+            if (count($spec['charts']) >= self::MAX_CHARTS) {
+                break;
+            }
+            $spec['charts'][] = $this->varyForm($chart, $spec['charts']);
         }
 
         return $spec;
@@ -415,6 +433,11 @@ class DashboardSpecSuggester
             fn (array $f): bool => ($measureTypes[$f['id']] ?? '') !== SemanticProfile::MEASURE_IDENTIFIER,
         ));
 
+        // Open the board on a window the data actually LIVES in: a monthly or
+        // yearly series filtered to the fixed 30-day default renders empty.
+        // The sampled span picks the preset (validated by the compiler).
+        $defaultRange = $this->defaultRange($dateField, $stats);
+
         return array_filter([
             'object_slug' => $object['slug'] ?? null,
             'title' => ($es ? 'Análisis de ' : 'Analysis of ').($object['name'] ?? $object['slug'] ?? ''),
@@ -424,10 +447,37 @@ class DashboardSpecSuggester
             // filter silently deletes every row and the whole board renders
             // empty (observed: an entire benchmark scenario scored 1/5).
             'include_date_filter' => $dateField !== null,
-            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics, $stats, $dateField),
+            'default_range' => $defaultRange,
+            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics, $stats, $dateField, $defaultRange),
             'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object, $promptTopics),
             'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es, $rows),
         ], fn ($v) => $v !== null && $v !== '');
+    }
+
+    /**
+     * The range preset the board OPENS on, from the sampled data's temporal
+     * span: ≤35 days → 30d; ≤120 → 90d; longer → 1y. Unknown span (no date,
+     * no rows) keeps the product default. Must be one of the filter bar's
+     * real presets — the compiler validates.
+     *
+     * @param  array<string, mixed>|null  $dateField
+     * @param  array<string, array{values: list<mixed>, distinct: int, null_rate: float, all_equal: bool}>  $stats
+     */
+    private function defaultRange(?array $dateField, array $stats): ?string
+    {
+        if ($dateField === null || $stats === []) {
+            return null;
+        }
+        $span = $this->semantics->temporalSpanDays($stats[$dateField['id']]['values'] ?? []);
+        if ($span <= 0) {
+            return null;
+        }
+
+        return match (true) {
+            $span <= 35 => '30d',
+            $span <= 120 => '90d',
+            default => '1y',
+        };
     }
 
     /**
@@ -527,7 +577,7 @@ class DashboardSpecSuggester
             : 'Total '.Str::lower($clean);
     }
 
-    private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es, array $promptTopics = [], array $stats = [], ?array $dateField = null): array
+    private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es, array $promptTopics = [], array $stats = [], ?array $dateField = null, ?string $defaultRange = null): array
     {
         $kpis = [];
 
@@ -706,8 +756,8 @@ class DashboardSpecSuggester
         // window; range_prev_start()/range_start() bracket the previous one.
         if ($dateField !== null) {
             $fieldsById = collect($numerics)->keyBy('id');
-            $kpis = array_map(function (array $kpi) use ($dateField, $fieldsById): array {
-                $kpi['compare'] ??= $this->previousWindowCompare((string) $dateField['id'], $kpi['filter'] ?? null);
+            $kpis = array_map(function (array $kpi) use ($dateField, $fieldsById, $defaultRange): array {
+                $kpi['compare'] ??= $this->previousWindowCompare((string) $dateField['id'], $kpi['filter'] ?? null, $defaultRange ?? '30d');
                 if (! array_key_exists('delta_good', $kpi)) {
                     $field = $fieldsById->get($kpi['field_id'] ?? '');
                     $direction = $field !== null ? $this->semantics->deltaGoodOf($field) : null;
@@ -734,11 +784,11 @@ class DashboardSpecSuggester
      * @param  array<string, mixed>|null  $ownFilter
      * @return array{filter: array<string, mixed>}
      */
-    private function previousWindowCompare(string $dateFieldId, ?array $ownFilter): array
+    private function previousWindowCompare(string $dateFieldId, ?array $ownFilter, string $defaultRange = '30d'): array
     {
         $window = ['op' => 'and', 'conditions' => [
-            ['op' => 'gte', 'field_id' => $dateFieldId, 'value_expression' => "{{range_prev_start(default(params.range, '30d'))}}"],
-            ['op' => 'lt', 'field_id' => $dateFieldId, 'value_expression' => "{{range_start(default(params.range, '30d'))}}"],
+            ['op' => 'gte', 'field_id' => $dateFieldId, 'value_expression' => "{{range_prev_start(default(params.range, '{$defaultRange}'))}}"],
+            ['op' => 'lt', 'field_id' => $dateFieldId, 'value_expression' => "{{range_start(default(params.range, '{$defaultRange}'))}}"],
         ]];
 
         return [
@@ -849,16 +899,49 @@ class DashboardSpecSuggester
                 // named after: nps_time_series → nps_score, not its first
                 // additive (a prod NPS board charted `responses` and the
                 // requested score never rendered). Topical ratio first, then
-                // topical additive, then the generic order.
+                // topical additive, then the generic order — and on a series
+                // carrying SEVERAL measures (contact rate: tickets,
+                // conversaciones, containment), up to three of them each get
+                // their own trend: one line was wasting the whole story.
                 $pick = $this->leadMeasure($object, $numerics, $measureTypes, $promptTopics);
-
-                if ($pick !== null) {
-                    [$field, $agg] = $pick;
-                    $trend['aggregation'] = $agg;
-                    $trend['y_field_id'] = $field['id'];
-                    $trend['label'] = ($es ? 'Evolución de ' : 'Evolution of ').Str::lower((string) ($field['name'] ?? $field['slug']));
-                } else {
+                if ($pick === null) {
                     $trend = null;
+                } else {
+                    $candidates = [$pick];
+                    $identities = [$this->measureIdentity((string) ($pick[0]['slug'] ?? ''), $pick[1])];
+                    // More measures, most-varied additives first, then ratios.
+                    $pool = collect($additives)
+                        ->sortByDesc(fn (array $f): int => $stats[$f['id']]['distinct'] ?? 0)
+                        ->map(fn (array $f): array => [$f, 'sum'])
+                        ->concat(collect($ratios)->map(fn (array $f): array => [$f, 'avg']));
+                    foreach ($pool as [$field, $agg]) {
+                        if (count($candidates) >= 3) {
+                            break;
+                        }
+                        $identity = $this->measureIdentity((string) ($field['slug'] ?? ''), $agg);
+                        if ($this->isDuplicateIdentity($identity, $identities)) {
+                            continue;
+                        }
+                        $candidates[] = [$field, $agg];
+                        $identities[] = $identity;
+                    }
+
+                    // Vary the form so the lint's max-2-per-type holds:
+                    // line, area, then bar-over-time.
+                    $trendTypes = ['line', 'area', 'bar'];
+                    foreach ($candidates as $i => [$field, $agg]) {
+                        if (count($charts) >= self::MAX_CHARTS) {
+                            break;
+                        }
+                        $charts[] = [
+                            ...$trend,
+                            'chart_type' => $trendTypes[$i] ?? 'line',
+                            'aggregation' => $agg,
+                            'y_field_id' => $field['id'],
+                            'label' => ($es ? 'Evolución de ' : 'Evolution of ').Str::lower((string) ($field['name'] ?? $field['slug'])),
+                        ];
+                    }
+                    $trend = null; // already emitted
                 }
             }
             if ($trend !== null) {
