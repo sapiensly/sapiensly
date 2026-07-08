@@ -203,15 +203,21 @@ it('surfaces an error when a hard-killed run left the placeholder a silent «non
         'app_id' => $this->testApp->id, 'conversation_id' => $this->conv->id, 'prompt' => 'x', 'status' => 'running',
     ]);
 
-    (new ExpressDashboardJob($placeholder->id, $run->id, 'x'))->failed(new RuntimeException('worker killed'));
+    // The exact prod exception — its message leaks the job class name and
+    // "attempted too many times". The user must NEVER see either.
+    (new ExpressDashboardJob($placeholder->id, $run->id, 'x'))
+        ->failed(new RuntimeException('App\Jobs\ExpressDashboardJob has been attempted too many times.'));
 
-    // Narration kept; a NEW error message explains the interruption.
+    // Narration kept; a NEW error message explains the interruption cleanly.
     expect($placeholder->fresh()->content)->toContain('Localizando');
     $error = BuilderMessage::where('conversation_id', $this->conv->id)
         ->where('id', '>', $placeholder->id)->first();
     expect($error)->not->toBeNull()
         ->and($error->status)->toBe('error')
-        ->and($error->content)->toContain('se interrumpió');
+        ->and($error->content)->toContain('se interrumpió')
+        ->and($error->content)->toContain('quedó guardado')
+        ->and($error->content)->not->toContain('attempted too many times')
+        ->and($error->content)->not->toContain('ExpressDashboardJob');
 });
 
 it('does NOT double-report when a failure report already followed the placeholder', function () {

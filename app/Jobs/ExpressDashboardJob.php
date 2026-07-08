@@ -32,6 +32,12 @@ class ExpressDashboardJob implements ShouldQueue
 {
     use Queueable;
 
+    /**
+     * The clean, user-facing line for an interrupted build — never the raw
+     * exception (which leaks a job class name or "attempted too many times").
+     */
+    private const INTERRUPTED_MESSAGE = 'El build se interrumpió antes de terminar. Lo que ya se había aplicado quedó guardado. Vuelve a intentarlo — y si el tablero era muy amplio, pídelo por partes.';
+
     public int $timeout = 300;
 
     public int $tries = 1;
@@ -279,7 +285,13 @@ class ExpressDashboardJob implements ShouldQueue
             return;
         }
 
-        $reason = 'El build Express se interrumpió: '.($e?->getMessage() ?? 'el proceso se detuvo').'.';
+        // NEVER surface the raw exception — it leaks internals like a job class
+        // name or "attempted too many times". The technical cause is already
+        // saved to $run->error above for telemetry; the user gets a clean,
+        // reassuring line. Bank-first means any dashboard/objects already
+        // compiled were saved as versions, so "lo aplicado quedó guardado" is
+        // honest even on a hard kill mid-enrichment.
+        $reason = self::INTERRUPTED_MESSAGE;
         $hasNarration = trim((string) $message->content) !== '';
         if ($hasNarration) {
             // The progress narration stays; the interruption is a NEW message.
