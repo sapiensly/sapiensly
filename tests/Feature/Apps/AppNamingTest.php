@@ -36,8 +36,12 @@ it('forces a description down to a single sentence', function () {
         ->and(AppNaming::firstSentence('  '))->toBe('');
 });
 
-it('builds a bounded, sentence-cased description from the prompt', function () {
-    expect(AppNaming::descriptionFromPrompt('analiza el otd semanal de yuhu'))
+it('builds a bounded, sentence-cased description from the prompt, dropping the lead verb', function () {
+    // A command becomes a statement: "crea un dashboard de OTD…" → "Dashboard de OTD…".
+    expect(AppNaming::descriptionFromPrompt('crea un dashboard de OTD de yuhu'))
+        ->toBe('Dashboard de OTD de yuhu')
+        // No lead build verb → kept as-is (sentence-cased).
+        ->and(AppNaming::descriptionFromPrompt('analiza el otd semanal de yuhu'))
         ->toBe('Analiza el otd semanal de yuhu');
 });
 

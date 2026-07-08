@@ -204,10 +204,12 @@ it('gives the hero an eyebrow and floats the headline KPI as a live stat', funct
     expect($hero['eyebrow'])->toBe('Reporte')
         ->and($hero['eyebrow_icon'])->toBe('bar-chart');
 
-    // The hero stat mirrors the FIRST KPI, resolved with the same range filter.
-    $firstKpi = collect($built['page']['blocks'])->firstWhere('type', 'metric_grid')['items'][0];
-    expect($hero['stat']['aggregation'])->toBe($firstKpi['aggregation'])
-        ->and($hero['stat']['query'])->toBe($firstKpi['query'])
+    // The hero stat prefers a RATE (avg/percentage) over volume — here the
+    // 'Promedio horas' avg, not the first count KPI — resolved with the same range.
+    $items = collect($built['page']['blocks'])->firstWhere('type', 'metric_grid')['items'];
+    $avgKpi = collect($items)->firstWhere('aggregation', 'avg');
+    expect($hero['stat']['aggregation'])->toBe('avg')
+        ->and($hero['stat']['query'])->toBe($avgKpi['query'])
         ->and(json_encode($hero['stat']['query']))->toContain('range_start');
 });
 

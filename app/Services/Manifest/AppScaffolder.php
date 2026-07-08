@@ -1439,10 +1439,14 @@ class AppScaffolder
                 'align' => 'left',
                 'min_height' => 120,
             ];
-            // Float the headline KPI (the first one) into the hero as a live
-            // figure — the executive-summary number, resolved with the same
-            // date filter as the band below.
-            $lead = $items[0] ?? null;
+            // Float the headline KPI into the hero as a live figure — the
+            // executive-summary number. Prefer a RATE (a percentage like OTD%, or
+            // an averaged score like NPS) over a raw volume: "96.7% OTD" is the
+            // number leadership reads, not "1.5M productos". Fall back to the
+            // first KPI when there's no rate.
+            $lead = collect($items)->first(fn (array $k): bool => ($k['format'] ?? null) === 'percentage')
+                ?? collect($items)->first(fn (array $k): bool => ($k['aggregation'] ?? null) === 'avg')
+                ?? ($items[0] ?? null);
             if (is_array($lead) && isset($lead['query'], $lead['aggregation'])) {
                 $hero['stat'] = array_filter([
                     'label' => (string) ($lead['label'] ?? ''),

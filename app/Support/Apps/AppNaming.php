@@ -45,8 +45,14 @@ class AppNaming
     public static function descriptionFromPrompt(string $prompt): ?string
     {
         $clean = self::clean($prompt);
+        if ($clean === '') {
+            return null;
+        }
+        // Drop the lead build verb so the fallback reads as a STATEMENT, not a
+        // command: "crea un dashboard de OTD…" → "Dashboard de OTD…".
+        $clean = trim((string) preg_replace(self::LEAD_VERB, '', $clean)) ?: $clean;
 
-        return $clean === '' ? null : Str::ucfirst(Str::limit($clean, 480));
+        return Str::ucfirst(Str::limit($clean, 480));
     }
 
     /**
