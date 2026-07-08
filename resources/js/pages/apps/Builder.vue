@@ -1430,9 +1430,9 @@ function reasoningElapsed(m: Message): string | null {
     }
 
     const secs = Math.max(0, Math.floor((end - start) / 1000));
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return m > 0 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
+    const mins = Math.floor(secs / 60);
+    const rem = secs % 60;
+    return mins > 0 ? `${mins}m ${String(rem).padStart(2, '0')}s` : `${rem}s`;
 }
 
 // Detener build: raises the cooperative stop flag server-side. The running
