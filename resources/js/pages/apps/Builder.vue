@@ -81,6 +81,7 @@ import {
     Eye,
     FileText,
     GripVertical,
+    Hourglass,
     ImagePlus,
     Layers,
     LayoutDashboard,
@@ -103,7 +104,6 @@ import {
     ShieldCheck,
     Sparkles,
     Square,
-    Timer,
     Wand2,
     Workflow as WorkflowIcon,
     X,
@@ -2509,9 +2509,9 @@ function statusTone(status: Message['status']): string {
                                         class="inline-flex items-center gap-0.5 tabular-nums text-accent-blue"
                                         :title="t('apps.builder.reasoning_time')"
                                     >
-                                        <Timer class="size-3" />{{
-                                            reasoningElapsed(m)
-                                        }}
+                                        <Hourglass
+                                            class="size-3 animate-spin [animation-duration:2.5s]"
+                                        />{{ reasoningElapsed(m) }}
                                     </span>
                                     <span>{{ messageTime(m) }}</span>
                                 </div>
