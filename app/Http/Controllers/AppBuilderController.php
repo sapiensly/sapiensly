@@ -16,6 +16,7 @@ use App\Models\Record;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Apps\AppAccessResolver;
+use App\Services\Apps\AppNamer;
 use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
@@ -1145,16 +1146,17 @@ class AppBuilderController extends Controller
         if ($app->name !== AppNaming::UNTITLED) {
             return;
         }
-        $name = AppNaming::nameFromPrompt($prompt);
-        if ($name === null) {
+        // Name via the short-summary model (heuristic fallback baked in); the
+        // slug is derived deterministically + unique. The DESCRIPTION is left for
+        // the build to fill from the finished dashboard (see the Express report),
+        // so it describes what was actually built, not the raw prompt.
+        $name = app(AppNamer::class)->nameFromPrompt($prompt, $app->user);
+        if ($name === '' || $name === AppNaming::UNTITLED) {
             return; // nothing usable — keep the placeholder for the next turn
         }
 
         $app->name = $name;
         $app->slug = AppNaming::uniqueSlug($name, $app->organization_id);
-        if (trim((string) $app->description) === '') {
-            $app->description = AppNaming::descriptionFromPrompt($prompt);
-        }
         $app->save();
 
         // Keep the active manifest's identity in step — its initial version baked

@@ -129,6 +129,8 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
         ['fixes' => []], // the sync-queued G-3 verifier finds nothing to fix
     ]);
 
+    $this->testApp->update(['description' => null]); // unnamed app has no description yet
+
     $placeholder = BuilderMessage::create([
         'conversation_id' => $this->conv->id, 'role' => 'assistant', 'content' => '', 'status' => 'streaming',
     ]);
@@ -162,6 +164,12 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
 
     $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
     expect($manifest['pages'])->toHaveCount(1);
+
+    // The app's description is filled from the FINISHED dashboard's purpose
+    // (the voice gate), not the raw prompt — and synced onto the manifest.
+    $this->testApp->refresh();
+    expect($this->testApp->description)->toBe('Volumen semanal.')
+        ->and($manifest['description'] ?? null)->toBe('Volumen semanal.');
 });
 
 it('aborts before spending anything when Detener was pressed first', function () {

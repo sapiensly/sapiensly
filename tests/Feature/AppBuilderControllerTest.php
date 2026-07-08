@@ -9,6 +9,7 @@ use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\Record;
 use App\Models\User;
+use App\Services\Apps\AppNamer;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Manifest\AppManifestService;
 use Illuminate\Http\UploadedFile;
@@ -115,7 +116,13 @@ it('reuses the active conversation across visits', function () {
 
 it('names an unnamed app from its first builder prompt', function () {
     Queue::fake();
-    $app = App::factory()->create(['user_id' => $this->user->id, 'visibility' => 'private', 'name' => 'Nueva app']);
+    // The name comes from the short-summary model; stub it so the test is
+    // deterministic and makes no real call.
+    $namer = Mockery::mock(AppNamer::class);
+    $namer->shouldReceive('nameFromPrompt')->andReturn('CRM de ventas');
+    app()->instance(AppNamer::class, $namer);
+
+    $app = App::factory()->create(['user_id' => $this->user->id, 'visibility' => 'private', 'name' => 'Nueva app', 'description' => null]);
     app(AppManifestService::class)->createVersion($app, bldcm($app->id), $this->user);
     $conv = BuilderConversation::create(['app_id' => $app->id, 'user_id' => $this->user->id, 'status' => 'active']);
 
@@ -126,16 +133,15 @@ it('names an unnamed app from its first builder prompt', function () {
         ])->assertOk();
 
     $app->refresh();
-    expect($app->name)->toBe('CRM de ventas para mi equipo')
+    expect($app->name)->toBe('CRM de ventas')
         ->and($app->slug)->toStartWith('crm')
-        ->and($app->description)->not->toBeNull();
-    $response->assertJsonPath('app.name', 'CRM de ventas para mi equipo');
+        ->and($app->description)->toBeNull(); // description is filled post-build, not now
+    $response->assertJsonPath('app.name', 'CRM de ventas');
 
-    // The active manifest's identity is synced too — not left at "Nueva app".
+    // Name + slug are synced onto the manifest too — not left at "Nueva app".
     $manifest = app(AppManifestService::class)->getActiveManifest($app);
-    expect($manifest['name'])->toBe('CRM de ventas para mi equipo')
-        ->and($manifest['slug'])->toBe($app->slug)
-        ->and($manifest['description'])->not->toBeNull();
+    expect($manifest['name'])->toBe('CRM de ventas')
+        ->and($manifest['slug'])->toBe($app->slug);
 });
 
 it('blocks builder access to users who cannot see the App', function () {

@@ -10,10 +10,13 @@ use App\Services\Builder\BuilderCancellation;
 use App\Services\Express\DashboardExpressPhases;
 use App\Services\Express\ExpressContext;
 use App\Services\Express\ExpressPipeline;
+use App\Services\Manifest\AppManifestService;
+use App\Support\Apps\AppNaming;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -113,6 +116,20 @@ class ExpressDashboardJob implements ShouldQueue
             BuilderStreamComplete::dispatch($reportMessage);
         } catch (Throwable) {
             // UI catches up from the DB.
+        }
+
+        // The app's DESCRIPTION comes from the FINISHED dashboard, not the raw
+        // prompt: fill it (once) from the voice gate's purpose — a one-line
+        // "audience + questions it answers" written after the spec exists — and
+        // sync it onto the manifest. Falls back to a prompt distillation only if
+        // the gate produced nothing.
+        if ($run->status === 'succeeded' && $context->page !== null && trim((string) $app->description) === '') {
+            $purpose = trim((string) ($context->semantic['voice']['purpose'] ?? ''));
+            $description = $purpose !== '' ? $purpose : (string) AppNaming::descriptionFromPrompt($this->prompt);
+            if ($description !== '') {
+                $app->forceFill(['description' => Str::limit($description, 480)])->save();
+                app(AppManifestService::class)->syncManifestIdentity($app->refresh());
+            }
         }
 
         // Persist the rendered-number summary so the adversarial verifier
