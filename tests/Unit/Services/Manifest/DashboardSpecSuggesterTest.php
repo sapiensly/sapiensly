@@ -279,3 +279,57 @@ it('decorates KPIs for honest display: fractions as percentage, 0-100 rates with
     expect($percent['format'] ?? null)->not->toBe('percentage')
         ->and($percent['unit'] ?? null)->toBe('%');
 });
+
+it('gives every dated KPI a previous-window compare and a semantic delta direction', function () {
+    ['object' => $object, 'rows' => $rows] = dss_weekly_series('cmp', 'csc_contact_rate', 'tickets_creados', 6);
+    // Add a measure whose good direction is DOWN (a backlog).
+    $object['fields'][] = ['id' => 'fld_backlogcmp', 'slug' => 'totals_backlog_open', 'name' => 'Backlog Open', 'type' => 'number'];
+    $object['source']['field_map'][] = ['field_id' => 'fld_backlogcmp', 'external_path' => 'backlog_open'];
+    $rows = array_map(fn (array $r, int $i) => [...$r, 'backlog_open' => 5 + $i], $rows, array_keys($rows));
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets']);
+
+    // Every KPI carries the previous-window compare (the delta chip's source).
+    foreach ($spec['kpis'] as $kpi) {
+        $json = json_encode($kpi['compare'] ?? null);
+        expect($json)->toContain('range_prev_start')
+            ->and($json)->toContain('range_start')
+            ->and($json)->toContain('fld_pstartcmp'); // the object's own date axis
+    }
+
+    // Semantic direction: a backlog falling is good.
+    $backlog = collect($spec['kpis'])->firstWhere('field_id', 'fld_backlogcmp');
+    expect($backlog)->not->toBeNull()
+        ->and($backlog['delta_good'])->toBe('down');
+});
+
+it('keeps ONE KPI per measure inside a single band (count of rows vs sum of its total column)', function () {
+    // A RAW ticket list that ALSO carries a total_tickets numeric column:
+    // count(rows) and sum(total_tickets) are the same headline twice.
+    $object = [
+        'id' => 'obj_rawtix00', 'slug' => 'tickets', 'name' => 'Tickets',
+        'fields' => [
+            ['id' => 'fld_createdrt', 'slug' => 'created_at', 'name' => 'Created', 'type' => 'datetime'],
+            ['id' => 'fld_totaltixr', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+            ['id' => 'fld_statusrt0', 'slug' => 'status', 'name' => 'Status', 'type' => 'string'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'fld_createdrt', 'external_path' => 'created_at'],
+            ['field_id' => 'fld_totaltixr', 'external_path' => 'total_tickets'],
+            ['field_id' => 'fld_statusrt0', 'external_path' => 'status'],
+        ]],
+    ];
+    $rows = collect(range(0, 7))->map(fn (int $i) => [
+        'created_at' => now()->utc()->subDays($i)->toIso8601String(),
+        'total_tickets' => 3 + $i,
+        'status' => $i % 2 ? 'open' : 'closed',
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows);
+
+    $volumeKpis = collect($spec['kpis'])->filter(
+        fn (array $k): bool => in_array($k['aggregation'] ?? '', ['count', 'sum'], true)
+            && ($k['filter'] ?? null) === null,
+    );
+    expect($volumeKpis)->toHaveCount(1);
+});

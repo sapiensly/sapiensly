@@ -336,6 +336,18 @@ class ExpressionResolver
                 '1y' => now()->utc()->subYear()->toDateString(),
                 default => '',
             },
+            // Start of the PREVIOUS window of the same preset — with range_start
+            // as its exclusive end it brackets the period-over-period compare
+            // window KPI delta chips read. Empty preset ("Todo") resolves empty,
+            // same as range_start, so both compare bounds skip server-side.
+            'range_prev_start' => match (is_string($args[0] ?? null) ? $args[0] : '') {
+                'today' => now()->utc()->subDay()->toDateString(),
+                '7d' => now()->utc()->subDays(14)->toDateString(),
+                '30d' => now()->utc()->subDays(60)->toDateString(),
+                '90d' => now()->utc()->subDays(180)->toDateString(),
+                '1y' => now()->utc()->subYears(2)->toDateString(),
+                default => '',
+            },
             default => null,
         };
     }

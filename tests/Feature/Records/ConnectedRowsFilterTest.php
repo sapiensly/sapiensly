@@ -194,3 +194,27 @@ it('threads the viewing user to the MCP read so per-user OAuth resolves', functi
     expect($seen)->not->toBeNull()
         ->and($seen->is($this->user))->toBeTrue();
 });
+
+it('computes the previous-window compare value over live connected rows', function () {
+    // The suggester's period-over-period contract: the KPI reads the current
+    // window; `compare` re-reads the SAME measure over
+    // [range_prev_start, range_start). Recent ticket (5d ago) is the current
+    // 30d window; the old one (60d ago) falls exactly in the previous window.
+    $block = [
+        'id' => 'blk_livecompare', 'type' => 'stat', 'label' => 'Minutos',
+        'query' => $this->rangedSource,
+        'aggregation' => 'sum', 'field_id' => 'fld_minutesfld',
+        'compare' => [
+            'object_id' => 'obj_livetickets',
+            'filter' => ['op' => 'and', 'conditions' => [
+                ['op' => 'gte', 'field_id' => 'fld_datecreated', 'value_expression' => "{{range_prev_start(default(params.range, '30d'))}}"],
+                ['op' => 'lt', 'field_id' => 'fld_datecreated', 'value_expression' => "{{range_start(default(params.range, '30d'))}}"],
+            ]],
+        ],
+    ];
+
+    $data = $this->resolver->resolve($this->testApp, [$block], $this->manifest, ['params' => []]);
+
+    expect($data['blk_livecompare']['value'])->toBe(30)          // current window
+        ->and($data['blk_livecompare']['compare_value'])->toBe(90); // previous window
+});

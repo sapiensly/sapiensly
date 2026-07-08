@@ -240,3 +240,24 @@ it('range_start(default(params.range, ...)) honours the chosen preset over the d
     expect($this->resolver->resolve("{{range_start(default(params.range, '30d'))}}", ['params' => ['range' => 'all']]))
         ->toBe('');
 });
+
+it('range_prev_start brackets the previous window of each preset', function () {
+    // With range_start as the exclusive end, [range_prev_start, range_start)
+    // is the period-over-period compare window KPI delta chips read.
+    expect($this->resolver->resolve("{{range_prev_start('30d')}}", []))
+        ->toBe(now()->utc()->subDays(60)->toDateString());
+    expect($this->resolver->resolve("{{range_prev_start('7d')}}", []))
+        ->toBe(now()->utc()->subDays(14)->toDateString());
+    expect($this->resolver->resolve("{{range_prev_start('90d')}}", []))
+        ->toBe(now()->utc()->subDays(180)->toDateString());
+    expect($this->resolver->resolve("{{range_prev_start('1y')}}", []))
+        ->toBe(now()->utc()->subYears(2)->toDateString());
+    expect($this->resolver->resolve("{{range_prev_start('today')}}", []))
+        ->toBe(now()->utc()->subDay()->toDateString());
+
+    // "Todo" (empty preset) resolves empty — the condition skips server-side,
+    // mirroring range_start.
+    expect($this->resolver->resolve("{{range_prev_start('')}}", []))->toBe('');
+    expect($this->resolver->resolve("{{range_prev_start(default(params.range, '30d'))}}", ['params' => []]))
+        ->toBe(now()->utc()->subDays(60)->toDateString());
+});

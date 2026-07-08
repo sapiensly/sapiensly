@@ -424,7 +424,7 @@ class DashboardSpecSuggester
             // filter silently deletes every row and the whole board renders
             // empty (observed: an entire benchmark scenario scored 1/5).
             'include_date_filter' => $dateField !== null,
-            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics, $stats),
+            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics, $stats, $dateField),
             'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object, $promptTopics),
             'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es, $rows),
         ], fn ($v) => $v !== null && $v !== '');
@@ -527,7 +527,7 @@ class DashboardSpecSuggester
             : 'Total '.Str::lower($clean);
     }
 
-    private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es, array $promptTopics = [], array $stats = []): array
+    private function suggestKpis(array $object, string $grain, array $numerics, array $measureTypes, array $booleans, bool $es, array $promptTopics = [], array $stats = [], ?array $dateField = null): array
     {
         $kpis = [];
 
@@ -592,7 +592,20 @@ class DashboardSpecSuggester
             }
         }
 
-        foreach ($numerics as $field) {
+        // Rank the remaining numerics by story value instead of API field
+        // order: ratios (the qualitative read) first, then additives with the
+        // most variation (columnStats distinct), statistics last.
+        $ranked = collect($numerics)->values()->sortBy(fn (array $f, int $i): array => [
+            match ($measureTypes[$f['id']] ?? '') {
+                SemanticProfile::MEASURE_RATIO => 0,
+                SemanticProfile::MEASURE_ADDITIVE => 1,
+                default => 2,
+            },
+            -($stats[$f['id']]['distinct'] ?? 0),
+            $i,
+        ])->values()->all();
+
+        foreach ($ranked as $field) {
             if (count($kpis) >= self::MAX_KPIS) {
                 break;
             }
@@ -671,7 +684,68 @@ class DashboardSpecSuggester
             ];
         }
 
+        // One KPI per MEASURE, not per column: sum(total_tickets) next to
+        // count(ticket rows) is the same headline twice. Keep the first card
+        // of each identity, whatever branch produced it.
+        $slugById = $this->fieldSlugIndex($object);
+        $seen = [];
+        $kpis = array_values(array_filter($kpis, function (array $kpi) use (&$seen, $slugById): bool {
+            $identity = $this->kpiIdentity($kpi, $slugById);
+            if ($this->isDuplicateIdentity($identity, $seen)) {
+                return false;
+            }
+            $seen[] = $identity;
+
+            return true;
+        }));
+
+        // Period-over-period: with a real date axis every card gets a compare
+        // window (the PREVIOUS period of whatever preset is selected) so the
+        // delta chip renders, plus the field's semantic direction (backlog
+        // down = good, containment up = good). The compiler wires the current
+        // window; range_prev_start()/range_start() bracket the previous one.
+        if ($dateField !== null) {
+            $fieldsById = collect($numerics)->keyBy('id');
+            $kpis = array_map(function (array $kpi) use ($dateField, $fieldsById): array {
+                $kpi['compare'] ??= $this->previousWindowCompare((string) $dateField['id'], $kpi['filter'] ?? null);
+                if (! array_key_exists('delta_good', $kpi)) {
+                    $field = $fieldsById->get($kpi['field_id'] ?? '');
+                    $direction = $field !== null ? $this->semantics->deltaGoodOf($field) : null;
+                    if ($direction !== null) {
+                        $kpi['delta_good'] = $direction;
+                    }
+                }
+
+                return $kpi;
+            }, $kpis);
+        }
+
         return $kpis;
+    }
+
+    /**
+     * The compare query for a KPI's delta chip: the same measure over the
+     * PREVIOUS window of the currently selected preset —
+     * [range_prev_start, range_start). The KPI's own filter (a boolean flag,
+     * say) applies to both windows so the comparison is apples to apples. On
+     * the "Todo" preset both bounds resolve empty and skip, so the chip reads
+     * flat instead of lying.
+     *
+     * @param  array<string, mixed>|null  $ownFilter
+     * @return array{filter: array<string, mixed>}
+     */
+    private function previousWindowCompare(string $dateFieldId, ?array $ownFilter): array
+    {
+        $window = ['op' => 'and', 'conditions' => [
+            ['op' => 'gte', 'field_id' => $dateFieldId, 'value_expression' => "{{range_prev_start(default(params.range, '30d'))}}"],
+            ['op' => 'lt', 'field_id' => $dateFieldId, 'value_expression' => "{{range_start(default(params.range, '30d'))}}"],
+        ]];
+
+        return [
+            'filter' => $ownFilter === null
+                ? $window
+                : ['op' => 'and', 'conditions' => [$ownFilter, $window]],
+        ];
     }
 
     /**
