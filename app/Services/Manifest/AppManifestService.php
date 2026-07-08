@@ -201,6 +201,43 @@ class AppManifestService
         return ManifestPatch::apply($document, $ops);
     }
 
+    /**
+     * Mirror the App model's identity (slug/name/description) onto its ACTIVE
+     * version's manifest, in place. Used when an app is renamed from its first
+     * builder prompt: the initial manifest baked the "Nueva app" placeholder, so
+     * without this the manifest stays desynced and every version built on top of
+     * it inherits the stale name/slug. Safe because the active version at rename
+     * time is the fresh, empty initial one; later versions read the corrected
+     * manifest via getActiveManifest and carry the right identity forward.
+     */
+    public function syncManifestIdentity(App $app): void
+    {
+        if ($app->current_version_id === null) {
+            return;
+        }
+        $version = AppVersion::query()
+            ->where('id', $app->current_version_id)
+            ->where('app_id', $app->id)
+            ->first();
+        if ($version === null || ! is_array($version->manifest)) {
+            return;
+        }
+
+        $manifest = $version->manifest;
+        $manifest['slug'] = $app->slug;
+        $manifest['name'] = $app->name;
+        $description = trim((string) $app->description);
+        if ($description !== '') {
+            $manifest['description'] = mb_strlen($description) > self::MAX_DESCRIPTION_LENGTH
+                ? rtrim(mb_substr($description, 0, self::MAX_DESCRIPTION_LENGTH - 1)).'…'
+                : $description;
+        }
+
+        $version->manifest = $manifest;
+        $version->save();
+        $this->cache->forget($this->cacheKey($app->id, $app->current_version_id));
+    }
+
     private function cacheKey(string $appId, string $versionId): string
     {
         return "manifest:{$appId}:{$versionId}";

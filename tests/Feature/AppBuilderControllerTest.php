@@ -130,6 +130,12 @@ it('names an unnamed app from its first builder prompt', function () {
         ->and($app->slug)->toStartWith('crm')
         ->and($app->description)->not->toBeNull();
     $response->assertJsonPath('app.name', 'CRM de ventas para mi equipo');
+
+    // The active manifest's identity is synced too — not left at "Nueva app".
+    $manifest = app(AppManifestService::class)->getActiveManifest($app);
+    expect($manifest['name'])->toBe('CRM de ventas para mi equipo')
+        ->and($manifest['slug'])->toBe($app->slug)
+        ->and($manifest['description'])->not->toBeNull();
 });
 
 it('blocks builder access to users who cannot see the App', function () {

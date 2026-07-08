@@ -1156,6 +1156,10 @@ class AppBuilderController extends Controller
             $app->description = AppNaming::descriptionFromPrompt($prompt);
         }
         $app->save();
+
+        // Keep the active manifest's identity in step — its initial version baked
+        // the "Nueva app" placeholder; every version built on it would inherit it.
+        $this->manifestService->syncManifestIdentity($app);
     }
 
     /**
