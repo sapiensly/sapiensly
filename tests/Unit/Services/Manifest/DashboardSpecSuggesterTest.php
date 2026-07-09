@@ -1,6 +1,9 @@
 <?php
 
+use App\Ai\Tools\Builder\PlanDashboardTool;
+use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
+use App\Support\Branding\ColorPalette;
 use Illuminate\Support\Str;
 
 /**
@@ -160,12 +163,38 @@ it('a time series with too few buckets gets a bar per period, never axis-less ch
             ->and($chart['chart_type'])->not->toBe('radar');
     }
 
-    // The honest form: the lead measure as one bar per period, on the
-    // bucket-label axis (few periods ⇒ few bars, still a real picture).
-    $perPeriod = collect($spec['charts'])->firstWhere('group_by_field_id', 'fld_plabelcr');
+    // The honest form: the lead measure as one bar per period on the DATE
+    // axis (few periods ⇒ few bars, still a real picture). Never group_by the
+    // bucket-label column — that is the exact shape the compiler refuses
+    // (illegal_aggregation, "the time axis in costume"), and it killed a
+    // whole prod build once (ticketcsc, run plr_01kx4jxx…).
+    $perPeriod = collect($spec['charts'])->firstWhere('x_field_id', 'fld_pstartcr');
     expect($perPeriod)->not->toBeNull()
         ->and($perPeriod['chart_type'])->toBe('bar')
-        ->and($perPeriod['y_field_id'])->toBe('fld_measurcr');
+        ->and($perPeriod['y_field_id'])->toBe('fld_measurcr')
+        ->and($perPeriod['bucket'])->toBe('week')
+        ->and(collect($spec['charts'])->pluck('group_by_field_id')->filter()->values()->all())
+        ->not->toContain('fld_plabelcr');
+});
+
+it('a degenerate series\' suggested spec survives the compiler and its lints end to end', function () {
+    // The suggester and the compiler are two halves of ONE contract: whatever
+    // the fallback ladder emits must compile and lint clean, because Express
+    // banks this spec with zero model help. Prod ticketcsc: a weekly series
+    // with a single sampled bucket made the fallback group by period_label,
+    // the compiler refused its own pipeline's suggestion, and the build died
+    // before any dashboard version existed.
+    ['object' => $object, 'rows' => $rows] = dss_weekly_series('dg', 'csc_contact_rate', 'tickets_creados', 1);
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets']);
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $object, [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'] ?? false)->toBeTrue();
+
+    $lint = PlanDashboardTool::lint($built['purpose'], $built['plan_rows']);
+    expect($lint['ok'])->toBeTrue();
 });
 
 it('deduplicates the same measure across objects: one tickets total, then each source\'s next metric', function () {

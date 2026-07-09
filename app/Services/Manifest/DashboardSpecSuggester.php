@@ -1037,27 +1037,24 @@ class DashboardSpecSuggester
             $label = (string) ($field['name'] ?? $field['slug']);
             $bucketLabel = $this->bucketLabelField($object['fields'] ?? []);
 
-            if ($dateField !== null && $bucketLabel !== null) {
+            if ($dateField !== null) {
                 // A time axis exists but had too few buckets for a line — one
                 // bar per period IS the right picture (few periods, few bars).
-                // The bucket-label column is excluded from breakdowns precisely
-                // because it re-plots the trend; here that's exactly the point.
+                // Always charted on the DATE axis: grouping by the bucket-label
+                // column instead is exactly the shape the compiler refuses
+                // (illegal_aggregation, "the time axis in costume") — shipped
+                // once: a degenerate weekly series suggested group_by
+                // period_label and the whole build failed to compile. The
+                // label column only picks the bucket granularity and the title.
                 $charts[] = [
-                    'label' => $label.($es ? ' por periodo' : ' by period'),
-                    'chart_type' => 'bar',
-                    'aggregation' => $agg,
-                    'y_field_id' => $field['id'],
-                    'group_by_field_id' => $bucketLabel['id'],
-                    'limit' => self::BREAKDOWN_LIMIT,
-                ];
-            } elseif ($dateField !== null) {
-                $charts[] = [
-                    'label' => $label.($es ? ' por día' : ' by day'),
+                    'label' => $label.($bucketLabel !== null
+                        ? ($es ? ' por periodo' : ' by period')
+                        : ($es ? ' por día' : ' by day')),
                     'chart_type' => 'bar',
                     'aggregation' => $agg,
                     'y_field_id' => $field['id'],
                     'x_field_id' => $dateField['id'],
-                    'bucket' => 'day',
+                    'bucket' => $bucketLabel !== null ? 'week' : 'day',
                 ];
             } elseif ($grain === SemanticProfile::GRAIN_RAW) {
                 // No axis anywhere on raw rows: a box of the lead measure is a
