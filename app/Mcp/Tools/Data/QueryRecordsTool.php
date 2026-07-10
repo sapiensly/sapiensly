@@ -50,7 +50,7 @@ class QueryRecordsTool extends SapiensTool
         }
 
         try {
-            $result = app(RecordQueryService::class)->queryWithMeta($app, $query, $manifest ?? []);
+            $result = app(RecordQueryService::class)->actingAs($user)->queryWithMeta($app, $query, $manifest ?? []);
         } catch (\Throwable $e) {
             return Response::error('Query failed: '.$e->getMessage());
         }

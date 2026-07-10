@@ -173,6 +173,8 @@ class BuilderAiService
         $proposeTool = new ProposeChangeTool($app, $this->manifestService, $this->validator);
         $planTool = new ProposePlanTool;
         $createIntegrationTool = new CreateIntegrationTool($this->integrationAuthoring, $conversation->user);
+        // Connected reads act as the conversation's user (per-user OAuth tokens).
+        $this->records->actingAs($conversation->user);
 
         $tools = [
             new ReadManifestTool($app, $this->manifestService, $proposeTool),
@@ -186,7 +188,7 @@ class BuilderAiService
             new ListAvailableActionsTool,
             new ListAvailableTriggersTool,
             new ListAvailableStepsTool,
-            new InspectRecordsTool($app),
+            new InspectRecordsTool($app, $conversation->user),
             new ProfileObjectTool($app, $this->manifestService, $this->records, $proposeTool),
             new PrepareDashboardTool($app, $this->manifestService, $this->records, $proposeTool),
             new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
@@ -368,6 +370,8 @@ class BuilderAiService
         $proposeTool = new ProposeChangeTool($app, $this->manifestService, $this->validator);
         $planTool = new ProposePlanTool;
         $createIntegrationTool = new CreateIntegrationTool($this->integrationAuthoring, $conversation->user);
+        // Connected reads act as the conversation's user (per-user OAuth tokens).
+        $this->records->actingAs($conversation->user);
 
         // Checkpoint accumulated valid work onto the placeholder after each
         // successful propose_change. The turn runs in a queue worker with a hard
@@ -394,7 +398,7 @@ class BuilderAiService
             new ListAvailableActionsTool,
             new ListAvailableTriggersTool,
             new ListAvailableStepsTool,
-            new InspectRecordsTool($app),
+            new InspectRecordsTool($app, $conversation->user),
             new ProfileObjectTool($app, $this->manifestService, $this->records, $proposeTool),
             new PrepareDashboardTool($app, $this->manifestService, $this->records, $proposeTool),
             new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),

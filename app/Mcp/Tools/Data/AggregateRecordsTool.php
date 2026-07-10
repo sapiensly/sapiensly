@@ -56,7 +56,7 @@ class AggregateRecordsTool extends SapiensTool
             }
         }
 
-        $records = app(RecordQueryService::class);
+        $records = app(RecordQueryService::class)->actingAs($request->user());
 
         try {
             if (! empty($validated['group_by'])) {

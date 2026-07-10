@@ -41,6 +41,8 @@ use RuntimeException;
  */
 class RecordQueryService
 {
+    private ?User $defaultActor = null;
+
     public function __construct(
         private ExpressionResolver $expressions,
         private DerivedFieldsResolver $derived,
@@ -49,6 +51,22 @@ class RecordQueryService
         private InMemoryRowFilter $rowFilter,
         private InMemoryAggregator $aggregator,
     ) {}
+
+    /**
+     * The user CONNECTED reads act as when the call context carries no actor.
+     * A per-user-OAuth source reads with this user's token; without one the
+     * read fails as "authorize the connection" even though the connection IS
+     * authorized for the human actually asking (observed: the builder agent
+     * and MCP query tools run in contexts with no __actor, so the first
+     * connected-aware inspection told the user to re-authorize a working
+     * source). Entry points (builder toolset, MCP data tools) set this once.
+     */
+    public function actingAs(?User $user): static
+    {
+        $this->defaultActor = $user;
+
+        return $this;
+    }
 
     /**
      * @param  array<string, mixed>  $query  Query block from the manifest
@@ -1337,7 +1355,7 @@ class RecordQueryService
             throw new RuntimeException('This connected object needs an authorized connection.');
         }
 
-        $actor = $context['__actor'] ?? ($context['current_user'] ?? null);
+        $actor = $context['__actor'] ?? $context['current_user'] ?? $this->defaultActor ?? auth()->user();
         $result = $this->connected->list($object, $integration, $query, $actor instanceof User ? $actor : null, $context);
         if (! ($result['ok'] ?? false)) {
             throw new RuntimeException($result['error'] ?? 'Could not read from the connected system.');

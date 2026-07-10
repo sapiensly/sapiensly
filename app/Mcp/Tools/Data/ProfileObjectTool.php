@@ -38,7 +38,7 @@ class ProfileObjectTool extends SapiensTool
         $tool = new BuilderProfileObjectTool(
             $app,
             app(AppManifestService::class),
-            app(RecordQueryService::class),
+            app(RecordQueryService::class)->actingAs($request->user()),
         );
 
         return Response::text($tool->handle(new BuilderRequest(['object_id' => $validated['object_id']])));

@@ -4,6 +4,7 @@ namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
 use App\Models\Record;
+use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\RecordQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -24,7 +25,7 @@ class InspectRecordsTool implements Tool
 {
     private const MAX_LIMIT = 5;
 
-    public function __construct(private App $appModel) {}
+    public function __construct(private App $appModel, private ?User $user = null) {}
 
     public function name(): string
     {
@@ -70,7 +71,7 @@ class InspectRecordsTool implements Tool
         if (is_array($object) && (($object['source']['type'] ?? null) === 'connected')) {
             try {
                 $result = app(RecordQueryService::class)
-                    ->queryWithMeta($this->appModel, ['object_id' => $objectId, 'limit' => $limit], $manifest);
+                    ->queryWithMeta($this->appModel, ['object_id' => $objectId, 'limit' => $limit], $manifest, ['__actor' => $this->user]);
             } catch (\Throwable $e) {
                 return json_encode([
                     'object_id' => $objectId,

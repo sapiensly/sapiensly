@@ -2,6 +2,7 @@
 
 use App\Models\App;
 use App\Models\Integration;
+use App\Models\User;
 use App\Services\Connected\ConnectedIntegrationResolver;
 use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Records\RecordQueryService;
@@ -87,4 +88,24 @@ it('finds one connected row by its external id', function () {
 
     expect($record)->not->toBeNull()
         ->and($record->data['reason'])->toBe('Retraso');
+});
+
+it('reads as the actingAs user when the context carries no actor', function () {
+    // Prod yuhuticket, second false diagnosis: the builder agent and MCP run
+    // with no __actor in context, so a per-user-OAuth source refused the read
+    // ("authorize the connection") for the very user who HAD authorized it.
+    $actor = User::factory()->create();
+
+    $reader = Mockery::mock(ConnectedObjectReader::class);
+    $reader->shouldReceive('list')
+        ->once()
+        ->withArgs(fn ($object, $integ, $query, $who) => $who?->is($actor) === true)
+        ->andReturn(['ok' => true, 'rows' => []]);
+    $this->app->instance(ConnectedObjectReader::class, $reader);
+
+    $count = app(RecordQueryService::class)
+        ->actingAs($actor)
+        ->count($this->testApp, ['object_id' => $this->object['id']], $this->manifest);
+
+    expect($count)->toBe(0);
 });
