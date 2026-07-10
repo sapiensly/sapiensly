@@ -214,6 +214,13 @@ class ExpressDashboardJob implements ShouldQueue
                 $lines[] = '**Datos en vivo:** '.$sources->join(', ', ' y ').'.';
             }
 
+            // The interpreter's translation is part of the contract: the user
+            // corrects the INTERPRETATION, not the board.
+            if ($context->interpretedPrompt !== null) {
+                $lines[] = '';
+                $lines[] = '**Interpreté tu pedido como:** «'.$context->interpretedPrompt.'» — si no era eso, dímelo y lo ajusto.';
+            }
+
             // Honest limitations the user asked about — kept; these are about the
             // DATA, not how the build ran.
             $caveats = [];

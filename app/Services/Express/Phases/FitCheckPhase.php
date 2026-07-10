@@ -53,22 +53,21 @@ class FitCheckPhase implements ExpressPhase
                 'arguments' => $t['arguments'] ?? [],
             ])->values()->all();
 
-        if ($this->economyFitSuffices($context)) {
-            // Economy: the ask maps cleanly onto the catalog — the model
-            // would re-derive what the keyword scorer already knows, at
-            // 2-60s and a paid call per gate. Skip ALL model gates this run.
-            $context->economyMode = true;
-            $run->recordGate('fit_check', [
-                'model' => null,
-                'latency_ms' => 0,
-                'fallback_used' => false,
-                'tokens' => null,
-                'error' => null,
-                'economy' => true,
-            ]);
-            $out = $this->heuristicDefault($context);
-            $this->auditCoverage($context, $out['tools'] ?? []);
-        } else {
+        $out = $this->economyFitSuffices($context) ? $this->economyOut($context, $run) : null;
+
+        // The interpreter: the ask's words didn't map onto the catalog — ONE
+        // small call translates the intent into the factory's vocabulary
+        // (form enriched, facts never invented; shown to the user in the
+        // report), then the deterministic signal gets a second chance. The
+        // factory downstream stays untouched either way.
+        if ($out === null
+            && (bool) config('express.economy', false)
+            && $this->interpretAsk($context, $run, $catalog)
+            && $this->economyFitSuffices($context)) {
+            $out = $this->economyOut($context, $run);
+        }
+
+        if ($out === null) {
             $result = $this->gates->run(
                 $run,
                 'fit_check',
@@ -90,7 +89,7 @@ core_unanswerable=true SOLO si el TEMA CENTRAL del pedido no se puede
 responder en absoluto — llena alternatives con 1-2 dashboards que estos datos
 SÍ responden. Nunca inventes tools que no estén en el catálogo.
 TXT,
-                json_encode(['pedido' => $context->prompt], JSON_UNESCAPED_UNICODE),
+                json_encode(['pedido' => $context->analysisPrompt()], JSON_UNESCAPED_UNICODE),
                 fn ($schema) => [
                     'tools' => $schema->array()->description('Nombres exactos de tools del catálogo a leer (1-4).'),
                     'pieces' => $schema->array()->description('OBLIGATORIO: una entrada por CADA pieza pedida: [{asked, tool: nombre exacto del tool que la responde o null, proxy: métrica sustituta honesta si tool es null y existe una}].'),
@@ -300,7 +299,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
     {
         // Same lexicon the picker used: a tool chosen via "quejas→complaints"
         // must not be vetoed by the raw Spanish words failing the same match.
-        $words = DomainLexicon::expand($this->topicWords($context->prompt));
+        $words = DomainLexicon::expand($this->topicWords($context->analysisPrompt()));
         if ($words->isEmpty()) {
             return false;
         }
@@ -354,7 +353,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      */
     private function discriminatingTopicWords(ExpressContext $context)
     {
-        $words = $this->topicWords($context->prompt);
+        $words = $this->topicWords($context->analysisPrompt());
         $tools = collect($context->catalogTools);
         $n = $tools->count();
         if ($n < 3 || $words->isEmpty()) {
@@ -401,7 +400,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         if ($context->chosenTools === []) {
             return;
         }
-        $words = $this->topicWords($context->prompt);
+        $words = $this->topicWords($context->analysisPrompt());
         if ($words->isEmpty()) {
             return;
         }
@@ -519,7 +518,9 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      */
     private function auditCoverage(ExpressContext $context, array $chosenTools): void
     {
-        $concepts = $this->discriminatingTopicWords($context);
+        $concepts = $this->discriminatingTopicWords($context)
+            ->reject(fn (string $w): bool => preg_match(self::FORM_WORDS, $w) === 1)
+            ->values();
         if ($concepts->isEmpty()) {
             return;
         }
@@ -584,6 +585,89 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
     }
 
     /**
+     * FORM words name how to draw, not what to read — "pareto de causas"
+     * asks for causes IN pareto form, and requiring "pareto" to match a tool
+     * would defeat the signal for exactly the asks the intent vocabulary (and
+     * the interpreter) serve. Filtered out of the coverage checks only; the
+     * suggester still reads them from the prompt.
+     */
+    private const FORM_WORDS = '/^(pareto|acumulad\w*|concentraci\w*|top\d*|ranking|mayores|principales|distribuci\w*|proporci\w*|participaci\w*|reparto|share|compar\w*|versus|vs|embudo|funnel|heatmap|mapa|calor|meta|objetivo|target|goal|ejecutiv\w*|executive|overview|resumen|detalle|grafic\w*|chart\w*)$/iu';
+
+    /**
+     * The economy path's single exit: record the gate as an economy skip,
+     * take the deterministic fit, audit what the chosen tools do not cover.
+     *
+     * @return array{tools: list<string>, substitutions: array, unanswerable: array, core_unanswerable: bool}
+     */
+    private function economyOut(ExpressContext $context, PipelineRun $run): array
+    {
+        $context->economyMode = true;
+        $run->recordGate('fit_check', [
+            'model' => null,
+            'latency_ms' => 0,
+            'fallback_used' => false,
+            'tokens' => null,
+            'error' => null,
+            'economy' => true,
+        ]);
+        $out = $this->heuristicDefault($context);
+        $this->auditCoverage($context, $out['tools'] ?? []);
+
+        return $out;
+    }
+
+    /**
+     * The INTERPRETER gate: one small call that translates a vague ask into
+     * the factory's precise vocabulary — enriching the FORM (pareto, top,
+     * tendencia, embudo…), never the FACTS (no targets, numbers or dimensions
+     * the user didn't say), constrained to the catalog's actual domains. The
+     * translation is stored for the report ("Interpreté tu pedido como: …")
+     * so the user corrects the interpretation, not the board. Returns true
+     * only when a usable, different translation came back.
+     */
+    private function interpretAsk(ExpressContext $context, PipelineRun $run, array $catalog): bool
+    {
+        $domains = collect($catalog)
+            ->map(fn (array $t): string => $t['name'].' — '.Str::limit((string) ($t['description'] ?? ''), 90, '…'))
+            ->take(30)->implode("\n");
+
+        $result = $this->gates->run(
+            $run,
+            'interpret',
+            <<<'TXT'
+Traduces el PEDIDO difuso de un dashboard al vocabulario preciso del
+constructor, en el idioma del usuario. REGLAS: (1) enriquece la FORMA, nunca
+los HECHOS — jamás inventes metas, números, umbrales ni dimensiones que el
+usuario no dijo; (2) usa SOLO los dominios presentes en el catálogo — no
+prometas datos que no existen; (3) cuando la intención lo amerite usa estas
+palabras de forma: pareto / % acumulado, top N, distribución, compara,
+embudo, mapa de calor, tendencia semanal/diaria/mensual, resumen ejecutivo;
+(4) responde UNA sola frase imperativa («crea un dashboard de …»); (5) si el
+pedido ya es preciso, devuélvelo tal cual.
+TXT,
+            json_encode(['pedido' => $context->prompt], JSON_UNESCAPED_UNICODE),
+            fn ($schema) => [
+                'pedido_interpretado' => $schema->string()->description('El pedido reescrito en vocabulario preciso, una sola frase, mismo idioma.'),
+            ],
+            ['pedido_interpretado' => ''],
+            $context->user,
+            $context->modelOverride,
+            $context,
+            stableContext: 'DOMINIOS DEL CATÁLOGO:'."\n".$domains,
+        );
+
+        $translated = trim((string) ($result['output']['pedido_interpretado'] ?? ''));
+        if ($result['fallback_used'] || $translated === '' || Str::lower($translated) === Str::lower(trim($context->prompt))) {
+            return false;
+        }
+
+        $context->interpretedPrompt = Str::limit($translated, 400, '');
+        $context->progress('Interpretando tu pedido… → «'.$context->interpretedPrompt.'»');
+
+        return true;
+    }
+
+    /**
      * Economy mode's gate-skip signal: the deterministic fit SUFFICES when
      * every discriminating topic word of the ask hits at least one catalog
      * tool (no potentially-unanswerable piece — the honest-halt case stays
@@ -598,7 +682,9 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             return false;
         }
 
-        $concepts = $this->discriminatingTopicWords($context);
+        $concepts = $this->discriminatingTopicWords($context)
+            ->reject(fn (string $w): bool => preg_match(self::FORM_WORDS, $w) === 1)
+            ->values();
         if ($concepts->isEmpty()) {
             return false; // nothing to match on — let the model read the ask
         }

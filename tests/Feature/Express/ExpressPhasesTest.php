@@ -1042,10 +1042,15 @@ it('economy mode skips every model gate when the deterministic fit is unambiguou
 
 it('economy defers to the model when a topic word matches nothing (the possible-halt case)', function () {
     config(['express.economy' => true]);
-    ExpressGateAgent::fake([[
-        'tools' => ['get-tickets-time-series-tool'], 'substitutions' => [],
-        'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
-    ]]);
+    ExpressGateAgent::fake([
+        // The interpreter tries first and yields nothing usable…
+        ['pedido_interpretado' => ''],
+        // …so the full fit gate decides, as before the interpreter existed.
+        [
+            'tools' => ['get-tickets-time-series-tool'], 'substitutions' => [],
+            'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+        ],
+    ]);
 
     // 'facturacion' hits no catalog tool — only the model can decide between
     // an honest proxy and the halt, so the gate must run.
@@ -1208,4 +1213,45 @@ it('an ARRAY default on an enum argument cannot crash the enum cuts (prod yuhucs
     (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
 
     expect(collect($ctx->chosenCuts)->pluck('cut'))->toContain('cause');
+});
+
+it('the interpreter translates a vague ask into the factory vocabulary — visibly, economy after', function () {
+    // "quiero entender dónde está el grueso del problema con los tickets":
+    // grueso/problema match nothing, so the signal defers — ONE small call
+    // translates the intent (form enriched, no facts invented), the signal
+    // re-checks and economy proceeds with the translation on record.
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([
+        ['pedido_interpretado' => 'crea un dashboard de tickets: pareto con % acumulado y tendencia semanal'],
+    ]);
+
+    $ctx = xph_ctx($this, 'quiero entender donde esta el grueso del problema con los tickets');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    $run = xph_run($this);
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, $run);
+
+    expect($ctx->interpretedPrompt)->toContain('pareto')
+        ->and($ctx->economyMode)->toBeTrue()          // the translation unlocked economy
+        ->and($ctx->chosenTools)->toBe(['get-tickets-time-series-tool'])
+        ->and($ctx->analysisPrompt())->not->toBe($ctx->prompt)
+        ->and($run->fresh()->gates)->toHaveKey('interpret')
+        ->and($run->fresh()->gates['fit_check']['economy'] ?? false)->toBeTrue();
+});
+
+it('form words never defeat the economy signal — they name how to draw, not what to read', function () {
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    // 'pareto' and 'acumulado' match no tool; they are FORM. The topic
+    // ('tickets') maps, so economy fires directly — no interpreter needed.
+    $ctx = xph_ctx($this, 'pareto de tickets con acumulado');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->economyMode)->toBeTrue()
+        ->and($ctx->interpretedPrompt)->toBeNull();
 });

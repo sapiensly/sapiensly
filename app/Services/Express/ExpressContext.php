@@ -84,6 +84,13 @@ class ExpressContext
     public bool $economyMode = false;
 
     /**
+     * The interpreter gate's translation of a vague ask into the factory's
+     * precise vocabulary — shown to the user in the report so they correct
+     * the INTERPRETATION, not the board. Null when the ask needed none.
+     */
+    public ?string $interpretedPrompt = null;
+
+    /**
      * Set true once the semantic gates actually shaped the dashboard (an
      * accepted override, a model-written voice, or model-narrated insights).
      * When it stays false — every gate fell back — the deterministic page
@@ -138,5 +145,15 @@ class ExpressContext
     public function markProviderHung(): void
     {
         $this->providerHung = true;
+    }
+
+    /**
+     * The prompt every ANALYSIS step reads: the interpreter's translation
+     * when one exists, the user's own words otherwise. The original prompt
+     * stays untouched for display and telemetry.
+     */
+    public function analysisPrompt(): string
+    {
+        return $this->interpretedPrompt ?? $this->prompt;
     }
 }
