@@ -515,3 +515,40 @@ it('compiles a pareto over a real dimension and refuses one over a date', functi
     expect($bad['ok'] ?? false)->toBeFalse()
         ->and(collect($bad['errors'])->pluck('code'))->toContain('degenerate_chart');
 });
+
+it('an explicit form intent in the ask shapes the flagship breakdown deterministically', function (array $topics, string $expected) {
+    // The economy-mode complement: "pareto/top/distribución/compara" is a
+    // finite vocabulary — intent shapes form without a model call.
+    $object = [
+        'id' => 'obj_intent', 'slug' => 'tickets_reason_cause_breakdown', 'name' => 'Tickets Reason Cause Breakdown',
+        'fields' => [
+            ['id' => 'fld_intreason0', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_inttotal00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+    ];
+    $rows = collect(['Duplicado', 'Retraso', 'Defecto', 'Cobro'])->map(fn ($r, $i) => [
+        'reason' => $r, 'total_tickets' => 80 - $i * 15,
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, $topics);
+
+    $flagship = collect($spec['charts'])->first(
+        fn (array $c): bool => isset($c['group_by_field_id']) && ! isset($c['x_field_id']),
+    );
+    expect($flagship)->not->toBeNull()
+        ->and($flagship['chart_type'])->toBe($expected);
+
+    // Whatever the intent produced must survive the compiler and its lints.
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $object, [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'] ?? false)->toBeTrue()
+        ->and(PlanDashboardTool::lint($built['purpose'], $built['plan_rows'])['ok'])->toBeTrue();
+})->with([
+    'pareto' => [['tickets', 'pareto'], 'pareto'],
+    'acumulado' => [['causas', 'acumulado'], 'pareto'],
+    'ranking' => [['tickets', 'top'], 'hbar'],
+    'distribución' => [['tickets', 'distribucion'], 'donut'],
+    'comparación' => [['tickets', 'compara'], 'bar'],
+    'sin intención (default)' => [['tickets'], 'donut'],
+]);

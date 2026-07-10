@@ -290,6 +290,32 @@ class DashboardSpecSuggester
         return trim($label.' · '.$objectName);
     }
 
+    /**
+     * The chart FORM the ask names in words — "top 15", "distribución",
+     * "pareto/acumulado", "compara" — mapped deterministically so an explicit
+     * form intent shapes the flagship breakdown without a model call (the
+     * economy-mode complement: intent should shape form, and this vocabulary
+     * is finite). Null when the ask names no form; the data-shape defaults
+     * then rule as before.
+     *
+     * @param  list<string>  $topics
+     */
+    private function intentForm(array $topics): ?string
+    {
+        $words = collect($topics)->map(fn ($w): string => Str::lower(Str::ascii((string) $w)));
+        $has = fn (string $pattern): bool => $words->contains(
+            fn (string $w): bool => preg_match($pattern, $w) === 1,
+        );
+
+        return match (true) {
+            $has('/^pareto$|^acumulad|^concentraci/') => 'pareto',
+            $has('/^top\d*$|^ranking$|^mayores$|^principales$/') => 'hbar',
+            $has('/^distribuci|^proporci|^participaci|^reparto$|^share$/') => 'donut',
+            $has('/^compar|^versus$|^vs$/') => 'bar',
+            default => null,
+        };
+    }
+
     /** @return array<string, string> field_id → slug for one object */
     private function fieldSlugIndex(array $object): array
     {
@@ -959,8 +985,13 @@ class DashboardSpecSuggester
         }
 
         // Concentration: breakdowns per categorical, form chosen by REAL
-        // cardinality (donut needs few slices; many go horizontal, capped).
+        // cardinality (donut needs few slices; many go horizontal, capped) —
+        // unless the ASK names a form: an explicit "top/pareto/distribución/
+        // compara" overrides the data-shape default on the FLAGSHIP breakdown
+        // (the rest keep the variety rotation). Deterministic intent→form:
+        // the same words always produce the same chart, no model involved.
         $breakdownTypes = ['donut', 'bar', 'treemap'];
+        $intentForm = $this->intentForm($promptTopics);
         foreach ($categoricals as $i => $field) {
             if (count($charts) >= self::MAX_CHARTS - 1) {
                 break;
@@ -978,6 +1009,14 @@ class DashboardSpecSuggester
                     ? 'hbar'
                     : $breakdownTypes[$i % count($breakdownTypes)],
             ];
+            if ($intentForm !== null) {
+                // A part-of-whole ask over many slices reads better as a
+                // treemap than a 12-slice donut; every other form scales.
+                $chart['chart_type'] = ($intentForm === 'donut' && $distinct !== null && $distinct > 8)
+                    ? 'treemap'
+                    : $intentForm;
+                $intentForm = null; // flagship only
+            }
             if ($grain === SemanticProfile::GRAIN_RAW) {
                 $chart['aggregation'] = 'count';
             } elseif ($additives !== []) {
