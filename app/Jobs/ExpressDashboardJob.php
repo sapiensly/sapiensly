@@ -167,7 +167,7 @@ class ExpressDashboardJob implements ShouldQueue
         // user's first look. Carry the user's chosen model so the verifier
         // falls back to it (not the builder default) when no plumbing model
         // is configured.
-        if ($run->status === 'succeeded') {
+        if ($run->status === 'succeeded' && ! $context->economyMode) {
             VerifyExpressDashboardJob::dispatch($run->id, $this->modelOverride);
         }
     }

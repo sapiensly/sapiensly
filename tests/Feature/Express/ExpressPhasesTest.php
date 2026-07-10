@@ -1005,3 +1005,71 @@ it('titles are sanitized: no markup junk, cut at word boundaries', function () {
         // Word-boundary cut: never ends mid-word like "targe…".
         ->and($ctx->page['name'])->toMatch('/(\s|\S{2,})…$|[^…]$/u');
 });
+
+it('economy mode skips every model gate when the deterministic fit is unambiguous', function () {
+    // A/B observed (yuhunps $0.00/401 vs yuhunps_2 $0.026): on a laser-specific
+    // ask the gated and ungated dashboards were near-identical — the
+    // deterministic floor caught up. Economy skips the model when every
+    // discriminating topic word maps onto the catalog.
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    $ctx = xph_ctx($this, 'quiero un dashboard de tickets');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    $run = xph_run($this);
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, $run);
+
+    expect($ctx->economyMode)->toBeTrue()
+        ->and($ctx->chosenTools)->toBe(['get-tickets-time-series-tool'])
+        ->and($run->fresh()->gates['fit_check']['economy'] ?? false)->toBeTrue();
+
+    // The semantic gates honor the flag: suggestion becomes the page, both
+    // gates recorded as economy skips, refine stays off — still zero prompts.
+    $ctx->spec = [
+        'title' => 'Análisis de Tickets',
+        'insights' => [['variant' => 'conclusion', 'title' => 'Volumen', 'body' => '722 tickets.']],
+    ];
+    app(SemanticGatesPhase::class)->run($ctx, $run);
+
+    expect($ctx->semantic['voice']['title'])->toBe('Análisis de Tickets')
+        ->and($ctx->semantic['insights'][0]['body'])->toBe('722 tickets.')
+        ->and($ctx->semanticEnriched)->toBeFalse()
+        ->and($run->fresh()->gates['voice_insights']['economy'] ?? false)->toBeTrue()
+        ->and($run->fresh()->gates['spec_overrides']['economy'] ?? false)->toBeTrue();
+});
+
+it('economy defers to the model when a topic word matches nothing (the possible-halt case)', function () {
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([[
+        'tools' => ['get-tickets-time-series-tool'], 'substitutions' => [],
+        'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    // 'facturacion' hits no catalog tool — only the model can decide between
+    // an honest proxy and the halt, so the gate must run.
+    $ctx = xph_ctx($this, 'dashboard de facturacion y tickets');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->economyMode)->toBeFalse()
+        ->and($ctx->chosenTools)->toBe(['get-tickets-time-series-tool']);
+});
+
+it('economy stays off by default — the gates run unchanged', function () {
+    ExpressGateAgent::fake([[
+        'tools' => ['get-tickets-time-series-tool'], 'substitutions' => [],
+        'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+    ]]);
+
+    $ctx = xph_ctx($this, 'quiero un dashboard de tickets');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->economyMode)->toBeFalse();
+});

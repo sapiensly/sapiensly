@@ -31,4 +31,16 @@ return [
     */
     'slow_models' => ['deepseek', 'glm', 'qwen', 'mistral'],
 
+    /*
+    | Economy mode: skip the model gates entirely when the DETERMINISTIC fit
+    | is unambiguous — every discriminating topic word of the ask matches the
+    | tool catalog and the on-topic tool set is small enough to take whole.
+    | A laser-specific ask ("tendencia semanal del nps") then builds in
+    | seconds for $0 (A/B observed: near-identical output either way — the
+    | deterministic floor caught up with the gates). The gates still run
+    | whenever the ask is compound, ambiguous, or possibly unanswerable —
+    | the cases where model judgment (and the honest halt) earn their cost.
+    */
+    'economy' => env('DASHBOARD_EXPRESS_ECONOMY', false),
+
 ];

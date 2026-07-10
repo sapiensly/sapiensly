@@ -43,6 +43,31 @@ class SemanticGatesPhase implements ExpressPhase
     {
         $spec = $context->spec ?? [];
 
+        // Economy: the deterministic fit was unambiguous, so the suggestion IS
+        // the page — the suggester already writes factual insight bodies and
+        // an honest title, and semanticEnriched stays false so the refine pass
+        // skips itself. Recorded per gate so telemetry says WHY no model ran.
+        if ($context->economyMode) {
+            $context->semantic['overrides'] = [];
+            $context->semantic['voice'] = [
+                'title' => (string) ($spec['title'] ?? 'Dashboard'),
+                'purpose' => '',
+            ];
+            $context->semantic['insights'] = array_values($spec['insights'] ?? []);
+            foreach (['spec_overrides', 'voice_insights'] as $gate) {
+                $run->recordGate($gate, [
+                    'model' => null,
+                    'latency_ms' => 0,
+                    'fallback_used' => false,
+                    'tokens' => null,
+                    'error' => null,
+                    'economy' => true,
+                ]);
+            }
+
+            return;
+        }
+
         // --- G-2a: overrides -------------------------------------------------
         $overridesInstructions = <<<'TXT'
 Revisas el SPEC SUGERIDO de un dashboard contra el PEDIDO del usuario. Devuelve

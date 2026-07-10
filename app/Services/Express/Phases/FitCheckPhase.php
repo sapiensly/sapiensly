@@ -49,10 +49,25 @@ class FitCheckPhase implements ExpressPhase
                 'arguments' => $t['arguments'] ?? [],
             ])->values()->all();
 
-        $result = $this->gates->run(
-            $run,
-            'fit_check',
-            <<<'TXT'
+        if ($this->economyFitSuffices($context)) {
+            // Economy: the ask maps cleanly onto the catalog — the model
+            // would re-derive what the keyword scorer already knows, at
+            // 2-60s and a paid call per gate. Skip ALL model gates this run.
+            $context->economyMode = true;
+            $run->recordGate('fit_check', [
+                'model' => null,
+                'latency_ms' => 0,
+                'fallback_used' => false,
+                'tokens' => null,
+                'error' => null,
+                'economy' => true,
+            ]);
+            $out = $this->heuristicDefault($context);
+        } else {
+            $result = $this->gates->run(
+                $run,
+                'fit_check',
+                <<<'TXT'
 Eres el fit-check de un constructor de dashboards. Recibes el PEDIDO del
 usuario y el CATÁLOGO de tools de datos de su conexión. Decide qué tools leer
 (las mínimas que respondan el pedido, máx 4). REGLAS DE ELECCIÓN: (1) SOLO
@@ -70,28 +85,28 @@ core_unanswerable=true SOLO si el TEMA CENTRAL del pedido no se puede
 responder en absoluto — llena alternatives con 1-2 dashboards que estos datos
 SÍ responden. Nunca inventes tools que no estén en el catálogo.
 TXT,
-            json_encode(['pedido' => $context->prompt], JSON_UNESCAPED_UNICODE),
-            fn ($schema) => [
-                'tools' => $schema->array()->description('Nombres exactos de tools del catálogo a leer (1-4).'),
-                'pieces' => $schema->array()->description('OBLIGATORIO: una entrada por CADA pieza pedida: [{asked, tool: nombre exacto del tool que la responde o null, proxy: métrica sustituta honesta si tool es null y existe una}].'),
-                'substitutions' => $schema->array()->description('[{asked, using, reason}] proxies honestos.'),
-                'unanswerable' => $schema->array()->description('[{asked, reason}] piezas pedidas sin respuesta en estos datos.'),
-                'core_unanswerable' => $schema->boolean(),
-                'alternatives' => $schema->array()->description('Si core_unanswerable: 1-2 dashboards que SÍ se pueden construir.'),
-            ],
-            fn () => $this->heuristicDefault($context),
-            $context->user,
-            $context->modelOverride,
-            $context,
-            // The catalog is the gate's STABLE bulk (~10k tokens, identical
-            // across both attempts and across builds on the same connection) —
-            // as stable context it rides the system prompt and gets the
-            // Anthropic cache marker instead of being re-read cold per call.
-            stableContext: 'CATÁLOGO DE TOOLS DE LA CONEXIÓN (JSON):'."\n"
-                .json_encode(['catalogo' => $catalog], JSON_UNESCAPED_UNICODE),
-        );
-
-        $out = $result['output'];
+                json_encode(['pedido' => $context->prompt], JSON_UNESCAPED_UNICODE),
+                fn ($schema) => [
+                    'tools' => $schema->array()->description('Nombres exactos de tools del catálogo a leer (1-4).'),
+                    'pieces' => $schema->array()->description('OBLIGATORIO: una entrada por CADA pieza pedida: [{asked, tool: nombre exacto del tool que la responde o null, proxy: métrica sustituta honesta si tool es null y existe una}].'),
+                    'substitutions' => $schema->array()->description('[{asked, using, reason}] proxies honestos.'),
+                    'unanswerable' => $schema->array()->description('[{asked, reason}] piezas pedidas sin respuesta en estos datos.'),
+                    'core_unanswerable' => $schema->boolean(),
+                    'alternatives' => $schema->array()->description('Si core_unanswerable: 1-2 dashboards que SÍ se pueden construir.'),
+                ],
+                fn () => $this->heuristicDefault($context),
+                $context->user,
+                $context->modelOverride,
+                $context,
+                // The catalog is the gate's STABLE bulk (~10k tokens, identical
+                // across both attempts and across builds on the same connection) —
+                // as stable context it rides the system prompt and gets the
+                // Anthropic cache marker instead of being re-read cold per call.
+                stableContext: 'CATÁLOGO DE TOOLS DE LA CONEXIÓN (JSON):'."\n"
+                        .json_encode(['catalogo' => $catalog], JSON_UNESCAPED_UNICODE),
+            );
+            $out = $result['output'];
+        }
 
         if (($out['core_unanswerable'] ?? false) === true) {
             $alternatives = collect($out['alternatives'] ?? [])
@@ -426,6 +441,39 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             ->flatMap(fn (array $t) => preg_split('/[-_]/', (string) $t['name']))
             ->filter(fn ($w) => mb_strlen((string) $w) >= 3 && ! in_array($w, $generic, true))
             ->unique()->take(10)->implode(', ');
+    }
+
+    /**
+     * Economy mode's gate-skip signal: the deterministic fit SUFFICES when
+     * every discriminating topic word of the ask hits at least one catalog
+     * tool (no potentially-unanswerable piece — the honest-halt case stays
+     * with the model) and the on-topic tool set is small enough to take
+     * whole (no ambiguity for a model to arbitrate). A/B observed: on such
+     * asks the gated and ungated builds are near-identical, so the ~2-60s
+     * and the paid calls buy nothing.
+     */
+    private function economyFitSuffices(ExpressContext $context): bool
+    {
+        if (! (bool) config('express.economy', false)) {
+            return false;
+        }
+
+        $words = $this->discriminatingTopicWords($context);
+        if ($words->isEmpty()) {
+            return false; // nothing to match on — let the model read the ask
+        }
+
+        $haystacks = collect($context->catalogTools)
+            ->map(fn (array $t): string => Str::lower(Str::ascii(($t['name'] ?? '').' '.($t['description'] ?? ''))));
+
+        $unmatched = $words->filter(
+            fn (string $w): bool => ! $haystacks->contains(fn (string $h): bool => str_contains($h, $w)),
+        );
+        $onTopic = $haystacks->filter(
+            fn (string $h): bool => $words->contains(fn (string $w): bool => str_contains($h, $w)),
+        )->count();
+
+        return $unmatched->isEmpty() && $onTopic > 0 && $onTopic <= self::MAX_TOOLS;
     }
 
     /**

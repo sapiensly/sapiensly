@@ -58,6 +58,13 @@ class ExpressContext
     public bool $providerHung = false;
 
     /**
+     * Economy mode fired: the deterministic fit was unambiguous, so every
+     * model gate is skipped for this run (semantics stay at the suggested
+     * defaults; the post-hoc verifier is not dispatched).
+     */
+    public bool $economyMode = false;
+
+    /**
      * Set true once the semantic gates actually shaped the dashboard (an
      * accepted override, a model-written voice, or model-narrated insights).
      * When it stays false — every gate fell back — the deterministic page
