@@ -71,6 +71,7 @@ class GateRunner
         $output = null;
         $error = null;
         $tokens = null;
+        $salvaged = false;
 
         try {
             // Resolution is best-effort: a missing provider config surfaces as
@@ -94,6 +95,16 @@ class GateRunner
                     $decoded = $response instanceof Arrayable ? $response->toArray() : null;
                     if (is_array($decoded) && $decoded !== []) {
                         $output = $decoded;
+                    } elseif (($output = $this->decodeLenient($response->text ?? null)) !== null) {
+                        // A weak model often returns the RIGHT JSON in the
+                        // WRONG wrapper — ```json fences, a prose preamble,
+                        // reasoning spill — and the SDK's strict decode of the
+                        // message text silently yields []. Observed on GLM:
+                        // gates billed 1.2k output tokens and still "didn't
+                        // answer" (telemetry error:null). The raw text is
+                        // still on the response — salvage the object from it
+                        // before burning a retry or the default.
+                        $salvaged = true;
                     }
                     if (isset($response->usage)) {
                         $tokens = [
@@ -134,14 +145,40 @@ class GateRunner
             ]);
         }
 
-        $run->recordGate($name, [
+        $telemetry = [
             'model' => $model,
             'latency_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             'fallback_used' => $fallback,
             'tokens' => $tokens,
             'error' => $fallback ? $error : null,
-        ]);
+        ];
+        if ($salvaged) {
+            $telemetry['salvaged'] = true;
+        }
+        $run->recordGate($name, $telemetry);
 
         return ['output' => $output, 'fallback_used' => $fallback, 'model' => $model];
+    }
+
+    /**
+     * Salvage a JSON object from model text that failed the strict decode: the
+     * slice from the first '{' to the last '}' — which unwraps ```json fences,
+     * prose preambles and trailing chatter alike — decoded strictly. Null when
+     * no such slice exists or it still isn't valid JSON.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function decodeLenient(?string $text): ?array
+    {
+        $text = trim((string) $text);
+        $start = strpos($text, '{');
+        $end = strrpos($text, '}');
+        if ($start === false || $end === false || $end <= $start) {
+            return null;
+        }
+
+        $decoded = json_decode(substr($text, $start, $end - $start + 1), true);
+
+        return is_array($decoded) && $decoded !== [] ? $decoded : null;
     }
 }

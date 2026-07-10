@@ -11,6 +11,9 @@ use App\Services\Express\ExpressContext;
 use App\Services\Express\ExpressHalt;
 use App\Services\Express\ExpressPipeline;
 use App\Services\Express\GateRunner;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\StructuredTextResponse;
 
 beforeEach(function () {
     $this->user = User::factory()->create(['email_verified_at' => now()]);
@@ -184,4 +187,61 @@ it('GateRunner skips the retry when the first attempt timed out', function () {
     expect($result['fallback_used'])->toBeTrue()
         ->and($result['output']['a'])->toBe('default')
         ->and($calls)->toBe(1); // no second 45s window burned
+});
+
+it('GateRunner salvages fenced JSON the strict decode dropped', function () {
+    // Prod (run plr_01kx66fw…, GLM via OpenRouter): gates billed 1.2k output
+    // tokens and still fell back with error:null — the model answered with the
+    // RIGHT JSON in the WRONG wrapper (```json fences / prose preamble), and
+    // the SDK's strict json_decode of the text silently yielded [].
+    ExpressGateAgent::fake([
+        new StructuredTextResponse(
+            [],
+            "Claro, aquí está el resultado:\n```json\n{\"accept\": true, \"overrides\": {\"title\": \"NPS de Yuhu\"}}\n```",
+            new Usage(100, 50),
+            new Meta('openrouter', 'z-ai/glm-5-turbo'),
+        ),
+    ]);
+    $run = xp_run($this);
+
+    $result = app(GateRunner::class)->run(
+        $run, 'spec_overrides', 'Revisas el spec.', 'pedido',
+        fn ($schema) => ['accept' => $schema->boolean(), 'overrides' => $schema->object()],
+        ['accept' => true, 'overrides' => []],
+        $this->user,
+    );
+
+    expect($result['fallback_used'])->toBeFalse()
+        ->and($result['output']['overrides']['title'])->toBe('NPS de Yuhu');
+
+    $gate = $run->fresh()->gates['spec_overrides'];
+    expect($gate['fallback_used'])->toBeFalse()
+        ->and($gate['salvaged'])->toBeTrue();
+});
+
+it('GateRunner still defaults when the text carries no JSON object at all', function () {
+    ExpressGateAgent::fake([
+        new StructuredTextResponse(
+            [], 'No puedo ayudarte con eso.',
+            new Usage(10, 5),
+            new Meta('openrouter', 'z-ai/glm-5-turbo'),
+        ),
+        new StructuredTextResponse(
+            [], 'Sigo sin poder.',
+            new Usage(10, 5),
+            new Meta('openrouter', 'z-ai/glm-5-turbo'),
+        ),
+    ]);
+    $run = xp_run($this);
+
+    $result = app(GateRunner::class)->run(
+        $run, 'voice', 'Eres la voz.', 'pedido',
+        fn ($schema) => ['title' => $schema->string()],
+        fn () => ['title' => 'Análisis de Tickets'],
+        $this->user,
+    );
+
+    expect($result['fallback_used'])->toBeTrue()
+        ->and($result['output']['title'])->toBe('Análisis de Tickets')
+        ->and($run->fresh()->gates['voice'])->not->toHaveKey('salvaged');
 });
