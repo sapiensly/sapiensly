@@ -21,7 +21,7 @@ class VerifyExpressDashboardJob implements ShouldQueue
 {
     use Queueable;
 
-    private const VALID_CHART_TYPES = ['bar', 'hbar', 'line', 'area', 'pie', 'donut', 'radar', 'scatter', 'treemap', 'sankey', 'box'];
+    private const VALID_CHART_TYPES = ['bar', 'hbar', 'line', 'area', 'pie', 'donut', 'radar', 'scatter', 'treemap', 'sankey', 'box', 'pareto'];
 
     private const MAX_FIXES = 5;
 
@@ -74,7 +74,7 @@ gráficas redundantes, labels confusos o genéricos, un chart_type que no le
 queda a su dato, y números que no cuadran con su label. Devuelve fixes SOLO del
 menú: remove_block (bloque redundante), rename_block (label mejor),
 change_chart_type (uno de: bar,hbar,line,area,pie,donut,radar,scatter,
-treemap,sankey,box). Máximo 5 fixes; lista vacía si la página está bien.
+treemap,sankey,box,pareto). Máximo 5 fixes; lista vacía si la página está bien.
 Nunca inventes block_ids.
 TXT,
             json_encode([

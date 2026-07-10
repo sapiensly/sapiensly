@@ -25,7 +25,7 @@ class PlanDashboardTool implements Tool
     /** chart_type values the runtime can render (mirrors the manifest schema enum). */
     private const CHART_TYPES = [
         'bar', 'hbar', 'line', 'area', 'pie', 'donut', 'radar', 'scatter',
-        'treemap', 'sankey', 'box',
+        'treemap', 'sankey', 'box', 'pareto',
     ];
 
     /** Block types that belong on a dashboard page plan. */
@@ -48,7 +48,7 @@ class PlanDashboardTool implements Tool
     private const SHORT_CHARTS = ['pie', 'donut'];
 
     /** Naturally WIDE/TALL content that deserves the lion's share of a row. */
-    private const WIDE_CHARTS = ['line', 'area', 'bar', 'box', 'sankey', 'treemap'];
+    private const WIDE_CHARTS = ['line', 'area', 'bar', 'box', 'sankey', 'treemap', 'pareto'];
 
     public function name(): string
     {

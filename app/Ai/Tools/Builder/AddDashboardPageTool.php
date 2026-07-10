@@ -53,7 +53,7 @@ it against the professional-dashboard lints before applying. Pass:
 `kpis` (1-8 of {label, aggregation: count|sum|avg|min|max|distinct_count|median|
 p90|p95, field_id? (needed for non-count), format?, icon?, filter?, compare?,
 delta_good?}); `charts` (1-10 of {label, chart_type: bar|hbar|line|area|pie|
-donut|radar|scatter|treemap|sankey|box, aggregation: count|sum|avg|min|max,
+donut|radar|scatter|treemap|sankey|box|pareto, aggregation: count|sum|avg|min|max,
 y_field_id? (needed for sum/avg/min/max), group_by_field_id?, x_field_id?,
 bucket?, series_field_id?, stacked?, filter?, limit?}); `insights` (0-4 of
 {variant: conclusion|recommendation|risk|positive|insight, title, body?,

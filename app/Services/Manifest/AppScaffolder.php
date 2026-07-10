@@ -1329,6 +1329,17 @@ class AppScaffolder
                 continue;
             }
 
+            // A pareto RANKS categories by their share (bars + cumulative-%
+            // line) — it needs a real non-temporal dimension to rank; a date
+            // axis is an order, not a ranking.
+            if ($chartType === 'pareto'
+                && ($groupId === null || $groupId === ''
+                    || ($groupType !== null && in_array($groupType, self::DATE_TYPES, true)))) {
+                $errors[] = ['path' => "/charts/{$i}/group_by_field_id", 'message' => 'A pareto ranks categories by their share of the total — set group_by_field_id to a real dimension (motivo, categoría, responsable…), never a date.', 'code' => 'degenerate_chart'];
+
+                continue;
+            }
+
             // A part-of-whole chart needs a category to slice by. A pie/donut
             // with no group_by (and no series) is a single 100% slice —
             // observed: a «Respuestas por Periodo» donut of sum(responses) that

@@ -31,7 +31,8 @@ interface ChartBlock {
         | 'scatter'
         | 'treemap'
         | 'sankey'
-        | 'box';
+        | 'box'
+        | 'pareto';
     data_source: { object_id: string };
     x_field_id?: string;
     y_field_id?: string;
@@ -165,7 +166,8 @@ const series = computed<{ label: string; value: number }[]>(() => {
         );
     } else if (
         (props.block.chart_type === 'bar' ||
-            props.block.chart_type === 'hbar') &&
+            props.block.chart_type === 'hbar' ||
+            props.block.chart_type === 'pareto') &&
         groupSlug &&
         !PERIOD_LABEL_SLUG.test(groupSlug)
     ) {
@@ -789,7 +791,105 @@ function aggregateVals(vals: number[] | undefined, agg: Agg): number {
     }
 }
 
+
+// Pareto: the grouped measure as DESCENDING bars plus a cumulative-share line
+// on a fixed 0-100% right axis (with an 80% tick — the classic read: how few
+// categories carry most of the volume). Synthesizes the combo shape so the
+// combo template, legend, crosshair and tooltip render it with no dedicated
+// branch.
+const pareto = computed(() => {
+    if (props.block.chart_type !== 'pareto') return null;
+    const g = series.value.filter((d) => d.value > 0);
+    if (g.length === 0) return null;
+
+    const total = g.reduce((a, d) => a + d.value, 0);
+    let running = 0;
+    const cum = g.map((d) => ((running += d.value) / total) * 100);
+
+    const W = 360;
+    const H = 210;
+    const padL = 36;
+    const padR = 36;
+    const padT = 10;
+    const padB = 30;
+    const innerH = H - padT - padB;
+    const innerW = W - padL - padR;
+    const slot = innerW / g.length;
+    const centerX = (ci: number) => padL + slot * (ci + 0.5);
+    const baselineY = padT + innerH;
+    const leftMax = Math.max(1, ...g.map((d) => d.value));
+    const yLeft = (v: number) => baselineY - (v / leftMax) * innerH;
+    const yRight = (v: number) => baselineY - (v / 100) * innerH;
+
+    const barW = Math.max(1, slot * 0.64);
+    const bars = g.map((d, ci) => ({
+        x: centerX(ci) - barW / 2,
+        y: yLeft(d.value),
+        w: barW,
+        h: Math.max(0, baselineY - yLeft(d.value)),
+        color: chartColor(0),
+    }));
+    const pts = g.map((_, ci) => ({ x: centerX(ci), y: yRight(cum[ci]) }));
+    const lines = [
+        {
+            color: chartColor(1),
+            path: smoothLine(pts),
+            area: null as string | null,
+            points: pts,
+        },
+    ];
+
+    const measureLabel =
+        yField.value?.name ?? (props.block.aggregation === 'count' ? 'Total' : 'Valor');
+    return {
+        W,
+        H,
+        padL,
+        padR,
+        top: padT,
+        baselineY,
+        stepX: slot,
+        xs: g.map((_, ci) => centerX(ci)),
+        bars,
+        lines,
+        leftTicks: [0, 0.5, 1].map((f) => ({
+            y: baselineY - f * innerH,
+            label: formatNumber(leftMax * f),
+            x: padL - 5,
+            anchor: 'end',
+        })),
+        rightTicks: [0, 0.5, 0.8, 1].map((f) => ({
+            y: baselineY - f * innerH,
+            label: `${Math.round(f * 100)}%`,
+            x: W - padR + 5,
+            anchor: 'start',
+        })),
+        catLabels: g.map((d, ci) => ({ x: centerX(ci), label: d.label })),
+        hover: g.map((d, ci) => ({
+            label: d.label,
+            rows: [
+                {
+                    label: measureLabel,
+                    color: chartColor(0),
+                    value: formatNumber(d.value),
+                },
+                {
+                    label: '% acumulado',
+                    color: chartColor(1),
+                    value: `${cum[ci].toFixed(1)}%`,
+                },
+            ],
+            markers: [{ y: pts[ci].y, color: chartColor(1) }],
+        })),
+        legend: [
+            { label: measureLabel, color: chartColor(0), type: 'bar', secondary: false },
+            { label: '% acumulado', color: chartColor(1), type: 'line', secondary: true },
+        ],
+    };
+});
+
 const combo = computed(() => {
+    if (props.block.chart_type === 'pareto') return pareto.value;
     if (!isCombo.value) return null;
     const defs = props.block.series!;
     const rows = props.data?.rows ?? [];
@@ -964,7 +1064,9 @@ const activeCross = computed(() => crosshair.value ?? comboCrosshair.value);
 
 // Empty state must account for combo (which ignores the single-series path).
 const emptyState = computed(() =>
-    isCombo.value ? combo.value === null : series.value.length === 0,
+    isCombo.value || props.block.chart_type === 'pareto'
+        ? combo.value === null
+        : series.value.length === 0,
 );
 
 // Scatter: plot raw (x_field, y_field) points from each row.

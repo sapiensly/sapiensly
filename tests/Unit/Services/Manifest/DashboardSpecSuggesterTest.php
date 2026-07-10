@@ -483,3 +483,35 @@ it('sizes a pre-aggregated breakdown with the additive measure, and the compiler
     expect($built['ok'] ?? false)->toBeFalse()
         ->and(collect($built['errors'])->pluck('code'))->toContain('illegal_aggregation');
 });
+
+it('compiles a pareto over a real dimension and refuses one over a date', function () {
+    $object = [
+        'id' => 'obj_par', 'slug' => 'causas', 'name' => 'Causas',
+        'fields' => [
+            ['id' => 'fld_causekey00', 'slug' => 'causa', 'name' => 'Causa', 'type' => 'string'],
+            ['id' => 'fld_causedate0', 'slug' => 'fecha', 'name' => 'Fecha', 'type' => 'date'],
+            ['id' => 'fld_causetix00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+    ];
+    $base = [
+        'title' => 'Pareto de causas',
+        'kpis' => [['label' => 'Tickets', 'aggregation' => 'sum', 'field_id' => 'fld_causetix00']],
+        'insights' => [],
+    ];
+    $compile = fn (array $chart) => app(AppScaffolder::class)->buildDashboardFromSpec(
+        $base + ['charts' => [$chart]], $object, [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+
+    $ok = $compile([
+        'label' => 'Top causas', 'chart_type' => 'pareto', 'aggregation' => 'sum',
+        'y_field_id' => 'fld_causetix00', 'group_by_field_id' => 'fld_causekey00', 'limit' => 15,
+    ]);
+    expect($ok['ok'] ?? false)->toBeTrue();
+
+    $bad = $compile([
+        'label' => 'Pareto por fecha', 'chart_type' => 'pareto', 'aggregation' => 'sum',
+        'y_field_id' => 'fld_causetix00', 'group_by_field_id' => 'fld_causedate0',
+    ]);
+    expect($bad['ok'] ?? false)->toBeFalse()
+        ->and(collect($bad['errors'])->pluck('code'))->toContain('degenerate_chart');
+});
