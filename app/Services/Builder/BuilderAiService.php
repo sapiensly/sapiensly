@@ -451,7 +451,7 @@ class BuilderAiService
             }
             $sdkHistory[] = $m->role === 'user'
                 ? new UserMessage($content)
-                : new AssistantMessage($content);
+                : new AssistantMessage($content.$this->outcomeReceipt($m));
         }
 
         // Drop the last user turn — the prompt() / stream() call takes it
@@ -1536,9 +1536,15 @@ class BuilderAiService
      */
     private function buildHistory(BuilderConversation $conversation): array
     {
+        // reorder() clears the relation's default ASC sort (without it the
+        // added orderByDesc is a no-op tiebreaker: the limit takes the OLDEST
+        // N and reverses them into the wrong order); the id tiebreaker keeps
+        // same-second messages stable. Mirrors the streaming path's fix.
         $messages = $conversation
             ->messages()
+            ->reorder()
             ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->limit(self::MAX_HISTORY_MESSAGES)
             ->get()
             ->reverse()
@@ -1552,10 +1558,39 @@ class BuilderAiService
             }
             $sdk[] = $m->role === 'user'
                 ? new UserMessage($content)
-                : new AssistantMessage($content);
+                : new AssistantMessage($content.$this->outcomeReceipt($m));
         }
 
         return $sdk;
+    }
+
+    /**
+     * The ground-truth receipt appended to every REPLAYED assistant turn.
+     *
+     * History replays as plain text — the tool calls and their results are
+     * invisible — so the model reads its own past "✅ eliminé el bloque"
+     * indistinguishably from having done it. After enough turns it imitates
+     * the FORM (narrate + claim success) without the substance (calling
+     * tools): observed in prod as three consecutive turns of pure narration —
+     * zero tool calls, fabricated "verifications", false success claims —
+     * while the manifest never moved (the poisoned-context spiral). The
+     * receipt pins each replayed turn to what the DB says actually happened,
+     * so narration can never masquerade as action in its own context.
+     */
+    private function outcomeReceipt(BuilderMessage $m): string
+    {
+        if ($m->applied_version_id !== null) {
+            $summary = trim((string) ($m->change_summary ?? ''));
+
+            return "\n\n[SYSTEM RECEIPT — changes APPLIED this turn"
+                .($summary !== '' ? ': '.$summary : '').']';
+        }
+
+        if ($m->status === 'pending') {
+            return "\n\n[SYSTEM RECEIPT — a proposal was left PENDING review; nothing is applied yet.]";
+        }
+
+        return "\n\n[SYSTEM RECEIPT — NO changes were applied in this turn. Any action claims above did NOT happen.]";
     }
 
     private function systemPrompt(App $app): string
@@ -1567,6 +1602,8 @@ class BuilderAiService
 {$now}
 
 You are the Builder AI inside Sapiensly. Your job is to help the tenant edit a low-code App by modifying its JSON manifest.
+
+HARD RULE — YOUR WORDS CHANGE NOTHING. Only a successful TOOL CALL in THIS turn (propose_change, delete_block_by_id, add_connected_object, scaffold/add-page tools, …) modifies the app. NEVER claim an action ("✅ eliminado", "agregué la tabla", "listo") unless you executed the corresponding tool call in this same turn and it succeeded. Every one of your past turns is replayed with a [SYSTEM RECEIPT] stating what ACTUALLY happened — a success claim contradicted by its receipt is a visible lie that destroys the user's trust. If you notice you are describing steps without calling tools, STOP mid-sentence and call the tool.
 
 App details:
   id: {$app->id}

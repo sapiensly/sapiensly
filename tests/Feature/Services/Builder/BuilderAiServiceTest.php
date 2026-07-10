@@ -1573,3 +1573,41 @@ it('an untargeted apply still advances the plan to the first open step', functio
         ->and($plan['steps'][1]['applied_version_id'])->toBe($version->id)
         ->and($plan['status'])->toBe('done');
 });
+
+it('replays history with ground-truth receipts so narration cannot masquerade as action', function () {
+    // Prod yuhuticket: three consecutive turns of pure narration — zero tool
+    // calls, fabricated verifications, "✅ Eliminé" — while the manifest never
+    // moved. History replays as plain text (tool calls invisible), so the
+    // model learned from its own transcript that claiming = doing. Receipts
+    // pin every replayed assistant turn to what actually happened.
+    $user = User::factory()->create();
+    $app = App::factory()->create(['user_id' => $user->id]);
+    $conv = BuilderConversation::create(['app_id' => $app->id, 'user_id' => $user->id, 'status' => 'active']);
+    $version = AppVersion::create([
+        'app_id' => $app->id, 'version_number' => 2,
+        'manifest' => ['schema_version' => '1.0.0', 'id' => $app->id, 'slug' => $app->slug, 'name' => $app->name, 'objects' => [], 'pages' => [], 'permissions' => ['roles' => []], 'version' => 2],
+        'change_summary' => 'x', 'created_by' => $user->id,
+    ]);
+
+    BuilderMessage::create(['conversation_id' => $conv->id, 'role' => 'user', 'content' => 'quita el sankey', 'status' => 'none']);
+    BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'status' => 'applied',
+        'content' => 'Listo, apliqué el cambio.', 'applied_version_id' => $version->id,
+        'change_summary' => 'Eliminé el sankey.',
+    ]);
+    BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'status' => 'none',
+        'content' => '✅ Eliminé el sankey y agregué la tabla.',
+    ]);
+
+    $service = app(BuilderAiService::class);
+    $method = new ReflectionMethod($service, 'buildHistory');
+    $history = $method->invoke($service, $conv);
+
+    $texts = collect($history)->map(fn ($m) => $m->content);
+    $withPrefix = fn (string $needle) => $texts->first(fn ($t) => str_starts_with($t, $needle));
+
+    expect($withPrefix('Listo, apliqué'))->toContain('[SYSTEM RECEIPT — changes APPLIED this turn: Eliminé el sankey.]')
+        ->and($withPrefix('✅ Eliminé el sankey'))->toContain('NO changes were applied in this turn')
+        ->and($withPrefix('quita el sankey'))->not->toContain('SYSTEM RECEIPT'); // user turns replay untouched
+});
