@@ -4,6 +4,8 @@ namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
 use App\Models\Record;
+use App\Services\Manifest\AppManifestService;
+use App\Services\Records\RecordQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -56,6 +58,33 @@ class InspectRecordsTool implements Tool
 
         if ($objectId === '') {
             return json_encode(['error' => 'object_id is required'], JSON_THROW_ON_ERROR);
+        }
+
+        // A CONNECTED object stores nothing in the records table — reading it
+        // there always says "0 records", and the agent then mis-diagnosed a
+        // WORKING live source as broken ("no data, reconnect or load a demo
+        // snapshot?") minutes after the dashboard rendered real rows. Route
+        // through the shared query service, which reads connected objects live.
+        $manifest = app(AppManifestService::class)->getActiveManifest($this->appModel);
+        $object = collect($manifest['objects'] ?? [])->firstWhere('id', $objectId);
+        if (is_array($object) && (($object['source']['type'] ?? null) === 'connected')) {
+            try {
+                $result = app(RecordQueryService::class)
+                    ->queryWithMeta($this->appModel, ['object_id' => $objectId, 'limit' => $limit], $manifest);
+            } catch (\Throwable $e) {
+                return json_encode([
+                    'object_id' => $objectId,
+                    'source' => 'connected',
+                    'error' => 'The live source could not be read: '.$e->getMessage(),
+                ], JSON_THROW_ON_ERROR);
+            }
+
+            return json_encode([
+                'object_id' => $objectId,
+                'source' => 'connected (live rows — this object stores nothing locally)',
+                'total_count' => $result['total'],
+                'sample_rows' => $result['records']->map(fn (Record $r) => ['id' => $r->id, 'data' => $r->data])->all(),
+            ], JSON_THROW_ON_ERROR);
         }
 
         $scope = Record::query()

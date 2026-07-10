@@ -4,7 +4,10 @@ namespace App\Services\Records;
 
 use App\Models\App;
 use App\Models\Record;
+use App\Models\User;
 use App\Services\Apps\AppAccessContext;
+use App\Services\Connected\ConnectedIntegrationResolver;
+use App\Services\Connected\ConnectedObjectReader;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use InvalidArgumentException;
@@ -41,6 +44,10 @@ class RecordQueryService
     public function __construct(
         private ExpressionResolver $expressions,
         private DerivedFieldsResolver $derived,
+        private ConnectedObjectReader $connected,
+        private ConnectedIntegrationResolver $integrations,
+        private InMemoryRowFilter $rowFilter,
+        private InMemoryAggregator $aggregator,
     ) {}
 
     /**
@@ -57,6 +64,17 @@ class RecordQueryService
         }
 
         $object = $this->findObject($manifest, $objectId);
+
+        if ($this->isConnected($object)) {
+            $rows = $this->sortRowsInMemory($this->connectedRows($app, $object, $query, $context), $query, $object);
+            $offset = (int) ($query['offset'] ?? 0);
+
+            return $this->toTransientRecords(
+                $app,
+                $object,
+                array_slice($rows, $offset, (int) ($query['limit'] ?? 50)),
+            );
+        }
 
         $builder = $this->scopeForObject($app, $objectId);
 
@@ -308,6 +326,14 @@ class RecordQueryService
         }
 
         $object = $this->findObject($manifest, $objectId);
+
+        if ($this->isConnected($object)) {
+            $rows = $this->connectedRows($app, $object, $query, $context);
+            $fieldSlug = $fieldId !== null ? (string) ($this->findField($object, $fieldId)['slug'] ?? '') : null;
+
+            return $this->aggregator->aggregate($rows, $aggregation, $fieldSlug);
+        }
+
         $builder = $this->scopeForObject($app, $objectId);
 
         $this->applyConstraints($builder, $query, $object, $objectId, $app, $manifest, $context);
@@ -489,6 +515,13 @@ class RecordQueryService
     {
         $object = $this->findObject($manifest, $objectId);
 
+        if ($this->isConnected($object)) {
+            $match = collect($this->connectedRows($app, $object, [], $context))
+                ->first(fn (array $r): bool => (string) ($r['id'] ?? '') === $recordId);
+
+            return $match === null ? null : $this->toTransientRecords($app, $object, [$match])->first();
+        }
+
         $builder = $this->scopeForObject($app, $objectId)->whereKey($recordId);
         $this->applyAccessFilter($builder, $object, $objectId, $app, $manifest, $context);
 
@@ -519,6 +552,11 @@ class RecordQueryService
         }
 
         $object = $this->findObject($manifest, $objectId);
+
+        if ($this->isConnected($object)) {
+            return count($this->connectedRows($app, $object, $query, $context));
+        }
+
         $builder = $this->scopeForObject($app, $objectId);
 
         $this->applyConstraints($builder, $query, $object, $objectId, $app, $manifest, $context);
@@ -597,6 +635,18 @@ class RecordQueryService
                 throw new InvalidArgumentException("Aggregation '{$aggregation}' requires field_id.");
             }
             $aggField = $this->findField($object, $fieldId);
+        }
+
+        if ($this->isConnected($object)) {
+            return $this->aggregator->grouped(
+                $this->connectedRows($app, $object, $query, $context),
+                $aggregation,
+                $aggField !== null ? (string) ($aggField['slug'] ?? '') : null,
+                (string) ($groupField['slug'] ?? ''),
+                $bucket,
+                $limit,
+                $group2Field !== null ? (string) ($group2Field['slug'] ?? '') : null,
+            );
         }
 
         $builder = $this->scopeForObject($app, $objectId);
@@ -1257,5 +1307,99 @@ class RecordQueryService
         }
 
         return $slug;
+    }
+
+    private function isConnected(array $object): bool
+    {
+        return ($object['source']['type'] ?? null) === 'connected';
+    }
+
+    /**
+     * Live rows for a CONNECTED object, filtered in memory by the same query
+     * block grammar. Connected objects store NOTHING in the records table, so
+     * the SQL path always answered "0 records" — the builder agent then
+     * confidently mis-diagnosed working sources as broken ("no data, want a
+     * demo snapshot?"). This routes every read through the same reader the
+     * dashboard renderer uses, so inspection finally sees what the user sees.
+     * The reader memoizes per operation+args, so count()+query() in one
+     * request costs one external read. `search` is not supported on connected
+     * rows (no text-index to hit) and is ignored.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $query
+     * @param  array<string, mixed>  $context
+     * @return list<array{id: string|null, data: array<string, mixed>}>
+     */
+    private function connectedRows(App $app, array $object, array $query, array $context): array
+    {
+        $integration = $this->integrations->resolve($app, $object['source']['integration_id'] ?? null);
+        if ($integration === null) {
+            throw new RuntimeException('This connected object needs an authorized connection.');
+        }
+
+        $actor = $context['__actor'] ?? ($context['current_user'] ?? null);
+        $result = $this->connected->list($object, $integration, $query, $actor instanceof User ? $actor : null, $context);
+        if (! ($result['ok'] ?? false)) {
+            throw new RuntimeException($result['error'] ?? 'Could not read from the connected system.');
+        }
+
+        $rows = array_map(function (array $row): array {
+            $id = $row['_external_id'] ?? null;
+            unset($row['_external_id']);
+
+            return ['id' => $id !== null ? (string) $id : null, 'data' => $row];
+        }, $result['rows']);
+
+        // Filter ONLY — the row filter would also apply the query's sort and
+        // limit, but count()/aggregate() need the full filtered set and
+        // query() pages explicitly (offset support the filter lacks).
+        return $this->rowFilter->apply($rows, ['filter' => $query['filter'] ?? null], $object, $context);
+    }
+
+    /**
+     * @param  list<array{id: string|null, data: array<string, mixed>}>  $rows
+     * @param  array<string, mixed>  $query
+     * @param  array<string, mixed>  $object
+     * @return list<array{id: string|null, data: array<string, mixed>}>
+     */
+    private function sortRowsInMemory(array $rows, array $query, array $object): array
+    {
+        foreach (array_reverse($query['sort'] ?? []) as $sort) {
+            $slug = (string) ($this->findField($object, $sort['field_id'])['slug'] ?? '');
+            $desc = ($sort['direction'] ?? 'asc') === 'desc';
+            usort($rows, function (array $a, array $b) use ($slug, $desc): int {
+                $cmp = ($a['data'][$slug] ?? null) <=> ($b['data'][$slug] ?? null);
+
+                return $desc ? -$cmp : $cmp;
+            });
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Wrap live rows as UNSAVED Record instances so connected reads flow
+     * through the same Collection<Record> contract every caller consumes.
+     * They are never persisted; ids are the source's external ids.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array{id: string|null, data: array<string, mixed>}>  $rows
+     * @return Collection<int, Record>
+     */
+    private function toTransientRecords(App $app, array $object, array $rows): Collection
+    {
+        $records = array_map(function (array $row) use ($app, $object): Record {
+            $record = new Record;
+            $record->forceFill([
+                'id' => $row['id'] ?? '',
+                'app_id' => $app->id,
+                'object_definition_id' => $object['id'] ?? '',
+                'data' => $row['data'],
+            ]);
+
+            return $record;
+        }, $rows);
+
+        return new Collection($records);
     }
 }
