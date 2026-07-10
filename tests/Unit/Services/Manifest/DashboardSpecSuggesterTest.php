@@ -687,3 +687,88 @@ it('a dateless windowed source gets a live previous-window compare on its KPIs',
         ->and($kpi['compare_window'] ?? null)->toBe('previous')
         ->and($kpi)->not->toHaveKey('compare');
 });
+
+it('drops a chart that shows exactly the same information, whatever its chart_type', function () {
+    // Prod yuhuticket: «Total Tickets por reason» (bar, avg) beside «Total
+    // Tickets por Motivo» (hbar) — same measure over the same dimension of
+    // the same object. On a one-row-per-category grain sum/avg collapse to
+    // the same numbers, so a different aggregation or type is still the same
+    // information. The duplicate is dropped; different dimensions survive.
+    $object = [
+        'id' => 'obj_dup', 'slug' => 'tickets_reason_cause_breakdown', 'name' => 'Tickets Reason Cause Breakdown',
+        'fields' => [
+            ['id' => 'fld_dupreason0', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_dupcanal00', 'slug' => 'canal', 'name' => 'Canal', 'type' => 'string'],
+            ['id' => 'fld_duptotal00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+    ];
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec([
+        'title' => 'Duplicados',
+        'kpis' => [['label' => 'Tickets', 'aggregation' => 'sum', 'field_id' => 'fld_duptotal00']],
+        'insights' => [],
+        'charts' => [
+            ['label' => 'Total Tickets por reason', 'chart_type' => 'bar', 'aggregation' => 'avg', 'y_field_id' => 'fld_duptotal00', 'group_by_field_id' => 'fld_dupreason0'],
+            ['label' => 'Total Tickets por Motivo', 'chart_type' => 'hbar', 'aggregation' => 'sum', 'y_field_id' => 'fld_duptotal00', 'group_by_field_id' => 'fld_dupreason0'],
+            ['label' => 'Por canal', 'chart_type' => 'donut', 'aggregation' => 'sum', 'y_field_id' => 'fld_duptotal00', 'group_by_field_id' => 'fld_dupcanal00'],
+        ],
+    ], $object, [], ColorPalette::fromAccent('#00ce7c'), 'es');
+
+    expect($built['ok'])->toBeTrue();
+    $charts = collect(json_decode(json_encode($built['page']['blocks']), true))
+        ->flatten(2)->filter(fn ($b) => is_array($b) && ($b['type'] ?? null) === 'chart');
+    $labels = [];
+    $walk = function (array $nodes) use (&$walk, &$labels): void {
+        foreach ($nodes as $n) {
+            if (! is_array($n)) {
+                continue;
+            }
+            if (($n['type'] ?? null) === 'chart') {
+                $labels[] = $n['label'];
+            }
+            $walk($n['blocks'] ?? []);
+        }
+    };
+    $labels = [];
+    $walk($built['page']['blocks']);
+    expect($labels)->toContain('Total Tickets por reason')
+        ->and($labels)->toContain('Por canal')
+        ->and($labels)->not->toContain('Total Tickets por Motivo'); // the duplicate died
+});
+
+it('every compiled chart carries an executive description; a spec-provided one wins', function () {
+    $object = [
+        'id' => 'obj_desc', 'slug' => 'causas', 'name' => 'Causas',
+        'fields' => [
+            ['id' => 'fld_desccausa0', 'slug' => 'causa', 'name' => 'Causa', 'type' => 'string'],
+            ['id' => 'fld_desctix000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+    ];
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec([
+        'title' => 'Descripciones',
+        'kpis' => [['label' => 'Tickets', 'aggregation' => 'sum', 'field_id' => 'fld_desctix000']],
+        'insights' => [],
+        'charts' => [
+            ['label' => 'Top causas', 'chart_type' => 'pareto', 'aggregation' => 'sum', 'y_field_id' => 'fld_desctix000', 'group_by_field_id' => 'fld_desccausa0'],
+            ['label' => 'Con descripción propia', 'chart_type' => 'donut', 'aggregation' => 'sum', 'y_field_id' => 'fld_desctix000', 'group_by_field_id' => 'fld_desccausa0', 'filter' => ['op' => 'neq', 'field_id' => 'fld_desccausa0', 'value' => 'Otros'], 'description' => 'Reparto excluyendo «Otros».'],
+        ],
+    ], $object, [], ColorPalette::fromAccent('#00ce7c'), 'es');
+
+    expect($built['ok'])->toBeTrue();
+    $charts = [];
+    $walk = function (array $nodes) use (&$walk, &$charts): void {
+        foreach ($nodes as $n) {
+            if (! is_array($n)) {
+                continue;
+            }
+            if (($n['type'] ?? null) === 'chart') {
+                $charts[$n['label']] = $n['description'] ?? null;
+            }
+            $walk($n['blocks'] ?? []);
+        }
+    };
+    $walk($built['page']['blocks']);
+
+    expect($charts['Top causas'])->toContain('% acumulado')
+        ->and($charts['Top causas'])->toContain('causa')
+        ->and($charts['Con descripción propia'])->toBe('Reparto excluyendo «Otros».');
+});

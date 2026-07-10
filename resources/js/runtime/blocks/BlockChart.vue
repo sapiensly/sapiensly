@@ -20,6 +20,7 @@ interface ChartBlock {
     id: string;
     type: 'chart';
     label?: string;
+    description?: string;
     chart_type:
         | 'bar'
         | 'hbar'
@@ -1420,12 +1421,18 @@ const boxPlot = computed(() => {
                 }}</span>
             </div>
         </div>
-        <header
-            v-if="block.label"
-            class="mb-3 flex items-center justify-between"
-        >
-            <p :class="['text-[11px] tracking-wider uppercase', t.textSubtle]">
-                {{ block.label }}
+        <header v-if="block.label" class="mb-3">
+            <div class="flex items-center justify-between">
+                <p :class="['text-[11px] tracking-wider uppercase', t.textSubtle]">
+                    {{ block.label }}
+                </p>
+            </div>
+            <!-- One executive line: what the chart shows and how to read it. -->
+            <p
+                v-if="block.description"
+                :class="['mt-0.5 text-[11px] leading-snug', t.textMuted]"
+            >
+                {{ block.description }}
             </p>
         </header>
 

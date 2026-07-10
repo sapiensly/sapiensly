@@ -167,10 +167,15 @@ it('names the exact unknown field instead of failing opaquely', function () {
 it('enforces the dashboard lints on its own layout (variety, insights)', function () {
     [$tool] = adp_tool($this);
     $spec = adp_spec();
-    // Monoculture: four bars and no insight cards.
-    $spec['charts'] = array_map(fn (int $i) => [
-        'label' => "Bar {$i}", 'chart_type' => 'bar', 'aggregation' => 'count', 'group_by_field_id' => 'fld_statefield',
-    ], [1, 2, 3, 4]);
+    // Monoculture: four bars carrying DISTINCT information (different
+    // dimensions/measures — identical ones would be deduped as one chart)
+    // and no insight cards.
+    $spec['charts'] = [
+        ['label' => 'Bar 1', 'chart_type' => 'bar', 'aggregation' => 'count', 'group_by_field_id' => 'fld_statefield'],
+        ['label' => 'Bar 2', 'chart_type' => 'bar', 'aggregation' => 'count', 'group_by_field_id' => 'fld_priofield'],
+        ['label' => 'Bar 3', 'chart_type' => 'bar', 'aggregation' => 'avg', 'y_field_id' => 'fld_hoursfield', 'group_by_field_id' => 'fld_statefield'],
+        ['label' => 'Bar 4', 'chart_type' => 'bar', 'aggregation' => 'sum', 'y_field_id' => 'fld_hoursfield', 'group_by_field_id' => 'fld_priofield'],
+    ];
     $spec['insights'] = [];
 
     $result = json_decode($tool->handle(new ToolRequest($spec)), true);
