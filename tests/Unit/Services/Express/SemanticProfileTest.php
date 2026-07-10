@@ -143,3 +143,26 @@ it('names units from slugs and knows which delta direction is good', function ()
         ->and($this->semantics->deltaGoodOf(['slug' => 'nps_score']))->toBe('up')
         ->and($this->semantics->deltaGoodOf(['slug' => 'total_tickets']))->toBeNull();
 });
+
+it('classifies a reason breakdown as dimension grain by identity and share column', function () {
+    // Prod yuhuticket: collection `reasons` + label field `reason` dodged both
+    // dimension heuristics, the object classified RAW, and the suggester
+    // legally emitted count-by-reason — an hbar where every bar was 1 row.
+    $fields = [
+        ['id' => 'f1', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+        ['id' => 'f2', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ['id' => 'f3', 'slug' => 'pct_of_total', 'name' => 'Pct Of Total', 'type' => 'number'],
+        ['id' => 'f4', 'slug' => 'causes_truncated', 'name' => 'Causes Truncated', 'type' => 'boolean'],
+    ];
+
+    // (a) identity says breakdown — object slug/name/tool.
+    $byIdentity = sem_object($fields, 'reasons');
+    $byIdentity['slug'] = 'tickets_reason_cause_breakdown';
+    $byIdentity['name'] = 'Tickets Reason Cause Breakdown';
+    expect($this->semantics->grainOf($byIdentity))->toBe(SemanticProfile::GRAIN_DIMENSION);
+
+    // (b) even with an anonymous identity, a dateless share-of-total column
+    // means the rows ARE the aggregation.
+    $byShare = sem_object($fields, 'reasons');
+    expect($this->semantics->grainOf($byShare))->toBe(SemanticProfile::GRAIN_DIMENSION);
+});

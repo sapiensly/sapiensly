@@ -3,6 +3,7 @@
 namespace App\Services\Express;
 
 use App\Services\Records\InMemoryRowFilter;
+use Illuminate\Support\Str;
 
 /**
  * The semantic layer that keeps dashboard numbers HONEST. Two classifications
@@ -64,9 +65,32 @@ class SemanticProfile
             return self::GRAIN_TIME_SERIES;
         }
 
-        // A `key`-style label + a breakdown-ish collection → one row per category.
+        // The object's own identity — slug, name and the tool it reads — often
+        // says "breakdown" outright where the collection path does not
+        // (tickets_reason_cause_breakdown listed a collection called `reasons`,
+        // classified RAW, and shipped an hbar counting one row per reason).
+        $identity = Str::lower(implode(' ', [
+            (string) ($object['slug'] ?? ''),
+            (string) ($object['name'] ?? ''),
+            (string) ($object['source']['operations']['list']['mcp_tool'] ?? ''),
+        ]));
+
+        // A `key`-style label + a breakdown-ish collection/identity → one row
+        // per category.
         if ($slugs->contains(fn (string $s) => preg_match('/^key$|^dimension$|^grupo$/i', $s) === 1)
-            || preg_match('/breakdown|by_dimension|by_[a-z]+$/i', $collection) === 1) {
+            || preg_match('/breakdown|by_dimension|by_[a-z]+$/i', $collection) === 1
+            || preg_match('/breakdown|desglose|distribution|distribucion|by_dimension/i', $identity) === 1) {
+            return self::GRAIN_DIMENSION;
+        }
+
+        $hasDate = $fields->contains(fn (array $f) => in_array($f['type'] ?? '', ['date', 'datetime'], true));
+
+        // A share-of-total column only exists on rows that ARE the aggregation
+        // (each row a category with its % of the whole) — dateless, that is a
+        // dimension breakdown whatever the names say.
+        if (! $hasDate && $slugs->contains(
+            fn (string $s) => preg_match('/pct_of_total|share_of_total|porcentaje_(del_)?total|_share$/i', $s) === 1,
+        )) {
             return self::GRAIN_DIMENSION;
         }
 
@@ -76,7 +100,6 @@ class SemanticProfile
             ->filter(fn (array $f) => in_array($f['type'] ?? '', ['number', 'currency'], true))
             ->filter(fn (array $f) => preg_match(self::STATISTIC_NAME, (string) ($f['slug'] ?? '')) === 1)
             ->count();
-        $hasDate = $fields->contains(fn (array $f) => in_array($f['type'] ?? '', ['date', 'datetime'], true));
         if ($statisticColumns >= 2 && ! $hasDate) {
             return self::GRAIN_DIMENSION;
         }

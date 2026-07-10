@@ -440,3 +440,46 @@ it('leads a dimension breakdown that carries statistics with the statistic, not 
         ->and($first['y_field_id'])->toBe('fld_avgminrt')
         ->and($first['aggregation'])->toBe('avg');
 });
+
+it('sizes a pre-aggregated breakdown with the additive measure, and the compiler refuses count', function () {
+    // Prod yuhuticket: «Total Tickets por Motivo», an hbar counting rows on a
+    // one-row-per-reason source — every bar was 1, labeled as ticket totals.
+    $object = [
+        'id' => 'obj_rcb', 'slug' => 'tickets_reason_cause_breakdown', 'name' => 'Tickets Reason Cause Breakdown',
+        'fields' => [
+            ['id' => 'fld_reason0000', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_totaltix00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+            ['id' => 'fld_pcttotal00', 'slug' => 'pct_of_total', 'name' => 'Pct Of Total', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected',
+            'operations' => ['list' => ['mcp_tool' => 'get-tickets-reason-cause-breakdown-tool', 'collection_path' => 'reasons']],
+        ],
+    ];
+    $rows = collect(['Duplicado', 'Retraso', 'Defecto', 'Cobro'])->map(fn ($r, $i) => [
+        'reason' => $r, 'total_tickets' => 80 - $i * 15, 'pct_of_total' => 32.0 - $i * 6,
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets', 'motivos']);
+
+    // Whatever the suggester emits: no count-sized breakdowns on this grain.
+    foreach ($spec['charts'] as $chart) {
+        if (isset($chart['group_by_field_id']) && ! isset($chart['x_field_id'])) {
+            expect($chart['aggregation'])->not->toBe('count');
+        }
+    }
+
+    // And the compiler enforces it against ANY author: a hand-written count
+    // breakdown on the same object dies as illegal_aggregation.
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        array_merge($spec, ['charts' => [[
+            'label' => 'Total Tickets por Motivo',
+            'chart_type' => 'hbar',
+            'aggregation' => 'count',
+            'group_by_field_id' => 'fld_reason0000',
+        ]]]),
+        $object, [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'] ?? false)->toBeFalse()
+        ->and(collect($built['errors'])->pluck('code'))->toContain('illegal_aggregation');
+});

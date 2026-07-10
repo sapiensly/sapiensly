@@ -1314,6 +1314,21 @@ class AppScaffolder
                 continue;
             }
 
+            // Counting PRE-AGGREGATED rows grouped by a category charts "one
+            // bar per row" — the source already collapsed each category to one
+            // row, so count(rows) per group is always 1 (or the number of
+            // buckets, never the number of underlying entities). Shipped once:
+            // «Total Tickets por Motivo», an hbar of flat 1s over a reason
+            // breakdown. Size the slices with the additive measure instead.
+            if ($agg === 'count' && $groupId !== null && $groupId !== ''
+                && ! isset($chart['x_field_id'])
+                && in_array($grainBySlug[(string) ($chartObject['slug'] ?? $primarySlug)] ?? '',
+                    [SemanticProfile::GRAIN_DIMENSION, SemanticProfile::GRAIN_TIME_SERIES], true)) {
+                $errors[] = ['path' => "/charts/{$i}/aggregation", 'message' => 'This object is pre-aggregated (one row per category/bucket), so counting rows per group charts the row layout, not the data — aggregate sum/avg of a numeric column instead.', 'code' => 'illegal_aggregation'];
+
+                continue;
+            }
+
             // A part-of-whole chart needs a category to slice by. A pie/donut
             // with no group_by (and no series) is a single 100% slice —
             // observed: a «Respuestas por Periodo» donut of sum(responses) that
