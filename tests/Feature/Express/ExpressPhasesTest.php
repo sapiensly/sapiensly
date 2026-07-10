@@ -1186,3 +1186,26 @@ it('economy states plainly which asked topics the built board does not cover', f
     $covered = implode(' ', $ctx->chosenTools).' '.implode(' ', $ctx->coverageNotes);
     expect($covered)->toContain('complaints'); // chosen, or named in a note
 });
+
+it('an ARRAY default on an enum argument cannot crash the enum cuts (prod yuhucsc)', function () {
+    // Prod plr_01kx70sb11: the gate answered fine and the run died AFTER it —
+    // enumCuts cast an authored ARRAY default to string. An array default now
+    // reads as "no single default": named enum values still become cuts.
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    $ctx = xph_ctx($this, 'distribucion de motivos y la causa raiz de los tickets');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [[
+        'name' => 'get-tickets-by-dimension-tool',
+        'description' => 'Tickets agregados por dimensión: motivos, causa, canal',
+        'arguments' => ['dimension' => ['category'], 'filters' => ['a', 'b']], // arrays, as prod shipped
+        'input_schema' => ['properties' => [
+            'dimension' => ['enum' => ['category', 'cause', 'channel'], 'default' => ['category']],
+        ]],
+    ]];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect(collect($ctx->chosenCuts)->pluck('cut'))->toContain('cause');
+});

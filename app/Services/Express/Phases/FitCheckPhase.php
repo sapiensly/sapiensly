@@ -269,7 +269,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         $haystack = collect($context->chosenTools)
             ->map(fn (string $n) => $byName->get($n))
             ->filter()
-            ->map(fn (array $t): string => Str::lower(Str::ascii(($t['name'] ?? '').' '.($t['description'] ?? ''))))
+            ->map(fn (array $t): string => $this->toolText($t))
             ->implode(' ');
         // Stem-tolerant both ways: "producto" matches "productos" in the tool,
         // and the tool's "detractor" matches "detractores" in the prompt.
@@ -311,7 +311,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             if ($tool === null) {
                 continue;
             }
-            $haystack = Str::lower(Str::ascii(($tool['name'] ?? '').' '.($tool['description'] ?? '')));
+            $haystack = $this->toolText($tool);
             if ($words->contains(fn ($w) => str_contains($haystack, (string) $w))) {
                 return false;
             }
@@ -362,7 +362,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         }
 
         $haystacks = $tools
-            ->map(fn (array $t): string => Str::lower(Str::ascii(($t['name'] ?? '').' '.($t['description'] ?? ''))))
+            ->map(fn (array $t): string => $this->toolText($t))
             ->all();
 
         $discriminating = $words->filter(function (string $word) use ($haystacks, $n): bool {
@@ -489,7 +489,11 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
                 if (count($enum) < 2) {
                     continue;
                 }
-                $default = (string) ($defaults[$arg] ?? ($schema['default'] ?? ''));
+                $rawDefault = $defaults[$arg] ?? ($schema['default'] ?? '');
+                // An authored default can be an ARRAY (multi-value args) —
+                // treat it as "no single default": every named enum value is
+                // then a legitimate extra cut. Casting it crashed a prod run.
+                $default = is_scalar($rawDefault) ? (string) $rawDefault : '';
 
                 foreach ($enum as $value) {
                     if (strcasecmp($value, $default) === 0) {
@@ -521,7 +525,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         }
 
         $byName = collect($context->catalogTools)->keyBy('name');
-        $hayOf = fn (array $t): string => Str::lower(Str::ascii(($t['name'] ?? '').' '.($t['description'] ?? '')));
+        $hayOf = fn (array $t): string => $this->toolText($t);
         $chosenHay = collect($chosenTools)
             ->map(fn (string $n): string => $hayOf($byName->get($n) ?? []))
             ->implode(' ');
@@ -539,6 +543,21 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
                 ? "**{$concept}** quedó fuera de este tablero — lo cubre `{$elsewhere['name']}`; pídelo aparte y lo agrego."
                 : "**{$concept}** no aparece en los datos de esta conexión.";
         }
+    }
+
+    /**
+     * Scalar-safe "name + description" text of a catalog tool — MCP servers
+     * occasionally ship structured descriptions, and concatenating an array
+     * is a fatal mid-pipeline.
+     *
+     * @param  array<string, mixed>  $tool
+     */
+    private function toolText(array $tool): string
+    {
+        $name = is_scalar($tool['name'] ?? null) ? (string) $tool['name'] : '';
+        $description = is_scalar($tool['description'] ?? null) ? (string) $tool['description'] : json_encode($tool['description'] ?? '');
+
+        return Str::lower(Str::ascii($name.' '.$description));
     }
 
     /**
@@ -585,7 +604,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         }
 
         $haystacks = collect($context->catalogTools)
-            ->map(fn (array $t): string => Str::lower(Str::ascii(($t['name'] ?? '').' '.($t['description'] ?? ''))));
+            ->map(fn (array $t): string => $this->toolText($t));
 
         // Concept-wise: a topic is COVERED when the word OR any of its lexicon
         // translations hits ("quejas" is covered via "complaints"); an
@@ -629,7 +648,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         $scored = collect($context->catalogTools)
             ->reject(fn (array $t): bool => in_array($t['name'], $noRows, true))
             ->map(function (array $tool) use ($words): array {
-                $haystack = Str::lower(Str::ascii(($tool['name'] ?? '').' '.($tool['description'] ?? '')));
+                $haystack = $this->toolText($tool);
                 $score = $words->filter(fn ($w) => str_contains($haystack, (string) $w))->count();
 
                 return ['name' => $tool['name'], 'score' => $score];
