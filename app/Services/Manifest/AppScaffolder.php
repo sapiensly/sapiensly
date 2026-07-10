@@ -1263,6 +1263,29 @@ class AppScaffolder
                 continue;
             }
             $chartType = (string) ($chart['chart_type'] ?? '');
+
+            // Specialized-viz intents authored as chart entries: the spec
+            // grammar stays uniform (everything visual lives in charts[]) and
+            // the compiler translates to the dedicated block the runtime
+            // renders — with its own feasibility checks instead of the
+            // chart-block lints below.
+            if ($chartType === 'funnel') {
+                $block = $this->funnelBlockFromChart($chart, $chartObject, $i, $errors, $withRange);
+                if ($block !== null) {
+                    $chartBlocks[] = $block;
+                }
+
+                continue;
+            }
+            if ($chartType === 'heatmap') {
+                $block = $this->heatmapBlockFromChart($chart, $chartObject, $i, $errors);
+                if ($block !== null) {
+                    $chartBlocks[] = $block;
+                }
+
+                continue;
+            }
+
             $agg = (string) ($chart['aggregation'] ?? 'count');
             if (in_array($agg, ['median', 'p90', 'p95', 'distinct_count'], true)) {
                 $errors[] = ['path' => "/charts/{$i}/aggregation", 'message' => "Charts render count|sum|avg|min|max only — put '{$agg}' in a KPI instead.", 'code' => 'bad_aggregation'];
@@ -1390,7 +1413,7 @@ class AppScaffolder
         // --- Deterministic layout: pair charts by their natural footprint ------
         $wide = $medium = $short = [];
         foreach ($chartBlocks as $block) {
-            match (PlanDashboardTool::kindOf('chart', $block['chart_type'])) {
+            match (PlanDashboardTool::kindOf((string) ($block['type'] ?? 'chart'), (string) ($block['chart_type'] ?? ''))) {
                 'wide' => $wide[] = $block,
                 'short' => $short[] = $block,
                 default => $medium[] = $block,
@@ -1557,8 +1580,8 @@ class AppScaffolder
                 'blocks' => array_values($row),
             ];
             $planRows[] = ['section' => $useSections ? $sectionLabels[$rowIsTemporal($row) ? 'trend' : 'breakdown'] : null] + ['blocks' => array_map(fn (array $b): array => array_filter([
-                'type' => 'chart',
-                'chart_type' => $b['chart_type'],
+                'type' => (string) ($b['type'] ?? 'chart'),
+                'chart_type' => $b['chart_type'] ?? null,
                 'col_span' => $b['style']['col_span'] ?? null,
             ], fn ($v) => $v !== null), $row)];
         }
@@ -1601,6 +1624,89 @@ class AppScaffolder
             ],
             'plan_rows' => $planRows,
             'purpose' => trim((string) ($spec['purpose'] ?? '')) ?: "Vista ejecutiva de {$object['name']}: KPIs, tendencias y conclusiones.",
+        ];
+    }
+
+    /**
+     * Translate a funnel-intent chart entry into the dedicated funnel block:
+     * one stage per named category value, each an eq-filtered aggregate over
+     * the SAME object (count of rows, or sum of the entry's y_field). Stage
+     * values come from the suggester's sampled data or, for a single_select,
+     * the field's authored options — the compiler itself has no rows. 2-8
+     * stages or it isn't a funnel.
+     *
+     * @param  array<string, mixed>  $chart
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $errors
+     * @return array<string, mixed>|null
+     */
+    private function funnelBlockFromChart(array $chart, array $object, int $i, array &$errors, \Closure $withRange): ?array
+    {
+        $group = collect($object['fields'] ?? [])->firstWhere('id', $chart['group_by_field_id'] ?? null);
+        if ($group === null) {
+            $errors[] = ['path' => "/charts/{$i}/group_by_field_id", 'message' => 'A funnel needs group_by_field_id — the category whose values are the stages.', 'code' => 'degenerate_chart'];
+
+            return null;
+        }
+
+        $stages = collect($chart['stages'] ?? [])
+            ->map(fn ($v): string => is_scalar($v) ? trim((string) $v) : '')
+            ->filter()->unique()->values();
+        if ($stages->isEmpty() && ($group['type'] ?? '') === 'single_select') {
+            $stages = collect($group['options'] ?? [])
+                ->map(fn ($o): string => trim((string) (is_array($o) ? ($o['value'] ?? '') : $o)))
+                ->filter()->values();
+        }
+        if ($stages->count() < 2 || $stages->count() > 8) {
+            $errors[] = ['path' => "/charts/{$i}/stages", 'message' => 'A funnel needs 2-8 stages — pass the category values in order (or use a single_select group field whose options define them).', 'code' => 'degenerate_chart'];
+
+            return null;
+        }
+
+        $sum = ($chart['aggregation'] ?? 'count') === 'sum' && isset($chart['y_field_id']);
+
+        return [
+            'id' => $this->id('blk'),
+            'type' => 'funnel',
+            'label' => (string) ($chart['label'] ?? 'Embudo'),
+            'stages' => $stages->map(fn (string $value): array => array_filter([
+                'id' => $this->id('stg'),
+                'label' => Str::limit($value, 80, ''),
+                'query' => [
+                    'object_id' => $object['id'],
+                    'filter' => $withRange(['op' => 'eq', 'field_id' => $group['id'], 'value' => $value], $object),
+                ],
+                'aggregation' => $sum ? 'sum' : 'count',
+                'field_id' => $sum ? $chart['y_field_id'] : null,
+            ], fn ($v) => $v !== null))->all(),
+        ];
+    }
+
+    /**
+     * Translate a heatmap-intent chart entry into the calendar-heatmap block
+     * (records per day over the trailing weeks). Needs a date/datetime field
+     * — the entry's x_field_id — and record-level rows to count.
+     *
+     * @param  array<string, mixed>  $chart
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $errors
+     * @return array<string, mixed>|null
+     */
+    private function heatmapBlockFromChart(array $chart, array $object, int $i, array &$errors): ?array
+    {
+        $date = collect($object['fields'] ?? [])->firstWhere('id', $chart['x_field_id'] ?? ($chart['date_field_id'] ?? null));
+        if ($date === null || ! in_array($date['type'] ?? '', self::DATE_TYPES, true)) {
+            $errors[] = ['path' => "/charts/{$i}/x_field_id", 'message' => 'A heatmap counts records per DAY — set x_field_id to a date/datetime field.', 'code' => 'degenerate_chart'];
+
+            return null;
+        }
+
+        return [
+            'id' => $this->id('blk'),
+            'type' => 'heatmap',
+            'label' => (string) ($chart['label'] ?? 'Actividad'),
+            'data_source' => ['object_id' => $object['id']],
+            'date_field_id' => $date['id'],
         ];
     }
 

@@ -309,6 +309,9 @@ class DashboardSpecSuggester
 
         return match (true) {
             $has('/^pareto$|^acumulad|^concentraci/') => 'pareto',
+            $has('/^embudo$|^funnel$/') => 'funnel',
+            // "mapa de calor" tokenizes to two words; "heatmap" is one.
+            $has('/^heatmap$/') || ($has('/^mapa$/') && $has('/^calor$/')) => 'heatmap',
             $has('/^top\d*$|^ranking$|^mayores$|^principales$/') => 'hbar',
             $has('/^distribuci|^proporci|^participaci|^reparto$|^share$/') => 'donut',
             $has('/^compar|^versus$|^vs$/') => 'bar',
@@ -984,6 +987,22 @@ class DashboardSpecSuggester
             $this->appendStatisticCharts($charts, $statistics, $categoricals, $es);
         }
 
+        // "Mapa de calor": the calendar heatmap counts RECORDS per day, so it
+        // is only honest on record-level rows with a real date axis and no
+        // recency cap (a capped sample's density is the sampling window).
+        if ($this->intentForm($promptTopics) === 'heatmap'
+            && $grain === SemanticProfile::GRAIN_RAW
+            && $dateField !== null
+            && ! $this->isCappedSample($object)
+            && count($charts) < self::MAX_CHARTS) {
+            $charts[] = [
+                'label' => $es ? 'Actividad por día' : 'Daily activity',
+                'chart_type' => 'heatmap',
+                'aggregation' => 'count',
+                'x_field_id' => $dateField['id'],
+            ];
+        }
+
         // Concentration: breakdowns per categorical, form chosen by REAL
         // cardinality (donut needs few slices; many go horizontal, capped) —
         // unless the ASK names a form: an explicit "top/pareto/distribución/
@@ -1009,13 +1028,29 @@ class DashboardSpecSuggester
                     ? 'hbar'
                     : $breakdownTypes[$i % count($breakdownTypes)],
             ];
-            if ($intentForm !== null) {
-                // A part-of-whole ask over many slices reads better as a
-                // treemap than a 12-slice donut; every other form scales.
-                $chart['chart_type'] = ($intentForm === 'donut' && $distinct !== null && $distinct > 8)
-                    ? 'treemap'
-                    : $intentForm;
-                $intentForm = null; // flagship only
+            if ($intentForm !== null && $intentForm !== 'heatmap') {
+                if ($intentForm === 'funnel') {
+                    // Stages are the sampled category values in source order
+                    // (breakdown tools already return them sorted by volume);
+                    // outside 2-6 real stages a funnel stops being one and the
+                    // data-shape default stands.
+                    $values = collect($stats[$field['id']]['values'] ?? [])
+                        ->map(fn ($v): string => is_scalar($v) ? trim((string) $v) : '')
+                        ->filter()->unique()->take(6)->values();
+                    if ($values->count() >= 2) {
+                        $chart['chart_type'] = 'funnel';
+                        $chart['stages'] = $values->all();
+                        $chart['label'] = ($es ? 'Embudo por ' : 'Funnel by ').Str::lower((string) ($field['name'] ?? $field['slug']));
+                        $intentForm = null; // flagship only
+                    }
+                } else {
+                    // A part-of-whole ask over many slices reads better as a
+                    // treemap than a 12-slice donut; every other form scales.
+                    $chart['chart_type'] = ($intentForm === 'donut' && $distinct !== null && $distinct > 8)
+                        ? 'treemap'
+                        : $intentForm;
+                    $intentForm = null; // flagship only
+                }
             }
             if ($grain === SemanticProfile::GRAIN_RAW) {
                 $chart['aggregation'] = 'count';

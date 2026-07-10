@@ -552,3 +552,69 @@ it('an explicit form intent in the ask shapes the flagship breakdown determinist
     'comparación' => [['tickets', 'compara'], 'bar'],
     'sin intención (default)' => [['tickets'], 'donut'],
 ]);
+
+it('embudo builds a funnel from sampled stage values and compiles to the dedicated block', function () {
+    $object = [
+        'id' => 'obj_funl', 'slug' => 'tickets_reason_cause_breakdown', 'name' => 'Tickets Reason Cause Breakdown',
+        'fields' => [
+            ['id' => 'fld_funreason0', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_funtotal00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+    ];
+    $rows = collect(['Duplicado', 'Retraso', 'Defecto', 'Cobro'])->map(fn ($r, $i) => [
+        'reason' => $r, 'total_tickets' => 80 - $i * 15,
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets', 'embudo']);
+
+    $funnel = collect($spec['charts'])->firstWhere('chart_type', 'funnel');
+    expect($funnel)->not->toBeNull()
+        ->and($funnel['stages'])->toBe(['Duplicado', 'Retraso', 'Defecto', 'Cobro']);
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $object, [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'] ?? false)->toBeTrue()
+        ->and(PlanDashboardTool::lint($built['purpose'], $built['plan_rows'])['ok'])->toBeTrue();
+
+    // The compiled page carries the DEDICATED funnel block: one eq-filtered
+    // sum stage per sampled value, never a chart block with a funnel costume.
+    $blocks = [];
+    $walk = function (array $nodes) use (&$walk, &$blocks): void {
+        foreach ($nodes as $node) {
+            if (! is_array($node)) {
+                continue;
+            }
+            $blocks[] = $node;
+            $walk($node['blocks'] ?? []);
+        }
+    };
+    $walk($built['page']['blocks']);
+    $block = collect($blocks)->firstWhere('type', 'funnel');
+    expect($block)->not->toBeNull()
+        ->and($block['stages'])->toHaveCount(4)
+        ->and($block['stages'][0]['aggregation'])->toBe('sum')
+        ->and($block['stages'][0]['field_id'])->toBe('fld_funtotal00')
+        ->and(json_encode($block['stages'][0]['query']['filter']))->toContain('Duplicado');
+});
+
+it('mapa de calor emits the calendar heatmap only where dated record-level rows can answer it', function () {
+    $topics = ['nps', 'mapa', 'calor'];
+
+    // Raw rows + datetime + no cap → the heatmap chart entry appears and
+    // compiles to the dedicated block.
+    $spec = app(DashboardSpecSuggester::class)->suggest(dss_comments_object(null), 'es', dss_comments_rows(), $topics);
+    $heat = collect($spec['charts'])->firstWhere('chart_type', 'heatmap');
+    expect($heat)->not->toBeNull()
+        ->and($heat['x_field_id'])->toBe('fld_respondedat');
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, dss_comments_object(null), [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'] ?? false)->toBeTrue()
+        ->and(json_encode($built['page']['blocks']))->toContain('"type":"heatmap"');
+
+    // A recency-capped sample would plot the sampling window — no heatmap.
+    $capped = app(DashboardSpecSuggester::class)->suggest(dss_comments_object('latest'), 'es', dss_comments_rows(), $topics);
+    expect(collect($capped['charts'])->firstWhere('chart_type', 'heatmap'))->toBeNull();
+});
