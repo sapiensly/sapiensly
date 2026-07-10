@@ -300,6 +300,113 @@ class DashboardSpecSuggester
     }
 
     /**
+     * Inline history behind the headline numbers: the first two KPIs of a
+     * dated non-breakdown object get a sparkline over the date axis with the
+     * KPI's own fold — the compact "how did we get here" beside the value.
+     *
+     * @param  list<array<string, mixed>>  $kpis
+     * @return list<array<string, mixed>>
+     */
+    private function suggestSparks(array $kpis, string $grain, ?array $dateField): array
+    {
+        if ($dateField === null || $grain === SemanticProfile::GRAIN_DIMENSION) {
+            return $kpis;
+        }
+
+        $decorated = 0;
+        foreach ($kpis as $i => $kpi) {
+            if ($decorated >= 2) {
+                break;
+            }
+            $agg = (string) ($kpi['aggregation'] ?? 'count');
+            if (! in_array($agg, ['count', 'sum', 'avg', 'min', 'max'], true) || isset($kpi['spark'])) {
+                continue;
+            }
+            $kpis[$i]['spark'] = array_filter([
+                'x_field_id' => $dateField['id'],
+                'y_field_id' => $agg === 'count' ? null : ($kpi['field_id'] ?? null),
+                'aggregation' => $agg,
+            ], fn ($v) => $v !== null);
+            $decorated++;
+        }
+
+        return $kpis;
+    }
+
+    /**
+     * The dominant categorical as a SELECT filter: 2-12 sampled values on the
+     * first usable category — the compiler wires every primary-object block
+     * to params.<slug>, so picking «Envíos» re-scopes the whole board (an
+     * unset param resolves empty and filters nothing).
+     *
+     * @param  list<array<string, mixed>>  $categoricals
+     * @param  array<string, array{values: list<mixed>, distinct: int}>  $stats
+     * @return array<string, mixed>|null
+     */
+    private function suggestCategoryFilter(array $categoricals, array $stats): ?array
+    {
+        foreach ($categoricals as $field) {
+            $distinct = $stats[$field['id']]['distinct'] ?? null;
+            if ($distinct === null || $distinct < 2 || $distinct > 12) {
+                continue;
+            }
+            $options = collect($stats[$field['id']]['values'] ?? [])
+                ->map(fn ($v): string => is_scalar($v) ? trim((string) $v) : '')
+                ->filter()->unique()->take(12)->values();
+            if ($options->count() < 2) {
+                continue;
+            }
+
+            return [
+                'field_id' => $field['id'],
+                'label' => (string) ($field['name'] ?? $field['slug']),
+                'options' => $options->all(),
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * The flagship detail table: the rows behind the charts — category first,
+     * then the leading measures, the date when there is one — sorted by the
+     * biggest measure (or newest first on dated rows). Where a manager goes
+     * from "the chart says X" to "which cases exactly".
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $categoricals
+     * @param  list<array<string, mixed>>  $numerics
+     * @param  array<string, string>  $measureTypes
+     * @return array<string, mixed>|null
+     */
+    private function suggestTable(array $object, string $grain, ?array $dateField, array $categoricals, array $numerics, array $measureTypes, bool $es): ?array
+    {
+        $measures = collect($numerics)
+            ->filter(fn (array $f): bool => ($measureTypes[$f['id']] ?? '') !== SemanticProfile::MEASURE_IDENTIFIER)
+            ->take(3)->values();
+        $columns = collect([$categoricals[0]['id'] ?? null])
+            ->concat($measures->pluck('id'))
+            ->concat([$dateField['id'] ?? null])
+            ->filter()->unique()->take(5)->values();
+        if ($columns->count() < 2) {
+            return null;
+        }
+
+        $lead = $measures->first(fn (array $f): bool => ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE)
+            ?? $measures->first();
+        $sort = $dateField !== null && $grain !== SemanticProfile::GRAIN_DIMENSION
+            ? ['field_id' => $dateField['id'], 'direction' => 'desc']
+            : ($lead !== null ? ['field_id' => $lead['id'], 'direction' => 'desc'] : null);
+
+        return array_filter([
+            'label' => $es ? 'Detalle' : 'Detail',
+            'columns' => $columns->all(),
+            'sort' => $sort !== null ? [$sort] : null,
+            'limit' => 10,
+        ], fn ($v) => $v !== null);
+    }
+
+    /**
      * The chart FORM the ask names in words — "top 15", "distribución",
      * "pareto/acumulado", "compara" — mapped deterministically so an explicit
      * form intent shapes the flagship breakdown without a model call (the
@@ -487,9 +594,15 @@ class DashboardSpecSuggester
             // empty (observed: an entire benchmark scenario scored 1/5).
             'include_date_filter' => $dateField !== null,
             'default_range' => $defaultRange,
-            'kpis' => $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics, $stats, $dateField, $defaultRange),
+            'kpis' => $this->suggestSparks(
+                $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics, $stats, $dateField, $defaultRange),
+                $grain,
+                $dateField,
+            ),
             'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object, $promptTopics),
             'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es, $rows),
+            'category_filter' => $this->suggestCategoryFilter($categoricals, $stats),
+            'table' => $this->suggestTable($object, $grain, $dateField, $categoricals, $numerics, $measureTypes, $es),
         ], fn ($v) => $v !== null && $v !== '');
     }
 

@@ -851,3 +851,53 @@ it('crossFacts reports a strong co-movement between two aligned series, as a lea
         ->and($sentence)->toContain('en sentidos opuestos')
         ->and($sentence)->toContain('no una causa probada');
 });
+
+it('interactivity base: category select filter wired to blocks, and a flagship detail table', function () {
+    $object = [
+        'id' => 'obj_int4', 'slug' => 'tickets_reason_cause_breakdown', 'name' => 'Tickets Reason Cause Breakdown',
+        'fields' => [
+            ['id' => 'fld_i4reason00', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_i4total000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'fld_i4reason00', 'external_path' => 'reason'],
+            ['field_id' => 'fld_i4total000', 'external_path' => 'total_tickets'],
+        ]],
+    ];
+    $rows = collect(['Duplicado', 'Retraso', 'Defecto', 'Cobro', 'Extravío', 'Garantía'])->map(fn ($r, $i) => [
+        'reason' => $r, 'total_tickets' => 90 - $i * 10,
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets']);
+
+    expect($spec['category_filter']['field_id'])->toBe('fld_i4reason00')
+        ->and($spec['category_filter']['options'])->toContain('Duplicado')
+        ->and($spec['table']['columns'][0])->toBe('fld_i4reason00')
+        ->and($spec['table']['sort'][0]['direction'])->toBe('desc');
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $object, [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'])->toBeTrue()
+        ->and(PlanDashboardTool::lint($built['purpose'], $built['plan_rows'])['ok'])->toBeTrue();
+
+    $page = json_encode($built['page']);
+    expect($page)->toContain('"type":"select"')            // the filter control exists…
+        ->and($page)->toContain('{{params.reason}}')       // …and blocks actually listen to it
+        ->and($page)->toContain('"type":"table"')          // the detail table landed
+        ->and($page)->toContain('"page_size":10');
+});
+
+it('the first dated KPIs carry a sparkline with the KPI own fold', function () {
+    $spec = app(DashboardSpecSuggester::class)->suggest(dss_comments_object(null), 'es', dss_comments_rows(), ['nps']);
+
+    $withSpark = collect($spec['kpis'])->filter(fn (array $k): bool => isset($k['spark']));
+    expect($withSpark->count())->toBeGreaterThanOrEqual(1)
+        ->and($withSpark->first()['spark']['x_field_id'])->toBe('fld_respondedat');
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, dss_comments_object(null), [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'])->toBeTrue()
+        ->and(json_encode($built['page']))->toContain('"spark"');
+});

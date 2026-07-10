@@ -1187,17 +1187,53 @@ class AppScaffolder
                 : ['op' => 'gte', 'field_id' => $fieldId, 'value_expression' => "{{range_start(default(params.range, '{$defaultRange}'))}}"];
         }
 
+        // The dominant-categorical SELECT filter: an eq condition on
+        // params.<param> merged into every block reading the PRIMARY object.
+        // An unset param resolves empty and the condition is skipped
+        // server-side — the same "Todo" mechanics the date range uses.
+        $categoryFilter = null;
+        $categoryWired = false;
+        if (is_array($spec['category_filter'] ?? null)) {
+            $cf = $spec['category_filter'];
+            $cfField = collect($object['fields'] ?? [])->firstWhere('id', $cf['field_id'] ?? null);
+            $cfOptions = collect($cf['options'] ?? [])
+                ->map(fn ($v): string => is_scalar($v) ? trim((string) $v) : '')
+                ->filter()->unique()->take(12)->values();
+            if ($cfField !== null && in_array($cfField['type'] ?? '', ['string', 'single_select'], true) && $cfOptions->count() >= 2) {
+                $param = (string) preg_replace('/[^a-z0-9_]/', '', Str::snake((string) ($cfField['slug'] ?? 'categoria')));
+                $categoryFilter = [
+                    'field_id' => $cfField['id'],
+                    'label' => (string) ($cf['label'] ?? $cfField['name'] ?? $cfField['slug']),
+                    'param' => $param !== '' && $param !== 'range' ? $param : 'categoria',
+                    'options' => $cfOptions->all(),
+                ];
+            }
+        }
+
         // Merge the range filter into a block's own filter (empty preset ⇒ the
         // condition resolves empty and is skipped server-side ⇒ "Todo").
         $rangeWired = false;
-        $withRange = function (?array $own, array $obj) use ($withDateFilter, $rangeBySlug, $primarySlug, &$rangeWired): ?array {
+        $withRange = function (?array $own, array $obj) use ($withDateFilter, $rangeBySlug, $primarySlug, &$rangeWired, $categoryFilter, &$categoryWired, $object): ?array {
+            $conditions = [];
             $range = $rangeBySlug[(string) ($obj['slug'] ?? $primarySlug)] ?? null;
-            if (! $withDateFilter || $range === null) {
+            if ($withDateFilter && $range !== null) {
+                $rangeWired = true;
+                $conditions[] = $range;
+            }
+            if ($categoryFilter !== null && ($obj['id'] ?? null) === ($object['id'] ?? null)) {
+                $categoryWired = true;
+                $conditions[] = [
+                    'op' => 'eq',
+                    'field_id' => $categoryFilter['field_id'],
+                    'value_expression' => '{{params.'.$categoryFilter['param'].'}}',
+                ];
+            }
+            if ($conditions === []) {
                 return $own;
             }
-            $rangeWired = true;
+            $all = $own === null ? $conditions : [$own, ...$conditions];
 
-            return $own === null ? $range : ['op' => 'and', 'conditions' => [$own, $range]];
+            return count($all) === 1 ? $all[0] : ['op' => 'and', 'conditions' => $all];
         };
 
         // --- KPI band ---------------------------------------------------------
@@ -1244,6 +1280,18 @@ class AppScaffolder
                 'compare' => $compare,
                 'compare_window' => ($kpi['compare_window'] ?? null) === 'previous' && $compare === null ? 'previous' : null,
                 'delta_good' => $kpi['delta_good'] ?? null,
+                // Inline history behind the number: the compiler owns the query
+                // (object + current-window filter); the spec names the axes.
+                'spark' => is_array($kpi['spark'] ?? null) ? array_filter([
+                    'data_source' => array_filter([
+                        'object_id' => $kpiObject['id'],
+                        'filter' => $withRange(null, $kpiObject),
+                        'limit' => self::DASHBOARD_ROW_LIMIT,
+                    ], fn ($v) => $v !== null),
+                    'x_field_id' => $kpi['spark']['x_field_id'] ?? null,
+                    'y_field_id' => $kpi['spark']['y_field_id'] ?? null,
+                    'aggregation' => $kpi['spark']['aggregation'] ?? null,
+                ], fn ($v) => $v !== null) : null,
                 // An honest caption naming the aggregation basis (a promedio vs a
                 // suma vs a mediana reads very differently), filter-safe because
                 // it describes the number's KIND, not a value that goes stale.
@@ -1552,16 +1600,27 @@ class AppScaffolder
             $blocks[] = ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $title];
         }
 
+        // Only controls at least one block actually listens to — a filter bar
+        // over unwired blocks is a control that does nothing.
+        $controls = [];
         if ($withDateFilter && $rangeWired) {
-            // Only when at least one block actually listens to it — a filter
-            // bar over unwired blocks is a control that does nothing.
-            $blocks[] = [
-                'id' => $this->id('blk'),
-                'type' => 'filter_bar',
-                // Matches the range condition's default so the active preset on
-                // open reflects the window the blocks actually query.
-                'controls' => [['param' => 'range', 'type' => 'date_range', 'default' => $defaultRange]],
+            // Matches the range condition's default so the active preset on
+            // open reflects the window the blocks actually query.
+            $controls[] = ['param' => 'range', 'type' => 'date_range', 'default' => $defaultRange];
+        }
+        if ($categoryFilter !== null && $categoryWired) {
+            $controls[] = [
+                'param' => $categoryFilter['param'],
+                'type' => 'select',
+                'label' => Str::limit($categoryFilter['label'], 60, ''),
+                'options' => array_map(
+                    fn (string $v): array => ['value' => Str::limit($v, 120, ''), 'label' => Str::limit($v, 120, '')],
+                    $categoryFilter['options'],
+                ),
             ];
+        }
+        if ($controls !== []) {
+            $blocks[] = ['id' => $this->id('blk'), 'type' => 'filter_bar', 'controls' => $controls];
             $planRows[] = ['blocks' => [['type' => 'filter_bar']]];
         }
 
@@ -1618,6 +1677,38 @@ class AppScaffolder
                 'chart_type' => $b['chart_type'] ?? null,
                 'col_span' => $b['style']['col_span'] ?? null,
             ], fn ($v) => $v !== null), $row)];
+        }
+
+        // The flagship detail table: the rows BEHIND the charts, right
+        // columns, honest sort — where a manager checks the specific cases.
+        if (is_array($spec['table'] ?? null)) {
+            $tableSpec = $spec['table'];
+            $columns = collect($tableSpec['columns'] ?? [])
+                ->filter(fn ($fid): bool => is_string($fid)
+                    && collect($object['fields'] ?? [])->firstWhere('id', $fid) !== null)
+                ->take(5)->values();
+            $sort = collect($tableSpec['sort'] ?? [])
+                ->filter(fn ($s): bool => is_array($s)
+                    && collect($object['fields'] ?? [])->firstWhere('id', $s['field_id'] ?? null) !== null)
+                ->take(1)->values()->all();
+            if ($columns->count() >= 2) {
+                if ($useSections) {
+                    $blocks[] = ['id' => $this->id('blk'), 'type' => 'heading', 'level' => 3, 'content' => $lang === 'es' ? 'Detalle' : 'Detail'];
+                }
+                $blocks[] = array_filter([
+                    'id' => $this->id('blk'),
+                    'type' => 'table',
+                    'columns' => $columns->map(fn (string $fid): array => ['id' => $this->id('col'), 'field_id' => $fid])->all(),
+                    'data_source' => array_filter([
+                        'object_id' => $object['id'],
+                        'filter' => $withRange(null, $object),
+                        'sort' => $sort !== [] ? $sort : null,
+                        'limit' => max(5, min(25, (int) ($tableSpec['limit'] ?? 10))),
+                    ], fn ($v) => $v !== null),
+                    'pagination' => ['page_size' => max(5, min(25, (int) ($tableSpec['limit'] ?? 10)))],
+                ], fn ($v) => $v !== null);
+                $planRows[] = ['blocks' => [['type' => 'table']]];
+            }
         }
 
         $emittedInsightsHeading = false;
