@@ -78,10 +78,10 @@
         /* Bottom-left indigo glow — dimmed + shifted right so it reads as
            ambient rather than a second light source competing with the top-right. */
         radial-gradient(
-            ellipse 45% 30% at 20% 100%,
-            rgba(79, 70, 229, 0.035),
-            transparent 55%
-        );
+                ellipse 45% 30% at 20% 100%,
+                rgba(79, 70, 229, 0.035),
+                transparent 55%
+            );
 }
 
 .sp-admin-shell:not([data-bg]) .sp-admin-content::before,
@@ -144,11 +144,7 @@
  * ----------------------------------------------------------------------- */
 
 .sp-glass {
-    background: color-mix(
-        in oklab,
-        var(--sp-bg-primary) 80%,
-        transparent
-    );
+    background: color-mix(in oklab, var(--sp-bg-primary) 80%, transparent);
     backdrop-filter: blur(10px) saturate(1.2);
     -webkit-backdrop-filter: blur(10px) saturate(1.2);
     border-bottom: 1px solid var(--sp-border-soft);
@@ -171,11 +167,7 @@
         border-color 180ms ease;
 }
 .sp-topbar.is-scrolled {
-    background: color-mix(
-        in oklab,
-        var(--sp-bg-primary) 80%,
-        transparent
-    );
+    background: color-mix(in oklab, var(--sp-bg-primary) 80%, transparent);
     backdrop-filter: blur(10px) saturate(1.2);
     -webkit-backdrop-filter: blur(10px) saturate(1.2);
     border-bottom-color: var(--sp-border-soft);
@@ -620,7 +612,8 @@
     background: var(--sp-accent-blue);
 }
 
-:is(.sp-admin-shell, .sp-app-shell) [data-slot='switch'][data-state='unchecked'] {
+:is(.sp-admin-shell, .sp-app-shell)
+    [data-slot='switch'][data-state='unchecked'] {
     background: var(--sp-tint-strong);
 }
 
@@ -671,7 +664,8 @@
 }
 
 /* Checkbox — checked state = accent-blue. */
-:is(.sp-admin-shell, .sp-app-shell) [data-slot='checkbox'][data-state='checked'] {
+:is(.sp-admin-shell, .sp-app-shell)
+    [data-slot='checkbox'][data-state='checked'] {
     background: var(--sp-accent-blue);
     border-color: var(--sp-accent-blue);
     color: #ffffff;
@@ -791,7 +785,9 @@
     background: transparent;
     border-bottom: 1px solid var(--sp-border-soft);
     color: var(--sp-text-secondary);
-    transition: color 150ms ease, background 150ms ease;
+    transition:
+        color 150ms ease,
+        background 150ms ease;
 }
 
 .sp-flow-controls .vue-flow__controls-button:last-child {

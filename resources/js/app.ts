@@ -22,7 +22,13 @@ createInertiaApp({
         const locale = (props.initialPage.props.locale as string) || 'en';
         const i18n = createI18nInstance(locale);
 
-        createApp({ render: () => h('div', [h(App, props), h(Toaster, { richColors: true, position: 'top-right' })]) })
+        createApp({
+            render: () =>
+                h('div', [
+                    h(App, props),
+                    h(Toaster, { richColors: true, position: 'top-right' }),
+                ]),
+        })
             .use(plugin)
             .use(i18n)
             .mount(el);
