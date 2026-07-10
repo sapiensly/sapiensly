@@ -59,21 +59,32 @@ class FitCheckPhase implements ExpressPhase
         // The interpreter: the ask's words didn't map onto the catalog — ONE
         // small call translates the intent into the factory's vocabulary
         // (form enriched, facts never invented; shown to the user in the
-        // report), then the deterministic signal gets a second chance. The
-        // translation is ADOPTED only when that second check validates it —
-        // a translation the signal can't ground (meta-commentary, invented
-        // domains) is discarded whole: nothing shown, nothing reported, and
-        // the model fit judges the user's ORIGINAL words.
+        // report). Adoption requires GROUNDING: every concept of the
+        // translation anchors in the catalog — meta-commentary and invented
+        // domains ground nothing and die whole (nothing shown, nothing
+        // reported; the model fit judges the user's ORIGINAL words). A
+        // grounded translation is adopted even when economy's stricter
+        // ambiguity cap keeps the model fit in charge of picking tools: the
+        // suggester still reads the translated FORM (pareto, embudo…), so
+        // the interpretation serves both paths.
         if ($out === null && (bool) config('express.economy', false)) {
             $translated = $this->interpretAsk($context, $run, $catalog);
+            $adopted = false;
             if ($translated !== null) {
                 $context->interpretedPrompt = $translated;
-                if ($this->economyFitSuffices($context)) {
+                if ($this->translationGrounds($context)) {
+                    $adopted = true;
                     $context->progress('Interpretando tu pedido… → «'.$translated.'»');
-                    $out = $this->economyOut($context, $run);
+                    if ($this->economyFitSuffices($context)) {
+                        $out = $this->economyOut($context, $run);
+                    }
                 } else {
                     $context->interpretedPrompt = null;
                 }
+            }
+            if ($translated !== null || ($run->gates['interpret'] ?? null) !== null) {
+                $run->recordGate('interpret', ($run->gates['interpret'] ?? [])
+                    + ['translation' => $translated, 'adopted' => $adopted]);
             }
         }
 
@@ -528,9 +539,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      */
     private function auditCoverage(ExpressContext $context, array $chosenTools): void
     {
-        $concepts = $this->discriminatingTopicWords($context)
-            ->reject(fn (string $w): bool => preg_match(self::FORM_WORDS, $w) === 1)
-            ->values();
+        $concepts = $this->coverageConcepts($context);
         if ($concepts->isEmpty()) {
             return;
         }
@@ -723,20 +732,46 @@ TXT,
             return false;
         }
 
-        $concepts = $this->discriminatingTopicWords($context)
-            ->reject(fn (string $w): bool => preg_match(self::FORM_WORDS, $w) === 1)
-            ->values();
+        [$concepts, $unmatched, $onTopic] = $this->conceptCoverage($context);
+
+        return $concepts->isNotEmpty() && $unmatched->isEmpty()
+            && $onTopic > 0 && $onTopic <= self::MAX_TOOLS;
+    }
+
+    /**
+     * A candidate translation is GROUNDED when every one of its concepts
+     * anchors in the catalog — the anti-garbage bar for adopting it
+     * (meta-commentary and invented domains anchor nothing). Deliberately
+     * WITHOUT economy's tool-count ambiguity cap: grounding is about honesty;
+     * who arbitrates the tools is a separate, stricter question.
+     */
+    private function translationGrounds(ExpressContext $context): bool
+    {
+        [$concepts, $unmatched, $onTopic] = $this->conceptCoverage($context);
+
+        return $concepts->isNotEmpty() && $unmatched->isEmpty() && $onTopic > 0;
+    }
+
+    /**
+     * The shared concept-coverage read of the analysis prompt: topic concepts
+     * (form and source-name words excluded), which of them no catalog tool
+     * answers, and how many tools are on topic. Concept-wise lexicon matching
+     * — a topic is COVERED when the word OR any of its translations hits
+     * ("quejas" is covered via "complaints"); an uncovered concept is the
+     * possible-unanswerable case only the model can halt honestly.
+     *
+     * @return array{0: Collection<int, string>, 1: Collection<int, string>, 2: int}
+     */
+    private function conceptCoverage(ExpressContext $context): array
+    {
+        $concepts = $this->coverageConcepts($context);
         if ($concepts->isEmpty()) {
-            return false; // nothing to match on — let the model read the ask
+            return [$concepts, collect(), 0];
         }
 
         $haystacks = collect($context->catalogTools)
             ->map(fn (array $t): string => $this->toolText($t));
 
-        // Concept-wise: a topic is COVERED when the word OR any of its lexicon
-        // translations hits ("quejas" is covered via "complaints"); an
-        // uncovered concept is the possible-unanswerable case only the model
-        // can halt honestly.
         $variantsOf = fn (string $w) => DomainLexicon::expand(collect([$w]));
         $unmatched = $concepts->filter(
             fn (string $w): bool => ! $haystacks->contains(
@@ -748,7 +783,30 @@ TXT,
             fn (string $h): bool => $allVariants->contains(fn (string $w): bool => str_contains($h, $w)),
         )->count();
 
-        return $unmatched->isEmpty() && $onTopic > 0 && $onTopic <= self::MAX_TOOLS;
+        return [$concepts, $unmatched, $onTopic];
+    }
+
+    /**
+     * Topic concepts that must be COVERED: discriminating words minus FORM
+     * words (how to draw, not what to read) minus words naming the SOURCE
+     * itself — "tickets de yuhu" on a "YuhuGo" connection asks about tickets;
+     * "yuhu" names where they live, matches no tool text, and must never
+     * defeat the signal or the interpreter's translation.
+     *
+     * @return Collection<int, string>
+     */
+    private function coverageConcepts(ExpressContext $context)
+    {
+        $source = Str::lower(Str::ascii(implode(' ', array_filter([
+            (string) ($context->integration->name ?? ''),
+            (string) ($context->integration->slug ?? ''),
+            (string) ($context->integration->base_url ?? ''),
+        ]))));
+
+        return $this->discriminatingTopicWords($context)
+            ->reject(fn (string $w): bool => preg_match(self::FORM_WORDS, $w) === 1)
+            ->reject(fn (string $w): bool => $source !== '' && str_contains($source, $w))
+            ->values();
     }
 
     /**

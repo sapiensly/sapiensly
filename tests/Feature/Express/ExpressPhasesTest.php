@@ -1308,3 +1308,59 @@ it('the interpreter reads the user\'s previous turns — the topic one turn back
     // The earlier turn travelled to the gate; the triggering prompt is not duplicated.
     ExpressGateAgent::assertPrompted(fn ($prompt) => str_contains(json_encode($prompt), 'grueso del problema con los tickets'));
 });
+
+it('source-name words never defeat the signal — "tickets de yuhu" on a YuhuGo connection is about tickets', function () {
+    config(['express.economy' => true]);
+    $this->integration->update(['name' => 'YuhuGo', 'base_url' => 'https://go.yuhu.services/mcp/yuhu-go']);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    $ctx = xph_ctx($this, 'pareto de tickets de yuhu con acumulado');
+    $ctx->integration = $this->integration->fresh();
+    $ctx->catalogTools = xph_catalog_tools();
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->economyMode)->toBeTrue()
+        ->and($ctx->interpretedPrompt)->toBeNull();
+});
+
+it('a grounded translation is adopted even when economy\'s ambiguity cap keeps the model fit in charge', function () {
+    // Prod plr_01kx75yvkvnnv9rtxcpejnvycd: a rich single-domain source (many
+    // tickets tools) trips the onTopic ≤ MAX_TOOLS cap, so economy stays off —
+    // but the translation is honest and grounded, and discarding it also
+    // discarded the pareto FORM the user's vague ask deserved. Grounding and
+    // economy are now separate bars: the translation rides to the model fit
+    // and the suggester either way.
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([
+        ['pedido_interpretado' => 'crea un dashboard de tickets: pareto de motivos con % acumulado y tendencia semanal'],
+        [
+            'tools' => ['get-tickets-time-series-tool'], 'substitutions' => [],
+            'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+        ],
+    ]);
+
+    $ctx = xph_ctx($this, 'quiero entender el grueso del problema con los tickets');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-tickets-time-series-tool', 'description' => 'Weekly aggregated tickets series', 'input_schema' => []],
+        ['name' => 'get-tickets-by-dimension-tool', 'description' => 'Tickets by dimension with reason', 'input_schema' => []],
+        ['name' => 'get-tickets-fcr-tool', 'description' => 'Tickets first contact resolution', 'input_schema' => []],
+        ['name' => 'get-tickets-sla-tool', 'description' => 'Tickets SLA compliance', 'input_schema' => []],
+        ['name' => 'get-tickets-backlog-tool', 'description' => 'Tickets backlog aging', 'input_schema' => []],
+        // The delivery side keeps "tickets" below the ubiquity threshold —
+        // like prod, where OTS/OTD tools share the catalog.
+        ['name' => 'get-ots-time-series-tool', 'description' => 'On time shipping weekly series', 'input_schema' => []],
+        ['name' => 'get-otd-breakdown-tool', 'description' => 'Order to delivery by vertical', 'input_schema' => []],
+        ['name' => 'get-deliveries-by-seller-tool', 'description' => 'Deliveries by seller', 'input_schema' => []],
+    ];
+
+    $run = xph_run($this);
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, $run);
+
+    expect($ctx->economyMode)->toBeFalse()                       // cap held (5 on-topic tools > 4)
+        ->and($ctx->interpretedPrompt)->toContain('pareto')      // …but the translation survives
+        ->and($ctx->analysisPrompt())->not->toBe($ctx->prompt)   // …and feeds the model fit + suggester
+        ->and($run->fresh()->gates['interpret']['adopted'] ?? null)->toBeTrue()
+        ->and($run->fresh()->gates['interpret']['translation'] ?? '')->toContain('pareto');
+});
