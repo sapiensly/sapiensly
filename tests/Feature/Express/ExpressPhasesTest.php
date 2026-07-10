@@ -1128,3 +1128,20 @@ it('acquire reads each enum cut as its own named object', function () {
         ->and($calls[1]['object_name'])->toBe('Tickets By Dimension · Cause')
         ->and($ctx->objects)->toHaveCount(2);
 });
+
+it('acquire samples the previous window per object for delta facts', function () {
+    $ctx = xph_ctx($this, 'tickets');
+    $ctx->integration = $this->integration;
+    $ctx->chosenTools = ['get-tickets-by-dimension-tool'];
+
+    $object = xph_object('con_ventana', $this->integration->id);
+    $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
+    $authoring->shouldReceive('author')->once()
+        ->andReturn(['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «con_ventana»']);
+    $authoring->shouldReceive('previousWindowRows')->once()
+        ->andReturn([['bucket_start' => '2026-06-01', 'total' => 5]]);
+
+    (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->previousRowsByObject[$object['id']])->toBe([['bucket_start' => '2026-06-01', 'total' => 5]]);
+});

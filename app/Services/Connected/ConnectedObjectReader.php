@@ -232,7 +232,7 @@ class ConnectedObjectReader
      * one key so the dashboard's date-range preset drives the actual fetch. Kept
      * to unambiguous START-of-window names (never a bare `date`/`to`/`end`).
      */
-    private const DATE_FROM_ARG_KEYS = [
+    public const DATE_FROM_ARG_KEYS = [
         'from', 'from_date', 'date_from', 'start', 'start_date', 'since',
         'after', 'desde', 'fecha_inicio', 'fecha_desde',
     ];
@@ -242,7 +242,7 @@ class ConnectedObjectReader
      * value from the block), so a widened fetch runs from the picked window
      * start through now.
      */
-    private const DATE_TO_ARG_KEYS = [
+    public const DATE_TO_ARG_KEYS = [
         'to', 'to_date', 'date_to', 'end', 'end_date', 'until',
         'before', 'hasta', 'fecha_fin', 'fecha_hasta',
     ];

@@ -17,12 +17,17 @@ class ComputedFactsBuilder
      * @param  list<array<string, mixed>>  $rows  raw external rows (as sampled)
      * @return array<string, mixed>
      */
-    public function build(array $object, array $rows): array
+    public function build(array $object, array $rows, array $previousRows = []): array
     {
         $facts = [
             'object' => $object['name'] ?? $object['slug'] ?? '',
             'row_count' => count($rows),
         ];
+
+        $pop = $this->periodOverPeriod($object, $rows, $previousRows);
+        if ($pop !== []) {
+            $facts['vs_periodo_anterior'] = $pop;
+        }
 
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
         $pathByFieldId = collect($object['source']['field_map'] ?? [])
@@ -205,5 +210,136 @@ class ComputedFactsBuilder
             'week' => $week,
             'value' => round($byWeek[$week], 2),
         ];
+    }
+
+    /**
+     * Period-over-period deltas for the leading measures — the fact that turns
+     * "Duplicado: 94" into "94, +18% vs periodo anterior". Two bases:
+     * previous-window rows when the acquisition sampled them (window-arg
+     * tools), else the object's OWN dated rows split at the midpoint of their
+     * span (a series carries its history). Additive measures compare SUMS,
+     * ratio/statistic measures compare AVERAGES — the only legal folds for
+     * each. Empty when neither base exists.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<array<string, mixed>>  $previousRows
+     * @return array{base: string, measures: array<string, array{actual: float, anterior: float, delta_pct: float, agg: string}>}|array{}
+     */
+    private function periodOverPeriod(array $object, array $rows, array $previousRows): array
+    {
+        $base = 'ventana_anterior';
+        $current = $rows;
+
+        if ($previousRows === []) {
+            [$current, $previousRows] = $this->splitByDateMidpoint($object, $rows);
+            if ($previousRows === []) {
+                return [];
+            }
+            $base = 'mitades';
+        }
+
+        $semantics = new SemanticProfile;
+        $pathByFieldId = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $measures = [];
+
+        foreach ($object['fields'] ?? [] as $field) {
+            if (! is_array($field) || ! in_array($field['type'] ?? '', ['number', 'currency'], true)) {
+                continue;
+            }
+            $measureType = $semantics->measureTypeOf($field);
+            if (! in_array($measureType, [SemanticProfile::MEASURE_ADDITIVE, SemanticProfile::MEASURE_RATIO, SemanticProfile::MEASURE_STATISTIC], true)) {
+                continue;
+            }
+            $agg = $measureType === SemanticProfile::MEASURE_ADDITIVE ? 'sum' : 'avg';
+            $path = $pathByFieldId[$field['id']] ?? ($field['slug'] ?? null);
+            if ($path === null) {
+                continue;
+            }
+
+            $fold = function (array $set) use ($path, $agg): ?float {
+                $values = array_values(array_filter(
+                    array_map(fn (array $r) => data_get($r, $path), $set),
+                    'is_numeric',
+                ));
+                if ($values === []) {
+                    return null;
+                }
+
+                return $agg === 'sum'
+                    ? round(array_sum($values), 2)
+                    : round(array_sum($values) / count($values), 2);
+            };
+
+            $actual = $fold($current);
+            $anterior = $fold($previousRows);
+            if ($actual === null || $anterior === null || abs($anterior) < 0.000001) {
+                continue;
+            }
+
+            $measures[(string) ($field['name'] ?? $field['slug'])] = [
+                'actual' => $actual,
+                'anterior' => $anterior,
+                'delta_pct' => round(($actual - $anterior) / abs($anterior) * 100, 1),
+                'agg' => $agg,
+            ];
+            if (count($measures) >= 3) {
+                break;
+            }
+        }
+
+        return $measures === [] ? [] : ['base' => $base, 'measures' => $measures];
+    }
+
+    /**
+     * Split dated rows into the recent half and the earlier half of their own
+     * span — the self-contained PoP base for a series (no second fetch).
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    private function splitByDateMidpoint(array $object, array $rows): array
+    {
+        $dateField = collect($object['fields'] ?? [])->first(
+            fn ($f) => is_array($f) && in_array($f['type'] ?? '', ['date', 'datetime'], true),
+        );
+        if ($dateField === null || count($rows) < 4) {
+            return [$rows, []];
+        }
+        $path = collect($object['source']['field_map'] ?? [])
+            ->pluck('external_path', 'field_id')[$dateField['id']] ?? ($dateField['slug'] ?? null);
+        if ($path === null) {
+            return [$rows, []];
+        }
+
+        $stamped = [];
+        foreach ($rows as $row) {
+            $ts = InMemoryRowFilter::timestamp(data_get($row, $path));
+            if ($ts !== null) {
+                $stamped[] = ['ts' => $ts, 'row' => $row];
+            }
+        }
+        if (count($stamped) < 4) {
+            return [$rows, []];
+        }
+
+        $min = min(array_column($stamped, 'ts'));
+        $max = max(array_column($stamped, 'ts'));
+        if ($max - $min < 2 * 86400) {
+            return [$rows, []]; // under two days there is no "previous period"
+        }
+        $mid = $min + intdiv($max - $min, 2);
+
+        $recent = $earlier = [];
+        foreach ($stamped as $s) {
+            if ($s['ts'] > $mid) {
+                $recent[] = $s['row'];
+            } else {
+                $earlier[] = $s['row'];
+            }
+        }
+
+        return ($recent === [] || $earlier === []) ? [$rows, []] : [$recent, $earlier];
     }
 }

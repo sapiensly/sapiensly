@@ -50,6 +50,15 @@ class ExpressContext
     /** @var array<string, list<array<string, mixed>>> fetched rows per object id (for facts) */
     public array $rowsByObject = [];
 
+    /**
+     * Raw rows of each object's PREVIOUS window (same tool, from/to shifted
+     * back one span) — fuels period-over-period deltas in the computed facts.
+     * Empty for objects without window arguments.
+     *
+     * @var array<string, list<array<string, mixed>>>
+     */
+    public array $previousRowsByObject = [];
+
     /** @var array<string, mixed>|null the suggested spec (F-3) */
     public ?array $spec = null;
 

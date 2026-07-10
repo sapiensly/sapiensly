@@ -49,6 +49,19 @@ class FactNarrator
     public function factSentences(array $facts): array
     {
         $pool = [];
+        // Deltas first — "94 vs 80 (+18%)" is the strongest sentence a card
+        // can carry; static aggregates follow.
+        $pop = $facts['vs_periodo_anterior'] ?? [];
+        $vsLabel = ($pop['base'] ?? '') === 'mitades'
+            ? 'vs la primera mitad del periodo'
+            : 'vs el periodo anterior';
+        foreach ($pop['measures'] ?? [] as $name => $d) {
+            if (! is_array($d)) {
+                continue;
+            }
+            $sign = ($d['delta_pct'] ?? 0) >= 0 ? '+' : '';
+            $pool[] = "«{$name}»: {$this->num($d['actual'] ?? null)} {$vsLabel} ({$sign}{$this->num($d['delta_pct'] ?? null)}%).";
+        }
         foreach ($facts['numeric'] ?? [] as $name => $n) {
             if (! is_array($n)) {
                 continue;

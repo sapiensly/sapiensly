@@ -5,6 +5,7 @@ namespace App\Services\Connected;
 use App\Models\Integration;
 use App\Models\User;
 use App\Services\Tools\McpClient;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -160,6 +161,89 @@ class ConnectedObjectAuthoring
      * @param  array<mixed>  $decoded
      * @return array{0: list<array<string, mixed>>, 1: ?string}
      */
+    /**
+     * Raw rows for the PREVIOUS window of an already-authored connected
+     * object: the same tool call with its from/to shifted back one span, so
+     * the facts layer can compute real period-over-period deltas ("Duplicado:
+     * 94, +18% vs periodo anterior") instead of static numbers. Best-effort
+     * by design — [] when the object carries no window arguments (a
+     * granularity-only series compares against its own history instead) or
+     * when the read fails: the double window is an enrichment, never a build
+     * risk. Rows come back RAW (external shape), matching what the sampler
+     * feeds ComputedFactsBuilder.
+     *
+     * @param  array<string, mixed>  $object
+     * @return list<array<string, mixed>>
+     */
+    public function previousWindowRows(User $user, Integration $integration, array $object): array
+    {
+        $op = $object['source']['operations']['list'] ?? null;
+        $toolName = trim((string) ($op['mcp_tool'] ?? ''));
+        $arguments = is_array($op['arguments'] ?? null) ? $op['arguments'] : [];
+        if ($toolName === '' || $arguments === []) {
+            return [];
+        }
+
+        $fromKey = collect(ConnectedObjectReader::DATE_FROM_ARG_KEYS)->first(fn (string $k) => array_key_exists($k, $arguments));
+        $toKey = collect(ConnectedObjectReader::DATE_TO_ARG_KEYS)->first(fn (string $k) => array_key_exists($k, $arguments));
+        $from = $this->windowDate($arguments[$fromKey ?? ''] ?? null);
+        if ($fromKey === null || $from === null) {
+            return [];
+        }
+        $to = $this->windowDate($arguments[$toKey ?? ''] ?? null) ?? now()->utc()->startOfDay();
+
+        $spanDays = max(1, (int) $from->diffInDays($to));
+        $arguments[$fromKey] = $from->copy()->subDays($spanDays)->toDateString();
+        if ($toKey !== null) {
+            $arguments[$toKey] = $from->toDateString();
+        }
+
+        try {
+            $decoded = $this->mcp->callToolData([
+                'endpoint' => $integration->base_url,
+                'integration_id' => $integration->id,
+                'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
+                'auth_config' => $integration->auth_config ?? [],
+            ], $user, $toolName, $arguments);
+        } catch (\Throwable) {
+            return [];
+        }
+        if ($decoded === null) {
+            return [];
+        }
+
+        [$rows] = $this->extractRows($decoded, $op['collection_path'] ?? null);
+
+        return $rows;
+    }
+
+    /**
+     * Concretize one authored window argument: the two relative template
+     * forms relativizeDateArguments writes, or a literal Y-m-d.
+     */
+    private function windowDate(mixed $value): ?CarbonImmutable
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+        $today = now()->utc()->startOfDay()->toImmutable();
+        if ($value === '{{today()}}') {
+            return $today;
+        }
+        if (preg_match('/^\{\{days_ago\((\d+)\)\}\}$/', $value) === 1) {
+            preg_match('/\d+/', $value, $m);
+
+            return $today->subDays((int) $m[0]);
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1) {
+            $parsed = CarbonImmutable::createFromFormat('Y-m-d', $value, 'UTC');
+
+            return $parsed === false ? null : $parsed->startOfDay();
+        }
+
+        return null;
+    }
+
     private function extractRows(array $decoded, mixed $explicitPath): array
     {
         if (is_string($explicitPath) && trim($explicitPath) !== '') {

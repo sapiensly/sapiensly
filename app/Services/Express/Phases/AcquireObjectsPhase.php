@@ -88,6 +88,18 @@ class AcquireObjectsPhase implements ExpressPhase
             $summaries[] = $authored['summary'];
             $context->objects[] = $object;
             $context->rowsByObject[$object['id']] = $authored['rows'];
+
+            // Double window: sample the SAME tool one span back so the facts
+            // can say "+18% vs periodo anterior" instead of a static number.
+            // Best-effort — [] for window-less tools and on any failure.
+            try {
+                $previous = $this->authoring->previousWindowRows($context->user, $context->integration, $object);
+                if ($previous !== []) {
+                    $context->previousRowsByObject[$object['id']] = $previous;
+                }
+            } catch (\Throwable) {
+                // The current window already succeeded; deltas are optional.
+            }
         }
 
         if ($ops === []) {

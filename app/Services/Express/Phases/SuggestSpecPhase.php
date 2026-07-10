@@ -57,8 +57,8 @@ class SuggestSpecPhase implements ExpressPhase
         // drives the skeleton, the rest contribute their trend/breakdown/KPI
         // tagged with object_slug (before this, 3 of 4 acquired objects were
         // paid for and never rendered).
-        $context->spec = $this->suggester->suggestMulti($ordered, $lang, $context->rowsByObject, $topics) + ['object_slug' => $primary['slug']];
-        $context->facts = $this->facts->build($primary, $context->rowsByObject[$primary['id']] ?? []);
+        $context->spec = $this->suggester->suggestMulti($ordered, $lang, $context->rowsByObject, $topics, $context->previousRowsByObject) + ['object_slug' => $primary['slug']];
+        $context->facts = $this->facts->build($primary, $context->rowsByObject[$primary['id']] ?? [], $context->previousRowsByObject[$primary['id']] ?? []);
 
         // Compact facts per contributing secondary, so the insight gate can
         // narrate THEIR numbers too (name, volume, sums — not the full drill).
@@ -69,8 +69,8 @@ class SuggestSpecPhase implements ExpressPhase
                 continue;
             }
             $secondaryFacts[] = array_intersect_key(
-                $this->facts->build($obj, $rows),
-                array_flip(['object', 'row_count', 'numeric', 'rates']),
+                $this->facts->build($obj, $rows, $context->previousRowsByObject[$obj['id']] ?? []),
+                array_flip(['object', 'row_count', 'numeric', 'rates', 'vs_periodo_anterior']),
             );
         }
         if ($secondaryFacts !== []) {

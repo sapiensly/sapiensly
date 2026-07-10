@@ -2,6 +2,7 @@
 
 use App\Models\Integration;
 use App\Models\User;
+use App\Services\Connected\ConnectedObjectAuthoring;
 use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Integrations\IntegrationCaller;
 use App\Services\Manifest\ManifestValidator;
@@ -402,4 +403,38 @@ it('does not retry when the required field is not a window key', function () {
 
     expect($result['ok'])->toBeFalse()
         ->and($result['error'])->toContain('dimension');
+});
+
+it('samples the PREVIOUS window of an authored object: same tool, span shifted back', function () {
+    $sixtyAgo = now()->utc()->startOfDay()->subDays(60)->toDateString();
+    $thirtyAgo = now()->utc()->startOfDay()->subDays(30)->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = ['from' => '{{days_ago(30)}}', 'to' => '{{today()}}', 'dimension' => 'cause'];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $sixtyAgo
+            && $args['to'] === $thirtyAgo
+            && $args['dimension'] === 'cause')
+        ->andReturn(['tickets' => [['ticket_id' => 'p1', 'status' => 'open', 'metrics' => ['resolution_minutes' => 4]]]]);
+    $this->app->instance(McpClient::class, $mcp);
+
+    $rows = app(ConnectedObjectAuthoring::class)
+        ->previousWindowRows($this->user, $this->integration, $object);
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['ticket_id'])->toBe('p1'); // RAW shape, as the sampler feeds facts
+});
+
+it('previous window is a no-op for a window-less tool (granularity-only series)', function () {
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = ['granularity' => 'weekly'];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldNotReceive('callToolData');
+    $this->app->instance(McpClient::class, $mcp);
+
+    expect(app(ConnectedObjectAuthoring::class)
+        ->previousWindowRows($this->user, $this->integration, $object))->toBe([]);
 });

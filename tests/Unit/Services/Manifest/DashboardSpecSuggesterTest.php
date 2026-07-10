@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\Tools\Builder\PlanDashboardTool;
+use App\Services\Express\ComputedFactsBuilder;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
 use App\Support\Branding\ColorPalette;
@@ -617,4 +618,50 @@ it('mapa de calor emits the calendar heatmap only where dated record-level rows 
     // A recency-capped sample would plot the sampling window — no heatmap.
     $capped = app(DashboardSpecSuggester::class)->suggest(dss_comments_object('latest'), 'es', dss_comments_rows(), $topics);
     expect(collect($capped['charts'])->firstWhere('chart_type', 'heatmap'))->toBeNull();
+});
+
+it('insights are born with period-over-period deltas when the previous window was sampled', function () {
+    $object = [
+        'id' => 'obj_pop', 'slug' => 'tickets_reason_cause_breakdown', 'name' => 'Tickets Reason Cause Breakdown',
+        'fields' => [
+            ['id' => 'fld_popreason0', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_poptotal00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'fld_popreason0', 'external_path' => 'reason'],
+            ['field_id' => 'fld_poptotal00', 'external_path' => 'total_tickets'],
+        ]],
+    ];
+    $rows = [
+        ['reason' => 'Duplicado', 'total_tickets' => 60],
+        ['reason' => 'Retraso', 'total_tickets' => 40],
+    ]; // actual: 100
+    $previous = [
+        ['reason' => 'Duplicado', 'total_tickets' => 50],
+        ['reason' => 'Retraso', 'total_tickets' => 30],
+    ]; // anterior: 80 → +25%
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets'], $previous);
+
+    $bodies = collect($spec['insights'])->pluck('body')->implode(' ');
+    expect($bodies)->toContain('vs el periodo anterior')
+        ->and($bodies)->toContain('+25');
+});
+
+it('a dated series computes its delta from its own halves — no second fetch needed', function () {
+    ['object' => $object] = dss_weekly_series('pp', 'tickets_semanales', 'total_tickets', 8);
+    // 8 weekly rows: older half 100..121, recent half 128..149 → recent sums higher.
+    $rows = collect(range(0, 7))->map(fn (int $w) => [
+        'period_start' => now()->utc()->subWeeks(7 - $w)->startOfWeek()->toDateString(),
+        'period_label' => 'Semana '.($w + 1),
+        'total_tickets' => 100 + $w * 7,
+        'ordenes' => 40,
+    ])->all();
+
+    $facts = app(ComputedFactsBuilder::class)->build($object, $rows);
+
+    $pop = $facts['vs_periodo_anterior'] ?? null;
+    expect($pop)->not->toBeNull()
+        ->and($pop['base'])->toBe('mitades')
+        ->and($pop['measures']['Total Tickets']['delta_pct'])->toBeGreaterThan(0);
 });

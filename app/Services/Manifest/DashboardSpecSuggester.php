@@ -40,6 +40,14 @@ class DashboardSpecSuggester
         private readonly FactNarrator $narrator = new FactNarrator,
     ) {}
 
+    /**
+     * The current suggest() call's previous-window rows — threaded to the
+     * insight narration so cards are born with period-over-period deltas.
+     *
+     * @var list<array<string, mixed>>
+     */
+    private array $previousRows = [];
+
     /** With several objects, how much of the board the primary keeps. */
     private const PRIMARY_KPIS = 4;
 
@@ -62,7 +70,7 @@ class DashboardSpecSuggester
      * @param  list<string>  $promptTopics  the request's subject words (e.g. ['nps']) — feature that measure
      * @return array<string, mixed> spec in add_dashboard_page's input shape
      */
-    public function suggestMulti(array $objects, string $lang = 'es', array $rowsByObject = [], array $promptTopics = []): array
+    public function suggestMulti(array $objects, string $lang = 'es', array $rowsByObject = [], array $promptTopics = [], array $previousRowsByObject = []): array
     {
         $objects = array_values(array_filter($objects, 'is_array'));
         if ($objects === []) {
@@ -70,7 +78,7 @@ class DashboardSpecSuggester
         }
 
         $primary = $objects[0];
-        $spec = $this->suggest($primary, $lang, $rowsByObject[$primary['id'] ?? ''] ?? [], $promptTopics);
+        $spec = $this->suggest($primary, $lang, $rowsByObject[$primary['id'] ?? ''] ?? [], $promptTopics, $previousRowsByObject[$primary['id'] ?? ''] ?? []);
         $secondaries = array_values(array_filter(
             array_slice($objects, 1),
             fn (array $o): bool => ($rowsByObject[$o['id'] ?? ''] ?? []) !== [],
@@ -109,7 +117,7 @@ class DashboardSpecSuggester
             if ($slug === null) {
                 continue;
             }
-            $mini = $this->suggest($secondary, $lang, $rowsByObject[$secondary['id'] ?? ''] ?? [], $promptTopics);
+            $mini = $this->suggest($secondary, $lang, $rowsByObject[$secondary['id'] ?? ''] ?? [], $promptTopics, $previousRowsByObject[$secondary['id'] ?? ''] ?? []);
             $name = (string) ($secondary['name'] ?? $slug);
             $miniSlugs = $this->fieldSlugIndex($secondary);
 
@@ -421,8 +429,9 @@ class DashboardSpecSuggester
      * @param  list<string>  $promptTopics  request subject words — a measure field matching one leads
      * @return array<string, mixed> spec in add_dashboard_page's input shape
      */
-    public function suggest(array $object, string $lang = 'es', array $rows = [], array $promptTopics = []): array
+    public function suggest(array $object, string $lang = 'es', array $rows = [], array $promptTopics = [], array $previousRows = []): array
     {
+        $this->previousRows = $previousRows;
         $es = $lang !== 'en';
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
 
@@ -1300,7 +1309,7 @@ class DashboardSpecSuggester
         // Stamp each card with a DISTINCT real number from the sampled rows —
         // a board's conclusions carry figures from birth, model or no model.
         if ($rows !== []) {
-            $insights = $this->narrator->narrate($insights, $this->factsBuilder->build($object, $rows));
+            $insights = $this->narrator->narrate($insights, $this->factsBuilder->build($object, $rows, $this->previousRows));
         }
 
         return $insights;
