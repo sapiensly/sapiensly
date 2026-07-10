@@ -70,7 +70,7 @@ core_unanswerable=true SOLO si el TEMA CENTRAL del pedido no se puede
 responder en absoluto — llena alternatives con 1-2 dashboards que estos datos
 SÍ responden. Nunca inventes tools que no estén en el catálogo.
 TXT,
-            json_encode(['pedido' => $context->prompt, 'catalogo' => $catalog], JSON_UNESCAPED_UNICODE),
+            json_encode(['pedido' => $context->prompt], JSON_UNESCAPED_UNICODE),
             fn ($schema) => [
                 'tools' => $schema->array()->description('Nombres exactos de tools del catálogo a leer (1-4).'),
                 'pieces' => $schema->array()->description('OBLIGATORIO: una entrada por CADA pieza pedida: [{asked, tool: nombre exacto del tool que la responde o null, proxy: métrica sustituta honesta si tool es null y existe una}].'),
@@ -83,6 +83,12 @@ TXT,
             $context->user,
             $context->modelOverride,
             $context,
+            // The catalog is the gate's STABLE bulk (~10k tokens, identical
+            // across both attempts and across builds on the same connection) —
+            // as stable context it rides the system prompt and gets the
+            // Anthropic cache marker instead of being re-read cold per call.
+            stableContext: 'CATÁLOGO DE TOOLS DE LA CONEXIÓN (JSON):'."\n"
+                .json_encode(['catalogo' => $catalog], JSON_UNESCAPED_UNICODE),
         );
 
         $out = $result['output'];

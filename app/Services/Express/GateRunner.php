@@ -46,6 +46,7 @@ class GateRunner
         User $user,
         ?string $modelOverride = null,
         ?ExpressContext $context = null,
+        ?string $stableContext = null,
     ): array {
         // Circuit-breaker: a provider that already hung this run won't answer
         // the next gate either — asking burns another full 45s window for the
@@ -85,7 +86,7 @@ class GateRunner
                 $model = $modelOverride;
             }
 
-            $agent = new ExpressGateAgent($instructions, $schema);
+            $agent = new ExpressGateAgent($instructions, $schema, $stableContext);
 
             $attempts = 0;
             while ($attempts < 2 && $output === null) {

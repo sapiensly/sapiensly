@@ -5,7 +5,9 @@ namespace App\Ai;
 use Closure;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasStructuredOutput;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 
 /**
@@ -13,8 +15,18 @@ use Laravel\Ai\Promptable;
  * tools, tiny instructions. This shape — not the model — is what makes a gate
  * fast: no 40k prefill, no tool schemas, no history to re-read, and the SDK
  * enforces the JSON schema on the way out.
+ *
+ * A gate may carry a STABLE context block (the fit-check's ~10k-token tool
+ * catalog — same across both attempts and across builds minutes apart). On
+ * Anthropic it is sent as a system content block marked `cache_control:
+ * ephemeral` (same mechanism as {@see ChatAgent}), so the retry and the next
+ * build bill it as cached input (~0.1x) instead of re-reading it cold —
+ * observed: a Haiku build re-sent 12k catalog tokens with cache_read 0. Other
+ * providers get the identical text folded into the instructions (OpenAI-style
+ * prefix caching needs no marker; below Anthropic's per-model minimum the
+ * marker is a silent no-op).
  */
-class ExpressGateAgent implements Agent, HasStructuredOutput
+class ExpressGateAgent implements Agent, HasProviderOptions, HasStructuredOutput
 {
     use Promptable;
 
@@ -24,11 +36,38 @@ class ExpressGateAgent implements Agent, HasStructuredOutput
     public function __construct(
         private readonly string $gateInstructions,
         private readonly Closure $schemaFn,
+        private readonly ?string $cacheableContext = null,
     ) {}
 
     public function instructions(): string
     {
-        return $this->gateInstructions;
+        return $this->hasCacheableContext()
+            ? $this->gateInstructions."\n\n".$this->cacheableContext
+            : $this->gateInstructions;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function providerOptions(Lab|string $provider): array
+    {
+        if (! $this->hasCacheableContext()
+            || ($provider !== Lab::Anthropic && $provider !== 'anthropic')) {
+            return [];
+        }
+
+        // Replaces the gateway's plain `system` string: instructions first,
+        // then the stable context carrying the cache marker — Anthropic caches
+        // the whole prefix up to and including the marked block.
+        return ['system' => [
+            ['type' => 'text', 'text' => $this->gateInstructions],
+            ['type' => 'text', 'text' => (string) $this->cacheableContext, 'cache_control' => ['type' => 'ephemeral']],
+        ]];
+    }
+
+    private function hasCacheableContext(): bool
+    {
+        return $this->cacheableContext !== null && trim($this->cacheableContext) !== '';
     }
 
     public function schema(JsonSchema $schema): array
