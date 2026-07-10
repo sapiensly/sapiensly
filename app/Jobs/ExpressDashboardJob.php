@@ -133,13 +133,21 @@ class ExpressDashboardJob implements ShouldQueue
         // falls back to a prompt distillation. Synced onto the manifest.
         if ($run->status === 'succeeded' && $context->page !== null && trim((string) $app->description) === '') {
             $description = trim((string) ($context->semantic['voice']['purpose'] ?? ''));
-            if ($description === '') {
+            if ($description !== '') {
+                // The voice purpose is authored as "audiencia + preguntas que
+                // responde" — models often split that into TWO grammatical
+                // sentences, and decapitating at the first period shipped
+                // "Gerentes de Éxito de Cliente y Liderazgo de Producto." as a
+                // whole app description (the audience, minus everything the
+                // dashboard answers). Keep the full purpose on one line; the
+                // 480-char clamp below bounds a runaway.
+                $description = trim((string) preg_replace('/\s+/u', ' ', $description));
+            } else {
                 $description = (string) (app(AppNamer::class)->describeDashboard($this->dashboardSummary($context), $user)
                     ?? AppNaming::descriptionFromPrompt($this->prompt));
+                // These sources CAN return a paragraph — force one sentence.
+                $description = AppNaming::firstSentence($description);
             }
-            // Force a single sentence — the description is a one-liner, never a
-            // paragraph, whatever the source (voice gate, model, or prompt).
-            $description = AppNaming::firstSentence($description);
             if ($description !== '') {
                 $app->forceFill(['description' => Str::limit($description, 480)])->save();
                 app(AppManifestService::class)->syncManifestIdentity($app->refresh());

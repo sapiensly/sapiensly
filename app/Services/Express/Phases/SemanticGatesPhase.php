@@ -96,8 +96,10 @@ TXT;
             <<<'TXT'
 Dos tareas sobre un dashboard, en el idioma del pedido. (1) VOZ: escribe title
 (máximo 8 palabras, lenguaje de negocio — NUNCA nombres técnicos de tools,
-endpoints ni placeholders) y purpose (1 frase: audiencia + preguntas que
-responde).
+endpoints ni placeholders) y purpose (UNA sola oración: audiencia + preguntas
+que responde, unidas con dos puntos y sin punto intermedio — p. ej. «Para
+líderes del CSC: responde cuánto volumen entra, qué está rezagado y cuánto
+tarda resolverse»).
 (2) INSIGHTS: redacta los body de las tarjetas usando SOLO los HECHOS
 COMPUTADOS (números reales) — mantén variant y title de cada tarjeta sugerida
 (puedes afinar el title), body con una conclusión concreta y accionable (1-2

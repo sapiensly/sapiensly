@@ -122,7 +122,10 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
         ['accept' => true, 'overrides' => []],
         fn ($prompt) => [
             'title' => 'Panel de Tickets',
-            'purpose' => 'Volumen semanal.',
+            // Two grammatical sentences — the exact shape that once got
+            // decapitated into an audience-only description ("Gerentes de
+            // Éxito de Cliente y Liderazgo de Producto.").
+            'purpose' => 'Para líderes de soporte. Responde cuánto volumen entra cada semana.',
             'insights' => collect(json_decode($prompt, true)['tarjetas_sugeridas'])
                 ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'Dato real.'])
                 ->values()->all(),
@@ -169,8 +172,8 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
     // The app's description is filled from the FINISHED dashboard's purpose
     // (the voice gate), not the raw prompt — and synced onto the manifest.
     $this->testApp->refresh();
-    expect($this->testApp->description)->toBe('Volumen semanal.')
-        ->and($manifest['description'] ?? null)->toBe('Volumen semanal.');
+    expect($this->testApp->description)->toBe('Para líderes de soporte. Responde cuánto volumen entra cada semana.')
+        ->and($manifest['description'] ?? null)->toBe('Para líderes de soporte. Responde cuánto volumen entra cada semana.');
 });
 
 it('aborts before spending anything when Detener was pressed first', function () {
