@@ -390,6 +390,19 @@ class BlockDataResolver
 
         if (isset($spec['compare'])) {
             $payload['compare_value'] = $this->aggregateBlock($app, $spec['compare'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest, $context);
+        } elseif (($spec['compare_window'] ?? null) === 'previous') {
+            // Dateless connected source: no date field to bracket a compare
+            // query with, so the SAME query re-reads the tool one window back
+            // (__window: previous, reader-side). The chip is optional — a
+            // failed previous read never sinks the KPI itself.
+            try {
+                $payload['compare_value'] = $this->aggregateBlock(
+                    $app, $spec['query'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest,
+                    ['__window' => 'previous'] + $context,
+                );
+            } catch (Throwable) {
+                // Chip omitted; the value already resolved.
+            }
         }
 
         return $this->withSpark($app, $spec, $payload, $manifest, $context);

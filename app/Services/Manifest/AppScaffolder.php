@@ -1242,6 +1242,7 @@ class AppScaffolder
                 'format' => $kpi['format'] ?? null,
                 'icon' => $this->renderableIcon($kpi['icon'] ?? null),
                 'compare' => $compare,
+                'compare_window' => ($kpi['compare_window'] ?? null) === 'previous' && $compare === null ? 'previous' : null,
                 'delta_good' => $kpi['delta_good'] ?? null,
                 // An honest caption naming the aggregation basis (a promedio vs a
                 // suma vs a mediana reads very differently), filter-safe because

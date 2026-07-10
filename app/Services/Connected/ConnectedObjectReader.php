@@ -83,6 +83,11 @@ class ConnectedObjectReader
             // different presets don't collide on one cached read.
             $arguments = $this->resolveArguments(is_array($op['arguments'] ?? null) ? $op['arguments'] : [], $context);
             $arguments = $this->pushDownDateRange($arguments, $query, $context, $op, $config, $actor);
+            if (($context['__window'] ?? null) === 'previous') {
+                // A KPI's live previous-window compare: same tool, the RESOLVED
+                // window (authored or picker-pushed) shifted back one span.
+                $arguments = $this->shiftWindowToPrevious($arguments, $context);
+            }
             $key = $this->memoKey($object, $integration, $op, $arguments, $actor);
             if (isset($this->memo[$key])) {
                 return $this->memo[$key];
@@ -399,6 +404,43 @@ class ConnectedObjectReader
         $arguments[$fromKey] = $capped;
 
         return $this->listViaMcp($object, $integration, $op, $source, $arguments, $config, $actor);
+    }
+
+    /**
+     * Shift a resolved from/to window one span back — [from-span, from] — for
+     * the `__window: previous` compare read. No-op without a from key (the
+     * compare then equals the current value and the chip reads flat, never
+     * wrong) or when the dates do not parse.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function shiftWindowToPrevious(array $arguments, array $context): array
+    {
+        $fromKey = $this->firstExistingKey(self::DATE_FROM_ARG_KEYS, $arguments);
+        if ($fromKey === null) {
+            return $arguments;
+        }
+        $from = strtotime((string) $arguments[$fromKey]);
+
+        $toKey = $this->firstExistingKey(self::DATE_TO_ARG_KEYS, $arguments);
+        $todayResolved = $this->expressions->resolve('{{today()}}', $context);
+        $to = $toKey !== null
+            ? strtotime((string) $arguments[$toKey])
+            : (is_string($todayResolved) ? strtotime($todayResolved) : false);
+
+        if ($from === false || $to === false || $to <= $from) {
+            return $arguments;
+        }
+
+        $span = max(86400, $to - $from);
+        $arguments[$fromKey] = date('Y-m-d', $from - $span);
+        if ($toKey !== null) {
+            $arguments[$toKey] = date('Y-m-d', $from);
+        }
+
+        return $arguments;
     }
 
     /**

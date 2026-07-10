@@ -665,3 +665,25 @@ it('a dated series computes its delta from its own halves — no second fetch ne
         ->and($pop['base'])->toBe('mitades')
         ->and($pop['measures']['Total Tickets']['delta_pct'])->toBeGreaterThan(0);
 });
+
+it('a dateless windowed source gets a live previous-window compare on its KPIs', function () {
+    $object = [
+        'id' => 'obj_cw', 'slug' => 'tickets_by_dimension', 'name' => 'Tickets By Dimension',
+        'fields' => [
+            ['id' => 'fld_cwk', 'slug' => 'key', 'name' => 'Key', 'type' => 'string'],
+            ['id' => 'fld_cwt', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected',
+            'operations' => ['list' => ['mcp_tool' => 'get-tickets-by-dimension-tool', 'arguments' => ['from' => '{{days_ago(30)}}', 'to' => '{{today()}}'], 'collection_path' => 'breakdown']],
+        ],
+    ];
+    $rows = [['key' => 'A', 'total_tickets' => 60], ['key' => 'B', 'total_tickets' => 40]];
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets']);
+
+    $kpi = collect($spec['kpis'])->firstWhere('field_id', 'fld_cwt');
+    expect($kpi)->not->toBeNull()
+        ->and($kpi['compare_window'] ?? null)->toBe('previous')
+        ->and($kpi)->not->toHaveKey('compare');
+});

@@ -467,3 +467,52 @@ it('threads the page date_range control to connected reads as __page_range_start
 
     expect($data['blk_grid']['items']['itm_passives00']['value'])->toBe(7);
 });
+
+it('compare_window previous computes a live delta chip for a dateless connected KPI', function () {
+    $connectedObject = [
+        'id' => 'obj_'.strtolower((string) Str::ulid()),
+        'slug' => 'tickets_by_dimension',
+        'name' => 'Tickets By Dimension',
+        'fields' => [
+            ['id' => 'fld_cwkey000000', 'slug' => 'key', 'name' => 'Key', 'type' => 'string'],
+            ['id' => 'fld_cwtotal0000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected',
+            'integration_id' => 'integ_fake',
+            'operations' => ['list' => ['mcp_tool' => 'get-tickets-by-dimension-tool', 'arguments' => ['from' => '{{days_ago(30)}}', 'to' => '{{today()}}'], 'collection_path' => 'breakdown']],
+        ],
+    ];
+    $manifest = array_merge($this->manifest, ['objects' => [$connectedObject]]);
+
+    $integrations = Mockery::mock(ConnectedIntegrationResolver::class);
+    $integrations->shouldReceive('resolve')->andReturn(Integration::factory()->create(['is_mcp' => true]));
+
+    $reader = Mockery::mock(ConnectedObjectReader::class);
+    $reader->shouldReceive('list')
+        ->withArgs(fn ($o, $i, $q, $a, $ctx) => ($ctx['__window'] ?? null) !== 'previous')
+        ->andReturn(['ok' => true, 'rows' => [['_external_id' => 'a', 'key' => 'Duplicado', 'total_tickets' => 100]]]);
+    $reader->shouldReceive('list')
+        ->withArgs(fn ($o, $i, $q, $a, $ctx) => ($ctx['__window'] ?? null) === 'previous')
+        ->andReturn(['ok' => true, 'rows' => [['_external_id' => 'a', 'key' => 'Duplicado', 'total_tickets' => 80]]]);
+
+    $this->app->instance(ConnectedObjectReader::class, $reader);
+    $this->app->instance(ConnectedIntegrationResolver::class, $integrations);
+    $resolver = app(BlockDataResolver::class);
+
+    $data = $resolver->resolve($this->testApp, [[
+        'id' => 'blk_cwgrid',
+        'type' => 'metric_grid',
+        'items' => [[
+            'id' => 'itm_cw0',
+            'label' => 'Total Tickets',
+            'field_id' => 'fld_cwtotal0000',
+            'aggregation' => 'sum',
+            'compare_window' => 'previous',
+            'query' => ['object_id' => $connectedObject['id']],
+        ]],
+    ]], $manifest, ['params' => []]);
+
+    expect($data['blk_cwgrid']['items']['itm_cw0']['value'])->toEqual(100)
+        ->and($data['blk_cwgrid']['items']['itm_cw0']['compare_value'])->toEqual(80);
+});

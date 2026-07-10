@@ -988,6 +988,7 @@
                         "format": { "enum": ["number", "currency", "percentage", "duration"] },
                         "icon": { "type": "string", "maxLength": 40, "description": "Optional emoji shown in the card corner." },
                         "compare": { "$ref": "#/$defs/query", "description": "Optional comparison query (e.g. the previous period). When set the card shows the % change vs this value as a trend chip." },
+                        "compare_window": { "enum": ["previous"], "description": "Live compare for a dateless connected source: the runtime re-reads the tool with its window shifted back one span and shows the % change." },
                         "compare_label": { "type": "string", "maxLength": 40, "description": "Optional muted caption for the comparison, shown beside the trend chip (e.g. 'vs período anterior')." },
                         "subtitle": { "type": "string", "maxLength": 60, "description": "Optional muted caption under the number naming its basis (e.g. 'promedio del periodo', 'acumulado en la ventana')." },
                         "delta_good": { "enum": ["up", "down"], "default": "up", "description": "Which direction of change is GOOD (green): 'up' (more is better) or 'down' (less is better, e.g. costs/churn)." },
@@ -1024,6 +1025,7 @@
                                 "field_id": { "$ref": "#/$defs/id" },
                                 "format": { "enum": ["number", "currency", "percentage", "duration"] },
                                 "compare": { "$ref": "#/$defs/query", "description": "Optional comparison query (e.g. previous period) → drives the trend chip." },
+                                "compare_window": { "enum": ["previous"], "description": "Live compare for a dateless connected source: the runtime re-reads the tool with its window shifted back one span." },
                                 "delta_good": { "enum": ["up", "down"], "default": "up", "description": "Which direction of change is GOOD (green)." },
                                 "spark": { "$ref": "#/$defs/spark" }
                             }

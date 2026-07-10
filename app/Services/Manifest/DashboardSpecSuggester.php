@@ -2,6 +2,7 @@
 
 namespace App\Services\Manifest;
 
+use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Express\ComputedFactsBuilder;
 use App\Services\Express\FactNarrator;
 use App\Services\Express\SemanticProfile;
@@ -806,9 +807,49 @@ class DashboardSpecSuggester
 
                 return $kpi;
             }, $kpis);
+        } elseif ($this->hasWindowArguments($object)) {
+            // A DATELESS pre-aggregated source with a from/to window: no date
+            // field to bracket a compare query with, so the chip compares LIVE
+            // against the previous window — the runtime re-reads the tool one
+            // span back (compare_window: previous). Only for aggregations the
+            // in-memory folder can compute over the second read.
+            $fieldsById = collect($numerics)->keyBy('id');
+            $kpis = array_map(function (array $kpi) use ($fieldsById): array {
+                if (! in_array($kpi['aggregation'] ?? 'count', ['count', 'sum', 'avg', 'min', 'max'], true)) {
+                    return $kpi;
+                }
+                $kpi['compare_window'] ??= 'previous';
+                if (! array_key_exists('delta_good', $kpi)) {
+                    $field = $fieldsById->get($kpi['field_id'] ?? '');
+                    $direction = $field !== null ? $this->semantics->deltaGoodOf($field) : null;
+                    if ($direction !== null) {
+                        $kpi['delta_good'] = $direction;
+                    }
+                }
+
+                return $kpi;
+            }, $kpis);
         }
 
         return $kpis;
+    }
+
+    /**
+     * Does the object's list operation carry a start-of-window argument (the
+     * authored rolling from/to)? Those are the sources whose previous window
+     * the runtime can re-read for a live compare.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function hasWindowArguments(array $object): bool
+    {
+        $arguments = $object['source']['operations']['list']['arguments'] ?? null;
+        if (! is_array($arguments) || $arguments === []) {
+            return false;
+        }
+
+        return collect(ConnectedObjectReader::DATE_FROM_ARG_KEYS)
+            ->contains(fn (string $key): bool => array_key_exists($key, $arguments));
     }
 
     /**

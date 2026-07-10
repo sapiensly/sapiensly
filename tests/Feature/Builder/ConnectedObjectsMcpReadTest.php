@@ -438,3 +438,21 @@ it('previous window is a no-op for a window-less tool (granularity-only series)'
     expect(app(ConnectedObjectAuthoring::class)
         ->previousWindowRows($this->user, $this->integration, $object))->toBe([]);
 });
+
+it('a __window previous read shifts the RESOLVED window one span back', function () {
+    $sixtyAgo = now()->utc()->subDays(60)->toDateString();
+    $thirtyAgo = now()->utc()->subDays(30)->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = ['from' => '{{days_ago(30)}}', 'to' => '{{today()}}'];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $sixtyAgo && $args['to'] === $thirtyAgo)
+        ->andReturn(['tickets' => []]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list($object, $this->integration, [], $this->user, ['__window' => 'previous']);
+
+    expect($result['ok'])->toBeTrue();
+});
