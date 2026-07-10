@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
  */
 class ExpressIntentRouter
 {
-    private const DASHBOARD_WORDS = '/\b(dashboard|tablero|reporte|kpis?|m[eé]tricas|anal[ií]tica|an[aá]lisis)\b/iu';
+    private const DASHBOARD_WORDS = '/\b(dashboard|scoreboard|scorecard|tablero|reporte|kpis?|m[eé]tricas|anal[ií]tica|an[aá]lisis)\b/iu';
 
     private const BUILD_WORDS = '/\b(crea|constru|haz|genera|arma|dame|quiero|necesito|build|create|make)\w*/iu';
 
@@ -52,20 +52,36 @@ class ExpressIntentRouter
     }
 
     /**
+     * Per-word edit-distance tolerance for the fuzzy dashboard words. Short
+     * words get 1, long ones 2 — near-misses at those lengths are
+     * overwhelmingly the intended word. The matcher also demands the same
+     * first letter, cutting the worst real-word collisions ("deporte" vs
+     * "reporte"). The survivors ("recorte", "storyboard") still need a build
+     * verb and a live source, and a stray reroute halts honestly downstream.
+     *
+     * @var array<string, int>
+     */
+    private const FUZZY_WORDS = [
+        'dashboard' => 2,
+        'scoreboard' => 2,
+        'scorecard' => 2,
+        'tablero' => 1,
+        'reporte' => 1,
+    ];
+
+    /**
      * Typo tolerance for the flagship words only: "dahsboard" (observed twice
      * in prod, defeating the route both times) must count as "dashboard".
-     * Edit distance ≤ 2 for dashboard, ≤ 1 for tablero — long enough words
-     * that near-misses are overwhelmingly the intended word.
      */
     private function typoedDashboardWord(string $text): bool
     {
         foreach (preg_split('/[^a-z]+/', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $word) {
-            $len = strlen($word);
-            if ($len >= 7 && $len <= 11 && levenshtein($word, 'dashboard') <= 2) {
-                return true;
-            }
-            if ($len >= 6 && $len <= 8 && levenshtein($word, 'tablero') <= 1) {
-                return true;
+            foreach (self::FUZZY_WORDS as $target => $tolerance) {
+                if ($word[0] === $target[0]
+                    && abs(strlen($word) - strlen($target)) <= $tolerance
+                    && levenshtein($word, (string) $target) <= $tolerance) {
+                    return true;
+                }
             }
         }
 

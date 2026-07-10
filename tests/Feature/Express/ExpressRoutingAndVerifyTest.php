@@ -82,8 +82,12 @@ it('routes typoed dashboard words — "dahsboard" defeated the route twice in pr
     expect($router->shouldRunExpress('quiero un dahsboard para entender donde esta el grueso del problema con los tickets', $this->testApp))->toBeTrue()
         ->and($router->shouldRunExpress('crea un dashbord de entregas', $this->testApp))->toBeTrue()
         ->and($router->shouldRunExpress('necesito un tablerro de tickets', $this->testApp))->toBeTrue()
+        ->and($router->shouldRunExpress('arma un scoreboad de ventas', $this->testApp))->toBeTrue()
+        ->and($router->shouldRunExpress('dame un socrecard de kpis del equipo', $this->testApp))->toBeTrue()
+        ->and($router->shouldRunExpress('genera el reprte semanal de tickets', $this->testApp))->toBeTrue()
         // Near words that are NOT the word never route.
         ->and($router->shouldRunExpress('quiero un keyboard nuevo', $this->testApp))->toBeFalse()
+        ->and($router->shouldRunExpress('crea una app de deporte', $this->testApp))->toBeFalse()
         ->and($router->shouldRunExpress('crea una tablet de pruebas', $this->testApp))->toBeFalse();
 });
 
