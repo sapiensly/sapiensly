@@ -1,7 +1,10 @@
 <?php
 
 use App\Models\App;
+use App\Models\Integration;
 use App\Models\Record;
+use App\Services\Connected\ConnectedIntegrationResolver;
+use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Records\BlockDataResolver;
 use Illuminate\Support\Str;
 
@@ -412,4 +415,55 @@ it('a date_range filter (range_start) narrows a block to the selected window', f
     // 'all' clears the filter → both records show.
     $data = $this->resolver->resolve($this->testApp, [$block], $this->manifest, ['params' => ['range' => 'all']]);
     expect($data['blk_ranged']['rows'])->toHaveCount(2);
+});
+
+it('threads the page date_range control to connected reads as __page_range_start_expr', function () {
+    // The other half of the frozen-window fix: resolve() derives the page's
+    // governing range expression from its filter_bar and threads it in the
+    // context, so ConnectedObjectReader can widen a date-less block's fetch
+    // window (see ConnectedObjectsMcpReadTest for the reader half).
+    $connectedObject = [
+        'id' => 'obj_'.strtolower((string) Str::ulid()),
+        'slug' => 'nps_by_dimension',
+        'name' => 'Nps By Dimension',
+        'fields' => [
+            ['id' => 'fld_dimkey00000', 'slug' => 'key', 'name' => 'Key', 'type' => 'string'],
+            ['id' => 'fld_dimpassives', 'slug' => 'passives', 'name' => 'Passives', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected',
+            'integration_id' => 'integ_fake',
+            'operations' => ['list' => ['mcp_tool' => 'get-nps-by-dimension-tool', 'collection_path' => 'breakdown']],
+        ],
+    ];
+    $manifest = array_merge($this->manifest, ['objects' => [$connectedObject]]);
+
+    $integration = Integration::factory()->create(['is_mcp' => true]);
+    $integrations = Mockery::mock(ConnectedIntegrationResolver::class);
+    $integrations->shouldReceive('resolve')->andReturn($integration);
+
+    $reader = Mockery::mock(ConnectedObjectReader::class);
+    $reader->shouldReceive('list')
+        ->once()
+        ->withArgs(fn ($object, $integ, $query, $actor, $context) => ($context['__page_range_start_expr'] ?? null) === "{{range_start(default(params.range, '90d'))}}")
+        ->andReturn(['ok' => true, 'rows' => [['_external_id' => 'x', 'key' => 'Salud', 'passives' => 7]]]);
+
+    $this->app->instance(ConnectedObjectReader::class, $reader);
+    $this->app->instance(ConnectedIntegrationResolver::class, $integrations);
+    $resolver = app(BlockDataResolver::class);
+
+    $blocks = [
+        ['id' => 'blk_fbar', 'type' => 'filter_bar', 'controls' => [['type' => 'date_range', 'param' => 'range', 'default' => '90d']]],
+        ['id' => 'blk_grid', 'type' => 'metric_grid', 'items' => [[
+            'id' => 'itm_passives00',
+            'label' => 'Passives',
+            'field_id' => 'fld_dimpassives',
+            'aggregation' => 'sum',
+            'query' => ['object_id' => $connectedObject['id']],
+        ]]],
+    ];
+
+    $data = $resolver->resolve($this->testApp, $blocks, $manifest, ['params' => []]);
+
+    expect($data['blk_grid']['items']['itm_passives00']['value'])->toBe(7);
 });

@@ -295,8 +295,17 @@ class ConnectedObjectReader
      *      never send a parameter a strict tool would reject; if the schema
      *      can't be read we simply skip injection.
      *
-     * No-ops when: the block has no range-start filter, the preset resolves
-     * empty, or neither an existing arg nor the schema offers a start-date key.
+     * The window expression comes from the block's own date filter when it has
+     * one; a block with NONE (its object exposes no date field to filter by —
+     * pre-aggregated breakdowns) falls back to the PAGE's date_range control,
+     * threaded by BlockDataResolver as `__page_range_start_expr`. Without the
+     * fallback those blocks stayed frozen on the authoring-time window while
+     * their subtitles claimed "en la ventana" (prod yuhunps: two KPIs and two
+     * hbars stuck at the tool's baked 30d whatever the picker said).
+     *
+     * No-ops when: neither the block nor the page carries a range expression,
+     * the preset resolves empty, or neither an existing arg nor the schema
+     * offers a start-date key.
      *
      * @param  array<string, mixed>  $arguments
      * @param  array<string, mixed>  $query  the block's data-source query
@@ -307,7 +316,8 @@ class ConnectedObjectReader
      */
     private function pushDownDateRange(array $arguments, array $query, array $context, array $op, array $config, ?User $actor): array
     {
-        $expr = $this->findRangeStartExpression($query['filter'] ?? null);
+        $expr = $this->findRangeStartExpression($query['filter'] ?? null)
+            ?? (is_string($context['__page_range_start_expr'] ?? null) ? $context['__page_range_start_expr'] : null);
         if ($expr === null) {
             return $arguments;
         }

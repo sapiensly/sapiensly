@@ -47,6 +47,15 @@ class BlockDataResolver
         // date-driven data source it governs.
         $context['__page_blocks'] ??= $blocks;
 
+        // The page's date_range control (if any) as a range_start() expression,
+        // threaded so CONNECTED reads can widen their fetch window even for
+        // blocks with no date filter of their own — their object has no date
+        // field, so without this the KPI/chart stays frozen on the source's
+        // authoring-time window while the rest of the page follows the picker.
+        if (! array_key_exists('__page_range_start_expr', $context)) {
+            $context['__page_range_start_expr'] = $this->pageRangeStartExpression($context['__page_blocks']);
+        }
+
         $data = [];
 
         foreach ($blocks as $block) {
@@ -500,6 +509,55 @@ class BlockDataResolver
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * The page's governing date_range control rendered as the range_start()
+     * expression its governed blocks use — "{{range_start(default(params.range,
+     * '90d'))}}" — or null when the page has no date_range filter bar. Param
+     * and default are sanitized before interpolation so a malformed manifest
+     * can't inject expression syntax.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     */
+    private function pageRangeStartExpression(array $blocks): ?string
+    {
+        foreach ($blocks as $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+
+            if (($block['type'] ?? null) === 'filter_bar') {
+                $control = collect($block['controls'] ?? [])->first(fn ($c) => is_array($c) && ($c['type'] ?? null) === 'date_range');
+                if (is_array($control)) {
+                    $param = trim((string) ($control['param'] ?? 'range'));
+                    if (preg_match('/^[a-z0-9_]+$/i', $param) !== 1) {
+                        $param = 'range';
+                    }
+                    $default = trim((string) ($control['default'] ?? ''));
+
+                    return $default !== '' && preg_match('/^[a-z0-9_]+$/i', $default) === 1
+                        ? "{{range_start(default(params.{$param}, '{$default}'))}}"
+                        : "{{range_start(params.{$param})}}";
+                }
+            }
+
+            $nested = match ($block['type'] ?? null) {
+                'container', 'modal' => $block['blocks'] ?? [],
+                'tabs' => collect($block['tabs'] ?? [])->flatMap(fn ($t) => $t['blocks'] ?? [])->all(),
+                'accordion' => collect($block['sections'] ?? [])->flatMap(fn ($s) => $s['blocks'] ?? [])->all(),
+                'split_view' => array_merge($block['left_blocks'] ?? [], $block['right_blocks'] ?? []),
+                default => [],
+            };
+            if ($nested !== []) {
+                $found = $this->pageRangeStartExpression($nested);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

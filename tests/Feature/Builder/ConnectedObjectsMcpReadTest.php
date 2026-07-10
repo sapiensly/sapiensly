@@ -325,3 +325,37 @@ it('does NOT inject a window the tool schema does not declare (no blind guessing
 
     expect($result['ok'])->toBeTrue();
 });
+
+it('falls back to the PAGE range when the block has no date filter of its own', function () {
+    // Prod yuhunps: nps_by_dimension exposes NO date field, so its KPI/hbar
+    // blocks carry no range_start leaf — the tool's baked 30d window stayed
+    // frozen while the page picker said 90d (subtitle still claiming "en la
+    // ventana"). BlockDataResolver threads the page's date_range control as
+    // __page_range_start_expr; the push-down uses it when the block is silent.
+    $yearAgo = now()->utc()->subYear()->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = ['from' => '{{days_ago(30)}}', 'to' => '{{today()}}'];
+
+    $context = [
+        'params' => (object) ['range' => '1y'],
+        '__page_range_start_expr' => "{{range_start(default(params.range, '90d'))}}",
+    ];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')
+        ->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $yearAgo)  // page preset, not the 30d bake
+        ->andReturn(['tickets' => []]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list(
+        $object,
+        $this->integration,
+        ['filter' => ['op' => 'eq', 'field_id' => 'fld_statusfield', 'value' => 'abierto']],
+        $this->user,
+        $context,
+    );
+
+    expect($result['ok'])->toBeTrue();
+});
