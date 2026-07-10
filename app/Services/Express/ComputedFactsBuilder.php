@@ -29,6 +29,19 @@ class ComputedFactsBuilder
             $facts['vs_periodo_anterior'] = $pop;
         }
 
+        // The analytical pack — anomaly, cumulative concentration, trend
+        // slope — all arithmetic over the sampled rows, zero model. Each key
+        // is absent when the data can't honestly support it (guards inside).
+        foreach ([
+            'anomalia' => $this->anomaly($object, $rows),
+            'concentracion' => $this->concentration($object, $rows),
+            'tendencia' => $this->trendSlope($object, $rows),
+        ] as $key => $fact) {
+            if ($fact !== null) {
+                $facts[$key] = $fact;
+            }
+        }
+
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
         $pathByFieldId = collect($object['source']['field_map'] ?? [])
             ->pluck('external_path', 'field_id')->all();
@@ -147,9 +160,21 @@ class ComputedFactsBuilder
             if ($rows === []) {
                 continue;
             }
-            $peak = $this->weeklyPeak($object, $rows);
-            if ($peak !== null) {
-                $series[] = ['object' => (string) ($object['name'] ?? $object['slug'] ?? ''), ...$peak];
+            $weekly = $this->weeklySeries($object, $rows);
+            if ($weekly !== null) {
+                // Peak from a COPY: byWeek must stay week-ordered — the
+                // correlation aligns the two maps by key order, and a
+                // value-sorted map correlates any two series at r = 1.
+                $byValue = $weekly['byWeek'];
+                arsort($byValue);
+                $peakWeek = (string) array_key_first($byValue);
+                $series[] = [
+                    'object' => (string) ($object['name'] ?? $object['slug'] ?? ''),
+                    'metric' => $weekly['metric'],
+                    'week' => $peakWeek,
+                    'value' => round($byValue[$peakWeek], 2),
+                    'byWeek' => $weekly['byWeek'],
+                ];
             }
         }
         if (count($series) < 2) {
@@ -165,17 +190,75 @@ class ComputedFactsBuilder
             $facts[] = 'Los picos de todas las métricas COINCIDEN en la semana '.$weeks->first().' — un mismo evento parece explicarlos.';
         }
 
+        // Pairwise co-movement over SHARED weeks: strong correlation between
+        // two series is a lead worth stating — always as movement, never as
+        // cause. One sentence max; the strongest pair wins.
+        $best = null;
+        for ($i = 0; $i < count($series); $i++) {
+            for ($j = $i + 1; $j < count($series); $j++) {
+                $shared = array_intersect_key($series[$i]['byWeek'], $series[$j]['byWeek']);
+                if (count($shared) < 5) {
+                    continue;
+                }
+                $a = array_values($shared);
+                $b = array_values(array_intersect_key($series[$j]['byWeek'], $shared));
+                $r = $this->pearson($a, $b);
+                if ($r !== null && abs($r) >= 0.7 && ($best === null || abs($r) > abs($best['r']))) {
+                    $best = ['i' => $i, 'j' => $j, 'r' => $r, 'n' => count($shared)];
+                }
+            }
+        }
+        if ($best !== null) {
+            $a = $series[$best['i']];
+            $b = $series[$best['j']];
+            $rTxt = number_format($best['r'], 2);
+            $facts[] = "«{$a['metric']}» ({$a['object']}) y «{$b['metric']}» ({$b['object']}) se mueven "
+                .($best['r'] >= 0 ? 'juntas' : 'en sentidos opuestos')
+                ." (r = {$rTxt} en {$best['n']} semanas compartidas) — una relación a revisar, no una causa probada.";
+        }
+
         return $facts;
     }
 
     /**
-     * The ISO week (and value) where the object's primary numeric peaks.
+     * Pearson correlation of two aligned numeric series; null when either is
+     * constant (a flat line correlates with nothing).
+     *
+     * @param  list<float|int>  $a
+     * @param  list<float|int>  $b
+     */
+    private function pearson(array $a, array $b): ?float
+    {
+        $n = min(count($a), count($b));
+        if ($n < 2) {
+            return null;
+        }
+        $meanA = array_sum($a) / $n;
+        $meanB = array_sum($b) / $n;
+        $num = $denA = $denB = 0.0;
+        for ($i = 0; $i < $n; $i++) {
+            $da = $a[$i] - $meanA;
+            $db = $b[$i] - $meanB;
+            $num += $da * $db;
+            $denA += $da ** 2;
+            $denB += $db ** 2;
+        }
+        if ($denA <= 0.0 || $denB <= 0.0) {
+            return null;
+        }
+
+        return $num / sqrt($denA * $denB);
+    }
+
+    /**
+     * The object's primary numeric summed per ISO week — the shared series
+     * behind the peak fact and the pairwise correlation.
      *
      * @param  array<string, mixed>  $object
      * @param  list<array<string, mixed>>  $rows
-     * @return array{metric: string, week: string, value: float|int}|null
+     * @return array{metric: string, byWeek: array<string, float>}|null
      */
-    private function weeklyPeak(array $object, array $rows): ?array
+    private function weeklySeries(array $object, array $rows): ?array
     {
         $fields = collect($object['fields'] ?? []);
         $dateField = $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true));
@@ -202,13 +285,11 @@ class ComputedFactsBuilder
             return null;
         }
 
-        arsort($byWeek);
-        $week = (string) array_key_first($byWeek);
+        ksort($byWeek);
 
         return [
             'metric' => (string) ($numField['name'] ?? $numField['slug']),
-            'week' => $week,
-            'value' => round($byWeek[$week], 2),
+            'byWeek' => $byWeek,
         ];
     }
 
@@ -341,5 +422,215 @@ class ComputedFactsBuilder
         }
 
         return ($recent === [] || $earlier === []) ? [$rows, []] : [$recent, $earlier];
+    }
+
+    /**
+     * The dated (timestamp, value) pairs of the object's LEADING additive
+     * measure — the shared input of the anomaly and slope analyses. Null when
+     * there is no date axis or no additive measure with enough points.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{name: string, pairs: list<array{0: int, 1: float}>}|null
+     */
+    private function datedMeasurePairs(array $object, array $rows, int $minPoints): ?array
+    {
+        $fields = collect($object['fields'] ?? [])->filter(fn ($f): bool => is_array($f));
+        $dateField = $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true));
+        if ($dateField === null) {
+            return null;
+        }
+
+        $semantics = new SemanticProfile;
+        $measure = $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
+            && $semantics->measureTypeOf($f) === SemanticProfile::MEASURE_ADDITIVE)
+            ?? $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true));
+        if ($measure === null) {
+            return null;
+        }
+
+        $pathByFieldId = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $datePath = $pathByFieldId[$dateField['id']] ?? ($dateField['slug'] ?? null);
+        $numPath = $pathByFieldId[$measure['id']] ?? ($measure['slug'] ?? null);
+        if ($datePath === null || $numPath === null) {
+            return null;
+        }
+
+        $pairs = [];
+        foreach ($rows as $row) {
+            $ts = InMemoryRowFilter::timestamp(data_get($row, $datePath));
+            $value = data_get($row, $numPath);
+            if ($ts !== null && is_numeric($value)) {
+                $pairs[] = [$ts, (float) $value];
+            }
+        }
+        if (count($pairs) < $minPoints) {
+            return null;
+        }
+        usort($pairs, fn (array $a, array $b): int => $a[0] <=> $b[0]);
+
+        return ['name' => (string) ($measure['name'] ?? $measure['slug']), 'pairs' => $pairs];
+    }
+
+    /**
+     * The single point of the dated leading measure that sits furthest out of
+     * pattern — reported only when it clears 2σ over at least 6 points (below
+     * that a "σ" is noise wearing a lab coat).
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, mixed>|null
+     */
+    private function anomaly(array $object, array $rows): ?array
+    {
+        $dated = $this->datedMeasurePairs($object, $rows, 6);
+        if ($dated === null) {
+            return null;
+        }
+        $values = array_column($dated['pairs'], 1);
+        $mean = array_sum($values) / count($values);
+        $variance = array_sum(array_map(fn (float $v): float => ($v - $mean) ** 2, $values)) / count($values);
+        $std = sqrt($variance);
+        if ($std <= 0.0) {
+            return null;
+        }
+
+        $peak = null;
+        foreach ($dated['pairs'] as [$ts, $value]) {
+            $z = ($value - $mean) / $std;
+            if ($peak === null || abs($z) > abs($peak['z'])) {
+                $peak = ['ts' => $ts, 'valor' => $value, 'z' => $z];
+            }
+        }
+        if ($peak === null || abs($peak['z']) < 2.0) {
+            return null;
+        }
+
+        return [
+            'measure' => $dated['name'],
+            'fecha' => date('Y-m-d', $peak['ts']),
+            'valor' => round($peak['valor'], 2),
+            'z' => round(abs($peak['z']), 1),
+            'direccion' => $peak['z'] >= 0 ? 'sobre' : 'bajo',
+            'media' => round($mean, 2),
+        ];
+    }
+
+    /**
+     * Cumulative concentration of the leading additive measure over the
+     * leading categorical: how FEW categories carry at least half the total —
+     * the sentence behind a pareto ("3 de 15 motivos concentran el 47%").
+     * Needs 5+ real categories; below that concentration states the obvious.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, mixed>|null
+     */
+    private function concentration(array $object, array $rows): ?array
+    {
+        $fields = collect($object['fields'] ?? [])->filter(fn ($f): bool => is_array($f));
+        $cat = $fields->first(fn (array $f): bool => ($f['type'] ?? '') === 'string'
+            && preg_match('/label|bucket|period|semana|week|comment|descrip|nota|_id$|^id$/i', (string) ($f['slug'] ?? '')) !== 1);
+        $semantics = new SemanticProfile;
+        $measure = $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
+            && $semantics->measureTypeOf($f) === SemanticProfile::MEASURE_ADDITIVE);
+        if ($cat === null || $measure === null) {
+            return null;
+        }
+
+        $pathByFieldId = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $catPath = $pathByFieldId[$cat['id']] ?? ($cat['slug'] ?? null);
+        $numPath = $pathByFieldId[$measure['id']] ?? ($measure['slug'] ?? null);
+
+        $sums = [];
+        foreach ($rows as $row) {
+            $key = data_get($row, $catPath);
+            $value = data_get($row, $numPath);
+            if (is_scalar($key) && trim((string) $key) !== '' && is_numeric($value)) {
+                $sums[(string) $key] = ($sums[(string) $key] ?? 0) + (float) $value;
+            }
+        }
+        $total = array_sum($sums);
+        if (count($sums) < 5 || $total <= 0) {
+            return null;
+        }
+        arsort($sums);
+
+        $running = 0.0;
+        $leaders = [];
+        foreach ($sums as $key => $value) {
+            $running += $value;
+            $leaders[] = $key;
+            if ($running / $total >= 0.5) {
+                break;
+            }
+        }
+        if (count($leaders) >= count($sums)) {
+            return null; // evenly spread — nothing concentrates
+        }
+
+        return [
+            'measure' => (string) ($measure['name'] ?? $measure['slug']),
+            'dimension' => (string) ($cat['name'] ?? $cat['slug']),
+            'lideres' => array_slice($leaders, 0, 4),
+            'top' => count($leaders),
+            'total_categorias' => count($sums),
+            'pct' => round($running * 100 / $total, 1),
+        ];
+    }
+
+    /**
+     * The dated leading measure's linear-fit slope, expressed as %-of-mean per
+     * bucket with the cadence read from the median gap ("+4.2%/semana").
+     * Reported from 4 points and a ±1%/bucket floor — flatter than that is a
+     * flat line, not a trend.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, mixed>|null
+     */
+    private function trendSlope(array $object, array $rows): ?array
+    {
+        $dated = $this->datedMeasurePairs($object, $rows, 4);
+        if ($dated === null) {
+            return null;
+        }
+        $values = array_column($dated['pairs'], 1);
+        $n = count($values);
+        $mean = array_sum($values) / $n;
+        if (abs($mean) < 0.000001) {
+            return null;
+        }
+
+        // Least squares over (index, value).
+        $xMean = ($n - 1) / 2;
+        $num = $den = 0.0;
+        foreach ($values as $i => $v) {
+            $num += ($i - $xMean) * ($v - $mean);
+            $den += ($i - $xMean) ** 2;
+        }
+        if ($den <= 0.0) {
+            return null;
+        }
+        $slopePct = round(($num / $den) / abs($mean) * 100, 1);
+        if (abs($slopePct) < 1.0) {
+            return null;
+        }
+
+        $stamps = array_column($dated['pairs'], 0);
+        $gaps = [];
+        for ($i = 1; $i < count($stamps); $i++) {
+            $gaps[] = $stamps[$i] - $stamps[$i - 1];
+        }
+        sort($gaps);
+        $medianGapDays = (int) round(($gaps[intdiv(count($gaps), 2)] ?? 86400) / 86400);
+        $cadencia = match (true) {
+            $medianGapDays <= 1 => 'día',
+            $medianGapDays <= 10 => 'semana',
+            $medianGapDays <= 45 => 'mes',
+            default => 'periodo',
+        };
+
+        return ['measure' => $dated['name'], 'pendiente_pct' => $slopePct, 'cadencia' => $cadencia];
     }
 }

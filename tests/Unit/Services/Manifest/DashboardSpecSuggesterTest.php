@@ -276,8 +276,11 @@ it('narrates insight bodies with real numbers at suggest time', function () {
     $spec = app(DashboardSpecSuggester::class)->suggest(dss_comments_object(null), 'es', dss_comments_rows());
 
     $all = collect($spec['insights'])->pluck('body')->implode(' || ');
-    expect($all)->toContain('promedio')     // a numeric measure fact with real values
-        ->and($all)->toContain('concentra'); // a category concentration fact
+    // The analytical pack ranks ABOVE static aggregates: cards lead with the
+    // self-split period delta and the trend slope, each carrying real numbers.
+    expect($all)->toContain('vs la primera mitad del periodo') // PoP delta, real value
+        ->and($all)->toContain('tendencia')                    // linear slope %/cadence
+        ->and($all)->toContain('%');
 });
 
 it('decorates KPIs for honest display: fractions as percentage, 0-100 rates with a % unit', function () {
@@ -771,4 +774,80 @@ it('every compiled chart carries an executive description; a spec-provided one w
     expect($charts['Top causas'])->toContain('% acumulado')
         ->and($charts['Top causas'])->toContain('causa')
         ->and($charts['Con descripción propia'])->toBe('Reparto excluyendo «Otros».');
+});
+
+it('the analytical pack computes anomaly, concentration and slope — with honest guards', function () {
+    $builder = app(ComputedFactsBuilder::class);
+
+    // Anomaly: a weekly series with one spike ≥2σ.
+    ['object' => $series] = dss_weekly_series('an', 'tickets_semanales', 'total_tickets', 8);
+    $rows = collect(range(0, 7))->map(fn (int $w) => [
+        'period_start' => now()->utc()->subWeeks(7 - $w)->startOfWeek()->toDateString(),
+        'period_label' => 'S'.($w + 1),
+        'total_tickets' => $w === 5 ? 400 : 100, // the spike
+        'ordenes' => 40,
+    ])->all();
+    $anomaly = $builder->build($series, $rows)['anomalia'] ?? null;
+    expect($anomaly)->not->toBeNull()
+        ->and($anomaly['valor'])->toEqual(400)
+        ->and($anomaly['direccion'])->toBe('sobre')
+        ->and($anomaly['z'])->toBeGreaterThanOrEqual(2);
+
+    // Concentration: 2 of 6 categories carry >50% of the additive measure.
+    $breakdown = [
+        'id' => 'obj_conc', 'slug' => 'causas_breakdown', 'name' => 'Causas Breakdown',
+        'fields' => [
+            ['id' => 'fld_conccausa', 'slug' => 'causa', 'name' => 'Causa', 'type' => 'string'],
+            ['id' => 'fld_conctix00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'fld_conccausa', 'external_path' => 'causa'],
+            ['field_id' => 'fld_conctix00', 'external_path' => 'total_tickets'],
+        ]],
+    ];
+    $concRows = collect(['A' => 40, 'B' => 25, 'C' => 10, 'D' => 10, 'E' => 8, 'F' => 7])
+        ->map(fn ($v, $k) => ['causa' => $k, 'total_tickets' => $v])->values()->all();
+    $conc = $builder->build($breakdown, $concRows)['concentracion'] ?? null;
+    expect($conc)->not->toBeNull()
+        ->and($conc['top'])->toBe(2)
+        ->and($conc['total_categorias'])->toBe(6)
+        ->and($conc['pct'])->toEqual(65.0)
+        ->and($conc['lideres'])->toBe(['A', 'B']);
+
+    // Slope: a steadily climbing series reports a positive %/semana.
+    $climb = collect(range(0, 5))->map(fn (int $w) => [
+        'period_start' => now()->utc()->subWeeks(5 - $w)->startOfWeek()->toDateString(),
+        'period_label' => 'S'.($w + 1),
+        'total_tickets' => 100 + $w * 20,
+        'ordenes' => 40,
+    ])->all();
+    $slope = $builder->build($series, $climb)['tendencia'] ?? null;
+    expect($slope)->not->toBeNull()
+        ->and($slope['pendiente_pct'])->toBeGreaterThan(0)
+        ->and($slope['cadencia'])->toBe('semana');
+
+    // Guards: a flat short series reports none of the three.
+    $flat = $builder->build($series, array_slice($climb, 0, 3));
+    expect($flat)->not->toHaveKey('anomalia')
+        ->and($flat)->not->toHaveKey('tendencia');
+});
+
+it('crossFacts reports a strong co-movement between two aligned series, as a lead not a cause', function () {
+    $mk = fn (string $suffix, string $slug, string $measure) => dss_weekly_series($suffix, $slug, $measure, 6)['object'];
+    $a = $mk('ca', 'tickets_semanales', 'total_tickets');
+    $b = $mk('cb', 'quejas_semanales', 'total_quejas');
+
+    $weeks = collect(range(0, 5))->map(fn (int $w) => now()->utc()->subWeeks(5 - $w)->startOfWeek()->toDateString());
+    $rowsA = $weeks->map(fn ($d, $i) => ['period_start' => $d, 'period_label' => 'S'.$i, 'total_tickets' => 100 + $i * 10, 'ordenes' => 1])->all();
+    $rowsB = $weeks->map(fn ($d, $i) => ['period_start' => $d, 'period_label' => 'S'.$i, 'total_quejas' => 200 - $i * 15, 'ordenes' => 1])->all();
+
+    $cross = app(ComputedFactsBuilder::class)->crossFacts(
+        [$a, $b],
+        [$a['id'] => $rowsA, $b['id'] => $rowsB],
+    );
+
+    $sentence = collect($cross)->first(fn (string $f) => str_contains($f, '(r = '));
+    expect($sentence)->not->toBeNull()
+        ->and($sentence)->toContain('en sentidos opuestos')
+        ->and($sentence)->toContain('no una causa probada');
 });

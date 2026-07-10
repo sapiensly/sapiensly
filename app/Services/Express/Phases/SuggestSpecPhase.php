@@ -82,6 +82,18 @@ class SuggestSpecPhase implements ExpressPhase
         $cross = $this->facts->crossFacts($context->objects, $context->rowsByObject);
         if ($cross !== []) {
             $context->facts['cross'] = $cross;
+
+            // A strong co-movement is board-worthy on its own: surface it as a
+            // deterministic insight card so the ECONOMY path states it too —
+            // the gate may rewrite it, never un-know it.
+            $correlation = collect($cross)->first(fn (string $f): bool => str_contains($f, '(r = '));
+            if ($correlation !== null) {
+                $context->spec['insights'][] = [
+                    'variant' => 'conclusion',
+                    'title' => 'Series relacionadas',
+                    'body' => $correlation,
+                ];
+            }
         }
     }
 

@@ -62,6 +62,19 @@ class FactNarrator
             $sign = ($d['delta_pct'] ?? 0) >= 0 ? '+' : '';
             $pool[] = "«{$name}»: {$this->num($d['actual'] ?? null)} {$vsLabel} ({$sign}{$this->num($d['delta_pct'] ?? null)}%).";
         }
+        if (is_array($facts['anomalia'] ?? null)) {
+            $a = $facts['anomalia'];
+            $pool[] = "«{$a['measure']}»: el {$a['fecha']} ({$this->num($a['valor'])}) quedó {$this->num($a['z'])}σ {$a['direccion']} la media ({$this->num($a['media'])}) — un punto fuera de patrón.";
+        }
+        if (is_array($facts['concentracion'] ?? null)) {
+            $c = $facts['concentracion'];
+            $pool[] = "{$c['top']} de {$c['total_categorias']} {$c['dimension']} concentran el {$this->num($c['pct'])}% de {$c['measure']} (".implode(', ', $c['lideres']).').';
+        }
+        if (is_array($facts['tendencia'] ?? null)) {
+            $t = $facts['tendencia'];
+            $sign = ($t['pendiente_pct'] ?? 0) >= 0 ? '+' : '';
+            $pool[] = "«{$t['measure']}»: tendencia {$sign}{$this->num($t['pendiente_pct'])}%/{$t['cadencia']} dentro de la ventana.";
+        }
         foreach ($facts['numeric'] ?? [] as $name => $n) {
             if (! is_array($n)) {
                 continue;
