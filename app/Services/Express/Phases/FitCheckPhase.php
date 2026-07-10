@@ -21,6 +21,9 @@ class FitCheckPhase implements ExpressPhase
 {
     private const MAX_TOOLS = 4;
 
+    /** Extra enum cuts per run — each is a full acquisition, so keep it tight. */
+    private const MAX_ENUM_CUTS = 2;
+
     public function __construct(private readonly GateRunner $gates) {}
 
     public function name(): string
@@ -217,6 +220,15 @@ Lo que sí cubren: '.$this->sourceDomains($context).'.
 
 Dime qué construyo sobre eso (o conecta otra fuente).',
             );
+        }
+
+        // Enum-aware cuts: the ask can name ANOTHER value of an argument the
+        // chosen tool already declares (its input_schema enum) — a second
+        // dimension of the same data. Deterministic, so it enriches BOTH the
+        // economy path and a model answer.
+        $context->chosenCuts = $this->enumCuts($context);
+        foreach ($context->chosenCuts as $cut) {
+            $context->note('Corte adicional: '.$cut['tool'].' con '.json_encode($cut['arguments'], JSON_UNESCAPED_UNICODE));
         }
 
         foreach ($context->substitutions as $sub) {
@@ -441,6 +453,75 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             ->flatMap(fn (array $t) => preg_split('/[-_]/', (string) $t['name']))
             ->filter(fn ($w) => mb_strlen((string) $w) >= 3 && ! in_array($w, $generic, true))
             ->unique()->take(10)->implode(', ');
+    }
+
+    /**
+     * The ask can name a value of an enum argument a chosen tool already
+     * declares — a SECOND cut of the same data sitting one argument away.
+     * Observed (prod yuhuticket): "distribución de motivos y la causa raíz"
+     * chose get-tickets-by-dimension (default dimension: category), and the
+     * CAUSE cut — listed in that tool's own input_schema enum — took a
+     * human-driven agent session to discover. Match the discriminating topic
+     * words against enum values (shared 4-char stem covers causa↔cause) and
+     * acquire each named non-default value as an extra cut, capped.
+     *
+     * @return list<array{tool: string, arguments: array<string, string>, cut: string}>
+     */
+    private function enumCuts(ExpressContext $context): array
+    {
+        $words = $this->discriminatingTopicWords($context);
+        if ($words->isEmpty()) {
+            return [];
+        }
+
+        $cuts = [];
+        foreach ($context->chosenTools as $toolName) {
+            $tool = collect($context->catalogTools)->firstWhere('name', $toolName);
+            $props = is_array($tool['input_schema']['properties'] ?? null) ? $tool['input_schema']['properties'] : [];
+            $defaults = is_array($tool['arguments'] ?? null) ? $tool['arguments'] : [];
+
+            foreach ($props as $arg => $schema) {
+                $enum = array_values(array_filter((array) ($schema['enum'] ?? []), 'is_string'));
+                if (count($enum) < 2) {
+                    continue;
+                }
+                $default = (string) ($defaults[$arg] ?? ($schema['default'] ?? ''));
+
+                foreach ($enum as $value) {
+                    if (strcasecmp($value, $default) === 0) {
+                        continue; // the default cut is already acquired via chosenTools
+                    }
+                    if ($this->wordsNameValue($words, $value)) {
+                        $cuts[] = ['tool' => (string) $toolName, 'arguments' => [(string) $arg => $value], 'cut' => $value];
+                    }
+                }
+            }
+        }
+
+        return array_slice($cuts, 0, self::MAX_ENUM_CUTS);
+    }
+
+    /**
+     * Does any discriminating word NAME this enum value? Exact, containment,
+     * or a shared 4-character stem — the cross-language cases this exists for
+     * (causa↔cause, prioridad↔priority) share their stem.
+     *
+     * @param  Collection<int, string>  $words
+     */
+    private function wordsNameValue(Collection $words, string $value): bool
+    {
+        $v = Str::lower(Str::ascii($value));
+        if (mb_strlen($v) < 3) {
+            return false;
+        }
+
+        return $words->contains(function (string $w) use ($v): bool {
+            if ($w === $v || str_contains($v, $w) || str_contains($w, $v)) {
+                return true;
+            }
+
+            return mb_strlen($w) >= 4 && mb_strlen($v) >= 4 && substr($w, 0, 4) === substr($v, 0, 4);
+        });
     }
 
     /**

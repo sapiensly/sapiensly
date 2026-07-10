@@ -1073,3 +1073,58 @@ it('economy stays off by default — the gates run unchanged', function () {
 
     expect($ctx->economyMode)->toBeFalse();
 });
+
+it('fit derives an enum cut when the ask names another value of a chosen tool argument', function () {
+    // Prod yuhuticket: "distribución de motivos y la causa raíz" chose
+    // get-tickets-by-dimension (default dimension: category); the CAUSE cut —
+    // listed in that tool's own input_schema enum — took a human-driven agent
+    // session to discover. The enum was in the catalog all along.
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    $ctx = xph_ctx($this, 'distribucion de motivos y la causa raiz de los tickets');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [[
+        'name' => 'get-tickets-by-dimension-tool',
+        'description' => 'Tickets agregados por dimensión: motivos, causa, canal',
+        'arguments' => ['dimension' => 'category'],
+        'input_schema' => ['properties' => [
+            'dimension' => ['enum' => ['category', 'cause', 'channel']],
+            'from' => ['type' => 'string'],
+        ]],
+    ]];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->chosenTools)->toBe(['get-tickets-by-dimension-tool'])
+        ->and($ctx->chosenCuts)->toBe([[
+            'tool' => 'get-tickets-by-dimension-tool',
+            'arguments' => ['dimension' => 'cause'],
+            'cut' => 'cause',
+        ]]);
+});
+
+it('acquire reads each enum cut as its own named object', function () {
+    $ctx = xph_ctx($this, 'motivos y causa raiz');
+    $ctx->integration = $this->integration;
+    $ctx->chosenTools = ['get-tickets-by-dimension-tool'];
+    $ctx->chosenCuts = [['tool' => 'get-tickets-by-dimension-tool', 'arguments' => ['dimension' => 'cause'], 'cut' => 'cause']];
+
+    $calls = [];
+    $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
+    $authoring->shouldReceive('author')->twice()
+        ->andReturnUsing(function ($user, $integration, array $spec) use (&$calls) {
+            $calls[] = $spec;
+            $object = xph_object('cut_'.count($calls), $integration->id);
+
+            return ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «'.$object['slug'].'»'];
+        });
+
+    (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, xph_run($this));
+
+    expect($calls)->toHaveCount(2)
+        ->and($calls[0])->not->toHaveKey('arguments')       // default cut untouched
+        ->and($calls[1]['arguments'])->toBe(['dimension' => 'cause'])
+        ->and($calls[1]['object_name'])->toBe('Tickets By Dimension · Cause')
+        ->and($ctx->objects)->toHaveCount(2);
+});

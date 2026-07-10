@@ -7,6 +7,7 @@ use App\Services\Connected\ConnectedObjectAuthoring;
 use App\Services\Express\Contracts\ExpressPhase;
 use App\Services\Express\ExpressContext;
 use App\Services\Manifest\AppManifestService;
+use Illuminate\Support\Str;
 
 /**
  * F-2: author one connected object per chosen tool (server-side, ~1-3s each —
@@ -28,7 +29,7 @@ class AcquireObjectsPhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        $n = count($context->chosenTools);
+        $n = count($context->chosenTools) + count($context->chosenCuts);
 
         return "Modelando {$n} objeto(s) conectado(s) desde la fuente…";
     }
@@ -40,16 +41,34 @@ class AcquireObjectsPhase implements ExpressPhase
             throw new \RuntimeException('The app has no active manifest.');
         }
 
+        // Every chosen tool acquires its DEFAULT cut; enum cuts re-read a
+        // chosen tool with one argument swapped ("dimension: cause") and a
+        // name that says which slice this object is.
+        $targets = array_map(
+            fn (string $name): array => ['tool' => $name, 'arguments' => null, 'cut' => null],
+            $context->chosenTools,
+        );
+        foreach ($context->chosenCuts as $cut) {
+            $targets[] = $cut;
+        }
+
         $ops = [];
         $summaries = [];
-        foreach ($context->chosenTools as $toolName) {
+        foreach ($targets as $target) {
+            $toolName = (string) $target['tool'];
+            $spec = array_filter([
+                'tool_name' => $toolName,
+                'arguments' => $target['arguments'],
+                'object_name' => $target['cut'] !== null
+                    ? Str::headline((string) preg_replace(['/^get[-_]/i', '/[-_]?tool$/i'], '', $toolName)).' · '.Str::headline((string) $target['cut'])
+                    : null,
+            ], fn ($v) => $v !== null);
+
             // One tool that throws (a slow/oversized source, a transport error)
             // must not abort the whole build — note it and move on, exactly like
             // an ok:false. Only ZERO successes fails the run (below).
             try {
-                $authored = $this->authoring->author($context->user, $context->integration, [
-                    'tool_name' => $toolName,
-                ], $manifest);
+                $authored = $this->authoring->author($context->user, $context->integration, $spec, $manifest);
             } catch (\Throwable $e) {
                 $context->note("El tool {$toolName} no se pudo leer: ".$e->getMessage());
 

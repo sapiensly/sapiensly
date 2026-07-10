@@ -28,6 +28,16 @@ class ExpressContext
     /** @var list<string> MCP tool names G-1 chose to read */
     public array $chosenTools = [];
 
+    /**
+     * EXTRA acquisitions of an already-chosen tool with a different enum value
+     * for one of its arguments — {tool, arguments, cut}. "Motivos y causa
+     * raíz" reads get-tickets-by-dimension twice: the default cut (category)
+     * via chosenTools plus {dimension: cause} here.
+     *
+     * @var list<array{tool: string, arguments: array<string, string>, cut: string}>
+     */
+    public array $chosenCuts = [];
+
     /** @var list<array<string, mixed>> honest substitutions {asked, using, reason} */
     public array $substitutions = [];
 
