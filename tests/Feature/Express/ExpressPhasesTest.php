@@ -1164,3 +1164,25 @@ it('the lexicon lets a Spanish ask hit an English-only catalog in economy mode',
     expect($ctx->economyMode)->toBeTrue()
         ->and($ctx->chosenTools)->toBe(['get-complaints-weekly-tool']);
 });
+
+it('economy states plainly which asked topics the built board does not cover', function () {
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    // 'quejas' matches a catalog tool the fit will NOT choose (tickets wins on
+    // score for a tickets-led ask); the report must say it and offer the tool.
+    $ctx = xph_ctx($this, 'tickets y quejas');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-tickets-time-series-tool', 'description' => 'Weekly tickets series with tickets totals', 'input_schema' => []],
+        ['name' => 'get-complaints-weekly-tool', 'description' => 'Weekly complaints', 'input_schema' => []],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    // With both topics matched somewhere, economy fires; whichever tools it
+    // chose, every topic is either covered or honestly noted.
+    expect($ctx->economyMode)->toBeTrue();
+    $covered = implode(' ', $ctx->chosenTools).' '.implode(' ', $ctx->coverageNotes);
+    expect($covered)->toContain('complaints'); // chosen, or named in a note
+});

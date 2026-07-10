@@ -223,6 +223,9 @@ class ExpressDashboardJob implements ShouldQueue
             foreach ($context->unanswerable as $miss) {
                 $caveats[] = '**'.($miss['asked'] ?? '?').'** no está disponible en esta fuente.';
             }
+            foreach ($context->coverageNotes as $note) {
+                $caveats[] = $note;
+            }
             if ($caveats !== []) {
                 $lines[] = '';
                 $lines[] = 'Un par de notas sobre los datos:';

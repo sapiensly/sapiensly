@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { usePage } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
@@ -21,6 +21,7 @@ interface ChartBlock {
     type: 'chart';
     label?: string;
     description?: string;
+    drill_param?: string;
     chart_type:
         | 'bar'
         | 'hbar'
@@ -59,6 +60,28 @@ const props = defineProps<{
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+
+// Drill-down: clicking a category toggles the page param the category select
+// filter owns — the whole board (KPIs, charts, detail table) re-scopes
+// through wiring that already exists; clicking the active value clears it.
+function onDrill(label: string) {
+    const param = props.block.drill_param;
+    if (!param) return;
+    const query: Record<string, string> = {};
+    new URLSearchParams(window.location.search).forEach((v, k) => {
+        query[k] = v;
+    });
+    if (query[param] === label) {
+        delete query[param];
+    } else {
+        query[param] = label;
+    }
+    router.get(window.location.pathname, query, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
 
 // A short date-range preset (Hoy / 7 días) buckets by DAY regardless of the
 // chart's authored grain — a weekly bucket over 7 days is one bar. The reader
@@ -1610,6 +1633,7 @@ const boxPlot = computed(() => {
                             stroke="rgba(0,0,0,0.15)"
                             stroke-width="0.5"
                             class="cursor-pointer transition-opacity hover:opacity-80"
+                            @click="onDrill(slice.label)"
                             @mouseenter="
                                 showTip(
                                     slice.label,
@@ -1854,7 +1878,11 @@ const boxPlot = computed(() => {
                     <li
                         v-for="(s, i) in series"
                         :key="s.label"
-                        class="space-y-1 rounded-xs px-1 transition-colors hover:bg-surface"
+                        :class="[
+                            'space-y-1 rounded-xs px-1 transition-colors hover:bg-surface',
+                            block.drill_param ? 'cursor-pointer' : '',
+                        ]"
+                        @click="onDrill(s.label)"
                         @mouseenter="
                             showTip(
                                 s.label,
@@ -1983,6 +2011,7 @@ const boxPlot = computed(() => {
                             :fill="r.color"
                             rx="2"
                             class="cursor-pointer transition-opacity hover:opacity-80"
+                            @click="onDrill(r.label)"
                             @mouseenter="
                                 showTip(r.label, formatNumber(r.value), r.color)
                             "
@@ -2372,6 +2401,7 @@ const boxPlot = computed(() => {
                                     '%',
                                 background: colorFor(s.label, i),
                             }"
+                            @click="onDrill(s.label)"
                             @mouseenter="
                                 showTip(
                                     s.label,

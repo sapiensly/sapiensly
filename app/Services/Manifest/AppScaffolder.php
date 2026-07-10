@@ -1485,6 +1485,12 @@ class AppScaffolder
                     ? trim((string) $chart['description'])
                     : $this->chartDescription($chart, $chartType, $agg, $chartObject, $lang), 200),
                 'chart_type' => $chartType,
+                // Clicking a category toggles the select filter's param — the
+                // whole board re-scopes through wiring that already exists.
+                'drill_param' => ($categoryFilter !== null
+                    && ($chart['group_by_field_id'] ?? null) === $categoryFilter['field_id']
+                    && ($chartObject['id'] ?? null) === ($object['id'] ?? null))
+                    ? $categoryFilter['param'] : null,
                 'data_source' => $dataSource,
                 'aggregation' => $agg,
                 'y_field_id' => $chart['y_field_id'] ?? null,

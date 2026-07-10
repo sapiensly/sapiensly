@@ -67,6 +67,7 @@ class FitCheckPhase implements ExpressPhase
                 'economy' => true,
             ]);
             $out = $this->heuristicDefault($context);
+            $this->auditCoverage($context, $out['tools'] ?? []);
         } else {
             $result = $this->gates->run(
                 $run,
@@ -502,6 +503,42 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         }
 
         return array_slice($cuts, 0, self::MAX_ENUM_CUTS);
+    }
+
+    /**
+     * Economy's honesty backstop: with no model to declare substitutions, say
+     * plainly which asked topics the BUILT board does not cover — available
+     * in a tool the fit did not choose ("pídelo aparte"), or nowhere in this
+     * source. Concept-wise lexicon matching, same as the fit signal.
+     *
+     * @param  list<string>  $chosenTools
+     */
+    private function auditCoverage(ExpressContext $context, array $chosenTools): void
+    {
+        $concepts = $this->discriminatingTopicWords($context);
+        if ($concepts->isEmpty()) {
+            return;
+        }
+
+        $byName = collect($context->catalogTools)->keyBy('name');
+        $hayOf = fn (array $t): string => Str::lower(Str::ascii(($t['name'] ?? '').' '.($t['description'] ?? '')));
+        $chosenHay = collect($chosenTools)
+            ->map(fn (string $n): string => $hayOf($byName->get($n) ?? []))
+            ->implode(' ');
+
+        foreach ($concepts as $concept) {
+            $variants = DomainLexicon::expand(collect([$concept]));
+            $inChosen = $variants->contains(fn (string $v): bool => str_contains($chosenHay, $v));
+            if ($inChosen) {
+                continue;
+            }
+            $elsewhere = collect($context->catalogTools)->first(
+                fn (array $t): bool => $variants->contains(fn (string $v): bool => str_contains($hayOf($t), $v)),
+            );
+            $context->coverageNotes[] = $elsewhere !== null
+                ? "**{$concept}** quedó fuera de este tablero — lo cubre `{$elsewhere['name']}`; pídelo aparte y lo agrego."
+                : "**{$concept}** no aparece en los datos de esta conexión.";
+        }
     }
 
     /**

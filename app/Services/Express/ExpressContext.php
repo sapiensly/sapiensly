@@ -99,6 +99,14 @@ class ExpressContext
     public array $renderedSummary = [];
 
     /** @var list<string> plain-language notes for the final report */
+    /**
+     * Report-ready coverage caveats: topics the ask named that the BUILT
+     * board does not cover (available in an unchosen tool, or nowhere).
+     *
+     * @var list<string>
+     */
+    public array $coverageNotes = [];
+
     public array $notes = [];
 
     public ?Closure $onProgress = null;

@@ -955,3 +955,43 @@ it('an executive ask caps the board at four charts, keeping KPIs and insights wh
         ->and(count($exec['charts']))->toBeLessThanOrEqual(count($full['charts']))
         ->and(count($exec['kpis']))->toBe(count($full['kpis']));
 });
+
+it('charts grouped by the filter field carry drill_param — click re-scopes the board', function () {
+    $object = [
+        'id' => 'obj_drill', 'slug' => 'tickets_reason_cause_breakdown', 'name' => 'Tickets Reason Cause Breakdown',
+        'fields' => [
+            ['id' => 'fld_drreason00', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_drtotal000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'fld_drreason00', 'external_path' => 'reason'],
+            ['field_id' => 'fld_drtotal000', 'external_path' => 'total_tickets'],
+        ]],
+    ];
+    $rows = collect(['A', 'B', 'C', 'D', 'E'])->map(fn ($r, $i) => [
+        'reason' => $r, 'total_tickets' => 90 - $i * 10,
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets']);
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $object, [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'])->toBeTrue();
+
+    $charts = [];
+    $walk = function (array $nodes) use (&$walk, &$charts): void {
+        foreach ($nodes as $n) {
+            if (! is_array($n)) {
+                continue;
+            }
+            if (($n['type'] ?? null) === 'chart') {
+                $charts[] = $n;
+            }
+            $walk($n['blocks'] ?? []);
+        }
+    };
+    $walk($built['page']['blocks']);
+
+    $byReason = collect($charts)->firstWhere('group_by_field_id', 'fld_drreason00');
+    expect($byReason['drill_param'] ?? null)->toBe('reason');
+});
