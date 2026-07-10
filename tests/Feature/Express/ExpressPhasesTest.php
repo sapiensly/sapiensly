@@ -1145,3 +1145,22 @@ it('acquire samples the previous window per object for delta facts', function ()
 
     expect($ctx->previousRowsByObject[$object['id']])->toBe([['bucket_start' => '2026-06-01', 'total' => 5]]);
 });
+
+it('the lexicon lets a Spanish ask hit an English-only catalog in economy mode', function () {
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    $ctx = xph_ctx($this, 'quejas semanales por motivo');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-complaints-weekly-tool', 'description' => 'Weekly complaints by reason', 'input_schema' => []],
+        ['name' => 'get-orders-tool', 'description' => 'Orders list', 'input_schema' => []],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    // quejas→complaints, semanales→weekly, motivo→reason: economy fires and
+    // the heuristic picks the right tool — zero model, cross-language.
+    expect($ctx->economyMode)->toBeTrue()
+        ->and($ctx->chosenTools)->toBe(['get-complaints-weekly-tool']);
+});

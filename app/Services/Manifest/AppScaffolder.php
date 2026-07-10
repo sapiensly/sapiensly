@@ -1364,6 +1364,14 @@ class AppScaffolder
 
                 continue;
             }
+            if ($chartType === 'gauge') {
+                $block = $this->gaugeBlockFromChart($chart, $chartObject, $i, $errors, $withRange);
+                if ($block !== null) {
+                    $chartBlocks[] = $block;
+                }
+
+                continue;
+            }
 
             $agg = (string) ($chart['aggregation'] ?? 'count');
             if (in_array($agg, ['median', 'p90', 'p95', 'distinct_count'], true)) {
@@ -1872,6 +1880,40 @@ class AppScaffolder
                 'field_id' => $sum ? $chart['y_field_id'] : null,
             ], fn ($v) => $v !== null))->all(),
         ];
+    }
+
+    /**
+     * Translate a target-intent chart entry into the dedicated gauge block:
+     * one aggregate of a numeric field against the max_value the ask named.
+     *
+     * @param  array<string, mixed>  $chart
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $errors
+     * @return array<string, mixed>|null
+     */
+    private function gaugeBlockFromChart(array $chart, array $object, int $i, array &$errors, \Closure $withRange): ?array
+    {
+        $field = collect($object['fields'] ?? [])->firstWhere('id', $chart['y_field_id'] ?? null);
+        $max = is_numeric($chart['max_value'] ?? null) ? (float) $chart['max_value'] : null;
+        if ($field === null || ! in_array($field['type'] ?? '', self::NUMERIC_TYPES, true) || $max === null || $max <= 0) {
+            $errors[] = ['path' => "/charts/{$i}", 'message' => 'A gauge needs a numeric y_field_id and a positive max_value (the target).', 'code' => 'degenerate_chart'];
+
+            return null;
+        }
+
+        return array_filter([
+            'id' => $this->id('blk'),
+            'type' => 'gauge',
+            'label' => Str::limit((string) ($chart['label'] ?? 'Meta'), 80, ''),
+            'query' => array_filter([
+                'object_id' => $object['id'],
+                'filter' => $withRange(null, $object),
+            ], fn ($v) => $v !== null),
+            'aggregation' => in_array($chart['aggregation'] ?? null, ['count', 'sum', 'avg', 'min', 'max'], true) ? $chart['aggregation'] : 'sum',
+            'field_id' => $field['id'],
+            'max_value' => $max,
+            'format' => in_array($chart['format'] ?? null, ['number', 'currency', 'percentage'], true) ? $chart['format'] : null,
+        ], fn ($v) => $v !== null);
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Services\Express\Phases;
 
 use App\Models\PipelineRun;
 use App\Services\Express\Contracts\ExpressPhase;
+use App\Services\Express\DomainLexicon;
 use App\Services\Express\ExpressContext;
 use App\Services\Express\ExpressHalt;
 use App\Services\Express\GateRunner;
@@ -296,7 +297,9 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      */
     private function allChosenOffTopic(ExpressContext $context): bool
     {
-        $words = $this->topicWords($context->prompt);
+        // Same lexicon the picker used: a tool chosen via "quejas→complaints"
+        // must not be vetoed by the raw Spanish words failing the same match.
+        $words = DomainLexicon::expand($this->topicWords($context->prompt));
         if ($words->isEmpty()) {
             return false;
         }
@@ -469,7 +472,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      */
     private function enumCuts(ExpressContext $context): array
     {
-        $words = $this->discriminatingTopicWords($context);
+        $words = DomainLexicon::expand($this->discriminatingTopicWords($context));
         if ($words->isEmpty()) {
             return [];
         }
@@ -539,19 +542,27 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             return false;
         }
 
-        $words = $this->discriminatingTopicWords($context);
-        if ($words->isEmpty()) {
+        $concepts = $this->discriminatingTopicWords($context);
+        if ($concepts->isEmpty()) {
             return false; // nothing to match on — let the model read the ask
         }
 
         $haystacks = collect($context->catalogTools)
             ->map(fn (array $t): string => Str::lower(Str::ascii(($t['name'] ?? '').' '.($t['description'] ?? ''))));
 
-        $unmatched = $words->filter(
-            fn (string $w): bool => ! $haystacks->contains(fn (string $h): bool => str_contains($h, $w)),
+        // Concept-wise: a topic is COVERED when the word OR any of its lexicon
+        // translations hits ("quejas" is covered via "complaints"); an
+        // uncovered concept is the possible-unanswerable case only the model
+        // can halt honestly.
+        $variantsOf = fn (string $w) => DomainLexicon::expand(collect([$w]));
+        $unmatched = $concepts->filter(
+            fn (string $w): bool => ! $haystacks->contains(
+                fn (string $h): bool => $variantsOf($w)->contains(fn (string $v): bool => str_contains($h, $v)),
+            ),
         );
+        $allVariants = DomainLexicon::expand($concepts);
         $onTopic = $haystacks->filter(
-            fn (string $h): bool => $words->contains(fn (string $w): bool => str_contains($h, $w)),
+            fn (string $h): bool => $allVariants->contains(fn (string $w): bool => str_contains($h, $w)),
         )->count();
 
         return $unmatched->isEmpty() && $onTopic > 0 && $onTopic <= self::MAX_TOOLS;
@@ -570,7 +581,9 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         // on-topic board than one padded with off-domain tools that merely share
         // the org name (observed: a defaulted fit_check dragging ticket tools
         // into an NPS build).
-        $words = $this->discriminatingTopicWords($context);
+        // Flat lexicon expansion: scoring counts hits, so translations only
+        // ever ADD signal ("quejas" scores via "complaints").
+        $words = DomainLexicon::expand($this->discriminatingTopicWords($context));
 
         $noRows = collect($context->knownShapes)
             ->filter(fn (array $shape): bool => ($shape['fields'] ?? null) === [])

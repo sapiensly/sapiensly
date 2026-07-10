@@ -901,3 +901,57 @@ it('the first dated KPIs carry a sparkline with the KPI own fold', function () {
     expect($built['ok'])->toBeTrue()
         ->and(json_encode($built['page']))->toContain('"spark"');
 });
+
+it('"meta de 80%" leads the board with a gauge against the named target', function () {
+    $object = [
+        'id' => 'obj_meta', 'slug' => 'csc_contact_rate', 'name' => 'Csc Contact Rate',
+        'fields' => [
+            ['id' => 'fld_metadate00', 'slug' => 'period_start', 'name' => 'Period Start', 'type' => 'date'],
+            ['id' => 'fld_metapct000', 'slug' => 'containment_pct', 'name' => 'Containment Pct', 'type' => 'number'],
+            ['id' => 'fld_metatix000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'fld_metadate00', 'external_path' => 'period_start'],
+            ['field_id' => 'fld_metapct000', 'external_path' => 'containment_pct'],
+            ['field_id' => 'fld_metatix000', 'external_path' => 'total_tickets'],
+        ]],
+    ];
+    $rows = collect(range(0, 5))->map(fn (int $w) => [
+        'period_start' => now()->utc()->subWeeks(5 - $w)->startOfWeek()->toDateString(),
+        'containment_pct' => 60 + $w, 'total_tickets' => 100 + $w,
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest(
+        $object, 'es', $rows, ['contencion'], [], 'dashboard de contención con meta de 80%',
+    );
+
+    $gauge = collect($spec['charts'])->firstWhere('chart_type', 'gauge');
+    expect($gauge)->not->toBeNull()
+        ->and($gauge['max_value'])->toEqual(80.0)
+        ->and($gauge['y_field_id'])->toBe('fld_metapct000')
+        ->and($gauge['format'])->toBe('percentage');
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $object, [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'])->toBeTrue()
+        ->and(json_encode($built['page']))->toContain('"type":"gauge"')
+        ->and(json_encode($built['page']))->toContain('"max_value":80');
+});
+
+it('an executive ask caps the board at four charts, keeping KPIs and insights whole', function () {
+    ['object' => $object] = dss_weekly_series('ex', 'tickets_semanales', 'total_tickets', 8);
+    $rows = collect(range(0, 7))->map(fn (int $w) => [
+        'period_start' => now()->utc()->subWeeks(7 - $w)->startOfWeek()->toDateString(),
+        'period_label' => 'S'.($w + 1),
+        'total_tickets' => 100 + $w * 7,
+        'ordenes' => 40 + $w,
+    ])->all();
+
+    $full = app(DashboardSpecSuggester::class)->suggestMulti([$object], 'es', [$object['id'] => $rows], ['tickets']);
+    $exec = app(DashboardSpecSuggester::class)->suggestMulti([$object], 'es', [$object['id'] => $rows], ['tickets'], [], 'resumen ejecutivo de tickets');
+
+    expect(count($exec['charts']))->toBeLessThanOrEqual(4)
+        ->and(count($exec['charts']))->toBeLessThanOrEqual(count($full['charts']))
+        ->and(count($exec['kpis']))->toBe(count($full['kpis']));
+});

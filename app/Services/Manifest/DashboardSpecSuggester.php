@@ -49,6 +49,9 @@ class DashboardSpecSuggester
      */
     private array $previousRows = [];
 
+    /** The raw ask — for signals topic words can't carry (target numbers, layout presets). */
+    private ?string $prompt = null;
+
     /** With several objects, how much of the board the primary keeps. */
     private const PRIMARY_KPIS = 4;
 
@@ -71,7 +74,7 @@ class DashboardSpecSuggester
      * @param  list<string>  $promptTopics  the request's subject words (e.g. ['nps']) — feature that measure
      * @return array<string, mixed> spec in add_dashboard_page's input shape
      */
-    public function suggestMulti(array $objects, string $lang = 'es', array $rowsByObject = [], array $promptTopics = [], array $previousRowsByObject = []): array
+    public function suggestMulti(array $objects, string $lang = 'es', array $rowsByObject = [], array $promptTopics = [], array $previousRowsByObject = [], ?string $prompt = null): array
     {
         $objects = array_values(array_filter($objects, 'is_array'));
         if ($objects === []) {
@@ -79,13 +82,13 @@ class DashboardSpecSuggester
         }
 
         $primary = $objects[0];
-        $spec = $this->suggest($primary, $lang, $rowsByObject[$primary['id'] ?? ''] ?? [], $promptTopics, $previousRowsByObject[$primary['id'] ?? ''] ?? []);
+        $spec = $this->suggest($primary, $lang, $rowsByObject[$primary['id'] ?? ''] ?? [], $promptTopics, $previousRowsByObject[$primary['id'] ?? ''] ?? [], $prompt);
         $secondaries = array_values(array_filter(
             array_slice($objects, 1),
             fn (array $o): bool => ($rowsByObject[$o['id'] ?? ''] ?? []) !== [],
         ));
         if ($secondaries === []) {
-            return $spec;
+            return $this->applyExecutivePreset($spec, $prompt);
         }
 
         // Make room for the guests: the primary keeps its strongest pieces
@@ -180,7 +183,7 @@ class DashboardSpecSuggester
             $spec['charts'][] = $this->varyForm($chart, $spec['charts']);
         }
 
-        return $spec;
+        return $this->applyExecutivePreset($spec, $prompt);
     }
 
     /**
@@ -407,6 +410,68 @@ class DashboardSpecSuggester
     }
 
     /**
+     * "Meta de 80%": when the ask names a TARGET, the board leads with a
+     * gauge of the matching measure against it. The number comes from the raw
+     * prompt (topic words drop digits); no parseable number or no fitting
+     * measure ⇒ no gauge — an invented target is a lie with a needle.
+     *
+     * @param  list<array<string, mixed>>  $charts
+     * @param  list<array<string, mixed>>  $numerics
+     * @param  array<string, string>  $measureTypes
+     * @return list<array<string, mixed>>
+     */
+    private function withGaugeTarget(array $charts, array $numerics, array $measureTypes, bool $es): array
+    {
+        $prompt = (string) ($this->prompt ?? '');
+        if ($prompt === '' || preg_match('/\b(meta|objetivo|target|goal)\b/iu', $prompt) !== 1) {
+            return $charts;
+        }
+        if (preg_match('/\b(?:meta|objetivo|target|goal)\b[^0-9%]{0,40}?(\d+(?:[.,]\d+)?)\s*(%)?/iu', $prompt, $m) !== 1) {
+            return $charts;
+        }
+        $target = (float) str_replace(',', '.', $m[1]);
+        $isPct = ($m[2] ?? '') === '%' || ($target <= 100 && str_contains($prompt, '%'));
+        if ($target <= 0) {
+            return $charts;
+        }
+
+        $measure = collect($numerics)->first(fn (array $f): bool => $isPct
+            ? ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_RATIO
+            : ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE);
+        if ($measure === null) {
+            return $charts;
+        }
+
+        array_unshift($charts, array_filter([
+            'label' => ($es ? 'Meta: ' : 'Target: ').($measure['name'] ?? $measure['slug']),
+            'chart_type' => 'gauge',
+            'aggregation' => $isPct ? 'avg' : 'sum',
+            'y_field_id' => $measure['id'],
+            'max_value' => $target,
+            'format' => $isPct ? 'percentage' : null,
+        ], fn ($v) => $v !== null));
+
+        return $charts;
+    }
+
+    /**
+     * "Resumen ejecutivo": the ask names the ALTITUDE — keep the KPI band and
+     * the insights whole, cap the charts at the four strongest. (The word is
+     * a topic stopword, so only the raw prompt carries it.)
+     *
+     * @param  array<string, mixed>  $spec
+     * @return array<string, mixed>
+     */
+    private function applyExecutivePreset(array $spec, ?string $prompt): array
+    {
+        if ($prompt !== null && preg_match('/ejecutiv|executive|overview/iu', $prompt) === 1) {
+            $spec['charts'] = array_slice($spec['charts'] ?? [], 0, 4);
+        }
+
+        return $spec;
+    }
+
+    /**
      * The chart FORM the ask names in words — "top 15", "distribución",
      * "pareto/acumulado", "compara" — mapped deterministically so an explicit
      * form intent shapes the flagship breakdown without a model call (the
@@ -537,9 +602,10 @@ class DashboardSpecSuggester
      * @param  list<string>  $promptTopics  request subject words — a measure field matching one leads
      * @return array<string, mixed> spec in add_dashboard_page's input shape
      */
-    public function suggest(array $object, string $lang = 'es', array $rows = [], array $promptTopics = [], array $previousRows = []): array
+    public function suggest(array $object, string $lang = 'es', array $rows = [], array $promptTopics = [], array $previousRows = [], ?string $prompt = null): array
     {
         $this->previousRows = $previousRows;
+        $this->prompt = $prompt;
         $es = $lang !== 'en';
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
 
@@ -599,7 +665,12 @@ class DashboardSpecSuggester
                 $grain,
                 $dateField,
             ),
-            'charts' => $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object, $promptTopics),
+            'charts' => $this->withGaugeTarget(
+                $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object, $promptTopics),
+                $numerics,
+                $measureTypes,
+                $es,
+            ),
             'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es, $rows),
             'category_filter' => $this->suggestCategoryFilter($categoricals, $stats),
             'table' => $this->suggestTable($object, $grain, $dateField, $categoricals, $numerics, $measureTypes, $es),
