@@ -94,6 +94,10 @@ class ConnectedObjectReader
             // the source allows. Cap to the tool's stated maximum and retry once
             // so the chart renders its widest legal window instead of an error.
             $result = $this->retryWithinMaxRange($result, $arguments, $context, $object, $integration, $op, $source, $config, $actor);
+            // A hand-authored object can omit a window the tool REQUIRES
+            // ("The from field is required.") — synthesize the default window
+            // and retry once, mirroring what authoring does from the schema.
+            $result = $this->retryWithRequiredWindow($result, $arguments, $context, $object, $integration, $op, $source, $config, $actor);
 
             return $this->memo[$key] = $result;
         }
@@ -393,6 +397,68 @@ class ConnectedObjectReader
             return $result; // already at the cap — don't loop
         }
         $arguments[$fromKey] = $capped;
+
+        return $this->listViaMcp($object, $integration, $op, $source, $arguments, $config, $actor);
+    }
+
+    /**
+     * A tool can REQUIRE a date window the object never authored ("The from
+     * field is required. The to field is required.") — observed when an agent
+     * recreated a connected object by hand via propose_change and dropped the
+     * args the auto-authoring synthesizes from the input schema. Parse the
+     * missing field names out of the validation error, fill any that are
+     * known window keys (from → 30 days ago, to → today, matching the
+     * authoring default), and retry ONCE. No-op when the error isn't a
+     * required-field complaint or none of the missing names is a window key —
+     * a required `dimension` (etc.) stays the author's problem to fix.
+     *
+     * @param  array{ok: bool, rows: list<array<string, mixed>>, error?: string}  $result
+     * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $op
+     * @param  array<string, mixed>  $source
+     * @param  array<string, mixed>  $config
+     * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
+     */
+    private function retryWithRequiredWindow(array $result, array $arguments, array $context, array $object, Integration $integration, array $op, array $source, array $config, ?User $actor): array
+    {
+        if (($result['ok'] ?? false) === true) {
+            return $result;
+        }
+
+        preg_match_all(
+            '/(?:The |El campo )([a-z0-9_]+)(?: field is required| es (?:obligatorio|requerido))/iu',
+            (string) ($result['error'] ?? ''),
+            $matches,
+        );
+        $missing = array_map('strtolower', array_filter($matches[1] ?? []));
+        if ($missing === []) {
+            return $result;
+        }
+
+        $today = $this->expressions->resolve('{{today()}}', $context);
+        $start = $this->expressions->resolve('{{days_ago(30)}}', $context);
+        if (! is_string($today) || ! is_string($start)) {
+            return $result;
+        }
+
+        $filled = false;
+        foreach ($missing as $key) {
+            if (array_key_exists($key, $arguments)) {
+                continue;
+            }
+            if (in_array($key, self::DATE_FROM_ARG_KEYS, true)) {
+                $arguments[$key] = $start;
+                $filled = true;
+            } elseif (in_array($key, self::DATE_TO_ARG_KEYS, true)) {
+                $arguments[$key] = $today;
+                $filled = true;
+            }
+        }
+        if (! $filled) {
+            return $result;
+        }
 
         return $this->listViaMcp($object, $integration, $op, $source, $arguments, $config, $actor);
     }

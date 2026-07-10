@@ -359,3 +359,47 @@ it('falls back to the PAGE range when the block has no date filter of its own', 
 
     expect($result['ok'])->toBeTrue();
 });
+
+it('synthesizes a required date window the object never authored and retries once', function () {
+    // Prod yuhuticket: an agent recreated top_root_causes by hand via
+    // propose_change and dropped from/to — args the auto-authoring synthesizes
+    // from the tool schema — so every read died with "The from field is
+    // required. The to field is required." while the dashboard showed error
+    // cards over a perfectly healthy source.
+    $monthAgo = now()->utc()->subDays(30)->toDateString();
+    $today = now()->utc()->toDateString();
+
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = ['top_n' => 15, 'dimension' => 'cause'];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')->once()
+        ->withArgs(fn ($config, $user, $name, $args) => ! array_key_exists('from', $args))
+        ->andThrow(new RuntimeException("The MCP tool 'list_tickets' returned an error: The from field is required. The to field is required."));
+    $mcp->shouldReceive('callToolData')->once()
+        ->withArgs(fn ($config, $user, $name, $args) => $args['from'] === $monthAgo
+            && $args['to'] === $today
+            && $args['dimension'] === 'cause')
+        ->andReturn(['tickets' => [['ticket_id' => 't1', 'status' => 'open', 'metrics' => ['resolution_minutes' => 5]]]]);
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list($object, $this->integration, [], $this->user);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['rows'])->toHaveCount(1);
+});
+
+it('does not retry when the required field is not a window key', function () {
+    $object = mcpTicketObject($this->integration->id);
+    $object['source']['operations']['list']['arguments'] = ['top_n' => 15];
+
+    $mcp = Mockery::mock(McpClient::class);
+    $mcp->shouldReceive('callToolData')->once()
+        ->andThrow(new RuntimeException("The MCP tool 'list_tickets' returned an error: The dimension field is required."));
+
+    $reader = new ConnectedObjectReader(app(IntegrationCaller::class), $mcp, app(ExpressionResolver::class));
+    $result = $reader->list($object, $this->integration, [], $this->user);
+
+    expect($result['ok'])->toBeFalse()
+        ->and($result['error'])->toContain('dimension');
+});
