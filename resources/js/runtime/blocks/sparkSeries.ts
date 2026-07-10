@@ -85,6 +85,19 @@ export function computeSparkSeries(
         }
         if (minKey === null || maxKey === null) return [];
 
+        // Native cadence: when consecutive points are typically more than a
+        // day apart (weekly/monthly series), zero-filling every calendar day
+        // between them fabricates a comb of needles — plot the real points.
+        const keys = Array.from(buckets.keys()).sort();
+        const gaps = keys
+            .slice(1)
+            .map((k, i) => daysBetween(keys[i], k))
+            .sort((a, b) => a - b);
+        const typicalGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 1;
+        if (typicalGap > 1) {
+            return keys.map((k) => fold(buckets.get(k)!, aggregation));
+        }
+
         const span = daysBetween(minKey, maxKey);
         const out: number[] = [];
         for (let i = 0; i <= span; i++) {

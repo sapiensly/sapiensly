@@ -396,10 +396,21 @@ class BlockDataResolver
             // (__window: previous, reader-side). The chip is optional — a
             // failed previous read never sinks the KPI itself.
             try {
-                $payload['compare_value'] = $this->aggregateBlock(
+                $previous = $this->aggregateBlock(
                     $app, $spec['query'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest,
                     ['__window' => 'previous'] + $context,
                 );
+                // An aggregate of 0 over a windowless-looking past is
+                // ambiguous: "genuinely zero last period" earns the chip,
+                // "the data simply doesn't reach that far back" must NOT
+                // read as «nuevo». Only rows in the previous window (the
+                // re-read is memoized, so this count is free) settle it.
+                if ((float) $previous !== 0.0 || (float) $this->aggregateBlock(
+                    $app, $spec['query'], 'count', null, $manifest,
+                    ['__window' => 'previous'] + $context,
+                ) > 0.0) {
+                    $payload['compare_value'] = $previous;
+                }
             } catch (Throwable) {
                 // Chip omitted; the value already resolved.
             }
