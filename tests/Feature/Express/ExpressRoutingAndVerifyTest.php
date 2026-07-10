@@ -70,6 +70,23 @@ it('routes a clear dashboard-build message to Express when a source exists', fun
         ->and($router->shouldRunExpress('quiero un dashboard pero construido conversando paso a paso', $this->testApp))->toBeFalse();
 });
 
+it('routes typoed dashboard words — "dahsboard" defeated the route twice in prod', function () {
+    config(['express.enabled' => true, 'express.autoroute' => true]);
+    Integration::factory()->forUser($this->user)->create([
+        'is_mcp' => true, 'status' => 'active', 'auth_type' => 'bearer', 'auth_config' => ['token' => 'T'],
+        'base_url' => 'https://mcp.example.com/v1',
+    ]);
+
+    $router = app(ExpressIntentRouter::class);
+
+    expect($router->shouldRunExpress('quiero un dahsboard para entender donde esta el grueso del problema con los tickets', $this->testApp))->toBeTrue()
+        ->and($router->shouldRunExpress('crea un dashbord de entregas', $this->testApp))->toBeTrue()
+        ->and($router->shouldRunExpress('necesito un tablerro de tickets', $this->testApp))->toBeTrue()
+        // Near words that are NOT the word never route.
+        ->and($router->shouldRunExpress('quiero un keyboard nuevo', $this->testApp))->toBeFalse()
+        ->and($router->shouldRunExpress('crea una tablet de pruebas', $this->testApp))->toBeFalse();
+});
+
 it('does not route without a live MCP source or with the flags off', function () {
     config(['express.enabled' => true, 'express.autoroute' => true]);
     $router = app(ExpressIntentRouter::class);
