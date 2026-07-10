@@ -4,6 +4,7 @@ use App\Ai\Tools\Builder\PlanDashboardTool;
 use App\Services\Express\ComputedFactsBuilder;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
+use App\Services\Manifest\ManifestValidator;
 use App\Support\Branding\ColorPalette;
 use Illuminate\Support\Str;
 
@@ -994,4 +995,50 @@ it('charts grouped by the filter field carry drill_param — click re-scopes the
 
     $byReason = collect($charts)->firstWhere('group_by_field_id', 'fld_drreason00');
     expect($byReason['drill_param'] ?? null)->toBe('reason');
+});
+
+it('a full suggested board VALIDATES against the manifest JSON schema', function () {
+    // Compile-harness tests never ran schema validation, so compare_window
+    // shipped into a metric_grid item def that did not allow it and prod died
+    // at applyPatch (plr_01kx71cx). This pins the WHOLE chain: suggest →
+    // compile → the page is legal manifest, filters, sparks, table, drill,
+    // gauge and chips included.
+    $object = [
+        'id' => 'obj_schematest00', 'slug' => 'tickets_by_dimension', 'name' => 'Tickets By Dimension',
+        'fields' => [
+            ['id' => 'fld_sckey0000001', 'slug' => 'key', 'name' => 'Key', 'type' => 'string'],
+            ['id' => 'fld_sctotal00001', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected',
+            'integration_id' => 'integ_x',
+            'operations' => ['list' => ['mcp_tool' => 'get-tickets-by-dimension-tool', 'arguments' => ['from' => '{{days_ago(30)}}', 'to' => '{{today()}}'], 'collection_path' => 'breakdown']],
+            'field_map' => [
+                ['field_id' => 'fld_sckey0000001', 'external_path' => 'key'],
+                ['field_id' => 'fld_sctotal00001', 'external_path' => 'totals.total_tickets'],
+            ],
+        ],
+    ];
+    $rows = collect(['A', 'B', 'C', 'D', 'E', 'F'])->map(fn ($k, $i) => [
+        'key' => $k, 'totals' => ['total_tickets' => 100 - $i * 12],
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['tickets']);
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $object, [], ColorPalette::fromAccent('#00ce7c'), 'es',
+    );
+    expect($built['ok'])->toBeTrue();
+
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_schematest0000000000000',
+        'slug' => 'schema_test', 'name' => 'Schema Test', 'version' => 1,
+        'objects' => [$object],
+        'pages' => [$built['page']],
+        'permissions' => ['roles' => [['id' => 'rol_schematest0000000000000', 'name' => 'Admin', 'slug' => 'admin', 'is_default' => true]]],
+    ];
+    $result = app(ManifestValidator::class)->validate($manifest);
+
+    expect($result->errorsArray())->toBe([])
+        ->and($result->valid)->toBeTrue();
 });
