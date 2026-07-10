@@ -3,6 +3,7 @@
 use App\Ai\ExpressGateAgent;
 use App\Models\App;
 use App\Models\BuilderConversation;
+use App\Models\BuilderMessage;
 use App\Models\Integration;
 use App\Models\PipelineRun;
 use App\Models\User;
@@ -1254,4 +1255,56 @@ it('form words never defeat the economy signal — they name how to draw, not wh
 
     expect($ctx->economyMode)->toBeTrue()
         ->and($ctx->interpretedPrompt)->toBeNull();
+});
+
+it('a meta-commentary "translation" is discarded whole — the model judges the original words', function () {
+    // Prod plr_01kx73ryswnk21qvt2bvxzmrpz: the interpreter answered with an
+    // EVALUATION of the ask instead of a rewrite, we adopted it, showed it,
+    // and fit_check judged the meta-text. Now adoption requires the economy
+    // signal to ground the translation in the catalog — meta-commentary
+    // grounds nothing, so it dies silently and the original ask proceeds.
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([
+        ['pedido_interpretado' => 'El pedido es demasiado difuso: no especifica qué métricas, dimensiones ni rangos desea visualizar.'],
+        [
+            'tools' => ['get-tickets-time-series-tool'], 'substitutions' => [],
+            'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+        ],
+    ]);
+
+    $ctx = xph_ctx($this, 'analiza el asunto de los tickets como mejor veas');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->interpretedPrompt)->toBeNull()          // nothing adopted…
+        ->and($ctx->analysisPrompt())->toBe('analiza el asunto de los tickets como mejor veas') // …nothing poisoned
+        ->and($ctx->economyMode)->toBeFalse()
+        ->and($ctx->chosenTools)->toBe(['get-tickets-time-series-tool']);
+});
+
+it('the interpreter reads the user\'s previous turns — the topic one turn back counts as their words', function () {
+    // The G-0 autoroute forwards only the TRIGGERING message ("quiero un
+    // dashboard no un app"); the actual ask lived one turn earlier in the
+    // same conversation. Those turns are the user's own words, so they ride
+    // along as interpreter context.
+    config(['express.economy' => true]);
+    BuilderMessage::create(['conversation_id' => $this->conv->id, 'role' => 'user', 'content' => 'quiero entender el grueso del problema con los tickets', 'status' => 'none']);
+    BuilderMessage::create(['conversation_id' => $this->conv->id, 'role' => 'assistant', 'content' => '¿De dónde vienen los datos?', 'status' => 'none']);
+    BuilderMessage::create(['conversation_id' => $this->conv->id, 'role' => 'user', 'content' => 'quiero un dashboard no un app', 'status' => 'none']);
+    ExpressGateAgent::fake([
+        ['pedido_interpretado' => 'crea un dashboard de tickets: pareto con % acumulado y tendencia semanal'],
+    ]);
+
+    $ctx = xph_ctx($this, 'quiero un dashboard no un app');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->economyMode)->toBeTrue()
+        ->and($ctx->interpretedPrompt)->toContain('pareto');
+    // The earlier turn travelled to the gate; the triggering prompt is not duplicated.
+    ExpressGateAgent::assertPrompted(fn ($prompt) => str_contains(json_encode($prompt), 'grueso del problema con los tickets'));
 });

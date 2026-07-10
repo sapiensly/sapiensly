@@ -2,6 +2,7 @@
 
 namespace App\Services\Express\Phases;
 
+use App\Models\BuilderMessage;
 use App\Models\PipelineRun;
 use App\Services\Express\Contracts\ExpressPhase;
 use App\Services\Express\DomainLexicon;
@@ -59,12 +60,21 @@ class FitCheckPhase implements ExpressPhase
         // small call translates the intent into the factory's vocabulary
         // (form enriched, facts never invented; shown to the user in the
         // report), then the deterministic signal gets a second chance. The
-        // factory downstream stays untouched either way.
-        if ($out === null
-            && (bool) config('express.economy', false)
-            && $this->interpretAsk($context, $run, $catalog)
-            && $this->economyFitSuffices($context)) {
-            $out = $this->economyOut($context, $run);
+        // translation is ADOPTED only when that second check validates it —
+        // a translation the signal can't ground (meta-commentary, invented
+        // domains) is discarded whole: nothing shown, nothing reported, and
+        // the model fit judges the user's ORIGINAL words.
+        if ($out === null && (bool) config('express.economy', false)) {
+            $translated = $this->interpretAsk($context, $run, $catalog);
+            if ($translated !== null) {
+                $context->interpretedPrompt = $translated;
+                if ($this->economyFitSuffices($context)) {
+                    $context->progress('Interpretando tu pedido… → «'.$translated.'»');
+                    $out = $this->economyOut($context, $run);
+                } else {
+                    $context->interpretedPrompt = null;
+                }
+            }
         }
 
         if ($out === null) {
@@ -620,12 +630,15 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
      * The INTERPRETER gate: one small call that translates a vague ask into
      * the factory's precise vocabulary — enriching the FORM (pareto, top,
      * tendencia, embudo…), never the FACTS (no targets, numbers or dimensions
-     * the user didn't say), constrained to the catalog's actual domains. The
-     * translation is stored for the report ("Interpreté tu pedido como: …")
-     * so the user corrects the interpretation, not the board. Returns true
-     * only when a usable, different translation came back.
+     * the user didn't say), constrained to the catalog's actual domains. When
+     * the ask arrived through a builder conversation the user's PREVIOUS
+     * turns ride along — their own words ("quiero un dashboard no un app"
+     * carries no topic; the turn before it named the tickets), so the
+     * translation can recover the topic without inventing anything. Returns
+     * the candidate translation or null; the CALLER adopts it only if the
+     * deterministic signal validates it.
      */
-    private function interpretAsk(ExpressContext $context, PipelineRun $run, array $catalog): bool
+    private function interpretAsk(ExpressContext $context, PipelineRun $run, array $catalog): ?string
     {
         $domains = collect($catalog)
             ->map(fn (array $t): string => $t['name'].' — '.Str::limit((string) ($t['description'] ?? ''), 90, '…'))
@@ -638,16 +651,24 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
 Traduces el PEDIDO difuso de un dashboard al vocabulario preciso del
 constructor, en el idioma del usuario. REGLAS: (1) enriquece la FORMA, nunca
 los HECHOS — jamás inventes metas, números, umbrales ni dimensiones que el
-usuario no dijo; (2) usa SOLO los dominios presentes en el catálogo — no
-prometas datos que no existen; (3) cuando la intención lo amerite usa estas
-palabras de forma: pareto / % acumulado, top N, distribución, compara,
-embudo, mapa de calor, tendencia semanal/diaria/mensual, resumen ejecutivo;
-(4) responde UNA sola frase imperativa («crea un dashboard de …»); (5) si el
-pedido ya es preciso, devuélvelo tal cual.
+usuario no dijo; los mensajes_previos_del_usuario son palabras del usuario y
+cuentan: úsalos para recuperar el TEMA cuando el pedido actual no lo trae;
+(2) usa SOLO los dominios presentes en el catálogo — no prometas datos que no
+existen; (3) cuando la intención lo amerite usa estas palabras de forma:
+pareto / % acumulado, top N, distribución, compara, embudo, mapa de calor,
+tendencia semanal/diaria/mensual, resumen ejecutivo; (4) responde UNA sola
+frase imperativa («crea un dashboard de …»); (5) si el pedido ya es preciso,
+devuélvelo tal cual. PROHIBIDO devolver comentarios, evaluaciones o
+descripciones del pedido («el pedido es demasiado difuso», «no especifica…»):
+pedido_interpretado es SIEMPRE una orden de dashboard construible — si ni con
+los mensajes previos puedes formular una fiel al usuario, devuelve ''.
 TXT,
-            json_encode(['pedido' => $context->prompt], JSON_UNESCAPED_UNICODE),
+            json_encode([
+                'pedido' => $context->prompt,
+                'mensajes_previos_del_usuario' => $this->previousUserTurns($run, $context->prompt),
+            ], JSON_UNESCAPED_UNICODE),
             fn ($schema) => [
-                'pedido_interpretado' => $schema->string()->description('El pedido reescrito en vocabulario preciso, una sola frase, mismo idioma.'),
+                'pedido_interpretado' => $schema->string()->description('El pedido reescrito como orden imperativa de dashboard, una sola frase, mismo idioma — o cadena vacía. Nunca una evaluación del pedido.'),
             ],
             ['pedido_interpretado' => ''],
             $context->user,
@@ -658,13 +679,33 @@ TXT,
 
         $translated = trim((string) ($result['output']['pedido_interpretado'] ?? ''));
         if ($result['fallback_used'] || $translated === '' || Str::lower($translated) === Str::lower(trim($context->prompt))) {
-            return false;
+            return null;
         }
 
-        $context->interpretedPrompt = Str::limit($translated, 400, '');
-        $context->progress('Interpretando tu pedido… → «'.$context->interpretedPrompt.'»');
+        return Str::limit($translated, 400, '');
+    }
 
-        return true;
+    /**
+     * The user's most recent turns in the builder conversation this run came
+     * from (excluding the triggering prompt itself) — the interpreter's only
+     * extra context, and still exclusively the user's own words.
+     *
+     * @return list<string>
+     */
+    private function previousUserTurns(PipelineRun $run, string $prompt): array
+    {
+        if ($run->conversation_id === null) {
+            return [];
+        }
+
+        return BuilderMessage::query()
+            ->where('conversation_id', $run->conversation_id)
+            ->where('role', 'user')
+            ->orderByDesc('created_at')->orderByDesc('id')
+            ->limit(6)->pluck('content')
+            ->map(fn ($c): string => trim((string) $c))
+            ->reject(fn (string $c): bool => $c === '' || $c === trim($prompt))
+            ->take(3)->reverse()->values()->all();
     }
 
     /**
