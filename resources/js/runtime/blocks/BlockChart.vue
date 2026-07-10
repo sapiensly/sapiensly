@@ -476,6 +476,36 @@ function smoothLine(pts: { x: number; y: number }[]): string {
 // vertical crosshair, the highlighted markers and the multi-series tooltip.
 const activeIdx = ref<number | null>(null);
 
+// ---- categorical x-axis fitting -------------------------------------------
+// Long category labels (ticket reasons, product names…) cannot render
+// horizontally under their bars — a dozen sentence-long strings overlap into
+// noise. When the longest label outgrows its slot the axis switches to
+// truncated diagonals (the full text stays on the hover tooltip), pays the
+// extra bottom padding, and thins ticks if even diagonals would collide.
+const AXIS_CHAR_W = 4.6; // ≈ glyph width of the 8px tick font
+const AXIS_MAX_CHARS = 18;
+const AXIS_DIAG = AXIS_CHAR_W * 0.707; // per-char x AND y extent at -45°
+
+function catAxisLayout(labels: string[], slot: number, leftRoom: number) {
+    const maxLen = Math.max(0, ...labels.map((l) => l.length));
+    if (maxLen * AXIS_CHAR_W <= slot + 2) {
+        return { rotated: false, padB: 30, stride: 1, trim: (s: string) => s };
+    }
+    // The first diagonal grows up-left from its anchor; the svg clips outside
+    // its viewBox, so the char budget is also bounded by the room to the left.
+    const chars = Math.max(
+        6,
+        Math.min(maxLen, AXIS_MAX_CHARS, Math.floor(leftRoom / AXIS_DIAG)),
+    );
+    return {
+        rotated: true,
+        padB: 16 + Math.ceil(chars * AXIS_DIAG),
+        stride: Math.max(1, Math.ceil(9 / slot)),
+        trim: (s: string) =>
+            s.length > chars ? s.slice(0, chars - 1).trimEnd() + '…' : s,
+    };
+}
+
 const lineChart = computed(() => {
     const isLine =
         props.block.chart_type === 'line' || props.block.chart_type === 'area';
@@ -815,7 +845,6 @@ function aggregateVals(vals: number[] | undefined, agg: Agg): number {
     }
 }
 
-
 // Pareto: the grouped measure as DESCENDING bars plus a cumulative-share line
 // on a fixed 0-100% right axis (with an 80% tick — the classic read: how few
 // categories carry most of the volume). Synthesizes the combo shape so the
@@ -835,10 +864,14 @@ const pareto = computed(() => {
     const padL = 36;
     const padR = 36;
     const padT = 10;
-    const padB = 30;
-    const innerH = H - padT - padB;
     const innerW = W - padL - padR;
     const slot = innerW / g.length;
+    const axis = catAxisLayout(
+        g.map((d) => d.label),
+        slot,
+        padL + slot / 2,
+    );
+    const innerH = H - padT - axis.padB;
     const centerX = (ci: number) => padL + slot * (ci + 0.5);
     const baselineY = padT + innerH;
     const leftMax = Math.max(1, ...g.map((d) => d.value));
@@ -864,7 +897,8 @@ const pareto = computed(() => {
     ];
 
     const measureLabel =
-        yField.value?.name ?? (props.block.aggregation === 'count' ? 'Total' : 'Valor');
+        yField.value?.name ??
+        (props.block.aggregation === 'count' ? 'Total' : 'Valor');
     return {
         W,
         H,
@@ -888,7 +922,10 @@ const pareto = computed(() => {
             x: W - padR + 5,
             anchor: 'start',
         })),
-        catLabels: g.map((d, ci) => ({ x: centerX(ci), label: d.label })),
+        catLabels: g
+            .map((d, ci) => ({ x: centerX(ci), label: axis.trim(d.label), ci }))
+            .filter((l) => l.ci % axis.stride === 0),
+        rotatedCats: axis.rotated,
         hover: g.map((d, ci) => ({
             label: d.label,
             rows: [
@@ -906,8 +943,18 @@ const pareto = computed(() => {
             markers: [{ y: pts[ci].y, color: chartColor(1) }],
         })),
         legend: [
-            { label: measureLabel, color: chartColor(0), type: 'bar', secondary: false },
-            { label: '% acumulado', color: chartColor(1), type: 'line', secondary: true },
+            {
+                label: measureLabel,
+                color: chartColor(0),
+                type: 'bar',
+                secondary: false,
+            },
+            {
+                label: '% acumulado',
+                color: chartColor(1),
+                type: 'line',
+                secondary: true,
+            },
         ],
     };
 });
@@ -972,11 +1019,11 @@ const combo = computed(() => {
     const padL = 36;
     const padR = hasRight ? 36 : 12;
     const padT = 10;
-    const padB = 30;
-    const innerH = H - padT - padB;
     const innerW = W - padL - padR;
     const n = cats.length;
     const slot = innerW / n;
+    const axis = catAxisLayout(cats, slot, padL + slot / 2);
+    const innerH = H - padT - axis.padB;
     const centerX = (ci: number) => padL + slot * (ci + 0.5);
     const baselineY = padT + innerH;
     const yFor = (v: number, axis?: string) =>
@@ -1049,7 +1096,10 @@ const combo = computed(() => {
         lines,
         leftTicks: tickSet(leftMax, 'left'),
         rightTicks: hasRight ? tickSet(rightMax, 'right') : null,
-        catLabels: cats.map((c, ci) => ({ x: centerX(ci), label: c })),
+        catLabels: cats
+            .map((c, ci) => ({ x: centerX(ci), label: axis.trim(c), ci }))
+            .filter((l) => l.ci % axis.stride === 0),
+        rotatedCats: axis.rotated,
         // Per-category hover payload: every series' value there (for the tooltip)
         // and the line/area markers to highlight (bars show their own rect).
         hover: cats.map((cat, ci) => ({
@@ -1352,12 +1402,12 @@ const boxPlot = computed(() => {
     const padL = 38;
     const padR = 12;
     const padT = 12;
-    const padB = 30;
     const innerW = W - padL - padR;
-    const innerH = H - padT - padB;
-    const baselineY = padT + innerH;
     const n = cats.length;
     const slot = innerW / n;
+    const axis = catAxisLayout(cats, slot, padL + slot / 2);
+    const innerH = H - padT - axis.padB;
+    const baselineY = padT + innerH;
     const centerX = (i: number) => padL + slot * (i + 0.5);
     const boxW = Math.min(46, slot * 0.5);
     const yFor = (v: number) =>
@@ -1381,12 +1431,22 @@ const boxPlot = computed(() => {
         y: baselineY - f * innerH,
         label: formatNumber(dmin + f * (dmax - dmin)),
     }));
-    const stride = Math.max(1, Math.ceil(n / 8));
+    const stride = axis.rotated ? axis.stride : Math.max(1, Math.ceil(n / 8));
     const xLabels = cats
-        .map((label, i) => ({ x: centerX(i), label, i }))
+        .map((label, i) => ({ x: centerX(i), label: axis.trim(label), i }))
         .filter((l) => l.i % stride === 0 || l.i === n - 1);
 
-    return { W, H, padL, padR, baselineY, boxes, yTicks, xLabels };
+    return {
+        W,
+        H,
+        padL,
+        padR,
+        baselineY,
+        boxes,
+        yTicks,
+        xLabels,
+        rotatedCats: axis.rotated,
+    };
 });
 </script>
 
@@ -1446,7 +1506,12 @@ const boxPlot = computed(() => {
         </div>
         <header v-if="block.label" class="mb-3">
             <div class="flex items-center justify-between">
-                <p :class="['text-[11px] tracking-wider uppercase', t.textSubtle]">
+                <p
+                    :class="[
+                        'text-[11px] tracking-wider uppercase',
+                        t.textSubtle,
+                    ]"
+                >
                     {{ block.label }}
                 </p>
             </div>
@@ -1602,13 +1667,18 @@ const boxPlot = computed(() => {
                         @mouseenter="activeIdx = i"
                         @mousemove="activeIdx = i"
                     />
-                    <!-- x labels -->
+                    <!-- x labels: horizontal when they fit, truncated diagonals when not -->
                     <text
                         v-for="(c, i) in combo.catLabels"
                         :key="'x' + i"
                         :x="c.x"
                         :y="combo.baselineY + 14"
-                        text-anchor="middle"
+                        :text-anchor="combo.rotatedCats ? 'end' : 'middle'"
+                        :transform="
+                            combo.rotatedCats
+                                ? `rotate(-45 ${c.x} ${combo.baselineY + 14})`
+                                : undefined
+                        "
                         fill="currentColor"
                         fill-opacity="0.7"
                         style="font-size: 8px"
@@ -2270,13 +2340,20 @@ const boxPlot = computed(() => {
                                 "
                             />
                         </g>
-                        <!-- x labels -->
+                        <!-- x labels: horizontal when they fit, truncated diagonals when not -->
                         <text
                             v-for="(l, i) in boxPlot.xLabels"
                             :key="'x' + i"
                             :x="l.x"
                             :y="boxPlot.baselineY + 15"
-                            text-anchor="middle"
+                            :text-anchor="
+                                boxPlot.rotatedCats ? 'end' : 'middle'
+                            "
+                            :transform="
+                                boxPlot.rotatedCats
+                                    ? `rotate(-45 ${l.x} ${boxPlot.baselineY + 15})`
+                                    : undefined
+                            "
                             fill="currentColor"
                             fill-opacity="0.6"
                             style="font-size: 8px"
