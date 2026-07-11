@@ -517,6 +517,15 @@ const panelMode = ref<'chat' | 'manual'>('chat');
 const selectedBlockId = ref<string | null>(null);
 watch(panelMode, () => (selectedBlockId.value = null));
 
+// The right drawer needs the horizontal room the left panel occupies —
+// auto-hide it while a block is selected; the toggle brings it back.
+const leftPanelHidden = ref(false);
+watch(selectedBlockId, (id) => {
+    if (panelMode.value === 'manual') {
+        leftPanelHidden.value = id !== null;
+    }
+});
+
 function findBlockById(
     blocks: unknown[],
     id: string,
@@ -755,10 +764,16 @@ const isResizing = ref(false);
 
 // The resizer only makes sense when both panes are visible side by side.
 const resizable = computed(
-    () => fullscreenPanel.value === null && isLargeScreen.value,
+    () =>
+        fullscreenPanel.value === null &&
+        isLargeScreen.value &&
+        !leftPanelHidden.value,
 );
 
 const gridClass = computed(() => {
+    if (leftPanelHidden.value) {
+        return 'grid min-h-0 flex-1 grid-cols-1 gap-4';
+    }
     if (fullscreenPanel.value !== null) {
         // When fullscreen, the grid container becomes irrelevant since the
         // active pane is `position: fixed`. We still keep grid-cols-1 so
@@ -2657,6 +2672,7 @@ function statusTone(status: Message['status']): string {
                      honest today. -->
                 <section
                     v-if="panelMode === 'manual'"
+                    v-show="!leftPanelHidden"
                     :class="[
                         'relative flex min-h-0 flex-col rounded-sp-sm border border-soft bg-navy',
                         ...fullscreenClassFor('chat'),
@@ -2690,7 +2706,7 @@ function statusTone(status: Message['status']): string {
                 <section
                     v-else
                     ref="chatSection"
-                    v-show="fullscreenPanel !== 'work'"
+                    v-show="fullscreenPanel !== 'work' && !leftPanelHidden"
                     :class="[
                         'relative flex min-h-0 flex-col rounded-sp-sm border border-soft bg-navy',
                         ...fullscreenClassFor('chat'),
@@ -3480,6 +3496,22 @@ function statusTone(status: Message['status']): string {
                                     </button>
                                 </nav>
                             </template>
+                            <button
+                                type="button"
+                                class="inline-flex size-6 items-center justify-center rounded-pill border border-medium bg-surface text-ink-muted transition-colors hover:text-ink"
+                                :title="
+                                    leftPanelHidden
+                                        ? 'Mostrar panel izquierdo'
+                                        : 'Ocultar panel izquierdo'
+                                "
+                                @click="leftPanelHidden = !leftPanelHidden"
+                            >
+                                <PanelLeftOpen
+                                    v-if="leftPanelHidden"
+                                    class="size-3"
+                                />
+                                <PanelLeftClose v-else class="size-3" />
+                            </button>
 
                             <button
                                 type="button"
