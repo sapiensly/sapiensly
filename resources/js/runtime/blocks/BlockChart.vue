@@ -1420,10 +1420,13 @@ const boxPlot = computed(() => {
                     {{ block.label }}
                 </p>
             </div>
-            <!-- One executive line: what the chart shows and how to read it. -->
+            <!-- One executive line: what the chart shows and how to read it —
+                 styled as the card's real headline (the label above is the
+                 eyebrow). -->
             <p
                 v-if="block.description"
-                :class="['mt-0.5 text-[11px] leading-snug', t.textMuted]"
+                :class="['mt-0.5 leading-snug font-semibold', t.textMuted]"
+                style="font-size: medium"
             >
                 {{ block.description }}
             </p>
