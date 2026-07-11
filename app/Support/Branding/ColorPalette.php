@@ -24,7 +24,7 @@ final class ColorPalette
     /**
      * @return array{ramp: array<string, string>, soft: string, contrast: string, on_accent: string, chart: list<string>}
      */
-    public static function fromAccent(string $accent): array
+    public static function fromAccent(string $accent, string $chartMode = 'brand'): array
     {
         [$r, $g, $b] = self::toRgb($accent);
 
@@ -36,15 +36,32 @@ final class ColorPalette
         }
 
         [$h, $s, $l] = self::rgbToHsl($r, $g, $b);
-        $chart = [];
-        foreach (self::CHART_HUES as $i => $offset) {
-            $hue = fmod(($h + $offset + 360), 360);
-            // Clamp saturation/lightness into a professional band so series stay
-            // harmonious regardless of the base accent, with a touch of variation.
-            $sat = max(0.42, min(0.68, $s));
-            $light = max(0.46, min(0.60, $l + ($i % 2 === 0 ? 0.0 : -0.06)));
-            $chart[] = self::hslToHex($hue, $sat, $light);
-        }
+        $chart = match ($chartMode) {
+            // Monochromatic: the accent at alternating depths — reads as ONE
+            // brand voice; adjacency contrast comes from the lightness jumps.
+            'accent' => array_map(
+                fn (float $amount): string => $amount >= 0
+                    ? self::mix([$r, $g, $b], [255, 255, 255], $amount)
+                    : self::mix([$r, $g, $b], [0, 0, 0], -$amount),
+                [0.0, 0.45, -0.30, 0.65, -0.50, 0.25],
+            ),
+            // Neutral grayscale — for boards where color must carry NO
+            // categorical meaning at all.
+            'grays' => ['#4b5563', '#9ca3af', '#1f2937', '#d1d5db', '#6b7280', '#374151'],
+            default => (function () use ($h, $s, $l): array {
+                $chart = [];
+                foreach (self::CHART_HUES as $i => $offset) {
+                    $hue = fmod(($h + $offset + 360), 360);
+                    // Clamp saturation/lightness into a professional band so series stay
+                    // harmonious regardless of the base accent, with a touch of variation.
+                    $sat = max(0.42, min(0.68, $s));
+                    $light = max(0.46, min(0.60, $l + ($i % 2 === 0 ? 0.0 : -0.06)));
+                    $chart[] = self::hslToHex($hue, $sat, $light);
+                }
+
+                return $chart;
+            })(),
+        };
 
         return [
             'ramp' => $ramp,

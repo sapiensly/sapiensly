@@ -80,7 +80,9 @@ import {
     Database,
     Download,
     Eye,
+    Palette,
     Play,
+    SlidersHorizontal,
     FileText,
     GripVertical,
     ImagePlus,
@@ -476,6 +478,37 @@ const RESIZER_WIDTH = 12; // px — must match the middle grid track below.
 const CHAT_WIDTH_STORAGE_KEY = 'builder.chatWidth';
 
 const gridEl = ref<HTMLElement | null>(null);
+
+// ---- Dashboard toolbar: palette source + left-panel mode -------------------
+// Dashboards trade the generic app toolbar for two decisions that matter to a
+// board: WHICH palette voices the charts, and whether the left panel is the
+// chat builder or the manual editor (next iteration).
+const paletteMode = ref<string>(
+    ((props.preview?.settings ?? {}) as { palette_mode?: string })
+        .palette_mode ?? 'brand',
+);
+watch(
+    () => props.preview?.settings,
+    (next) => {
+        paletteMode.value =
+            ((next ?? {}) as { palette_mode?: string }).palette_mode ?? 'brand';
+    },
+);
+const PALETTE_MODES = [
+    { id: 'brand', label: 'Brandbook' },
+    { id: 'accent', label: 'Escala acento' },
+    { id: 'grays', label: 'Escala grises' },
+] as const;
+function setPaletteMode(mode: string) {
+    if (mode === paletteMode.value) return;
+    paletteMode.value = mode;
+    axios
+        .post(`/apps/${props.app.id}/builder/design`, { palette_mode: mode })
+        .then(() => router.reload({ only: ['preview', 'manifest'] }))
+        .catch(() => toast.error(t('apps.builder.brand_apply_failed')));
+}
+
+const panelMode = ref<'chat' | 'manual'>('chat');
 const chatWidth = ref(DEFAULT_CHAT_WIDTH);
 const isLargeScreen = ref(true);
 const isResizing = ref(false);
@@ -2168,11 +2201,69 @@ function statusTone(status: Message['status']): string {
                 </div>
 
                 <div class="flex items-center gap-2">
+                    <!-- Dashboard toolbar: palette source + panel mode + Run. -->
+                    <template v-if="app.kind === 'dashboard'">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
+                                >
+                                    <Palette class="size-3.5" />
+                                    Paleta
+                                    <span class="text-[10px] opacity-60">{{
+                                        PALETTE_MODES.find(
+                                            (m) => m.id === paletteMode,
+                                        )?.label
+                                    }}</span>
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                    v-for="m in PALETTE_MODES"
+                                    :key="m.id"
+                                    class="flex items-center justify-between gap-3"
+                                    @select="setPaletteMode(m.id)"
+                                >
+                                    {{ m.label }}
+                                    <Check
+                                        v-if="paletteMode === m.id"
+                                        class="size-3.5 text-accent-blue"
+                                    />
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        <span class="h-5 w-px bg-current opacity-15" />
+
+                        <div
+                            class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5"
+                        >
+                            <button
+                                v-for="m in [
+                                    { id: 'chat', label: 'Chat builder' },
+                                    { id: 'manual', label: 'Ajuste manual' },
+                                ] as const"
+                                :key="m.id"
+                                type="button"
+                                @click="panelMode = m.id"
+                                :class="[
+                                    'rounded-pill px-3 py-1 text-xs transition-colors',
+                                    panelMode === m.id
+                                        ? 'bg-accent-blue/15 text-accent-blue'
+                                        : 'text-ink-muted hover:text-ink',
+                                ]"
+                            >
+                                {{ m.label }}
+                            </button>
+                        </div>
+                    </template>
+
                     <!-- Accent colour: brand colour for buttons / links / highlights.
                          Collapsed to just the label until clicked; clicking it
                          again closes the swatch row. -->
                     <div
-                        v-if="viewMode === 'preview'"
+                        v-if="viewMode === 'preview' && app.kind !== 'dashboard'"
                         class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2 py-1"
                     >
                         <button
@@ -2235,7 +2326,11 @@ function statusTone(status: Message['status']): string {
 
                     <!-- Adopt the organization Brandbook in one click. -->
                     <button
-                        v-if="viewMode === 'preview' && hasOrgBrand"
+                        v-if="
+                            app.kind !== 'dashboard' &&
+                            viewMode === 'preview' &&
+                            hasOrgBrand
+                        "
                         type="button"
                         class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue"
                         :title="t('apps.builder.use_brand_hint')"
@@ -2247,6 +2342,7 @@ function statusTone(status: Message['status']): string {
 
                     <!-- Layers: every part of the app, one click away for consultation. -->
                     <button
+                        v-if="app.kind !== 'dashboard'"
                         type="button"
                         class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
                         @click="layersOpen = true"
@@ -2256,6 +2352,7 @@ function statusTone(status: Message['status']): string {
                     </button>
 
                     <div
+                        v-if="app.kind !== 'dashboard'"
                         class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5"
                     >
                         <button
@@ -2315,7 +2412,25 @@ function statusTone(status: Message['status']): string {
             </header>
 
             <div ref="gridEl" :class="gridClass" :style="gridStyle">
+                <!-- Manual adjust panel (dashboard mode) — next iteration
+                     builds the editor; the seat is reserved so the switch is
+                     honest today. -->
                 <section
+                    v-if="panelMode === 'manual'"
+                    :class="[
+                        'relative flex min-h-0 flex-col items-center justify-center gap-3 rounded-sp-sm border border-soft bg-navy p-8 text-center',
+                        ...fullscreenClassFor('chat'),
+                    ]"
+                >
+                    <SlidersHorizontal class="size-8 text-ink-subtle" />
+                    <p class="text-sm font-semibold text-ink">Ajuste manual</p>
+                    <p class="max-w-60 text-xs text-ink-muted">
+                        Edita títulos, gráficas y disposición sin pasar por el
+                        chat — muy pronto.
+                    </p>
+                </section>
+                <section
+                    v-else
                     ref="chatSection"
                     v-show="fullscreenPanel !== 'work'"
                     :class="[

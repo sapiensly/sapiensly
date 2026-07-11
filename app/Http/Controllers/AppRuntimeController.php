@@ -115,7 +115,10 @@ class AppRuntimeController extends Controller
 
         // Derive a professional palette from the effective accent and ship it so
         // the surface exposes it as CSS vars (--sp-accent-50…900, chart series).
-        $settings['palette'] = ColorPalette::fromAccent($settings['accent'] ?? OrganizationBrand::DEFAULT_ACCENT);
+        $settings['palette'] = ColorPalette::fromAccent(
+            $settings['accent'] ?? OrganizationBrand::DEFAULT_ACCENT,
+            (string) ($settings['palette_mode'] ?? 'brand'),
+        );
 
         return Inertia::render('runtime/Page', [
             'app' => [

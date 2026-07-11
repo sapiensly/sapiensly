@@ -266,6 +266,7 @@ class AppBuilderController extends Controller
             : ($manifest['settings'] ?? []);
         $settings['palette'] = ColorPalette::fromAccent(
             $settings['accent'] ?? OrganizationBrand::DEFAULT_ACCENT,
+            (string) ($settings['palette_mode'] ?? 'brand'),
         );
 
         return [
@@ -1068,14 +1069,15 @@ class AppBuilderController extends Controller
             'accent' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'theme' => ['nullable', 'string', Rule::in(['light', 'dark'])],
             'font' => ['nullable', 'string', Rule::in(['sans', 'serif', 'rounded', 'mono'])],
+            'palette_mode' => ['nullable', 'string', Rule::in(['brand', 'accent', 'grays'])],
         ]);
 
         $provided = array_filter(
-            ['accent' => $data['accent'] ?? null, 'theme' => $data['theme'] ?? null, 'font' => $data['font'] ?? null],
+            ['accent' => $data['accent'] ?? null, 'theme' => $data['theme'] ?? null, 'font' => $data['font'] ?? null, 'palette_mode' => $data['palette_mode'] ?? null],
             fn ($value) => $value !== null,
         );
         if ($provided === []) {
-            abort(422, 'Provide at least one of: accent, theme, font.');
+            abort(422, 'Provide at least one of: accent, theme, font, palette_mode.');
         }
 
         $manifest = $this->manifestService->getActiveManifest($app);
