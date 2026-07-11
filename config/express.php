@@ -52,4 +52,12 @@ return [
     */
     'spec_overrides' => env('DASHBOARD_EXPRESS_SPEC_OVERRIDES', false),
 
+    /*
+    | Short-TTL tenant cache over connected (MCP) reads: filter toggles,
+    | drills and reloads within the window serve from Redis instead of
+    | re-reading every live source. 0 disables. Keys carry the resolved
+    | arguments and acting user; TenantCache scopes them per tenant.
+    */
+    'connected_cache_ttl' => (int) env('DASHBOARD_EXPRESS_CONNECTED_CACHE_TTL', 90),
+
 ];

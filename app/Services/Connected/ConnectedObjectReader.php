@@ -2,6 +2,7 @@
 
 namespace App\Services\Connected;
 
+use App\Facades\TenantCache;
 use App\Models\Integration;
 use App\Models\User;
 use App\Services\Integrations\IntegrationCaller;
@@ -80,6 +81,10 @@ class ConnectedObjectReader
             if (isset($this->memo[$key])) {
                 return $this->memo[$key];
             }
+            $cached = $this->cacheGet($key);
+            if ($cached !== null) {
+                return $this->memo[$key] = $cached;
+            }
 
             $result = $this->listViaMcp($object, $integration, $op, $source, $arguments, $config, $actor);
             // A widened window can overshoot a tool's own max range ("El rango
@@ -91,6 +96,7 @@ class ConnectedObjectReader
             // ("The from field is required.") — synthesize the default window
             // and retry once, mirroring what authoring does from the schema.
             $result = $this->retryWithRequiredWindow($result, $arguments, $context, $object, $integration, $op, $source, $config, $actor);
+            $this->cachePut($key, $result);
 
             return $this->memo[$key] = $result;
         }
@@ -186,6 +192,46 @@ class ConnectedObjectReader
      * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
      */
     /**
+     * Short-TTL tenant cache over connected reads: a filter toggle, a drill
+     * click or a reload used to re-read EVERY source; within the TTL they
+     * serve from Redis instead. The memo key already carries the resolved
+     * arguments AND the acting user (per-user OAuth stays per-user), and
+     * TenantCache namespaces by tenant scope and FAILS CLOSED — outside a
+     * tenant scope (or with the TTL set to 0) the cache simply steps aside.
+     *
+     * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}|null
+     */
+    private function cacheGet(string $key): ?array
+    {
+        if ((int) config('express.connected_cache_ttl', 90) <= 0) {
+            return null;
+        }
+        try {
+            $hit = TenantCache::get('cread:'.sha1($key));
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return is_array($hit) && ($hit['ok'] ?? false) === true ? $hit : null;
+    }
+
+    /**
+     * @param  array{ok: bool, rows: list<array<string, mixed>>, error?: string}  $result
+     */
+    private function cachePut(string $key, array $result): void
+    {
+        $ttl = (int) config('express.connected_cache_ttl', 90);
+        if ($ttl <= 0 || ($result['ok'] ?? false) !== true) {
+            return; // only fresh successes are worth repeating
+        }
+        try {
+            TenantCache::put('cread:'.sha1($key), $result, $ttl);
+        } catch (\Throwable) {
+            // No tenant scope (or Redis hiccup) — the cache is an accelerator.
+        }
+    }
+
+    /**
      * The fully-resolved shape of one MCP read: config, arguments ({{…}}
      * resolved, window pushed down / shifted) and the memo key. Extracted so
      * list() and prefetch() compute IDENTICAL keys — a prefetch that resolves
@@ -247,6 +293,12 @@ class ConnectedObjectReader
             if (isset($this->memo[$key])) {
                 continue;
             }
+            $cached = $this->cacheGet($key);
+            if ($cached !== null) {
+                $this->memo[$key] = $cached;
+
+                continue;
+            }
             $groupKey = $integration->id.'|'.($read['actor']?->id ?? '-');
             $groups[$groupKey] ??= ['config' => $config, 'actor' => $read['actor'], 'calls' => [], 'meta' => []];
             if (isset($groups[$groupKey]['calls'][$key])) {
@@ -267,10 +319,12 @@ class ConnectedObjectReader
                     continue;
                 }
                 $meta = $group['meta'][$key];
-                $this->memo[$key] = [
+                $mapped = [
                     'ok' => true,
                     'rows' => $this->mapMcpRows($meta['object'], $meta['op'], $meta['source'], $result['data']),
                 ];
+                $this->cachePut($key, $mapped);
+                $this->memo[$key] = $mapped;
             }
         }
     }

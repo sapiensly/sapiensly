@@ -8,6 +8,7 @@ use App\Services\Integrations\IntegrationCaller;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Tools\McpClient;
+use App\Support\Tenancy\TenantContext;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -503,4 +504,38 @@ it('prefetch pools the distinct MCP reads once — list() then serves from memor
         ->and($a['rows'][0]['status'] ?? null)->toBe('abierto')
         ->and($b['ok'])->toBeTrue()
         ->and($b['rows'][0]['name'] ?? null)->toBe('Eva');
+});
+
+it('a repeat read within the TTL serves from the tenant cache — zero extra HTTP', function () {
+    // Filter toggles and drills re-resolve the whole page; within the short
+    // TTL the reads come from Redis (tenant-scoped, per-user keyed) instead
+    // of hitting the live source again.
+    config(['express.connected_cache_ttl' => 90, 'cache.default' => 'array']);
+    app(TenantContext::class)->set(null, $this->user->id);
+
+    Http::fake([
+        'mcp.example.com/*' => Http::sequence()
+            ->push(['result' => []], 200, ['Mcp-Session-Id' => 's1'])
+            ->push('', 202)
+            ->push(['result' => ['structuredContent' => ['tickets' => [
+                ['ticket_id' => 'T1', 'status' => 'abierto', 'metrics' => ['resolution_minutes' => 30]],
+            ]]]], 200),
+    ]);
+
+    $object = mcpTicketObject($this->integration->id);
+
+    // First request-cycle: reader instance A pays the live read.
+    $first = app()->make(ConnectedObjectReader::class)
+        ->list($object, $this->integration, [], $this->user, []);
+    expect($first['ok'])->toBeTrue();
+    Http::assertSentCount(3);
+
+    // Second request-cycle (fresh reader = fresh memo): served from cache.
+    $second = app()->make(ConnectedObjectReader::class)
+        ->list($object, $this->integration, [], $this->user, []);
+    Http::assertSentCount(3); // no new HTTP
+    expect($second['ok'])->toBeTrue()
+        ->and($second['rows'][0]['status'] ?? null)->toBe('abierto');
+
+    app(TenantContext::class)->forget();
 });
