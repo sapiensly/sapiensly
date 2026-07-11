@@ -1484,9 +1484,9 @@ class AppScaffolder
                 'id' => $this->id('blk'),
                 'type' => 'chart',
                 'label' => (string) ($chart['label'] ?? 'Chart'),
-                'description' => Str::limit(trim((string) ($chart['description'] ?? '')) !== ''
+                'description' => Str::ucfirst(Str::limit(trim((string) ($chart['description'] ?? '')) !== ''
                     ? trim((string) $chart['description'])
-                    : $this->chartDescription($chart, $chartType, $agg, $chartObject, $lang), 200),
+                    : $this->chartDescription($chart, $chartType, $agg, $chartObject, $lang), 200)),
                 'chart_type' => $chartType,
                 // Clicking a category toggles the select filter's param — the
                 // whole board re-scopes through wiring that already exists.

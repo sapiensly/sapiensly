@@ -1425,7 +1425,10 @@ const boxPlot = computed(() => {
                  eyebrow). -->
             <p
                 v-if="block.description"
-                :class="['mt-0.5 leading-snug font-semibold', t.textMuted]"
+                :class="[
+                    'mt-0.5 leading-snug font-semibold first-letter:uppercase',
+                    t.textMuted,
+                ]"
                 style="font-size: medium"
             >
                 {{ block.description }}
