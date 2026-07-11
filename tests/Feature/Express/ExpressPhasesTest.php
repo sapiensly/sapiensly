@@ -399,6 +399,7 @@ it('picks the time-series as primary over a fields-heavy mode:latest sample', fu
 });
 
 it('semantic gates fill voice and factual insights, judging overrides deterministically', function () {
+    config(['express.spec_overrides' => true]);
     // Overrides candidate references a nonexistent field → the judge must
     // reject it and keep the suggestion as-is.
     ExpressGateAgent::fake([
@@ -430,6 +431,7 @@ it('semantic gates fill voice and factual insights, judging overrides determinis
 });
 
 it('the insight fallback gives each card a DISTINCT real fact, not one filler line', function () {
+    config(['express.spec_overrides' => true]);
     // When voice_insights defaults, every card used to get the same "Registros
     // analizados: N" stamp (on a weekly series, N is just the bucket count).
     // Now each card draws a distinct computed fact: a measure avg, a rate, a
@@ -493,6 +495,7 @@ it('compile merges everything, enforces lints and applies the page as a version'
 });
 
 it('runs the whole chain end-to-end through ExpressPipeline', function () {
+    config(['express.spec_overrides' => true]);
     $catalog = Mockery::mock(IntegrationCatalog::class);
     $catalog->shouldReceive('knownShapes')->andReturn([]);
     $catalog->shouldReceive('tools')->andReturn(xph_catalog_tools());
@@ -544,6 +547,7 @@ it('runs the whole chain end-to-end through ExpressPipeline', function () {
 });
 
 it('trips the provider breaker on a gate timeout and SKIPS the remaining gates', function () {
+    config(['express.spec_overrides' => true]);
     // fit_check hangs (the exact prod symptom: cURL 28 at 45s). Every later
     // gate must then short-circuit to its default without touching the model —
     // a hung provider costs ONE 45s window, not 45s per gate.
@@ -1405,6 +1409,7 @@ it('one unbridged word does not sink an otherwise-grounded translation — super
 });
 
 it('an override that shrinks or mislabels is rejected whole — the suggestion is the floor', function () {
+    config(['express.spec_overrides' => true]);
     // Prod plr_01kx7adw2z: a wholesale charts override dropped the asked
     // donuts/gauge and relabeled a CATEGORY breakdown as «Causas Raíz».
     // Candidate 1 shrinks the charts list; candidate 2 keeps the count but
@@ -1438,6 +1443,7 @@ it('an override that shrinks or mislabels is rejected whole — the suggestion i
 });
 
 it('an override chart claiming a dimension its data does not carry is rejected', function () {
+    config(['express.spec_overrides' => true]);
     ExpressGateAgent::fake([
         fn ($prompt) => [
             'accept' => false,
@@ -1538,6 +1544,7 @@ it('structure words and observed column names no longer defeat the economy signa
 });
 
 it('the overrides decision is telemetry: applied flag and rejection reasons on the gate', function () {
+    config(['express.spec_overrides' => true]);
     ExpressGateAgent::fake([
         // Candidate shrinks the charts list → rejected with a reason.
         fn ($prompt) => [
@@ -1668,4 +1675,34 @@ it('a failed CUT read is named in the caveats — never a silent hole', function
     expect($targets->firstWhere('outcome', 'failed')['target'] ?? '')->toContain('priority')
         ->and($targets->firstWhere('outcome', 'failed')['error'] ?? '')->toContain('not supported')
         ->and($targets->where('outcome', 'ok'))->toHaveCount(1);
+});
+
+it('the overrides gate is RETIRED by default — no call, honest telemetry, voice intact', function () {
+    // Four consecutive prod builds saw every override candidate rejected at
+    // ~$0.012 + 5-9s each; the floor + grounded verifier cover its upside.
+    ExpressGateAgent::fake([
+        // Only voice_insights runs — an overrides candidate would misalign
+        // this queue and fail the count below.
+        fn ($prompt) => [
+            'title' => 'Panel de Tickets',
+            'purpose' => 'Operaciones: volumen y calidad.',
+            'insights' => collect(json_decode((string) $prompt, true)['tarjetas_sugeridas'] ?? [])
+                ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'dato real'])
+                ->values()->all(),
+        ],
+    ]);
+
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+    $run = xph_run($this);
+
+    app()->call(fn (SuggestSpecPhase $p) => $p->run($ctx, $run));
+    app()->call(fn (SemanticGatesPhase $p) => $p->run($ctx, $run));
+
+    expect($ctx->semantic['overrides'])->toBe([])
+        ->and($run->fresh()->gates['spec_overrides']['skipped'] ?? null)->toBe('disabled')
+        ->and($run->fresh()->gates['spec_overrides']['applied'] ?? null)->toBeFalse()
+        ->and($ctx->semantic['voice']['title'])->toBe('Panel de Tickets');
 });

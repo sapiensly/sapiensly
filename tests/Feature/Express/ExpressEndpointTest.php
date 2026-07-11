@@ -69,6 +69,7 @@ it('is hidden behind the flag', function () {
 });
 
 it('runs the job end-to-end: progress narrated, report applied, run succeeded', function () {
+    config(['express.spec_overrides' => true]);
     $integration = Integration::factory()->forUser($this->user)->create([
         'base_url' => 'https://mcp.example.com/v1',
         'is_mcp' => true,

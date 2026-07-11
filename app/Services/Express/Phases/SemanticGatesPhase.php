@@ -97,7 +97,9 @@ TXT;
         // Early-exit best-of-N: judge each candidate AS IT ARRIVES — an
         // accepted suggestion or a compiling delta skips the second model
         // call entirely (each one costs 20-45s on a slow model).
-        $attempts = $this->isSlowClass($context) ? 2 : 1;
+        $attempts = (bool) config('express.spec_overrides', false)
+            ? ($this->isSlowClass($context) ? 2 : 1)
+            : 0; // retired by default: the floor + grounded verifier cover it
         $chosen = [];
         $rejections = [];
         for ($i = 0; $i < $attempts; $i++) {
@@ -126,10 +128,12 @@ TXT;
         }
         $context->semantic['overrides'] = $chosen;
         // The decision itself is telemetry: two prod audits had to infer from
-        // page archaeology whether the override shipped or died.
+        // page archaeology whether the override shipped or died. A disabled
+        // gate says so instead of leaving a hole.
         $run->recordGate('spec_overrides', ($run->gates['spec_overrides'] ?? [])
             + array_filter([
                 'applied' => $chosen !== [],
+                'skipped' => $attempts === 0 ? 'disabled' : null,
                 'rejections' => $rejections !== [] ? $rejections : null,
             ], fn ($v) => $v !== null));
         if ($chosen !== []) {

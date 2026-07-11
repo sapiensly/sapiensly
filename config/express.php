@@ -43,4 +43,13 @@ return [
     */
     'economy' => env('DASHBOARD_EXPRESS_ECONOMY', false),
 
+    /*
+    | The spec-overrides gate (G-2a): a model pass that may refine the
+    | deterministic suggestion. Retired by default — once the fidelity floor
+    | shipped, four consecutive prod builds saw every candidate rejected
+    | («pierde forma», «label sin sustento») at ~$0.012 + 5-9s per build,
+    | while voice_insights and the grounded verifier cover its upside.
+    */
+    'spec_overrides' => env('DASHBOARD_EXPRESS_SPEC_OVERRIDES', false),
+
 ];
