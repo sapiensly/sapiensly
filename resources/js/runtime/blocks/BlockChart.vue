@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HBarChart from '@/components/charts/HBarChart.vue';
 import ParetoChart from '@/components/charts/ParetoChart.vue';
 import { router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -1864,47 +1865,16 @@ const boxPlot = computed(() => {
                 </div>
             </template>
 
-            <template v-else-if="block.chart_type === 'hbar'">
-                <!-- hbar = horizontal bars (progress-style) -->
-                <ul class="space-y-2">
-                    <li
-                        v-for="(s, i) in series"
-                        :key="s.label"
-                        :class="[
-                            'space-y-1 rounded-xs px-1 transition-colors hover:bg-surface',
-                            block.drill_param ? 'cursor-pointer' : '',
-                        ]"
-                        @click="onDrill(s.label)"
-                        @mouseenter="
-                            showTip(
-                                s.label,
-                                formatNumber(s.value),
-                                colorFor(s.label, i),
-                            )
-                        "
-                    >
-                        <div
-                            class="flex items-center justify-between text-[11px]"
-                        >
-                            <span :class="t.text">{{ s.label }}</span>
-                            <span :class="['tabular-nums', t.textMuted]">{{
-                                formatNumber(s.value)
-                            }}</span>
-                        </div>
-                        <div
-                            class="h-2 w-full overflow-hidden rounded-pill bg-surface"
-                        >
-                            <div
-                                class="h-full rounded-pill transition-all"
-                                :style="{
-                                    width: (s.value / maxValue) * 100 + '%',
-                                    background: colorFor(s.label, i),
-                                }"
-                            />
-                        </div>
-                    </li>
-                </ul>
-            </template>
+            <!-- hbar: ranked bars via the dedicated reusable component -->
+            <HBarChart
+                v-else-if="block.chart_type === 'hbar'"
+                :items="series"
+                :accent="chartColor(0)"
+                :measure-label="paretoMeasureLabel"
+                :category-noun="paretoNoun"
+                :clickable="!!block.drill_param"
+                @select="onDrill"
+            />
 
             <template v-else-if="block.chart_type === 'radar' && radar">
                 <!-- Series legend (only when multiple polygons are overlaid) -->
