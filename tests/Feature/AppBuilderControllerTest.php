@@ -1345,3 +1345,27 @@ it('the add-chart chat derives, dedupes and inserts a chart — no model involve
             'prompt' => 'agrega ventas por sucursal',
         ])->assertStatus(422);
 });
+
+it('manual adjust reorders a block before another — one versioned move', function () {
+    app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
+
+    // Second chart via the add-chat, then move it BEFORE the original.
+    $added = $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/charts", ['prompt' => 'top de backlog por motivo'])
+        ->assertOk()->json('block_id');
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/move", [
+            'block_id' => $added,
+            'target_block_id' => 'blk_manualbar0',
+            'position' => 'before',
+        ])->assertOk();
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $row = $manifest['pages'][0]['blocks'][0];
+    // The moved chart now precedes the original INSIDE its row, and the
+    // emptied source row was pruned.
+    expect(count($manifest['pages'][0]['blocks']))->toBe(1)
+        ->and($row['blocks'][0]['id'])->toBe($added)
+        ->and($row['blocks'][1]['id'])->toBe('blk_manualbar0');
+});

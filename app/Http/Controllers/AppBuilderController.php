@@ -1282,6 +1282,121 @@ class AppBuilderController extends Controller
     }
 
     /**
+     * Manual adjust: MOVE a block before/after another block on the same
+     * page — the drag-reorder gesture. The whole page's block tree is
+     * recomposed in PHP (source removed, emptied row pruned, inserted at the
+     * target) and lands as ONE replace op through the usual validation.
+     */
+    public function moveBlock(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'block_id' => ['required', 'string'],
+            'target_block_id' => ['required', 'string', 'different:block_id'],
+            'position' => ['required', Rule::in(['before', 'after'])],
+        ]);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        foreach ($manifest['pages'] ?? [] as $pageIndex => $page) {
+            $blocks = $page['blocks'] ?? [];
+            $source = $this->extractBlock($blocks, $data['block_id']);
+            if ($source === null) {
+                continue;
+            }
+            if (! $this->insertNearBlock($blocks, $data['target_block_id'], $data['position'], $source)) {
+                return response()->json(['error' => 'not_found', 'message' => 'El destino ya no existe en esta página.'], 404);
+            }
+
+            try {
+                $version = $this->manifestService->applyPatch(
+                    $app,
+                    [['op' => 'replace', 'path' => '/pages/'.$pageIndex.'/blocks', 'value' => array_values($blocks)]],
+                    $request->user(),
+                    'Ajuste manual: reordené «'.(string) ($source['label'] ?? $data['block_id']).'»',
+                );
+            } catch (InvalidManifestException $e) {
+                return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
+            }
+
+            return response()->json(['ok' => true, 'version' => $version->version_number]);
+        }
+
+        return response()->json(['error' => 'not_found', 'message' => 'Ese bloque ya no existe.'], 404);
+    }
+
+    /**
+     * Remove a block (top level or inside row containers) and return it;
+     * a container left empty by the extraction is pruned.
+     *
+     * @param  list<array<string, mixed>>  $blocks  mutated in place
+     * @return array<string, mixed>|null
+     */
+    private function extractBlock(array &$blocks, string $blockId): ?array
+    {
+        foreach ($blocks as $i => $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+            if (($block['id'] ?? null) === $blockId) {
+                array_splice($blocks, $i, 1);
+
+                return $block;
+            }
+            if (($block['type'] ?? null) === 'container' && is_array($block['blocks'] ?? null)) {
+                $inner = $block['blocks'];
+                $hit = $this->extractBlock($inner, $blockId);
+                if ($hit !== null) {
+                    if ($inner === []) {
+                        array_splice($blocks, $i, 1); // prune the emptied row
+                    } else {
+                        $blocks[$i]['blocks'] = array_values($inner);
+                    }
+
+                    return $hit;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Insert a block before/after the target (top level or inside row
+     * containers). True when the target was found.
+     *
+     * @param  list<array<string, mixed>>  $blocks  mutated in place
+     * @param  array<string, mixed>  $insert
+     */
+    private function insertNearBlock(array &$blocks, string $targetId, string $position, array $insert): bool
+    {
+        foreach ($blocks as $i => $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+            if (($block['id'] ?? null) === $targetId) {
+                array_splice($blocks, $position === 'before' ? $i : $i + 1, 0, [$insert]);
+
+                return true;
+            }
+            if (($block['type'] ?? null) === 'container' && is_array($block['blocks'] ?? null)) {
+                $inner = $block['blocks'];
+                if ($this->insertNearBlock($inner, $targetId, $position, $insert)) {
+                    $blocks[$i]['blocks'] = array_values($inner);
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * JSON pointer + node of a block id anywhere in the manifest's pages.
      *
      * @param  array<string, mixed>  $manifest

@@ -82,6 +82,7 @@ import {
     Database,
     Download,
     Eye,
+    GripHorizontal,
     Palette,
     Play,
     SlidersHorizontal,
@@ -602,8 +603,23 @@ function updateSelectionRect() {
         height: er.height,
     };
 }
+let rectObserver: ResizeObserver | null = null;
+function observeSelection() {
+    rectObserver?.disconnect();
+    const el = selectedEl();
+    const pane = previewPane.value;
+    if (!el || !pane) return;
+    rectObserver = new ResizeObserver(updateSelectionRect);
+    rectObserver.observe(el);
+    rectObserver.observe(pane);
+}
 watch([selectedBlockId, () => props.preview], () => {
-    nextTick(() => setTimeout(updateSelectionRect, 50));
+    nextTick(() =>
+        setTimeout(() => {
+            updateSelectionRect();
+            observeSelection();
+        }, 80),
+    );
 });
 onMounted(() => {
     previewPane.value?.addEventListener('scroll', updateSelectionRect, {
@@ -612,6 +628,7 @@ onMounted(() => {
     window.addEventListener('resize', updateSelectionRect, { passive: true });
 });
 onUnmounted(() => {
+    rectObserver?.disconnect();
     previewPane.value?.removeEventListener('scroll', updateSelectionRect);
     window.removeEventListener('resize', updateSelectionRect);
 });
@@ -622,6 +639,69 @@ function selectedEl(): HTMLElement | null {
           ) as HTMLElement | null)
         : null;
 }
+// Reorder: drag the selected card by its top handle; the drop target is
+// whichever card sits under the pointer, before/after by which half the
+// pointer is in. One versioned move op on release.
+const dropTarget = ref<{
+    id: string;
+    position: 'before' | 'after';
+    rect: { left: number; top: number; width: number; height: number };
+} | null>(null);
+function startBlockMove(down: PointerEvent) {
+    const blockId = selectedBlockId.value;
+    const pane = previewPane.value;
+    if (!blockId || !pane) return;
+    down.preventDefault();
+    dragHint.value = 'Suelta sobre otra card';
+    const move = (e: PointerEvent) => {
+        const under = document
+            .elementFromPoint(e.clientX, e.clientY)
+            ?.closest?.('[data-block-id]') as HTMLElement | null;
+        if (!under || under.dataset.blockId === blockId) {
+            dropTarget.value = null;
+            return;
+        }
+        const r = under.getBoundingClientRect();
+        const pr = pane.getBoundingClientRect();
+        const horizontal = r.width < pane.clientWidth * 0.9;
+        const position = horizontal
+            ? e.clientX < r.left + r.width / 2
+                ? 'before'
+                : 'after'
+            : e.clientY < r.top + r.height / 2
+              ? 'before'
+              : 'after';
+        dropTarget.value = {
+            id: under.dataset.blockId ?? '',
+            position,
+            rect: {
+                left: r.left - pr.left + pane.scrollLeft,
+                top: r.top - pr.top + pane.scrollTop,
+                width: r.width,
+                height: r.height,
+            },
+        };
+    };
+    const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        dragHint.value = null;
+        const target = dropTarget.value;
+        dropTarget.value = null;
+        if (!target || !target.id) return;
+        axios
+            .post(`/apps/${props.app.id}/builder/blocks/move`, {
+                block_id: blockId,
+                target_block_id: target.id,
+                position: target.position,
+            })
+            .then(afterManualChange)
+            .catch(() => toast.error('No se pudo mover la card.'));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+}
+
 function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
     const el = selectedEl();
     const blockId = selectedBlockId.value;
@@ -3524,6 +3604,43 @@ function statusTone(status: Message['status']): string {
                             @saved="afterManualChange"
                             @close="selectedBlockId = null"
                         />
+                        <!-- 12-column guide while manual mode is active -->
+                        <div
+                            v-if="panelMode === 'manual'"
+                            class="pointer-events-none absolute inset-x-5 top-5 bottom-5 z-[5]"
+                        >
+                            <div
+                                class="mx-auto grid h-full w-full grid-cols-12 gap-4"
+                                :class="
+                                    app.kind === 'dashboard'
+                                        ? 'max-w-[1200px]'
+                                        : ''
+                                "
+                            >
+                                <div
+                                    v-for="i in 12"
+                                    :key="i"
+                                    class="h-full rounded-sp-sm border border-dashed border-accent-blue/15 bg-accent-blue/[0.025]"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Drop indicator while reordering -->
+                        <div
+                            v-if="dropTarget"
+                            class="pointer-events-none absolute z-40 rounded-pill bg-accent-blue"
+                            :style="{
+                                left:
+                                    (dropTarget.position === 'before'
+                                        ? dropTarget.rect.left - 3
+                                        : dropTarget.rect.left +
+                                          dropTarget.rect.width) + 'px',
+                                top: dropTarget.rect.top + 'px',
+                                width: '5px',
+                                height: dropTarget.rect.height + 'px',
+                            }"
+                        />
+
                         <!-- Resize handles on the selected card -->
                         <template
                             v-if="
@@ -3532,6 +3649,18 @@ function statusTone(status: Message['status']): string {
                                 selectionRect
                             "
                         >
+                            <button
+                                type="button"
+                                class="absolute z-40 flex h-6 w-12 cursor-grab items-center justify-center rounded-pill bg-accent-blue text-white shadow active:cursor-grabbing"
+                                :style="{
+                                    left: selectionRect.left + selectionRect.width / 2 - 24 + 'px',
+                                    top: selectionRect.top - 12 + 'px',
+                                }"
+                                title="Arrastra para reordenar"
+                                @pointerdown="startBlockMove($event)"
+                            >
+                                <GripHorizontal class="size-4" />
+                            </button>
                             <button
                                 type="button"
                                 class="absolute z-40 h-10 w-2 cursor-ew-resize rounded-pill bg-accent-blue shadow"
