@@ -365,6 +365,89 @@ class McpClient
     }
 
     /**
+     * Call SEVERAL tools on one MCP server CONCURRENTLY — a complex dashboard
+     * resolves 7-11 live reads that used to run serially (sum of latencies);
+     * one session handshake, then Http::pool turns the sum into the max.
+     *
+     * @param  array<string, mixed>  $config  Decrypted MCP tool config.
+     * @param  array<string, array{name: string, arguments: array<string, mixed>}>  $calls  keyed by caller's key
+     * @return array<string, array{ok: bool, data?: array<string, mixed>|null, error?: string}>
+     */
+    public function poolToolCalls(array $config, ?User $user, array $calls, int $maxChars = 2_000_000): array
+    {
+        $endpoint = (string) ($config['endpoint'] ?? '');
+        if ($endpoint === '' || $calls === []) {
+            return [];
+        }
+
+        $this->ssrfGuard->assertHostAllowed($endpoint);
+        $authHeaders = $this->authResolver->resolveHeaders($config, $user);
+        $session = $this->session($endpoint, $authHeaders);
+
+        $headers = array_merge($authHeaders, [
+            'Accept' => 'application/json, text/event-stream',
+            'Content-Type' => 'application/json',
+        ]);
+        if ($session !== '') {
+            $headers['Mcp-Session-Id'] = $session;
+        }
+
+        $responses = Http::pool(function ($pool) use ($calls, $headers, $endpoint) {
+            $id = 100;
+            foreach ($calls as $key => $call) {
+                $pool->as((string) $key)
+                    ->connectTimeout(self::CONNECT_TIMEOUT_SECONDS)
+                    ->timeout(self::TIMEOUT_SECONDS)
+                    ->withHeaders($headers)
+                    ->post($endpoint, [
+                        'jsonrpc' => '2.0',
+                        'id' => $id++,
+                        'method' => 'tools/call',
+                        'params' => [
+                            'name' => $call['name'],
+                            'arguments' => empty($call['arguments']) ? new \stdClass : $call['arguments'],
+                        ],
+                    ]);
+            }
+        });
+
+        $out = [];
+        foreach ($calls as $key => $call) {
+            $response = $responses[(string) $key] ?? null;
+            if (! $response instanceof Response) {
+                $out[$key] = ['ok' => false, 'error' => $response instanceof \Throwable ? $response->getMessage() : 'no response'];
+
+                continue;
+            }
+            try {
+                if (! $response->successful()) {
+                    $out[$key] = ['ok' => false, 'error' => "MCP server returned HTTP {$response->status()} for tools/call."];
+
+                    continue;
+                }
+                $payload = $this->decode($response);
+                if (isset($payload['error'])) {
+                    $out[$key] = ['ok' => false, 'error' => 'MCP server error on tools/call: '.($payload['error']['message'] ?? 'unknown error')];
+
+                    continue;
+                }
+                $result = is_array($payload['result'] ?? null) ? $payload['result'] : [];
+                if (($result['isError'] ?? false) === true) {
+                    $message = trim($this->stringifyToolResult($result, 500));
+                    $out[$key] = ['ok' => false, 'error' => "The MCP tool '{$call['name']}' returned an error: ".($message !== '' ? $message : 'unknown error')];
+
+                    continue;
+                }
+                $out[$key] = ['ok' => true, 'data' => $this->decodeToolData($result, $maxChars)];
+            } catch (\Throwable $e) {
+                $out[$key] = ['ok' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Decode a JSON-RPC response that may be plain JSON or SSE-framed.
      *
      * @return array<string, mixed>

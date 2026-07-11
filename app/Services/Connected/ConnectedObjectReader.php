@@ -76,19 +76,7 @@ class ConnectedObjectReader
         // desk live) calls a tool instead of a REST endpoint. The mapping
         // (field_map/id_path) and in-memory aggregation downstream are identical.
         if ($integration->is_mcp || ! empty($op['mcp_tool'])) {
-            $config = $this->mcpConfig($integration);
-            // Resolve {{…}} argument expressions against the request context, then
-            // best-effort push the picked date-range window down into the tool's
-            // start-date argument. The resolved arguments key the memo, so two
-            // different presets don't collide on one cached read.
-            $arguments = $this->resolveArguments(is_array($op['arguments'] ?? null) ? $op['arguments'] : [], $context);
-            $arguments = $this->pushDownDateRange($arguments, $query, $context, $op, $config, $actor);
-            if (($context['__window'] ?? null) === 'previous') {
-                // A KPI's live previous-window compare: same tool, the RESOLVED
-                // window (authored or picker-pushed) shifted back one span.
-                $arguments = $this->shiftWindowToPrevious($arguments, $context);
-            }
-            $key = $this->memoKey($object, $integration, $op, $arguments, $actor);
+            [$config, $arguments, $key] = $this->mcpPlan($object, $integration, $op, $query, $actor, $context);
             if (isset($this->memo[$key])) {
                 return $this->memo[$key];
             }
@@ -197,6 +185,121 @@ class ConnectedObjectReader
      * @param  array<string, mixed>  $config  the MCP client config (from mcpConfig)
      * @return array{ok: bool, rows: list<array<string, mixed>>, error?: string}
      */
+    /**
+     * The fully-resolved shape of one MCP read: config, arguments ({{…}}
+     * resolved, window pushed down / shifted) and the memo key. Extracted so
+     * list() and prefetch() compute IDENTICAL keys — a prefetch that resolves
+     * arguments differently would warm nothing.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $op
+     * @param  array<string, mixed>  $query
+     * @param  array<string, mixed>  $context
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: string}
+     */
+    private function mcpPlan(array $object, Integration $integration, array $op, array $query, ?User $actor, array $context): array
+    {
+        $config = $this->mcpConfig($integration);
+        // Resolve {{…}} argument expressions against the request context, then
+        // best-effort push the picked date-range window down into the tool's
+        // start-date argument. The resolved arguments key the memo, so two
+        // different presets don't collide on one cached read.
+        $arguments = $this->resolveArguments(is_array($op['arguments'] ?? null) ? $op['arguments'] : [], $context);
+        $arguments = $this->pushDownDateRange($arguments, $query, $context, $op, $config, $actor);
+        if (($context['__window'] ?? null) === 'previous') {
+            // A KPI's live previous-window compare: same tool, the RESOLVED
+            // window (authored or picker-pushed) shifted back one span.
+            $arguments = $this->shiftWindowToPrevious($arguments, $context);
+        }
+
+        return [$config, $arguments, $this->memoKey($object, $integration, $op, $arguments, $actor)];
+    }
+
+    /**
+     * Warm the memo for a page's DISTINCT MCP reads concurrently. A complex
+     * dashboard used to pay 7-11 serial round-trips before its first byte;
+     * pooling turns the sum into the max. Failures are left un-memoized so
+     * the serial path keeps its retry ladder (max-range, required-window);
+     * prefetch can only make a page faster, never break it.
+     *
+     * @param  list<array{object: array<string, mixed>, integration: Integration, query: array<string, mixed>, actor: ?User, context: array<string, mixed>}>  $reads
+     */
+    public function prefetch(array $reads): void
+    {
+        $groups = [];
+        foreach ($reads as $read) {
+            $object = $read['object'];
+            $integration = $read['integration'];
+            $source = $object['source'] ?? [];
+            $op = $source['operations']['list'] ?? null;
+            if (! is_array($op) || ! ($integration->is_mcp || ! empty($op['mcp_tool']))) {
+                continue;
+            }
+            $toolName = trim((string) ($op['mcp_tool'] ?? ''));
+            if ($toolName === '') {
+                continue;
+            }
+            try {
+                [$config, $arguments, $key] = $this->mcpPlan($object, $integration, $op, $read['query'], $read['actor'], $read['context']);
+            } catch (\Throwable) {
+                continue; // planning failed — the serial path will surface it
+            }
+            if (isset($this->memo[$key])) {
+                continue;
+            }
+            $groupKey = $integration->id.'|'.($read['actor']?->id ?? '-');
+            $groups[$groupKey] ??= ['config' => $config, 'actor' => $read['actor'], 'calls' => [], 'meta' => []];
+            if (isset($groups[$groupKey]['calls'][$key])) {
+                continue; // same read referenced by several blocks
+            }
+            $groups[$groupKey]['calls'][$key] = ['name' => $toolName, 'arguments' => $arguments];
+            $groups[$groupKey]['meta'][$key] = ['object' => $object, 'op' => $op, 'source' => $source];
+        }
+
+        foreach ($groups as $group) {
+            try {
+                $results = $this->mcp->poolToolCalls($group['config'], $group['actor'], $group['calls'], self::MCP_MAX_CHARS);
+            } catch (\Throwable) {
+                continue; // handshake/transport failed — serial path decides
+            }
+            foreach ($results as $key => $result) {
+                if (($result['ok'] ?? false) !== true || ! is_array($result['data'] ?? null)) {
+                    continue;
+                }
+                $meta = $group['meta'][$key];
+                $this->memo[$key] = [
+                    'ok' => true,
+                    'rows' => $this->mapMcpRows($meta['object'], $meta['op'], $meta['source'], $result['data']),
+                ];
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $op
+     * @param  array<string, mixed>  $source
+     * @param  array<string, mixed>  $decoded
+     * @return list<array<string, mixed>>
+     */
+    private function mapMcpRows(array $object, array $op, array $source, array $decoded): array
+    {
+        $collectionPath = $op['collection_path'] ?? null;
+        $raw = $collectionPath ? (array) Arr::get($decoded, $collectionPath, []) : $decoded;
+
+        // A single object (not a list) → treat it as one row.
+        if ($raw !== [] && Arr::isAssoc($raw)) {
+            $raw = [$raw];
+        }
+
+        $fieldSlugById = collect($object['fields'] ?? [])->pluck('slug', 'id')->all();
+
+        return array_map(
+            fn ($row) => $this->mapRow((array) $row, $source, $fieldSlugById),
+            array_values($raw),
+        );
+    }
+
     private function listViaMcp(array $object, Integration $integration, array $op, array $source, array $arguments, array $config, ?User $actor = null): array
     {
         $toolName = trim((string) ($op['mcp_tool'] ?? ''));
@@ -214,21 +317,7 @@ class ConnectedObjectReader
             return ['ok' => false, 'rows' => [], 'error' => 'The MCP tool did not return JSON rows.'];
         }
 
-        $collectionPath = $op['collection_path'] ?? null;
-        $raw = $collectionPath ? (array) Arr::get($decoded, $collectionPath, []) : $decoded;
-
-        // A single object (not a list) → treat it as one row.
-        if ($raw !== [] && Arr::isAssoc($raw)) {
-            $raw = [$raw];
-        }
-
-        $fieldSlugById = collect($object['fields'] ?? [])->pluck('slug', 'id')->all();
-        $rows = array_map(
-            fn ($row) => $this->mapRow((array) $row, $source, $fieldSlugById),
-            array_values($raw),
-        );
-
-        return ['ok' => true, 'rows' => $rows];
+        return ['ok' => true, 'rows' => $this->mapMcpRows($object, $op, $source, $decoded)];
     }
 
     /**

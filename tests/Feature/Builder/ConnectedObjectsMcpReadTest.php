@@ -8,6 +8,7 @@ use App\Services\Integrations\IntegrationCaller;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Tools\McpClient;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 /**
@@ -455,4 +456,51 @@ it('a __window previous read shifts the RESOLVED window one span back', function
     $result = $reader->list($object, $this->integration, [], $this->user, ['__window' => 'previous']);
 
     expect($result['ok'])->toBeTrue();
+});
+
+it('prefetch pools the distinct MCP reads once — list() then serves from memory', function () {
+    // A complex dashboard used to pay 7-11 SERIAL MCP round-trips before its
+    // first byte. prefetch() resolves the same memo keys as list() and warms
+    // them concurrently; the block loop then reads memory.
+    Http::fake([
+        'mcp.example.com/*' => Http::sequence()
+            ->push(['result' => []], 200, ['Mcp-Session-Id' => 's1'])   // initialize
+            ->push('', 202)                                              // notifications/initialized
+            ->push(['result' => ['structuredContent' => ['tickets' => [
+                ['ticket_id' => 'T1', 'status' => 'abierto', 'metrics' => ['resolution_minutes' => 30]],
+            ]]]], 200)
+            ->push(['result' => ['structuredContent' => ['agents' => [
+                ['agent_id' => 'A1', 'name' => 'Eva'],
+            ]]]], 200),
+    ]);
+
+    $tickets = mcpTicketObject($this->integration->id);
+    $agents = [
+        'id' => 'obj_agentsobj', 'slug' => 'agents', 'name' => 'Agent',
+        'fields' => [['id' => 'fld_agentname00', 'slug' => 'name', 'name' => 'Name', 'type' => 'string']],
+        'source' => [
+            'type' => 'connected', 'integration_id' => $this->integration->id, 'id_path' => 'agent_id',
+            'operations' => ['list' => ['mcp_tool' => 'list_agents', 'arguments' => [], 'collection_path' => 'agents']],
+            'field_map' => [['field_id' => 'fld_agentname00', 'external_path' => 'name']],
+        ],
+    ];
+
+    $reader = app(ConnectedObjectReader::class);
+    $reader->prefetch([
+        ['object' => $tickets, 'integration' => $this->integration, 'query' => [], 'actor' => $this->user, 'context' => []],
+        ['object' => $agents, 'integration' => $this->integration, 'query' => [], 'actor' => $this->user, 'context' => []],
+        // Same read referenced by a second block — must not call twice.
+        ['object' => $tickets, 'integration' => $this->integration, 'query' => [], 'actor' => $this->user, 'context' => []],
+    ]);
+
+    Http::assertSentCount(4); // init + notify + 2 pooled calls
+
+    $a = $reader->list($tickets, $this->integration, [], $this->user, []);
+    $b = $reader->list($agents, $this->integration, [], $this->user, []);
+
+    Http::assertSentCount(4); // memo hits — zero extra HTTP
+    expect($a['ok'])->toBeTrue()
+        ->and($a['rows'][0]['status'] ?? null)->toBe('abierto')
+        ->and($b['ok'])->toBeTrue()
+        ->and($b['rows'][0]['name'] ?? null)->toBe('Eva');
 });

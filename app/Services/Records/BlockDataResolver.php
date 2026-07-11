@@ -45,6 +45,7 @@ class BlockDataResolver
         // Remember the top-level page blocks across recursion: a filter_bar
         // resolves its date-range meta by scanning the whole page for the
         // date-driven data source it governs.
+        $isRootCall = ! array_key_exists('__page_blocks', $context);
         $context['__page_blocks'] ??= $blocks;
 
         // The page's date_range control (if any) as a range_start() expression,
@@ -54,6 +55,13 @@ class BlockDataResolver
         // authoring-time window while the rest of the page follows the picker.
         if (! array_key_exists('__page_range_start_expr', $context)) {
             $context['__page_range_start_expr'] = $this->pageRangeStartExpression($context['__page_blocks']);
+        }
+
+        // Warm every distinct connected read CONCURRENTLY before the block
+        // loop touches the first one — a complex dashboard used to pay its
+        // 7-11 MCP round-trips in sequence.
+        if ($isRootCall) {
+            $this->prefetchConnectedReads($app, $blocks, $manifest, $context);
         }
 
         $data = [];
@@ -786,5 +794,56 @@ class BlockDataResolver
         }
 
         return $out;
+    }
+
+    /**
+     * Pool the page's distinct connected reads (one per object, plus the
+     * previous-window variant when any KPI compares against it) into the
+     * reader's memo. Strictly an accelerator: any failure here is swallowed
+     * and the serial path — with its retry ladder — decides for real.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    private function prefetchConnectedReads(App $app, array $blocks, array $manifest, array $context): void
+    {
+        try {
+            $json = json_encode($blocks) ?: '';
+            preg_match_all('/"object_id":"([^"]+)"/', $json, $m);
+            $ids = array_values(array_unique($m[1] ?? []));
+            if ($ids === []) {
+                return;
+            }
+            $objects = collect($manifest['objects'] ?? [])->filter(
+                fn ($o): bool => is_array($o)
+                    && in_array($o['id'] ?? null, $ids, true)
+                    && ($o['source']['type'] ?? null) === 'connected',
+            );
+            if ($objects->isEmpty()) {
+                return;
+            }
+
+            $actorRaw = $context['__actor'] ?? auth()->user();
+            $actor = $actorRaw instanceof User ? $actorRaw : null;
+            $hasPreviousWindow = str_contains($json, '"compare_window":"previous"');
+
+            $reads = [];
+            foreach ($objects as $object) {
+                $integration = $this->integrations->resolve($app, $object['source']['integration_id'] ?? null);
+                if ($integration === null) {
+                    continue;
+                }
+                $reads[] = ['object' => $object, 'integration' => $integration, 'query' => [], 'actor' => $actor, 'context' => $context];
+                if ($hasPreviousWindow) {
+                    $reads[] = ['object' => $object, 'integration' => $integration, 'query' => [], 'actor' => $actor, 'context' => ['__window' => 'previous'] + $context];
+                }
+            }
+            if ($reads !== []) {
+                $this->connected->prefetch($reads);
+            }
+        } catch (Throwable $e) {
+            Log::debug('Connected prefetch skipped', ['error' => $e->getMessage()]);
+        }
     }
 }
