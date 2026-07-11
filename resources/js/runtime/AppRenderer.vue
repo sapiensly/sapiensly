@@ -400,6 +400,10 @@ function colSpanStyle(block: AnyBlock): Record<string, string> | undefined {
         out.flexGrow = String(span);
         out.flexBasis = '0%';
         out.minWidth = '0';
+        // The cap makes the span REAL for a lone card too: flex-grow only
+        // splits free space, so a single child always filled its row and
+        // could never be narrowed to make room for a neighbour.
+        out.maxWidth = `${((span / 12) * 100).toFixed(3)}%`;
     }
     if (minHeight) out.minHeight = `${minHeight}px`;
     return Object.keys(out).length ? out : undefined;

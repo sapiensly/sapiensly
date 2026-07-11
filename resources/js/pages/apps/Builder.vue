@@ -785,6 +785,7 @@ function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
             dragHint.value = `${span} / 12`;
             el.style.flexGrow = String(span);
             el.style.flexBasis = '0%';
+            el.style.maxWidth = `${((span / 12) * 100).toFixed(3)}%`;
         } else {
             const h = rect.height + (e.clientY - startY);
             minH = Math.min(640, Math.max(200, Math.round(h / 40) * 40));
