@@ -1637,3 +1637,28 @@ it('the enum-cut cap counts distinct VALUES — one word on two tools costs one 
     expect($cuts->pluck('cut')->unique()->values()->all())->toBe(['reason', 'cause', 'priority'])
         ->and($cuts)->toHaveCount(4); // 3 values + 1 backfilled repeat
 });
+
+it('a failed CUT read is named in the caveats — never a silent hole', function () {
+    // Prod lost the priority cut twice (the source rejects
+    // dimension=priority) and only object-count arithmetic revealed it.
+    $ctx = xph_ctx($this, 'motivos y prioridad');
+    $ctx->integration = $this->integration;
+    $ctx->chosenTools = ['get-tickets-by-dimension-tool'];
+    $ctx->chosenCuts = [['tool' => 'get-tickets-by-dimension-tool', 'arguments' => ['dimension' => 'priority'], 'cut' => 'priority']];
+
+    $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
+    $authoring->shouldReceive('author')->twice()
+        ->andReturnUsing(function ($user, $integration, array $spec) {
+            if (($spec['arguments']['dimension'] ?? null) === 'priority') {
+                return ['ok' => false, 'error' => 'dimension=priority not supported'];
+            }
+            $object = xph_object('base_ok', $integration->id);
+
+            return ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'ok'];
+        });
+
+    (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, xph_run($this));
+
+    expect(collect($ctx->coverageNotes)->implode(' '))->toContain('**priority** no se pudo leer')
+        ->and(collect($ctx->notes)->implode(' '))->toContain('corte priority');
+});

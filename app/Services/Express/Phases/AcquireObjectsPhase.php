@@ -84,16 +84,19 @@ class AcquireObjectsPhase implements ExpressPhase
             // One tool that throws (a slow/oversized source, a transport error)
             // must not abort the whole build — note it and move on, exactly like
             // an ok:false. Only ZERO successes fails the run (below).
+            $targetLabel = $target['cut'] !== null
+                ? "el corte {$target['cut']} de {$toolName}"
+                : "el tool {$toolName}";
             try {
                 $authored = $this->authoring->author($context->user, $context->integration, $spec, $manifest);
             } catch (\Throwable $e) {
-                $context->note("El tool {$toolName} no se pudo leer: ".$e->getMessage());
+                $this->noteReadFailure($context, $target, $targetLabel, $e->getMessage());
 
                 continue;
             }
 
             if (($authored['ok'] ?? false) !== true) {
-                $context->note("El tool {$toolName} no se pudo leer: ".($authored['error'] ?? 'error desconocido'));
+                $this->noteReadFailure($context, $target, $targetLabel, (string) ($authored['error'] ?? 'error desconocido'));
 
                 continue;
             }
@@ -134,5 +137,21 @@ class AcquireObjectsPhase implements ExpressPhase
         );
 
         $context->note('Objetos aplicados en la versión v'.$version->version_number.'.');
+    }
+
+    /**
+     * A failed read must be VISIBLE, not a silent hole: prod lost the
+     * priority cut twice in a row (the source rejects dimension=priority)
+     * and only object-count arithmetic revealed it. Cuts are the user's own
+     * named dimensions, so their failures also ride the report caveats.
+     *
+     * @param  array{tool: string, arguments: ?array<string, string>, cut: ?string}  $target
+     */
+    private function noteReadFailure(ExpressContext $context, array $target, string $targetLabel, string $error): void
+    {
+        $context->note(ucfirst($targetLabel).' no se pudo leer: '.$error);
+        if ($target['cut'] !== null) {
+            $context->coverageNotes[] = '**'.$target['cut'].'** no se pudo leer de la fuente ('.Str::limit($error, 120, '…').') — ese desglose no está en el tablero.';
+        }
     }
 }

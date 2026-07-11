@@ -191,6 +191,10 @@ TXT,
         // funnel, heatmap live nowhere else) — the verifier may rename or
         // retype freely elsewhere, but an asked form is not its to take.
         $askedForm = fn (?array $b): bool => in_array($b['chart_type'] ?? null, ['pareto', 'funnel', 'heatmap'], true);
+        // Retyping INTO an intent form duplicates it: the audited run ended
+        // with two paretos because the verifier promoted an hbar while the
+        // asked pareto already existed. One intent form per board.
+        $formsOnBoard = collect($summary)->pluck('chart_type')->filter()->countBy();
 
         foreach ($fixes as $fix) {
             if (! is_array($fix) || count($valid) >= self::MAX_FIXES) {
@@ -211,7 +215,9 @@ TXT,
                     && LabelGrounding::grounded((string) $fix['value'], $objectsById[$block['object_id'] ?? ''] ?? null),
                 'change_chart_type' => ($block['type'] ?? null) === 'chart'
                     && ! $askedForm($block)
-                    && in_array($fix['value'] ?? null, self::VALID_CHART_TYPES, true),
+                    && in_array($fix['value'] ?? null, self::VALID_CHART_TYPES, true)
+                    && ! (in_array($fix['value'], ['pareto', 'funnel', 'heatmap'], true)
+                        && ($formsOnBoard[$fix['value']] ?? 0) > 0),
                 'remove_block' => in_array($block['type'] ?? null, ['chart', 'insight'], true)
                     && ! $askedForm($block)
                     && $removals < self::MAX_REMOVALS,

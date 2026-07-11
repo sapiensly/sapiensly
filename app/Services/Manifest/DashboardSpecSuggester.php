@@ -228,6 +228,20 @@ class DashboardSpecSuggester
 
             return $best;
         };
+        // The DIMENSION an object answers, as the position of the word that
+        // named it — three motivos objects share one dimension and must not
+        // eat three chart seats while categoría goes unseated.
+        $askedDimension = function (array $o) use ($variantPos, $hayOf): ?int {
+            $hay = $hayOf($o);
+            $best = null;
+            foreach ($variantPos as $variant => $pos) {
+                if ($pos !== PHP_INT_MAX && mb_strlen((string) $variant) >= 3 && str_contains($hay, (string) $variant)) {
+                    $best = $best === null ? $pos : min($best, $pos);
+                }
+            }
+
+            return $best;
+        };
         $secondaries = collect($secondaries)
             ->sortBy($askedScore) // stable: ties keep the fit's order
             ->values()->all();
@@ -240,11 +254,20 @@ class DashboardSpecSuggester
         $filterCandidates = [];
 
         $datedInsights = [];
-        foreach (array_slice($secondaries, 0, self::MAX_SECONDARIES) as $secondary) {
+        $seated = 0;
+        $chartedDimensions = [];
+        foreach ($secondaries as $secondary) {
+            if ($seated >= self::MAX_SECONDARIES || count($spec['charts']) >= self::MAX_CHARTS) {
+                break;
+            }
             $slug = $secondary['slug'] ?? null;
             if ($slug === null) {
                 continue;
             }
+            // One breakdown per NAMED dimension: a second motivos object may
+            // still lend a KPI or its filter, but not another chart seat.
+            $dimension = $askedDimension($secondary);
+            $dimensionCharted = $dimension !== null && in_array($dimension, $chartedDimensions, true);
             $mini = $this->suggest($secondary, $lang, $rowsByObject[$secondary['id'] ?? ''] ?? [], $promptTopics, $previousRowsByObject[$secondary['id'] ?? ''] ?? []);
             $name = (string) ($secondary['name'] ?? $slug);
             $miniSlugs = $this->fieldSlugIndex($secondary);
@@ -264,6 +287,10 @@ class DashboardSpecSuggester
                 }
             }
 
+            if ($dimensionCharted) {
+                $breakdown = null;
+            }
+            $added = false;
             foreach ([$trend, $breakdown] as $chart) {
                 if ($chart === null || count($spec['charts']) >= self::MAX_CHARTS) {
                     continue;
@@ -271,6 +298,13 @@ class DashboardSpecSuggester
                 $chart['object_slug'] = $slug;
                 $chart['label'] = $this->labelWithObject((string) ($chart['label'] ?? ''), $name);
                 $spec['charts'][] = $this->varyForm($chart, $spec['charts']);
+                $added = true;
+            }
+            if ($added) {
+                $seated++;
+                if ($dimension !== null && $breakdown !== null) {
+                    $chartedDimensions[] = $dimension;
+                }
             }
 
             // The secondary's FIRST KPI whose measure isn't already on the
