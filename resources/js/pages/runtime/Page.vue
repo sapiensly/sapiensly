@@ -89,6 +89,11 @@ const defaultCurrency = computed(
     () => settings.value.default_currency ?? 'MXN',
 );
 const theme = computed(() => settings.value.theme ?? 'light');
+// Dashboards cap at the standard analytics container width; other app
+// kinds keep the full canvas (forms, tables, sites decide their own).
+const contentWidthClass = computed(() =>
+    props.app.kind === 'dashboard' ? 'mx-auto w-full max-w-[1200px]' : '',
+);
 const loaderAccent = computed(
     () => (settings.value as { accent?: string }).accent ?? '#0059ff',
 );
@@ -232,6 +237,7 @@ useScrollReveal(sectionsEl);
                 <div
                     ref="sectionsEl"
                     class="relative flex-1 space-y-4 px-6 py-6"
+                    :class="contentWidthClass"
                 >
                     <AppRenderer
                         :blocks="contentBlocks"
@@ -270,7 +276,11 @@ useScrollReveal(sectionsEl);
                 />
             </div>
 
-            <div ref="sectionsEl" class="relative flex-1 space-y-4 px-5 py-6">
+            <div
+                ref="sectionsEl"
+                class="relative flex-1 space-y-4 px-5 py-6"
+                :class="contentWidthClass"
+            >
                 <AppRenderer
                     :blocks="page.blocks"
                     :block-data="liveBlockData"

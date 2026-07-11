@@ -277,6 +277,7 @@ export interface RuntimePageProps {
         name: string;
         icon: string | null;
         color: string | null;
+        kind?: string;
     };
     manifest: {
         navigation: { items?: unknown[] } | null;

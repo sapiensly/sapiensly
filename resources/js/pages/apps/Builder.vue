@@ -3229,6 +3229,11 @@ function statusTone(status: Message['status']): string {
                             v-if="preview"
                             data-preview-content
                             class="sp-app-surface"
+                            :class="
+                                app.kind === 'dashboard'
+                                    ? 'mx-auto w-full max-w-[1200px]'
+                                    : ''
+                            "
                             :style="previewSurfaceStyle"
                         >
                             <!-- Author CSS, pre-scoped server-side to .sp-app-surface. -->
