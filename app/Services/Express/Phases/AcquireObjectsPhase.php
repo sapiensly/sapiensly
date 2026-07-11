@@ -55,6 +55,7 @@ class AcquireObjectsPhase implements ExpressPhase
         $ops = [];
         $summaries = [];
         $baseArgs = [];
+        $outcomes = [];
         foreach ($targets as $target) {
             $toolName = (string) $target['tool'];
 
@@ -69,6 +70,7 @@ class AcquireObjectsPhase implements ExpressPhase
                 );
                 if ($duplicate) {
                     $context->note('Corte '.$target['cut'].' omitido: duplica la lectura base de '.$toolName.'.');
+                    $outcomes[] = ['target' => $target['cut'].' @'.$toolName, 'outcome' => 'skipped_duplicate'];
 
                     continue;
                 }
@@ -91,17 +93,21 @@ class AcquireObjectsPhase implements ExpressPhase
                 $authored = $this->authoring->author($context->user, $context->integration, $spec, $manifest);
             } catch (\Throwable $e) {
                 $this->noteReadFailure($context, $target, $targetLabel, $e->getMessage());
+                $outcomes[] = ['target' => ($target['cut'] !== null ? $target['cut'].' @' : '').$toolName, 'outcome' => 'failed', 'error' => Str::limit($e->getMessage(), 160, '…')];
 
                 continue;
             }
 
             if (($authored['ok'] ?? false) !== true) {
-                $this->noteReadFailure($context, $target, $targetLabel, (string) ($authored['error'] ?? 'error desconocido'));
+                $error = (string) ($authored['error'] ?? 'error desconocido');
+                $this->noteReadFailure($context, $target, $targetLabel, $error);
+                $outcomes[] = ['target' => ($target['cut'] !== null ? $target['cut'].' @' : '').$toolName, 'outcome' => 'failed', 'error' => Str::limit($error, 160, '…')];
 
                 continue;
             }
 
             $object = $authored['object'];
+            $outcomes[] = ['target' => ($target['cut'] !== null ? $target['cut'].' @' : '').$toolName, 'outcome' => 'ok', 'rows' => count($authored['rows'] ?? [])];
             if ($target['cut'] === null) {
                 $baseArgs[$toolName] = $object['source']['operations']['list']['arguments'] ?? [];
             }
@@ -124,6 +130,10 @@ class AcquireObjectsPhase implements ExpressPhase
                 // The current window already succeeded; deltas are optional.
             }
         }
+
+        // Every planned read's fate is telemetry: the priority cut vanished
+        // across three prod runs before anyone could say WHERE.
+        $run->recordGate('acquire', ['targets' => $outcomes]);
 
         if ($ops === []) {
             throw new \RuntimeException('Ninguno de los tools elegidos devolvió datos utilizables.');

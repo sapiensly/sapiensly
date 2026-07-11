@@ -1657,8 +1657,15 @@ it('a failed CUT read is named in the caveats — never a silent hole', function
             return ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'ok'];
         });
 
-    (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, xph_run($this));
+    $run = xph_run($this);
+    (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, $run);
 
     expect(collect($ctx->coverageNotes)->implode(' '))->toContain('**priority** no se pudo leer')
         ->and(collect($ctx->notes)->implode(' '))->toContain('corte priority');
+
+    // …and the fate of every planned read is telemetry.
+    $targets = collect($run->fresh()->gates['acquire']['targets'] ?? []);
+    expect($targets->firstWhere('outcome', 'failed')['target'] ?? '')->toContain('priority')
+        ->and($targets->firstWhere('outcome', 'failed')['error'] ?? '')->toContain('not supported')
+        ->and($targets->where('outcome', 'ok'))->toHaveCount(1);
 });
