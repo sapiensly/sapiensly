@@ -1489,7 +1489,11 @@ function progressLines(m: Message): string[] {
         .split('\n')
         .map((l) => l.trim())
         .filter(Boolean);
-    if (lines.length === 0 || !lines.every((l) => l.endsWith('…'))) {
+    // A step either ends in an ellipsis or carries a payload after one —
+    // the interpreter's «Interpretando tu pedido… → "…"» line must not
+    // knock the whole trail back to raw text.
+    const isStep = (l: string) => l.endsWith('…') || /… → «.*»$/u.test(l);
+    if (lines.length === 0 || !lines.every(isStep)) {
         return [];
     }
     // A single ellipsis line only counts while it is actually streaming —
@@ -2483,7 +2487,7 @@ function statusTone(status: Message['status']): string {
                                     <div
                                         v-for="(line, i) in progressLines(m)"
                                         :key="i"
-                                        class="flex items-center gap-1.5 text-xs"
+                                        class="flex items-start gap-1.5 text-xs"
                                         :class="
                                             m.status === 'streaming' &&
                                             i === progressLines(m).length - 1
@@ -2497,11 +2501,11 @@ function statusTone(status: Message['status']): string {
                                                 i ===
                                                     progressLines(m).length - 1
                                             "
-                                            class="size-3 shrink-0 animate-spin text-accent-blue"
+                                            class="mt-0.5 size-3 shrink-0 animate-spin text-accent-blue"
                                         />
                                         <Check
                                             v-else
-                                            class="size-3 shrink-0 text-accent-blue"
+                                            class="mt-0.5 size-3 shrink-0 text-accent-blue"
                                         />
                                         <span>{{ line }}</span>
                                     </div>
