@@ -97,6 +97,24 @@ beforeEach(function () {
     ]);
 });
 
+
+/**
+ * blockData is a DEFERRED Inertia prop: the shell responds without it and the
+ * client fetches it in a follow-up partial request — which this replicates.
+ */
+function deferredBlockData($test, string $url)
+{
+    $shell = $test->get($url);
+    $version = (string) ($shell->original->getData()['page']['version'] ?? '');
+
+    return $test->get($url, [
+        'X-Inertia' => 'true',
+        'X-Inertia-Version' => $version,
+        'X-Inertia-Partial-Component' => 'runtime/Page',
+        'X-Inertia-Partial-Data' => 'blockData',
+    ]);
+}
+
 it('redirects guests to login', function () {
     $this->get('/r/rcrm')->assertRedirect('/login');
 });
@@ -109,10 +127,14 @@ it('renders the first page when no page_slug is given', function () {
             ->component('runtime/Page')
             ->where('app.slug', 'rcrm')
             ->where('page.slug', 'clientes')
-            ->has('blockData.'.$this->statId.'.value')
-            ->where('blockData.'.$this->statId.'.value', 3500)
-            ->has('blockData.'.$this->tableId.'.rows', 2)
+            // blockData is DEFERRED — the shell ships without it.
+            ->missing('blockData')
         );
+
+    deferredBlockData($this->actingAs($this->user), '/r/rcrm')
+        ->assertOk()
+        ->assertJsonPath('props.blockData.'.$this->statId.'.value', 3500)
+        ->assertJsonCount(2, 'props.blockData.'.$this->tableId.'.rows');
 });
 
 it('renders the explicit page by slug', function () {
@@ -148,13 +170,10 @@ it('sorts table rows according to the data_source sort directive', function () {
         'data' => ['nombre' => 'Aaron', 'monto' => 500],
     ]);
 
-    $this->actingAs($this->user)
-        ->get('/r/rcrm')
-        ->assertInertia(fn ($page) => $page
-            ->where('blockData.'.$this->tableId.'.rows.0.data.nombre', 'Aaron')
-            ->where('blockData.'.$this->tableId.'.rows.1.data.nombre', 'Ana')
-            ->where('blockData.'.$this->tableId.'.rows.2.data.nombre', 'Beto')
-        );
+    deferredBlockData($this->actingAs($this->user), '/r/rcrm')
+        ->assertJsonPath('props.blockData.'.$this->tableId.'.rows.0.data.nombre', 'Aaron')
+        ->assertJsonPath('props.blockData.'.$this->tableId.'.rows.1.data.nombre', 'Ana')
+        ->assertJsonPath('props.blockData.'.$this->tableId.'.rows.2.data.nombre', 'Beto');
 });
 
 it('compiles author custom_css scoped to the app surface', function () {
@@ -206,14 +225,12 @@ it('honors a visibility expression against page params', function () {
     app(AppManifestService::class)->createVersion($app, $manifest, $this->user);
 
     // No flag → only the "no flag" block survives.
-    $this->actingAs($this->user)->get('/r/visapp/home')->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->missing('blockData.'.$whenFlag)
-            ->has('blockData.'.$whenNoFlag));
+    deferredBlockData($this->actingAs($this->user), '/r/visapp/home')->assertOk()
+        ->assertJsonMissingPath('props.blockData.'.$whenFlag)
+        ->assertJsonPath('props.blockData.'.$whenNoFlag.'.value', fn ($v) => $v !== null);
 
     // Flag set → only the "with flag" block survives.
-    $this->actingAs($this->user)->get('/r/visapp/home?flag=1')->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->has('blockData.'.$whenFlag)
-            ->missing('blockData.'.$whenNoFlag));
+    deferredBlockData($this->actingAs($this->user), '/r/visapp/home?flag=1')->assertOk()
+        ->assertJsonPath('props.blockData.'.$whenFlag.'.value', fn ($v) => $v !== null)
+        ->assertJsonMissingPath('props.blockData.'.$whenNoFlag);
 });

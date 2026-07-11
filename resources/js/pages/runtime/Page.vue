@@ -62,11 +62,16 @@ interface PageLink {
 // navigation, and patched in place when an action returns fresh data (so adding
 // to a cart updates instantly without a second request / full remount).
 type BlockDataMap = RuntimePageProps['blockData'];
-const liveBlockData = ref<BlockDataMap>({ ...props.blockData });
+// blockData is a DEFERRED prop: undefined while the follow-up request runs.
+const blockDataPending = computed(() => props.blockData == null);
+// Containers/tabs recurse through their own AppRenderer instances — provide
+// the pending flag so every depth shows skeletons without prop-drilling.
+provide('blockDataLoading', blockDataPending);
+const liveBlockData = ref<BlockDataMap>({ ...(props.blockData ?? {}) });
 watch(
     () => props.blockData,
     (next) => {
-        liveBlockData.value = { ...next };
+        liveBlockData.value = { ...(next ?? {}) };
     },
 );
 const stopBlockData = blockDataBus.on((patch) => {
@@ -224,6 +229,7 @@ useScrollReveal(sectionsEl);
                     <AppRenderer
                         :blocks="contentBlocks"
                         :block-data="liveBlockData"
+                :loading="blockDataPending"
                         :objects="manifest.objects"
                         :locale="locale"
                         :default-currency="defaultCurrency"
@@ -251,6 +257,7 @@ useScrollReveal(sectionsEl);
                 <AppRenderer
                     :blocks="page.blocks"
                     :block-data="liveBlockData"
+                :loading="blockDataPending"
                     :objects="manifest.objects"
                     :locale="locale"
                     :default-currency="defaultCurrency"

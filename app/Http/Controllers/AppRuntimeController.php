@@ -107,7 +107,6 @@ class AppRuntimeController extends Controller
         // (e.g. show the cart only when {{params.order}} is set).
         $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context);
 
-        $blockData = $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context);
 
         // Effective settings = manifest settings with the org Brandbook filling any
         // unset brand value (live fallback); the app's own choices win.
@@ -145,7 +144,10 @@ class AppRuntimeController extends Controller
                     : null,
             ],
             'page' => $page,
-            'blockData' => $blockData,
+            // Deferred: the shell (nav, layout, filter bar, skeletons) paints
+            // immediately; Inertia fetches the data in an automatic follow-up
+            // request while the pooled connected reads resolve.
+            'blockData' => \Inertia\Inertia::defer(fn () => $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context)),
             // Current filter values, so a filter_bar renders pre-filled with the
             // active query (deep-link / back-button friendly).
             'params' => (object) $params,

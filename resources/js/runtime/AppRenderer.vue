@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, provide } from 'vue';
+import { computed, defineAsyncComponent, provide, inject } from 'vue';
+import type { ComputedRef } from 'vue';
 import type {
     AnyBlock,
     BlockData,
@@ -138,6 +139,8 @@ const BlockPricing = defineAsyncComponent(
     () => import('./blocks/BlockPricing.vue'),
 );
 
+import BlockSkeleton from './blocks/BlockSkeleton.vue';
+
 const componentForType = {
     container: BlockContainer,
     text: BlockText,
@@ -195,6 +198,8 @@ type SupportedType = keyof typeof componentForType;
 const props = defineProps<{
     blocks: AnyBlock[];
     blockData: BlockData;
+    /** True while the page's deferred blockData is still loading. */
+    loading?: boolean;
     objects: ObjectDef[];
     locale: string;
     defaultCurrency: string;
@@ -212,6 +217,43 @@ const theme = computed<RuntimeTheme>(() => props.theme ?? 'light');
 
 // Provide the theme to descendants. We provide a getter so changes propagate.
 provide(ThemeKey, theme.value);
+
+// Block types whose content is server-resolved data — these show a pulsing
+// skeleton while the page's deferred blockData loads. Layout, text and the
+// filter bar render immediately.
+const DATA_BLOCK_TYPES = new Set([
+    'chart',
+    'table',
+    'data_grid',
+    'metric_grid',
+    'stat',
+    'gauge',
+    'progress',
+    'insight',
+    'kanban',
+    'calendar',
+    'sparkline',
+    'heatmap',
+    'timeline',
+    'gantt',
+    'map',
+    'card_grid',
+    'word_cloud',
+    'record_detail',
+]);
+
+const injectedLoading = inject<ComputedRef<boolean> | null>(
+    'blockDataLoading',
+    null,
+);
+
+function pendingData(block: AnyBlock): boolean {
+    return (
+        (props.loading === true || injectedLoading?.value === true) &&
+        DATA_BLOCK_TYPES.has(block.type) &&
+        props.blockData[block.id] === undefined
+    );
+}
 
 function isSupported(type: string): type is SupportedType {
     return type in componentForType;
@@ -404,7 +446,9 @@ function blockError(blockId: string): string | null {
                         : undefined
                 "
             >
+                <BlockSkeleton v-if="pendingData(block)" :block="block" />
                 <component
+                    v-else
                     :is="componentForType[block.type as SupportedType]"
                     :block="block"
                     :block-data="blockData"
@@ -415,6 +459,11 @@ function blockError(blockId: string): string | null {
                 />
             </div>
         </div>
+        <BlockSkeleton
+            v-else-if="isSupported(block.type) && pendingData(block)"
+            :block="block"
+            :style="colSpanStyle(block)"
+        />
         <component
             v-else-if="isSupported(block.type)"
             :is="componentForType[block.type as SupportedType]"
