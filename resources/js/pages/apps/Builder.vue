@@ -79,6 +79,7 @@ import {
     Database,
     Download,
     Eye,
+    Play,
     FileText,
     GripVertical,
     ImagePlus,
@@ -2298,6 +2299,17 @@ function statusTone(status: Message['status']): string {
                             {{ m.label }}
                         </button>
                     </div>
+
+                    <!-- Run the app in its real runtime, in a fresh tab -->
+                    <a
+                        :href="`/r/${app.slug}`"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
+                    >
+                        <Play class="size-3.5" />
+                        Run
+                    </a>
                 </div>
             </header>
 
