@@ -356,6 +356,7 @@
     "apps.builder.back": "Back to my apps",
     "apps.builder.chat_heading": "Builder chat",
     "apps.builder.preview_heading": "Live preview",
+    "apps.builder.preview_loading": "Loading your dashboard…",
     "apps.builder.preview_empty": "Nothing to preview yet",
     "apps.builder.preview_empty_hint": "Ask the Builder to add an object and a page. The runtime preview will appear here.",
     "apps.builder.show_manifest": "Manifest JSON",

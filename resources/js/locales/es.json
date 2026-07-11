@@ -356,6 +356,7 @@
     "apps.builder.back": "Volver a mis apps",
     "apps.builder.chat_heading": "Chat del Builder",
     "apps.builder.preview_heading": "Vista en vivo",
+    "apps.builder.preview_loading": "El dashboard está cargando…",
     "apps.builder.preview_empty": "Aún no hay nada que previsualizar",
     "apps.builder.preview_empty_hint": "Pídele al Builder que agregue un objeto y una página. El runtime aparecerá aquí.",
     "apps.builder.show_manifest": "Manifest JSON",

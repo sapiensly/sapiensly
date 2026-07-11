@@ -344,6 +344,11 @@ const sending = ref(false);
 const errorText = ref<string | null>(null);
 const transcript = ref<HTMLElement | null>(null);
 const previewPane = ref<HTMLElement | null>(null);
+
+// The post-build partial reload re-resolves every block against LIVE sources
+// (several seconds on connected data) — an overlay says so instead of
+// leaving a stale or empty pane.
+const previewLoading = ref(false);
 const requestingReview = ref(false);
 const wireframeOpen = ref(false);
 const layersOpen = ref(false);
@@ -1842,9 +1847,17 @@ function subscribe() {
                 : [...messages.value, finished];
             // Server already created a new AppVersion if the user pre-approved
             // — partial reload to refresh the preview and the build plan
-            // (its step statuses advanced this turn).
+            // (its step statuses advanced this turn). When a version was
+            // APPLIED the pane is about to re-resolve live data for seconds:
+            // say so with the loading overlay.
+            if (finished.status === 'applied') {
+                previewLoading.value = true;
+            }
             router.reload({
                 only: ['preview', 'manifest', 'conversation'],
+                onFinish: () => {
+                    previewLoading.value = false;
+                },
             });
         },
     );
@@ -3176,7 +3189,7 @@ function statusTone(status: Message['status']): string {
                         v-if="viewMode === 'preview'"
                         ref="previewPane"
                         :class="[
-                            'flex-1 overflow-auto p-5 transition-colors',
+                            'relative flex-1 overflow-auto p-5 transition-colors',
                             // Force the previewed app's own theme here (independent of the
                             // builder chrome's mode) so the author can check light AND dark.
                             preview
@@ -3187,6 +3200,28 @@ function statusTone(status: Message['status']): string {
                             preview ? 'bg-navy-deep' : '',
                         ]"
                     >
+                        <Transition
+                            enter-active-class="transition-opacity duration-200"
+                            enter-from-class="opacity-0"
+                            leave-active-class="transition-opacity duration-300"
+                            leave-to-class="opacity-0"
+                        >
+                            <div
+                                v-if="previewLoading"
+                                class="absolute inset-0 z-30 flex items-center justify-center bg-navy-deep/50 backdrop-blur-[2px]"
+                            >
+                                <div
+                                    class="flex items-center gap-3 rounded-sp-md border border-medium bg-navy-elevated px-6 py-4 shadow-xl"
+                                >
+                                    <Loader2
+                                        class="size-5 shrink-0 animate-spin text-accent-blue"
+                                    />
+                                    <span class="text-sm text-ink">{{
+                                        t('apps.builder.preview_loading')
+                                    }}</span>
+                                </div>
+                            </div>
+                        </Transition>
                         <div
                             v-if="preview"
                             data-preview-content
