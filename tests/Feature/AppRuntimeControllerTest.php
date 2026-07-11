@@ -97,24 +97,6 @@ beforeEach(function () {
     ]);
 });
 
-
-/**
- * blockData is a DEFERRED Inertia prop: the shell responds without it and the
- * client fetches it in a follow-up partial request — which this replicates.
- */
-function deferredBlockData($test, string $url)
-{
-    $shell = $test->get($url);
-    $version = (string) ($shell->original->getData()['page']['version'] ?? '');
-
-    return $test->get($url, [
-        'X-Inertia' => 'true',
-        'X-Inertia-Version' => $version,
-        'X-Inertia-Partial-Component' => 'runtime/Page',
-        'X-Inertia-Partial-Data' => 'blockData',
-    ]);
-}
-
 it('redirects guests to login', function () {
     $this->get('/r/rcrm')->assertRedirect('/login');
 });

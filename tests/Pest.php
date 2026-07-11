@@ -105,3 +105,20 @@ function mcpToolsList(): array
 {
     return ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'];
 }
+
+/**
+ * blockData is a DEFERRED Inertia prop: the shell responds without it and the
+ * client fetches it in a follow-up partial request — which this replicates.
+ */
+function deferredBlockData($test, string $url)
+{
+    $shell = $test->get($url);
+    $version = (string) ($shell->original->getData()['page']['version'] ?? '');
+
+    return $test->get($url, [
+        'X-Inertia' => 'true',
+        'X-Inertia-Version' => $version,
+        'X-Inertia-Partial-Component' => 'runtime/Page',
+        'X-Inertia-Partial-Data' => 'blockData',
+    ]);
+}

@@ -155,21 +155,20 @@ it('strips a block whose visibility excludes the role, data and all', function (
         ->get('/r/policed')
         ->assertInertia(fn ($page) => $page
             ->has('page.blocks', 1) // admin-only table dropped
-            ->where('page.blocks.0.id', $this->ids['blkTable'])
-            ->has('blockData.'.$this->ids['blkTable'])
-            ->missing('blockData.'.$this->ids['blkAdminOnly']),
+            ->where('page.blocks.0.id', $this->ids['blkTable']),
         );
+
+    deferredBlockData($this->actingAs($this->member), '/r/policed')
+        ->assertJsonPath('props.blockData.'.$this->ids['blkTable'], fn ($v) => $v !== null)
+        ->assertJsonMissingPath('props.blockData.'.$this->ids['blkAdminOnly']);
 });
 
 it('applies the row_filter and strips hidden fields for the member', function () {
-    $this->actingAs($this->member)
-        ->get('/r/policed')
-        ->assertInertia(fn ($page) => $page
-            ->has('blockData.'.$this->ids['blkTable'].'.rows', 1) // only the member's row
-            ->where('blockData.'.$this->ids['blkTable'].'.rows.0.data.name', 'Mine')
-            ->where('blockData.'.$this->ids['blkTable'].'.rows.0.data.owner', $this->member->id)
-            ->missing('blockData.'.$this->ids['blkTable'].'.rows.0.data.secret'),
-        );
+    deferredBlockData($this->actingAs($this->member), '/r/policed')
+        ->assertJsonCount(1, 'props.blockData.'.$this->ids['blkTable'].'.rows') // only the member's row
+        ->assertJsonPath('props.blockData.'.$this->ids['blkTable'].'.rows.0.data.name', 'Mine')
+        ->assertJsonPath('props.blockData.'.$this->ids['blkTable'].'.rows.0.data.owner', $this->member->id)
+        ->assertJsonMissingPath('props.blockData.'.$this->ids['blkTable'].'.rows.0.data.secret');
 });
 
 it('grants the app owner full bypass over every policy', function () {
@@ -178,10 +177,12 @@ it('grants the app owner full bypass over every policy', function () {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->has('manifest.pages', 2) // both pages visible
-            ->has('page.blocks', 2) // admin-only block present
-            ->has('blockData.'.$this->ids['blkTable'].'.rows', 2) // no row_filter
-            ->where('blockData.'.$this->ids['blkTable'].'.rows.0.data.secret', 'xyz'), // not hidden
+            ->has('page.blocks', 2), // admin-only block present
         );
+
+    deferredBlockData($this->actingAs($this->owner), '/r/policed')
+        ->assertJsonCount(2, 'props.blockData.'.$this->ids['blkTable'].'.rows') // no row_filter
+        ->assertJsonPath('props.blockData.'.$this->ids['blkTable'].'.rows.0.data.secret', 'xyz'); // not hidden
 
     $this->actingAs($this->owner)->get('/r/policed/admin')->assertOk();
 });
