@@ -54,8 +54,25 @@ class AcquireObjectsPhase implements ExpressPhase
 
         $ops = [];
         $summaries = [];
+        $baseArgs = [];
         foreach ($targets as $target) {
             $toolName = (string) $target['tool'];
+
+            // A cut whose swapped argument equals what the BASE read already
+            // resolved to is the same data twice (prod: dimension:category cut
+            // duplicating the by-dimension default) — skip the read, keep the
+            // slot honest.
+            if ($target['cut'] !== null && is_array($baseArgs[$toolName] ?? null)) {
+                $cutArgs = is_array($target['arguments']) ? $target['arguments'] : [];
+                $duplicate = $cutArgs !== [] && collect($cutArgs)->every(
+                    fn ($v, $k): bool => (string) ($baseArgs[$toolName][$k] ?? '') === (string) $v,
+                );
+                if ($duplicate) {
+                    $context->note('Corte '.$target['cut'].' omitido: duplica la lectura base de '.$toolName.'.');
+
+                    continue;
+                }
+            }
             $spec = array_filter([
                 'tool_name' => $toolName,
                 'arguments' => $target['arguments'],
@@ -82,6 +99,9 @@ class AcquireObjectsPhase implements ExpressPhase
             }
 
             $object = $authored['object'];
+            if ($target['cut'] === null) {
+                $baseArgs[$toolName] = $object['source']['operations']['list']['arguments'] ?? [];
+            }
             // Keep the draft current so slug uniqueness sees earlier objects.
             $manifest['objects'][] = $object;
             $ops[] = ['op' => 'add', 'path' => '/objects/-', 'value' => $object];

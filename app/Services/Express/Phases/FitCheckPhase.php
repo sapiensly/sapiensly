@@ -23,8 +23,10 @@ class FitCheckPhase implements ExpressPhase
 {
     private const MAX_TOOLS = 4;
 
-    /** Extra enum cuts per run — each is a full acquisition, so keep it tight. */
-    private const MAX_ENUM_CUTS = 2;
+    /** Extra enum cuts per run — each is a full (memoized) acquisition. 3 fits
+     * the observed asks («causas, categoría y prioridad»); the base-duplicate
+     * skip in acquire keeps the real read count honest. */
+    private const MAX_ENUM_CUTS = 3;
 
     public function __construct(private readonly GateRunner $gates) {}
 
@@ -359,6 +361,10 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             // y desgloses relevantes" describes ANY dashboard; these words must
             // not count as topical evidence for or against a source.
             'muestrame', 'muestra', 'dame', 'hazme', 'metricas', 'metrica', 'clave', 'tendencia', 'tendencias', 'evolucion', 'semanal', 'mensual', 'diario', 'diaria', 'desglose', 'desgloses', 'dimension', 'dimensiones', 'relevantes', 'principales', 'conclusiones', 'recomendaciones', 'acciones', 'tomar', 'donde', 'concentran', 'problemas', 'oportunidades', 'diagnostico', 'resumen', 'general', 'picos', 'caidas', 'tiempo', 'periodo',
+            // Structure words name dashboard FURNITURE (a table, the previous
+            // window), never a data topic — they defeated economy on a
+            // perfectly precise ask.
+            'tabla', 'tablas', 'anterior', 'previo', 'previa', 'contra',
         ];
 
         // >= 3, not > 3: three-letter acronyms ARE the topic in this domain
@@ -528,13 +534,58 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
                         continue; // the default cut is already acquired via chosenTools
                     }
                     if ($this->wordsNameValue($words, $value)) {
-                        $cuts[] = ['tool' => (string) $toolName, 'arguments' => [(string) $arg => $value], 'cut' => $value];
+                        $cuts[] = [
+                            'tool' => (string) $toolName,
+                            'arguments' => [(string) $arg => $value],
+                            'cut' => $value,
+                            // The cap slices in USER order: the cut named
+                            // first in the ask outranks the ones named later
+                            // (prod: causas was named first and got sliced
+                            // off while category/priority took both slots).
+                            '_pos' => $this->namingPosition($context, $words, $value),
+                        ];
                     }
                 }
             }
         }
 
-        return array_slice($cuts, 0, self::MAX_ENUM_CUTS);
+        usort($cuts, fn (array $a, array $b): int => $a['_pos'] <=> $b['_pos']);
+
+        return array_map(
+            fn (array $c): array => ['tool' => $c['tool'], 'arguments' => $c['arguments'], 'cut' => $c['cut']],
+            array_slice($cuts, 0, self::MAX_ENUM_CUTS),
+        );
+    }
+
+    /**
+     * Position in the (combined) prompt of the topic word that names this
+     * enum value — matching wordsNameValue's rules, then mapping lexicon
+     * variants back to the ORIGINAL word the user typed ("cause" matched via
+     * "causa"; the position that counts is causa's).
+     *
+     * @param  Collection<int, string>  $words
+     */
+    private function namingPosition(ExpressContext $context, Collection $words, string $value): int
+    {
+        $prompt = Str::lower(Str::ascii($context->combinedPrompt()));
+        $v = Str::lower(Str::ascii($value));
+        $positions = [];
+        foreach ($words as $w) {
+            $names = $w === $v || str_contains($v, $w) || str_contains($w, $v)
+                || (mb_strlen($w) >= 4 && mb_strlen($v) >= 4 && substr($w, 0, 4) === substr($v, 0, 4));
+            if (! $names) {
+                continue;
+            }
+            // Words arrive lexicon-expanded; anchor on whichever ORIGINAL
+            // word expands to this one and actually appears in the prompt.
+            $sources = DomainLexicon::expand(collect([$w]))
+                ->filter(fn (string $s): bool => mb_strpos($prompt, $s) !== false);
+            foreach ($sources as $src) {
+                $positions[] = (int) mb_strpos($prompt, $src);
+            }
+        }
+
+        return $positions === [] ? PHP_INT_MAX : min($positions);
     }
 
     /**
@@ -586,6 +637,28 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         $description = is_scalar($tool['description'] ?? null) ? (string) $tool['description'] : json_encode($tool['description'] ?? '');
 
         return Str::lower(Str::ascii($name.' '.$description));
+    }
+
+    /**
+     * toolText PLUS the tool's OBSERVED row shape (field paths/names from
+     * knownShapes). "backlog", "reopened", "volume" live in the columns a
+     * tool returns, never in its name or description — once a shape has been
+     * seen, those words anchor here instead of defeating the signal.
+     *
+     * @param  array<string, mixed>  $tool
+     */
+    private function toolHaystack(ExpressContext $context, array $tool): string
+    {
+        $shape = $context->knownShapes[(string) ($tool['name'] ?? '')] ?? null;
+        $fields = is_array($shape) && is_array($shape['fields'] ?? null) ? $shape['fields'] : [];
+        if ($fields === []) {
+            return $this->toolText($tool);
+        }
+        $extra = collect($fields)
+            ->flatMap(fn ($f): array => is_array($f) ? array_values(array_filter($f, 'is_scalar')) : [])
+            ->implode(' ');
+
+        return $this->toolText($tool).' '.Str::lower(Str::ascii($extra));
     }
 
     /**
@@ -786,7 +859,7 @@ TXT,
         }
 
         $haystacks = collect($context->catalogTools)
-            ->map(fn (array $t): string => $this->toolText($t));
+            ->map(fn (array $t): string => $this->toolHaystack($context, $t));
 
         $variantsOf = fn (string $w) => DomainLexicon::expand(collect([$w]));
         $unmatched = $concepts->filter(
@@ -848,8 +921,8 @@ TXT,
 
         $scored = collect($context->catalogTools)
             ->reject(fn (array $t): bool => in_array($t['name'], $noRows, true))
-            ->map(function (array $tool) use ($words): array {
-                $haystack = $this->toolText($tool);
+            ->map(function (array $tool) use ($context, $words): array {
+                $haystack = $this->toolHaystack($context, $tool);
                 $score = $words->filter(fn ($w) => str_contains($haystack, (string) $w))->count();
 
                 return ['name' => $tool['name'], 'score' => $score];

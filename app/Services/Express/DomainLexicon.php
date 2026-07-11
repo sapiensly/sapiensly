@@ -34,7 +34,7 @@ class DomainLexicon
         'clientes' => ['customers', 'clients'], 'cliente' => ['customer', 'client'],
         'usuarios' => ['users'], 'usuario' => ['user'],
         'canal' => ['channel'], 'canales' => ['channels'],
-        'prioridad' => ['priority'], 'estado' => ['status', 'state'],
+        'prioridad' => ['priority'], 'prioridades' => ['priorities', 'priority'], 'estado' => ['status', 'state'],
         'categoria' => ['category'], 'categorias' => ['categories'],
         'resolucion' => ['resolution'], 'tiempo' => ['time'],
         'volumen' => ['volume'], 'ingresos' => ['revenue', 'income'],

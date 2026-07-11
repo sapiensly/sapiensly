@@ -6,6 +6,7 @@ use App\Ai\Tools\Builder\PlanDashboardTool;
 use App\Models\PipelineRun;
 use App\Services\Ai\AiDefaults;
 use App\Services\Express\Contracts\ExpressPhase;
+use App\Services\Express\DomainLexicon;
 use App\Services\Express\ExpressContext;
 use App\Services\Express\GateRunner;
 use App\Services\Manifest\AppScaffolder;
@@ -76,6 +77,11 @@ responde el pedido). overrides puede traer: title, kpis, charts (listas
 COMPLETAS que reemplazan la parte), date_field_id. Solo usa field_ids que
 existan en el spec sugerido, y CONSERVA el object_slug de cada kpi/chart que
 lo traiga — ese bloque lee OTRO objeto y sin su slug apunta al equivocado.
+La sugerencia es el PISO de calidad, no un borrador: puedes afinar títulos,
+añadir o reordenar, pero NUNCA reducir el número de gráficas o KPIs, NUNCA
+eliminar una forma presente (gauge, pareto, donut, funnel, heatmap…), y NUNCA
+etiquetar una gráfica con una dimensión (causas, motivos, categorías…) que
+sus datos no traen. Un override que recorta se rechaza entero.
 TXT;
         $overridesSchema = fn ($schema) => [
             'accept' => $schema->boolean(),
@@ -103,7 +109,7 @@ TXT;
             if ($overrides === []) {
                 break; // suggestion accepted as-is
             }
-            if ($this->overridesCompile($context, $overrides)) {
+            if ($this->fidelityHolds($context, $overrides) && $this->overridesCompile($context, $overrides)) {
                 $chosen = $overrides;
                 break;
             }
@@ -171,6 +177,101 @@ TXT,
             || trim((string) $context->semantic['voice']['title']) !== trim((string) ($spec['title'] ?? '')))) {
             $context->semanticEnriched = true;
         }
+    }
+
+    /**
+     * Dimension words a chart label may claim — each must be carried by the
+     * chart's actual data (object name/slug, field names, cut arguments).
+     */
+    private const DIMENSION_WORDS = '/\b(causas?|motivos?|categor[ií]as?|prioridad(?:es)?|canal(?:es)?|reasons?|causes?|categor(?:y|ies)|priorit(?:y|ies)|channels?)\b/iu';
+
+    /**
+     * The deterministic suggestion is the FLOOR, not a draft (prod
+     * plr_01kx7adw2z: a wholesale charts override dropped the asked gauge and
+     * both distribution donuts, and relabeled a category breakdown as "Causas
+     * Raíz"). An override may refine and add; one that shrinks a section,
+     * loses a suggested chart form, or claims a dimension its data does not
+     * carry is rejected whole — the suggestion ships instead.
+     *
+     * @param  array<string, mixed>  $overrides
+     */
+    private function fidelityHolds(ExpressContext $context, array $overrides): bool
+    {
+        foreach (['charts', 'kpis'] as $section) {
+            if (! array_key_exists($section, $overrides)) {
+                continue;
+            }
+            $suggested = collect($context->spec[$section] ?? [])
+                ->filter(fn ($c): bool => is_array($c))->values();
+            $proposed = collect(is_array($overrides[$section]) ? $overrides[$section] : [])
+                ->filter(fn ($c): bool => is_array($c))->values();
+            if ($proposed->count() < $suggested->count()) {
+                return false;
+            }
+            if ($section !== 'charts') {
+                continue;
+            }
+            $countsOf = fn ($list) => $list->countBy(
+                fn (array $c): string => (string) ($c['chart_type'] ?? 'bar'),
+            );
+            $have = $countsOf($proposed);
+            foreach ($countsOf($suggested) as $type => $needed) {
+                if ((int) ($have[$type] ?? 0) < (int) $needed) {
+                    return false;
+                }
+            }
+            foreach ($proposed as $chart) {
+                if (! $this->chartLabelGrounded($context, $chart)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * A label claiming a dimension ("Top 8 Causas Raíz") must point at data
+     * that carries it — the observed failure showed category keys wearing a
+     * causes title. Lexicon variants bridge ES↔EN (causas↔cause); a 5-char
+     * stem covers inflections the lexicon lacks.
+     *
+     * @param  array<string, mixed>  $chart
+     */
+    private function chartLabelGrounded(ExpressContext $context, array $chart): bool
+    {
+        $label = Str::lower(Str::ascii((string) ($chart['label'] ?? '')));
+        if ($label === '' || preg_match_all(self::DIMENSION_WORDS, $label, $m) === 0) {
+            return true;
+        }
+
+        $slug = (string) ($chart['object_slug'] ?? ($context->spec['object_slug'] ?? ''));
+        $object = collect($context->objects)->firstWhere('slug', $slug);
+        if (! is_array($object)) {
+            return true; // unknown target — the compile judge decides
+        }
+
+        $hay = Str::lower(Str::ascii(json_encode([
+            $object['slug'] ?? '',
+            $object['name'] ?? '',
+            collect($object['fields'] ?? [])
+                ->map(fn ($f): array => is_array($f) ? [(string) ($f['name'] ?? ''), (string) ($f['slug'] ?? '')] : [])
+                ->all(),
+            $object['source']['operations']['list']['arguments'] ?? [],
+        ], JSON_UNESCAPED_UNICODE) ?: ''));
+
+        foreach (array_unique($m[0]) as $word) {
+            $w = Str::lower(Str::ascii((string) $word));
+            $grounded = DomainLexicon::expand(collect([$w]))->contains(
+                fn (string $v): bool => str_contains($hay, $v)
+                    || (mb_strlen($v) >= 5 && str_contains($hay, mb_substr($v, 0, 5))),
+            );
+            if (! $grounded) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

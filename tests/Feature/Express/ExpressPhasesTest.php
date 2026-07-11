@@ -1402,3 +1402,136 @@ it('one unbridged word does not sink an otherwise-grounded translation — super
     ExpressGateAgent::assertPrompted(fn ($prompt) => str_contains(json_encode($prompt), 'grueso del problema')
         && str_contains(json_encode($prompt), 'interpretacion'));
 });
+
+it('an override that shrinks or mislabels is rejected whole — the suggestion is the floor', function () {
+    // Prod plr_01kx7adw2z: a wholesale charts override dropped the asked
+    // donuts/gauge and relabeled a CATEGORY breakdown as «Causas Raíz».
+    // Candidate 1 shrinks the charts list; candidate 2 keeps the count but
+    // claims a dimension the data does not carry. Both die at the fidelity
+    // judge; the deterministic suggestion ships.
+    ExpressGateAgent::fake([
+        fn ($prompt) => [
+            'accept' => false,
+            'overrides' => ['charts' => array_slice(json_decode(json_encode($prompt), true) === null ? [] : (json_decode((string) $prompt, true)['spec_sugerido']['charts'] ?? []), 0, 1)],
+        ],
+        fn ($prompt) => [
+            'title' => 'T',
+            'purpose' => '',
+            'insights' => collect(json_decode((string) $prompt, true)['tarjetas_sugeridas'] ?? [])
+                ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'ok'])
+                ->values()->all(),
+        ],
+    ]);
+
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+
+    app()->call(fn (SuggestSpecPhase $p) => $p->run($ctx, xph_run($this)));
+    expect(count($ctx->spec['charts'] ?? []))->toBeGreaterThan(1);
+
+    app()->call(fn (SemanticGatesPhase $p) => $p->run($ctx, xph_run($this)));
+
+    expect($ctx->semantic['overrides'])->toBe([]); // shrunk candidate rejected
+});
+
+it('an override chart claiming a dimension its data does not carry is rejected', function () {
+    ExpressGateAgent::fake([
+        fn ($prompt) => [
+            'accept' => false,
+            'overrides' => ['charts' => collect(json_decode((string) $prompt, true)['spec_sugerido']['charts'] ?? [])
+                ->map(fn (array $c, int $i) => $i === 0 ? ['label' => 'Top 8 Causas Raíz'] + $c : $c)
+                ->values()->all()],
+        ],
+        fn ($prompt) => [
+            'title' => 'T',
+            'purpose' => '',
+            'insights' => collect(json_decode((string) $prompt, true)['tarjetas_sugeridas'] ?? [])
+                ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'ok'])
+                ->values()->all(),
+        ],
+    ]);
+
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id); // no cause anywhere
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+
+    app()->call(fn (SuggestSpecPhase $p) => $p->run($ctx, xph_run($this)));
+    app()->call(fn (SemanticGatesPhase $p) => $p->run($ctx, xph_run($this)));
+
+    expect($ctx->semantic['overrides'])->toBe([]); // «Causas» over no-cause data — rejected
+});
+
+it('the enum-cut cap slices in USER order — the cut named first survives', function () {
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    // causa raíz named FIRST, then canal, then prioridad, then estado: the
+    // cap (3) must keep cause, channel, priority — in that order.
+    $ctx = xph_ctx($this, 'tickets: causa raiz, luego canal, luego prioridad y al final estado');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [[
+        'name' => 'get-tickets-by-dimension-tool',
+        'description' => 'Tickets agregados por dimensión: causa, canal, prioridad, estado',
+        'arguments' => ['dimension' => 'category'],
+        'input_schema' => ['properties' => [
+            'dimension' => ['enum' => ['category', 'estado', 'priority', 'channel', 'cause']],
+        ]],
+    ]];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect(collect($ctx->chosenCuts)->pluck('cut')->all())->toBe(['cause', 'channel', 'priority']);
+});
+
+it('acquire skips a cut that duplicates the base read of the same tool', function () {
+    // Prod: the Category cut re-read get-tickets-by-dimension with the exact
+    // arguments the base object already resolved to — same data, two objects.
+    $ctx = xph_ctx($this, 'motivos por categoria y causa raiz');
+    $ctx->integration = $this->integration;
+    $ctx->chosenTools = ['get-tickets-by-dimension-tool'];
+    $ctx->chosenCuts = [
+        ['tool' => 'get-tickets-by-dimension-tool', 'arguments' => ['dimension' => 'category'], 'cut' => 'category'],
+        ['tool' => 'get-tickets-by-dimension-tool', 'arguments' => ['dimension' => 'cause'], 'cut' => 'cause'],
+    ];
+
+    $calls = [];
+    $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
+    $authoring->shouldReceive('author')->twice()
+        ->andReturnUsing(function ($user, $integration, array $spec) use (&$calls) {
+            $calls[] = $spec;
+            $object = xph_object('cut_'.count($calls), $integration->id);
+            $object['source']['operations']['list']['arguments'] = ($spec['arguments'] ?? null) ?: ['dimension' => 'category'];
+
+            return ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «'.$object['slug'].'»'];
+        });
+
+    (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, xph_run($this));
+
+    expect($calls)->toHaveCount(2)                                  // base + cause; category dup skipped
+        ->and($calls[1]['arguments'])->toBe(['dimension' => 'cause'])
+        ->and(collect($ctx->notes)->implode(' '))->toContain('duplica la lectura base');
+});
+
+it('structure words and observed column names no longer defeat the economy signal', function () {
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    // "tabla", "anterior" are furniture; "backlog" lives in the OBSERVED row
+    // shape (knownShapes), not in the tool name/description.
+    $ctx = xph_ctx($this, 'pareto de tickets, tendencia del backlog, compara contra el periodo anterior y tabla de detalle');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = xph_catalog_tools();
+    $ctx->knownShapes = [
+        'get-tickets-time-series-tool' => ['fields' => [
+            ['path' => 'totals.backlog_open', 'name' => 'Backlog Open', 'type' => 'number'],
+        ]],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    expect($ctx->economyMode)->toBeTrue()
+        ->and($ctx->interpretedPrompt)->toBeNull();
+});
