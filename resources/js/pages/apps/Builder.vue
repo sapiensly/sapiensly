@@ -517,6 +517,15 @@ const panelMode = ref<'chat' | 'manual'>('chat');
 const selectedBlockId = ref<string | null>(null);
 watch(panelMode, () => (selectedBlockId.value = null));
 
+// The drawer PUSHES the layout instead of covering it: the shell reserves
+// its width (transitioned) whenever a block is selected in manual mode.
+const drawerOpen = computed(
+    () =>
+        panelMode.value === 'manual' &&
+        selectedBlockId.value !== null &&
+        props.app.kind === 'dashboard',
+);
+
 // The right drawer needs the horizontal room the left panel occupies —
 // auto-hide it while a block is selected; the toggle brings it back.
 const leftPanelHidden = ref(false);
@@ -2477,7 +2486,10 @@ function statusTone(status: Message['status']): string {
         :title="`${t('apps.builder.title')} · ${appMeta.name}`"
         full-bleed
     >
-        <div class="flex min-h-0 flex-1 flex-col gap-4 px-7 py-5">
+        <div
+            class="flex min-h-0 flex-1 flex-col gap-4 px-7 py-5 transition-[padding-right] duration-300 ease-out"
+            :style="drawerOpen ? { paddingRight: '340px' } : undefined"
+        >
             <header class="flex items-center justify-between gap-4">
                 <div class="flex min-w-0 items-center gap-3">
                     <button
