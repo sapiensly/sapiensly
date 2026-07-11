@@ -3636,27 +3636,6 @@ function statusTone(status: Message['status']): string {
                             @saved="afterManualChange"
                             @close="selectedBlockId = null"
                         />
-                        <!-- 12-column guide while manual mode is active -->
-                        <div
-                            v-if="panelMode === 'manual'"
-                            class="pointer-events-none absolute inset-x-5 top-5 bottom-5 z-[5]"
-                        >
-                            <div
-                                class="mx-auto grid h-full w-full grid-cols-12 gap-4"
-                                :class="
-                                    app.kind === 'dashboard'
-                                        ? 'max-w-[1200px]'
-                                        : ''
-                                "
-                            >
-                                <div
-                                    v-for="i in 12"
-                                    :key="i"
-                                    class="h-full rounded-sp-sm border border-dashed border-accent-blue/15 bg-accent-blue/[0.025]"
-                                />
-                            </div>
-                        </div>
-
                         <!-- Drop indicator while reordering -->
                         <div
                             v-if="dropTarget"
@@ -3738,7 +3717,7 @@ function statusTone(status: Message['status']): string {
                         <div
                             v-if="preview"
                             data-preview-content
-                            class="sp-app-surface"
+                            class="sp-app-surface relative"
                             :class="
                                 app.kind === 'dashboard'
                                     ? 'mx-auto w-full max-w-[1200px]'
@@ -3746,6 +3725,18 @@ function statusTone(status: Message['status']): string {
                             "
                             :style="previewSurfaceStyle"
                         >
+                            <!-- 12-column guide: lives INSIDE the content so
+                                 it runs the dashboard's full height. -->
+                            <div
+                                v-if="panelMode === 'manual'"
+                                class="pointer-events-none absolute inset-0 z-[5] grid grid-cols-12 gap-4"
+                            >
+                                <div
+                                    v-for="i in 12"
+                                    :key="i"
+                                    class="h-full rounded-sp-sm border border-dashed border-accent-blue/15 bg-accent-blue/[0.025]"
+                                />
+                            </div>
                             <!-- Author CSS, pre-scoped server-side to .sp-app-surface. -->
                             <component
                                 :is="'style'"
