@@ -58,94 +58,104 @@ const chartStyle = (i: number) => ({
 </script>
 
 <template>
-    <div
-        class="dl-veil absolute inset-0 z-30 flex items-center justify-center"
-    >
-        <div class="dl-card">
-            <!-- spinner with cycling mini-charts -->
-            <div
-                class="relative mb-[30px] flex size-[92px] items-center justify-center"
-            >
+    <div class="dl-veil absolute inset-0 z-30">
+        <!-- The card pins to the VIEWPORT centre: on a tall page the veil
+             spans thousands of pixels and a container-centred card would sit
+             below the fold. -->
+        <div
+            class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center"
+        >
+            <div class="dl-card pointer-events-auto">
+                <!-- spinner with cycling mini-charts -->
                 <div
-                    class="absolute inset-0 rounded-full border-[2.5px] border-[#eef1f7]"
-                />
-                <div
-                    class="dl-arc absolute inset-0 rounded-full"
-                    :style="{
-                        background: `conic-gradient(from 0deg, rgba(0,0,0,0) 0deg, ${accentFaint} 140deg, ${accent} 320deg)`,
-                    }"
-                />
-
-                <!-- bar chart -->
-                <div
-                    class="dl-mini absolute inset-0 flex items-end justify-center gap-1 px-[30px] py-[32px]"
-                    :style="chartStyle(0)"
+                    class="relative mb-[30px] flex size-[92px] items-center justify-center"
                 >
-                    <span
-                        v-for="(h, i) in [42, 74, 56, 100]"
-                        :key="i"
-                        class="w-1.5 rounded-[3px]"
-                        :style="{ height: h + '%', background: accent }"
+                    <div
+                        class="absolute inset-0 rounded-full border-[2.5px] border-[#eef1f7]"
                     />
-                </div>
+                    <div
+                        class="dl-arc absolute inset-0 rounded-full"
+                        :style="{
+                            background: `conic-gradient(from 0deg, rgba(0,0,0,0) 0deg, ${accentFaint} 140deg, ${accent} 320deg)`,
+                        }"
+                    />
 
-                <!-- line chart -->
-                <div
-                    class="dl-mini absolute inset-0 flex items-center justify-center"
-                    :style="chartStyle(1)"
-                >
-                    <svg width="34" height="28" viewBox="0 0 34 28" fill="none">
-                        <polyline
-                            points="2,22 9,14 16,17 24,7 32,2"
-                            :stroke="accent"
-                            stroke-width="2.6"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
+                    <!-- bar chart -->
+                    <div
+                        class="dl-mini absolute inset-0 flex items-end justify-center gap-1 px-[30px] py-[32px]"
+                        :style="chartStyle(0)"
+                    >
+                        <span
+                            v-for="(h, i) in [42, 74, 56, 100]"
+                            :key="i"
+                            class="w-1.5 rounded-[3px]"
+                            :style="{ height: h + '%', background: accent }"
                         />
-                        <circle cx="32" cy="2" r="3" :fill="accent" />
-                    </svg>
+                    </div>
+
+                    <!-- line chart -->
+                    <div
+                        class="dl-mini absolute inset-0 flex items-center justify-center"
+                        :style="chartStyle(1)"
+                    >
+                        <svg
+                            width="34"
+                            height="28"
+                            viewBox="0 0 34 28"
+                            fill="none"
+                        >
+                            <polyline
+                                points="2,22 9,14 16,17 24,7 32,2"
+                                :stroke="accent"
+                                stroke-width="2.6"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                            <circle cx="32" cy="2" r="3" :fill="accent" />
+                        </svg>
+                    </div>
+
+                    <!-- donut chart -->
+                    <div
+                        class="dl-mini absolute inset-0 flex items-center justify-center"
+                        :style="chartStyle(2)"
+                    >
+                        <span
+                            class="dl-donut block size-[30px] rounded-full"
+                            :style="{
+                                background: `conic-gradient(${accent} 0 66%, #e4e8f1 0 100%)`,
+                            }"
+                        />
+                    </div>
                 </div>
 
-                <!-- donut chart -->
-                <div
-                    class="dl-mini absolute inset-0 flex items-center justify-center"
-                    :style="chartStyle(2)"
+                <p
+                    class="mb-[9px] text-[18px] font-semibold tracking-[-0.35px] text-[#1b2030]"
                 >
-                    <span
-                        class="dl-donut block size-[30px] rounded-full"
-                        :style="{
-                            background: `conic-gradient(${accent} 0 66%, #e4e8f1 0 100%)`,
-                        }"
-                    />
+                    {{ title ?? copy.title }}
+                </p>
+                <p
+                    class="mb-[30px] max-w-[290px] text-[13.5px] leading-relaxed text-[#6b7280]"
+                >
+                    {{ subtitle ?? copy.subtitle }}
+                </p>
+
+                <div
+                    class="flex items-center gap-1.5 text-[12px] font-medium tracking-[0.2px] text-[#9aa1b2]"
+                >
+                    <span>{{ copy.status }}</span>
+                    <span class="inline-flex gap-[3px]">
+                        <span
+                            v-for="i in 3"
+                            :key="i"
+                            class="dl-dot size-[3px] rounded-full"
+                            :style="{
+                                background: accent,
+                                animationDelay: (i - 1) * 0.2 + 's',
+                            }"
+                        />
+                    </span>
                 </div>
-            </div>
-
-            <p
-                class="mb-[9px] text-[18px] font-semibold tracking-[-0.35px] text-[#1b2030]"
-            >
-                {{ title ?? copy.title }}
-            </p>
-            <p
-                class="mb-[30px] max-w-[290px] text-[13.5px] leading-relaxed text-[#6b7280]"
-            >
-                {{ subtitle ?? copy.subtitle }}
-            </p>
-
-            <div
-                class="flex items-center gap-1.5 text-[12px] font-medium tracking-[0.2px] text-[#9aa1b2]"
-            >
-                <span>{{ copy.status }}</span>
-                <span class="inline-flex gap-[3px]">
-                    <span
-                        v-for="i in 3"
-                        :key="i"
-                        class="dl-dot size-[3px] rounded-full"
-                        :style="{
-                            background: accent,
-                            animationDelay: (i - 1) * 0.2 + 's',
-                        }"
-                    />
-                </span>
             </div>
         </div>
     </div>
@@ -153,9 +163,9 @@ const chartStyle = (i: number) => ({
 
 <style scoped>
 .dl-veil {
-    background: rgba(255, 255, 255, 0.55);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.28);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
 }
 .dl-card {
     display: flex;
