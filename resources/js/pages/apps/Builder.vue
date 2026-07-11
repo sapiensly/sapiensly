@@ -586,6 +586,15 @@ function afterManualChange() {
     router.reload({ only: ['preview', 'manifest'] });
 }
 
+// Layout gestures (resize, reorder) already updated the DOM optimistically —
+// the server round-trip only needs to CONFIRM, so reloads coalesce into one
+// quiet refresh instead of freezing every drop for a full preview resolve.
+let layoutReloadTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleLayoutReload() {
+    clearTimeout(layoutReloadTimer);
+    layoutReloadTimer = setTimeout(afterManualChange, 900);
+}
+
 // On-grid resize: drag the selected card's right edge (width snaps to the
 // 12-col grid) or bottom edge (min-height snaps to 40px). The change lands
 // through the same versioned endpoint as the drawer.
@@ -662,7 +671,16 @@ function startBlockMove(down: PointerEvent) {
     if (!blockId || !pane) return;
     down.preventDefault();
     dragHint.value = 'Suelta sobre otra card';
-    const move = (e: PointerEvent) => {
+    document.body.style.userSelect = 'none';
+    // rAF-throttled hit test: elementFromPoint + rects once per frame, not
+    // once per pointer event.
+    let pending: PointerEvent | null = null;
+    let rafId = 0;
+    const hitTest = () => {
+        rafId = 0;
+        const e = pending;
+        pending = null;
+        if (!e) return;
         const under = document
             .elementFromPoint(e.clientX, e.clientY)
             ?.closest?.('[data-block-id]') as HTMLElement | null;
@@ -691,21 +709,43 @@ function startBlockMove(down: PointerEvent) {
             },
         };
     };
+    const move = (e: PointerEvent) => {
+        pending = e;
+        if (!rafId) rafId = requestAnimationFrame(hitTest);
+    };
     const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
+        document.body.style.userSelect = '';
+        if (rafId) cancelAnimationFrame(rafId);
         dragHint.value = null;
         const target = dropTarget.value;
         dropTarget.value = null;
         if (!target || !target.id) return;
+        // OPTIMISTIC: move the element in the DOM right now — the server
+        // confirms in the coalesced reload; on failure we hard-refresh.
+        const dragged = selectedEl();
+        const targetEl = pane.querySelector(
+            `[data-block-id="${target.id}"]`,
+        ) as HTMLElement | null;
+        if (dragged && targetEl) {
+            targetEl.insertAdjacentElement(
+                target.position === 'before' ? 'beforebegin' : 'afterend',
+                dragged,
+            );
+            requestAnimationFrame(updateSelectionRect);
+        }
         axios
             .post(`/apps/${props.app.id}/builder/blocks/move`, {
                 block_id: blockId,
                 target_block_id: target.id,
                 position: target.position,
             })
-            .then(afterManualChange)
-            .catch(() => toast.error('No se pudo mover la card.'));
+            .then(scheduleLayoutReload)
+            .catch(() => {
+                toast.error('No se pudo mover la card.');
+                afterManualChange();
+            });
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -722,7 +762,14 @@ function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
     const rowWidth = el.parentElement?.clientWidth || rect.width;
     let span = 0;
     let minH = 0;
-    const move = (e: PointerEvent) => {
+    document.body.style.userSelect = 'none';
+    let rafId = 0;
+    let last: PointerEvent | null = null;
+    const applyMove = () => {
+        rafId = 0;
+        const e = last;
+        last = null;
+        if (!e) return;
         if (axis === 'x') {
             const w = rect.width + (e.clientX - startX);
             span = Math.min(12, Math.max(3, Math.round((w / rowWidth) * 12)));
@@ -735,25 +782,35 @@ function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
             dragHint.value = `${minH}px`;
             el.style.minHeight = `${minH}px`;
         }
+        updateSelectionRect();
+    };
+    const move = (e: PointerEvent) => {
+        last = e;
+        if (!rafId) rafId = requestAnimationFrame(applyMove);
     };
     const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
+        document.body.style.userSelect = '';
+        if (rafId) cancelAnimationFrame(rafId);
         dragHint.value = null;
         const changes: Record<string, number> = {};
         if (axis === 'x' && span > 0) changes.col_span = span;
         if (axis === 'y' && minH > 0) changes.min_height = minH;
         if (Object.keys(changes).length === 0) return;
+        // The element already wears the final size (live styles stay on) —
+        // confirm quietly in the coalesced reload.
+        requestAnimationFrame(updateSelectionRect);
         axios
             .post(`/apps/${props.app.id}/builder/blocks/update`, {
                 block_id: blockId,
                 changes,
             })
-            .then(() => {
+            .then(scheduleLayoutReload)
+            .catch(() => {
+                toast.error('No se pudo aplicar el tamaño.');
                 afterManualChange();
-                setTimeout(updateSelectionRect, 400);
-            })
-            .catch(() => toast.error('No se pudo aplicar el tamaño.'));
+            });
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -3662,36 +3719,48 @@ function statusTone(status: Message['status']): string {
                         >
                             <button
                                 type="button"
-                                class="absolute z-40 flex h-6 w-12 cursor-grab items-center justify-center rounded-pill bg-accent-blue text-white shadow active:cursor-grabbing"
+                                class="absolute z-40 flex cursor-grab touch-none items-center justify-center p-2 active:cursor-grabbing"
                                 :style="{
-                                    left: selectionRect.left + selectionRect.width / 2 - 24 + 'px',
-                                    top: selectionRect.top - 12 + 'px',
+                                    left: selectionRect.left + selectionRect.width / 2 - 32 + 'px',
+                                    top: selectionRect.top - 18 + 'px',
                                 }"
                                 title="Arrastra para reordenar"
                                 @pointerdown="startBlockMove($event)"
                             >
-                                <GripHorizontal class="size-4" />
+                                <span
+                                    class="flex h-6 w-12 items-center justify-center rounded-pill bg-accent-blue text-white shadow"
+                                >
+                                    <GripHorizontal class="size-4" />
+                                </span>
                             </button>
                             <button
                                 type="button"
-                                class="absolute z-40 h-10 w-2 cursor-ew-resize rounded-pill bg-accent-blue shadow"
+                                class="absolute z-40 flex cursor-ew-resize touch-none items-center justify-center px-3 py-2"
                                 :style="{
-                                    left: selectionRect.left + selectionRect.width - 4 + 'px',
-                                    top: selectionRect.top + selectionRect.height / 2 - 20 + 'px',
+                                    left: selectionRect.left + selectionRect.width - 14 + 'px',
+                                    top: selectionRect.top + selectionRect.height / 2 - 26 + 'px',
                                 }"
                                 title="Arrastra para ajustar el ancho"
                                 @pointerdown="startBlockResize('x', $event)"
-                            />
+                            >
+                                <span
+                                    class="block h-10 w-2 rounded-pill bg-accent-blue shadow"
+                                />
+                            </button>
                             <button
                                 type="button"
-                                class="absolute z-40 h-2 w-10 cursor-ns-resize rounded-pill bg-accent-blue shadow"
+                                class="absolute z-40 flex cursor-ns-resize touch-none items-center justify-center px-2 py-3"
                                 :style="{
-                                    left: selectionRect.left + selectionRect.width / 2 - 20 + 'px',
-                                    top: selectionRect.top + selectionRect.height - 4 + 'px',
+                                    left: selectionRect.left + selectionRect.width / 2 - 26 + 'px',
+                                    top: selectionRect.top + selectionRect.height - 14 + 'px',
                                 }"
                                 title="Arrastra para ajustar el alto"
                                 @pointerdown="startBlockResize('y', $event)"
-                            />
+                            >
+                                <span
+                                    class="block h-2 w-10 rounded-pill bg-accent-blue shadow"
+                                />
+                            </button>
                             <div
                                 v-if="dragHint"
                                 class="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
