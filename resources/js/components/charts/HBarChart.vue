@@ -10,7 +10,8 @@
  *  - hover: row tint, accent label, and a cumulative-% pill riding the track
  *  - click-through per row for drill-downs
  */
-import { computed, ref } from 'vue';
+import { resolveCssColor } from '@/lib/resolveCssColor';
+import { computed, onMounted, ref, watch } from 'vue';
 
 export interface HBarItem {
     label: string;
@@ -42,9 +43,19 @@ const emit = defineEmits<{ (e: 'select', label: string): void }>();
 const hover = ref<number | null>(null);
 const nf = computed(() => new Intl.NumberFormat(props.locale));
 
+// The accent often arrives as `var(--sp-chart-1, #hex)` — resolve it against
+// this element so the sequential ramp really follows the org palette.
+const rootEl = ref<HTMLElement | null>(null);
+const accent = ref(props.accent);
+const syncAccent = () => {
+    accent.value = resolveCssColor(props.accent, rootEl.value);
+};
+onMounted(syncAccent);
+watch(() => props.accent, syncAccent);
+
 /** Accent hex → [hue, sat%] so the sequential ramp follows the palette. */
 const accentHs = computed<[number, number]>(() => {
-    const m = /^#?([0-9a-f]{6})$/i.exec(props.accent.trim());
+    const m = /^#?([0-9a-f]{6})$/i.exec(accent.value.trim());
     if (!m) return [220, 92];
     const n = parseInt(m[1], 16);
     const r = ((n >> 16) & 255) / 255;
@@ -101,7 +112,7 @@ const model = computed(() => {
 </script>
 
 <template>
-    <div v-if="model" class="hbar-chart">
+    <div v-if="model" ref="rootEl" class="hbar-chart">
         <div
             v-if="showHeaderStats"
             class="mb-1 flex items-center justify-end gap-4 border-b border-medium pb-2"
@@ -149,18 +160,19 @@ const model = computed(() => {
                     :title="row.label"
                     >{{ row.label }}</span
                 >
-                <span
-                    class="relative block h-2 rounded-pill bg-current/10"
-                >
+                <span class="relative block h-2 rounded-pill bg-current/10">
                     <span
                         class="hbar-fill block h-full rounded-pill"
                         :style="{
                             width: row.width,
                             background: row.color,
-                            filter: hover === row.i ? 'brightness(0.9)' : undefined,
+                            filter:
+                                hover === row.i ? 'brightness(0.9)' : undefined,
                             boxShadow:
                                 hover === row.i
-                                    ? '0 0 0 3px color-mix(in srgb, ' + accent + ' 14%, transparent)'
+                                    ? '0 0 0 3px color-mix(in srgb, ' +
+                                      accent +
+                                      ' 14%, transparent)'
                                     : undefined,
                         }"
                     />
@@ -173,7 +185,10 @@ const model = computed(() => {
                         "
                         :style="{
                             color: accent,
-                            background: 'color-mix(in srgb, ' + accent + ' 12%, transparent)',
+                            background:
+                                'color-mix(in srgb, ' +
+                                accent +
+                                ' 12%, transparent)',
                         }"
                         >{{ row.cum }}</span
                     >

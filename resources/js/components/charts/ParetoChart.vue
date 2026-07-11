@@ -12,7 +12,8 @@
  *    per-bar value labels, two-line wrapped category labels, hover tooltip
  *    with the full label, click-through for drill-downs
  */
-import { computed, ref } from 'vue';
+import { resolveCssColor } from '@/lib/resolveCssColor';
+import { computed, onMounted, ref, watch } from 'vue';
 
 export interface ParetoItem {
     label: string;
@@ -50,6 +51,19 @@ const emit = defineEmits<{ (e: 'select', label: string): void }>();
 const hover = ref<number | null>(null);
 const mouse = ref({ x: 0, y: 0 });
 
+// Palette colors often arrive as `var(--sp-chart-N, #hex)` — resolve them
+// against this element so tints, gradients and the vital band follow the
+// org accent instead of the component defaults.
+const rootEl = ref<HTMLElement | null>(null);
+const accent = ref(props.accent);
+const lineColor = ref(props.lineColor);
+const syncColors = () => {
+    accent.value = resolveCssColor(props.accent, rootEl.value);
+    lineColor.value = resolveCssColor(props.lineColor, rootEl.value);
+};
+onMounted(syncColors);
+watch(() => [props.accent, props.lineColor], syncColors);
+
 function onMove(e: MouseEvent) {
     const el = (e.currentTarget as HTMLElement).getBoundingClientRect();
     mouse.value = { x: e.clientX - el.left, y: e.clientY - el.top };
@@ -65,11 +79,11 @@ function hexRgb(hex: string): [number, number, number] {
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 const accentDark = computed(() => {
-    const [r, g, b] = hexRgb(props.accent).map((c) => Math.round(c * 0.72));
+    const [r, g, b] = hexRgb(accent.value).map((c) => Math.round(c * 0.72));
     return `rgb(${r} ${g} ${b})`;
 });
 const bandTint = computed(() => {
-    const [r, g, b] = hexRgb(props.accent);
+    const [r, g, b] = hexRgb(accent.value);
     return `rgba(${r},${g},${b},0.045)`;
 });
 
@@ -201,7 +215,7 @@ const footnoteText = computed(() => {
 </script>
 
 <template>
-    <div v-if="model" class="pareto-chart">
+    <div v-if="model" ref="rootEl" class="pareto-chart">
         <!-- legend + insight badge -->
         <div class="mb-1 flex flex-wrap items-center justify-between gap-3">
             <div
