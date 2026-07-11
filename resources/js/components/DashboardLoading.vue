@@ -59,11 +59,10 @@ const chartStyle = (i: number) => ({
 
 <template>
     <div class="dl-veil absolute inset-0 z-30">
-        <!-- The card pins to the VIEWPORT centre: on a tall page the veil
-             spans thousands of pixels and a container-centred card would sit
-             below the fold. -->
+        <!-- The card pins to the TOP of the viewport: always in sight on
+             page load, clear of the (blurred) content behind. -->
         <div
-            class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center"
+            class="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center pt-20"
         >
             <div class="dl-card pointer-events-auto">
                 <!-- spinner with cycling mini-charts -->
