@@ -1294,7 +1294,7 @@ class AppBuilderController extends Controller
         $data = $request->validate([
             'block_id' => ['required', 'string'],
             'target_block_id' => ['required', 'string', 'different:block_id'],
-            'position' => ['required', Rule::in(['before', 'after'])],
+            'position' => ['required', Rule::in(['before', 'after', 'inside'])],
         ]);
 
         $manifest = $this->manifestService->getActiveManifest($app);
@@ -1379,6 +1379,13 @@ class AppBuilderController extends Controller
                 continue;
             }
             if (($block['id'] ?? null) === $targetId) {
+                // 'inside' = drop on a row's EMPTY space: the card joins the
+                // row instead of becoming a sibling row.
+                if ($position === 'inside' && ($block['type'] ?? null) === 'container') {
+                    $blocks[$i]['blocks'] = array_values([...($block['blocks'] ?? []), $insert]);
+
+                    return true;
+                }
                 array_splice($blocks, $position === 'before' ? $i : $i + 1, 0, [$insert]);
 
                 return true;

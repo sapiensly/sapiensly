@@ -1369,3 +1369,25 @@ it('manual adjust reorders a block before another — one versioned move', funct
         ->and($row['blocks'][0]['id'])->toBe($added)
         ->and($row['blocks'][1]['id'])->toBe('blk_manualbar0');
 });
+
+it('dropping on a row\'s empty space moves the card INSIDE that row', function () {
+    app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
+
+    $added = $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/charts", ['prompt' => 'top de backlog por motivo'])
+        ->assertOk()->json('block_id');
+
+    // Target = the ROW container of the original chart, position inside.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/move", [
+            'block_id' => $added,
+            'target_block_id' => 'cn_manualrow0',
+            'position' => 'inside',
+        ])->assertOk();
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $row = $manifest['pages'][0]['blocks'][0];
+    expect(count($manifest['pages'][0]['blocks']))->toBe(1)   // source row pruned
+        ->and($row['id'])->toBe('cn_manualrow0')
+        ->and(collect($row['blocks'])->pluck('id')->all())->toBe(['blk_manualbar0', $added]);
+});

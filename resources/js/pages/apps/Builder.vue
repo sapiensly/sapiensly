@@ -671,7 +671,7 @@ function selectedEl(): HTMLElement | null {
 // pointer is in. One versioned move op on release.
 const dropTarget = ref<{
     id: string;
-    position: 'before' | 'after';
+    position: 'before' | 'after' | 'inside';
     rect: { left: number; top: number; width: number; height: number };
 } | null>(null);
 function startBlockMove(down: PointerEvent) {
@@ -699,12 +699,12 @@ function startBlockMove(down: PointerEvent) {
         }
         const r = under.getBoundingClientRect();
         const pr = pane.getBoundingClientRect();
-        const horizontal = r.width < pane.clientWidth * 0.9;
-        const position = horizontal
-            ? e.clientX < r.left + r.width / 2
-                ? 'before'
-                : 'after'
-            : e.clientY < r.top + r.height / 2
+        // Empty space in a ROW belongs to its container: dropping there means
+        // «join this row», not «become a sibling row».
+        const isRow = under.dataset.blockType === 'container';
+        const position = isRow
+            ? 'inside'
+            : e.clientX < r.left + r.width / 2
               ? 'before'
               : 'after';
         dropTarget.value = {
@@ -738,10 +738,17 @@ function startBlockMove(down: PointerEvent) {
             `[data-block-id="${target.id}"]`,
         ) as HTMLElement | null;
         if (dragged && targetEl) {
-            targetEl.insertAdjacentElement(
-                target.position === 'before' ? 'beforebegin' : 'afterend',
-                dragged,
-            );
+            if (target.position === 'inside') {
+                const rowFlex = targetEl.querySelector(
+                    ':scope > div',
+                ) as HTMLElement | null;
+                (rowFlex ?? targetEl).appendChild(dragged);
+            } else {
+                targetEl.insertAdjacentElement(
+                    target.position === 'before' ? 'beforebegin' : 'afterend',
+                    dragged,
+                );
+            }
             requestAnimationFrame(updateSelectionRect);
         }
         axios
@@ -3703,7 +3710,17 @@ function statusTone(status: Message['status']): string {
                         />
                         <!-- Drop indicator while reordering -->
                         <div
-                            v-if="dropTarget"
+                            v-if="dropTarget && dropTarget.position === 'inside'"
+                            class="pointer-events-none absolute z-40 rounded-sp-sm border-2 border-dashed border-accent-blue bg-accent-blue/5"
+                            :style="{
+                                left: dropTarget.rect.left + 'px',
+                                top: dropTarget.rect.top + 'px',
+                                width: dropTarget.rect.width + 'px',
+                                height: dropTarget.rect.height + 'px',
+                            }"
+                        />
+                        <div
+                            v-else-if="dropTarget"
                             class="pointer-events-none absolute z-40 rounded-pill bg-accent-blue"
                             :style="{
                                 left:
