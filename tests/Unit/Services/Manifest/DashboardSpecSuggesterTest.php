@@ -552,6 +552,11 @@ it('an explicit form intent in the ask shapes the flagship breakdown determinist
 })->with([
     'pareto' => [['tickets', 'pareto'], 'pareto'],
     'acumulado' => [['causas', 'acumulado'], 'pareto'],
+    // Prod: the interpreter said «dónde está concentrado el volumen» and the
+    // form escaped on the conjugation; «el grueso» is the same ask in
+    // manager speech.
+    'concentrado' => [['tickets', 'concentrado'], 'pareto'],
+    'grueso' => [['tickets', 'grueso'], 'pareto'],
     'ranking' => [['tickets', 'top'], 'hbar'],
     'distribución' => [['tickets', 'distribucion'], 'donut'],
     'comparación' => [['tickets', 'compara'], 'bar'],

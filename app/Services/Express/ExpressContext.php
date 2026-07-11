@@ -156,4 +156,17 @@ class ExpressContext
     {
         return $this->interpretedPrompt ?? $this->prompt;
     }
+
+    /**
+     * Original ask PLUS the adopted interpretation — for the steps that must
+     * not lose breadth to a narrowing translation (the model fit's scope, the
+     * suggester's intent forms): "el grueso del problema" and "concentrado
+     * por causa raíz" both count, whichever text carried them.
+     */
+    public function combinedPrompt(): string
+    {
+        return $this->interpretedPrompt === null
+            ? $this->prompt
+            : $this->prompt.' — '.$this->interpretedPrompt;
+    }
 }

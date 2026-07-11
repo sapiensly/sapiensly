@@ -1395,4 +1395,10 @@ it('one unbridged word does not sink an otherwise-grounded translation — super
     // Concepts {tickets ✓, motivos ✓, zonzo ✗}: 2/3 anchored — adopted.
     expect($ctx->interpretedPrompt)->toContain('pareto')
         ->and($run->fresh()->gates['interpret']['adopted'] ?? null)->toBeTrue();
+
+    // The model fit received BOTH texts: the original fixes the scope, the
+    // interpretation refines it — a narrowing translation cannot shrink the
+    // board on its own (prod: 4 objects fell to 1).
+    ExpressGateAgent::assertPrompted(fn ($prompt) => str_contains(json_encode($prompt), 'grueso del problema')
+        && str_contains(json_encode($prompt), 'interpretacion'));
 });

@@ -109,8 +109,16 @@ piezas no se pueden responder.
 core_unanswerable=true SOLO si el TEMA CENTRAL del pedido no se puede
 responder en absoluto — llena alternatives con 1-2 dashboards que estos datos
 SÍ responden. Nunca inventes tools que no estén en el catálogo.
+Si viene `interpretacion`, es una lectura enriquecida del MISMO pedido: el
+ALCANCE lo fija el pedido original — un pedido abierto («entender el
+problema») merece panorama (serie temporal + desgloses), no solo la
+dimensión que la interpretación nombra; usa la interpretación para afinar
+dimensiones y forma, nunca para recortar.
 TXT,
-                json_encode(['pedido' => $context->analysisPrompt()], JSON_UNESCAPED_UNICODE),
+                json_encode(array_filter([
+                    'pedido' => $context->prompt,
+                    'interpretacion' => $context->interpretedPrompt,
+                ]), JSON_UNESCAPED_UNICODE),
                 fn ($schema) => [
                     'tools' => $schema->array()->description('Nombres exactos de tools del catálogo a leer (1-4).'),
                     'pieces' => $schema->array()->description('OBLIGATORIO: una entrada por CADA pieza pedida: [{asked, tool: nombre exacto del tool que la responde o null, proxy: métrica sustituta honesta si tool es null y existe una}].'),
@@ -320,7 +328,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
     {
         // Same lexicon the picker used: a tool chosen via "quejas→complaints"
         // must not be vetoed by the raw Spanish words failing the same match.
-        $words = DomainLexicon::expand($this->topicWords($context->analysisPrompt()));
+        $words = DomainLexicon::expand($this->topicWords($context->combinedPrompt()));
         if ($words->isEmpty()) {
             return false;
         }
@@ -421,7 +429,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         if ($context->chosenTools === []) {
             return;
         }
-        $words = $this->topicWords($context->analysisPrompt());
+        $words = $this->topicWords($context->combinedPrompt());
         if ($words->isEmpty()) {
             return;
         }
@@ -663,11 +671,14 @@ los HECHOS — jamás inventes metas, números, umbrales ni dimensiones que el
 usuario no dijo; los mensajes_previos_del_usuario son palabras del usuario y
 cuentan: úsalos para recuperar el TEMA cuando el pedido actual no lo trae;
 (2) usa SOLO los dominios presentes en el catálogo — no prometas datos que no
-existen; (3) cuando la intención lo amerite usa estas palabras de forma:
-pareto / % acumulado, top N, distribución, compara, embudo, mapa de calor,
-tendencia semanal/diaria/mensual, resumen ejecutivo; (4) responde UNA sola
-frase imperativa («crea un dashboard de …»); (5) si el pedido ya es preciso,
-devuélvelo tal cual. PROHIBIDO devolver comentarios, evaluaciones o
+existen; (3) usa las palabras de forma EXACTAS cuando la intención las pida —
+«dónde se concentra / el grueso / lo que pesa» = «pareto de X con % acumulado»
+(la palabra pareto, no un sinónimo); otras: top N, distribución, compara,
+embudo, mapa de calor, tendencia semanal/diaria/mensual, resumen ejecutivo;
+(4) NO recortes el alcance: un pedido abierto («entender el problema») pide
+panorama — volumen y tendencia + desglose + concentración — no solo una
+dimensión; (5) responde UNA sola frase imperativa («crea un dashboard de …»);
+(6) si el pedido ya es preciso, devuélvelo tal cual. PROHIBIDO devolver comentarios, evaluaciones o
 descripciones del pedido («el pedido es demasiado difuso», «no especifica…»):
 pedido_interpretado es SIEMPRE una orden de dashboard construible — si ni con
 los mensajes previos puedes formular una fiel al usuario, devuelve ''.

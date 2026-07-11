@@ -489,7 +489,11 @@ class DashboardSpecSuggester
         );
 
         return match (true) {
-            $has('/^pareto$|^acumulad|^concentraci/') => 'pareto',
+            // concentr\w*: "dónde está concentrado el volumen" IS the pareto
+            // ask — the interpreter phrased it as a participle and the form
+            // escaped on a conjugation. "grueso (del problema)" is the same
+            // intent in manager speech.
+            $has('/^pareto$|^acumulad|^concentr|^grueso$/') => 'pareto',
             $has('/^embudo$|^funnel$/') => 'funnel',
             // "mapa de calor" tokenizes to two words; "heatmap" is one.
             $has('/^heatmap$/') || ($has('/^mapa$/') && $has('/^calor$/')) => 'heatmap',
