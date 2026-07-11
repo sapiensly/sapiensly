@@ -58,6 +58,17 @@ class SuggestSpecPhase implements ExpressPhase
         // tagged with object_slug (before this, 3 of 4 acquired objects were
         // paid for and never rendered).
         $context->spec = $this->suggester->suggestMulti($ordered, $lang, $context->rowsByObject, $topics, $context->previousRowsByObject, $context->combinedPrompt()) + ['object_slug' => $primary['slug']];
+
+        // The suggested spec IS the deterministic floor — record its shape so
+        // an audit reads suggestion vs page directly instead of replaying.
+        $run->recordGate('suggest', [
+            'charts' => collect($context->spec['charts'] ?? [])->map(fn (array $c): string => (string) ($c['chart_type'] ?? '?').' «'.(string) ($c['label'] ?? '').'»'.(isset($c['object_slug']) ? ' @'.$c['object_slug'] : ''))->values()->all(),
+            'kpis' => count($context->spec['kpis'] ?? []),
+            'insights' => count($context->spec['insights'] ?? []),
+            'category_filter' => isset($context->spec['category_filter'])
+                ? (string) ($context->spec['category_filter']['label'] ?? '').' @'.(string) ($context->spec['category_filter']['object_slug'] ?? 'primary')
+                : null,
+        ]);
         $context->facts = $this->facts->build($primary, $context->rowsByObject[$primary['id']] ?? [], $context->previousRowsByObject[$primary['id']] ?? []);
 
         // Compact facts per contributing secondary, so the insight gate can

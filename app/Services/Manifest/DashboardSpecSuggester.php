@@ -75,6 +75,10 @@ class DashboardSpecSuggester
      */
     private array $gaugeHintWords = [];
 
+    private ?float $gaugeTarget = null;
+
+    private bool $gaugeIsPct = false;
+
     /** With several objects, how much of the board the primary keeps. */
     private const PRIMARY_KPIS = 4;
 
@@ -106,6 +110,9 @@ class DashboardSpecSuggester
         }
 
         $this->intentFormSpent = false;
+        $this->gaugeHintWords = [];
+        $this->gaugeTarget = null;
+        $this->gaugeIsPct = false;
         $this->inMulti = true;
 
         try {
@@ -168,24 +175,69 @@ class DashboardSpecSuggester
         $topicVariants = DomainLexicon::expand(
             collect($promptTopics)->map(fn ($w): string => Str::lower(Str::ascii((string) $w))),
         );
-        $askedScore = function (array $o) use ($topicVariants): int {
-            // Only the object's DISTINGUISHING text counts: the cut argument
-            // values, the «· Cut» name suffix, the slug's last token. The
-            // shared domain word ("tickets") anchors on EVERY object and
-            // would make the ranking a no-op.
+        // Rank by WHERE in the ask the object's dimension was named:
+        // «pareto de motivos, top causas, distribución por categoría» seats
+        // reason objects before cause before category. Only DISTINGUISHING
+        // text counts (cut argument, «· Cut» suffix, slug tail, FIELD
+        // names/slugs) — the shared domain word anchors on everything.
+        $promptAscii = Str::lower(Str::ascii((string) ($prompt ?? '')));
+        $variantPos = [];
+        foreach ($promptTopics as $topicWord) {
+            $w = Str::lower(Str::ascii((string) $topicWord));
+            $pos = $promptAscii === '' ? 0 : (int) (mb_strpos($promptAscii, $w) !== false ? mb_strpos($promptAscii, $w) : PHP_INT_MAX);
+            foreach (DomainLexicon::expand(collect([$w])) as $variant) {
+                $variantPos[$variant] = min($variantPos[$variant] ?? PHP_INT_MAX, $pos);
+            }
+        }
+        $hayOf = function (array $o): string {
             $name = (string) ($o['name'] ?? '');
             $suffix = str_contains($name, '·') ? Str::afterLast($name, '·') : '';
             $slugTail = Str::afterLast((string) ($o['slug'] ?? ''), '_');
             $args = collect($o['source']['operations']['list']['arguments'] ?? [])
                 ->filter(fn ($v): bool => is_scalar($v) && ! str_contains((string) $v, '{{'))
                 ->implode(' ');
-            $hay = Str::lower(Str::ascii($suffix.' '.$slugTail.' '.$args));
+            // Only STRING fields: the dimension is what distinguishes an
+            // object; numeric measures («Total Tickets») carry the shared
+            // domain word onto everything.
+            $fields = collect($o['fields'] ?? [])
+                ->filter(fn ($f): bool => is_array($f) && in_array($f['type'] ?? '', ['string', 'single_select'], true))
+                ->map(fn (array $f): string => (string) ($f['name'] ?? '').' '.(string) ($f['slug'] ?? ''))
+                ->implode(' ');
 
-            return $topicVariants->contains(fn (string $w): bool => mb_strlen($w) >= 3 && str_contains($hay, $w)) ? 0 : 1;
+            return Str::lower(Str::ascii($suffix.' '.$slugTail.' '.$args.' '.$fields));
+        };
+        // Field names smuggle the shared domain word back in («Total
+        // Tickets» lives on every object) — a variant present in most hays
+        // ranks nothing and is dropped, same ubiquity rule the fit uses.
+        $allHays = array_map($hayOf, $secondaries);
+        $n = max(1, count($allHays));
+        foreach (array_keys($variantPos) as $variant) {
+            $hits = count(array_filter($allHays, fn (string $h): bool => str_contains($h, (string) $variant)));
+            if ($n >= 3 && $hits / $n > 0.7) {
+                unset($variantPos[$variant]);
+            }
+        }
+        $askedScore = function (array $o) use ($variantPos, $hayOf): int {
+            $hay = $hayOf($o);
+            $best = PHP_INT_MAX;
+            foreach ($variantPos as $variant => $pos) {
+                if (mb_strlen((string) $variant) >= 3 && str_contains($hay, (string) $variant)) {
+                    $best = min($best, $pos);
+                }
+            }
+
+            return $best;
         };
         $secondaries = collect($secondaries)
             ->sortBy($askedScore) // stable: ties keep the fit's order
             ->values()->all();
+
+        // «filtro por categoría» names the SELECT's dimension explicitly —
+        // adoption must honor it over whichever asked mini happens first.
+        $filterHint = preg_match('/filtros? por ([a-záéíóúñ]+)/iu', (string) ($prompt ?? ''), $fm) === 1
+            ? Str::lower(Str::ascii($fm[1]))
+            : null;
+        $filterCandidates = [];
 
         $datedInsights = [];
         foreach (array_slice($secondaries, 0, self::MAX_SECONDARIES) as $secondary) {
@@ -250,23 +302,8 @@ class DashboardSpecSuggester
             // has 15 values; category lives on a cut): adopt the first
             // ASKED-dimension mini's filter, tagged with its owner so the
             // compiler binds the param to the right object.
-            if (! isset($spec['category_filter'])
-                && is_array($mini['category_filter'] ?? null)
-                && $askedScore($secondary) === 0) {
-                $adopted = $mini['category_filter'] + ['object_slug' => $slug];
-                // «Key» labels the column, not the dimension — the cut name
-                // or dimension argument says what the user filters BY.
-                if (in_array(Str::lower((string) ($adopted['label'] ?? '')), ['key', 'name', 'label', 'value'], true)) {
-                    $dim = str_contains($name, '·')
-                        ? trim(Str::afterLast($name, '·'))
-                        : (string) collect($secondary['source']['operations']['list']['arguments'] ?? [])
-                            ->filter(fn ($v): bool => is_scalar($v) && ! str_contains((string) $v, '{{') && ! preg_match('/^\d/', (string) $v))
-                            ->first();
-                    if ($dim !== '') {
-                        $adopted['label'] = Str::headline($dim);
-                    }
-                }
-                $spec['category_filter'] = $adopted;
+            if (is_array($mini['category_filter'] ?? null) && $askedScore($secondary) !== PHP_INT_MAX) {
+                $filterCandidates[] = ['cf' => $mini['category_filter'], 'slug' => $slug, 'name' => $name, 'secondary' => $secondary];
             }
 
             // The analytics band narrates from wherever the FACTS live: a
@@ -276,6 +313,38 @@ class DashboardSpecSuggester
             if (($mini['date_field_id'] ?? null) !== null) {
                 $datedInsights = array_merge($datedInsights, array_values(array_filter($mini['insights'] ?? [], 'is_array')));
             }
+        }
+
+        if (! isset($spec['category_filter']) && $filterCandidates !== []) {
+            $dimOf = fn (array $c): string => Str::lower(Str::ascii(str_contains($c['name'], '·')
+                ? trim(Str::afterLast($c['name'], '·'))
+                : (string) collect($c['secondary']['source']['operations']['list']['arguments'] ?? [])
+                    ->filter(fn ($v): bool => is_scalar($v) && ! str_contains((string) $v, '{{') && preg_match('/^\d/', (string) $v) !== 1)
+                    ->first()));
+            $chosen = null;
+            if ($filterHint !== null) {
+                $hintVariants = DomainLexicon::expand(collect([$filterHint]));
+                $chosen = collect($filterCandidates)->first(
+                    fn (array $c): bool => $hintVariants->contains(
+                        fn (string $v): bool => $dimOf($c) !== '' && (str_contains($dimOf($c), $v) || str_contains($v, $dimOf($c))),
+                    ),
+                );
+            }
+            $chosen ??= $filterCandidates[0];
+            $adopted = $chosen['cf'] + ['object_slug' => $chosen['slug']];
+            // «Key» labels the column, not the dimension — the cut name, the
+            // dimension argument, or the user's own filter word says what
+            // they filter BY.
+            if (in_array(Str::lower((string) ($adopted['label'] ?? '')), ['key', 'name', 'label', 'value'], true)) {
+                $dim = $dimOf($chosen);
+                if ($dim === '' && $filterHint !== null) {
+                    $dim = $filterHint;
+                }
+                if ($dim !== '') {
+                    $adopted['label'] = Str::headline($dim);
+                }
+            }
+            $spec['category_filter'] = $adopted;
         }
 
         $cardKey = fn (array $c): string => Str::lower((string) ($c['variant'] ?? '').'|'.(string) ($c['title'] ?? ''));
@@ -307,9 +376,52 @@ class DashboardSpecSuggester
             $spec['charts'][] = $this->varyForm($chart, $spec['charts']);
         }
 
+        $spec['charts'] = $this->ensureGaugeAcrossBoard($spec['charts'] ?? [], $objects, $lang);
         $spec['charts'] = $this->rebindGaugeToNamedMeasure($spec['charts'] ?? [], $objects);
 
         return $this->applyExecutivePreset($spec, $prompt);
+    }
+
+    /**
+     * «meta de FCR de 80%» must yield a gauge WHOEVER ended up primary: the
+     * primary-local attempt fails when the primary has no ratio (prod: the
+     * fit led with a ratio-less object), so the board gets a second chance
+     * with every object's measures once they are all known — content
+     * decides, not position.
+     *
+     * @param  list<array<string, mixed>>  $charts
+     * @param  list<array<string, mixed>>  $objects
+     * @return list<array<string, mixed>>
+     */
+    private function ensureGaugeAcrossBoard(array $charts, array $objects, string $lang): array
+    {
+        if ($this->gaugeTarget === null
+            || collect($charts)->contains(fn (array $c): bool => ($c['chart_type'] ?? null) === 'gauge')) {
+            return $charts;
+        }
+        foreach ($objects as $object) {
+            $match = collect($object['fields'] ?? [])->first(fn ($f): bool => is_array($f)
+                && ($f['type'] ?? '') === 'number'
+                && $this->fieldMatchesGaugeHint($f)
+                && (! $this->gaugeIsPct
+                    || preg_match('/pct|percent|rate|ratio|share|porcentaje/i', (string) ($f['slug'] ?? '').' '.(string) ($f['name'] ?? '')) === 1));
+            if ($match === null) {
+                continue;
+            }
+            array_unshift($charts, array_filter([
+                'label' => ($lang !== 'en' ? 'Meta: ' : 'Target: ').($match['name'] ?? $match['slug']),
+                'chart_type' => 'gauge',
+                'aggregation' => $this->gaugeIsPct ? 'avg' : 'sum',
+                'y_field_id' => $match['id'],
+                'object_slug' => $object['slug'] ?? null,
+                'max_value' => $this->gaugeTarget,
+                'format' => $this->gaugeIsPct ? 'percentage' : null,
+            ], fn ($v) => $v !== null));
+
+            return $charts;
+        }
+
+        return $charts;
     }
 
     /**
@@ -560,6 +672,8 @@ class DashboardSpecSuggester
         if ($target <= 0) {
             return $charts;
         }
+        $this->gaugeTarget = $target;
+        $this->gaugeIsPct = $isPct;
 
         // «meta de FCR de 80%» names WHICH measure the target is for — the
         // words between the meta-word and the number are the binding hint.
@@ -807,6 +921,9 @@ class DashboardSpecSuggester
         $this->prompt = $prompt;
         if (! $this->inMulti) {
             $this->intentFormSpent = false;
+            $this->gaugeHintWords = [];
+            $this->gaugeTarget = null;
+            $this->gaugeIsPct = false;
         }
         $es = $lang !== 'en';
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));

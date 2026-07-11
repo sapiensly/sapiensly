@@ -1116,3 +1116,48 @@ it('the master-prompt checklist compiles from the deterministic floor alone', fu
         ->and($page)->toContain('drill_param')
         ->and($page)->toContain('{{params.key}}');
 });
+
+it('roles are assigned by CONTENT, not by which object the fit listed first', function () {
+    // Prod plr_01kx7erjff: the fit's order left a ratio-less object as
+    // primary — the gauge never born, the pareto drifted to the wrong mini,
+    // the filter grabbed the wrong dimension and kept the «Key» label. Same
+    // shapes, WORST-case order: time series first, motivos object last.
+    $mk = function (string $slug, string $name, array $fields, array $args) {
+        static $i = 0;
+        $i++;
+
+        return ['id' => 'obj_role'.$i, 'slug' => $slug, 'name' => $name,
+            'fields' => collect($fields)->map(fn ($f, $k) => ['id' => 'fld_role'.$i.'_'.$k, 'name' => $f[0], 'slug' => $f[1], 'type' => $f[2]])->values()->all(),
+            'source' => ['type' => 'connected', 'integration_id' => 'integ_x',
+                'operations' => ['list' => ['mcp_tool' => $slug.'-tool', 'arguments' => $args, 'collection_path' => 'x']]]];
+    };
+    $dimFields = [['Key', 'key', 'string'], ['Total Tickets', 'totals_total_tickets', 'number'], ['Backlog Open', 'totals_backlog_open', 'number']];
+    $objects = [
+        $mk('tickets_time_series', 'Tickets Time Series', [['Bucket Start', 'bucket_start', 'date'], ['Total Tickets', 'totals_total_tickets', 'number'], ['Backlog Open', 'totals_backlog_open', 'number']], ['granularity' => 'weekly']),
+        $mk('tickets_fcr', 'Tickets Fcr', [['Key', 'key', 'string'], ['Closed Count', 'closed_count', 'number'], ['Fcr Pct', 'fcr_pct', 'number']], ['from' => 'x', 'to' => 'y']),
+        $mk('tickets_by_dimension', 'Tickets By Dimension', $dimFields, ['dimension' => 'category']),
+        $mk('tickets_by_dimension_reason', 'Tickets By Dimension · Reason', $dimFields, ['dimension' => 'reason']),
+    ];
+    $rows = [
+        'obj_role1' => collect(range(0, 12))->map(fn ($w) => ['bucket_start' => date('Y-m-d', strtotime("2026-04-06 +{$w} week")), 'totals_total_tickets' => 90 + ($w % 5) * 7, 'totals_backlog_open' => 20 + $w])->all(),
+        'obj_role2' => collect(['Facturación', 'Envíos', 'Cuenta', 'App'])->map(fn ($k, $i) => ['key' => $k, 'closed_count' => 200 - $i * 30, 'fcr_pct' => 78 - $i])->all(),
+        'obj_role3' => collect(['Facturación', 'Envíos', 'Cuenta', 'App', 'Fraude'])->map(fn ($k, $i) => ['key' => $k, 'totals_total_tickets' => 300 - $i * 40, 'totals_backlog_open' => 50 - $i * 5])->all(),
+        'obj_role4' => collect(range(1, 8))->map(fn ($i) => ['key' => "Motivo {$i}", 'totals_total_tickets' => 300 - $i * 30, 'totals_backlog_open' => 40 - $i * 3])->all(),
+    ];
+    $prompt = 'crea un dashboard de tickets: pareto de motivos con % acumulado, distribución por categoría, meta de FCR de 80%, con filtro por categoría';
+    $topics = ['tickets', 'pareto', 'motivos', 'acumulado', 'distribucion', 'categoria', 'meta', 'fcr', 'filtro'];
+
+    $spec = app(DashboardSpecSuggester::class)->suggestMulti($objects, 'es', $rows, $topics, [], $prompt);
+    $charts = collect($spec['charts']);
+
+    $gauge = $charts->firstWhere('chart_type', 'gauge');
+    $pareto = $charts->firstWhere('chart_type', 'pareto');
+    expect($gauge)->not->toBeNull()                                   // born board-level…
+        ->and($gauge['object_slug'] ?? null)->toBe('tickets_fcr')     // …on the hinted measure's owner
+        ->and($gauge['max_value'])->toEqual(80.0)
+        ->and($pareto)->not->toBeNull()
+        ->and($pareto['object_slug'] ?? null)->toBe('tickets_by_dimension_reason') // motivos, named FIRST
+        ->and($charts->where('chart_type', 'pareto'))->toHaveCount(1)
+        ->and($spec['category_filter']['object_slug'] ?? null)->toBe('tickets_by_dimension') // «filtro por categoría»
+        ->and($spec['category_filter']['label'] ?? '')->toBe('Category');
+});

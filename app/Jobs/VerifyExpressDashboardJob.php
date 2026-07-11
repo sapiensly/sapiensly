@@ -276,7 +276,19 @@ TXT,
                 $result[] = $block;
             }
 
-            return $result;
+            // A heading whose section lost every block (the removed card was
+            // the whole «Lecturas clave» band) is an orphan — drop it.
+            $pruned = [];
+            foreach ($result as $i => $block) {
+                $isHeading = is_array($block) && ($block['type'] ?? null) === 'heading';
+                $next = $result[$i + 1] ?? null;
+                if ($isHeading && ($next === null || (is_array($next) && ($next['type'] ?? null) === 'heading'))) {
+                    continue;
+                }
+                $pruned[] = $block;
+            }
+
+            return $pruned;
         };
 
         $page['blocks'] = $walk($page['blocks'] ?? []);

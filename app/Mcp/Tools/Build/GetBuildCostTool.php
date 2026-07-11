@@ -97,6 +97,10 @@ class GetBuildCostTool extends SapiensTool
                     'applied' => is_array($g) ? ($g['applied'] ?? null) : null,
                     'rejections' => is_array($g) ? ($g['rejections'] ?? null) : null,
                     'fixes' => is_array($g) ? ($g['fixes'] ?? null) : null,
+                    'charts' => is_array($g) ? ($g['charts'] ?? null) : null,
+                    'kpis' => is_array($g) ? ($g['kpis'] ?? null) : null,
+                    'insights' => is_array($g) ? ($g['insights'] ?? null) : null,
+                    'category_filter' => is_array($g) ? ($g['category_filter'] ?? null) : null,
                 ], fn ($v) => $v !== null))
                 ->all();
 
