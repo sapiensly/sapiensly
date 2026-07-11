@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HBarChart from '@/components/charts/HBarChart.vue';
+import TreemapChart from '@/components/charts/TreemapChart.vue';
 import ParetoChart from '@/components/charts/ParetoChart.vue';
 import { router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -744,84 +745,6 @@ const radar = computed(() => {
 });
 
 // Treemap: squarified rectangles sized by each bucket's value (segmentation).
-const treemap = computed(() => {
-    const total = totalValue.value;
-    if (total === 0) return null;
-    const W = 320;
-    const H = 200;
-    const data = [...series.value]
-        .filter((s) => s.value > 0)
-        .sort((a, b) => b.value - a.value);
-    if (data.length === 0) return null;
-
-    const rects: {
-        x: number;
-        y: number;
-        w: number;
-        h: number;
-        label: string;
-        value: number;
-        color: string;
-    }[] = [];
-    // Simple squarified layout: pack rows along the shorter side.
-    let x = 0;
-    let y = 0;
-    let w = W;
-    let h = H;
-    let i = 0;
-    let remaining = total;
-    while (i < data.length) {
-        const horizontal = w >= h;
-        const side = horizontal ? h : w;
-        // Greedily grow a row while it keeps aspect ratios reasonable.
-        let row: typeof data = [];
-        let rowSum = 0;
-        let bestRatio = Infinity;
-        let j = i;
-        while (j < data.length) {
-            const trySum = rowSum + data[j].value;
-            const length = (trySum / remaining) * (horizontal ? w : h);
-            const next = [...row, data[j]];
-            const worst = Math.max(
-                ...next.map((d) => {
-                    const cell = (d.value / trySum) * side;
-                    return Math.max(length / cell, cell / length);
-                }),
-            );
-            if (worst > bestRatio && row.length > 0) break;
-            bestRatio = worst;
-            row = next;
-            rowSum = trySum;
-            j++;
-        }
-        const rowLen = (rowSum / remaining) * (horizontal ? w : h);
-        let off = 0;
-        for (const d of row) {
-            const cell = (d.value / rowSum) * side;
-            const idx = data.indexOf(d);
-            rects.push({
-                x: horizontal ? x : x + off,
-                y: horizontal ? y + off : y,
-                w: horizontal ? rowLen : cell,
-                h: horizontal ? cell : rowLen,
-                label: d.label,
-                value: d.value,
-                color: colorFor(d.label, idx),
-            });
-            off += cell;
-        }
-        if (horizontal) {
-            x += rowLen;
-            w -= rowLen;
-        } else {
-            y += rowLen;
-            h -= rowLen;
-        }
-        remaining -= rowSum;
-        i = j;
-    }
-    return { W, H, rects };
-});
 
 // Combo: overlay several typed measures (bar/line/area) on a shared X axis,
 // each scaled against the left (primary) or right (secondary) Y axis. When
@@ -1962,44 +1885,14 @@ const boxPlot = computed(() => {
                 </svg>
             </template>
 
-            <template v-else-if="block.chart_type === 'treemap' && treemap">
-                <svg :viewBox="`0 0 ${treemap.W} ${treemap.H}`" class="w-full">
-                    <g v-for="(r, i) in treemap.rects" :key="i">
-                        <rect
-                            :x="r.x + 1"
-                            :y="r.y + 1"
-                            :width="Math.max(0, r.w - 2)"
-                            :height="Math.max(0, r.h - 2)"
-                            :fill="r.color"
-                            rx="2"
-                            class="cursor-pointer transition-opacity hover:opacity-80"
-                            @click="onDrill(r.label)"
-                            @mouseenter="
-                                showTip(r.label, formatNumber(r.value), r.color)
-                            "
-                        />
-                        <text
-                            v-if="r.w > 44 && r.h > 22"
-                            :x="r.x + 6"
-                            :y="r.y + 16"
-                            fill="#fff"
-                            style="font-size: 9px; font-weight: 600"
-                        >
-                            {{ r.label }}
-                        </text>
-                        <text
-                            v-if="r.w > 44 && r.h > 34"
-                            :x="r.x + 6"
-                            :y="r.y + 28"
-                            fill="#fff"
-                            fill-opacity="0.8"
-                            style="font-size: 8px"
-                        >
-                            {{ formatNumber(r.value) }}
-                        </text>
-                    </g>
-                </svg>
-            </template>
+            <!-- Treemap: dedicated reusable component (wrapped labels, value+share) -->
+            <TreemapChart
+                v-else-if="block.chart_type === 'treemap' && series.length"
+                :items="series"
+                :colors="[0, 1, 2, 3, 4, 5].map((i) => chartColor(i))"
+                :clickable="!!block.drill_param"
+                @select="onDrill"
+            />
 
             <template v-else-if="block.chart_type === 'scatter' && scatter">
                 <svg
