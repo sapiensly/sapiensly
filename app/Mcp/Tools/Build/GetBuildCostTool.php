@@ -86,6 +86,14 @@ class GetBuildCostTool extends SapiensTool
                     'fallback_used' => is_array($g) ? ($g['fallback_used'] ?? null) : null,
                     'tokens' => is_array($g) ? ($g['tokens'] ?? null) : null,
                     'error' => is_array($g) ? ($g['error'] ?? null) : null,
+                    // Forensic extras individual gates record: economy skips,
+                    // salvaged decodes, the interpreter's translation and
+                    // whether it was adopted. Projecting these away made a
+                    // prod audit conclude "old code" from their absence.
+                    'economy' => is_array($g) ? ($g['economy'] ?? null) : null,
+                    'salvaged' => is_array($g) ? ($g['salvaged'] ?? null) : null,
+                    'translation' => is_array($g) ? ($g['translation'] ?? null) : null,
+                    'adopted' => is_array($g) ? ($g['adopted'] ?? null) : null,
                 ], fn ($v) => $v !== null))
                 ->all();
 

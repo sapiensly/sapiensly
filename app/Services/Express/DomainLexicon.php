@@ -48,6 +48,13 @@ class DomainLexicon
         'satisfaccion' => ['satisfaction', 'csat'],
         'abandono' => ['churn'], 'entregas' => ['deliveries', 'shipments'], 'entrega' => ['delivery'],
         'envios' => ['shipments', 'shipping'], 'envio' => ['shipment'],
+        'raiz' => ['root'], 'raices' => ['root'],
+        'pendientes' => ['backlog', 'open'], 'pendiente' => ['backlog', 'open'],
+        'abiertos' => ['open'], 'abierto' => ['open'],
+        'cerrados' => ['closed'], 'cerrado' => ['closed'], 'cierre' => ['closed', 'close'],
+        'reabiertos' => ['reopened'], 'reabierto' => ['reopened'], 'reaperturas' => ['reopened'],
+        'resueltos' => ['resolved', 'resolution'], 'resuelto' => ['resolved', 'resolution'],
+        'incompletos' => ['incomplete'], 'incompleto' => ['incomplete'],
     ];
 
     /**

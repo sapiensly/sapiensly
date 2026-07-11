@@ -739,17 +739,22 @@ TXT,
     }
 
     /**
-     * A candidate translation is GROUNDED when every one of its concepts
-     * anchors in the catalog — the anti-garbage bar for adopting it
-     * (meta-commentary and invented domains anchor nothing). Deliberately
-     * WITHOUT economy's tool-count ambiguity cap: grounding is about honesty;
-     * who arbitrates the tools is a separate, stricter question.
+     * A candidate translation is GROUNDED when its concepts anchor in the
+     * catalog — the anti-garbage bar for adopting it. Meta-commentary and
+     * invented domains anchor (near) nothing, so the bar is a supermajority,
+     * not unanimity: an honest translation may carry ONE word the lexicon
+     * doesn't bridge ("causas raíz" — tools say "root", no "raiz" entry) and
+     * losing the whole interpretation over it costs the user the form they
+     * asked for. Deliberately WITHOUT economy's tool-count ambiguity cap:
+     * grounding is about honesty; who arbitrates the tools is a separate,
+     * stricter question.
      */
     private function translationGrounds(ExpressContext $context): bool
     {
         [$concepts, $unmatched, $onTopic] = $this->conceptCoverage($context);
+        $matched = $concepts->count() - $unmatched->count();
 
-        return $concepts->isNotEmpty() && $unmatched->isEmpty() && $onTopic > 0;
+        return $matched >= 1 && $unmatched->count() * 3 <= $concepts->count() && $onTopic > 0;
     }
 
     /**

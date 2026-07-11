@@ -1364,3 +1364,35 @@ it('a grounded translation is adopted even when economy\'s ambiguity cap keeps t
         ->and($run->fresh()->gates['interpret']['adopted'] ?? null)->toBeTrue()
         ->and($run->fresh()->gates['interpret']['translation'] ?? '')->toContain('pareto');
 });
+
+it('one unbridged word does not sink an otherwise-grounded translation — supermajority, not unanimity', function () {
+    // Prod: «causas raíz» — tools say "root"; before the lexicon bridged
+    // raiz→root, that single word failed unanimity and the user lost the
+    // pareto. The bar is now a supermajority: honest translations survive a
+    // vocabulary gap, meta-commentary (anchoring ~nothing) still dies.
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([
+        ['pedido_interpretado' => 'crea un dashboard de tickets: pareto de motivos y sus zonzo con % acumulado'],
+        // The unmatched concept keeps economy off — the model fit stays in
+        // charge, reading the ADOPTED translation.
+        [
+            'tools' => ['get-tickets-by-dimension-tool'], 'substitutions' => [],
+            'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => [],
+        ],
+    ]);
+
+    $ctx = xph_ctx($this, 'quiero entender el grueso del problema con los tickets');
+    $ctx->integration = $this->integration;
+    $ctx->catalogTools = [
+        ['name' => 'get-tickets-time-series-tool', 'description' => 'Weekly aggregated tickets series', 'input_schema' => []],
+        ['name' => 'get-tickets-by-dimension-tool', 'description' => 'Tickets by dimension with reason', 'input_schema' => []],
+        ['name' => 'get-orders-tool', 'description' => 'Orders list', 'input_schema' => []],
+    ];
+
+    $run = xph_run($this);
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, $run);
+
+    // Concepts {tickets ✓, motivos ✓, zonzo ✗}: 2/3 anchored — adopted.
+    expect($ctx->interpretedPrompt)->toContain('pareto')
+        ->and($run->fresh()->gates['interpret']['adopted'] ?? null)->toBeTrue();
+});
