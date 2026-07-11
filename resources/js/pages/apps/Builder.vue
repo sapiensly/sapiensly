@@ -2148,13 +2148,6 @@ function statusTone(status: Message['status']): string {
                                 <LayoutDashboard class="size-3" />
                                 Dashboard
                             </span>
-                            <span
-                                v-if="appMeta.description"
-                                class="truncate text-xs text-ink-subtle"
-                                :title="appMeta.description ?? undefined"
-                            >
-                                · {{ appMeta.description }}
-                            </span>
                         </div>
                     </div>
                 </div>
