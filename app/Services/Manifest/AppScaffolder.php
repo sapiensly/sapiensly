@@ -1307,6 +1307,7 @@ class AppScaffolder
         // --- Charts -----------------------------------------------------------
         $chartBlocks = [];
         $seenChartIdentities = [];
+        $droppedCharts = [];
         foreach ($charts as $i => $chart) {
             $chartObject = $resolveObject(is_array($chart) ? $chart : [], "/charts/{$i}");
             if ($chartObject === null) {
@@ -1339,6 +1340,8 @@ class AppScaffolder
                 $chart['filter'] ?? null,
             ]);
             if (isset($seenChartIdentities[$identity])) {
+                $droppedCharts[] = '«'.(string) ($chart['label'] ?? $chartType).'» (misma información que otra gráfica)';
+
                 continue;
             }
             $seenChartIdentities[$identity] = $i;
@@ -1754,6 +1757,7 @@ class AppScaffolder
 
         return [
             'ok' => true,
+            'dropped_charts' => $droppedCharts,
             'page' => [
                 'id' => $this->id('pag'),
                 'slug' => $pageSlug,

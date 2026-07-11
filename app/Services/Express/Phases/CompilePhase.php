@@ -119,6 +119,10 @@ class CompilePhase implements ExpressPhase
             throw new \RuntimeException('Dashboard lints failed: '.implode(' · ', $lint['issues']));
         }
 
+        foreach ($built['dropped_charts'] ?? [] as $droppedChart) {
+            $context->note('Gráfica descartada al compilar: '.$droppedChart);
+        }
+
         return $built['page'];
     }
 

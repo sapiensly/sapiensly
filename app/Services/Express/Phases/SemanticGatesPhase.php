@@ -99,6 +99,7 @@ TXT;
         // call entirely (each one costs 20-45s on a slow model).
         $attempts = $this->isSlowClass($context) ? 2 : 1;
         $chosen = [];
+        $rejections = [];
         for ($i = 0; $i < $attempts; $i++) {
             $result = $this->gates->run(
                 $run, $i > 0 ? "spec_overrides_{$i}" : 'spec_overrides',
@@ -109,12 +110,28 @@ TXT;
             if ($overrides === []) {
                 break; // suggestion accepted as-is
             }
-            if ($this->fidelityHolds($context, $overrides) && $this->overridesCompile($context, $overrides)) {
-                $chosen = $overrides;
-                break;
+            $breach = $this->fidelityBreach($context, $overrides);
+            if ($breach !== null) {
+                $rejections[] = $breach;
+
+                continue;
             }
+            if (! $this->overridesCompile($context, $overrides)) {
+                $rejections[] = 'no compila / lints';
+
+                continue;
+            }
+            $chosen = $overrides;
+            break;
         }
         $context->semantic['overrides'] = $chosen;
+        // The decision itself is telemetry: two prod audits had to infer from
+        // page archaeology whether the override shipped or died.
+        $run->recordGate('spec_overrides', ($run->gates['spec_overrides'] ?? [])
+            + array_filter([
+                'applied' => $chosen !== [],
+                'rejections' => $rejections !== [] ? $rejections : null,
+            ], fn ($v) => $v !== null));
         if ($chosen !== []) {
             $context->semanticEnriched = true;
         }
@@ -195,7 +212,7 @@ TXT,
      *
      * @param  array<string, mixed>  $overrides
      */
-    private function fidelityHolds(ExpressContext $context, array $overrides): bool
+    private function fidelityBreach(ExpressContext $context, array $overrides): ?string
     {
         foreach (['charts', 'kpis'] as $section) {
             if (! array_key_exists($section, $overrides)) {
@@ -206,7 +223,7 @@ TXT,
             $proposed = collect(is_array($overrides[$section]) ? $overrides[$section] : [])
                 ->filter(fn ($c): bool => is_array($c))->values();
             if ($proposed->count() < $suggested->count()) {
-                return false;
+                return "recorta {$section}: ".$proposed->count().' < '.$suggested->count();
             }
             if ($section !== 'charts') {
                 continue;
@@ -217,17 +234,17 @@ TXT,
             $have = $countsOf($proposed);
             foreach ($countsOf($suggested) as $type => $needed) {
                 if ((int) ($have[$type] ?? 0) < (int) $needed) {
-                    return false;
+                    return "pierde forma: {$type}";
                 }
             }
             foreach ($proposed as $chart) {
                 if (! $this->chartLabelGrounded($context, $chart)) {
-                    return false;
+                    return 'label sin sustento: «'.(string) ($chart['label'] ?? '').'»';
                 }
             }
         }
 
-        return true;
+        return null;
     }
 
     /**

@@ -108,6 +108,15 @@ TXT,
             'Afiné el dashboard tras la verificación Express ('.count($fixes).' ajuste(s))',
         );
 
+        // The ops are telemetry: an audit must read WHICH blocks the verifier
+        // removed or renamed, not deduce it from holes in the page.
+        $run->refresh()->recordGate('verify', ($run->gates['verify'] ?? [])
+            + ['fixes' => array_map(fn (array $f): array => array_filter([
+                'action' => $f['action'],
+                'block_id' => $f['block_id'],
+                'value' => is_scalar($f['value'] ?? null) ? (string) $f['value'] : null,
+            ], fn ($v) => $v !== null), $fixes)]);
+
         Log::info('Express verifier applied fixes', ['run_id' => $run->id, 'fixes' => $fixes]);
     }
 
@@ -236,6 +245,12 @@ TXT,
                 }
                 if (is_array($block['blocks'] ?? null)) {
                     $block['blocks'] = $walk($block['blocks']);
+                    // A container whose every child was removed is a hole in
+                    // the page, not a block (observed: two empty shells after
+                    // two remove_block fixes).
+                    if (($block['type'] ?? null) === 'container' && $block['blocks'] === []) {
+                        continue;
+                    }
                 }
                 $result[] = $block;
             }

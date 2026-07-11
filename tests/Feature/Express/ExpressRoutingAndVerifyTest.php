@@ -189,6 +189,30 @@ it('the verifier applies only menu-valid fixes as a new version', function () {
         ->and($json)->not->toContain($insight['id'])
         ->and(collect($after['pages'])->count())->toBe(1);
 
+    // No hollow shells: a container whose every child was removed is pruned
+    // (prod: two empty containers where remove_block fixes had struck).
+    $hasEmptyContainer = false;
+    $scan = function (array $blocks) use (&$scan, &$hasEmptyContainer): void {
+        foreach ($blocks as $b) {
+            if (! is_array($b)) {
+                continue;
+            }
+            if (($b['type'] ?? null) === 'container' && ($b['blocks'] ?? null) === []) {
+                $hasEmptyContainer = true;
+            }
+            if (is_array($b['blocks'] ?? null)) {
+                $scan($b['blocks']);
+            }
+        }
+    };
+    $scan($page['blocks'] ?? []);
+    expect($hasEmptyContainer)->toBeFalse();
+
+    // The applied ops are telemetry, not archaeology.
+    $fixOps = collect($run->fresh()->gates['verify']['fixes'] ?? [])->pluck('action');
+    expect($fixOps)->toContain('remove_block')
+        ->and($fixOps)->toContain('rename_block');
+
     // A new version landed on top of the page version.
     expect($this->testApp->fresh()->currentVersion->version_number)
         ->toBeGreaterThan($version->version_number);

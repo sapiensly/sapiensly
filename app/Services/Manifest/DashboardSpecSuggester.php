@@ -52,6 +52,25 @@ class DashboardSpecSuggester
     /** The raw ask — for signals topic words can't carry (target numbers, layout presets). */
     private ?string $prompt = null;
 
+    /**
+     * The intent form (pareto/embudo/…) is a BOARD-level budget of one: the
+     * primary's flagship takes it; when the primary has no categorical chart,
+     * the first mini that does inherits it — never every mini (observed: two
+     * paretos on one page, the FCR one mislabeled as motivos).
+     */
+    private bool $intentFormSpent = false;
+
+    private bool $inMulti = false;
+
+    /**
+     * Words the user put NEXT TO the target («meta de FCR de 80%» → fcr) —
+     * the gauge must bind the measure they name, wherever it lives, not the
+     * primary's first ratio.
+     *
+     * @var list<string>
+     */
+    private array $gaugeHintWords = [];
+
     /** With several objects, how much of the board the primary keeps. */
     private const PRIMARY_KPIS = 4;
 
@@ -81,6 +100,25 @@ class DashboardSpecSuggester
             return [];
         }
 
+        $this->intentFormSpent = false;
+        $this->inMulti = true;
+
+        try {
+            return $this->suggestMultiInner($objects, $lang, $rowsByObject, $promptTopics, $previousRowsByObject, $prompt);
+        } finally {
+            $this->inMulti = false;
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $objects
+     * @param  array<string, list<array<string, mixed>>>  $rowsByObject
+     * @param  list<string>  $promptTopics
+     * @param  array<string, list<array<string, mixed>>>  $previousRowsByObject
+     * @return array<string, mixed>
+     */
+    private function suggestMultiInner(array $objects, string $lang, array $rowsByObject, array $promptTopics, array $previousRowsByObject, ?string $prompt): array
+    {
         $primary = $objects[0];
         $spec = $this->suggest($primary, $lang, $rowsByObject[$primary['id'] ?? ''] ?? [], $promptTopics, $previousRowsByObject[$primary['id'] ?? ''] ?? [], $prompt);
         $secondaries = array_values(array_filter(
@@ -88,6 +126,8 @@ class DashboardSpecSuggester
             fn (array $o): bool => ($rowsByObject[$o['id'] ?? ''] ?? []) !== [],
         ));
         if ($secondaries === []) {
+            $spec['charts'] = $this->rebindGaugeToNamedMeasure($spec['charts'] ?? [], $objects);
+
             return $this->applyExecutivePreset($spec, $prompt);
         }
 
@@ -182,6 +222,8 @@ class DashboardSpecSuggester
             }
             $spec['charts'][] = $this->varyForm($chart, $spec['charts']);
         }
+
+        $spec['charts'] = $this->rebindGaugeToNamedMeasure($spec['charts'] ?? [], $objects);
 
         return $this->applyExecutivePreset($spec, $prompt);
     }
@@ -426,18 +468,26 @@ class DashboardSpecSuggester
         if ($prompt === '' || preg_match('/\b(meta|objetivo|target|goal)\b/iu', $prompt) !== 1) {
             return $charts;
         }
-        if (preg_match('/\b(?:meta|objetivo|target|goal)\b[^0-9%]{0,40}?(\d+(?:[.,]\d+)?)\s*(%)?/iu', $prompt, $m) !== 1) {
+        if (preg_match('/\b(?:meta|objetivo|target|goal)\b([^0-9%]{0,40}?)(\d+(?:[.,]\d+)?)\s*(%)?/iu', $prompt, $m) !== 1) {
             return $charts;
         }
-        $target = (float) str_replace(',', '.', $m[1]);
-        $isPct = ($m[2] ?? '') === '%' || ($target <= 100 && str_contains($prompt, '%'));
+        $target = (float) str_replace(',', '.', $m[2]);
+        $isPct = ($m[3] ?? '') === '%' || ($target <= 100 && str_contains($prompt, '%'));
         if ($target <= 0) {
             return $charts;
         }
 
-        $measure = collect($numerics)->first(fn (array $f): bool => $isPct
+        // «meta de FCR de 80%» names WHICH measure the target is for — the
+        // words between the meta-word and the number are the binding hint.
+        $this->gaugeHintWords = collect(preg_split('/[^a-z0-9]+/i', Str::lower(Str::ascii((string) $m[1]))) ?: [])
+            ->filter(fn ($w): bool => mb_strlen((string) $w) >= 3)
+            ->values()->all();
+
+        $candidates = collect($numerics)->filter(fn (array $f): bool => $isPct
             ? ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_RATIO
             : ($measureTypes[$f['id']] ?? '') === SemanticProfile::MEASURE_ADDITIVE);
+        $measure = $candidates->first(fn (array $f): bool => $this->fieldMatchesGaugeHint($f))
+            ?? $candidates->first();
         if ($measure === null) {
             return $charts;
         }
@@ -450,6 +500,67 @@ class DashboardSpecSuggester
             'max_value' => $target,
             'format' => $isPct ? 'percentage' : null,
         ], fn ($v) => $v !== null));
+
+        return $charts;
+    }
+
+    /** Does this field's name/slug share a word with the gauge's hint? */
+    private function fieldMatchesGaugeHint(array $field): bool
+    {
+        if ($this->gaugeHintWords === []) {
+            return false;
+        }
+        $hay = Str::lower(Str::ascii((string) ($field['name'] ?? '').' '.(string) ($field['slug'] ?? '')));
+
+        return collect($this->gaugeHintWords)->contains(
+            fn (string $w): bool => str_contains($hay, $w),
+        );
+    }
+
+    /**
+     * The measure «meta de FCR» names can live on a SECONDARY object (prod:
+     * fcr_pct on Tickets Fcr while the primary only had pct_of_total). Once
+     * every object is on the board, rebind the gauge to the best-named
+     * measure — a %-looking numeric whose name carries the hint word.
+     *
+     * @param  list<array<string, mixed>>  $charts
+     * @param  list<array<string, mixed>>  $objects
+     * @return list<array<string, mixed>>
+     */
+    private function rebindGaugeToNamedMeasure(array $charts, array $objects): array
+    {
+        if ($this->gaugeHintWords === []) {
+            return $charts;
+        }
+        foreach ($charts as $gi => $chart) {
+            if (($chart['chart_type'] ?? null) !== 'gauge') {
+                continue;
+            }
+            $current = collect($objects)->flatMap(fn (array $o) => $o['fields'] ?? [])
+                ->firstWhere('id', $chart['y_field_id'] ?? null);
+            if (is_array($current) && $this->fieldMatchesGaugeHint($current)) {
+                return $charts; // already bound to the named measure
+            }
+            foreach ($objects as $object) {
+                $match = collect($object['fields'] ?? [])->first(fn ($f): bool => is_array($f)
+                    && ($f['type'] ?? '') === 'number'
+                    && $this->fieldMatchesGaugeHint($f)
+                    && (($chart['format'] ?? null) !== 'percentage'
+                        || preg_match('/pct|percent|rate|ratio|share|porcentaje/i', (string) ($f['slug'] ?? '').' '.(string) ($f['name'] ?? '')) === 1));
+                if ($match === null) {
+                    continue;
+                }
+                $charts[$gi] = array_merge($chart, array_filter([
+                    'y_field_id' => $match['id'],
+                    'object_slug' => $object['slug'] ?? null,
+                    'label' => preg_replace('/^(Meta|Target): .*/u', '$1: '.($match['name'] ?? $match['slug']), (string) ($chart['label'] ?? '')),
+                ], fn ($v) => $v !== null));
+
+                return $charts;
+            }
+
+            return $charts; // one gauge per board — nothing better found
+        }
 
         return $charts;
     }
@@ -610,6 +721,9 @@ class DashboardSpecSuggester
     {
         $this->previousRows = $previousRows;
         $this->prompt = $prompt;
+        if (! $this->inMulti) {
+            $this->intentFormSpent = false;
+        }
         $es = $lang !== 'en';
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
 
@@ -1228,11 +1342,13 @@ class DashboardSpecSuggester
         // "Mapa de calor": the calendar heatmap counts RECORDS per day, so it
         // is only honest on record-level rows with a real date axis and no
         // recency cap (a capped sample's density is the sampling window).
-        if ($this->intentForm($promptTopics) === 'heatmap'
+        if (! $this->intentFormSpent
+            && $this->intentForm($promptTopics) === 'heatmap'
             && $grain === SemanticProfile::GRAIN_RAW
             && $dateField !== null
             && ! $this->isCappedSample($object)
             && count($charts) < self::MAX_CHARTS) {
+            $this->intentFormSpent = true;
             $charts[] = [
                 'label' => $es ? 'Actividad por día' : 'Daily activity',
                 'chart_type' => 'heatmap',
@@ -1248,7 +1364,7 @@ class DashboardSpecSuggester
         // (the rest keep the variety rotation). Deterministic intent→form:
         // the same words always produce the same chart, no model involved.
         $breakdownTypes = ['donut', 'bar', 'treemap'];
-        $intentForm = $this->intentForm($promptTopics);
+        $intentForm = $this->intentFormSpent ? null : $this->intentForm($promptTopics);
         foreach ($categoricals as $i => $field) {
             if (count($charts) >= self::MAX_CHARTS - 1) {
                 break;
@@ -1280,6 +1396,7 @@ class DashboardSpecSuggester
                         $chart['stages'] = $values->all();
                         $chart['label'] = ($es ? 'Embudo por ' : 'Funnel by ').Str::lower((string) ($field['name'] ?? $field['slug']));
                         $intentForm = null; // flagship only
+                        $this->intentFormSpent = true; // …and once per BOARD
                     }
                 } else {
                     // A part-of-whole ask over many slices reads better as a
@@ -1288,6 +1405,7 @@ class DashboardSpecSuggester
                         ? 'treemap'
                         : $intentForm;
                     $intentForm = null; // flagship only
+                    $this->intentFormSpent = true; // …and once per BOARD
                 }
             }
             if ($grain === SemanticProfile::GRAIN_RAW) {

@@ -21,6 +21,7 @@ use App\Services\Express\Phases\ResolveSourcePhase;
 use App\Services\Express\Phases\SemanticGatesPhase;
 use App\Services\Express\Phases\SuggestSpecPhase;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\DashboardSpecSuggester;
 use Illuminate\Support\Str;
 
 beforeEach(function () {
@@ -1534,4 +1535,83 @@ it('structure words and observed column names no longer defeat the economy signa
 
     expect($ctx->economyMode)->toBeTrue()
         ->and($ctx->interpretedPrompt)->toBeNull();
+});
+
+it('the overrides decision is telemetry: applied flag and rejection reasons on the gate', function () {
+    ExpressGateAgent::fake([
+        // Candidate shrinks the charts list → rejected with a reason.
+        fn ($prompt) => [
+            'accept' => false,
+            'overrides' => ['charts' => array_slice(json_decode((string) $prompt, true)['spec_sugerido']['charts'] ?? [], 0, 1)],
+        ],
+        fn ($prompt) => [
+            'title' => 'T', 'purpose' => '',
+            'insights' => collect(json_decode((string) $prompt, true)['tarjetas_sugeridas'] ?? [])
+                ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'ok'])->values()->all(),
+        ],
+    ]);
+
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+    $run = xph_run($this);
+
+    app()->call(fn (SuggestSpecPhase $p) => $p->run($ctx, $run));
+    app()->call(fn (SemanticGatesPhase $p) => $p->run($ctx, $run));
+
+    $gate = $run->fresh()->gates['spec_overrides'] ?? [];
+    expect($gate['applied'] ?? null)->toBeFalse()
+        ->and(implode(' ', $gate['rejections'] ?? []))->toContain('recorta charts');
+});
+
+it('the intent form is a board-level budget of one — primary flagship takes it, minis keep native forms', function () {
+    $primary = xph_object('tickets_reason', $this->integration->id);
+    $secondary = xph_object('tickets_by_dimension', $this->integration->id);
+
+    $spec = app(DashboardSpecSuggester::class)->suggestMulti(
+        [$primary, $secondary], 'es',
+        [$primary['id'] => xph_rows(), $secondary['id'] => xph_rows()],
+        ['tickets', 'pareto', 'acumulado'],
+    );
+
+    $paretos = collect($spec['charts'] ?? [])->where('chart_type', 'pareto');
+    expect($paretos)->toHaveCount(1)
+        ->and($paretos->first()['object_slug'] ?? null)->toBeNull(); // the primary's flagship
+});
+
+it('«meta de FCR de 80%» binds the gauge to the fcr measure — even on a secondary object', function () {
+    $primary = [
+        'id' => 'obj_gbind1', 'slug' => 'tickets_reason_cause_breakdown', 'name' => 'Tickets Reason Cause Breakdown',
+        'fields' => [
+            ['id' => 'fld_gbreason0', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_gbtotal00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+            ['id' => 'fld_gbpct0000', 'slug' => 'pct_of_total', 'name' => 'Pct Of Total', 'type' => 'number'],
+        ],
+    ];
+    $secondary = [
+        'id' => 'obj_gbind2', 'slug' => 'tickets_fcr', 'name' => 'Tickets Fcr',
+        'fields' => [
+            ['id' => 'fld_gbkey0000', 'slug' => 'key', 'name' => 'Key', 'type' => 'string'],
+            ['id' => 'fld_gbclosed0', 'slug' => 'closed_count', 'name' => 'Closed Count', 'type' => 'number'],
+            ['id' => 'fld_gbfcrpct0', 'slug' => 'fcr_pct', 'name' => 'Fcr Pct', 'type' => 'number'],
+        ],
+    ];
+    $primaryRows = collect(range(1, 8))->map(fn ($i) => ['reason' => "R{$i}", 'total_tickets' => 300 - $i * 20, 'pct_of_total' => 30 - $i * 2])->all();
+    $secondaryRows = collect(range(1, 5))->map(fn ($i) => ['key' => "K{$i}", 'closed_count' => 100 - $i * 10, 'fcr_pct' => 80 - $i * 3])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggestMulti(
+        [$primary, $secondary], 'es',
+        [$primary['id'] => $primaryRows, $secondary['id'] => $secondaryRows],
+        ['tickets', 'meta', 'fcr'],
+        [],
+        'dashboard de tickets con meta de FCR de 80%',
+    );
+
+    $gauge = collect($spec['charts'] ?? [])->firstWhere('chart_type', 'gauge');
+    expect($gauge)->not->toBeNull()
+        ->and($gauge['y_field_id'])->toBe('fld_gbfcrpct0')      // fcr_pct, not pct_of_total
+        ->and($gauge['object_slug'] ?? null)->toBe('tickets_fcr')
+        ->and($gauge['max_value'])->toEqual(80.0)
+        ->and($gauge['label'])->toContain('Fcr');
 });
