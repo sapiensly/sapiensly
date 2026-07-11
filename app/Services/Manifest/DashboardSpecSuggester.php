@@ -4,6 +4,7 @@ namespace App\Services\Manifest;
 
 use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Express\ComputedFactsBuilder;
+use App\Services\Express\DomainLexicon;
 use App\Services\Express\FactNarrator;
 use App\Services\Express\SemanticProfile;
 use Illuminate\Support\Str;
@@ -32,6 +33,9 @@ class DashboardSpecSuggester
     private const MAX_KPIS = 6;
 
     private const MAX_CHARTS = 7;
+
+    /** Insight cards render 3 per row — two rows is a band, not an essay. */
+    private const MAX_INSIGHTS = 5;
 
     private const BREAKDOWN_LIMIT = 12;
 
@@ -76,7 +80,8 @@ class DashboardSpecSuggester
 
     private const PRIMARY_CHARTS = 4;
 
-    private const MAX_SECONDARIES = 3;
+    /** Asked-dimension guests each need their chart; the chart cap still rules the page. */
+    private const MAX_SECONDARIES = 5;
 
     /**
      * Multi-object composition: the PRIMARY (first) object drives the board's
@@ -156,6 +161,33 @@ class DashboardSpecSuggester
             ->map(fn (array $c): ?array => $this->chartMeasureIdentity($c, $slugById))
             ->all();
 
+        // The mini budget serves ASKED dimensions first: a secondary whose
+        // name/slug/cut-argument matches a prompt topic (lexicon-bridged)
+        // outranks incidental guests — «distribución por prioridad» must not
+        // lose its only chart to an object nobody named.
+        $topicVariants = DomainLexicon::expand(
+            collect($promptTopics)->map(fn ($w): string => Str::lower(Str::ascii((string) $w))),
+        );
+        $askedScore = function (array $o) use ($topicVariants): int {
+            // Only the object's DISTINGUISHING text counts: the cut argument
+            // values, the «· Cut» name suffix, the slug's last token. The
+            // shared domain word ("tickets") anchors on EVERY object and
+            // would make the ranking a no-op.
+            $name = (string) ($o['name'] ?? '');
+            $suffix = str_contains($name, '·') ? Str::afterLast($name, '·') : '';
+            $slugTail = Str::afterLast((string) ($o['slug'] ?? ''), '_');
+            $args = collect($o['source']['operations']['list']['arguments'] ?? [])
+                ->filter(fn ($v): bool => is_scalar($v) && ! str_contains((string) $v, '{{'))
+                ->implode(' ');
+            $hay = Str::lower(Str::ascii($suffix.' '.$slugTail.' '.$args));
+
+            return $topicVariants->contains(fn (string $w): bool => mb_strlen($w) >= 3 && str_contains($hay, $w)) ? 0 : 1;
+        };
+        $secondaries = collect($secondaries)
+            ->sortBy($askedScore) // stable: ties keep the fit's order
+            ->values()->all();
+
+        $datedInsights = [];
         foreach (array_slice($secondaries, 0, self::MAX_SECONDARIES) as $secondary) {
             $slug = $secondary['slug'] ?? null;
             if ($slug === null) {
@@ -213,6 +245,58 @@ class DashboardSpecSuggester
             if (($mini['date_field_id'] ?? null) !== null) {
                 $spec['include_date_filter'] = true;
             }
+
+            // «filtro por categoría» when the primary can't offer one (reason
+            // has 15 values; category lives on a cut): adopt the first
+            // ASKED-dimension mini's filter, tagged with its owner so the
+            // compiler binds the param to the right object.
+            if (! isset($spec['category_filter'])
+                && is_array($mini['category_filter'] ?? null)
+                && $askedScore($secondary) === 0) {
+                $adopted = $mini['category_filter'] + ['object_slug' => $slug];
+                // «Key» labels the column, not the dimension — the cut name
+                // or dimension argument says what the user filters BY.
+                if (in_array(Str::lower((string) ($adopted['label'] ?? '')), ['key', 'name', 'label', 'value'], true)) {
+                    $dim = str_contains($name, '·')
+                        ? trim(Str::afterLast($name, '·'))
+                        : (string) collect($secondary['source']['operations']['list']['arguments'] ?? [])
+                            ->filter(fn ($v): bool => is_scalar($v) && ! str_contains((string) $v, '{{') && ! preg_match('/^\d/', (string) $v))
+                            ->first();
+                    if ($dim !== '') {
+                        $adopted['label'] = Str::headline($dim);
+                    }
+                }
+                $spec['category_filter'] = $adopted;
+            }
+
+            // The analytics band narrates from wherever the FACTS live: a
+            // dateless primary (a breakdown) has no PoP/anomaly/slope to
+            // tell — the dated guest's cards carry them (their compute
+            // queries already point at their own object).
+            if (($mini['date_field_id'] ?? null) !== null) {
+                $datedInsights = array_merge($datedInsights, array_values(array_filter($mini['insights'] ?? [], 'is_array')));
+            }
+        }
+
+        $cardKey = fn (array $c): string => Str::lower((string) ($c['variant'] ?? '').'|'.(string) ($c['title'] ?? ''));
+        $byKey = [];
+        foreach (array_values(array_filter($spec['insights'] ?? [], 'is_array')) as $i => $card) {
+            $byKey[$cardKey($card)] = $i;
+        }
+        foreach ($datedInsights as $card) {
+            $key = $cardKey($card);
+            if (isset($byKey[$key])) {
+                // Twin titles: the DATED narration wins — «Volumen del
+                // periodo» with a trend beats the same count without one.
+                $spec['insights'][$byKey[$key]] = $card;
+
+                continue;
+            }
+            if (count($spec['insights'] ?? []) >= self::MAX_INSIGHTS) {
+                break;
+            }
+            $byKey[$key] = count($spec['insights'] ?? []);
+            $spec['insights'][] = $card;
         }
 
         // The primary pieces the guests displaced come back while there's room.

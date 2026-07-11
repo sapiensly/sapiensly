@@ -218,6 +218,67 @@ it('the verifier applies only menu-valid fixes as a new version', function () {
         ->toBeGreaterThan($version->version_number);
 });
 
+it('the verifier cannot fabricate labels nor remove asked forms — same bar as G-2a', function () {
+    // Prod plr_01kx7d7b7a: version 5 renamed an FCR-by-category chart to
+    // «Pareto de Motivos» and removed asked charts — G-3 was the one door
+    // with no grounding. Build a page with a pareto over a REASON-less
+    // object and try both attacks.
+    $manifests = app(AppManifestService::class);
+    $manifest = $manifests->getActiveManifest($this->testApp->fresh());
+    $object = $manifest['objects'][0];
+    $spec = (new DashboardSpecSuggester)->suggest($object, 'es', [], ['tickets', 'pareto']);
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec + ['object_slug' => $object['slug']],
+        $object, [],
+        ColorPalette::fromAccent(OrganizationBrand::DEFAULT_ACCENT),
+        'es',
+    );
+    expect($built['ok'])->toBeTrue();
+    $manifests->applyPatch($this->testApp->fresh(), [['op' => 'add', 'path' => '/pages/-', 'value' => $built['page']]], $this->user, 'page');
+
+    $run = PipelineRun::create([
+        'app_id' => $this->testApp->id,
+        'conversation_id' => $this->conv->id,
+        'prompt' => 'pareto de tickets',
+        'status' => 'succeeded',
+        'result' => ['page' => ['slug' => $built['page']['slug']]],
+    ]);
+
+    $flat = [];
+    $walk = function (array $blocks) use (&$walk, &$flat) {
+        foreach ($blocks as $b) {
+            $flat[] = $b;
+            if (is_array($b['blocks'] ?? null)) {
+                $walk($b['blocks']);
+            }
+        }
+    };
+    $walk($built['page']['blocks']);
+    $pareto = collect($flat)->first(fn ($b) => ($b['chart_type'] ?? null) === 'pareto');
+    $anyChart = collect($flat)->first(fn ($b) => ($b['type'] ?? null) === 'chart' && ($b['chart_type'] ?? null) !== 'pareto');
+    expect($pareto)->not->toBeNull();
+
+    ExpressGateAgent::fake([[
+        'fixes' => array_values(array_filter([
+            // Ungrounded rename: the object has no causes anywhere.
+            ['action' => 'rename_block', 'block_id' => ($anyChart ?? $pareto)['id'], 'value' => 'Top Causas Raíz'],
+            // Asked-form removal: the pareto only exists because it was asked.
+            ['action' => 'remove_block', 'block_id' => $pareto['id']],
+            ['action' => 'change_chart_type', 'block_id' => $pareto['id'], 'value' => 'bar'],
+        ])),
+    ]]);
+
+    $before = $this->testApp->fresh()->currentVersion->version_number;
+    (new VerifyExpressDashboardJob($run->id))->handle(app(GateRunner::class), $manifests);
+
+    // Every candidate died at the menu — no new version, page intact.
+    expect($this->testApp->fresh()->currentVersion->version_number)->toBe($before);
+    $after = $manifests->getActiveManifest($this->testApp->fresh());
+    $json = json_encode($after, JSON_UNESCAPED_UNICODE);
+    expect($json)->toContain($pareto['id'])
+        ->and($json)->not->toContain('Top Causas Raíz');
+});
+
 it('verify falls back to the user-chosen model when no plumbing model is configured', function () {
     config(['express.plumbing_model' => '']);
 

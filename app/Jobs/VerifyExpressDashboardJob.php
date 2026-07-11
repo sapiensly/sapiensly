@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\PipelineRun;
 use App\Services\Express\GateRunner;
+use App\Services\Express\LabelGrounding;
 use App\Services\Manifest\AppManifestService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -94,7 +95,10 @@ TXT,
             $this->verifyModel(),
         );
 
-        $fixes = $this->validFixes($result['output']['fixes'] ?? [], $summary);
+        $objectsById = collect($manifest['objects'] ?? [])
+            ->filter(fn ($o): bool => is_array($o))
+            ->keyBy(fn (array $o) => $o['id'] ?? '');
+        $fixes = $this->validFixes($result['output']['fixes'] ?? [], $summary, $objectsById->all());
         if ($fixes === []) {
             return;
         }
@@ -153,6 +157,12 @@ TXT,
                     'type' => $block['type'] ?? null,
                     'label' => $block['label'] ?? ($block['title'] ?? null),
                     'chart_type' => $block['chart_type'] ?? null,
+                    // The object this block actually reads — renames are
+                    // grounded against ITS fields, not against vibes.
+                    'object_id' => $block['data_source']['object_id']
+                        ?? ($block['query']['object_id']
+                        ?? ($block['stat']['query']['object_id']
+                        ?? ($block['compute']['query']['object_id'] ?? null))),
                 ], fn ($v) => $v !== null);
                 if (is_array($block['blocks'] ?? null)) {
                     $walk($block['blocks']);
@@ -171,11 +181,16 @@ TXT,
      * @param  list<array<string, mixed>>  $summary
      * @return list<array<string, mixed>>
      */
-    private function validFixes(array $fixes, array $summary): array
+    private function validFixes(array $fixes, array $summary, array $objectsById = []): array
     {
         $byId = collect($summary)->keyBy('block_id');
         $valid = [];
         $removals = 0;
+
+        // Intent-only forms exist BECAUSE the user asked for them (pareto,
+        // funnel, heatmap live nowhere else) — the verifier may rename or
+        // retype freely elsewhere, but an asked form is not its to take.
+        $askedForm = fn (?array $b): bool => in_array($b['chart_type'] ?? null, ['pareto', 'funnel', 'heatmap'], true);
 
         foreach ($fixes as $fix) {
             if (! is_array($fix) || count($valid) >= self::MAX_FIXES) {
@@ -189,10 +204,16 @@ TXT,
             }
 
             $ok = match ($action) {
-                'rename_block' => is_string($fix['value'] ?? null) && trim($fix['value']) !== '',
+                // Same bar as G-2a: a rename claiming a dimension must point
+                // at data that carries it («Pareto de Motivos» over FCR
+                // category keys walked in exactly here).
+                'rename_block' => is_string($fix['value'] ?? null) && trim($fix['value']) !== ''
+                    && LabelGrounding::grounded((string) $fix['value'], $objectsById[$block['object_id'] ?? ''] ?? null),
                 'change_chart_type' => ($block['type'] ?? null) === 'chart'
+                    && ! $askedForm($block)
                     && in_array($fix['value'] ?? null, self::VALID_CHART_TYPES, true),
                 'remove_block' => in_array($block['type'] ?? null, ['chart', 'insight'], true)
+                    && ! $askedForm($block)
                     && $removals < self::MAX_REMOVALS,
                 default => false,
             };

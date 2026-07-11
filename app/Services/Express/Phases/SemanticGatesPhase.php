@@ -6,9 +6,9 @@ use App\Ai\Tools\Builder\PlanDashboardTool;
 use App\Models\PipelineRun;
 use App\Services\Ai\AiDefaults;
 use App\Services\Express\Contracts\ExpressPhase;
-use App\Services\Express\DomainLexicon;
 use App\Services\Express\ExpressContext;
 use App\Services\Express\GateRunner;
+use App\Services\Express\LabelGrounding;
 use App\Services\Manifest\AppScaffolder;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
@@ -197,12 +197,6 @@ TXT,
     }
 
     /**
-     * Dimension words a chart label may claim — each must be carried by the
-     * chart's actual data (object name/slug, field names, cut arguments).
-     */
-    private const DIMENSION_WORDS = '/\b(causas?|motivos?|categor[ií]as?|prioridad(?:es)?|canal(?:es)?|reasons?|causes?|categor(?:y|ies)|priorit(?:y|ies)|channels?)\b/iu';
-
-    /**
      * The deterministic suggestion is the FLOOR, not a draft (prod
      * plr_01kx7adw2z: a wholesale charts override dropped the asked gauge and
      * both distribution donuts, and relabeled a category breakdown as "Causas
@@ -257,38 +251,10 @@ TXT,
      */
     private function chartLabelGrounded(ExpressContext $context, array $chart): bool
     {
-        $label = Str::lower(Str::ascii((string) ($chart['label'] ?? '')));
-        if ($label === '' || preg_match_all(self::DIMENSION_WORDS, $label, $m) === 0) {
-            return true;
-        }
-
         $slug = (string) ($chart['object_slug'] ?? ($context->spec['object_slug'] ?? ''));
         $object = collect($context->objects)->firstWhere('slug', $slug);
-        if (! is_array($object)) {
-            return true; // unknown target — the compile judge decides
-        }
 
-        $hay = Str::lower(Str::ascii(json_encode([
-            $object['slug'] ?? '',
-            $object['name'] ?? '',
-            collect($object['fields'] ?? [])
-                ->map(fn ($f): array => is_array($f) ? [(string) ($f['name'] ?? ''), (string) ($f['slug'] ?? '')] : [])
-                ->all(),
-            $object['source']['operations']['list']['arguments'] ?? [],
-        ], JSON_UNESCAPED_UNICODE) ?: ''));
-
-        foreach (array_unique($m[0]) as $word) {
-            $w = Str::lower(Str::ascii((string) $word));
-            $grounded = DomainLexicon::expand(collect([$w]))->contains(
-                fn (string $v): bool => str_contains($hay, $v)
-                    || (mb_strlen($v) >= 5 && str_contains($hay, mb_substr($v, 0, 5))),
-            );
-            if (! $grounded) {
-                return false;
-            }
-        }
-
-        return true;
+        return LabelGrounding::grounded((string) ($chart['label'] ?? ''), is_array($object) ? $object : null);
     }
 
     /**

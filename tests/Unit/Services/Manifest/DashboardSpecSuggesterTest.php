@@ -1047,3 +1047,72 @@ it('a full suggested board VALIDATES against the manifest JSON schema', function
     expect($result->errorsArray())->toBe([])
         ->and($result->valid)->toBeTrue();
 });
+
+it('the master-prompt checklist compiles from the deterministic floor alone', function () {
+    // Compact replay of prod plr_01kx7d7b7a's object shapes: every promised
+    // piece — gauge bound to fcr, ONE pareto on the primary, the CAUSE and
+    // PRIORITY cuts charted, a cross-object category filter with drill — must
+    // come out of the suggestion + compiler with no model involved.
+    $mk = function (string $slug, string $name, array $fields, array $args) {
+        static $i = 0;
+        $i++;
+
+        return ['id' => 'obj_mchk'.$i, 'slug' => $slug, 'name' => $name,
+            'fields' => collect($fields)->map(fn ($f, $k) => ['id' => 'fld_mchk'.$i.'_'.$k, 'name' => $f[0], 'slug' => $f[1], 'type' => $f[2]])->values()->all(),
+            'source' => ['type' => 'connected', 'integration_id' => 'integ_x',
+                'operations' => ['list' => ['mcp_tool' => $slug.'-tool', 'arguments' => $args, 'collection_path' => 'x']]]];
+    };
+    $dimFields = [['Key', 'key', 'string'], ['Total Tickets', 'totals_total_tickets', 'number'], ['Backlog Open', 'totals_backlog_open', 'number'], ['Reopened', 'totals_reopened', 'number']];
+    $objects = [
+        $mk('tickets_reason_cause_breakdown', 'Tickets Reason Cause Breakdown', [['Reason', 'reason', 'string'], ['Total Tickets', 'total_tickets', 'number'], ['Pct Of Total', 'pct_of_total', 'number']], ['from' => 'x', 'to' => 'y']),
+        $mk('tickets_by_dimension', 'Tickets By Dimension', $dimFields, ['dimension' => 'category']),
+        $mk('tickets_time_series', 'Tickets Time Series', [['Bucket Start', 'bucket_start', 'date'], ['Total Tickets', 'totals_total_tickets', 'number'], ['Backlog Open', 'totals_backlog_open', 'number']], ['granularity' => 'weekly']),
+        $mk('tickets_fcr', 'Tickets Fcr', [['Key', 'key', 'string'], ['Closed Count', 'closed_count', 'number'], ['Fcr Pct', 'fcr_pct', 'number']], ['from' => 'x', 'to' => 'y']),
+        $mk('tickets_by_dimension_cause', 'Tickets By Dimension · Cause', $dimFields, ['dimension' => 'cause']),
+        $mk('tickets_by_dimension_priority', 'Tickets By Dimension · Priority', $dimFields, ['dimension' => 'priority']),
+    ];
+    $dimRows = fn () => collect(['Facturación', 'Envíos', 'Cuenta', 'App', 'Fraude', 'Otros'])
+        ->map(fn ($k, $i) => ['key' => $k, 'totals_total_tickets' => 300 - $i * 40, 'totals_backlog_open' => 50 - $i * 5, 'totals_reopened' => 20 - $i * 2])->all();
+    $rows = [
+        'obj_mchk1' => collect(range(1, 15))->map(fn ($i) => ['reason' => "Motivo {$i} de contacto", 'total_tickets' => 400 - $i * 20, 'pct_of_total' => 30 - $i])->all(),
+        'obj_mchk2' => $dimRows(),
+        'obj_mchk3' => collect(range(0, 12))->map(fn ($w) => ['bucket_start' => date('Y-m-d', strtotime("2026-04-06 +{$w} week")), 'totals_total_tickets' => 90 + ($w % 5) * 7, 'totals_backlog_open' => 20 + $w])->all(),
+        'obj_mchk4' => collect(['Facturación', 'Envíos', 'Cuenta', 'App'])->map(fn ($k, $i) => ['key' => $k, 'closed_count' => 200 - $i * 30, 'fcr_pct' => 78 - $i])->all(),
+        'obj_mchk5' => $dimRows(),
+        'obj_mchk6' => $dimRows(),
+    ];
+    $prompt = 'crea un dashboard de tickets: pareto de motivos con % acumulado, top 8 de causas raíz, distribución por categoría y por prioridad, tendencia semanal, meta de FCR de 80%, con filtro por categoría y tabla de detalle';
+    $topics = ['tickets', 'pareto', 'motivos', 'acumulado', 'top8', 'causas', 'raiz', 'distribucion', 'categoria', 'prioridad', 'meta', 'fcr', 'filtro', 'detalle'];
+
+    $spec = app(DashboardSpecSuggester::class)->suggestMulti($objects, 'es', $rows, $topics, [], $prompt);
+    $charts = collect($spec['charts']);
+
+    // 1) ONE pareto, on the primary (motivos).
+    expect($charts->where('chart_type', 'pareto'))->toHaveCount(1)
+        ->and($charts->firstWhere('chart_type', 'pareto')['object_slug'] ?? null)->toBeNull()
+        // 2) gauge bound by the «meta de FCR» hint, cross-object.
+        ->and($charts->firstWhere('chart_type', 'gauge')['object_slug'] ?? null)->toBe('tickets_fcr')
+        ->and($charts->firstWhere('chart_type', 'gauge')['max_value'])->toEqual(80.0)
+        // 3) the asked CAUSE and PRIORITY cuts each got a chart.
+        ->and($charts->pluck('object_slug'))->toContain('tickets_by_dimension_cause')
+        ->and($charts->pluck('object_slug'))->toContain('tickets_by_dimension_priority')
+        // 4) cross-object category filter, labeled by the DIMENSION, not «Key».
+        ->and($spec['category_filter']['object_slug'] ?? null)->toBe('tickets_by_dimension')
+        ->and($spec['category_filter']['label'] ?? '')->toBe('Category')
+        ->and($spec['category_filter']['options'])->toContain('Facturación')
+        // 5) the analytics band carries a card computed on the DATED guest.
+        ->and(collect($spec['insights'])->pluck('compute.query.object_id'))->toContain('obj_mchk3');
+
+    // 6) The whole thing must survive the compiler, wire the select control,
+    //    stamp the drill, and filter the cut charts through the shared param.
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $objects[0], [], ColorPalette::fromAccent('#00ce7c'), 'es',
+        array_slice($objects, 1),
+    );
+    expect($built['ok'] ?? false)->toBeTrue()
+        ->and(PlanDashboardTool::lint($built['purpose'], $built['plan_rows'])['ok'])->toBeTrue();
+    $page = json_encode($built['page'], JSON_UNESCAPED_UNICODE);
+    expect($page)->toContain('"type":"select"')
+        ->and($page)->toContain('drill_param')
+        ->and($page)->toContain('{{params.key}}');
+});

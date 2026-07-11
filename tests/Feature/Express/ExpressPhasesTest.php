@@ -1615,3 +1615,25 @@ it('«meta de FCR de 80%» binds the gauge to the fcr measure — even on a seco
         ->and($gauge['max_value'])->toEqual(80.0)
         ->and($gauge['label'])->toContain('Fcr');
 });
+
+it('the enum-cut cap counts distinct VALUES — one word on two tools costs one slot', function () {
+    // Prod: «motivos» matched the reason enum on BOTH by-dimension and fcr,
+    // spending two of the three slots — «prioridad», named explicitly, got
+    // sliced. Distinct values fill first; repeats backfill the spare read.
+    config(['express.economy' => true]);
+    ExpressGateAgent::fake([])->preventStrayPrompts();
+
+    $ctx = xph_ctx($this, 'tickets por motivos, causas y prioridad');
+    $ctx->integration = $this->integration;
+    $dims = ['enum' => ['category', 'reason', 'cause', 'priority']];
+    $ctx->catalogTools = [
+        ['name' => 'get-tickets-by-dimension-tool', 'description' => 'Tickets por dimensión: motivos, causa, prioridad', 'arguments' => ['dimension' => 'category'], 'input_schema' => ['properties' => ['dimension' => $dims]]],
+        ['name' => 'get-tickets-fcr-tool', 'description' => 'Tickets FCR por dimensión: motivos, causa, prioridad', 'arguments' => ['dimension' => 'category'], 'input_schema' => ['properties' => ['dimension' => $dims]]],
+    ];
+
+    (new FitCheckPhase(app(GateRunner::class)))->run($ctx, xph_run($this));
+
+    $cuts = collect($ctx->chosenCuts);
+    expect($cuts->pluck('cut')->unique()->values()->all())->toBe(['reason', 'cause', 'priority'])
+        ->and($cuts)->toHaveCount(4); // 3 values + 1 backfilled repeat
+});

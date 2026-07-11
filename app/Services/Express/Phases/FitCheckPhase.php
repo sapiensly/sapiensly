@@ -551,10 +551,33 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
 
         usort($cuts, fn (array $a, array $b): int => $a['_pos'] <=> $b['_pos']);
 
-        return array_map(
-            fn (array $c): array => ['tool' => $c['tool'], 'arguments' => $c['arguments'], 'cut' => $c['cut']],
-            array_slice($cuts, 0, self::MAX_ENUM_CUTS),
-        );
+        // The cap counts DISTINCT VALUES, not reads: «motivos» matching the
+        // reason enum on two tools must not spend two of the user's slots
+        // (prod: reason×2 ate the slot prioridad was named for). Pass one
+        // takes the first cut of each named value; pass two backfills repeat
+        // tools while total reads stay bounded.
+        $strip = fn (array $c): array => ['tool' => $c['tool'], 'arguments' => $c['arguments'], 'cut' => $c['cut']];
+        $taken = [];
+        $values = [];
+        foreach ($cuts as $cut) {
+            $v = Str::lower($cut['cut']);
+            if (in_array($v, $values, true) || count($values) >= self::MAX_ENUM_CUTS) {
+                continue;
+            }
+            $values[] = $v;
+            $taken[] = $strip($cut);
+        }
+        foreach ($cuts as $cut) {
+            if (count($taken) >= self::MAX_ENUM_CUTS + 1) {
+                break;
+            }
+            $c = $strip($cut);
+            if (in_array(Str::lower($cut['cut']), $values, true) && ! in_array($c, $taken, true)) {
+                $taken[] = $c;
+            }
+        }
+
+        return $taken;
     }
 
     /**

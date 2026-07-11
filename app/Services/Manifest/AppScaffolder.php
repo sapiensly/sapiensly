@@ -1195,14 +1195,22 @@ class AppScaffolder
         $categoryWired = false;
         if (is_array($spec['category_filter'] ?? null)) {
             $cf = $spec['category_filter'];
-            $cfField = collect($object['fields'] ?? [])->firstWhere('id', $cf['field_id'] ?? null);
+            // The filter's field may live on a SECONDARY object («filtro por
+            // categoría» when the primary is a reason breakdown) — resolve it
+            // on its owner and remember the slug so every object carrying a
+            // same-named field listens too.
+            $cfOwner = isset($cf['object_slug'])
+                ? (collect($extraObjects)->firstWhere('slug', $cf['object_slug']) ?? $object)
+                : $object;
+            $cfField = collect($cfOwner['fields'] ?? [])->firstWhere('id', $cf['field_id'] ?? null);
             $cfOptions = collect($cf['options'] ?? [])
                 ->map(fn ($v): string => is_scalar($v) ? trim((string) $v) : '')
                 ->filter()->unique()->take(12)->values();
             if ($cfField !== null && in_array($cfField['type'] ?? '', ['string', 'single_select'], true) && $cfOptions->count() >= 2) {
-                $param = (string) preg_replace('/[^a-z0-9_]/', '', Str::snake((string) ($cfField['slug'] ?? 'categoria')));
+                $param = (string) preg_replace('/[^a-z0-9_]/', '', Str::snake((string) ($cf['param'] ?? $cfField['slug'] ?? 'categoria')));
                 $categoryFilter = [
                     'field_id' => $cfField['id'],
+                    'field_slug' => (string) ($cfField['slug'] ?? ''),
                     'label' => (string) ($cf['label'] ?? $cfField['name'] ?? $cfField['slug']),
                     'param' => $param !== '' && $param !== 'range' ? $param : 'categoria',
                     'options' => $cfOptions->all(),
@@ -1213,20 +1221,25 @@ class AppScaffolder
         // Merge the range filter into a block's own filter (empty preset ⇒ the
         // condition resolves empty and is skipped server-side ⇒ "Todo").
         $rangeWired = false;
-        $withRange = function (?array $own, array $obj) use ($withDateFilter, $rangeBySlug, $primarySlug, &$rangeWired, $categoryFilter, &$categoryWired, $object): ?array {
+        $withRange = function (?array $own, array $obj) use ($withDateFilter, $rangeBySlug, $primarySlug, &$rangeWired, $categoryFilter, &$categoryWired): ?array {
             $conditions = [];
             $range = $rangeBySlug[(string) ($obj['slug'] ?? $primarySlug)] ?? null;
             if ($withDateFilter && $range !== null) {
                 $rangeWired = true;
                 $conditions[] = $range;
             }
-            if ($categoryFilter !== null && ($obj['id'] ?? null) === ($object['id'] ?? null)) {
-                $categoryWired = true;
-                $conditions[] = [
-                    'op' => 'eq',
-                    'field_id' => $categoryFilter['field_id'],
-                    'value_expression' => '{{params.'.$categoryFilter['param'].'}}',
-                ];
+            if ($categoryFilter !== null) {
+                $listener = collect($obj['fields'] ?? [])->first(
+                    fn ($f): bool => is_array($f) && ($f['slug'] ?? null) === $categoryFilter['field_slug'],
+                );
+                if ($listener !== null) {
+                    $categoryWired = true;
+                    $conditions[] = [
+                        'op' => 'eq',
+                        'field_id' => $listener['id'],
+                        'value_expression' => '{{params.'.$categoryFilter['param'].'}}',
+                    ];
+                }
             }
             if ($conditions === []) {
                 return $own;
@@ -1491,8 +1504,11 @@ class AppScaffolder
                 // Clicking a category toggles the select filter's param — the
                 // whole board re-scopes through wiring that already exists.
                 'drill_param' => ($categoryFilter !== null
-                    && ($chart['group_by_field_id'] ?? null) === $categoryFilter['field_id']
-                    && ($chartObject['id'] ?? null) === ($object['id'] ?? null))
+                    && collect($chartObject['fields'] ?? [])->contains(
+                        fn ($f): bool => is_array($f)
+                            && ($f['id'] ?? null) === ($chart['group_by_field_id'] ?? null)
+                            && ($f['slug'] ?? null) === $categoryFilter['field_slug'],
+                    ))
                     ? $categoryFilter['param'] : null,
                 'data_source' => $dataSource,
                 'aggregation' => $agg,
