@@ -7,6 +7,7 @@ import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
 import type { AnyBlock, RuntimePageProps } from '@/runtime/types/manifest';
+import DashboardLoading from '@/components/DashboardLoading.vue';
 import { blockDataBus } from '@/runtime/useActionExecutor';
 import { useScrollReveal } from '@/runtime/useReveal';
 import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
@@ -88,6 +89,9 @@ const defaultCurrency = computed(
     () => settings.value.default_currency ?? 'MXN',
 );
 const theme = computed(() => settings.value.theme ?? 'light');
+const loaderAccent = computed(
+    () => (settings.value as { accent?: string }).accent ?? '#0059ff',
+);
 
 // Brand defaults to the app name so the site header is never empty.
 const brand = computed(() => ({
@@ -225,16 +229,29 @@ useScrollReveal(sectionsEl);
                         {{ page.name }}
                     </h1>
                 </header>
-                <div ref="sectionsEl" class="flex-1 space-y-4 px-6 py-6">
+                <div
+                    ref="sectionsEl"
+                    class="relative flex-1 space-y-4 px-6 py-6"
+                >
                     <AppRenderer
                         :blocks="contentBlocks"
                         :block-data="liveBlockData"
-                :loading="blockDataPending"
+                        :loading="blockDataPending"
                         :objects="manifest.objects"
                         :locale="locale"
                         :default-currency="defaultCurrency"
                         :theme="theme"
                     />
+                    <Transition
+                        leave-active-class="transition-opacity duration-500"
+                        leave-to-class="opacity-0"
+                    >
+                        <DashboardLoading
+                            v-if="blockDataPending"
+                            :accent="loaderAccent"
+                            :lang="locale"
+                        />
+                    </Transition>
                 </div>
                 <div class="px-6">
                     <SiteFooter :footer="footer" :brand-name="brand.name" />
@@ -253,16 +270,26 @@ useScrollReveal(sectionsEl);
                 />
             </div>
 
-            <div ref="sectionsEl" class="flex-1 space-y-4 px-5 py-6">
+            <div ref="sectionsEl" class="relative flex-1 space-y-4 px-5 py-6">
                 <AppRenderer
                     :blocks="page.blocks"
                     :block-data="liveBlockData"
-                :loading="blockDataPending"
+                    :loading="blockDataPending"
                     :objects="manifest.objects"
                     :locale="locale"
                     :default-currency="defaultCurrency"
                     :theme="theme"
                 />
+                <Transition
+                    leave-active-class="transition-opacity duration-500"
+                    leave-to-class="opacity-0"
+                >
+                    <DashboardLoading
+                        v-if="blockDataPending"
+                        :accent="loaderAccent"
+                        :lang="locale"
+                    />
+                </Transition>
             </div>
 
             <div class="px-5">

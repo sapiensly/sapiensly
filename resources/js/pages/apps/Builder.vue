@@ -37,6 +37,7 @@ import {
     slashFilterFor,
     type SlashCommand,
 } from '@/lib/builderSlashCommands';
+import DashboardLoading from '@/components/DashboardLoading.vue';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
@@ -3218,21 +3219,11 @@ function statusTone(status: Message['status']): string {
                             leave-active-class="transition-opacity duration-300"
                             leave-to-class="opacity-0"
                         >
-                            <div
+                            <DashboardLoading
                                 v-if="previewLoading"
-                                class="absolute inset-0 z-30 flex items-center justify-center bg-navy-deep/50 backdrop-blur-[2px]"
-                            >
-                                <div
-                                    class="flex items-center gap-3 rounded-sp-md border border-medium bg-navy-elevated px-6 py-4 shadow-xl"
-                                >
-                                    <Loader2
-                                        class="size-5 shrink-0 animate-spin text-accent-blue"
-                                    />
-                                    <span class="text-sm text-ink">{{
-                                        t('apps.builder.preview_loading')
-                                    }}</span>
-                                </div>
-                            </div>
+                                :accent="(previewSettings.accent as string) ?? '#0059ff'"
+                                :lang="previewLocale"
+                            />
                         </Transition>
                         <div
                             v-if="preview"
