@@ -292,6 +292,12 @@
                             "default": "to-br"
                         }
                     }
+                },
+                "min_height": {
+                    "type": "integer",
+                    "minimum": 120,
+                    "maximum": 800,
+                    "description": "Minimum block height in px — the manual-adjust resize writes it; the renderer applies it as min-height."
                 }
             }
         },

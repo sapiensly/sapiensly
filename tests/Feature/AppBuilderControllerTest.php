@@ -1236,3 +1236,112 @@ it('blocks design updates from users who cannot see the App', function () {
         ->postJson("/apps/{$this->testApp->id}/builder/design", ['accent' => '#FF8800'])
         ->assertForbidden();
 });
+
+// ---------------------------------------------------------------------------
+// Manual adjust: block updates + the add-chart mini-Express
+// ---------------------------------------------------------------------------
+function manualDashManifest(string $appId): array
+{
+    return [
+        'id' => $appId,
+        'name' => 'Dash',
+        'slug' => 'dash',
+        'version' => 1,
+        'schema_version' => '1.0.0',
+        'settings' => ['default_locale' => 'es-MX'],
+        'objects' => [[
+            'id' => 'obj_manualdim0',
+            'slug' => 'tickets_by_reason',
+            'name' => 'Tickets By Reason',
+            'fields' => [
+                ['id' => 'fld_mreason000', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+                ['id' => 'fld_mtotal0000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+                ['id' => 'fld_mbacklog00', 'slug' => 'backlog_open', 'name' => 'Backlog Open', 'type' => 'number'],
+            ],
+            'source' => [
+                'type' => 'connected', 'integration_id' => 'integ_x',
+                'field_map' => [
+                    ['field_id' => 'fld_mreason000', 'external_path' => 'reason'],
+                    ['field_id' => 'fld_mtotal0000', 'external_path' => 'total'],
+                    ['field_id' => 'fld_mbacklog00', 'external_path' => 'backlog'],
+                ],
+                'operations' => ['list' => ['mcp_tool' => 'get-reasons-tool', 'collection_path' => 'rows']],
+            ],
+        ]],
+        'pages' => [[
+            'id' => 'pag_manual0000', 'slug' => 'dashboard', 'name' => 'Dash', 'path' => '/dashboard',
+            'blocks' => [[
+                'id' => 'cn_manualrow0', 'type' => 'container', 'direction' => 'row', 'gap' => 'md',
+                'blocks' => [[
+                    'id' => 'blk_manualbar0', 'type' => 'chart', 'label' => 'Por reason',
+                    'chart_type' => 'hbar', 'aggregation' => 'sum',
+                    'y_field_id' => 'fld_mtotal0000', 'group_by_field_id' => 'fld_mreason000',
+                    'data_source' => ['object_id' => 'obj_manualdim0', 'limit' => 12],
+                ]],
+            ]],
+        ]],
+        'permissions' => ['roles' => [['id' => 'rol_manual0000', 'slug' => 'admin', 'name' => 'Admin']]],
+        'workflows' => [],
+    ];
+}
+
+it('manual adjust patches a block through validation — and refuses lies', function () {
+    app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
+
+    // Legal: retype to pareto, retitle (grounded), resize.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/update", [
+            'block_id' => 'blk_manualbar0',
+            'changes' => ['chart_type' => 'pareto', 'label' => 'Pareto de Motivos', 'col_span' => 7, 'min_height' => 360],
+        ])->assertOk();
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $block = $manifest['pages'][0]['blocks'][0]['blocks'][0];
+    expect($block['chart_type'])->toBe('pareto')
+        ->and($block['label'])->toBe('Pareto de Motivos')
+        ->and($block['style']['col_span'])->toBe(7)
+        ->and($block['style']['min_height'])->toBe(360);
+
+    // Ungrounded label: «causas» over reason-only data → 422.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/update", [
+            'block_id' => 'blk_manualbar0',
+            'changes' => ['label' => 'Top Causas Raíz'],
+        ])->assertStatus(422)->assertJsonPath('error', 'label_ungrounded');
+
+    // avg over a non-numeric measure → 422.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/update", [
+            'block_id' => 'blk_manualbar0',
+            'changes' => ['aggregation' => 'avg', 'y_field_id' => 'fld_mreason000'],
+        ])->assertStatus(422)->assertJsonPath('error', 'illegal_aggregation');
+});
+
+it('the add-chart chat derives, dedupes and inserts a chart — no model involved', function () {
+    app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
+
+    // «backlog por motivo» → new measure over the same dimension: legal add.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/charts", [
+            'prompt' => 'agrega un top de backlog por motivo',
+        ])->assertOk()->assertJsonPath('ok', true);
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $page = $manifest['pages'][0];
+    expect(count($page['blocks']))->toBe(2);
+    $added = $page['blocks'][1]['blocks'][0];
+    expect($added['type'])->toBe('chart')
+        ->and($added['group_by_field_id'])->toBe('fld_mreason000')
+        ->and($added['y_field_id'])->toBe('fld_mbacklog00');
+
+    // The SAME information again → honest refusal, nothing inserted.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/charts", [
+            'prompt' => 'agrega un top de backlog por motivo',
+        ])->assertStatus(422);
+
+    // An ask naming nothing on the board → honest vocabulary reply.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/charts", [
+            'prompt' => 'agrega ventas por sucursal',
+        ])->assertStatus(422);
+});

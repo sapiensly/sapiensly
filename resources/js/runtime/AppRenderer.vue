@@ -393,8 +393,16 @@ function innerMaxWidth(block: AnyBlock): string {
 // container's default equal-column classes. No-op outside a flex row.
 function colSpanStyle(block: AnyBlock): Record<string, string> | undefined {
     const span = block.style?.col_span;
-    if (!span) return undefined;
-    return { flexGrow: String(span), flexBasis: '0%', minWidth: '0' };
+    const minHeight = (block.style as { min_height?: number } | undefined)
+        ?.min_height;
+    const out: Record<string, string> = {};
+    if (span) {
+        out.flexGrow = String(span);
+        out.flexBasis = '0%';
+        out.minWidth = '0';
+    }
+    if (minHeight) out.minHeight = `${minHeight}px`;
+    return Object.keys(out).length ? out : undefined;
 }
 
 function outerStyle(block: AnyBlock): Record<string, string> | undefined {

@@ -22,7 +22,10 @@ use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Express\ExpressIntentRouter;
+use App\Services\Express\LabelGrounding;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\DashboardSpecSuggester;
 use App\Services\Manifest\InvalidManifestException;
 use App\Services\Records\AppDataOverview;
 use App\Services\Records\BlockDataResolver;
@@ -1061,6 +1064,277 @@ class AppBuilderController extends Controller
      * `settings`, saved as a reversible version. Only these cosmetic keys are
      * touched — the data model and pages are never affected.
      */
+    /**
+     * Manual adjust: patch ONE block's editable fields. Every change rides
+     * the same applyPatch + schema validation as any build, becomes a
+     * version (undo = rollback), renames pass LabelGrounding, and chart-type
+     * changes are restricted to the axes' legal menu — a hand edit cannot
+     * fabricate a lying chart.
+     */
+    public function updateBlock(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'block_id' => ['required', 'string'],
+            'changes' => ['required', 'array'],
+            'changes.label' => ['sometimes', 'string', 'max:120'],
+            'changes.description' => ['sometimes', 'nullable', 'string', 'max:300'],
+            'changes.chart_type' => ['sometimes', 'string'],
+            'changes.aggregation' => ['sometimes', 'string', Rule::in(['count', 'sum', 'avg', 'min', 'max'])],
+            'changes.y_field_id' => ['sometimes', 'nullable', 'string'],
+            'changes.group_by_field_id' => ['sometimes', 'string'],
+            'changes.limit' => ['sometimes', 'integer', 'min:3', 'max:50'],
+            'changes.col_span' => ['sometimes', 'integer', 'min:3', 'max:12'],
+            'changes.min_height' => ['sometimes', 'nullable', 'integer', 'min:200', 'max:640'],
+        ]);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        $found = $this->findBlockPath($manifest, $data['block_id']);
+        if ($found === null) {
+            return response()->json(['error' => 'not_found', 'message' => 'Ese bloque ya no existe en el manifiesto.'], 404);
+        }
+        [$pointer, $block] = $found;
+
+        $objectId = $block['data_source']['object_id'] ?? ($block['query']['object_id'] ?? null);
+        $object = collect($manifest['objects'] ?? [])->firstWhere('id', $objectId);
+        $changes = $data['changes'];
+
+        // A label claiming a dimension must point at data that carries it —
+        // the same bar every model gate obeys.
+        if (isset($changes['label']) && is_array($object)
+            && ! LabelGrounding::grounded((string) $changes['label'], $object)) {
+            return response()->json(['error' => 'label_ungrounded', 'message' => 'Ese título nombra una dimensión que estos datos no traen — ajústalo a lo que la gráfica realmente muestra.'], 422);
+        }
+
+        if (isset($changes['chart_type']) && ($block['type'] ?? null) === 'chart') {
+            $legal = isset($block['x_field_id'])
+                ? ['line', 'area', 'bar']
+                : ['bar', 'hbar', 'donut', 'pie', 'treemap', 'pareto'];
+            if (! in_array($changes['chart_type'], $legal, true)) {
+                return response()->json(['error' => 'illegal_chart_type', 'message' => 'Ese tipo no aplica a los ejes de esta gráfica. Opciones: '.implode(', ', $legal).'.'], 422);
+            }
+        }
+
+        if (in_array($changes['aggregation'] ?? null, ['sum', 'avg', 'min', 'max'], true)) {
+            $yId = array_key_exists('y_field_id', $changes) ? $changes['y_field_id'] : ($block['y_field_id'] ?? null);
+            $yField = is_array($object) ? collect($object['fields'] ?? [])->firstWhere('id', $yId) : null;
+            if (! is_array($yField) || ($yField['type'] ?? null) !== 'number') {
+                return response()->json(['error' => 'illegal_aggregation', 'message' => 'Esa agregación necesita una medida numérica.'], 422);
+            }
+        }
+
+        $ops = [];
+        foreach (['label', 'description', 'chart_type', 'aggregation', 'y_field_id', 'group_by_field_id'] as $key) {
+            if (array_key_exists($key, $changes)) {
+                $ops[] = $changes[$key] === null
+                    ? ['op' => 'remove', 'path' => $pointer.'/'.$key]
+                    : ['op' => 'add', 'path' => $pointer.'/'.$key, 'value' => $changes[$key]];
+            }
+        }
+        if (array_key_exists('limit', $changes) && isset($block['data_source'])) {
+            $ops[] = ['op' => 'add', 'path' => $pointer.'/data_source/limit', 'value' => $changes['limit']];
+        }
+        if (array_key_exists('col_span', $changes) || array_key_exists('min_height', $changes)) {
+            $style = is_array($block['style'] ?? null) ? $block['style'] : [];
+            if (array_key_exists('col_span', $changes)) {
+                $style['col_span'] = $changes['col_span'];
+            }
+            if (array_key_exists('min_height', $changes)) {
+                if ($changes['min_height'] === null) {
+                    unset($style['min_height']);
+                } else {
+                    $style['min_height'] = $changes['min_height'];
+                }
+            }
+            $ops[] = ['op' => 'add', 'path' => $pointer.'/style', 'value' => (object) $style];
+        }
+        if ($ops === []) {
+            return response()->json(['error' => 'empty', 'message' => 'Nada que cambiar.'], 422);
+        }
+
+        try {
+            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste manual: '.(string) ($changes['label'] ?? $block['label'] ?? $data['block_id']));
+        } catch (InvalidManifestException $e) {
+            return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
+        }
+
+        return response()->json(['ok' => true, 'version' => $version->version_number]);
+    }
+
+    /**
+     * Manual adjust: add ONE chart from a natural ask — a deterministic
+     * mini-Express over the objects already on the board (form vocabulary +
+     * lexicon; zero model calls). Additive only: identity-deduped against
+     * the page, inserted as its own row, versioned like everything else.
+     */
+    public function addChart(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'prompt' => ['required', 'string', 'max:500'],
+            'page_slug' => ['nullable', 'string'],
+        ]);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+        $lang = AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null);
+        $connected = array_values(array_filter(
+            $manifest['objects'] ?? [],
+            fn ($o): bool => is_array($o) && (($o['source']['type'] ?? null) === 'connected'),
+        ));
+
+        $suggested = app(DashboardSpecSuggester::class)->suggestChartFromAsk($connected !== [] ? $connected : ($manifest['objects'] ?? []), $data['prompt'], $lang);
+        if (($suggested['ok'] ?? false) !== true) {
+            return response()->json(['ok' => false, 'message' => $suggested['error'] ?? 'No pude derivar la gráfica.'], 422);
+        }
+        $chart = $suggested['chart'];
+        $object = $suggested['object'];
+
+        $pageIndex = collect($manifest['pages'] ?? [])->search(fn ($p) => ($data['page_slug'] ?? null) === null || ($p['slug'] ?? null) === $data['page_slug']);
+        if ($pageIndex === false) {
+            return response()->json(['ok' => false, 'message' => 'No encontré la página.'], 404);
+        }
+        $page = $manifest['pages'][$pageIndex];
+
+        // Two charts with the same information add nothing — same rule the
+        // compiler enforces at build time.
+        $identity = json_encode([$object['id'], $chart['group_by_field_id'] ?? null, $chart['x_field_id'] ?? null, $chart['y_field_id'] ?? null, $chart['aggregation'] ?? 'count']);
+        $duplicate = false;
+        $walk = function (array $blocks) use (&$walk, &$duplicate, $identity): void {
+            foreach ($blocks as $b) {
+                if (! is_array($b)) {
+                    continue;
+                }
+                if (($b['type'] ?? null) === 'chart') {
+                    $bid = json_encode([$b['data_source']['object_id'] ?? null, $b['group_by_field_id'] ?? null, $b['x_field_id'] ?? null, $b['y_field_id'] ?? null, $b['aggregation'] ?? 'count']);
+                    if ($bid === $identity) {
+                        $duplicate = true;
+                    }
+                }
+                if (is_array($b['blocks'] ?? null)) {
+                    $walk($b['blocks']);
+                }
+            }
+        };
+        $walk($page['blocks'] ?? []);
+        if ($duplicate) {
+            return response()->json(['ok' => false, 'message' => 'Esa gráfica ya está en el tablero (misma dimensión y medida). Pide otro corte o cambia la medida.'], 422);
+        }
+
+        $scaffolder = app(AppScaffolder::class);
+        $block = array_filter([
+            'id' => $scaffolder->id('blk'),
+            'type' => 'chart',
+            'label' => $chart['label'],
+            'description' => $chart['description'] ?? null,
+            'chart_type' => $chart['chart_type'],
+            'x_field_id' => $chart['x_field_id'] ?? null,
+            'group_by_field_id' => $chart['group_by_field_id'] ?? null,
+            'y_field_id' => $chart['y_field_id'] ?? null,
+            'aggregation' => $chart['aggregation'],
+            'bucket' => $chart['bucket'] ?? null,
+            'data_source' => ['object_id' => $object['id'], 'limit' => isset($chart['x_field_id']) ? 500 : 12],
+        ], fn ($v) => $v !== null);
+        $container = [
+            'id' => $scaffolder->id('cn'),
+            'type' => 'container',
+            'direction' => 'row',
+            'gap' => 'md',
+            'blocks' => [$block],
+        ];
+
+        // Insert after the LAST chart-bearing row so the new card joins the
+        // breakdown section instead of dangling at the page bottom.
+        $blocks = $page['blocks'] ?? [];
+        $insertAt = count($blocks);
+        foreach ($blocks as $i => $b) {
+            $hasChart = isset($b['blocks']) && collect($b['blocks'])->contains(fn ($c) => is_array($c) && ($c['type'] ?? null) === 'chart');
+            if ((($b['type'] ?? null) === 'chart') || $hasChart) {
+                $insertAt = $i + 1;
+            }
+        }
+
+        try {
+            $version = $this->manifestService->applyPatch(
+                $app,
+                [['op' => 'add', 'path' => '/pages/'.$pageIndex.'/blocks/'.$insertAt, 'value' => $container]],
+                $request->user(),
+                'Ajuste manual: agregué «'.$chart['label'].'»',
+            );
+        } catch (InvalidManifestException $e) {
+            return response()->json(['ok' => false, 'message' => 'La gráfica no pasó validación.', 'errors' => $e->result->errorsArray()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'version' => $version->version_number,
+            'block_id' => $block['id'],
+            'message' => 'Listo — agregué «'.$chart['label'].'» ('.$chart['chart_type'].') al tablero.',
+        ]);
+    }
+
+    /**
+     * JSON pointer + node of a block id anywhere in the manifest's pages.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{0: string, 1: array<string, mixed>}|null
+     */
+    private function findBlockPath(array $manifest, string $blockId): ?array
+    {
+        $walk = function (array $blocks, string $base) use (&$walk, $blockId): ?array {
+            foreach ($blocks as $i => $block) {
+                if (! is_array($block)) {
+                    continue;
+                }
+                if (($block['id'] ?? null) === $blockId) {
+                    return [$base.'/'.$i, $block];
+                }
+                foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                    if (is_array($block[$key] ?? null)) {
+                        $hit = $walk($block[$key], $base.'/'.$i.'/'.$key);
+                        if ($hit !== null) {
+                            return $hit;
+                        }
+                    }
+                }
+                foreach (['tabs', 'sections'] as $key) {
+                    foreach ($block[$key] ?? [] as $j => $sub) {
+                        if (is_array($sub['blocks'] ?? null)) {
+                            $hit = $walk($sub['blocks'], $base.'/'.$i.'/'.$key.'/'.$j.'/blocks');
+                            if ($hit !== null) {
+                                return $hit;
+                            }
+                        }
+                    }
+                }
+                // metric_grid items are editable too (label/limit not spans).
+                foreach ($block['items'] ?? [] as $j => $item) {
+                    if (is_array($item) && ($item['id'] ?? null) === $blockId) {
+                        return [$base.'/'.$i.'/items/'.$j, $item];
+                    }
+                }
+            }
+
+            return null;
+        };
+        foreach ($manifest['pages'] ?? [] as $p => $page) {
+            $hit = $walk($page['blocks'] ?? [], '/pages/'.$p.'/blocks');
+            if ($hit !== null) {
+                return $hit;
+            }
+        }
+
+        return null;
+    }
+
     public function updateDesign(Request $request, App $app): JsonResponse
     {
         $this->assertCanAccess($request, $app);

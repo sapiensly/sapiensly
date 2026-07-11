@@ -37,6 +37,8 @@ import {
     slashFilterFor,
     type SlashCommand,
 } from '@/lib/builderSlashCommands';
+import ManualChat from '@/components/builder/ManualChat.vue';
+import ManualDrawer from '@/components/builder/ManualDrawer.vue';
 import DashboardLoading from '@/components/DashboardLoading.vue';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
@@ -509,6 +511,164 @@ function setPaletteMode(mode: string) {
 }
 
 const panelMode = ref<'chat' | 'manual'>('chat');
+
+// ---- Manual adjust: selection, drawer, on-grid resize ----------------------
+const selectedBlockId = ref<string | null>(null);
+watch(panelMode, () => (selectedBlockId.value = null));
+
+function findBlockById(
+    blocks: unknown[],
+    id: string,
+): Record<string, unknown> | null {
+    for (const b of blocks as Record<string, any>[]) {
+        if (!b || typeof b !== 'object') continue;
+        if (b.id === id) return b;
+        for (const key of ['blocks', 'left_blocks', 'right_blocks']) {
+            if (Array.isArray(b[key])) {
+                const hit = findBlockById(b[key], id);
+                if (hit) return hit;
+            }
+        }
+        for (const key of ['tabs', 'sections']) {
+            for (const sub of b[key] ?? []) {
+                if (Array.isArray(sub?.blocks)) {
+                    const hit = findBlockById(sub.blocks, id);
+                    if (hit) return hit;
+                }
+            }
+        }
+    }
+    return null;
+}
+const selectedBlock = computed(() =>
+    selectedBlockId.value && props.preview
+        ? findBlockById(
+              props.preview.page.blocks as unknown[],
+              selectedBlockId.value,
+          )
+        : null,
+);
+const selectedObject = computed(() => {
+    const b = selectedBlock.value as Record<string, any> | null;
+    const objId = b?.data_source?.object_id ?? b?.query?.object_id ?? null;
+    return objId
+        ? ((props.preview?.objects.find((o) => o.id === objId) as {
+              fields?: { id: string; name?: string; slug?: string; type?: string }[];
+              name?: string;
+          } | null) ?? null)
+        : null;
+});
+// Highlight the selected card without touching block components.
+const manualSelectionCss = computed(() =>
+    panelMode.value === 'manual' && selectedBlockId.value
+        ? `[data-block-id="${selectedBlockId.value}"]{outline:2px solid #3b82f6;outline-offset:3px;border-radius:14px;}`
+        : '',
+);
+function onManualPreviewClick(e: MouseEvent) {
+    if (panelMode.value !== 'manual') return;
+    const el = (e.target as HTMLElement).closest?.('[data-block-id]');
+    if (!(el instanceof HTMLElement)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    selectedBlockId.value = el.dataset.blockId ?? null;
+}
+function afterManualChange() {
+    router.reload({ only: ['preview', 'manifest'] });
+}
+
+// On-grid resize: drag the selected card's right edge (width snaps to the
+// 12-col grid) or bottom edge (min-height snaps to 40px). The change lands
+// through the same versioned endpoint as the drawer.
+const dragHint = ref<string | null>(null);
+const selectionRect = ref<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+} | null>(null);
+function updateSelectionRect() {
+    const el = selectedEl();
+    const pane = previewPane.value;
+    if (!el || !pane) {
+        selectionRect.value = null;
+        return;
+    }
+    const er = el.getBoundingClientRect();
+    const pr = pane.getBoundingClientRect();
+    selectionRect.value = {
+        left: er.left - pr.left + pane.scrollLeft,
+        top: er.top - pr.top + pane.scrollTop,
+        width: er.width,
+        height: er.height,
+    };
+}
+watch([selectedBlockId, () => props.preview], () => {
+    nextTick(() => setTimeout(updateSelectionRect, 50));
+});
+onMounted(() => {
+    previewPane.value?.addEventListener('scroll', updateSelectionRect, {
+        passive: true,
+    });
+    window.addEventListener('resize', updateSelectionRect, { passive: true });
+});
+onUnmounted(() => {
+    previewPane.value?.removeEventListener('scroll', updateSelectionRect);
+    window.removeEventListener('resize', updateSelectionRect);
+});
+function selectedEl(): HTMLElement | null {
+    return selectedBlockId.value
+        ? (previewPane.value?.querySelector(
+              `[data-block-id="${selectedBlockId.value}"]`,
+          ) as HTMLElement | null)
+        : null;
+}
+function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
+    const el = selectedEl();
+    const blockId = selectedBlockId.value;
+    if (!el || !blockId) return;
+    down.preventDefault();
+    const startX = down.clientX;
+    const startY = down.clientY;
+    const rect = el.getBoundingClientRect();
+    const rowWidth = el.parentElement?.clientWidth || rect.width;
+    let span = 0;
+    let minH = 0;
+    const move = (e: PointerEvent) => {
+        if (axis === 'x') {
+            const w = rect.width + (e.clientX - startX);
+            span = Math.min(12, Math.max(3, Math.round((w / rowWidth) * 12)));
+            dragHint.value = `${span} / 12`;
+            el.style.flexGrow = String(span);
+            el.style.flexBasis = '0%';
+        } else {
+            const h = rect.height + (e.clientY - startY);
+            minH = Math.min(640, Math.max(200, Math.round(h / 40) * 40));
+            dragHint.value = `${minH}px`;
+            el.style.minHeight = `${minH}px`;
+        }
+    };
+    const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        dragHint.value = null;
+        const changes: Record<string, number> = {};
+        if (axis === 'x' && span > 0) changes.col_span = span;
+        if (axis === 'y' && minH > 0) changes.min_height = minH;
+        if (Object.keys(changes).length === 0) return;
+        axios
+            .post(`/apps/${props.app.id}/builder/blocks/update`, {
+                block_id: blockId,
+                changes,
+            })
+            .then(() => {
+                afterManualChange();
+                setTimeout(updateSelectionRect, 400);
+            })
+            .catch(() => toast.error('No se pudo aplicar el tamaño.'));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+}
 const chatWidth = ref(DEFAULT_CHAT_WIDTH);
 const isLargeScreen = ref(true);
 const isResizing = ref(false);
@@ -2418,16 +2578,34 @@ function statusTone(status: Message['status']): string {
                 <section
                     v-if="panelMode === 'manual'"
                     :class="[
-                        'relative flex min-h-0 flex-col items-center justify-center gap-3 rounded-sp-sm border border-soft bg-navy p-8 text-center',
+                        'relative flex min-h-0 flex-col rounded-sp-sm border border-soft bg-navy',
                         ...fullscreenClassFor('chat'),
                     ]"
                 >
-                    <SlidersHorizontal class="size-8 text-ink-subtle" />
-                    <p class="text-sm font-semibold text-ink">Ajuste manual</p>
-                    <p class="max-w-60 text-xs text-ink-muted">
-                        Edita títulos, gráficas y disposición sin pasar por el
-                        chat — muy pronto.
-                    </p>
+                    <div
+                        class="flex items-center gap-2 border-b border-soft px-4 py-3"
+                    >
+                        <SlidersHorizontal class="size-4 text-accent-blue" />
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold text-ink">
+                                Ajuste manual
+                            </p>
+                            <p class="truncate text-[11px] text-ink-muted">
+                                Haz click en una card del preview para editarla
+                                — o pide una gráfica nueva aquí abajo.
+                            </p>
+                        </div>
+                    </div>
+                    <ManualChat
+                        :app-id="app.id"
+                        :page-slug="preview?.page?.slug"
+                        @added="
+                            (id) => {
+                                selectedBlockId = id;
+                                afterManualChange();
+                            }
+                        "
+                    />
                 </section>
                 <section
                     v-else
@@ -3316,6 +3494,7 @@ function statusTone(status: Message['status']): string {
                     <div
                         v-if="viewMode === 'preview'"
                         ref="previewPane"
+                        @click.capture="onManualPreviewClick"
                         :class="[
                             'relative flex-1 overflow-auto p-5 transition-colors',
                             // Force the previewed app's own theme here (independent of the
@@ -3328,6 +3507,61 @@ function statusTone(status: Message['status']): string {
                             preview ? 'bg-navy-deep' : '',
                         ]"
                     >
+                        <component
+                            :is="'style'"
+                            v-if="manualSelectionCss"
+                            :text-content="manualSelectionCss"
+                        />
+                        <ManualDrawer
+                            v-if="
+                                panelMode === 'manual' &&
+                                selectedBlock &&
+                                app.kind === 'dashboard'
+                            "
+                            :app-id="app.id"
+                            :block="selectedBlock"
+                            :object="selectedObject"
+                            @saved="afterManualChange"
+                            @close="selectedBlockId = null"
+                        />
+                        <!-- Resize handles on the selected card -->
+                        <template
+                            v-if="
+                                panelMode === 'manual' &&
+                                selectedBlock &&
+                                selectionRect
+                            "
+                        >
+                            <button
+                                type="button"
+                                class="absolute z-40 h-10 w-2 cursor-ew-resize rounded-pill bg-accent-blue shadow"
+                                :style="{
+                                    left: selectionRect.left + selectionRect.width - 4 + 'px',
+                                    top: selectionRect.top + selectionRect.height / 2 - 20 + 'px',
+                                }"
+                                title="Arrastra para ajustar el ancho"
+                                @pointerdown="startBlockResize('x', $event)"
+                            />
+                            <button
+                                type="button"
+                                class="absolute z-40 h-2 w-10 cursor-ns-resize rounded-pill bg-accent-blue shadow"
+                                :style="{
+                                    left: selectionRect.left + selectionRect.width / 2 - 20 + 'px',
+                                    top: selectionRect.top + selectionRect.height - 4 + 'px',
+                                }"
+                                title="Arrastra para ajustar el alto"
+                                @pointerdown="startBlockResize('y', $event)"
+                            />
+                            <div
+                                v-if="dragHint"
+                                class="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
+                            >
+                                <span
+                                    class="rounded-pill bg-navy-elevated px-3 py-1 text-xs text-ink shadow-xl"
+                                    >{{ dragHint }}</span
+                                >
+                            </div>
+                        </template>
                         <Transition
                             enter-active-class="transition-opacity duration-200"
                             enter-from-class="opacity-0"

@@ -824,6 +824,105 @@ class DashboardSpecSuggester
      *
      * @param  list<string>  $topics
      */
+    /**
+     * One chart from a natural ask, over ALREADY-acquired objects — the
+     * manual-adjust «agregar gráfica» chat. Deterministic mini-Express: the
+     * intent vocabulary picks the form, the lexicon picks the object and the
+     * measure/dimension the words name. Returns ok:false with a human reason
+     * when the ask doesn't anchor (the caller answers the chat honestly).
+     *
+     * @param  list<array<string, mixed>>  $objects
+     * @return array{ok: bool, chart?: array<string, mixed>, object?: array<string, mixed>, error?: string}
+     */
+    public function suggestChartFromAsk(array $objects, string $prompt, string $lang = 'es'): array
+    {
+        $stop = ['agrega', 'agregar', 'una', 'uno', 'grafica', 'gráfica', 'chart', 'nueva', 'nuevo', 'crea', 'crear', 'quiero', 'necesito', 'para', 'con', 'las', 'los', 'del', 'que', 'por', 'muestra', 'muestrame', 'dame'];
+        $topics = collect(preg_split('/[^a-z0-9áéíóúñ%]+/iu', Str::lower(Str::ascii($prompt))) ?: [])
+            ->filter(fn ($w): bool => mb_strlen((string) $w) >= 3 && ! in_array((string) $w, $stop, true))
+            ->unique()->values();
+        if ($topics->isEmpty()) {
+            return ['ok' => false, 'error' => $lang !== 'en'
+                ? 'Dime qué quieres graficar: la dimensión (motivos, categoría…) y opcionalmente la forma (pareto, top, distribución, tendencia).'
+                : 'Tell me what to chart: the dimension and optionally the form (pareto, top, distribution, trend).'];
+        }
+        $variants = DomainLexicon::expand($topics);
+
+        // The object whose DISTINGUISHING text the ask names (cut argument,
+        // «· Cut» suffix, slug tail, string fields) — first match wins.
+        $connected = array_values(array_filter($objects, fn ($o): bool => is_array($o)));
+        $scored = collect($connected)->map(function (array $o) use ($variants): array {
+            $name = (string) ($o['name'] ?? '');
+            $suffix = str_contains($name, '·') ? Str::afterLast($name, '·') : '';
+            $args = collect($o['source']['operations']['list']['arguments'] ?? [])
+                ->filter(fn ($v): bool => is_scalar($v) && ! str_contains((string) $v, '{{'))->implode(' ');
+            $fields = collect($o['fields'] ?? [])
+                ->map(fn ($f): string => is_array($f) ? (string) ($f['name'] ?? '').' '.(string) ($f['slug'] ?? '') : '')->implode(' ');
+            $hay = Str::lower(Str::ascii($suffix.' '.Str::afterLast((string) ($o['slug'] ?? ''), '_').' '.$args.' '.$fields));
+            $hits = $variants->filter(fn (string $v): bool => mb_strlen($v) >= 3 && str_contains($hay, $v))->count();
+
+            return ['object' => $o, 'hits' => $hits];
+        })->sortByDesc('hits')->values();
+
+        $best = $scored->first();
+        if ($best === null || $best['hits'] === 0) {
+            return ['ok' => false, 'error' => $lang !== 'en'
+                ? 'No encontré esa dimensión en los datos de este tablero. Dimensiones disponibles: '.collect($connected)->pluck('name')->implode(', ').'.'
+                : 'That dimension is not in this board\'s data. Available: '.collect($connected)->pluck('name')->implode(', ').'.'];
+        }
+        $object = $best['object'];
+
+        $strings = array_values(array_filter($object['fields'] ?? [], fn ($f): bool => is_array($f) && in_array($f['type'] ?? '', ['string', 'single_select'], true)));
+        $numerics = array_values(array_filter($object['fields'] ?? [], fn ($f): bool => is_array($f) && ($f['type'] ?? '') === 'number'));
+        $dates = array_values(array_filter($object['fields'] ?? [], fn ($f): bool => is_array($f) && in_array($f['type'] ?? '', ['date', 'datetime'], true)));
+
+        $named = function (array $fields) use ($variants): ?array {
+            foreach ($fields as $f) {
+                $hay = Str::lower(Str::ascii((string) ($f['name'] ?? '').' '.(string) ($f['slug'] ?? '')));
+                if ($variants->contains(fn (string $v): bool => mb_strlen($v) >= 3 && str_contains($hay, $v))) {
+                    return $f;
+                }
+            }
+
+            return null;
+        };
+
+        $form = $this->intentForm($topics->all());
+        $wantsTrend = $topics->contains(fn (string $w): bool => preg_match('/^(tendencia|evoluci|semanal|mensual|diari|trend)/u', $w) === 1);
+        $measure = $named($numerics) ?? ($numerics[0] ?? null);
+        $es = $lang !== 'en';
+
+        if (($wantsTrend || $strings === []) && $dates !== []) {
+            if ($measure === null) {
+                return ['ok' => false, 'error' => $es ? 'Ese objeto no tiene una medida numérica para graficar.' : 'No numeric measure to chart there.'];
+            }
+
+            return ['ok' => true, 'object' => $object, 'chart' => [
+                'label' => ($es ? 'Evolución de ' : 'Trend of ').Str::lower((string) $measure['name']),
+                'chart_type' => 'line',
+                'x_field_id' => $dates[0]['id'],
+                'y_field_id' => $measure['id'],
+                'aggregation' => 'sum',
+                'bucket' => 'week',
+                'description' => Str::ucfirst(($es ? 'Evolución semanal de ' : 'Weekly trend of ').Str::lower((string) $measure['name']).'.'),
+            ]];
+        }
+
+        $dimension = $named($strings) ?? ($strings[0] ?? null);
+        if ($dimension === null) {
+            return ['ok' => false, 'error' => $es ? 'Ese objeto no tiene una dimensión categórica para desglosar.' : 'No categorical dimension to break down there.'];
+        }
+        $form ??= 'hbar';
+
+        return ['ok' => true, 'object' => $object, 'chart' => array_filter([
+            'label' => ($es ? 'Por ' : 'By ').Str::lower((string) $dimension['name']).' · '.(string) ($object['name'] ?? ''),
+            'chart_type' => $form,
+            'group_by_field_id' => $dimension['id'],
+            'y_field_id' => $measure['id'] ?? null,
+            'aggregation' => $measure !== null ? 'sum' : 'count',
+            'description' => Str::ucfirst(Str::lower((string) ($measure['name'] ?? 'Registros')).' '.($es ? 'por' : 'by').' '.Str::lower((string) $dimension['name']).($form === 'pareto' ? ($es ? ', con % acumulado.' : ', with cumulative %.') : '.')),
+        ], fn ($v) => $v !== null)];
+    }
+
     private function intentForm(array $topics): ?string
     {
         $words = collect($topics)->map(fn ($w): string => Str::lower(Str::ascii((string) $w)));
