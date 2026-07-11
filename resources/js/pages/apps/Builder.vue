@@ -3534,10 +3534,22 @@ function statusTone(status: Message['status']): string {
                         class="flex items-center justify-between gap-3 border-b border-soft px-4 py-3"
                     >
                         <div class="flex items-center gap-2">
-                            <component
-                                :is="currentViewMeta.icon"
-                                class="size-3.5 text-ink-muted"
-                            />
+                            <button
+                                type="button"
+                                class="inline-flex size-6 items-center justify-center rounded-pill border border-medium bg-surface text-ink-muted transition-colors hover:text-ink"
+                                :title="
+                                    leftPanelHidden
+                                        ? 'Mostrar panel izquierdo'
+                                        : 'Ocultar panel izquierdo'
+                                "
+                                @click="leftPanelHidden = !leftPanelHidden"
+                            >
+                                <PanelLeftOpen
+                                    v-if="leftPanelHidden"
+                                    class="size-3"
+                                />
+                                <PanelLeftClose v-else class="size-3" />
+                            </button>
                             <h2
                                 class="text-xs font-medium tracking-wide text-ink-muted uppercase"
                             >
@@ -3566,23 +3578,6 @@ function statusTone(status: Message['status']): string {
                                     </button>
                                 </nav>
                             </template>
-                            <button
-                                type="button"
-                                class="inline-flex size-6 items-center justify-center rounded-pill border border-medium bg-surface text-ink-muted transition-colors hover:text-ink"
-                                :title="
-                                    leftPanelHidden
-                                        ? 'Mostrar panel izquierdo'
-                                        : 'Ocultar panel izquierdo'
-                                "
-                                @click="leftPanelHidden = !leftPanelHidden"
-                            >
-                                <PanelLeftOpen
-                                    v-if="leftPanelHidden"
-                                    class="size-3"
-                                />
-                                <PanelLeftClose v-else class="size-3" />
-                            </button>
-
                             <button
                                 type="button"
                                 @click="toggleFullscreen('work')"
