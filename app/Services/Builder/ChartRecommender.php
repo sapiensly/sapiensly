@@ -104,6 +104,40 @@ class ChartRecommender
             'total_rows' => $totalRows,
             'recommendations' => $recs,
             'gaps' => $this->gaps($factsByObject, $existing, $domain, $es),
+            'sources_detail' => array_map(
+                fn (array $e) => $this->sourceDetail($e['object'], count($e['rows']), $es),
+                array_values($factsByObject),
+            ),
+            'source_suggestions' => $this->domain->sourceSuggestions($domain, $es ? 'es' : 'en'),
+        ];
+    }
+
+    /**
+     * A plain-language read of what a source provides — its measures and the
+     * dimensions it can be broken down by, in business terms — for the "fuentes
+     * leídas" panel.
+     *
+     * @param  array<string, mixed>  $object
+     * @return array{name: string, rows: int, measures: list<string>, dimensions: list<string>}
+     */
+    private function sourceDetail(array $object, int $rowCount, bool $es): array
+    {
+        $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
+        $measures = collect($fields)
+            ->filter(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true))
+            ->map(fn (array $f): string => (string) ($f['name'] ?? $f['slug']))
+            ->take(6)->values()->all();
+        $dimensions = collect($fields)
+            ->filter(fn (array $f): bool => in_array($f['type'] ?? '', ['string', 'single_select', 'date', 'datetime'], true)
+                && preg_match('/label|bucket|_id$|^id$/i', (string) ($f['slug'] ?? '')) !== 1)
+            ->map(fn (array $f): string => (string) ($f['name'] ?? $f['slug']))
+            ->take(6)->values()->all();
+
+        return [
+            'name' => (string) ($object['name'] ?? $object['slug'] ?? ''),
+            'rows' => $rowCount,
+            'measures' => $measures,
+            'dimensions' => $dimensions,
         ];
     }
 

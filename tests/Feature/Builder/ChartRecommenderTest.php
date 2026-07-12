@@ -154,14 +154,20 @@ it('exposes recommendations over HTTP and adds one to the board', function () {
     app()->instance(ConnectedObjectReader::class, tap(Mockery::mock(ConnectedObjectReader::class), fn ($m) => $m->shouldReceive('list')->andReturn(['ok' => true, 'rows' => concentratedRows()])));
     app()->instance(ConnectedIntegrationResolver::class, tap(Mockery::mock(ConnectedIntegrationResolver::class), fn ($m) => $m->shouldReceive('resolve')->andReturn(Mockery::mock(Integration::class))));
 
-    $recs = $this->actingAs($user)
+    $body = $this->actingAs($user)
         ->getJson("/apps/{$app->id}/builder/recommendations?page=dashboard")
         ->assertOk()
         ->assertJsonPath('domain.sector', 'support')
-        ->json('recommendations');
+        ->json();
 
-    $pareto = collect($recs)->firstWhere('form', 'pareto');
-    expect($pareto)->not->toBeNull();
+    $pareto = collect($body['recommendations'])->firstWhere('form', 'pareto');
+    expect($pareto)->not->toBeNull()
+        // The «fuentes leídas» panel: what each source provides + what to add.
+        ->and($body['sources_detail'][0]['name'])->toBe('Tickets Reason Breakdown')
+        ->and($body['sources_detail'][0]['measures'])->toContain('Total Tickets')
+        ->and($body['sources_detail'][0]['dimensions'])->toContain('Reason')
+        ->and($body['source_suggestions'])->not->toBeEmpty()
+        ->and($body['source_suggestions'][0])->toHaveKeys(['title', 'why']);
 
     $this->actingAs($user)
         ->postJson("/apps/{$app->id}/builder/charts/from-recommendation", [

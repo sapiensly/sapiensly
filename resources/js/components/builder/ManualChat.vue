@@ -35,11 +35,21 @@ const FORM_LABEL: Record<string, string> = {
     treemap: 'Treemap',
 };
 
+interface SourceDetail {
+    name: string;
+    rows: number;
+    measures: string[];
+    dimensions: string[];
+}
+
 const loading = ref(true);
 const recs = ref<Recommendation[]>([]);
 const gaps = ref<{ text: string }[]>([]);
 const domain = ref<{ label: string } | null>(null);
 const sources = ref(0);
+const sourcesDetail = ref<SourceDetail[]>([]);
+const sourceSuggestions = ref<{ title: string; why: string }[]>([]);
+const showSources = ref(false);
 const addingId = ref<string | null>(null);
 const done = ref<Set<string>>(new Set());
 
@@ -59,6 +69,8 @@ async function loadRecommendations() {
         gaps.value = data.gaps ?? [];
         domain.value = data.domain ?? null;
         sources.value = data.sources ?? 0;
+        sourcesDetail.value = data.sources_detail ?? [];
+        sourceSuggestions.value = data.source_suggestions ?? [];
     } catch {
         recs.value = [];
     } finally {
@@ -159,11 +171,134 @@ async function send() {
                     <Check class="size-3" />
                     {{ domain.label }}
                 </span>
-                <span>{{ sources }} fuentes leídas</span>
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-pill px-1.5 py-0.5 text-ink-subtle underline decoration-dotted underline-offset-2 transition-colors hover:text-accent-blue"
+                    @click="showSources = true"
+                >
+                    {{ sources }} fuentes leídas
+                    <svg
+                        viewBox="0 0 24 24"
+                        class="size-3"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M9 18l6-6-6-6" />
+                    </svg>
+                </button>
             </p>
         </header>
 
         <div class="min-h-0 flex-1 space-y-1 overflow-y-auto pb-3">
+            <!-- FUENTES: what each source provides + what to add next -->
+            <template v-if="showSources">
+                <button
+                    type="button"
+                    class="mx-3 mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:text-accent-blue"
+                    @click="showSources = false"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        class="size-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M15 18l-6-6 6-6" />
+                    </svg>
+                    Recomendaciones
+                </button>
+
+                <div
+                    class="px-4 pt-3 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
+                >
+                    Fuentes leídas
+                    <span class="ml-1 text-ink-subtle normal-case">
+                        · lo que aporta cada una
+                    </span>
+                </div>
+                <div class="space-y-2 px-3">
+                    <div
+                        v-for="(s, i) in sourcesDetail"
+                        :key="i"
+                        class="rounded-xl border border-soft bg-surface px-3.5 py-3"
+                    >
+                        <div class="flex items-baseline justify-between gap-2">
+                            <span class="text-[13px] font-semibold text-ink">{{
+                                s.name
+                            }}</span>
+                            <span
+                                class="shrink-0 text-[10.5px] text-ink-subtle"
+                                >{{ s.rows.toLocaleString() }} filas</span
+                            >
+                        </div>
+                        <p
+                            v-if="s.measures.length"
+                            class="mt-1.5 text-[11.5px] leading-relaxed text-ink-muted"
+                        >
+                            <span class="text-ink-subtle">Mide:</span>
+                            {{ s.measures.join(', ') }}
+                        </p>
+                        <p
+                            v-if="s.dimensions.length"
+                            class="mt-0.5 text-[11.5px] leading-relaxed text-ink-muted"
+                        >
+                            <span class="text-ink-subtle">Desglosa por:</span>
+                            {{ s.dimensions.join(', ') }}
+                        </p>
+                    </div>
+                </div>
+
+                <div
+                    v-if="sourceSuggestions.length"
+                    class="px-4 pt-4 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
+                >
+                    Enriquece el análisis
+                </div>
+                <div
+                    v-if="sourceSuggestions.length"
+                    class="space-y-2 px-3 pb-2"
+                >
+                    <div
+                        v-for="(sug, i) in sourceSuggestions"
+                        :key="i"
+                        class="flex gap-2.5 rounded-xl border border-dashed border-medium px-3.5 py-2.5"
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            class="mt-0.5 size-4 shrink-0 text-accent-blue"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        <span>
+                            <span
+                                class="block text-[12.5px] font-semibold text-ink"
+                                >{{ sug.title }}</span
+                            >
+                            <span
+                                class="block text-[11.5px] leading-relaxed text-ink-muted"
+                                >{{ sug.why }}</span
+                            >
+                        </span>
+                    </div>
+                </div>
+                <p class="px-4 pt-1 pb-2 text-[10.5px] leading-relaxed text-ink-subtle">
+                    Conectar una fuente nueva se hace desde el chat del builder o
+                    en Integraciones.
+                </p>
+            </template>
+
+            <template v-else>
             <div
                 class="px-4 pt-3.5 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
             >
@@ -310,6 +445,7 @@ async function send() {
                         {{ g.text }}
                     </span>
                 </div>
+            </template>
             </template>
         </div>
 
