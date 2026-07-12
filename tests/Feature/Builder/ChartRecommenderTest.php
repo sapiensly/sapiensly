@@ -111,6 +111,51 @@ it('recommends a Pareto grounded in the real concentration fact', function () {
     app(TenantContext::class)->forget();
 });
 
+it('dedupes the same cut across a DIFFERENT overlapping source', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+
+    // A second source of the SAME breakdown: field is generically named «Key»,
+    // but the object name's suffix says it's the reason cut.
+    $objB = [
+        'id' => 'obj_recB0000000',
+        'slug' => 'tickets_by_dimension_reason',
+        'name' => 'Tickets By Dimension · Reason',
+        'fields' => [
+            ['id' => 'fld_keyB0000000', 'slug' => 'key', 'name' => 'Key', 'type' => 'string'],
+            ['id' => 'fld_totalB00000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'integ_recB00000',
+            'field_map' => [
+                ['field_id' => 'fld_keyB0000000', 'external_path' => 'reason'],
+                ['field_id' => 'fld_totalB00000', 'external_path' => 'total'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'get-x', 'collection_path' => 'rows']],
+        ],
+    ];
+
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+    $manifest = ['objects' => [recObject(), $objB], 'settings' => ['default_locale' => 'es-MX']];
+    // Board already shows Total Tickets by Reason (from source A).
+    $page = ['id' => 'pag_rec0000000', 'slug' => 'dashboard', 'blocks' => [[
+        'id' => 'blk_existing000', 'type' => 'chart', 'chart_type' => 'pareto',
+        'group_by_field_id' => 'fld_reason00000', 'y_field_id' => 'fld_total000000',
+        'aggregation' => 'sum', 'data_source' => ['object_id' => 'obj_rec00000000'],
+    ]]];
+
+    $result = makeRecommender(concentratedRows())->recommend($app, $manifest, $page, $user, 'es');
+
+    // Source B is a different object, but its «Total Tickets by (reason)»
+    // breakdown is the SAME analysis — must not be re-recommended.
+    $breakdowns = collect($result['recommendations'])
+        ->filter(fn ($r) => in_array($r['form'], ['pareto', 'hbar', 'donut', 'bar'], true));
+    expect($breakdowns)->toBeEmpty();
+
+    app(TenantContext::class)->forget();
+});
+
 it('does not re-recommend a cut the board already shows', function () {
     config(['cache.default' => 'array']);
     $user = User::factory()->create();

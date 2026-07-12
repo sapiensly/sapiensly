@@ -60,7 +60,17 @@ class ChartRecommender
             fn ($o): bool => is_array($o) && (($o['source']['type'] ?? null) === 'connected'),
         ));
         $domain = $this->domain->classify($connected, $lang);
-        $existing = $this->existingIdentities($page['blocks'] ?? []);
+        $names = $this->fieldNames($manifest);
+        // A generic dimension field ("Key") named the same across sources hides
+        // WHICH dimension it is — the object's distinguishing suffix does
+        // ("Tickets By Dimension · Reason" → reason). Fold it in so those cuts
+        // dedupe by what they actually break down by.
+        $hints = $this->objectHints($manifest);
+        // Dedup is SEMANTIC, not by exact ids: the board carries the same cut
+        // under several overlapping sources (reason/cause/key breakdowns of
+        // tickets), so «Total Tickets by Reason» must be recognised as already
+        // shown whichever object backs it, and regardless of sum-vs-count.
+        $existing = $this->existingSemanticKeys($page['blocks'] ?? [], $names, $hints);
 
         $candidates = [];
         $totalRows = 0;
@@ -76,12 +86,14 @@ class ChartRecommender
                 $factsByObject[$object['id']] = ['object' => $object, 'rows' => $rows, 'facts' => $facts];
 
                 foreach ($this->candidatesFor($object, $rows, $facts, $domain, $es) as $c) {
-                    $identity = $this->identityOf($object['id'], $c['chart']);
-                    if (isset($existing[$identity])) {
-                        continue; // the tablero already shows this exact cut
+                    $semKey = $this->semanticKeyOf($object['id'], $c['chart'], $names, $hints);
+                    if (isset($existing[$semKey])) {
+                        continue; // the tablero already shows this analysis
                     }
-                    $c['identity'] = $identity;
-                    $candidates[$identity] = $this->rankBest($candidates[$identity] ?? null, $c);
+                    $c['identity'] = $this->identityOf($object['id'], $c['chart']);
+                    // Key candidates by the SEMANTIC cut too, so two overlapping
+                    // sources don't both propose "the same chart".
+                    $candidates[$semKey] = $this->rankBest($candidates[$semKey] ?? null, $c);
                 }
             } catch (\Throwable) {
                 continue; // one malformed object never sinks the whole panel
@@ -512,30 +524,110 @@ class ChartRecommender
     }
 
     /**
-     * The identity strings of the charts/gauges already on the page — the
-     * dedupe set, walked recursively into containers.
+     * field_id → normalised field NAME across every object — the vocabulary the
+     * semantic dedupe compares in (so the same measure/dimension matches across
+     * overlapping sources and id renames).
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, string>
+     */
+    private function fieldNames(array $manifest): array
+    {
+        $out = [];
+        foreach ($manifest['objects'] ?? [] as $object) {
+            foreach ($object['fields'] ?? [] as $f) {
+                if (is_array($f) && isset($f['id'])) {
+                    $out[$f['id']] = Str::lower(Str::ascii((string) ($f['name'] ?? $f['slug'] ?? '')));
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * objectId → the token that DISTINGUISHES the object among overlapping
+     * sources: the name's "·" suffix ("Tickets By Dimension · Reason" → reason)
+     * or the slug's last segment. Used to name a generic dimension field.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, string>
+     */
+    private function objectHints(array $manifest): array
+    {
+        $out = [];
+        foreach ($manifest['objects'] ?? [] as $object) {
+            $name = (string) ($object['name'] ?? '');
+            $hint = str_contains($name, '·')
+                ? Str::afterLast($name, '·')
+                : Str::afterLast((string) ($object['slug'] ?? ''), '_');
+            $out[(string) ($object['id'] ?? '')] = Str::lower(Str::ascii(trim($hint)));
+        }
+
+        return $out;
+    }
+
+    /** A dimension field whose name says nothing about WHICH dimension it is. */
+    private const GENERIC_DIM = '/^(key|clave|dimension|dimensi\w*|grupo|group|valor|value|name|nombre)$/';
+
+    /**
+     * A chart's SEMANTIC identity — «what it shows», not which object/agg backs
+     * it: {family}|{measure name}|{dimension name}. Two charts with the same
+     * key are the same analysis (e.g. Total Tickets by Reason as a pareto vs a
+     * bar, sum vs count, from different sources). A generic dimension name
+     * ("Key") is replaced by the object's distinguishing hint.
+     *
+     * @param  array<string, mixed>  $chart
+     * @param  array<string, string>  $names
+     * @param  array<string, string>  $hints
+     */
+    private function semanticKeyOf(string $objectId, array $chart, array $names, array $hints): string
+    {
+        if (($chart['__gauge'] ?? false) === true) {
+            return 'gauge|'.($names[$chart['field_id'] ?? ''] ?? '').'|';
+        }
+        $family = in_array($chart['chart_type'] ?? '', ['area', 'line'], true)
+            ? 'trend'
+            : 'breakdown';
+        $measure = $names[$chart['y_field_id'] ?? ''] ?? 'count';
+        if ($family === 'trend') {
+            return 'trend|'.$measure.'|time';
+        }
+        $dim = $names[$chart['group_by_field_id'] ?? ''] ?? '';
+        if ($dim === '' || preg_match(self::GENERIC_DIM, $dim) === 1) {
+            $dim = $hints[$objectId] ?? $dim;
+        }
+
+        return 'breakdown|'.$measure.'|'.$dim;
+    }
+
+    /**
+     * The semantic keys of the charts/gauges already on the page — the dedupe
+     * set, walked recursively into containers.
      *
      * @param  list<array<string, mixed>>  $blocks
+     * @param  array<string, string>  $names
+     * @param  array<string, string>  $hints
      * @return array<string, true>
      */
-    private function existingIdentities(array $blocks): array
+    private function existingSemanticKeys(array $blocks, array $names, array $hints): array
     {
         $seen = [];
-        $walk = function (array $blocks) use (&$walk, &$seen): void {
+        $walk = function (array $blocks) use (&$walk, &$seen, $names, $hints): void {
             foreach ($blocks as $b) {
                 if (! is_array($b)) {
                     continue;
                 }
                 if (($b['type'] ?? null) === 'chart') {
-                    $seen[$this->identityOf((string) ($b['data_source']['object_id'] ?? ''), [
+                    $seen[$this->semanticKeyOf((string) ($b['data_source']['object_id'] ?? ''), [
+                        'chart_type' => $b['chart_type'] ?? null,
                         'group_by_field_id' => $b['group_by_field_id'] ?? null,
                         'x_field_id' => $b['x_field_id'] ?? null,
                         'y_field_id' => $b['y_field_id'] ?? null,
-                        'aggregation' => $b['aggregation'] ?? 'count',
-                    ])] = true;
+                    ], $names, $hints)] = true;
                 }
                 if (($b['type'] ?? null) === 'gauge') {
-                    $seen['gauge|'.(string) ($b['query']['object_id'] ?? '').'|'.($b['field_id'] ?? '')] = true;
+                    $seen[$this->semanticKeyOf('', ['__gauge' => true, 'field_id' => $b['field_id'] ?? ''], $names, $hints)] = true;
                 }
                 if (is_array($b['blocks'] ?? null)) {
                     $walk($b['blocks']);
