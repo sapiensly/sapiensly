@@ -164,6 +164,12 @@ const hrefFor = (slug: string) => `/r/${props.app.slug}/${slug}`;
 
 // Provide the App slug so BlockForm/BlockButton can POST to /r/{slug}/actions.
 provide('appSlug', props.app.slug);
+// Chart components that resolve CSS-var palettes to hex re-read on this signal
+// when the palette changes (see usePaletteSignal).
+provide(
+    'paletteSignal',
+    computed(() => (settings.value as { palette?: unknown }).palette),
+);
 // Provide current filter params so a filter_bar block renders pre-filled.
 provide('pageParams', props.params ?? {});
 

@@ -1211,6 +1211,24 @@ it('accepts theme and font on the design endpoint', function () {
         ->assertJsonPath('settings.font', 'serif');
 });
 
+it('persists the palette mode and each mode yields a distinct chart palette', function () {
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/design", ['palette_mode' => 'grays'])
+        ->assertOk()
+        ->assertJsonPath('settings.palette_mode', 'grays');
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect($manifest['settings']['palette_mode'])->toBe('grays');
+
+    // The three modes must produce genuinely different chart series.
+    $brand = \App\Support\Branding\ColorPalette::fromAccent('#0059ff', 'brand')['chart'];
+    $accent = \App\Support\Branding\ColorPalette::fromAccent('#0059ff', 'accent')['chart'];
+    $grays = \App\Support\Branding\ColorPalette::fromAccent('#0059ff', 'grays')['chart'];
+    expect($brand)->not->toBe($accent)
+        ->and($accent)->not->toBe($grays)
+        ->and($grays[0])->toBe('#4b5563');
+});
+
 it('rejects an invalid accent hex on the design endpoint', function () {
     $this->actingAs($this->user)
         ->postJson("/apps/{$this->testApp->id}/builder/design", ['accent' => 'blue'])

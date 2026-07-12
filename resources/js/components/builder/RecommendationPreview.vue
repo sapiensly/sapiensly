@@ -5,6 +5,7 @@
  * before you add it. One canvas, four forms; accent resolved from the app's CSS
  * vars so it adopts the org brand.
  */
+import { onPaletteChange } from '@/composables/usePaletteSignal';
 import { resolveCssColor } from '@/lib/resolveCssColor';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -244,6 +245,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => ro?.disconnect());
 watch(() => props.preview, draw, { deep: true });
+onPaletteChange(draw);
 </script>
 
 <template>

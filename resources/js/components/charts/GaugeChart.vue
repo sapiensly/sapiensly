@@ -6,6 +6,7 @@
  * and the distance to target in points. Self-contained: value + target in,
  * palette accent resolved from CSS vars.
  */
+import { onPaletteChange } from '@/composables/usePaletteSignal';
 import { resolveCssColor } from '@/lib/resolveCssColor';
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -38,6 +39,7 @@ const syncAccent = () => {
 };
 onMounted(syncAccent);
 watch(() => props.accent, syncAccent);
+onPaletteChange(syncAccent);
 
 function hexRgb(hex: string): [number, number, number] {
     const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());

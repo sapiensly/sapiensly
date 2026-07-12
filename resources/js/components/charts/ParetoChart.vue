@@ -13,6 +13,7 @@
  *    with the full label, click-through for drill-downs
  */
 import { useElementSize } from '@/composables/useElementSize';
+import { onPaletteChange } from '@/composables/usePaletteSignal';
 import { resolveCssColor } from '@/lib/resolveCssColor';
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -69,6 +70,7 @@ const syncColors = () => {
 };
 onMounted(syncColors);
 watch(() => [props.accent, props.lineColor], syncColors);
+onPaletteChange(syncColors);
 
 function onMove(e: MouseEvent) {
     const el = (e.currentTarget as HTMLElement).getBoundingClientRect();

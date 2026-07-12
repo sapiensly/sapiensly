@@ -10,6 +10,7 @@
  *  - hover: row tint, accent label, and a cumulative-% pill riding the track
  *  - click-through per row for drill-downs
  */
+import { onPaletteChange } from '@/composables/usePaletteSignal';
 import { resolveCssColor } from '@/lib/resolveCssColor';
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -56,6 +57,7 @@ const syncAccent = () => {
 };
 onMounted(syncAccent);
 watch(() => props.accent, syncAccent);
+onPaletteChange(syncAccent);
 
 /** Accent hex → [hue, sat%] so the sequential ramp follows the palette. */
 const accentHs = computed<[number, number]>(() => {

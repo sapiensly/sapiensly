@@ -6,6 +6,7 @@
  * pinned bottom-left, font tiers by cell area, full text on the tooltip.
  * Self-contained: [{label, value}] in, palette colors as props.
  */
+import { onPaletteChange } from '@/composables/usePaletteSignal';
 import { resolveCssColor } from '@/lib/resolveCssColor';
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -54,6 +55,7 @@ const syncPalette = () => {
 };
 onMounted(syncPalette);
 watch(() => props.colors, syncPalette);
+onPaletteChange(syncPalette);
 
 const cells = computed(() => {
     const data = props.items
