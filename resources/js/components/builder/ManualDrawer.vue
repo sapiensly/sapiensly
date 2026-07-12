@@ -39,25 +39,35 @@ const emit = defineEmits<{
 }>();
 
 const LAYOUT_KEYS = ['col_span', 'min_height'];
+// The ONLY drawer field that changes the fetched ROWS (data_source). Every
+// other change (chart_type, aggregation, measure, dimension, title…) just
+// re-renders the same rows — the client aggregates — so it needs no data
+// refetch and can confirm with a light reload.
+const DATA_KEYS = ['limit'];
 
 /**
- * Reflect a width/height change on the card RIGHT NOW by mutating the block's
- * reactive `style` (the same object AppRenderer's colSpanStyle reads), so the
- * canvas reacts to the stepper/presets instantly. Driving it through the
- * reactive block — NOT an imperative el.style — is deliberate: an imperative
- * style fights the bound :style and any re-render snaps the card back to the
- * block's OLD size until the reload lands.
+ * Reflect a change on the canvas RIGHT NOW by mutating the block's reactive
+ * fields (the same objects the renderer reads), so it reacts instantly instead
+ * of waiting for the confirm reload — this is what makes «Tipo de gráfica» flip
+ * immediately. Driving it through the reactive block — NOT imperative DOM — is
+ * deliberate: an imperative style fights the bound :style and any re-render
+ * snaps the card back until the reload lands. `limit` changes the fetched rows,
+ * so there's nothing to paint until the data reload.
  */
-function paintLayout(key: string, value: unknown) {
-    const b = props.block as { style?: Record<string, unknown> };
-    const style = { ...(b.style ?? {}) };
-    const n = Number(value ?? 0);
-    if (n > 0) {
-        style[key] = n;
-    } else {
-        delete style[key];
+function paintOptimistic(key: string, value: unknown) {
+    const b = props.block as Record<string, any>;
+    if (key === 'col_span' || key === 'min_height') {
+        const style = { ...(b.style ?? {}) };
+        const n = Number(value ?? 0);
+        if (n > 0) {
+            style[key] = n;
+        } else {
+            delete style[key];
+        }
+        b.style = style;
+    } else if (key !== 'limit') {
+        b[key] = value;
     }
-    b.style = style;
 }
 
 const isChart = computed(() => props.block.type === 'chart');
@@ -144,9 +154,11 @@ async function apply(changes: Record<string, unknown>) {
             block_id: (props.block as { id: string }).id,
             changes,
         });
+        // «light» = no data refetch needed (render/layout only). Only a
+        // DATA_KEYS change (limit) requires re-reading the source.
         emit(
             'saved',
-            Object.keys(changes).every((k) => LAYOUT_KEYS.includes(k)),
+            !Object.keys(changes).some((k) => DATA_KEYS.includes(k)),
         );
     } catch (e: unknown) {
         const msg =
@@ -175,9 +187,7 @@ function autoApply(key: string, getter: () => unknown, debounceMs = 0) {
             return;
         }
         clearTimeout(timer);
-        if (LAYOUT_KEYS.includes(key)) {
-            paintLayout(key, next);
-        }
+        paintOptimistic(key, next);
         timer = setTimeout(() => {
             const value =
                 key === 'description' && next === ''

@@ -619,8 +619,12 @@ function scheduleLayoutReload() {
 
 // The drawer says whether a save touched only layout (col_span/min_height,
 // already painted optimistically) or real content/data.
-function onDrawerSaved(layoutOnly: boolean) {
-    if (layoutOnly) {
+// `light` = the change was render/layout only (no data refetch): the block
+// was already painted optimistically, so confirm with the light reload that
+// SKIPS previewBlockData (the seconds-long MCP/record reads). Only a change
+// that alters the fetched rows (e.g. limit) needs the full reload.
+function onDrawerSaved(light: boolean) {
+    if (light) {
         scheduleLayoutReload();
     } else {
         afterManualChange();
