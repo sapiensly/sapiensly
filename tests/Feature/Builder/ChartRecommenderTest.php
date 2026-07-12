@@ -1,0 +1,126 @@
+<?php
+
+use App\Models\App;
+use App\Models\Integration;
+use App\Models\User;
+use App\Services\Builder\ChartRecommender;
+use App\Services\Builder\DomainClassifier;
+use App\Services\Connected\ConnectedIntegrationResolver;
+use App\Services\Connected\ConnectedObjectReader;
+use App\Services\Express\ComputedFactsBuilder;
+use App\Services\Express\SemanticProfile;
+use App\Support\Tenancy\TenantContext;
+
+/** A connected ticket-breakdown object: reason (string) + total_tickets (additive). */
+function recObject(): array
+{
+    return [
+        'id' => 'obj_rec00000000',
+        'slug' => 'tickets_reason_breakdown',
+        'name' => 'Tickets Reason Breakdown',
+        'fields' => [
+            ['id' => 'fld_reason00000', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_total000000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected',
+            'integration_id' => 'integ_rec000000',
+            'field_map' => [
+                ['field_id' => 'fld_reason00000', 'external_path' => 'reason'],
+                ['field_id' => 'fld_total000000', 'external_path' => 'total'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'get-reasons', 'collection_path' => 'reasons']],
+        ],
+    ];
+}
+
+/** Rows where a few reasons carry most of the volume → concentration fires. */
+function concentratedRows(): array
+{
+    return [
+        ['reason' => 'Envíos', 'total' => 412],
+        ['reason' => 'Cobranza', 'total' => 286],
+        ['reason' => 'Garantías', 'total' => 96],
+        ['reason' => 'Precompra', 'total' => 74],
+        ['reason' => 'Créditos', 'total' => 52],
+        ['reason' => 'Devoluciones', 'total' => 29],
+        ['reason' => 'Otros', 'total' => 15],
+    ];
+}
+
+function makeRecommender(array $rows): ChartRecommender
+{
+    $reader = Mockery::mock(ConnectedObjectReader::class);
+    $reader->shouldReceive('list')->andReturn(['ok' => true, 'rows' => $rows]);
+
+    $integrations = Mockery::mock(ConnectedIntegrationResolver::class);
+    $integrations->shouldReceive('resolve')->andReturn(Mockery::mock(Integration::class));
+
+    return new ChartRecommender(
+        $reader,
+        $integrations,
+        new ComputedFactsBuilder,
+        new SemanticProfile,
+        new DomainClassifier,
+    );
+}
+
+it('classifies a support-ticket board as the support domain', function () {
+    $domain = (new DomainClassifier)->classify([recObject()], 'es');
+
+    expect($domain['sector'])->toBe('support')
+        ->and($domain['label'])->toBe('Soporte de tickets');
+});
+
+it('recommends a Pareto grounded in the real concentration fact', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+    $manifest = ['objects' => [recObject()], 'settings' => ['default_locale' => 'es-MX']];
+    $page = ['id' => 'pag_rec0000000', 'slug' => 'dashboard', 'blocks' => []];
+
+    $result = makeRecommender(concentratedRows())->recommend($app, $manifest, $page, $user, 'es');
+
+    expect($result['domain']['sector'])->toBe('support')
+        ->and($result['sources'])->toBe(1)
+        ->and($result['recommendations'])->not->toBeEmpty();
+
+    $pareto = collect($result['recommendations'])->firstWhere('form', 'pareto');
+    expect($pareto)->not->toBeNull()
+        ->and($pareto['why'])->toContain('%')                 // carries the real number
+        ->and($pareto['preview']['kind'])->toBe('pareto')
+        ->and($pareto['preview']['values'][0])->toBe(412.0);  // top category value
+
+    // The proposed spec is cached, so «Agregar» inserts exactly what was shown.
+    $spec = makeRecommender(concentratedRows())->specFor($app, $pareto['id']);
+    expect($spec)->not->toBeNull()
+        ->and($spec['object_id'])->toBe('obj_rec00000000')
+        ->and($spec['chart']['chart_type'])->toBe('pareto')
+        ->and($spec['chart']['group_by_field_id'])->toBe('fld_reason00000')
+        ->and($spec['chart']['y_field_id'])->toBe('fld_total000000');
+
+    app(TenantContext::class)->forget();
+});
+
+it('does not re-recommend a cut the board already shows', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+    $manifest = ['objects' => [recObject()], 'settings' => ['default_locale' => 'es-MX']];
+    // The Pareto (reason × total_tickets, sum) is ALREADY on the page.
+    $page = ['id' => 'pag_rec0000000', 'slug' => 'dashboard', 'blocks' => [[
+        'id' => 'blk_existing000', 'type' => 'chart', 'chart_type' => 'pareto',
+        'group_by_field_id' => 'fld_reason00000', 'y_field_id' => 'fld_total000000',
+        'aggregation' => 'sum', 'data_source' => ['object_id' => 'obj_rec00000000'],
+    ]]];
+
+    $result = makeRecommender(concentratedRows())->recommend($app, $manifest, $page, $user, 'es');
+
+    expect(collect($result['recommendations'])->firstWhere('form', 'pareto'))->toBeNull();
+
+    app(TenantContext::class)->forget();
+});

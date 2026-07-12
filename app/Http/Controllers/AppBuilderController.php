@@ -20,6 +20,7 @@ use App\Services\Apps\AppNamer;
 use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
+use App\Services\Builder\ChartRecommender;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\LabelGrounding;
@@ -1303,6 +1304,150 @@ class AppBuilderController extends Controller
             'block_id' => $block['id'],
             'message' => 'Listo — agregué «'.$chart['label'].'» ('.$chart['chart_type'].') al tablero.',
         ]);
+    }
+
+    /**
+     * The analyst read: professional analyses worth adding to THIS board,
+     * ranked and each grounded in a real computed fact, plus the coverage gaps.
+     * Deterministic (see {@see ChartRecommender}); an AI narrative pass reranks
+     * and rewords on top when a builder model is enabled.
+     */
+    public function recommendations(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            return response()->json(['ok' => true, 'recommendations' => [], 'gaps' => []]);
+        }
+        $lang = AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null);
+
+        $pageSlug = $request->query('page');
+        $page = collect($manifest['pages'] ?? [])->first(
+            fn ($p) => $pageSlug === null || ($p['slug'] ?? null) === $pageSlug,
+        ) ?? ($manifest['pages'][0] ?? null);
+        if (! is_array($page)) {
+            return response()->json(['ok' => true, 'recommendations' => [], 'gaps' => []]);
+        }
+
+        $result = app(ChartRecommender::class)->recommend($app, $manifest, $page, $request->user(), $lang);
+
+        return response()->json(['ok' => true] + $result);
+    }
+
+    /**
+     * Insert a recommendation the analyst proposed. The spec was cached at
+     * recommend() time (keyed by id), so «Agregar» adds EXACTLY what was shown
+     * without trusting a client-supplied chart definition.
+     */
+    public function addRecommendation(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'recommendation_id' => ['required', 'string', 'max:64'],
+            'page_slug' => ['nullable', 'string'],
+        ]);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        $spec = app(ChartRecommender::class)->specFor($app, $data['recommendation_id']);
+        if ($spec === null) {
+            return response()->json(['ok' => false, 'message' => 'Esa recomendación expiró — vuelve a abrir el panel para regenerarlas.'], 410);
+        }
+
+        $pageIndex = collect($manifest['pages'] ?? [])->search(fn ($p) => ($data['page_slug'] ?? null) === null || ($p['slug'] ?? null) === $data['page_slug']);
+        if ($pageIndex === false) {
+            return response()->json(['ok' => false, 'message' => 'No encontré la página.'], 404);
+        }
+
+        $scaffolder = app(AppScaffolder::class);
+        if (($spec['kind'] ?? null) === 'gauge') {
+            $g = $spec['chart'];
+            $block = [
+                'id' => $scaffolder->id('blk'),
+                'type' => 'gauge',
+                'label' => $g['label'],
+                'query' => ['object_id' => $spec['object_id']],
+                'field_id' => $g['field_id'],
+                'aggregation' => $g['aggregation'] ?? 'avg',
+                'max_value' => $g['max_value'],
+                'format' => $g['format'] ?? 'number',
+                'style' => (object) ['col_span' => 4, 'min_height' => 320],
+            ];
+            $label = $g['label'];
+            $kind = 'medidor';
+        } else {
+            $chart = $spec['chart'];
+            $block = array_filter([
+                'id' => $scaffolder->id('blk'),
+                'type' => 'chart',
+                'label' => $chart['label'],
+                'description' => $chart['description'] ?? null,
+                'chart_type' => $chart['chart_type'],
+                'x_field_id' => $chart['x_field_id'] ?? null,
+                'group_by_field_id' => $chart['group_by_field_id'] ?? null,
+                'y_field_id' => $chart['y_field_id'] ?? null,
+                'aggregation' => $chart['aggregation'] ?? 'count',
+                'bucket' => $chart['bucket'] ?? null,
+                'data_source' => ['object_id' => $spec['object_id'], 'limit' => isset($chart['x_field_id']) ? 500 : 12],
+            ], fn ($v) => $v !== null);
+            $label = $chart['label'];
+            $kind = $chart['chart_type'];
+        }
+
+        $container = [
+            'id' => $scaffolder->id('cn'),
+            'type' => 'container',
+            'direction' => 'row',
+            'gap' => 'md',
+            'blocks' => [$block],
+        ];
+
+        try {
+            $version = $this->appendChartContainer($app, $manifest, (int) $pageIndex, $container, 'Analista: agregué «'.$label.'»', $request->user());
+        } catch (InvalidManifestException $e) {
+            return response()->json(['ok' => false, 'message' => 'La gráfica no pasó validación.', 'errors' => $e->result->errorsArray()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'version' => $version->version_number,
+            'block_id' => $block['id'],
+            'message' => 'Listo — agregué «'.$label.'» ('.$kind.') al tablero.',
+        ]);
+    }
+
+    /**
+     * Append a chart/gauge container just after the LAST chart-bearing row of a
+     * page (so it joins the analytics section, not the page bottom) and version
+     * it. Shared by the analyst's «Agregar» and the add-chart chat.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $container
+     */
+    private function appendChartContainer(App $app, array $manifest, int $pageIndex, array $container, string $label, $user): AppVersion
+    {
+        $blocks = $manifest['pages'][$pageIndex]['blocks'] ?? [];
+        $insertAt = count($blocks);
+        foreach ($blocks as $i => $b) {
+            $hasChart = isset($b['blocks']) && collect($b['blocks'])->contains(
+                fn ($c) => is_array($c) && in_array($c['type'] ?? null, ['chart', 'gauge'], true),
+            );
+            if (in_array($b['type'] ?? null, ['chart', 'gauge'], true) || $hasChart) {
+                $insertAt = $i + 1;
+            }
+        }
+
+        return $this->manifestService->applyPatch(
+            $app,
+            [['op' => 'add', 'path' => '/pages/'.$pageIndex.'/blocks/'.$insertAt, 'value' => $container]],
+            $user,
+            $label,
+        );
     }
 
     /**

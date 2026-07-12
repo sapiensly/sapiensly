@@ -36,6 +36,8 @@ Route::middleware([
     Route::post('/apps/{app}/builder/design', [AppBuilderController::class, 'updateDesign'])->name('apps.builder.design');
     Route::post('/apps/{app}/builder/blocks/update', [AppBuilderController::class, 'updateBlock'])->name('apps.builder.blocks.update');
     Route::post('/apps/{app}/builder/charts', [AppBuilderController::class, 'addChart'])->name('apps.builder.charts.add');
+    Route::get('/apps/{app}/builder/recommendations', [AppBuilderController::class, 'recommendations'])->name('apps.builder.recommendations');
+    Route::post('/apps/{app}/builder/charts/from-recommendation', [AppBuilderController::class, 'addRecommendation'])->name('apps.builder.charts.recommend');
     Route::post('/apps/{app}/builder/blocks/move', [AppBuilderController::class, 'moveBlock'])->name('apps.builder.blocks.move');
     Route::post('/apps/{app}/builder/messages/{message}/approve', [AppBuilderController::class, 'approve'])->name('apps.builder.approve');
     Route::post('/apps/{app}/builder/messages/{message}/reject', [AppBuilderController::class, 'reject'])->name('apps.builder.reject');
