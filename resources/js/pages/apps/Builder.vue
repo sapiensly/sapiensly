@@ -38,8 +38,8 @@ import {
     type SlashCommand,
 } from '@/lib/builderSlashCommands';
 import ManualChat from '@/components/builder/ManualChat.vue';
-import ManualDrawer from '@/components/builder/ManualDrawer.vue';
 import DashboardLoading from '@/components/DashboardLoading.vue';
+import ManualDrawer from '@/components/builder/ManualDrawer.vue';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
@@ -1881,6 +1881,11 @@ provide('appSlug', props.app.slug);
 const previewDataPending = computed(() => props.previewBlockData == null);
 provide('blockDataLoading', previewDataPending);
 const previewBlockDataMap = computed(() => props.previewBlockData ?? {});
+const previewLoaderAccent = computed(
+    () =>
+        (props.preview?.settings as { accent?: string } | undefined)?.accent ??
+        '#0059ff',
+);
 
 // Re-sync the local ref whenever Inertia gives us new props (conversation
 // switched, page reloaded after an approve). Jump to the bottom without
@@ -3841,6 +3846,24 @@ function statusTone(status: Message['status']): string {
                             v-if="manualSelectionCss"
                             :text-content="manualSelectionCss"
                         />
+                        <!-- Same load experience as the runtime: frosted veil
+                             + loader over the skeletons while the deferred
+                             block data resolves. -->
+                        <Transition
+                            leave-active-class="transition-opacity duration-500"
+                            leave-to-class="opacity-0"
+                        >
+                            <DashboardLoading
+                                v-if="
+                                    app.kind === 'dashboard' &&
+                                    preview &&
+                                    previewDataPending
+                                "
+                                :accent="previewLoaderAccent"
+                                :lang="previewLocale"
+                                :viewport="false"
+                            />
+                        </Transition>
                         <ManualDrawer
                             v-if="
                                 panelMode === 'manual' &&

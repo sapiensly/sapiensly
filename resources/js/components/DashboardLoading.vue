@@ -11,11 +11,20 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 const props = withDefaults(
     defineProps<{
         accent?: string;
+        /** Pin the card to the viewport (runtime) or to the veil's own
+         *  container (builder preview pane). */
+        viewport?: boolean;
         lang?: string;
         title?: string;
         subtitle?: string;
     }>(),
-    { accent: '#0059ff', lang: 'es', title: undefined, subtitle: undefined },
+    {
+        accent: '#0059ff',
+        viewport: true,
+        lang: 'es',
+        title: undefined,
+        subtitle: undefined,
+    },
 );
 
 const idx = ref(0);
@@ -62,7 +71,8 @@ const chartStyle = (i: number) => ({
         <!-- The card pins to the TOP of the viewport: always in sight on
              page load, clear of the (blurred) content behind. -->
         <div
-            class="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center pt-20"
+            class="pointer-events-none inset-x-0 top-0 z-40 flex justify-center pt-20"
+            :class="viewport ? 'fixed' : 'absolute'"
         >
             <div class="dl-card pointer-events-auto">
                 <!-- spinner with cycling mini-charts -->
