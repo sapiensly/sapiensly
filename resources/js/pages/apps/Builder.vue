@@ -728,9 +728,11 @@ function startBlockMove(down: PointerEvent) {
         }
 
         // A concrete CARD under the pointer → sibling insert by halves.
-        // Cards are SINGLE-chart components: only a ROW container is ever an
-        // «inside» target — column/styled containers look like cards and
-        // nesting into them is forbidden.
+        // Cards are SINGLE-chart components; we NEVER offer an «inside» drop
+        // (the big dashed-area target) — a row is joined by landing BESIDE a
+        // card (before/after), which the server places in the row (wrapping
+        // top-level cards into one). So a container under the pointer is
+        // skipped here and resolved via the card band-scan below.
         const isRowContainer = (c: HTMLElement) =>
             c.dataset.blockType === 'container' &&
             c.dataset.blockDirection === 'row';
@@ -744,40 +746,16 @@ function startBlockMove(down: PointerEvent) {
             return;
         }
 
-        // Otherwise resolve the ROW by GEOMETRY: hit-testing empty flex space
-        // is fragile (overlays, gaps, stacking) — the row whose vertical band
-        // contains the pointer is the target, and dropping there means «join
-        // this row». The dragged card's own row only counts if it has
-        // siblings (rejoining an empty own row is a no-op).
         const dragged = selectedEl();
         const rows = (
             Array.from(
                 pane.querySelectorAll('[data-block-type="container"]'),
             ) as HTMLElement[]
         ).filter(isRowContainer);
-        const row = rows.find((c) => {
-            const r = c.getBoundingClientRect();
-            if (e.clientY < r.top || e.clientY > r.bottom) return false;
-            if (dragged && c.contains(dragged)) {
-                return (
-                    c.querySelectorAll('[data-block-id]').length > 1 &&
-                    !(under && c === under)
-                );
-            }
-            return true;
-        });
-        if (row?.dataset.blockId) {
-            dropTarget.value = {
-                id: row.dataset.blockId,
-                position: 'inside',
-                rect: toPaneRect(row.getBoundingClientRect()),
-            };
-            return;
-        }
 
-        // No row either: the empty space BESIDE a top-level card (e.g. one
-        // just narrowed with col_span) — the horizontally nearest card whose
-        // vertical band contains the pointer is the row-mate.
+        // Empty space beside a card (a row's gutter, or beside a narrowed
+        // top-level card): the horizontally nearest card whose vertical band
+        // contains the pointer is the row-mate → land before/after it.
         const cards = (
             Array.from(pane.querySelectorAll('[data-block-id]')) as HTMLElement[]
         ).filter(
@@ -3864,19 +3842,11 @@ function statusTone(status: Message['status']): string {
                             @saved="onDrawerSaved"
                             @close="selectedBlockId = null"
                         />
-                        <!-- Drop indicator while reordering -->
+                        <!-- Drop indicator while reordering: a thin bar only
+                             (before/after = vertical, above/below = horizontal).
+                             No big dashed «inside» area — that behaviour is gone. -->
                         <div
-                            v-if="dropTarget && dropTarget.position === 'inside'"
-                            class="pointer-events-none absolute z-40 rounded-sp-sm border-2 border-dashed border-accent-blue bg-accent-blue/5"
-                            :style="{
-                                left: dropTarget.rect.left + 'px',
-                                top: dropTarget.rect.top + 'px',
-                                width: dropTarget.rect.width + 'px',
-                                height: dropTarget.rect.height + 'px',
-                            }"
-                        />
-                        <div
-                            v-else-if="
+                            v-if="
                                 dropTarget &&
                                 (dropTarget.position === 'above' ||
                                     dropTarget.position === 'below')
