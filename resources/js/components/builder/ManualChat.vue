@@ -175,10 +175,20 @@ async function send() {
                 >
             </div>
 
-            <!-- skeletons -->
+            <!-- loading: message + skeletons -->
             <div v-if="loading" class="space-y-2.5 px-3">
                 <div
-                    v-for="i in 3"
+                    class="flex items-center gap-2.5 rounded-xl border border-soft bg-surface px-3.5 py-3"
+                >
+                    <span
+                        class="size-4 shrink-0 animate-spin rounded-full border-2 border-accent-blue/30 border-t-accent-blue"
+                    />
+                    <span class="text-[12.5px] font-medium text-ink-muted">
+                        Cargando recomendaciones, tomará un momento…
+                    </span>
+                </div>
+                <div
+                    v-for="i in 2"
                     :key="i"
                     class="h-40 animate-pulse rounded-xl border border-soft bg-surface"
                 />
@@ -318,19 +328,20 @@ async function send() {
                 …o pídeme una gráfica en tus palabras.
             </p>
             <div
-                class="flex items-center gap-2 rounded-pill border border-medium bg-navy-elevated py-1 pr-1 pl-3.5"
+                class="flex flex-col gap-2 rounded-sp-md border border-medium bg-navy-elevated p-2.5 focus-within:border-accent-blue"
             >
-                <input
+                <textarea
                     v-model="input"
-                    type="text"
                     :disabled="asking"
+                    rows="3"
                     placeholder="¿dónde perdemos más tiempo?"
-                    class="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-subtle"
+                    class="min-h-[64px] w-full resize-none bg-transparent px-1 text-sm leading-relaxed text-ink outline-none placeholder:text-ink-subtle"
+                    @keydown.enter.exact.prevent="send"
                 />
                 <button
                     type="submit"
                     :disabled="asking || input.trim() === ''"
-                    class="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-blue text-white transition-opacity disabled:opacity-40"
+                    class="flex size-8 shrink-0 items-center justify-center self-end rounded-full bg-accent-blue text-white transition-opacity disabled:opacity-40"
                 >
                     <Send class="size-4" />
                 </button>
