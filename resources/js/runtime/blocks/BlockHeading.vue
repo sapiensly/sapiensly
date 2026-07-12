@@ -39,5 +39,14 @@ const sizeClass = computed(() => {
 </script>
 
 <template>
-    <component :is="tag" :class="[t.text, sizeClass]">{{ block.content }}</component>
+    <!-- data-block-* are bound explicitly: inheritAttrs:false drops the ones
+         AppRenderer passes, and the manual editor needs them here to select,
+         edit and reorder the heading. -->
+    <component
+        :is="tag"
+        :class="[t.text, sizeClass]"
+        :data-block-id="block.id"
+        :data-block-type="'heading'"
+        >{{ block.content }}</component
+    >
 </template>
