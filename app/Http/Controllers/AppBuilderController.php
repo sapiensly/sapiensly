@@ -1098,7 +1098,7 @@ class AppBuilderController extends Controller
             'changes.group_by_field_id' => ['sometimes', 'string'],
             'changes.limit' => ['sometimes', 'integer', 'min:3', 'max:50'],
             'changes.col_span' => ['sometimes', 'nullable', 'integer', 'min:3', 'max:12'],
-            'changes.min_height' => ['sometimes', 'nullable', 'integer', 'min:200', 'max:640'],
+            'changes.min_height' => ['sometimes', 'nullable', 'integer', 'min:120', 'max:800'],
         ]);
 
         $manifest = $this->manifestService->getActiveManifest($app);

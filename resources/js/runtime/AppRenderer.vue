@@ -405,7 +405,12 @@ function colSpanStyle(block: AnyBlock): Record<string, string> | undefined {
         // could never be narrowed to make room for a neighbour.
         out.maxWidth = `${((span / 12) * 100).toFixed(3)}%`;
     }
-    if (minHeight) out.minHeight = `${minHeight}px`;
+    if (minHeight) {
+        // An explicit height, not just a floor: charts adapt their plot area
+        // to it (BlockChart), so the card can shrink as well as grow.
+        out.minHeight = `${minHeight}px`;
+        out.height = `${minHeight}px`;
+    }
     return Object.keys(out).length ? out : undefined;
 }
 

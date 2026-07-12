@@ -65,6 +65,7 @@ function paintLayout(key: string, value: unknown) {
     if (key === 'min_height') {
         const h = Number(value ?? 0);
         el.style.minHeight = h > 0 ? `${h}px` : '';
+        el.style.height = h > 0 ? `${h}px` : '';
     }
 }
 

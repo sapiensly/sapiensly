@@ -128,6 +128,14 @@ const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.data_source.object_id),
 );
 
+// Manual adjust wrote an explicit card height: plot areas drop their
+// intrinsic minimums and track the card instead.
+const hasExplicitHeight = computed(
+    () =>
+        !!(props.block.style as { min_height?: number } | undefined)
+            ?.min_height,
+);
+
 function fieldOf(id: string | undefined): FieldDef | undefined {
     return resolveField(object.value, id);
 }
@@ -1360,8 +1368,9 @@ const boxPlot = computed(() => {
         </header>
 
         <!-- Content fills the card's (equal-height) cell and centres, so a short
-             chart never leaves an empty gap below it in a row of taller cards. -->
-        <div class="flex flex-1 flex-col justify-center">
+             chart never leaves an empty gap below it in a row of taller cards.
+             min-h-0 lets an explicit card height SHRINK the plot area too. -->
+        <div class="flex min-h-0 flex-1 flex-col justify-center">
             <p
                 v-if="emptyState"
                 :class="['py-8 text-center text-xs', t.textMuted]"
@@ -1407,7 +1416,7 @@ const boxPlot = computed(() => {
                 </ul>
                 <svg
                     :viewBox="`0 0 ${combo.W} ${combo.H}`"
-                    class="w-full"
+                    class="min-h-0 w-full flex-1"
                     :class="t.text"
                 >
                     <!-- left-axis gridlines + tick labels -->
@@ -1653,7 +1662,10 @@ const boxPlot = computed(() => {
                         }}</span>
                     </li>
                 </ul>
-                <div class="min-h-[14rem] flex-1">
+                <div
+                    class="flex-1"
+                    :class="hasExplicitHeight ? 'min-h-0' : 'min-h-[14rem]'"
+                >
                     <svg
                         :viewBox="`0 0 ${lineChart.W} ${lineChart.H}`"
                         class="h-full w-full"
@@ -1709,17 +1721,16 @@ const boxPlot = computed(() => {
                                 {{ tk.label }}
                             </text>
                         </g>
-                        <!-- each series: soft area fill + smoothed line stroke -->
+                        <!-- Each series. The gradient fill is what makes an
+                             AREA chart an area chart — a line chart stays an
+                             open stroke with point markers, so the two types
+                             read differently at a glance. -->
                         <template
                             v-for="(s, si) in lineChart.series"
                             :key="'s' + si"
                         >
                             <path
-                                v-if="
-                                    s.area &&
-                                    (lineChart.single ||
-                                        block.chart_type === 'area')
-                                "
+                                v-if="s.area && block.chart_type === 'area'"
                                 :d="s.area"
                                 :fill="`url(#${gradientId}-${si})`"
                             />
@@ -1731,6 +1742,26 @@ const boxPlot = computed(() => {
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
                             />
+                            <!-- point markers: line charts only, and only when
+                                 they stay readable -->
+                            <template
+                                v-if="
+                                    block.chart_type === 'line' &&
+                                    s.points.length <= 24
+                                "
+                            >
+                                <circle
+                                    v-for="(p, pi) in s.points"
+                                    :key="'p' + pi"
+                                    :cx="p.x"
+                                    :cy="p.y"
+                                    r="2.6"
+                                    :fill="s.color"
+                                    class="text-navy"
+                                    stroke="currentColor"
+                                    stroke-width="1.4"
+                                />
+                            </template>
                         </template>
                         <!-- crosshair: dashed vertical guide + markers on the
                              hovered category, across every series -->
@@ -2014,7 +2045,10 @@ const boxPlot = computed(() => {
 
             <template v-else-if="block.chart_type === 'box'">
                 <!-- box-and-whisker: distribution of y_field per group_by category -->
-                <div v-if="boxPlot" class="h-64">
+                <div
+                    v-if="boxPlot"
+                    :class="hasExplicitHeight ? 'min-h-0 flex-1' : 'h-64'"
+                >
                     <svg
                         :viewBox="`0 0 ${boxPlot.W} ${boxPlot.H}`"
                         class="h-full w-full"

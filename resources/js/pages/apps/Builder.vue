@@ -935,9 +935,10 @@ function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
             el.style.maxWidth = `${((span / 12) * 100).toFixed(3)}%`;
         } else {
             const h = rect.height + (e.clientY - startY);
-            minH = Math.min(640, Math.max(200, Math.round(h / 40) * 40));
+            minH = Math.min(800, Math.max(120, Math.round(h / 40) * 40));
             dragHint.value = `${minH}px`;
             el.style.minHeight = `${minH}px`;
+            el.style.height = `${minH}px`;
         }
         updateSelectionRect();
     };
