@@ -80,7 +80,7 @@ const chartStyle = (i: number) => ({
                     class="relative mb-[30px] flex size-[92px] items-center justify-center"
                 >
                     <div
-                        class="absolute inset-0 rounded-full border-[2.5px] border-[#eef1f7]"
+                        class="dl-track absolute inset-0 rounded-full border-[2.5px]"
                     />
                     <div
                         class="dl-arc absolute inset-0 rounded-full"
@@ -132,25 +132,25 @@ const chartStyle = (i: number) => ({
                         <span
                             class="dl-donut block size-[30px] rounded-full"
                             :style="{
-                                background: `conic-gradient(${accent} 0 66%, #e4e8f1 0 100%)`,
+                                background: `conic-gradient(${accent} 0 66%, var(--sp-tint-strong) 0 100%)`,
                             }"
                         />
                     </div>
                 </div>
 
                 <p
-                    class="mb-[9px] text-[18px] font-semibold tracking-[-0.35px] text-[#1b2030]"
+                    class="dl-title mb-[9px] text-[18px] font-semibold tracking-[-0.35px]"
                 >
                     {{ title ?? copy.title }}
                 </p>
                 <p
-                    class="mb-[30px] max-w-[290px] text-[13.5px] leading-relaxed text-[#6b7280]"
+                    class="dl-subtitle mb-[30px] max-w-[290px] text-[13.5px] leading-relaxed"
                 >
                     {{ subtitle ?? copy.subtitle }}
                 </p>
 
                 <div
-                    class="flex items-center gap-1.5 text-[12px] font-medium tracking-[0.2px] text-[#9aa1b2]"
+                    class="dl-status flex items-center gap-1.5 text-[12px] font-medium tracking-[0.2px]"
                 >
                     <span>{{ copy.status }}</span>
                     <span class="inline-flex gap-[3px]">
@@ -171,8 +171,16 @@ const chartStyle = (i: number) => ({
 </template>
 
 <style scoped>
+/* Every surface/ink here rides the --sp-* tokens, so the veil tints with the
+   page (frosted white on light, frosted navy on dark) instead of washing a dark
+   board out to grey. The tokens come from the nearest scope: `.dark` on <html>
+   in the runtime, `.theme-light`/`.theme-dark` on the Builder's preview pane. */
 .dl-veil {
-    background: rgba(255, 255, 255, 0.28);
+    background: color-mix(
+        in srgb,
+        var(--sp-bg-primary, #f3f5fb) 42%,
+        transparent
+    );
     backdrop-filter: blur(7px);
     -webkit-backdrop-filter: blur(7px);
 }
@@ -183,14 +191,24 @@ const chartStyle = (i: number) => ({
     text-align: center;
     width: 404px;
     max-width: calc(100% - 40px);
-    background: #ffffff;
-    border: 1px solid #eef0f5;
+    background: var(--sp-bg-secondary, #ffffff);
+    border: 1px solid var(--sp-border-soft, #eef0f5);
     border-radius: 24px;
-    box-shadow:
-        0 28px 70px -18px rgba(20, 28, 55, 0.16),
-        0 2px 6px rgba(20, 28, 55, 0.04);
+    box-shadow: var(--sp-shadow-image, 0 20px 60px rgba(11, 15, 41, 0.18));
     padding: 50px 46px 40px;
     animation: dl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.dl-track {
+    border-color: var(--sp-tint-strong, rgba(11, 15, 41, 0.12));
+}
+.dl-title {
+    color: var(--sp-text-primary, #0b0f29);
+}
+.dl-subtitle {
+    color: var(--sp-text-secondary, #56607a);
+}
+.dl-status {
+    color: var(--sp-text-tertiary, rgba(11, 15, 41, 0.45));
 }
 .dl-arc {
     -webkit-mask: radial-gradient(
