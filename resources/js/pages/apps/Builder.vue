@@ -3703,6 +3703,7 @@ function statusTone(status: Message['status']): string {
                     >
                         <div class="flex items-center gap-2">
                             <button
+                                v-if="panelMode === 'manual'"
                                 type="button"
                                 class="inline-flex size-6 items-center justify-center rounded-pill border border-medium bg-surface text-ink-muted transition-colors hover:text-ink"
                                 :title="
