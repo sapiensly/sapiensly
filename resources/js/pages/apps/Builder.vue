@@ -3955,7 +3955,7 @@ function statusTone(status: Message['status']): string {
                         <div
                             v-if="preview"
                             data-preview-content
-                            class="sp-app-surface relative"
+                            class="sp-app-surface relative text-ink"
                             :class="
                                 app.kind === 'dashboard'
                                     ? 'mx-auto w-full max-w-[1200px]'
