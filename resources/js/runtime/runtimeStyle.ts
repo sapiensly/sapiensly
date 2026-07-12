@@ -24,7 +24,7 @@ function darken(hex: string, amount: number): string {
     return '#' + [r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('');
 }
 
-interface Palette {
+export interface Palette {
     ramp?: Record<string, string>;
     soft?: string;
     contrast?: string;

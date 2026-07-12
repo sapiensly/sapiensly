@@ -42,7 +42,10 @@ import DashboardLoading from '@/components/DashboardLoading.vue';
 import ManualDrawer from '@/components/builder/ManualDrawer.vue';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
-import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
+import {
+    runtimeSettingsStyle,
+    type Palette as PaletteVars,
+} from '@/runtime/runtimeStyle';
 import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
@@ -1812,9 +1815,17 @@ const effectiveAccent = computed(
 );
 const previewSurfaceStyle = computed(() => ({
     '--sp-bleed': '1.25rem',
+    // Feed the FULL settings (brandbook accent + server-derived palette →
+    // --sp-accent-*, --sp-chart-1..6), mirroring the runtime page; without
+    // the palette the preview's charts fall back to defaults instead of the
+    // org's colours. A live accent override from the design control still
+    // wins, and the fresh palette lands on the next persist+reload.
     ...runtimeSettingsStyle({
-        accent: effectiveAccent.value ?? undefined,
+        accent:
+            effectiveAccent.value ??
+            (previewSettings.value.accent as string | undefined),
         font: previewSettings.value.font as string | undefined,
+        palette: previewSettings.value.palette as PaletteVars | undefined,
     }),
 }));
 
