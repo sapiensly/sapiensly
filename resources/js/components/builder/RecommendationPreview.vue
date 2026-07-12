@@ -10,10 +10,11 @@ import { resolveCssColor } from '@/lib/resolveCssColor';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 interface Preview {
-    kind: 'pareto' | 'area' | 'gauge' | 'bars';
+    kind: 'pareto' | 'area' | 'gauge' | 'bars' | 'scatter';
     values?: number[];
     value?: number;
     target?: number;
+    points?: number[][];
 }
 
 const props = defineProps<{ preview: Preview }>();
@@ -44,6 +45,48 @@ function draw() {
     else if (p.kind === 'area') areaChart(ctx, w, h, p.values ?? [], accent);
     else if (p.kind === 'gauge') gaugeChart(ctx, w, h, p.value ?? 0, p.target ?? 100, accent, ink, inkDim);
     else if (p.kind === 'bars') barsChart(ctx, w, h, p.values ?? [], accent);
+    else if (p.kind === 'scatter') scatterChart(ctx, w, h, p.points ?? [], accent);
+}
+
+function scatterChart(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    pts: number[][],
+    accent: string,
+) {
+    if (pts.length === 0) return;
+    const padL = 12,
+        padR = 10,
+        padT = 12,
+        padB = 12;
+    const iw = w - padL - padR,
+        ih = h - padT - padB;
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const xMin = Math.min(...xs),
+        xMax = Math.max(...xs);
+    const yMin = Math.min(...ys),
+        yMax = Math.max(...ys);
+    const X = (v: number) => padL + ((v - xMin) / (xMax - xMin || 1)) * iw;
+    const Y = (v: number) => padT + ih - ((v - yMin) / (yMax - yMin || 1)) * ih;
+    // axes
+    ctx.strokeStyle = 'rgba(150,160,200,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, padT + ih);
+    ctx.lineTo(padL + iw, padT + ih);
+    ctx.stroke();
+    // points (bigger = higher x/volume)
+    pts.forEach((p) => {
+        ctx.fillStyle = accent;
+        ctx.globalAlpha = 0.75;
+        ctx.beginPath();
+        ctx.arc(X(p[0]), Y(p[1]), 3.4, 0, 7);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
 }
 
 function roundedBar(

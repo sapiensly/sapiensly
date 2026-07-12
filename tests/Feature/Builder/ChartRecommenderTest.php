@@ -4,6 +4,7 @@ use App\Models\App;
 use App\Models\Integration;
 use App\Models\User;
 use App\Services\Builder\ChartRecommender;
+use App\Services\Builder\CrossSourceAnalyzer;
 use App\Services\Builder\DataQualityCheck;
 use App\Services\Builder\DomainClassifier;
 use App\Services\Builder\RecommendationNarrator;
@@ -51,6 +52,58 @@ function concentratedRows(): array
     ];
 }
 
+/** Two connected sources sharing the reason dimension: volume + FCR. */
+function volumeObject(): array
+{
+    return [
+        'id' => 'obj_vol0000000', 'slug' => 'tickets_by_reason', 'name' => 'Tickets By Reason',
+        'fields' => [
+            ['id' => 'fld_vreason000', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_vtotal0000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'integ_v00000000',
+            'field_map' => [
+                ['field_id' => 'fld_vreason000', 'external_path' => 'reason'],
+                ['field_id' => 'fld_vtotal0000', 'external_path' => 'total'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'get-v', 'collection_path' => 'rows']],
+        ],
+    ];
+}
+function perfObject(): array
+{
+    return [
+        'id' => 'obj_perf000000', 'slug' => 'fcr_by_reason', 'name' => 'Fcr By Reason',
+        'fields' => [
+            ['id' => 'fld_preason000', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_pfcr000000', 'slug' => 'fcr_pct', 'name' => 'Fcr Pct', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'integ_p00000000',
+            'field_map' => [
+                ['field_id' => 'fld_preason000', 'external_path' => 'reason'],
+                ['field_id' => 'fld_pfcr000000', 'external_path' => 'fcr'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'get-p', 'collection_path' => 'rows']],
+        ],
+    ];
+}
+function volRows(): array
+{
+    return [
+        ['reason' => 'A', 'total' => 400], ['reason' => 'B', 'total' => 300],
+        ['reason' => 'C', 'total' => 200], ['reason' => 'D', 'total' => 100], ['reason' => 'E', 'total' => 50],
+    ];
+}
+function perfRows(): array
+{
+    return [
+        ['reason' => 'A', 'fcr' => 60], ['reason' => 'B', 'fcr' => 65],
+        ['reason' => 'C', 'fcr' => 80], ['reason' => 'D', 'fcr' => 85], ['reason' => 'E', 'fcr' => 90],
+    ];
+}
+
 function makeRecommender(array $rows): ChartRecommender
 {
     $reader = Mockery::mock(ConnectedObjectReader::class);
@@ -67,6 +120,7 @@ function makeRecommender(array $rows): ChartRecommender
         new DomainClassifier,
         app(RecommendationNarrator::class),
         new DataQualityCheck,
+        new CrossSourceAnalyzer(new SemanticProfile),
     );
 }
 
@@ -256,4 +310,70 @@ it('exposes recommendations over HTTP and adds one to the board', function () {
         ->flatMap(fn ($b) => $b['blocks'] ?? [$b])
         ->where('chart_type', 'pareto');
     expect($charts)->toHaveCount(1);
+});
+
+
+it('cross-source join reads high volume against low performance', function () {
+    $names = [
+        'fld_vreason000' => 'reason', 'fld_vtotal0000' => 'total tickets',
+        'fld_preason000' => 'reason', 'fld_pfcr000000' => 'fcr pct',
+    ];
+    $byObject = [
+        'obj_vol0000000' => ['object' => volumeObject(), 'rows' => volRows(), 'facts' => []],
+        'obj_perf000000' => ['object' => perfObject(), 'rows' => perfRows(), 'facts' => []],
+    ];
+
+    $findings = (new CrossSourceAnalyzer(new SemanticProfile))->analyze($byObject, $names, [], true);
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]['kind'])->toBe('cross')
+        ->and($findings[0]['insight']['type'])->toBe('insight')
+        ->and($findings[0]['why'])->toContain('62.5')  // top-2 avg FCR
+        ->and($findings[0]['why'])->toContain('85')     // rest avg FCR
+        ->and($findings[0]['preview']['kind'])->toBe('scatter');
+});
+
+it('adds a cross-source finding as an insight block', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    $manifest = [
+        'id' => $app->id, 'name' => 'T', 'slug' => 't', 'version' => 1,
+        'schema_version' => '1.0.0', 'settings' => ['default_locale' => 'es-MX'],
+        'objects' => [volumeObject(), perfObject()],
+        'pages' => [[
+            'id' => 'pag_x000000000', 'slug' => 'dashboard', 'name' => 'D', 'path' => '/dashboard',
+            'blocks' => [['id' => 'blk_h0000000000', 'type' => 'heading', 'level' => 3, 'content' => 'Desglose']],
+        ]],
+        'permissions' => ['roles' => [['id' => 'rol_x000000000', 'slug' => 'admin', 'name' => 'Admin']]],
+        'workflows' => [],
+    ];
+    app(AppManifestService::class)->createVersion($app, $manifest, $user);
+
+    $reader = Mockery::mock(ConnectedObjectReader::class);
+    $reader->shouldReceive('list')->andReturnUsing(
+        fn ($object) => ['ok' => true, 'rows' => ($object['id'] === 'obj_vol0000000') ? volRows() : perfRows()],
+    );
+    app()->instance(ConnectedObjectReader::class, $reader);
+    app()->instance(ConnectedIntegrationResolver::class, tap(Mockery::mock(ConnectedIntegrationResolver::class), fn ($m) => $m->shouldReceive('resolve')->andReturn(Mockery::mock(Integration::class))));
+
+    $recs = $this->actingAs($user)
+        ->getJson("/apps/{$app->id}/builder/recommendations?page=dashboard")
+        ->assertOk()->json('recommendations');
+
+    $cross = collect($recs)->firstWhere('form', 'insight');
+    expect($cross)->not->toBeNull();
+
+    $this->actingAs($user)
+        ->postJson("/apps/{$app->id}/builder/charts/from-recommendation", [
+            'recommendation_id' => $cross['id'], 'page_slug' => 'dashboard',
+        ])->assertOk();
+
+    $active = app(AppManifestService::class)->getActiveManifest($app->fresh());
+    $insights = collect($active['pages'][0]['blocks'])
+        ->flatMap(fn ($b) => $b['blocks'] ?? [$b])
+        ->where('type', 'insight');
+    expect($insights)->toHaveCount(1)
+        ->and($insights->first()['body'])->toContain('%');
 });

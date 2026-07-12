@@ -33,6 +33,8 @@ const FORM_LABEL: Record<string, string> = {
     donut: 'Dona',
     gauge: 'Medidor',
     treemap: 'Treemap',
+    scatter: 'Dispersión',
+    insight: 'Hallazgo',
 };
 
 interface SourceDetail {

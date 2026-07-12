@@ -46,6 +46,7 @@ class ChartRecommender
         private DomainClassifier $domain,
         private RecommendationNarrator $narrator,
         private DataQualityCheck $quality,
+        private CrossSourceAnalyzer $crossSource,
     ) {}
 
     /**
@@ -99,6 +100,14 @@ class ChartRecommender
             } catch (\Throwable) {
                 continue; // one malformed object never sinks the whole panel
             }
+        }
+
+        // Cross-source findings: the join no single chart shows (volume in one
+        // source vs performance in another over a shared dimension).
+        foreach ($this->crossSource->analyze($factsByObject, $names, $hints, $es) as $f) {
+            $f['identity'] = 'cross|'.($f['dim'] ?? '');
+            $f['score'] = $f['base'] + ($f['flag'] !== null ? 6 : 0);
+            $candidates['cross|'.($f['dim'] ?? '')] = $f;
         }
 
         $ranked = collect($candidates)
@@ -349,6 +358,26 @@ class ChartRecommender
     private function present(App $app, array $page, array $candidate): array
     {
         $recId = substr(sha1($app->id.'|'.($page['id'] ?? '').'|'.$candidate['identity']), 0, 16);
+
+        // A cross-source finding is added as an INSIGHT (the value is in the
+        // join; no single-object chart shows it).
+        if (($candidate['kind'] ?? '') === 'cross') {
+            TenantCache::put($this->specKey($app, $recId), [
+                'kind' => 'insight',
+                'insight' => $candidate['insight'],
+            ], self::SPEC_TTL);
+
+            return [
+                'id' => $recId,
+                'kicker' => $candidate['kicker'],
+                'title' => $candidate['title'],
+                'why' => $candidate['why'],
+                'form' => 'insight',
+                'flag' => $candidate['flag'],
+                'preview' => $candidate['preview'],
+            ];
+        }
+
         $isGauge = ($candidate['chart']['__gauge'] ?? false) === true;
         $chart = $candidate['chart'];
         unset($chart['__gauge']);

@@ -1365,7 +1365,18 @@ class AppBuilderController extends Controller
         }
 
         $scaffolder = app(AppScaffolder::class);
-        if (($spec['kind'] ?? null) === 'gauge') {
+        if (($spec['kind'] ?? null) === 'insight') {
+            $ins = $spec['insight'];
+            $block = [
+                'id' => $scaffolder->id('in'),
+                'type' => 'insight',
+                'title' => $ins['title'],
+                'body' => $ins['body'],
+                'variant' => $ins['variant'] ?? 'conclusion',
+            ];
+            $label = $ins['title'];
+            $kind = 'insight';
+        } elseif (($spec['kind'] ?? null) === 'gauge') {
             $g = $spec['chart'];
             $block = [
                 'id' => $scaffolder->id('blk'),
