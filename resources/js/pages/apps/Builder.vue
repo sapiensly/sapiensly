@@ -3825,6 +3825,10 @@ function statusTone(status: Message['status']): string {
                             :app-id="app.id"
                             :block="selectedBlock"
                             :object="selectedObject"
+                            :data="
+                                previewBlockDataMap[selectedBlockId ?? ''] ??
+                                null
+                            "
                             @saved="afterManualChange"
                             @close="selectedBlockId = null"
                         />

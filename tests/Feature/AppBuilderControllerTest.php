@@ -1339,6 +1339,29 @@ it('the add-chart chat derives, dedupes and inserts a chart — no model involve
         ])->assertStatus(422);
 });
 
+it('col_span null returns the card to auto width (style key unset)', function () {
+    app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/update", [
+            'block_id' => 'blk_manualbar0',
+            'changes' => ['col_span' => 6],
+        ])->assertOk();
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect($manifest['pages'][0]['blocks'][0]['blocks'][0]['style']['col_span'])->toBe(6);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/update", [
+            'block_id' => 'blk_manualbar0',
+            'changes' => ['col_span' => null],
+        ])->assertOk();
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect($manifest['pages'][0]['blocks'][0]['blocks'][0]['style'] ?? [])
+        ->not->toHaveKey('col_span');
+});
+
 it('manual adjust reorders a block before another — one versioned move', function () {
     app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
 

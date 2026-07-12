@@ -1097,7 +1097,7 @@ class AppBuilderController extends Controller
             'changes.y_field_id' => ['sometimes', 'nullable', 'string'],
             'changes.group_by_field_id' => ['sometimes', 'string'],
             'changes.limit' => ['sometimes', 'integer', 'min:3', 'max:50'],
-            'changes.col_span' => ['sometimes', 'integer', 'min:3', 'max:12'],
+            'changes.col_span' => ['sometimes', 'nullable', 'integer', 'min:3', 'max:12'],
             'changes.min_height' => ['sometimes', 'nullable', 'integer', 'min:200', 'max:640'],
         ]);
 
@@ -1154,7 +1154,11 @@ class AppBuilderController extends Controller
         if (array_key_exists('col_span', $changes) || array_key_exists('min_height', $changes)) {
             $style = is_array($block['style'] ?? null) ? $block['style'] : [];
             if (array_key_exists('col_span', $changes)) {
-                $style['col_span'] = $changes['col_span'];
+                if ($changes['col_span'] === null) {
+                    unset($style['col_span']); // «Auto»: back to equal columns
+                } else {
+                    $style['col_span'] = $changes['col_span'];
+                }
             }
             if (array_key_exists('min_height', $changes)) {
                 if ($changes['min_height'] === null) {
@@ -1163,7 +1167,13 @@ class AppBuilderController extends Controller
                     $style['min_height'] = $changes['min_height'];
                 }
             }
-            $ops[] = ['op' => 'add', 'path' => $pointer.'/style', 'value' => (object) $style];
+            if ($style !== []) {
+                $ops[] = ['op' => 'add', 'path' => $pointer.'/style', 'value' => (object) $style];
+            } elseif (is_array($block['style'] ?? null)) {
+                // Emptied style round-trips as [] (not {}) and fails the
+                // schema — drop the key instead.
+                $ops[] = ['op' => 'remove', 'path' => $pointer.'/style'];
+            }
         }
         if ($ops === []) {
             return response()->json(['error' => 'empty', 'message' => 'Nada que cambiar.'], 422);
