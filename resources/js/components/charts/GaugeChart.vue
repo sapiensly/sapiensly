@@ -116,31 +116,10 @@ const tickB = computed(() => pt(tf.value, R + SW / 2 + 2));
 </script>
 
 <template>
-    <div ref="rootEl" class="gauge-chart">
+    <div ref="rootEl" class="gauge-chart flex h-full min-h-0 flex-col">
         <!-- header: icon badge + eyebrow/label, status pill -->
         <div class="mb-0.5 flex items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-2.5">
-                <span
-                    class="flex size-9 shrink-0 items-center justify-center rounded-[11px]"
-                    :style="{
-                        background:
-                            'color-mix(in srgb, ' + accent + ' 12%, transparent)',
-                    }"
-                >
-                    <svg
-                        width="19"
-                        height="19"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        :stroke="accent"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                        <polyline points="9 11 12 14 20 6" />
-                    </svg>
-                </span>
                 <span class="min-w-0">
                     <span
                         class="block text-[10px] font-semibold tracking-[1.4px] uppercase opacity-50"
@@ -164,7 +143,7 @@ const tickB = computed(() => pt(tf.value, R + SW / 2 + 2));
         </div>
 
         <!-- horseshoe -->
-        <div class="relative mt-1.5">
+        <div class="relative my-auto py-1.5">
             <svg
                 viewBox="0 0 300 250"
                 class="block w-full"
@@ -229,10 +208,9 @@ const tickB = computed(() => pt(tf.value, R + SW / 2 + 2));
             <div
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pt-6"
             >
-                <span
-                    class="text-[42px] leading-none font-bold tracking-[-1px]"
-                    >{{ valueLabel }}</span
-                >
+                <span class="text-2xl leading-none font-bold tracking-[-1px]">{{
+                    valueLabel
+                }}</span>
                 <span
                     class="mt-2 flex items-center gap-1.5 text-[12.5px] font-medium opacity-55"
                 >

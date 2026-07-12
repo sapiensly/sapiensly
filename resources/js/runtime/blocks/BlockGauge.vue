@@ -31,6 +31,7 @@ const value = computed(() => Number(props.data?.value ?? 0));
 <template>
     <div :class="['flex flex-col rounded-sp-sm border p-5', t.surface]">
         <GaugeChart
+            class="min-h-0 flex-1"
             :label="block.label ?? 'Meta'"
             :value="value"
             :target="block.max_value"
