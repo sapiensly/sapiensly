@@ -255,13 +255,20 @@ class ChartRecommender
                 $flag = ($pop !== null && abs($pop) >= 15)
                     ? ['tone' => 'hot', 'text' => ($pop >= 0 ? '+' : '').$pop.'% vs. '.($es ? 'periodo' : 'period')]
                     : null;
+                $series = $this->weeklyValues($object, $rows, $date, $measure);
+                // Run-rate: a declining measure heading to zero gets a concrete
+                // ETA — the projection an analyst leads with.
+                $runRate = $this->weeksToZero($series);
+                $projection = $runRate !== null
+                    ? ($es ? " Al ritmo actual, ~{$runRate} semanas para llegar a 0." : " At this pace, ~{$runRate} weeks to reach 0.")
+                    : '';
                 $out[] = [
                     'kind' => 'trend',
                     'kicker' => $es ? 'Tendencia · Semanal' : 'Trend · Weekly',
                     'title' => $es ? Str::ucfirst((string) $t['measure']).' en el tiempo' : Str::ucfirst((string) $t['measure']).' over time',
-                    'why' => $es
+                    'why' => ($es
                         ? Str::ucfirst((string) $t['measure'])." se mueve {$sign}{$t['pendiente_pct']}% por {$t['cadencia']}".($pop !== null ? " ({$sign}{$pop}% vs. periodo anterior)" : '').'. Vale seguirlo semana a semana.'
-                        : Str::ucfirst((string) $t['measure'])." is moving {$sign}{$t['pendiente_pct']}% per {$t['cadencia']}".($pop !== null ? " ({$sign}{$pop}% vs. previous period)" : '').'. Worth tracking weekly.',
+                        : Str::ucfirst((string) $t['measure'])." is moving {$sign}{$t['pendiente_pct']}% per {$t['cadencia']}".($pop !== null ? " ({$sign}{$pop}% vs. previous period)" : '').'. Worth tracking weekly.').$projection,
                     'chart' => array_filter([
                         'label' => ($es ? 'Evolución de ' : 'Trend of ').Str::lower((string) $t['measure']),
                         'chart_type' => 'area',
@@ -271,7 +278,7 @@ class ChartRecommender
                         'bucket' => 'week',
                         'description' => Str::ucfirst(($es ? 'Evolución semanal de ' : 'Weekly trend of ').Str::lower((string) $t['measure']).'.'),
                     ]),
-                    'preview' => ['kind' => 'area', 'values' => $this->weeklyValues($object, $rows, $date, $measure)],
+                    'preview' => ['kind' => 'area', 'values' => $series],
                     'base' => 88 + min(10, (int) round(abs((float) $t['pendiente_pct']) / 3)) + $head((string) $t['measure']),
                     'flag' => $flag,
                 ];
@@ -523,6 +530,34 @@ class ChartRecommender
         ksort($byWeek);
 
         return array_map(fn ($v) => round((float) $v, 2), array_values(array_slice($byWeek, -16)));
+    }
+
+    /**
+     * Weeks until a declining weekly series reaches 0 at its recent average
+     * pace — the run-rate ETA. Null when it isn't clearly declining, the ETA is
+     * implausible (≤1 or >52), or the series is too short.
+     *
+     * @param  list<float>  $series
+     */
+    private function weeksToZero(array $series): ?int
+    {
+        $n = count($series);
+        if ($n < 4) {
+            return null;
+        }
+        $last = $series[$n - 1];
+        if ($last <= 0) {
+            return null;
+        }
+        // Average step over the recent half — steadier than first-to-last.
+        $recent = array_slice($series, (int) floor($n / 2));
+        $step = (end($recent) - $recent[0]) / max(1, count($recent) - 1);
+        if ($step >= 0) {
+            return null; // flat or rising — no ETA to zero
+        }
+        $weeks = (int) ceil($last / abs($step));
+
+        return ($weeks >= 2 && $weeks <= 52) ? $weeks : null;
     }
 
     /** @return list<float> */

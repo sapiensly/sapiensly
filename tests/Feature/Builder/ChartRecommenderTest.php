@@ -408,3 +408,48 @@ it('proposes a derived reopen-rate the board does not carry', function () {
         ->and($findings[0]['insight']['body'])->toContain('3.2%')
         ->and($findings[0]['insight']['type'])->toBe('insight');
 });
+
+
+it('run-rate: a declining trend gets an ETA to zero', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    $obj = [
+        'id' => 'obj_ts00000000', 'slug' => 'tickets_time_series', 'name' => 'Tickets Time Series',
+        'fields' => [
+            ['id' => 'f_date', 'slug' => 'bucket_start', 'name' => 'Bucket Start', 'type' => 'date'],
+            ['id' => 'f_bl', 'slug' => 'backlog_open', 'name' => 'Backlog Open', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => [
+                ['field_id' => 'f_date', 'external_path' => 'bucket_start'],
+                ['field_id' => 'f_bl', 'external_path' => 'backlog'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'x', 'collection_path' => 'rows']],
+        ],
+    ];
+    $rows = [
+        ['bucket_start' => '2026-05-04', 'backlog' => 100],
+        ['bucket_start' => '2026-05-11', 'backlog' => 90],
+        ['bucket_start' => '2026-05-18', 'backlog' => 80],
+        ['bucket_start' => '2026-05-25', 'backlog' => 70],
+        ['bucket_start' => '2026-06-01', 'backlog' => 60],
+    ];
+
+    $result = makeRecommender($rows)->recommend(
+        $app,
+        ['objects' => [$obj], 'settings' => ['default_locale' => 'es-MX']],
+        ['id' => 'p', 'slug' => 'dashboard', 'blocks' => []],
+        $user,
+        'es',
+    );
+
+    $trend = collect($result['recommendations'])->firstWhere('form', 'area');
+    expect($trend)->not->toBeNull()
+        ->and($trend['why'])->toContain('semanas para llegar a 0');
+
+    app(TenantContext::class)->forget();
+});
