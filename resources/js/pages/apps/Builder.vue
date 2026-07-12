@@ -570,6 +570,9 @@ const selectedBlock = computed(() =>
           )
         : null,
 );
+const selectedIsHeading = computed(
+    () => (selectedBlock.value as { type?: string } | null)?.type === 'heading',
+);
 const selectedObject = computed(() => {
     const b = selectedBlock.value as Record<string, any> | null;
     const objId = b?.data_source?.object_id ?? b?.query?.object_id ?? null;
@@ -3902,34 +3905,37 @@ function statusTone(status: Message['status']): string {
                                     <GripHorizontal class="size-4" />
                                 </span>
                             </button>
-                            <button
-                                type="button"
-                                class="absolute z-40 flex cursor-ew-resize touch-none items-center justify-center px-3 py-2"
-                                :style="{
-                                    left: selectionRect.left + selectionRect.width - 14 + 'px',
-                                    top: selectionRect.top + selectionRect.height / 2 - 26 + 'px',
-                                }"
-                                title="Arrastra para ajustar el ancho"
-                                @pointerdown="startBlockResize('x', $event)"
-                            >
-                                <span
-                                    class="block h-10 w-2 rounded-pill bg-accent-blue shadow"
-                                />
-                            </button>
-                            <button
-                                type="button"
-                                class="absolute z-40 flex cursor-ns-resize touch-none items-center justify-center px-2 py-3"
-                                :style="{
-                                    left: selectionRect.left + selectionRect.width / 2 - 26 + 'px',
-                                    top: selectionRect.top + selectionRect.height - 14 + 'px',
-                                }"
-                                title="Arrastra para ajustar el alto"
-                                @pointerdown="startBlockResize('y', $event)"
-                            >
-                                <span
-                                    class="block h-2 w-10 rounded-pill bg-accent-blue shadow"
-                                />
-                            </button>
+                            <!-- Width/height resize: cards only, not headings. -->
+                            <template v-if="!selectedIsHeading">
+                                <button
+                                    type="button"
+                                    class="absolute z-40 flex cursor-ew-resize touch-none items-center justify-center px-3 py-2"
+                                    :style="{
+                                        left: selectionRect.left + selectionRect.width - 14 + 'px',
+                                        top: selectionRect.top + selectionRect.height / 2 - 26 + 'px',
+                                    }"
+                                    title="Arrastra para ajustar el ancho"
+                                    @pointerdown="startBlockResize('x', $event)"
+                                >
+                                    <span
+                                        class="block h-10 w-2 rounded-pill bg-accent-blue shadow"
+                                    />
+                                </button>
+                                <button
+                                    type="button"
+                                    class="absolute z-40 flex cursor-ns-resize touch-none items-center justify-center px-2 py-3"
+                                    :style="{
+                                        left: selectionRect.left + selectionRect.width / 2 - 26 + 'px',
+                                        top: selectionRect.top + selectionRect.height - 14 + 'px',
+                                    }"
+                                    title="Arrastra para ajustar el alto"
+                                    @pointerdown="startBlockResize('y', $event)"
+                                >
+                                    <span
+                                        class="block h-2 w-10 rounded-pill bg-accent-blue shadow"
+                                    />
+                                </button>
+                            </template>
                             <div
                                 v-if="dragHint"
                                 class="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2"

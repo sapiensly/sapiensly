@@ -1339,6 +1339,24 @@ it('the add-chart chat derives, dedupes and inserts a chart — no model involve
         ])->assertStatus(422);
 });
 
+it('manual adjust edits a section heading text via content', function () {
+    $manifest = manualDashManifest($this->testApp->id);
+    $manifest['pages'][0]['blocks'][] = [
+        'id' => 'blk_manualhead0', 'type' => 'heading', 'level' => 3, 'content' => 'Detalle',
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/update", [
+            'block_id' => 'blk_manualhead0',
+            'changes' => ['content' => 'Detalle por motivo'],
+        ])->assertOk();
+
+    $active = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $heading = collect($active['pages'][0]['blocks'])->firstWhere('id', 'blk_manualhead0');
+    expect($heading['content'])->toBe('Detalle por motivo');
+});
+
 it('col_span null returns the card to auto width (style key unset)', function () {
     app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
 

@@ -61,6 +61,7 @@ function paintLayout(key: string, value: unknown) {
 }
 
 const isChart = computed(() => props.block.type === 'chart');
+const isHeading = computed(() => props.block.type === 'heading');
 const isTemporal = computed(() => !!props.block.x_field_id);
 const chartTypes = computed(() =>
     isTemporal.value
@@ -88,6 +89,7 @@ const stringFields = computed(() =>
 
 const form = reactive({
     label: '',
+    content: '',
     description: '',
     chart_type: '',
     aggregation: '',
@@ -109,6 +111,7 @@ function seed() {
     seeding = true;
     const b = props.block as Record<string, any>;
     form.label = String(b.label ?? '');
+    form.content = String(b.content ?? '');
     form.description = String(b.description ?? '');
     form.chart_type = String(b.chart_type ?? '');
     form.aggregation = String(b.aggregation ?? 'count');
@@ -190,6 +193,7 @@ function autoApply(key: string, getter: () => unknown, debounceMs = 0) {
     });
 }
 autoApply('label', () => form.label, 700);
+autoApply('content', () => form.content, 500);
 autoApply('description', () => form.description, 700);
 autoApply('chart_type', () => form.chart_type);
 autoApply('aggregation', () => form.aggregation);
@@ -376,7 +380,10 @@ const previewChips = computed(() => {
                     </button>
                 </div>
                 <p class="truncate text-[15px] font-semibold text-ink">
-                    {{ form.label || (block.type as string) }}
+                    {{
+                        (isHeading ? form.content : form.label) ||
+                        (block.type as string)
+                    }}
                 </p>
 
                 <div
@@ -550,28 +557,46 @@ const previewChips = computed(() => {
                         />
                     </button>
                     <div v-show="open.contenido" class="space-y-3 px-4 pb-4">
-                        <label class="block space-y-1.5 text-xs text-ink-muted">
-                            <span>Título</span>
+                        <label
+                            v-if="isHeading"
+                            class="block space-y-1.5 text-xs text-ink-muted"
+                        >
+                            <span>Texto de la sección</span>
                             <input
-                                v-model="form.label"
+                                v-model="form.content"
                                 type="text"
+                                maxlength="200"
                                 class="w-full rounded-sp-sm border border-medium bg-surface px-3 py-2 text-[13px] text-ink outline-none focus:border-accent-blue"
                             />
                         </label>
-                        <label class="block space-y-1.5 text-xs text-ink-muted">
-                            <span class="flex items-center justify-between">
-                                Descripción
-                                <span class="text-[10.5px] text-ink-subtle">
-                                    {{ form.description.length }} / 300
+                        <template v-else>
+                            <label
+                                class="block space-y-1.5 text-xs text-ink-muted"
+                            >
+                                <span>Título</span>
+                                <input
+                                    v-model="form.label"
+                                    type="text"
+                                    class="w-full rounded-sp-sm border border-medium bg-surface px-3 py-2 text-[13px] text-ink outline-none focus:border-accent-blue"
+                                />
+                            </label>
+                            <label
+                                class="block space-y-1.5 text-xs text-ink-muted"
+                            >
+                                <span class="flex items-center justify-between">
+                                    Descripción
+                                    <span class="text-[10.5px] text-ink-subtle">
+                                        {{ form.description.length }} / 300
+                                    </span>
                                 </span>
-                            </span>
-                            <textarea
-                                v-model="form.description"
-                                rows="2"
-                                maxlength="300"
-                                class="w-full resize-none rounded-sp-sm border border-medium bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-accent-blue"
-                            />
-                        </label>
+                                <textarea
+                                    v-model="form.description"
+                                    rows="2"
+                                    maxlength="300"
+                                    class="w-full resize-none rounded-sp-sm border border-medium bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-accent-blue"
+                                />
+                            </label>
+                        </template>
                     </div>
                 </section>
 
@@ -774,8 +799,8 @@ const previewChips = computed(() => {
                     </div>
                 </section>
 
-                <!-- DISEÑO -->
-                <section>
+                <!-- DISEÑO (width/height don't apply to a section heading) -->
+                <section v-if="!isHeading">
                     <button
                         type="button"
                         class="flex w-full items-center gap-2 px-4 pt-3.5 pb-2.5"

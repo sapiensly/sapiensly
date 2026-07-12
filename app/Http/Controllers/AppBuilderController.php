@@ -1091,6 +1091,8 @@ class AppBuilderController extends Controller
             'block_id' => ['required', 'string'],
             'changes' => ['required', 'array'],
             'changes.label' => ['sometimes', 'string', 'max:120'],
+            // A section heading's / text block's own text.
+            'changes.content' => ['sometimes', 'string', 'max:200'],
             'changes.description' => ['sometimes', 'nullable', 'string', 'max:300'],
             'changes.chart_type' => ['sometimes', 'string'],
             'changes.aggregation' => ['sometimes', 'string', Rule::in(['count', 'sum', 'avg', 'min', 'max'])],
@@ -1141,7 +1143,7 @@ class AppBuilderController extends Controller
         }
 
         $ops = [];
-        foreach (['label', 'description', 'chart_type', 'aggregation', 'y_field_id', 'group_by_field_id'] as $key) {
+        foreach (['label', 'content', 'description', 'chart_type', 'aggregation', 'y_field_id', 'group_by_field_id'] as $key) {
             if (array_key_exists($key, $changes)) {
                 $ops[] = $changes[$key] === null
                     ? ['op' => 'remove', 'path' => $pointer.'/'.$key]
