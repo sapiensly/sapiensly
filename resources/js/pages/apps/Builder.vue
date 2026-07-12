@@ -851,55 +851,19 @@ function startBlockMove(down: PointerEvent) {
         const target = dropTarget.value;
         dropTarget.value = null;
         if (!target || !target.id) return;
-        // OPTIMISTIC: move the element in the DOM right now — the server
-        // confirms in the coalesced reload; on failure we hard-refresh.
-        const dragged = selectedEl();
-        const targetEl = pane.querySelector(
-            `[data-block-id="${target.id}"]`,
-        ) as HTMLElement | null;
-        if (dragged && targetEl) {
-            if (target.position === 'inside') {
-                const rowFlex = targetEl.querySelector(
-                    ':scope > div',
-                ) as HTMLElement | null;
-                (rowFlex ?? targetEl).appendChild(dragged);
-            } else if (
-                target.position === 'above' ||
-                target.position === 'below'
-            ) {
-                targetEl.insertAdjacentElement(
-                    target.position === 'above' ? 'beforebegin' : 'afterend',
-                    dragged,
-                );
-            } else if (
-                targetEl.parentElement?.dataset.blockType !== 'container'
-            ) {
-                // Top-level target: the server wraps both into a new row —
-                // mirror it in the DOM so the drop lands side by side at once.
-                const wrap = document.createElement('div');
-                wrap.className =
-                    'flex flex-row flex-wrap items-stretch gap-4 [&>*]:min-w-0 [&>*]:grow [&>*]:basis-72';
-                targetEl.insertAdjacentElement('beforebegin', wrap);
-                if (target.position === 'before') {
-                    wrap.append(dragged, targetEl);
-                } else {
-                    wrap.append(targetEl, dragged);
-                }
-            } else {
-                targetEl.insertAdjacentElement(
-                    target.position === 'before' ? 'beforebegin' : 'afterend',
-                    dragged,
-                );
-            }
-            requestAnimationFrame(updateSelectionRect);
-        }
+        // No optimistic DOM surgery here: moving Vue-owned nodes by hand
+        // (appendChild / insertAdjacentElement / hand-built row wrappers)
+        // desynced the real DOM from Vue's vnode tree, so the confirm reload
+        // reconciled into DUPLICATED, unselectable cards. The move restructures
+        // the block tree (wrap-into-row, reparenting), so we let the server be
+        // the source of truth and reload promptly — the render is authoritative.
         axios
             .post(`/apps/${props.app.id}/builder/blocks/move`, {
                 block_id: blockId,
                 target_block_id: target.id,
                 position: target.position,
             })
-            .then(scheduleLayoutReload)
+            .then(afterLayoutChange)
             .catch(() => {
                 toast.error('No se pudo mover la card.');
                 afterManualChange();
