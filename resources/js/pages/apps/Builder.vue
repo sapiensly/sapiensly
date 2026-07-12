@@ -3711,19 +3711,21 @@ function statusTone(status: Message['status']): string {
                             <button
                                 v-if="panelMode === 'manual'"
                                 type="button"
-                                class="inline-flex size-6 items-center justify-center rounded-pill border border-medium bg-surface text-ink-muted transition-colors hover:text-ink"
+                                class="inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px] font-semibold transition-colors"
+                                :class="
+                                    !leftPanelHidden
+                                        ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
+                                        : 'border-medium bg-surface text-ink-muted hover:text-ink'
+                                "
                                 :title="
                                     leftPanelHidden
-                                        ? 'Mostrar panel izquierdo'
-                                        : 'Ocultar panel izquierdo'
+                                        ? 'Mostrar el panel para agregar gráfica'
+                                        : 'Ocultar el panel de agregar gráfica'
                                 "
                                 @click="leftPanelHidden = !leftPanelHidden"
                             >
-                                <PanelLeftOpen
-                                    v-if="leftPanelHidden"
-                                    class="size-3"
-                                />
-                                <PanelLeftClose v-else class="size-3" />
+                                <BarChart3 class="size-3.5" />
+                                Agregar gráfica
                             </button>
                             <h2
                                 class="text-xs font-medium tracking-wide text-ink-muted uppercase"
