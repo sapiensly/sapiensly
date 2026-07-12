@@ -45,6 +45,7 @@ interface SourceDetail {
 const loading = ref(true);
 const recs = ref<Recommendation[]>([]);
 const gaps = ref<{ text: string }[]>([]);
+const dataQuality = ref<{ level: 'warn' | 'info'; text: string }[]>([]);
 const domain = ref<{ label: string } | null>(null);
 const sources = ref(0);
 const sourcesDetail = ref<SourceDetail[]>([]);
@@ -67,6 +68,7 @@ async function loadRecommendations() {
         );
         recs.value = data.recommendations ?? [];
         gaps.value = data.gaps ?? [];
+        dataQuality.value = data.data_quality ?? [];
         domain.value = data.domain ?? null;
         sources.value = data.sources ?? 0;
         sourcesDetail.value = data.sources_detail ?? [];
@@ -299,6 +301,50 @@ async function send() {
             </template>
 
             <template v-else>
+            <!-- Data-confidence flags: read the material before trusting it -->
+            <div
+                v-if="!loading && dataQuality.length"
+                class="flex flex-wrap gap-2 px-4 pt-3"
+            >
+                <span
+                    v-for="(q, i) in dataQuality"
+                    :key="i"
+                    class="inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px]"
+                    :class="
+                        q.level === 'warn'
+                            ? 'border-sp-warning/30 text-sp-warning'
+                            : 'border-soft bg-surface text-ink-muted'
+                    "
+                    :style="
+                        q.level === 'warn'
+                            ? { background: 'rgba(224,145,42,0.1)' }
+                            : undefined
+                    "
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        class="size-3"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <template v-if="q.level === 'warn'">
+                            <path d="M12 9v4M12 17h.01" />
+                            <path
+                                d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6A2 2 0 0 0 22 18L13.7 3.9a2 2 0 0 0-3.4 0z"
+                            />
+                        </template>
+                        <template v-else>
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M12 16v-4M12 8h.01" />
+                        </template>
+                    </svg>
+                    {{ q.text }}
+                </span>
+            </div>
+
             <div
                 class="px-4 pt-3.5 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
             >

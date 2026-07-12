@@ -4,6 +4,7 @@ use App\Models\App;
 use App\Models\Integration;
 use App\Models\User;
 use App\Services\Builder\ChartRecommender;
+use App\Services\Builder\DataQualityCheck;
 use App\Services\Builder\DomainClassifier;
 use App\Services\Builder\RecommendationNarrator;
 use App\Services\Connected\ConnectedIntegrationResolver;
@@ -65,6 +66,7 @@ function makeRecommender(array $rows): ChartRecommender
         new SemanticProfile,
         new DomainClassifier,
         app(RecommendationNarrator::class),
+        new DataQualityCheck,
     );
 }
 
@@ -154,6 +156,35 @@ it('dedupes the same cut across a DIFFERENT overlapping source', function () {
     expect($breakdowns)->toBeEmpty();
 
     app(TenantContext::class)->forget();
+});
+
+it('data quality flags a stale source and a high-null column', function () {
+    $object = [
+        'name' => 'Tickets Time Series',
+        'fields' => [
+            ['id' => 'f1', 'slug' => 'total', 'name' => 'Total', 'type' => 'number'],
+            ['id' => 'f2', 'slug' => 'note', 'name' => 'Note', 'type' => 'string'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'f1', 'external_path' => 'total'],
+            ['field_id' => 'f2', 'external_path' => 'note'],
+        ]],
+    ];
+    $rows = [
+        ['total' => 10, 'note' => ''],
+        ['total' => 20, 'note' => ''],
+        ['total' => 30, 'note' => 'x'],
+    ]; // note = 66% empty
+    $facts = ['trend' => ['Bucket Start' => ['span_to' => '2020-01-01']]]; // very stale
+
+    $flags = (new DataQualityCheck)->run(
+        ['obj1' => ['object' => $object, 'rows' => $rows, 'facts' => $facts]],
+        true,
+    );
+
+    expect(collect($flags)->firstWhere('level', 'warn'))->not->toBeNull()
+        ->and(collect($flags)->firstWhere('level', 'warn')['text'])->toContain('no actualiza')
+        ->and(collect($flags)->firstWhere('level', 'info')['text'])->toContain('vacío');
 });
 
 it('does not re-recommend a cut the board already shows', function () {

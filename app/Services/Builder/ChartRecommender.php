@@ -45,6 +45,7 @@ class ChartRecommender
         private SemanticProfile $semantics,
         private DomainClassifier $domain,
         private RecommendationNarrator $narrator,
+        private DataQualityCheck $quality,
     ) {}
 
     /**
@@ -116,6 +117,7 @@ class ChartRecommender
             'total_rows' => $totalRows,
             'recommendations' => $recs,
             'gaps' => $this->gaps($factsByObject, $existing, $domain, $es),
+            'data_quality' => $this->quality->run($factsByObject, $es),
             'sources_detail' => array_map(
                 fn (array $e) => $this->sourceDetail($e['object'], count($e['rows']), $es),
                 array_values($factsByObject),
