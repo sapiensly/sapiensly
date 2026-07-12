@@ -2920,12 +2920,7 @@ function statusTone(status: Message['status']): string {
                     <ManualChat
                         :app-id="app.id"
                         :page-slug="preview?.page?.slug"
-                        @added="
-                            (id) => {
-                                selectedBlockId = id;
-                                afterManualChange();
-                            }
-                        "
+                        @added="afterManualChange"
                     />
                 </section>
                 <section
