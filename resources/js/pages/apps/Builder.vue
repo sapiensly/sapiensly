@@ -519,7 +519,6 @@ const panelMode = ref<'chat' | 'manual'>('chat');
 
 // ---- Manual adjust: selection, drawer, on-grid resize ----------------------
 const selectedBlockId = ref<string | null>(null);
-watch(panelMode, () => (selectedBlockId.value = null));
 
 // The drawer PUSHES the layout instead of covering it: the shell reserves
 // its width (transitioned) whenever a block is selected in manual mode.
@@ -530,13 +529,13 @@ const drawerOpen = computed(
         props.app.kind === 'dashboard',
 );
 
-// The right drawer needs the horizontal room the left panel occupies —
-// auto-hide it while a block is selected; the toggle brings it back.
+// The right drawer needs the horizontal room the left panel (the AI
+// add-chart chat) occupies — so manual mode opens with the left panel
+// hidden and gives the canvas the whole width; the toggle brings it back.
 const leftPanelHidden = ref(false);
-watch(selectedBlockId, (id) => {
-    if (panelMode.value === 'manual') {
-        leftPanelHidden.value = id !== null;
-    }
+watch(panelMode, (mode) => {
+    selectedBlockId.value = null;
+    leftPanelHidden.value = mode === 'manual';
 });
 
 function findBlockById(
