@@ -77,6 +77,9 @@ async function add(rec: Recommendation) {
         );
         done.value.add(rec.id);
         if (data.block_id) emit('added', data.block_id);
+        // Re-read: the cut we just added drops out (now on the board) and the
+        // analyst surfaces the next-best analysis — a follow-up without asking.
+        loadRecommendations();
     } catch (e: unknown) {
         askReply.value =
             (e as { response?: { data?: { message?: string } } }).response

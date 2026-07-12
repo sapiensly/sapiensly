@@ -141,6 +141,12 @@ class ChartRecommender
         );
         $nameOf = fn (?array $f) => $f === null ? '' : (string) ($f['name'] ?? $f['slug']);
         $objName = (string) ($object['name'] ?? $object['slug'] ?? '');
+        // Business relevance: an analysis whose measure/dimension is a headline
+        // concept for the detected domain (FCR, backlog, reason… for support)
+        // ranks above an equally-loud but peripheral one.
+        $head = fn (string ...$names): int => collect($names)->contains(
+            fn (string $n): bool => $this->domain->isHeadline($domain, $n)
+        ) ? 12 : 0;
 
         // 1) PARETO — the strongest read: the measure concentrates in few
         // categories. The fact carries "N de M concentran P%".
@@ -165,7 +171,7 @@ class ChartRecommender
                         'description' => Str::ucfirst(Str::lower((string) $c['measure']).($es ? ' por ' : ' by ').Str::lower((string) $c['dimension']).($es ? ', con % acumulado.' : ', with cumulative %.')),
                     ]),
                     'preview' => ['kind' => 'pareto', 'values' => $this->breakdownValues($object, $rows, $dim, $measure, 10)],
-                    'base' => 100,
+                    'base' => 100 + $head((string) $c['dimension'], (string) $c['measure']),
                     'flag' => null,
                 ];
             }
@@ -200,7 +206,7 @@ class ChartRecommender
                         'description' => Str::ucfirst(($es ? 'Evolución semanal de ' : 'Weekly trend of ').Str::lower((string) $t['measure']).'.'),
                     ]),
                     'preview' => ['kind' => 'area', 'values' => $this->weeklyValues($object, $rows, $date, $measure)],
-                    'base' => 88 + min(10, (int) round(abs((float) $t['pendiente_pct']) / 3)),
+                    'base' => 88 + min(10, (int) round(abs((float) $t['pendiente_pct']) / 3)) + $head((string) $t['measure']),
                     'flag' => $flag,
                 ];
             }
@@ -239,7 +245,7 @@ class ChartRecommender
                     'format' => 'percentage',
                 ],
                 'preview' => ['kind' => 'gauge', 'value' => $value, 'target' => $target],
-                'base' => 82,
+                'base' => 82 + $head($nameOf($f)),
                 'flag' => $value < $target ? ['tone' => 'hot', 'text' => round(abs($target - $value), 1).' pts '.($es ? 'a la meta' : 'to target')] : null,
             ];
             break; // one gauge is enough per object
@@ -271,7 +277,7 @@ class ChartRecommender
                         'description' => Str::ucfirst(Str::lower((string) ($measure['name'] ?? ($es ? 'Registros' : 'Records'))).($es ? ' por ' : ' by ').Str::lower($topName).'.'),
                     ]),
                     'preview' => ['kind' => 'bars', 'values' => $this->breakdownValues($object, $rows, $dim, $measure, 6)],
-                    'base' => 68,
+                    'base' => 68 + $head($topName),
                     'flag' => null,
                 ];
             }

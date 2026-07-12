@@ -69,10 +69,14 @@ function makeRecommender(array $rows): ChartRecommender
 }
 
 it('classifies a support-ticket board as the support domain', function () {
-    $domain = (new DomainClassifier)->classify([recObject()], 'es');
+    $classifier = new DomainClassifier;
+    $domain = $classifier->classify([recObject()], 'es');
 
     expect($domain['sector'])->toBe('support')
-        ->and($domain['label'])->toBe('Soporte de tickets');
+        ->and($domain['label'])->toBe('Soporte de tickets')
+        // Headline concepts of the domain rank analyses higher.
+        ->and($classifier->isHeadline($domain, 'FCR Pct'))->toBeTrue()
+        ->and($classifier->isHeadline($domain, 'Nombre del agente'))->toBeFalse();
 });
 
 it('recommends a Pareto grounded in the real concentration fact', function () {
