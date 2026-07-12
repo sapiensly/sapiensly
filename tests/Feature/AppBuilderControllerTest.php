@@ -1408,6 +1408,35 @@ it('dropping on a row\'s empty space moves the card INSIDE that row', function (
         ->and(collect($row['blocks'])->pluck('id')->all())->toBe(['blk_manualbar0', $added]);
 });
 
+it('inside a COLUMN container lands as a sibling — cards never nest into cards', function () {
+    $manifest = manualDashManifest($this->testApp->id);
+    // A styled column container renders as a card; nesting into it is banned.
+    $manifest['pages'][0]['blocks'][] = [
+        'id' => 'cn_manualcol0', 'type' => 'container', 'direction' => 'column', 'gap' => 'md',
+        'blocks' => [[
+            'id' => 'blk_manualln00', 'type' => 'chart', 'label' => 'Backlog semanal',
+            'chart_type' => 'line', 'aggregation' => 'sum',
+            'y_field_id' => 'fld_mbacklog00', 'group_by_field_id' => 'fld_mreason000',
+            'data_source' => ['object_id' => 'obj_manualdim0', 'limit' => 12],
+        ]],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/move", [
+            'block_id' => 'blk_manualbar0',
+            'target_block_id' => 'cn_manualcol0',
+            'position' => 'inside',
+        ])->assertOk();
+
+    $active = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $blocks = $active['pages'][0]['blocks'];
+    // The column container keeps its single chart; the moved card sits AFTER
+    // it as a top-level sibling (its emptied source row was pruned).
+    expect(collect($blocks)->pluck('id')->all())->toBe(['cn_manualcol0', 'blk_manualbar0'])
+        ->and(collect($blocks[0]['blocks'])->pluck('id')->all())->toBe(['blk_manualln00']);
+});
+
 it('dropping beside a TOP-LEVEL card wraps both into a new row container', function () {
     $manifest = manualDashManifest($this->testApp->id);
     // A lone full-width chart living at the top level of the page.

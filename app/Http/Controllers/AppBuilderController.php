@@ -1407,9 +1407,16 @@ class AppBuilderController extends Controller
             }
             if (($block['id'] ?? null) === $targetId) {
                 // 'inside' = drop on a row's EMPTY space: the card joins the
-                // row instead of becoming a sibling row.
+                // row instead of becoming a sibling row. ONLY row containers
+                // qualify — cards are single-chart components, and a column/
+                // styled container renders as a card, so nesting into one is
+                // forbidden (the card lands as a sibling below instead).
                 if ($position === 'inside' && ($block['type'] ?? null) === 'container') {
-                    $blocks[$i]['blocks'] = array_values([...($block['blocks'] ?? []), $insert]);
+                    if (($block['direction'] ?? null) === 'row') {
+                        $blocks[$i]['blocks'] = array_values([...($block['blocks'] ?? []), $insert]);
+                    } else {
+                        array_splice($blocks, $i + 1, 0, [$insert]);
+                    }
 
                     return true;
                 }

@@ -726,7 +726,13 @@ function startBlockMove(down: PointerEvent) {
         }
 
         // A concrete CARD under the pointer → sibling insert by halves.
-        if (under && under.dataset.blockType !== 'container') {
+        // Cards are SINGLE-chart components: only a ROW container is ever an
+        // «inside» target — column/styled containers look like cards and
+        // nesting into them is forbidden.
+        const isRowContainer = (c: HTMLElement) =>
+            c.dataset.blockType === 'container' &&
+            c.dataset.blockDirection === 'row';
+        if (under && !isRowContainer(under)) {
             const r = under.getBoundingClientRect();
             dropTarget.value = {
                 id: under.dataset.blockId ?? '',
@@ -742,9 +748,11 @@ function startBlockMove(down: PointerEvent) {
         // this row». The dragged card's own row only counts if it has
         // siblings (rejoining an empty own row is a no-op).
         const dragged = selectedEl();
-        const rows = Array.from(
-            pane.querySelectorAll('[data-block-type="container"]'),
-        ) as HTMLElement[];
+        const rows = (
+            Array.from(
+                pane.querySelectorAll('[data-block-type="container"]'),
+            ) as HTMLElement[]
+        ).filter(isRowContainer);
         const row = rows.find((c) => {
             const r = c.getBoundingClientRect();
             if (e.clientY < r.top || e.clientY > r.bottom) return false;

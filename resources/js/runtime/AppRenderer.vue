@@ -447,6 +447,7 @@ function blockError(blockId: string): string | null {
             :style="outerStyle(block)"
             :data-block-id="block.id"
             :data-block-type="block.type"
+            :data-block-direction="(block as any).direction"
         >
             <div
                 :style="
@@ -488,6 +489,7 @@ function blockError(blockId: string): string | null {
             :style="colSpanStyle(block)"
             :data-block-id="block.id"
             :data-block-type="block.type"
+            :data-block-direction="(block as any).direction"
         />
         <div
             v-else
