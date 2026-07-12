@@ -3,6 +3,7 @@ import HBarChart from '@/components/charts/HBarChart.vue';
 import TreemapChart from '@/components/charts/TreemapChart.vue';
 import ParetoChart from '@/components/charts/ParetoChart.vue';
 import { router, usePage } from '@inertiajs/vue3';
+import { useElementSize } from '@/composables/useElementSize';
 import { computed, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
@@ -107,6 +108,21 @@ const effectiveBucket = computed<ChartBlock['bucket']>(() =>
 // follows the pointer across SVG marks and HTML bars alike. One mechanism, so
 // every dashboard chart gets consistent hover info without per-chart wiring.
 const card = ref<HTMLElement | null>(null);
+// The SVG plot host — measured so the axis charts' viewBox can match the
+// card's real aspect ratio and FILL it (re-laid-out at the new scale) instead
+// of letterboxing. Only one chart branch renders, so a single ref suffices.
+const chartHostEl = ref<HTMLElement | null>(null);
+const { width: hostW, height: hostH } = useElementSize(chartHostEl);
+/** viewBox height that matches the host aspect (keeping viewBox width `vw`),
+ *  clamped to a sane band; falls back to `def` off an explicit height. */
+function fitVH(vw: number, def: number, lo: number, hi: number): number {
+    if (!hasExplicitHeight.value || hostW.value === 0 || hostH.value === 0) {
+        return def;
+    }
+    return Math.round(
+        Math.min(hi, Math.max(lo, (vw * hostH.value) / hostW.value)),
+    );
+}
 const mouse = ref({ x: 0, y: 0 });
 const tip = ref<{ title: string; value?: string; color?: string } | null>(null);
 
@@ -572,7 +588,7 @@ const lineChart = computed(() => {
     const max = Math.max(1, ...values.flat());
 
     const W = 520;
-    const H = 200;
+    const H = fitVH(W, 200, 150, 460);
     const padL = 34;
     const padR = 12;
     const padT = 12;
@@ -851,7 +867,7 @@ const combo = computed(() => {
     );
 
     const W = 360;
-    const H = 210;
+    const H = fitVH(W, 210, 150, 460);
     const padL = 36;
     const padR = hasRight ? 36 : 12;
     const padT = 10;
@@ -1290,7 +1306,11 @@ const boxPlot = computed(() => {
 <template>
     <div
         ref="card"
-        :class="['relative flex flex-col rounded-sp-sm border p-5', t.surface]"
+        :class="[
+            'relative flex flex-col rounded-sp-sm border p-5',
+            t.surface,
+            t.text,
+        ]"
         @mousemove="onMove"
         @mouseleave="hideTip"
     >
@@ -1416,6 +1436,7 @@ const boxPlot = computed(() => {
                     </li>
                 </ul>
                 <svg
+                    ref="chartHostEl"
                     :viewBox="`0 0 ${combo.W} ${combo.H}`"
                     class="min-h-0 w-full flex-1"
                     :class="t.text"
@@ -1675,6 +1696,7 @@ const boxPlot = computed(() => {
                     </li>
                 </ul>
                 <div
+                    ref="chartHostEl"
                     class="flex-1"
                     :class="hasExplicitHeight ? 'min-h-0' : 'min-h-[14rem]'"
                 >

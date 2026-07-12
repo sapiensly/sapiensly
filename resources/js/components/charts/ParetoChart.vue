@@ -12,6 +12,7 @@
  *    per-bar value labels, two-line wrapped category labels, hover tooltip
  *    with the full label, click-through for drill-downs
  */
+import { useElementSize } from '@/composables/useElementSize';
 import { resolveCssColor } from '@/lib/resolveCssColor';
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -122,6 +123,20 @@ function niceStep(rawStep: number): number {
     return 10 * pow;
 }
 
+// Responsive viewBox: when the card has an explicit height, the plot's height
+// unit tracks the container's real aspect ratio so the chart FILLS the card
+// (no letterbox, no distortion — the geometry re-lays-out at the new scale).
+const plotEl = ref<HTMLElement | null>(null);
+const { width: plotW, height: plotH } = useElementSize(plotEl);
+const VW = 1000;
+const LABEL_BAND = 92; // viewBox units reserved below the plot for x labels
+const vh = computed(() => {
+    if (!props.fitHeight || plotW.value === 0 || plotH.value === 0) return 520;
+    return Math.round(
+        Math.min(900, Math.max(320, (VW * plotH.value) / plotW.value)),
+    );
+});
+
 const model = computed(() => {
     const data = props.items
         .filter((d) => Number.isFinite(d.value) && d.value > 0)
@@ -138,18 +153,18 @@ const model = computed(() => {
     if (cross < 0) cross = n - 1;
     const vitalCount = cross + 1;
 
-    // Geometry (reference viewBox): plot 52..948 × 26..428, labels below.
+    // Geometry: plot spans x 52..948, y 26..(vh - label band); labels below.
     const x0 = 52;
     const x1 = 948;
     const y0 = 26;
-    const y1 = 428;
-    const plotH = y1 - y0;
+    const y1 = vh.value - LABEL_BAND;
+    const plotArea = y1 - y0;
     const band = (x1 - x0) / n;
     const barW = Math.min(32, band * 0.52);
     const step = niceStep(Math.max(1, ...data.map((d) => d.value)) / 3);
     const yMax = step * 3;
-    const yv = (v: number) => y1 - (v / yMax) * plotH;
-    const yp = (p: number) => y1 - (p / 100) * plotH;
+    const yv = (v: number) => y1 - (v / yMax) * plotArea;
+    const yp = (p: number) => y1 - (p / 100) * plotArea;
     const cxOf = (i: number) => x0 + band * (i + 0.5);
     const labelStride = band < 34 ? Math.ceil(34 / band) : 1;
 
@@ -277,13 +292,14 @@ const footnoteText = computed(() => {
         </div>
 
         <div
+            ref="plotEl"
             class="relative"
             :class="fitHeight ? 'min-h-0 flex-1' : ''"
             @mousemove="onMove"
             @mouseleave="hover = null"
         >
             <svg
-                viewBox="0 0 1000 520"
+                :viewBox="`0 0 1000 ${vh}`"
                 preserveAspectRatio="xMidYMid meet"
                 class="block w-full overflow-visible"
                 :class="fitHeight ? 'h-full' : 'h-auto'"
