@@ -110,7 +110,7 @@ function mcpToolsList(): array
  * blockData is a DEFERRED Inertia prop: the shell responds without it and the
  * client fetches it in a follow-up partial request — which this replicates.
  */
-function deferredBlockData($test, string $url)
+function deferredBlockData($test, string $url, string $component = 'runtime/Page', string $props = 'blockData')
 {
     $shell = $test->get($url);
     $version = (string) ($shell->original->getData()['page']['version'] ?? '');
@@ -118,7 +118,7 @@ function deferredBlockData($test, string $url)
     return $test->get($url, [
         'X-Inertia' => 'true',
         'X-Inertia-Version' => $version,
-        'X-Inertia-Partial-Component' => 'runtime/Page',
-        'X-Inertia-Partial-Data' => 'blockData',
+        'X-Inertia-Partial-Component' => $component,
+        'X-Inertia-Partial-Data' => $props,
     ]);
 }

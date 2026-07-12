@@ -270,23 +270,21 @@ it('returns a schema payload with objects, record counts, workflows and system f
         'data' => ['nombre' => 'Beto'],
     ]);
 
-    $this->actingAs($this->user)
-        ->get("/apps/{$this->testApp->id}/builder")
+    // `schema` is a DEFERRED prop: absent from the shell, delivered by the
+    // follow-up partial request.
+    $this->actingAs($this->user);
+    deferredBlockData($this, "/apps/{$this->testApp->id}/builder", 'apps/Builder', 'schema')
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->component('apps/Builder')
-            ->has('schema')
-            ->has('schema.objects', 2)
-            ->where("schema.record_counts.{$objClientes}", 2)
-            // Orders has no records — its key may be absent rather than 0; both are acceptable.
-            ->has("schema.workflows_by_object.{$objOrders}", 1)
-            ->where("schema.workflows_by_object.{$objOrders}.0.id", $wfId)
-            ->where("schema.workflows_by_object.{$objOrders}.0.trigger_type", 'record.created')
-            // Each object should have system_fields injected (sys_created_at, sys_updated_at).
-            ->has('schema.objects.0.system_fields', 2)
-            ->where('schema.objects.0.system_fields.0.id', 'sys_created_at')
-            ->where('schema.objects.0.system_fields.1.id', 'sys_updated_at')
-        );
+        ->assertJsonCount(2, 'props.schema.objects')
+        ->assertJsonPath("props.schema.record_counts.{$objClientes}", 2)
+        // Orders has no records — its key may be absent rather than 0; both are acceptable.
+        ->assertJsonCount(1, "props.schema.workflows_by_object.{$objOrders}")
+        ->assertJsonPath("props.schema.workflows_by_object.{$objOrders}.0.id", $wfId)
+        ->assertJsonPath("props.schema.workflows_by_object.{$objOrders}.0.trigger_type", 'record.created')
+        // Each object should have system_fields injected (sys_created_at, sys_updated_at).
+        ->assertJsonCount(2, 'props.schema.objects.0.system_fields')
+        ->assertJsonPath('props.schema.objects.0.system_fields.0.id', 'sys_created_at')
+        ->assertJsonPath('props.schema.objects.0.system_fields.1.id', 'sys_updated_at');
 });
 
 it('exposes the conversation build_plan to the builder page', function () {
@@ -315,26 +313,21 @@ it('exposes the conversation build_plan to the builder page', function () {
 it('returns null schema when the app has no manifest yet', function () {
     $bareApp = App::factory()->create(['user_id' => $this->user->id, 'visibility' => 'private']);
 
-    $this->actingAs($this->user)
-        ->get("/apps/{$bareApp->id}/builder")
+    $this->actingAs($this->user);
+    deferredBlockData($this, "/apps/{$bareApp->id}/builder", 'apps/Builder', 'schema')
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->component('apps/Builder')
-            ->where('schema', null)
-        );
+        ->assertJsonPath('props.schema', null);
 });
 
 it('returns an empty-but-shaped schema when manifest has zero objects', function () {
     // The beforeEach manifest already has objects=[] — so this just hits the
     // "no objects" branch in buildSchema().
-    $this->actingAs($this->user)
-        ->get("/apps/{$this->testApp->id}/builder")
+    $this->actingAs($this->user);
+    deferredBlockData($this, "/apps/{$this->testApp->id}/builder", 'apps/Builder', 'schema')
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->where('schema.objects', [])
-            ->where('schema.record_counts', [])
-            ->where('schema.workflows_by_object', [])
-        );
+        ->assertJsonPath('props.schema.objects', [])
+        ->assertJsonPath('props.schema.record_counts', [])
+        ->assertJsonPath('props.schema.workflows_by_object', []);
 });
 
 it('preview hides a block gated by a visibility expression until its param is set', function () {

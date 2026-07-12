@@ -155,7 +155,6 @@ interface Message {
 interface Preview {
     page: PageDef;
     pages: PageSummary[];
-    block_data: BlockData;
     objects: ObjectDef[];
     settings: { default_locale?: string; default_currency?: string };
     custom_css?: string;
@@ -230,7 +229,9 @@ interface Props {
     untitledName?: string;
     manifest: Record<string, unknown> | null;
     preview: Preview | null;
-    schema: SchemaPayload | null;
+    // DEFERRED props: undefined while their follow-up request runs.
+    previewBlockData?: BlockData | null;
+    schema?: SchemaPayload | null;
     conversation: {
         id: string;
         messages: Message[];
@@ -507,7 +508,7 @@ function setPaletteMode(mode: string) {
     paletteMode.value = mode;
     axios
         .post(`/apps/${props.app.id}/builder/design`, { palette_mode: mode })
-        .then(() => router.reload({ only: ['preview', 'manifest'] }))
+        .then(() => router.reload({ only: ['preview', 'previewBlockData', 'manifest'] }))
         .catch(() => toast.error(t('apps.builder.brand_apply_failed')));
 }
 
@@ -592,7 +593,7 @@ function onManualPreviewClick(e: MouseEvent) {
     selectedBlockId.value = el.dataset.blockId ?? null;
 }
 function afterManualChange() {
-    router.reload({ only: ['preview', 'manifest'] });
+    router.reload({ only: ['preview', 'previewBlockData', 'manifest'] });
 }
 
 // Layout gestures (resize, reorder) already updated the DOM optimistically —
@@ -1841,7 +1842,7 @@ function useOrgBrand() {
         .post(`/apps/${props.app.id}/builder/design`, payload)
         .then(() =>
             router.reload({
-                only: ['preview', 'manifest'],
+                only: ['preview', 'previewBlockData', 'manifest'],
             }),
         )
         .catch(() => toast.error(t('apps.builder.brand_apply_failed')));
@@ -1850,6 +1851,11 @@ function useOrgBrand() {
 // Provide the App slug for BlockForm/BlockButton inside the preview so any
 // action they fire goes to /r/{slug}/actions just like in the real runtime.
 provide('appSlug', props.app.slug);
+// previewBlockData is deferred: while it's in flight the preview's data
+// blocks render as skeletons (AppRenderer injects this flag).
+const previewDataPending = computed(() => props.previewBlockData == null);
+provide('blockDataLoading', previewDataPending);
+const previewBlockDataMap = computed(() => props.previewBlockData ?? {});
 
 // Re-sync the local ref whenever Inertia gives us new props (conversation
 // switched, page reloaded after an approve). Jump to the bottom without
@@ -2332,7 +2338,7 @@ function subscribe() {
                 previewLoading.value = true;
             }
             router.reload({
-                only: ['preview', 'manifest', 'conversation'],
+                only: ['preview', 'previewBlockData', 'manifest', 'conversation'],
                 onFinish: () => {
                     previewLoading.value = false;
                 },
@@ -4037,7 +4043,7 @@ function statusTone(status: Message['status']): string {
                                     <div class="space-y-4 px-6 py-6">
                                         <AppRenderer
                                             :blocks="previewContentBlocks"
-                                            :block-data="preview.block_data"
+                                            :block-data="previewBlockDataMap"
                                             :objects="preview.objects"
                                             :locale="previewLocale"
                                             :default-currency="previewCurrency"
@@ -4061,7 +4067,7 @@ function statusTone(status: Message['status']): string {
                                 <div class="space-y-4 py-6">
                                     <AppRenderer
                                         :blocks="preview.page.blocks"
-                                        :block-data="preview.block_data"
+                                        :block-data="previewBlockDataMap"
                                         :objects="preview.objects"
                                         :locale="previewLocale"
                                         :default-currency="previewCurrency"
@@ -4090,7 +4096,7 @@ function statusTone(status: Message['status']): string {
 
                     <SchemaView
                         v-else-if="viewMode === 'schema'"
-                        :schema="schema"
+                        :schema="schema ?? null"
                         :app-id="app.id"
                         class="min-h-0 flex-1"
                     />
@@ -4107,7 +4113,7 @@ function statusTone(status: Message['status']): string {
                         @manifest-updated="
                             () =>
                                 router.reload({
-                                    only: ['preview', 'manifest', 'schema'],
+                                    only: ['preview', 'previewBlockData', 'manifest', 'schema'],
                                 })
                         "
                         class="min-h-0 flex-1"
@@ -4154,7 +4160,7 @@ function statusTone(status: Message['status']): string {
                 </SheetHeader>
                 <LayersExplorer
                     :manifest="manifest"
-                    :schema="schema"
+                    :schema="schema ?? null"
                     :versions="versions"
                 />
             </SheetContent>

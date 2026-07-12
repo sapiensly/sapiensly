@@ -132,8 +132,7 @@ class AppBuilderController extends Controller
             $request->except('page'),
             fn ($v) => is_string($v) || is_array($v),
         );
-        $preview = $this->buildPreview($app, $request->user(), $manifest, $request->query('page'), $previewParams);
-        $schema = $this->buildSchema($app, $manifest);
+        [$preview, $resolveBlockData] = $this->buildPreview($app, $request->user(), $manifest, $request->query('page'), $previewParams);
 
         $models = $this->chatModels();
         $modelIds = array_column($models, 'id');
@@ -156,7 +155,12 @@ class AppBuilderController extends Controller
             'backupModel' => $backupModel,
             'manifest' => $manifest,
             'preview' => $preview,
-            'schema' => $schema,
+            // The expensive halves of the page ship AFTER first paint: block
+            // data (connected/MCP reads) and the Schema tab digest (per-object
+            // record counts) resolve in deferred follow-up requests while the
+            // chrome, chat and layout render immediately.
+            'previewBlockData' => Inertia::defer($resolveBlockData),
+            'schema' => Inertia::defer(fn () => $this->buildSchema($app, $manifest)),
             // The org Brandbook, so the design panel can offer "use brand".
             'brand' => $app->organization?->brandbook()->toArray(),
             'versions' => $this->buildVersions($app),
@@ -219,19 +223,23 @@ class AppBuilderController extends Controller
      * expression-gated) and resolves data without the role's row filters /
      * hidden fields, so it diverges from the deployed app.
      *
+     * Returns the (cheap) preview payload plus a CLOSURE that resolves the
+     * page's block data — the expensive part (record queries, connected/MCP
+     * reads) — so `show` can defer it past first paint.
+     *
      * @param  array<string, mixed>|null  $manifest
      * @param  array<string, mixed>  $params  forwarded URL query (runtime params)
-     * @return array{page: array<string, mixed>, pages: list<array<string, mixed>>, block_data: array<string, mixed>, objects: list<array<string, mixed>>, settings: array<string, mixed>}|null
+     * @return array{0: array{page: array<string, mixed>, pages: list<array<string, mixed>>, objects: list<array<string, mixed>>, settings: array<string, mixed>}|null, 1: \Closure(): (array<string, mixed>|null)}
      */
-    private function buildPreview(App $app, $user, ?array $manifest, ?string $pageSlug, array $params = []): ?array
+    private function buildPreview(App $app, $user, ?array $manifest, ?string $pageSlug, array $params = []): array
     {
         if ($manifest === null) {
-            return null;
+            return [null, fn () => null];
         }
 
         $pages = $manifest['pages'] ?? [];
         if ($pages === []) {
-            return null;
+            return [null, fn () => null];
         }
 
         $page = null;
@@ -272,19 +280,23 @@ class AppBuilderController extends Controller
             (string) ($settings['palette_mode'] ?? 'brand'),
         );
 
-        return [
+        $preview = [
             'page' => $page,
             'pages' => array_map(
                 fn (array $p) => ['id' => $p['id'], 'slug' => $p['slug'], 'name' => $p['name'], 'icon' => $p['icon'] ?? null],
                 $pages,
             ),
-            'block_data' => $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context),
             'objects' => $manifest['objects'] ?? [],
             // Apply the org Brandbook as a live fallback so the preview matches
             // what the runtime renders (AppRuntimeController does the same).
             'settings' => $settings,
             // Author CSS scoped to the app surface — preview mirrors the runtime.
             'custom_css' => ScopedAppCss::compile($settings['custom_css'] ?? null),
+        ];
+
+        return [
+            $preview,
+            fn (): array => $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context),
         ];
     }
 
