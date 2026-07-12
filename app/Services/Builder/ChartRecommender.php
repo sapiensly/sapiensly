@@ -47,6 +47,7 @@ class ChartRecommender
         private RecommendationNarrator $narrator,
         private DataQualityCheck $quality,
         private CrossSourceAnalyzer $crossSource,
+        private DerivedMetricProposer $derived,
     ) {}
 
     /**
@@ -108,6 +109,14 @@ class ChartRecommender
             $f['identity'] = 'cross|'.($f['dim'] ?? '');
             $f['score'] = $f['base'] + ($f['flag'] !== null ? 6 : 0);
             $candidates['cross|'.($f['dim'] ?? '')] = $f;
+        }
+
+        // Derived metrics: ratios the board doesn't carry (reopen rate…).
+        foreach ($this->derived->analyze($factsByObject, $es) as $f) {
+            $key = 'derived|'.($f['metric'] ?? '');
+            $f['identity'] = $key;
+            $f['score'] = $f['base'];
+            $candidates[$key] = $f;
         }
 
         $ranked = collect($candidates)
@@ -359,9 +368,9 @@ class ChartRecommender
     {
         $recId = substr(sha1($app->id.'|'.($page['id'] ?? '').'|'.$candidate['identity']), 0, 16);
 
-        // A cross-source finding is added as an INSIGHT (the value is in the
-        // join; no single-object chart shows it).
-        if (($candidate['kind'] ?? '') === 'cross') {
+        // Findings carrying an `insight` (cross-source joins, derived
+        // metrics) are added as INSIGHT blocks — the value isn't a single viz.
+        if (isset($candidate['insight'])) {
             TenantCache::put($this->specKey($app, $recId), [
                 'kind' => 'insight',
                 'insight' => $candidate['insight'],

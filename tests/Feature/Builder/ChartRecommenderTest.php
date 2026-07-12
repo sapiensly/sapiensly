@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Builder\ChartRecommender;
 use App\Services\Builder\CrossSourceAnalyzer;
 use App\Services\Builder\DataQualityCheck;
+use App\Services\Builder\DerivedMetricProposer;
 use App\Services\Builder\DomainClassifier;
 use App\Services\Builder\RecommendationNarrator;
 use App\Services\Connected\ConnectedIntegrationResolver;
@@ -121,6 +122,7 @@ function makeRecommender(array $rows): ChartRecommender
         app(RecommendationNarrator::class),
         new DataQualityCheck,
         new CrossSourceAnalyzer(new SemanticProfile),
+        new DerivedMetricProposer(new SemanticProfile),
     );
 }
 
@@ -312,7 +314,6 @@ it('exposes recommendations over HTTP and adds one to the board', function () {
     expect($charts)->toHaveCount(1);
 });
 
-
 it('cross-source join reads high volume against low performance', function () {
     $names = [
         'fld_vreason000' => 'reason', 'fld_vtotal0000' => 'total tickets',
@@ -376,4 +377,34 @@ it('adds a cross-source finding as an insight block', function () {
         ->where('type', 'insight');
     expect($insights)->toHaveCount(1)
         ->and($insights->first()['body'])->toContain('%');
+});
+
+
+it('proposes a derived reopen-rate the board does not carry', function () {
+    $object = [
+        'id' => 'obj_ts00000000', 'name' => 'Tickets Time Series',
+        'fields' => [
+            ['id' => 'm_total', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+            ['id' => 'm_reop', 'slug' => 'reopened', 'name' => 'Reopened', 'type' => 'number'],
+        ],
+        'source' => ['field_map' => [
+            ['field_id' => 'm_total', 'external_path' => 'total'],
+            ['field_id' => 'm_reop', 'external_path' => 'reop'],
+        ]],
+    ];
+    $rows = [
+        ['total' => 1000, 'reop' => 20],
+        ['total' => 1000, 'reop' => 44],
+    ]; // 64 / 2000 = 3.2%
+
+    $findings = (new DerivedMetricProposer(new SemanticProfile))->analyze(
+        ['o' => ['object' => $object, 'rows' => $rows, 'facts' => []]],
+        true,
+    );
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]['kind'])->toBe('derived')
+        ->and($findings[0]['title'])->toBe('Tasa de reapertura')
+        ->and($findings[0]['insight']['body'])->toContain('3.2%')
+        ->and($findings[0]['insight']['type'])->toBe('insight');
 });
