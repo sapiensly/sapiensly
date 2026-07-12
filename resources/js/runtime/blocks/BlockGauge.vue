@@ -29,7 +29,12 @@ const value = computed(() => Number(props.data?.value ?? 0));
 </script>
 
 <template>
-    <div :class="['flex flex-col rounded-sp-sm border p-5', t.surface]">
+    <!-- t.text pins the ink colour: GaugeChart's labels/metric inherit `color`,
+         so without it they'd take whatever the surrounding chrome sets (white
+         in the builder's dark shell) and vanish on the light card. -->
+    <div
+        :class="['flex flex-col rounded-sp-sm border p-5', t.surface, t.text]"
+    >
         <GaugeChart
             class="min-h-0 flex-1"
             :label="block.label ?? 'Meta'"
