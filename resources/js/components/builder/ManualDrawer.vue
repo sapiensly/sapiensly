@@ -33,7 +33,40 @@ const props = defineProps<{
     data?: { rows?: Array<{ data: Record<string, unknown> }> } | null;
 }>();
 
-const emit = defineEmits<{ (e: 'saved'): void; (e: 'close'): void }>();
+const emit = defineEmits<{
+    (e: 'saved', layoutOnly: boolean): void;
+    (e: 'close'): void;
+}>();
+
+const LAYOUT_KEYS = ['col_span', 'min_height'];
+
+/**
+ * Paint a width/height change on the canvas element RIGHT NOW — the same
+ * optimistic styles the drag handles apply — so the card reacts to the
+ * stepper/presets instantly instead of waiting for the confirm reload.
+ */
+function paintLayout(key: string, value: unknown) {
+    const el = document.querySelector(
+        `[data-block-id="${(props.block as { id: string }).id}"]`,
+    ) as HTMLElement | null;
+    if (!el) return;
+    if (key === 'col_span') {
+        const span = Number(value ?? 0);
+        if (span > 0) {
+            el.style.flexGrow = String(span);
+            el.style.flexBasis = '0%';
+            el.style.maxWidth = `${((span / 12) * 100).toFixed(3)}%`;
+        } else {
+            el.style.flexGrow = '';
+            el.style.flexBasis = '';
+            el.style.maxWidth = '';
+        }
+    }
+    if (key === 'min_height') {
+        const h = Number(value ?? 0);
+        el.style.minHeight = h > 0 ? `${h}px` : '';
+    }
+}
 
 const isChart = computed(() => props.block.type === 'chart');
 const isTemporal = computed(() => !!props.block.x_field_id);
@@ -116,7 +149,10 @@ async function apply(changes: Record<string, unknown>) {
             block_id: (props.block as { id: string }).id,
             changes,
         });
-        emit('saved');
+        emit(
+            'saved',
+            Object.keys(changes).every((k) => LAYOUT_KEYS.includes(k)),
+        );
     } catch (e: unknown) {
         const msg =
             (e as { response?: { data?: { message?: string } } }).response
@@ -144,6 +180,9 @@ function autoApply(key: string, getter: () => unknown, debounceMs = 0) {
             return;
         }
         clearTimeout(timer);
+        if (LAYOUT_KEYS.includes(key)) {
+            paintLayout(key, next);
+        }
         timer = setTimeout(() => {
             const value =
                 key === 'description' && next === ''
@@ -165,8 +204,10 @@ autoApply('aggregation', () => form.aggregation);
 autoApply('y_field_id', () => form.y_field_id);
 autoApply('group_by_field_id', () => form.group_by_field_id);
 autoApply('limit', () => form.limit, 350);
-autoApply('col_span', () => form.col_span);
-autoApply('min_height', () => form.min_height);
+// Layout keys paint optimistically on each click; the POST debounces so a
+// burst of stepper clicks lands as ONE version.
+autoApply('col_span', () => form.col_span, 400);
+autoApply('min_height', () => form.min_height, 400);
 
 function restore() {
     const snap = snapshot.value as typeof form;
@@ -184,6 +225,11 @@ function restore() {
                     : v;
     }
     if (Object.keys(changes).length === 0) return;
+    for (const k of LAYOUT_KEYS) {
+        if (k in changes) {
+            paintLayout(k, snap[k as keyof typeof form]);
+        }
+    }
     apply(changes);
 }
 

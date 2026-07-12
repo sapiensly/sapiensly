@@ -596,13 +596,30 @@ function afterManualChange() {
     router.reload({ only: ['preview', 'previewBlockData', 'manifest'] });
 }
 
-// Layout gestures (resize, reorder) already updated the DOM optimistically —
-// the server round-trip only needs to CONFIRM, so reloads coalesce into one
-// quiet refresh instead of freezing every drop for a full preview resolve.
+// Layout gestures (resize, reorder, width/height from the drawer) already
+// updated the DOM optimistically — the server round-trip only needs to
+// CONFIRM, so reloads coalesce into one quiet refresh. And since layout ops
+// never change any block's DATA, the confirm skips previewBlockData (the
+// expensive MCP/record reads): it returns in milliseconds instead of
+// seconds, and the unchanged block-data prop means no skeleton flash while
+// it lands.
+function afterLayoutChange() {
+    router.reload({ only: ['preview', 'manifest'] });
+}
 let layoutReloadTimer: ReturnType<typeof setTimeout> | undefined;
 function scheduleLayoutReload() {
     clearTimeout(layoutReloadTimer);
-    layoutReloadTimer = setTimeout(afterManualChange, 900);
+    layoutReloadTimer = setTimeout(afterLayoutChange, 900);
+}
+
+// The drawer says whether a save touched only layout (col_span/min_height,
+// already painted optimistically) or real content/data.
+function onDrawerSaved(layoutOnly: boolean) {
+    if (layoutOnly) {
+        scheduleLayoutReload();
+    } else {
+        afterManualChange();
+    }
 }
 
 // On-grid resize: drag the selected card's right edge (width snaps to the
@@ -3829,7 +3846,7 @@ function statusTone(status: Message['status']): string {
                                 previewBlockDataMap[selectedBlockId ?? ''] ??
                                 null
                             "
-                            @saved="afterManualChange"
+                            @saved="onDrawerSaved"
                             @close="selectedBlockId = null"
                         />
                         <!-- Drop indicator while reordering -->
