@@ -41,32 +41,23 @@ const emit = defineEmits<{
 const LAYOUT_KEYS = ['col_span', 'min_height'];
 
 /**
- * Paint a width/height change on the canvas element RIGHT NOW — the same
- * optimistic styles the drag handles apply — so the card reacts to the
- * stepper/presets instantly instead of waiting for the confirm reload.
+ * Reflect a width/height change on the card RIGHT NOW by mutating the block's
+ * reactive `style` (the same object AppRenderer's colSpanStyle reads), so the
+ * canvas reacts to the stepper/presets instantly. Driving it through the
+ * reactive block — NOT an imperative el.style — is deliberate: an imperative
+ * style fights the bound :style and any re-render snaps the card back to the
+ * block's OLD size until the reload lands.
  */
 function paintLayout(key: string, value: unknown) {
-    const el = document.querySelector(
-        `[data-block-id="${(props.block as { id: string }).id}"]`,
-    ) as HTMLElement | null;
-    if (!el) return;
-    if (key === 'col_span') {
-        const span = Number(value ?? 0);
-        if (span > 0) {
-            el.style.flexGrow = String(span);
-            el.style.flexBasis = '0%';
-            el.style.maxWidth = `${((span / 12) * 100).toFixed(3)}%`;
-        } else {
-            el.style.flexGrow = '';
-            el.style.flexBasis = '';
-            el.style.maxWidth = '';
-        }
+    const b = props.block as { style?: Record<string, unknown> };
+    const style = { ...(b.style ?? {}) };
+    const n = Number(value ?? 0);
+    if (n > 0) {
+        style[key] = n;
+    } else {
+        delete style[key];
     }
-    if (key === 'min_height') {
-        const h = Number(value ?? 0);
-        el.style.minHeight = h > 0 ? `${h}px` : '';
-        el.style.height = h > 0 ? `${h}px` : '';
-    }
+    b.style = style;
 }
 
 const isChart = computed(() => props.block.type === 'chart');

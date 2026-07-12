@@ -912,7 +912,16 @@ function startBlockMove(down: PointerEvent) {
 function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
     const el = selectedEl();
     const blockId = selectedBlockId.value;
-    if (!el || !blockId) return;
+    // The block OBJECT (a live reference into props.preview): we drive the
+    // optimistic size through its reactive `style`, NOT imperative el.style.
+    // An imperative height fights the bound :style="colSpanStyle(block)" — any
+    // re-render re-applies the block's OLD style and snaps the card back until
+    // the reload lands. Mutating the block makes colSpanStyle the single source
+    // of truth (and flips the chart into fit-mode mid-drag, so it fills live).
+    const block = selectedBlock.value as {
+        style?: { col_span?: number; min_height?: number };
+    } | null;
+    if (!el || !blockId || !block) return;
     down.preventDefault();
     const startX = down.clientX;
     const startY = down.clientY;
@@ -932,17 +941,14 @@ function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
             const w = rect.width + (e.clientX - startX);
             span = Math.min(12, Math.max(3, Math.round((w / rowWidth) * 12)));
             dragHint.value = `${span} / 12`;
-            el.style.flexGrow = String(span);
-            el.style.flexBasis = '0%';
-            el.style.maxWidth = `${((span / 12) * 100).toFixed(3)}%`;
+            block.style = { ...(block.style ?? {}), col_span: span };
         } else {
             const h = rect.height + (e.clientY - startY);
             minH = Math.min(800, Math.max(120, Math.round(h / 40) * 40));
             dragHint.value = `${minH}px`;
-            el.style.minHeight = `${minH}px`;
-            el.style.height = `${minH}px`;
+            block.style = { ...(block.style ?? {}), min_height: minH };
         }
-        updateSelectionRect();
+        requestAnimationFrame(updateSelectionRect);
     };
     const move = (e: PointerEvent) => {
         last = e;
@@ -958,8 +964,8 @@ function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
         if (axis === 'x' && span > 0) changes.col_span = span;
         if (axis === 'y' && minH > 0) changes.min_height = minH;
         if (Object.keys(changes).length === 0) return;
-        // The element already wears the final size (live styles stay on) —
-        // confirm quietly in the coalesced reload.
+        // The block already carries the final size (reactive style) — confirm
+        // quietly in the coalesced reload.
         requestAnimationFrame(updateSelectionRect);
         axios
             .post(`/apps/${props.app.id}/builder/blocks/update`, {
