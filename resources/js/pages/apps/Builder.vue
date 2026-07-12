@@ -529,13 +529,25 @@ const drawerOpen = computed(
         props.app.kind === 'dashboard',
 );
 
-// The right drawer needs the horizontal room the left panel (the AI
-// add-chart chat) occupies — so manual mode opens with the left panel
-// hidden and gives the canvas the whole width; the toggle brings it back.
+// The left panel (Agregar gráfica) and the right edit drawer are MUTUALLY
+// EXCLUSIVE — both want the horizontal room, so opening one closes the other.
+// Manual mode opens with the left panel hidden and the canvas full-width.
 const leftPanelHidden = ref(false);
 watch(panelMode, (mode) => {
     selectedBlockId.value = null;
     leftPanelHidden.value = mode === 'manual';
+});
+// Showing the add-chart panel deselects the card (closes the right drawer)…
+watch(leftPanelHidden, (hidden) => {
+    if (!hidden) {
+        selectedBlockId.value = null;
+    }
+});
+// …and selecting a card hides the add-chart panel (deactivates its button).
+watch(selectedBlockId, (id) => {
+    if (id !== null) {
+        leftPanelHidden.value = true;
+    }
 });
 
 function findBlockById(
