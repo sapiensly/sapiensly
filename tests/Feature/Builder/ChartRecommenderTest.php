@@ -5,10 +5,12 @@ use App\Models\Integration;
 use App\Models\User;
 use App\Services\Builder\ChartRecommender;
 use App\Services\Builder\DomainClassifier;
+use App\Services\Builder\RecommendationNarrator;
 use App\Services\Connected\ConnectedIntegrationResolver;
 use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Express\ComputedFactsBuilder;
 use App\Services\Express\SemanticProfile;
+use App\Services\Manifest\AppManifestService;
 use App\Support\Tenancy\TenantContext;
 
 /** A connected ticket-breakdown object: reason (string) + total_tickets (additive). */
@@ -62,6 +64,7 @@ function makeRecommender(array $rows): ChartRecommender
         new ComputedFactsBuilder,
         new SemanticProfile,
         new DomainClassifier,
+        app(RecommendationNarrator::class),
     );
 }
 
@@ -123,4 +126,48 @@ it('does not re-recommend a cut the board already shows', function () {
     expect(collect($result['recommendations'])->firstWhere('form', 'pareto'))->toBeNull();
 
     app(TenantContext::class)->forget();
+});
+
+it('exposes recommendations over HTTP and adds one to the board', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    $manifest = [
+        'id' => $app->id, 'name' => 'Tickets', 'slug' => 'tickets', 'version' => 1,
+        'schema_version' => '1.0.0', 'settings' => ['default_locale' => 'es-MX'],
+        'objects' => [recObject()],
+        'pages' => [[
+            'id' => 'pag_rec0000000', 'slug' => 'dashboard', 'name' => 'Dash', 'path' => '/dashboard',
+            'blocks' => [['id' => 'blk_head000000', 'type' => 'heading', 'level' => 3, 'content' => 'Desglose']],
+        ]],
+        'permissions' => ['roles' => [['id' => 'rol_rec0000000', 'slug' => 'admin', 'name' => 'Admin']]],
+        'workflows' => [],
+    ];
+    app(AppManifestService::class)->createVersion($app, $manifest, $user);
+
+    // Fake the connected reader + integration so the facts come from our rows.
+    app()->instance(ConnectedObjectReader::class, tap(Mockery::mock(ConnectedObjectReader::class), fn ($m) => $m->shouldReceive('list')->andReturn(['ok' => true, 'rows' => concentratedRows()])));
+    app()->instance(ConnectedIntegrationResolver::class, tap(Mockery::mock(ConnectedIntegrationResolver::class), fn ($m) => $m->shouldReceive('resolve')->andReturn(Mockery::mock(Integration::class))));
+
+    $recs = $this->actingAs($user)
+        ->getJson("/apps/{$app->id}/builder/recommendations?page=dashboard")
+        ->assertOk()
+        ->assertJsonPath('domain.sector', 'support')
+        ->json('recommendations');
+
+    $pareto = collect($recs)->firstWhere('form', 'pareto');
+    expect($pareto)->not->toBeNull();
+
+    $this->actingAs($user)
+        ->postJson("/apps/{$app->id}/builder/charts/from-recommendation", [
+            'recommendation_id' => $pareto['id'],
+            'page_slug' => 'dashboard',
+        ])->assertOk();
+
+    $active = app(AppManifestService::class)->getActiveManifest($app->fresh());
+    $charts = collect($active['pages'][0]['blocks'])
+        ->flatMap(fn ($b) => $b['blocks'] ?? [$b])
+        ->where('chart_type', 'pareto');
+    expect($charts)->toHaveCount(1);
 });

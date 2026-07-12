@@ -60,4 +60,15 @@ return [
     */
     'connected_cache_ttl' => (int) env('DASHBOARD_EXPRESS_CONNECTED_CACHE_TTL', 90),
 
+    /*
+    | Analyst narration: when on, the add-chart recommender runs one bounded
+    | structured model call to reorder its recommendations and reword the
+    | title/why in the business's own voice — refining the deterministic
+    | output, never replacing it (a model failure or a fact it drops falls
+    | straight back to the grounded text). Gated OFF until validated on real
+    | boards, the same way builder OpenRouter models are gated, so a panel
+    | open never silently pays model latency/cost before it's proven.
+    */
+    'analyst_narration' => env('DASHBOARD_EXPRESS_ANALYST_NARRATION', false),
+
 ];

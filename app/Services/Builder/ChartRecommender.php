@@ -44,6 +44,7 @@ class ChartRecommender
         private ComputedFactsBuilder $facts,
         private SemanticProfile $semantics,
         private DomainClassifier $domain,
+        private RecommendationNarrator $narrator,
     ) {}
 
     /**
@@ -93,6 +94,9 @@ class ChartRecommender
             ->values();
 
         $recs = $ranked->map(fn (array $c) => $this->present($app, $page, $c))->all();
+        // AI refines: reorders + rewords in the business voice, keeping the
+        // numbers. Off by default (config-gated); passes through untouched.
+        $recs = $this->narrator->narrate($recs, ['sector' => $domain['sector'], 'label' => $domain['label']], $actor, $lang, $app->id);
 
         return [
             'domain' => ['sector' => $domain['sector'], 'label' => $domain['label']],
