@@ -21,6 +21,9 @@ const props = withDefaults(
         locale?: string;
         maxCells?: number;
         clickable?: boolean;
+        /** Fill the parent's height instead of the fixed 2:1 aspect box — set
+         *  on an explicit-height card. */
+        fitHeight?: boolean;
     }>(),
     {
         colors: () => [
@@ -34,6 +37,7 @@ const props = withDefaults(
         locale: 'es-MX',
         maxCells: 12,
         clickable: false,
+        fitHeight: false,
     },
 );
 
@@ -161,7 +165,12 @@ const cells = computed(() => {
     <div
         ref="rootEl"
         class="relative w-full"
-        style="aspect-ratio: 2 / 1; min-height: 260px"
+        :class="fitHeight ? 'h-full' : ''"
+        :style="
+            fitHeight
+                ? undefined
+                : { aspectRatio: '2 / 1', minHeight: '260px' }
+        "
     >
         <div
             v-for="cell in cells"

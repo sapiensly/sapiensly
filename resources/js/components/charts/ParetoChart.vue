@@ -32,6 +32,10 @@ const props = withDefaults(
         showValues?: boolean;
         showBadge?: boolean;
         footnote?: string | false;
+        /** Fill the parent's height (letterbox the plot) instead of taking the
+         *  viewBox's natural aspect height — set when the card has an explicit
+         *  height so the chart shrinks/grows with it. */
+        fitHeight?: boolean;
     }>(),
     {
         threshold: 80,
@@ -43,6 +47,7 @@ const props = withDefaults(
         showValues: true,
         showBadge: true,
         footnote: undefined,
+        fitHeight: false,
     },
 );
 
@@ -215,7 +220,12 @@ const footnoteText = computed(() => {
 </script>
 
 <template>
-    <div v-if="model" ref="rootEl" class="pareto-chart">
+    <div
+        v-if="model"
+        ref="rootEl"
+        class="pareto-chart"
+        :class="fitHeight ? 'flex h-full flex-col' : ''"
+    >
         <!-- legend + insight badge -->
         <div class="mb-1 flex flex-wrap items-center justify-between gap-3">
             <div
@@ -266,10 +276,17 @@ const footnoteText = computed(() => {
             </div>
         </div>
 
-        <div class="relative" @mousemove="onMove" @mouseleave="hover = null">
+        <div
+            class="relative"
+            :class="fitHeight ? 'min-h-0 flex-1' : ''"
+            @mousemove="onMove"
+            @mouseleave="hover = null"
+        >
             <svg
                 viewBox="0 0 1000 520"
-                class="block h-auto w-full overflow-visible"
+                preserveAspectRatio="xMidYMid meet"
+                class="block w-full overflow-visible"
+                :class="fitHeight ? 'h-full' : 'h-auto'"
             >
                 <!-- vital band + divider -->
                 <rect

@@ -37,6 +37,7 @@ const value = computed(() => Number(props.data?.value ?? 0));
     >
         <GaugeChart
             class="min-h-0 flex-1"
+            :fit-height="!!block.style?.min_height"
             :label="block.label ?? 'Meta'"
             :value="value"
             :target="block.max_value"

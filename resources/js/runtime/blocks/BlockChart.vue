@@ -1386,6 +1386,7 @@ const boxPlot = computed(() => {
                 :line-color="chartColor(1)"
                 :measure-label="paretoMeasureLabel"
                 :category-noun="paretoNoun"
+                :fit-height="hasExplicitHeight"
                 @select="onDrill"
             />
 
@@ -1548,8 +1549,19 @@ const boxPlot = computed(() => {
                     block.chart_type === 'pie' || block.chart_type === 'donut'
                 "
             >
-                <div class="flex items-center gap-6">
-                    <svg viewBox="0 0 160 160" class="size-32 shrink-0">
+                <div
+                    class="flex items-center gap-6"
+                    :class="hasExplicitHeight ? 'min-h-0 flex-1' : ''"
+                >
+                    <svg
+                        viewBox="0 0 160 160"
+                        class="shrink-0"
+                        :class="
+                            hasExplicitHeight
+                                ? 'aspect-square h-full max-h-full w-auto'
+                                : 'size-32'
+                        "
+                    >
                         <path
                             v-for="(slice, i) in pieSlices"
                             :key="i"
@@ -1827,6 +1839,7 @@ const boxPlot = computed(() => {
                 :measure-label="paretoMeasureLabel"
                 :category-noun="paretoNoun"
                 :clickable="!!block.drill_param"
+                :fit-height="hasExplicitHeight"
                 @select="onDrill"
             />
 
@@ -1852,8 +1865,14 @@ const boxPlot = computed(() => {
                 </ul>
                 <svg
                     viewBox="0 0 220 220"
-                    class="mx-auto w-full max-w-[280px]"
-                    :class="t.text"
+                    preserveAspectRatio="xMidYMid meet"
+                    class="mx-auto"
+                    :class="[
+                        t.text,
+                        hasExplicitHeight
+                            ? 'aspect-square h-full min-h-0 w-auto max-w-full flex-1'
+                            : 'w-full max-w-[280px]',
+                    ]"
                 >
                     <circle
                         v-for="ring in [0.34, 0.67, 1]"
@@ -1922,14 +1941,16 @@ const boxPlot = computed(() => {
                 :items="series"
                 :colors="[0, 1, 2, 3, 4, 5].map((i) => chartColor(i))"
                 :clickable="!!block.drill_param"
+                :fit-height="hasExplicitHeight"
                 @select="onDrill"
             />
 
             <template v-else-if="block.chart_type === 'scatter' && scatter">
                 <svg
                     :viewBox="`0 0 ${scatter.w} ${scatter.h}`"
+                    preserveAspectRatio="xMidYMid meet"
                     class="w-full"
-                    :class="t.text"
+                    :class="[t.text, hasExplicitHeight ? 'h-full min-h-0 flex-1' : '']"
                 >
                     <line
                         x1="18"
@@ -1970,8 +1991,9 @@ const boxPlot = computed(() => {
                 <svg
                     v-if="sankey"
                     :viewBox="`0 0 ${sankey.W} ${sankey.H}`"
+                    preserveAspectRatio="xMidYMid meet"
                     class="w-full"
-                    :class="t.text"
+                    :class="[t.text, hasExplicitHeight ? 'h-full min-h-0 flex-1' : '']"
                 >
                     <path
                         v-for="(lk, i) in sankey.links"
@@ -2204,7 +2226,10 @@ const boxPlot = computed(() => {
                         }}</span>
                     </li>
                 </ul>
-                <div class="flex h-56 items-end gap-3 px-2 pt-2">
+                <div
+                    class="flex items-end gap-3 px-2 pt-2"
+                    :class="hasExplicitHeight ? 'min-h-0 flex-1' : 'h-56'"
+                >
                     <div
                         v-for="(cat, ci) in multi.cats"
                         :key="cat"
@@ -2275,7 +2300,10 @@ const boxPlot = computed(() => {
 
             <template v-else>
                 <!-- bar = vertical columns -->
-                <div class="flex h-56 items-end gap-3 px-2 pt-2">
+                <div
+                    class="flex items-end gap-3 px-2 pt-2"
+                    :class="hasExplicitHeight ? 'min-h-0 flex-1' : 'h-56'"
+                >
                     <div
                         v-for="(s, i) in series"
                         :key="s.label"

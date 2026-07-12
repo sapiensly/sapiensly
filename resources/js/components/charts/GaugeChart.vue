@@ -17,11 +17,15 @@ const props = withDefaults(
         format?: 'percentage' | 'number';
         accent?: string;
         locale?: string;
+        /** Fill the parent's height (horseshoe scales to fit) instead of the
+         *  viewBox's natural aspect height — set on an explicit-height card. */
+        fitHeight?: boolean;
     }>(),
     {
         format: 'number',
         accent: '#0059ff',
         locale: 'es-MX',
+        fitHeight: false,
     },
 );
 
@@ -143,10 +147,15 @@ const tickB = computed(() => pt(tf.value, R + SW / 2 + 2));
         </div>
 
         <!-- horseshoe -->
-        <div class="relative my-auto py-1.5">
+        <div
+            class="relative"
+            :class="fitHeight ? 'flex min-h-0 flex-1 items-center' : 'my-auto py-1.5'"
+        >
             <svg
                 viewBox="0 0 300 250"
+                preserveAspectRatio="xMidYMid meet"
                 class="block w-full"
+                :class="fitHeight ? 'h-full' : ''"
                 style="overflow: visible"
             >
                 <defs>

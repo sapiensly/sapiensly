@@ -27,6 +27,9 @@ const props = withDefaults(
         locale?: string;
         showHeaderStats?: boolean;
         clickable?: boolean;
+        /** Distribute the rows to fill the parent's height instead of stacking
+         *  at their natural height — set on an explicit-height card. */
+        fitHeight?: boolean;
     }>(),
     {
         accent: '#0059ff',
@@ -35,6 +38,7 @@ const props = withDefaults(
         locale: 'es-MX',
         showHeaderStats: true,
         clickable: false,
+        fitHeight: false,
     },
 );
 
@@ -112,7 +116,12 @@ const model = computed(() => {
 </script>
 
 <template>
-    <div v-if="model" ref="rootEl" class="hbar-chart">
+    <div
+        v-if="model"
+        ref="rootEl"
+        class="hbar-chart"
+        :class="fitHeight ? 'flex h-full flex-col' : ''"
+    >
         <div
             v-if="showHeaderStats"
             class="mb-1 flex items-center justify-end gap-4 border-b border-medium pb-2"
@@ -138,7 +147,10 @@ const model = computed(() => {
             </span>
         </div>
 
-        <div class="mt-1">
+        <div
+            class="mt-1"
+            :class="fitHeight ? 'flex min-h-0 flex-1 flex-col justify-around' : ''"
+        >
             <div
                 v-for="row in model.rows"
                 :key="row.i"
