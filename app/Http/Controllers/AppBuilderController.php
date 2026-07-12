@@ -1294,7 +1294,7 @@ class AppBuilderController extends Controller
         $data = $request->validate([
             'block_id' => ['required', 'string'],
             'target_block_id' => ['required', 'string', 'different:block_id'],
-            'position' => ['required', Rule::in(['before', 'after', 'inside'])],
+            'position' => ['required', Rule::in(['before', 'after', 'inside', 'above', 'below'])],
         ]);
 
         $manifest = $this->manifestService->getActiveManifest($app);
@@ -1366,14 +1366,19 @@ class AppBuilderController extends Controller
     }
 
     /**
-     * Insert a block before/after the target (top level or inside row
-     * containers). True when the target was found.
+     * Insert a block near the target (top level or inside row containers).
+     * True when the target was found. Positions: 'inside' joins a row
+     * container; 'above'/'below' are plain vertical siblings; 'before'/
+     * 'after' land BESIDE the target — inside a row that's a sibling slot,
+     * but on a TOP-LEVEL card both get wrapped into a new row container
+     * (top-level siblings would only stack, never share a row).
      *
      * @param  list<array<string, mixed>>  $blocks  mutated in place
      * @param  array<string, mixed>  $insert
      */
-    private function insertNearBlock(array &$blocks, string $targetId, string $position, array $insert): bool
+    private function insertNearBlock(array &$blocks, string $targetId, string $position, array $insert, bool $topLevel = true): bool
     {
+        $rowless = ['container', 'heading', 'divider', 'text'];
         foreach ($blocks as $i => $block) {
             if (! is_array($block)) {
                 continue;
@@ -1386,13 +1391,30 @@ class AppBuilderController extends Controller
 
                     return true;
                 }
-                array_splice($blocks, $position === 'before' ? $i : $i + 1, 0, [$insert]);
+                if (
+                    in_array($position, ['before', 'after'], true)
+                    && $topLevel
+                    && ! in_array($block['type'] ?? null, $rowless, true)
+                    && ! in_array($insert['type'] ?? null, $rowless, true)
+                ) {
+                    // ManifestIdFiller mints the container's id on applyPatch.
+                    $blocks[$i] = [
+                        'type' => 'container',
+                        'direction' => 'row',
+                        'gap' => 'md',
+                        'blocks' => $position === 'before' ? [$insert, $block] : [$block, $insert],
+                    ];
+
+                    return true;
+                }
+                $beforeTarget = $position === 'before' || $position === 'above';
+                array_splice($blocks, $beforeTarget ? $i : $i + 1, 0, [$insert]);
 
                 return true;
             }
             if (($block['type'] ?? null) === 'container' && is_array($block['blocks'] ?? null)) {
                 $inner = $block['blocks'];
-                if ($this->insertNearBlock($inner, $targetId, $position, $insert)) {
+                if ($this->insertNearBlock($inner, $targetId, $position, $insert, false)) {
                     $blocks[$i]['blocks'] = array_values($inner);
 
                     return true;

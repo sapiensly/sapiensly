@@ -1391,3 +1391,54 @@ it('dropping on a row\'s empty space moves the card INSIDE that row', function (
         ->and($row['id'])->toBe('cn_manualrow0')
         ->and(collect($row['blocks'])->pluck('id')->all())->toBe(['blk_manualbar0', $added]);
 });
+
+it('dropping beside a TOP-LEVEL card wraps both into a new row container', function () {
+    $manifest = manualDashManifest($this->testApp->id);
+    // A lone full-width chart living at the top level of the page.
+    $manifest['pages'][0]['blocks'][] = [
+        'id' => 'blk_manualtop0', 'type' => 'chart', 'label' => 'Backlog por reason',
+        'chart_type' => 'bar', 'aggregation' => 'sum',
+        'y_field_id' => 'fld_mbacklog00', 'group_by_field_id' => 'fld_mreason000',
+        'data_source' => ['object_id' => 'obj_manualdim0', 'limit' => 12],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    // Drag the rowed chart onto the RIGHT half of the top-level chart:
+    // top-level siblings would only stack, so the server creates the row.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/move", [
+            'block_id' => 'blk_manualbar0',
+            'target_block_id' => 'blk_manualtop0',
+            'position' => 'after',
+        ])->assertOk();
+
+    $active = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $blocks = $active['pages'][0]['blocks'];
+    expect(count($blocks))->toBe(1)                            // emptied source row pruned
+        ->and($blocks[0]['type'])->toBe('container')
+        ->and($blocks[0]['direction'])->toBe('row')
+        ->and($blocks[0]['id'])->toStartWith('blk_')           // minted by ManifestIdFiller
+        ->and(collect($blocks[0]['blocks'])->pluck('id')->all())->toBe(['blk_manualtop0', 'blk_manualbar0']);
+});
+
+it('above/below stay a plain vertical reorder — no row wrapping', function () {
+    $manifest = manualDashManifest($this->testApp->id);
+    $manifest['pages'][0]['blocks'][] = [
+        'id' => 'blk_manualtop0', 'type' => 'chart', 'label' => 'Backlog por reason',
+        'chart_type' => 'bar', 'aggregation' => 'sum',
+        'y_field_id' => 'fld_mbacklog00', 'group_by_field_id' => 'fld_mreason000',
+        'data_source' => ['object_id' => 'obj_manualdim0', 'limit' => 12],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/move", [
+            'block_id' => 'blk_manualbar0',
+            'target_block_id' => 'blk_manualtop0',
+            'position' => 'above',
+        ])->assertOk();
+
+    $active = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect(collect($active['pages'][0]['blocks'])->pluck('id')->all())
+        ->toBe(['blk_manualbar0', 'blk_manualtop0']);
+});

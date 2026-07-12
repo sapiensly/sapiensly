@@ -671,7 +671,9 @@ function selectedEl(): HTMLElement | null {
 // pointer is in. One versioned move op on release.
 const dropTarget = ref<{
     id: string;
-    position: 'before' | 'after' | 'inside';
+    // before/after = share the target's ROW (side by side); inside = join a
+    // row container; above/below = vertical reorder between rows.
+    position: 'before' | 'after' | 'inside' | 'above' | 'below';
     rect: { left: number; top: number; width: number; height: number };
 } | null>(null);
 function startBlockMove(down: PointerEvent) {
@@ -690,33 +692,123 @@ function startBlockMove(down: PointerEvent) {
         const e = pending;
         pending = null;
         if (!e) return;
-        const under = document
+        const pr = pane.getBoundingClientRect();
+        const toPaneRect = (r: DOMRect) => ({
+            left: r.left - pr.left + pane.scrollLeft,
+            top: r.top - pr.top + pane.scrollTop,
+            width: r.width,
+            height: r.height,
+        });
+
+        let under = document
             .elementFromPoint(e.clientX, e.clientY)
             ?.closest?.('[data-block-id]') as HTMLElement | null;
-        if (!under || under.dataset.blockId === blockId) {
-            dropTarget.value = null;
+        if (under?.dataset.blockId === blockId) {
+            under = null;
+        }
+
+        // A concrete CARD under the pointer → sibling insert by halves.
+        if (under && under.dataset.blockType !== 'container') {
+            const r = under.getBoundingClientRect();
+            dropTarget.value = {
+                id: under.dataset.blockId ?? '',
+                position: e.clientX < r.left + r.width / 2 ? 'before' : 'after',
+                rect: toPaneRect(r),
+            };
             return;
         }
-        const r = under.getBoundingClientRect();
-        const pr = pane.getBoundingClientRect();
-        // Empty space in a ROW belongs to its container: dropping there means
-        // «join this row», not «become a sibling row».
-        const isRow = under.dataset.blockType === 'container';
-        const position = isRow
-            ? 'inside'
-            : e.clientX < r.left + r.width / 2
-              ? 'before'
-              : 'after';
-        dropTarget.value = {
-            id: under.dataset.blockId ?? '',
-            position,
-            rect: {
-                left: r.left - pr.left + pane.scrollLeft,
-                top: r.top - pr.top + pane.scrollTop,
-                width: r.width,
-                height: r.height,
-            },
-        };
+
+        // Otherwise resolve the ROW by GEOMETRY: hit-testing empty flex space
+        // is fragile (overlays, gaps, stacking) — the row whose vertical band
+        // contains the pointer is the target, and dropping there means «join
+        // this row». The dragged card's own row only counts if it has
+        // siblings (rejoining an empty own row is a no-op).
+        const dragged = selectedEl();
+        const rows = Array.from(
+            pane.querySelectorAll('[data-block-type="container"]'),
+        ) as HTMLElement[];
+        const row = rows.find((c) => {
+            const r = c.getBoundingClientRect();
+            if (e.clientY < r.top || e.clientY > r.bottom) return false;
+            if (dragged && c.contains(dragged)) {
+                return (
+                    c.querySelectorAll('[data-block-id]').length > 1 &&
+                    !(under && c === under)
+                );
+            }
+            return true;
+        });
+        if (row?.dataset.blockId) {
+            dropTarget.value = {
+                id: row.dataset.blockId,
+                position: 'inside',
+                rect: toPaneRect(row.getBoundingClientRect()),
+            };
+            return;
+        }
+
+        // No row either: the empty space BESIDE a top-level card (e.g. one
+        // just narrowed with col_span) — the horizontally nearest card whose
+        // vertical band contains the pointer is the row-mate.
+        const cards = (
+            Array.from(pane.querySelectorAll('[data-block-id]')) as HTMLElement[]
+        ).filter(
+            (c) =>
+                c.dataset.blockType !== 'container' &&
+                c.dataset.blockId !== blockId &&
+                !(dragged && (c.contains(dragged) || dragged.contains(c))),
+        );
+        let mate: HTMLElement | null = null;
+        let mateDx = Infinity;
+        for (const c of cards) {
+            const r = c.getBoundingClientRect();
+            if (e.clientY < r.top || e.clientY > r.bottom) continue;
+            const dx =
+                e.clientX < r.left
+                    ? r.left - e.clientX
+                    : e.clientX > r.right
+                      ? e.clientX - r.right
+                      : 0;
+            if (dx < mateDx) {
+                mateDx = dx;
+                mate = c;
+            }
+        }
+        if (mate?.dataset.blockId) {
+            const r = mate.getBoundingClientRect();
+            dropTarget.value = {
+                id: mate.dataset.blockId,
+                position: e.clientX < r.left + r.width / 2 ? 'before' : 'after',
+                rect: toPaneRect(r),
+            };
+            return;
+        }
+
+        // Between rows: nearest top-level block by vertical distance —
+        // a plain vertical reorder (above/below), never a row merge.
+        let near: HTMLElement | null = null;
+        let nearDy = Infinity;
+        let nearBelow = false;
+        for (const c of [...rows, ...cards]) {
+            if (c.parentElement?.closest('[data-block-id]')) continue; // top-level only
+            const r = c.getBoundingClientRect();
+            const dy =
+                e.clientY < r.top ? r.top - e.clientY : e.clientY - r.bottom;
+            if (dy >= 0 && dy < nearDy && dy < 80) {
+                nearDy = dy;
+                near = c;
+                nearBelow = e.clientY > r.bottom;
+            }
+        }
+        if (near?.dataset.blockId) {
+            dropTarget.value = {
+                id: near.dataset.blockId,
+                position: nearBelow ? 'below' : 'above',
+                rect: toPaneRect(near.getBoundingClientRect()),
+            };
+            return;
+        }
+        dropTarget.value = null;
     };
     const move = (e: PointerEvent) => {
         pending = e;
@@ -743,6 +835,28 @@ function startBlockMove(down: PointerEvent) {
                     ':scope > div',
                 ) as HTMLElement | null;
                 (rowFlex ?? targetEl).appendChild(dragged);
+            } else if (
+                target.position === 'above' ||
+                target.position === 'below'
+            ) {
+                targetEl.insertAdjacentElement(
+                    target.position === 'above' ? 'beforebegin' : 'afterend',
+                    dragged,
+                );
+            } else if (
+                targetEl.parentElement?.dataset.blockType !== 'container'
+            ) {
+                // Top-level target: the server wraps both into a new row —
+                // mirror it in the DOM so the drop lands side by side at once.
+                const wrap = document.createElement('div');
+                wrap.className =
+                    'flex flex-row flex-wrap items-stretch gap-4 [&>*]:min-w-0 [&>*]:grow [&>*]:basis-72';
+                targetEl.insertAdjacentElement('beforebegin', wrap);
+                if (target.position === 'before') {
+                    wrap.append(dragged, targetEl);
+                } else {
+                    wrap.append(targetEl, dragged);
+                }
             } else {
                 targetEl.insertAdjacentElement(
                     target.position === 'before' ? 'beforebegin' : 'afterend',
@@ -3717,6 +3831,24 @@ function statusTone(status: Message['status']): string {
                                 top: dropTarget.rect.top + 'px',
                                 width: dropTarget.rect.width + 'px',
                                 height: dropTarget.rect.height + 'px',
+                            }"
+                        />
+                        <div
+                            v-else-if="
+                                dropTarget &&
+                                (dropTarget.position === 'above' ||
+                                    dropTarget.position === 'below')
+                            "
+                            class="pointer-events-none absolute z-40 rounded-pill bg-accent-blue"
+                            :style="{
+                                left: dropTarget.rect.left + 'px',
+                                top:
+                                    (dropTarget.position === 'above'
+                                        ? dropTarget.rect.top - 4
+                                        : dropTarget.rect.top +
+                                          dropTarget.rect.height) + 'px',
+                                width: dropTarget.rect.width + 'px',
+                                height: '5px',
                             }"
                         />
                         <div
