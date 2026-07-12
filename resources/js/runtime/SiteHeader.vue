@@ -18,6 +18,9 @@ const props = defineProps<{
     pages?: PageLink[];
     currentSlug?: string;
     hrefFor?: (slug: string) => string;
+    /** Inside the Builder preview the bar scrolls with the board (mirrors
+     *  SiteSidebar's `embedded`); only the real runtime pins it. */
+    embedded?: boolean;
 }>();
 
 /** Readable text colour (dark/light) for a #RRGGBB background by luminance. */
@@ -53,7 +56,10 @@ const headerStyle = computed(() => {
 
 <template>
     <header
-        class="sticky top-0 z-30 -mx-[var(--sp-bleed,1.25rem)] flex items-center justify-between gap-4 border-b px-[var(--sp-bleed,1.25rem)] py-3.5 backdrop-blur"
+        :class="[
+            'z-30 -mx-[var(--sp-bleed,1.25rem)] flex items-center justify-between gap-4 border-b px-[var(--sp-bleed,1.25rem)] py-3.5 backdrop-blur',
+            embedded ? 'relative' : 'sticky top-0',
+        ]"
         :style="headerStyle"
     >
         <a

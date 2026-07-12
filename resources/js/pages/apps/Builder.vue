@@ -7,6 +7,9 @@ import SchemaView from '@/components/apps/SchemaView.vue';
 import SlashCommandMenu from '@/components/apps/SlashCommandMenu.vue';
 import WireframeImportDialog from '@/components/apps/WireframeImportDialog.vue';
 import AppWorkflowsTab from '@/components/apps/workflows/AppWorkflowsTab.vue';
+import ManualChat from '@/components/builder/ManualChat.vue';
+import ManualDrawer from '@/components/builder/ManualDrawer.vue';
+import DashboardLoading from '@/components/DashboardLoading.vue';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -37,9 +40,6 @@ import {
     slashFilterFor,
     type SlashCommand,
 } from '@/lib/builderSlashCommands';
-import ManualChat from '@/components/builder/ManualChat.vue';
-import DashboardLoading from '@/components/DashboardLoading.vue';
-import ManualDrawer from '@/components/builder/ManualDrawer.vue';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import {
@@ -85,11 +85,8 @@ import {
     Database,
     Download,
     Eye,
-    GripHorizontal,
-    Palette,
-    Play,
-    SlidersHorizontal,
     FileText,
+    GripHorizontal,
     GripVertical,
     ImagePlus,
     Layers,
@@ -102,15 +99,18 @@ import {
     Minimize2,
     MoreVertical,
     MousePointerClick,
+    Palette,
     PanelLeftClose,
     PanelLeftOpen,
     Paperclip,
+    Play,
     Plus,
     Repeat2,
     RotateCcw,
     Send,
     Settings2,
     ShieldCheck,
+    SlidersHorizontal,
     Sparkles,
     Square,
     Wand2,
@@ -511,7 +511,11 @@ function setPaletteMode(mode: string) {
     paletteMode.value = mode;
     axios
         .post(`/apps/${props.app.id}/builder/design`, { palette_mode: mode })
-        .then(() => router.reload({ only: ['preview', 'previewBlockData', 'manifest'] }))
+        .then(() =>
+            router.reload({
+                only: ['preview', 'previewBlockData', 'manifest'],
+            }),
+        )
         .catch(() => toast.error(t('apps.builder.brand_apply_failed')));
 }
 
@@ -590,7 +594,12 @@ const selectedObject = computed(() => {
     const objId = b?.data_source?.object_id ?? b?.query?.object_id ?? null;
     return objId
         ? ((props.preview?.objects.find((o) => o.id === objId) as {
-              fields?: { id: string; name?: string; slug?: string; type?: string }[];
+              fields?: {
+                  id: string;
+                  name?: string;
+                  slug?: string;
+                  type?: string;
+              }[];
               name?: string;
           } | null) ?? null)
         : null;
@@ -776,7 +785,9 @@ function startBlockMove(down: PointerEvent) {
         // top-level card): the horizontally nearest card whose vertical band
         // contains the pointer is the row-mate → land before/after it.
         const cards = (
-            Array.from(pane.querySelectorAll('[data-block-id]')) as HTMLElement[]
+            Array.from(
+                pane.querySelectorAll('[data-block-id]'),
+            ) as HTMLElement[]
         ).filter(
             (c) =>
                 c.dataset.blockType !== 'container' &&
@@ -2346,7 +2357,12 @@ function subscribe() {
                 previewLoading.value = true;
             }
             router.reload({
-                only: ['preview', 'previewBlockData', 'manifest', 'conversation'],
+                only: [
+                    'preview',
+                    'previewBlockData',
+                    'manifest',
+                    'conversation',
+                ],
                 onFinish: () => {
                     previewLoading.value = false;
                 },
@@ -2646,7 +2662,9 @@ function statusTone(status: Message['status']): string {
                             {{ t('apps.builder.title') }}
                         </h1>
                         <div class="flex min-w-0 items-center gap-2">
-                            <p class="shrink-0 text-xs font-medium text-ink-muted">
+                            <p
+                                class="shrink-0 text-xs font-medium text-ink-muted"
+                            >
                                 {{ appMeta.name }}
                             </p>
                             <span
@@ -2723,7 +2741,9 @@ function statusTone(status: Message['status']): string {
                          Collapsed to just the label until clicked; clicking it
                          again closes the swatch row. -->
                     <div
-                        v-if="viewMode === 'preview' && app.kind !== 'dashboard'"
+                        v-if="
+                            viewMode === 'preview' && app.kind !== 'dashboard'
+                        "
                         class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2 py-1"
                     >
                         <button
@@ -3158,14 +3178,19 @@ function statusTone(status: Message['status']): string {
                                     class="mt-1 flex items-center justify-end gap-1.5 text-[10px] text-ink-muted/70"
                                 >
                                     <CopyButton
-                                        v-if="m.content && m.status !== 'streaming'"
+                                        v-if="
+                                            m.content &&
+                                            m.status !== 'streaming'
+                                        "
                                         :text="m.content"
                                         :size="12"
                                     />
                                     <span
                                         v-if="reasoningElapsed(m)"
-                                        class="tabular-nums text-accent-blue"
-                                        :title="t('apps.builder.reasoning_time')"
+                                        class="text-accent-blue tabular-nums"
+                                        :title="
+                                            t('apps.builder.reasoning_time')
+                                        "
                                     >
                                         {{ reasoningElapsed(m) }}
                                     </span>
@@ -3909,7 +3934,11 @@ function statusTone(status: Message['status']): string {
                                 type="button"
                                 class="absolute z-40 flex cursor-grab touch-none items-center justify-center p-2 active:cursor-grabbing"
                                 :style="{
-                                    left: selectionRect.left + selectionRect.width / 2 - 32 + 'px',
+                                    left:
+                                        selectionRect.left +
+                                        selectionRect.width / 2 -
+                                        32 +
+                                        'px',
                                     top: selectionRect.top - 18 + 'px',
                                 }"
                                 title="Arrastra para reordenar"
@@ -3927,8 +3956,16 @@ function statusTone(status: Message['status']): string {
                                     type="button"
                                     class="absolute z-40 flex cursor-ew-resize touch-none items-center justify-center px-3 py-2"
                                     :style="{
-                                        left: selectionRect.left + selectionRect.width - 14 + 'px',
-                                        top: selectionRect.top + selectionRect.height / 2 - 26 + 'px',
+                                        left:
+                                            selectionRect.left +
+                                            selectionRect.width -
+                                            14 +
+                                            'px',
+                                        top:
+                                            selectionRect.top +
+                                            selectionRect.height / 2 -
+                                            26 +
+                                            'px',
                                     }"
                                     title="Arrastra para ajustar el ancho"
                                     @pointerdown="startBlockResize('x', $event)"
@@ -3941,8 +3978,16 @@ function statusTone(status: Message['status']): string {
                                     type="button"
                                     class="absolute z-40 flex cursor-ns-resize touch-none items-center justify-center px-2 py-3"
                                     :style="{
-                                        left: selectionRect.left + selectionRect.width / 2 - 26 + 'px',
-                                        top: selectionRect.top + selectionRect.height - 14 + 'px',
+                                        left:
+                                            selectionRect.left +
+                                            selectionRect.width / 2 -
+                                            26 +
+                                            'px',
+                                        top:
+                                            selectionRect.top +
+                                            selectionRect.height -
+                                            14 +
+                                            'px',
                                     }"
                                     title="Arrastra para ajustar el alto"
                                     @pointerdown="startBlockResize('y', $event)"
@@ -3970,7 +4015,10 @@ function statusTone(status: Message['status']): string {
                         >
                             <DashboardLoading
                                 v-if="previewLoading"
-                                :accent="(previewSettings.accent as string) ?? '#0059ff'"
+                                :accent="
+                                    (previewSettings.accent as string) ??
+                                    '#0059ff'
+                                "
                                 :lang="previewLocale"
                             />
                         </Transition>
@@ -4088,6 +4136,7 @@ function statusTone(status: Message['status']): string {
                             <!-- Top-header layout (default). -->
                             <template v-else>
                                 <SiteHeader
+                                    embedded
                                     :brand="previewBrand"
                                     :pages="preview.pages"
                                     :current-slug="preview.page.slug"
@@ -4141,7 +4190,12 @@ function statusTone(status: Message['status']): string {
                         @manifest-updated="
                             () =>
                                 router.reload({
-                                    only: ['preview', 'previewBlockData', 'manifest', 'schema'],
+                                    only: [
+                                        'preview',
+                                        'previewBlockData',
+                                        'manifest',
+                                        'schema',
+                                    ],
                                 })
                         "
                         class="min-h-0 flex-1"
