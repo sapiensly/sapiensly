@@ -404,6 +404,45 @@ it('semantic gates fill voice and factual insights, judging overrides determinis
     // reject it and keep the suggestion as-is.
     ExpressGateAgent::fake([
         ['accept' => false, 'overrides' => ['charts' => [['label' => 'X', 'chart_type' => 'line', 'aggregation' => 'count', 'x_field_id' => 'fld_nope']]]],
+        // The model does its job: it sharpens the voice and KEEPS the grounded
+        // number the deterministic body already carried.
+        fn ($prompt) => [
+            'title' => 'Panel Ejecutivo de Tickets',
+            'purpose' => 'Dirección: volumen y SLA.',
+            'insights' => collect(json_decode($prompt, true)['tarjetas_sugeridas'])
+                ->map(fn ($c) => ['variant' => $c['variant'], 'title' => $c['title'], 'body' => 'Acción: '.$c['body']])
+                ->values()->all(),
+        ],
+    ]);
+
+    $ctx = xph_ctx($this);
+    $object = xph_object('tickets_semanales', $this->integration->id);
+    $ctx->objects = [$object];
+    $ctx->rowsByObject[$object['id']] = xph_rows();
+
+    app()->call(function (SuggestSpecPhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+    $grounded = $ctx->spec['insights'][0]['body'];
+    app()->call(function (SemanticGatesPhase $phase) use ($ctx) {
+        $phase->run($ctx, xph_run($this));
+    });
+
+    expect($ctx->semantic['overrides'])->toBe([])   // judged out
+        ->and($ctx->semantic['voice']['title'])->toBe('Panel Ejecutivo de Tickets')
+        // The rewrite ships, because it kept the facts it was given.
+        ->and($ctx->semantic['insights'][0]['body'])->toBe('Acción: '.$grounded);
+});
+
+it('a narrated body that invents a figure loses to the grounded one', function () {
+    config(['express.spec_overrides' => true]);
+
+    // The gate used to check ONE thing: that the model returned the right NUMBER
+    // of cards. A model handing back the right count with the wrong figures was
+    // accepted whole, and its prose overwrote bodies computed from real data —
+    // which is how a dashboard states a number that never existed.
+    ExpressGateAgent::fake([
+        ['accept' => true, 'overrides' => []],
         fn ($prompt) => [
             'title' => 'Panel Ejecutivo de Tickets',
             'purpose' => 'Dirección: volumen y SLA.',
@@ -421,13 +460,16 @@ it('semantic gates fill voice and factual insights, judging overrides determinis
     app()->call(function (SuggestSpecPhase $phase) use ($ctx) {
         $phase->run($ctx, xph_run($this));
     });
+    $grounded = $ctx->spec['insights'][0]['body'];
     app()->call(function (SemanticGatesPhase $phase) use ($ctx) {
         $phase->run($ctx, xph_run($this));
     });
 
-    expect($ctx->semantic['overrides'])->toBe([])   // judged out
-        ->and($ctx->semantic['voice']['title'])->toBe('Panel Ejecutivo de Tickets')
-        ->and($ctx->semantic['insights'][0]['body'])->toContain('66%');
+    // 66% is nowhere in the computed facts. The card keeps the number it earned.
+    expect($ctx->semantic['insights'][0]['body'])->not->toContain('66%')
+        ->and($ctx->semantic['insights'][0]['body'])->toBe($grounded)
+        // …and the voice pass still lands, because the voice was never the risk.
+        ->and($ctx->semantic['voice']['title'])->toBe('Panel Ejecutivo de Tickets');
 });
 
 it('the insight fallback gives each card a DISTINCT real fact, not one filler line', function () {

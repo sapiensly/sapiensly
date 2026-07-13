@@ -8,6 +8,7 @@ use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
+use App\Support\Ai\FactGuard;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Enums\Lab;
 
@@ -39,6 +40,15 @@ class DeckNarrator
         private readonly AiDefaults $aiDefaults,
         private readonly AiProviderService $providers,
     ) {}
+
+    /**
+     * The only fields a narrative pass was invited to touch — the prose the
+     * prompt names: a chart's takeaway, a big_number's context/delta, a metric's
+     * delta. Everything else on a slide is data.
+     *
+     * @var list<string>
+     */
+    private const PROSE_FIELDS = ['takeaway', 'context', 'delta'];
 
     /**
      * @param  array<string, mixed>  $oldDigest
@@ -78,12 +88,24 @@ class DeckNarrator
                 return ['summary' => null, 'operations' => []];
             }
 
-            $operations = array_values(array_filter(
+            $operations = $this->faithfulOperations(
                 (array) ($decoded['operations'] ?? []),
-                fn ($op) => is_array($op) && ($op['op'] ?? null) === 'replace',
-            ));
+                $manifest,
+            );
 
+            // The summary is newly authored prose about the refresh, so there is
+            // no original sentence to preserve — the only defensible test is that
+            // every figure in it came from the data it is describing.
             $summary = is_string($decoded['summary'] ?? null) ? trim($decoded['summary']) : null;
+            if ($summary !== null && $summary !== '' && ! FactGuard::onlyKnownNumbers(
+                $summary,
+                (string) json_encode([$oldDigest, $newDigest], JSON_UNESCAPED_UNICODE),
+            )) {
+                Log::warning('Deck narrative summary stated a figure the data does not contain — dropped', [
+                    'deck' => $manifest['title'] ?? null,
+                ]);
+                $summary = null;
+            }
 
             return ['summary' => $summary !== '' ? $summary : null, 'operations' => $operations];
         } catch (\Throwable $e) {
@@ -93,6 +115,91 @@ class DeckNarrator
 
             return ['summary' => null, 'operations' => []];
         }
+    }
+
+    /**
+     * The replace operations that only rewrote prose — the rest are dropped.
+     *
+     * The model hands back a WHOLE slide object, so it can rewrite a big_number's
+     * value, a chart's series or a label as easily as the takeaway it was asked
+     * to fix. The prompt says "NEVER touch labels/series/values", and nothing made
+     * that true: the editor downstream validates a slide's structure, not its
+     * fidelity to the one it replaces. So a refreshed deck could quietly ship a
+     * figure the data never produced — in a deck whose whole promise is that its
+     * numbers are live.
+     *
+     * @param  list<mixed>  $operations
+     * @param  array<string, mixed>  $manifest
+     * @return list<array<string, mixed>>
+     */
+    private function faithfulOperations(array $operations, array $manifest): array
+    {
+        $slides = is_array($manifest['slides'] ?? null) ? array_values($manifest['slides']) : [];
+
+        $kept = [];
+        foreach ($operations as $op) {
+            if (! is_array($op) || ($op['op'] ?? null) !== 'replace') {
+                continue;
+            }
+            $index = $op['index'] ?? null;
+            $slide = $op['slide'] ?? null;
+            if (! is_numeric($index) || ! is_array($slide)) {
+                continue;
+            }
+            $original = $slides[(int) $index] ?? null;
+            if (! is_array($original)) {
+                continue; // an index that isn't a slide is not an edit
+            }
+
+            if (! $this->rewroteOnlyProse($original, $slide)) {
+                Log::warning('Deck narrative op changed more than prose — dropped', [
+                    'slide_index' => (int) $index,
+                    'layout' => $original['layout'] ?? null,
+                ]);
+
+                continue;
+            }
+
+            $kept[] = $op;
+        }
+
+        return $kept;
+    }
+
+    /**
+     * Did this slide come back with only its prose changed?
+     *
+     * A `metrics` slide carries prose INSIDE its items (each metric's delta), so
+     * the items are compared element by element before the flat check — otherwise
+     * a legitimate delta fix would read as a changed `items` array and be thrown
+     * away.
+     *
+     * @param  array<string, mixed>  $original
+     * @param  array<string, mixed>  $rewritten
+     */
+    private function rewroteOnlyProse(array $original, array $rewritten): bool
+    {
+        $exempt = self::PROSE_FIELDS;
+
+        $originalItems = $original['items'] ?? null;
+        $rewrittenItems = $rewritten['items'] ?? null;
+
+        if (is_array($originalItems) || is_array($rewrittenItems)) {
+            if (! is_array($originalItems) || ! is_array($rewrittenItems)
+                || count($originalItems) !== count($rewrittenItems)) {
+                return false; // adding or dropping a metric is not a rewrite
+            }
+            foreach ($originalItems as $i => $item) {
+                $new = $rewrittenItems[$i] ?? null;
+                if (! is_array($item) || ! is_array($new)
+                    || ! FactGuard::keepsValues($item, $new, self::PROSE_FIELDS)) {
+                    return false;
+                }
+            }
+            $exempt[] = 'items'; // compared element-wise above
+        }
+
+        return FactGuard::keepsValues($original, $rewritten, $exempt);
     }
 
     /**

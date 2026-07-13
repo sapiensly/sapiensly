@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
+use App\Support\Ai\FactGuard;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Support\Facades\Log;
@@ -61,15 +62,15 @@ class RecommendationNarrator
             if ($edit === null) {
                 return $rec;
             }
-            $title = trim((string) ($edit['title'] ?? ''));
-            $why = trim((string) ($edit['why'] ?? ''));
-            if ($title !== '') {
-                $rec['title'] = $title;
-            }
-            // A rewrite that drops the grounding number is a hallucination —
-            // keep the deterministic why instead.
-            if ($why !== '' && $this->keepsFacts((string) $rec['why'], $why)) {
-                $rec['why'] = $why;
+            // A rewrite that drops a grounding number is a hallucination, so the
+            // deterministic text stands. The title was accepted unchecked — a
+            // title can carry a figure too ("Backlog: 412 abiertos"), and there
+            // was no reason for it to be the one string a model could move.
+            foreach (['title', 'why'] as $field) {
+                $safe = FactGuard::safeRewrite((string) $rec[$field], $edit[$field] ?? null);
+                if ($safe !== null) {
+                    $rec[$field] = $safe;
+                }
             }
 
             return $rec;
@@ -146,21 +147,5 @@ class RecommendationNarrator
         }
 
         return $out === [] ? null : $out;
-    }
-
-    /**
-     * Every number the deterministic «why» carried must survive the rewrite —
-     * the enforcement of "refine, never replace".
-     */
-    private function keepsFacts(string $original, string $rewrite): bool
-    {
-        preg_match_all('/\d[\d.,]*/', $original, $m);
-        foreach ($m[0] as $number) {
-            if (! str_contains($rewrite, $number)) {
-                return false;
-            }
-        }
-
-        return true;
     }
 }

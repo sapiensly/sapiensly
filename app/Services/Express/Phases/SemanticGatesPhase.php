@@ -10,6 +10,7 @@ use App\Services\Express\ExpressContext;
 use App\Services\Express\GateRunner;
 use App\Services\Express\LabelGrounding;
 use App\Services\Manifest\AppScaffolder;
+use App\Support\Ai\FactGuard;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use Illuminate\Support\Str;
@@ -188,7 +189,7 @@ TXT,
         $bodies = array_values(array_filter($voiceInsights['output']['insights'] ?? [], 'is_array'));
         $modelWroteInsights = count($bodies) === count($suggested) && $suggested !== [];
         $context->semantic['insights'] = $modelWroteInsights
-            ? $this->mergeInsights($suggested, $bodies)
+            ? $this->mergeInsights($suggested, $bodies, (string) json_encode($context->facts, JSON_UNESCAPED_UNICODE))
             : $suggested;
 
         // A real voice line or model-narrated insight bodies also count as
@@ -324,11 +325,30 @@ TXT,
      * @param  list<array<string, mixed>>  $written
      * @return list<array<string, mixed>>
      */
-    private function mergeInsights(array $suggested, array $written): array
+    private function mergeInsights(array $suggested, array $written, string $facts): array
     {
-        return collect($suggested)->map(function (array $card, int $i) use ($written): array {
-            $card['title'] = (string) ($written[$i]['title'] ?? $card['title']);
-            $card['body'] = (string) ($written[$i]['body'] ?? $card['body'] ?? '');
+        return collect($suggested)->map(function (array $card, int $i) use ($written, $facts): array {
+            $groundedBody = (string) ($card['body'] ?? '');
+            $groundedTitle = (string) ($card['title'] ?? '');
+
+            // The card's body was written from the computed facts (FactNarrator),
+            // so it already carries a real number. The model is asked to say it
+            // better — and the only check that used to run was that it returned
+            // the right NUMBER of cards. A model handing back four cards with four
+            // invented figures was accepted whole, and its prose overwrote the
+            // grounded bodies. Now a body may only state numbers the data actually
+            // holds; one that invents a figure loses to the deterministic text.
+            $body = $written[$i]['body'] ?? null;
+            if (is_string($body) && trim($body) !== ''
+                && FactGuard::onlyKnownNumbers($body, $facts."\n".$groundedBody)) {
+                $card['body'] = trim($body);
+            }
+
+            // The title may be sharpened, never re-figured.
+            $title = FactGuard::safeRewrite($groundedTitle, $written[$i]['title'] ?? null);
+            if ($title !== null) {
+                $card['title'] = $title;
+            }
 
             return $card;
         })->values()->all();
