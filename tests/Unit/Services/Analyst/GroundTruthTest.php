@@ -1,7 +1,15 @@
 <?php
 
 use App\Services\Analyst\GroundTruth;
+use App\Services\Analyst\MaturationCheck;
+use App\Services\Analyst\RatioIdentity;
+use App\Services\Express\SemanticProfile;
 use App\Support\Ai\FactGuard;
+
+function groundTruth(): GroundTruth
+{
+    return new GroundTruth(new RatioIdentity(new SemanticProfile), new MaturationCheck);
+}
 
 /**
  * What the data can back, and what a model made up.
@@ -53,7 +61,7 @@ function otdRows(): array
 
 function grounds(string $prose): bool
 {
-    return FactGuard::onlyKnownNumbers($prose, (new GroundTruth)->forObject(otdObject(), otdRows()));
+    return FactGuard::onlyKnownNumbers($prose, groundTruth()->forObject(otdObject(), otdRows()));
 }
 
 it('catches the invented number that shipped to the director', function () {
@@ -62,7 +70,7 @@ it('catches the invented number that shipped to the director', function () {
 
     // And the guard can NAME the lie, which is what makes the rejection useful:
     // "this says 92" beats "this is ungrounded".
-    $truth = (new GroundTruth)->forObject(otdObject(), otdRows());
+    $truth = groundTruth()->forObject(otdObject(), otdRows());
     $invented = array_diff(
         FactGuard::numbersIn('Solo 92 de 100 pedidos entregados a tiempo (50%).'),
         FactGuard::numbersIn($truth),

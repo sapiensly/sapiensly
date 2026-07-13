@@ -52,9 +52,14 @@ class DataQualityCheck
      */
     private function freshness(array $entry, bool $es, array &$flags): void
     {
-        // ComputedFactsBuilder already stamped the latest date per date field.
-        $latest = collect($entry['facts']['trend'] ?? [])
-            ->pluck('span_to')->filter()->max();
+        // The last date the SOURCE carries — not the last date we chose to READ.
+        // MaturationCheck drops trailing periods that have not resolved, and without
+        // `source_latest` that trim would make the freshest feed in the system accuse
+        // itself of being five days stale. Staleness is about the source; maturity is
+        // about the window. Two different questions, and only one of them is answered
+        // by the last row of the analysed set.
+        $latest = $entry['facts']['source_latest']
+            ?? collect($entry['facts']['trend'] ?? [])->pluck('span_to')->filter()->max();
         if ($latest === null) {
             return;
         }

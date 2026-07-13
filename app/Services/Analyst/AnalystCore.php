@@ -80,6 +80,7 @@ class AnalystCore
         private DerivedMetricProposer $derived,
         private AnomalyFinder $anomalies,
         private RatioIdentity $ratios,
+        private MaturationCheck $maturation,
     ) {}
 
     /**
@@ -120,13 +121,42 @@ class AnalystCore
                 if ($rows === []) {
                     continue;
                 }
-                $totalRows += count($rows);
-                $facts = $this->facts->build($object, $rows);
                 // A rate column the data proves is derived from others: averaging
                 // it is a different number, not an approximation. Computed once and
                 // threaded through the facts, because both the candidate pass (which
                 // must not gauge such a rate) and the warnings need it.
+                $identities = $this->ratios->detect($object, $rows);
+
+                // The last periods of a live source have not RESOLVED yet — today's
+                // orders cannot be delivered late until their promised date arrives.
+                // Read literally they look like a collapse to zero, and a board built
+                // on them sends the director to shout at an innocent courier. So the
+                // analyst reads the window that actually happened: warning about the
+                // tail is not enough, because every finding computed over it — the
+                // trend, the anomaly, the correlation — would be an artefact of the
+                // calendar rather than a fact about the business.
+                $maturation = $this->maturation->detect($object, $rows, $identities);
+                $mature = $this->maturation->matureRows($rows, $maturation);
+                if ($mature === []) {
+                    continue;
+                }
+
+                // Freshness is a fact about the SOURCE, not about the window we chose
+                // to read. Without this, trimming five unresolved days would make the
+                // freshest feed in the system report itself as five days stale — the
+                // guard slandering its own data.
+                $latest = $this->latestDate($object, $rows);
+                $rows = $mature;
+
+                $totalRows += count($rows);
+                $facts = $this->facts->build($object, $rows);
+                // Re-proved on the mature window: the identity's STRUCTURE is the same,
+                // but its rate is not. Over the raw window OTD reads 73.1% because five
+                // days have not happened; over what resolved it is 86.3%. Every warning
+                // and KPI downstream quotes this number, so it must be the true one.
                 $facts['ratio_identities'] = $this->ratios->detect($object, $rows);
+                $facts['maturation'] = $maturation;
+                $facts['source_latest'] = $latest;
                 $factsByObject[$object['id']] = ['object' => $object, 'rows' => $rows, 'facts' => $facts];
 
                 $connected = FieldPaths::isConnected($object);
@@ -222,6 +252,8 @@ class AnalystCore
             'findings' => $findings,
             'gaps' => $this->gaps($factsByObject, $shown, $domain, $es),
             'data_quality' => [
+                // Leads: an immature tail invalidates every number below it.
+                ...$this->maturationWarnings($factsByObject, $es),
                 ...$this->rateWarnings($factsByObject, $es),
                 ...$this->quality->run($factsByObject, $es),
             ],
@@ -287,6 +319,69 @@ class AnalystCore
     }
 
     /**
+     * The most recent date the SOURCE carries, before any trimming.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function latestDate(array $object, array $rows): ?string
+    {
+        $paths = FieldPaths::forObject($object);
+        $latest = null;
+
+        foreach ($object['fields'] ?? [] as $field) {
+            if (! is_array($field) || ! in_array($field['type'] ?? '', ['date', 'datetime'], true)) {
+                continue;
+            }
+            $path = $paths[$field['id']] ?? null;
+            if ($path === null) {
+                continue;
+            }
+            foreach ($rows as $row) {
+                $value = data_get($row, $path);
+                if (is_string($value) && ($latest === null || $value > $latest)) {
+                    $latest = $value;
+                }
+            }
+        }
+
+        return $latest;
+    }
+
+    /**
+     * The periods that have not happened yet, said before anything else.
+     *
+     * This warning leads because it invalidates the rest: if the last five days
+     * have not resolved, then the trend, the anomaly and the headline rate are all
+     * statements about the calendar, not the business. The analyst has already
+     * dropped those rows — this says so, and hands over both numbers so the reader
+     * can see the size of the lie they were about to be told.
+     *
+     * @param  array<string, array{object: array<string,mixed>, rows: list<array<string,mixed>>, facts: array<string,mixed>}>  $byObject
+     * @return list<array{level: string, text: string}>
+     */
+    private function maturationWarnings(array $byObject, bool $es): array
+    {
+        $out = [];
+        foreach ($byObject as $entry) {
+            foreach ($entry['facts']['maturation'] ?? [] as $m) {
+                $rate = (string) $m['rate']['name'];
+                $n = (int) $m['immature_periods'];
+                $den = Str::lower((string) $m['denominator']['name']);
+
+                $out[] = [
+                    'level' => 'warn',
+                    'text' => $es
+                        ? "{$rate}: los últimos {$n} periodos todavía no cierran — sólo {$m['tail_resolved_pct']}% de {$den} tiene desenlace ahí, contra {$m['baseline_resolved_pct']}% normal. No es una caída, es data que aún no madura: sobre toda la ventana la tasa da {$m['full_window_rate']}%, pero la real (sobre lo que sí cerró) es {$m['mature_rate']}%. Excluí esos periodos del análisis; un tablero que los grafique va a reportar un colapso que no ocurrió."
+                        : "{$rate}: the last {$n} periods have not closed yet — only {$m['tail_resolved_pct']}% of {$den} has any outcome there, against {$m['baseline_resolved_pct']}% normally. This is not a drop, it is data that has not matured: over the whole window the rate reads {$m['full_window_rate']}%, but the real one (over what actually resolved) is {$m['mature_rate']}%. Those periods are excluded from this analysis; a board that charts them will report a collapse that never happened.",
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * A rate the board cannot compute correctly, said out loud.
      *
      * The numerator is a DIFFERENCE — a source that reports delivered and late
@@ -308,11 +403,20 @@ class AnalystCore
                 }
                 $name = (string) ($identity['rate']['name'] ?? '');
                 $gap = round(abs((float) $identity['true_rate'] - (float) $identity['averaged_rate']), 1);
+
+                // When the periods happen to carry similar volumes, the average lands
+                // on the true rate and the gap is ~0. The structural fact does not
+                // change — no KPI can compute this rate, and the validator still
+                // refuses it — but quoting "0 pts off" would read as "no big deal"
+                // right next to a hard rejection. State the reason, not a null delta.
                 $out[] = [
                     'level' => 'warn',
-                    'text' => $es
-                        ? "{$name}: promediada da {$identity['averaged_rate']}%, real {$identity['true_rate']}% ({$gap} pts). Es {$this->identityFormula($identity)} — sin una columna con el numerador, ningún KPI puede calcularla bien."
-                        : "{$name}: averaged reads {$identity['averaged_rate']}%, the real rate is {$identity['true_rate']}% ({$gap} pts off). It is {$this->identityFormula($identity)} — with no column for the numerator, no KPI can state it honestly.",
+                    'text' => match (true) {
+                        $gap < 0.5 && $es => "{$name}: es {$this->identityFormula($identity)} — una tasa derivada. Hoy promediarla casi coincide con la real ({$identity['true_rate']}%) porque los periodos traen volúmenes parejos, pero eso es suerte, no método: en cuanto un día flojo se cuele, el promedio deja de ser la tasa. Sin una columna con el numerador, ningún KPI puede calcularla bien.",
+                        $gap < 0.5 => "{$name}: it is {$this->identityFormula($identity)} — a derived rate. Averaging it currently lands near the true rate ({$identity['true_rate']}%) because the periods carry similar volumes, but that is luck, not method: one quiet period and the mean stops being the rate. With no column for the numerator, no KPI can state it honestly.",
+                        $es => "{$name}: promediada da {$identity['averaged_rate']}%, real {$identity['true_rate']}% ({$gap} pts). Es {$this->identityFormula($identity)} — sin una columna con el numerador, ningún KPI puede calcularla bien.",
+                        default => "{$name}: averaged reads {$identity['averaged_rate']}%, the real rate is {$identity['true_rate']}% ({$gap} pts off). It is {$this->identityFormula($identity)} — with no column for the numerator, no KPI can state it honestly.",
+                    },
                 ];
             }
         }

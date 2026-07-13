@@ -4,6 +4,7 @@ namespace App\Services\Connected;
 
 use App\Models\Integration;
 use App\Models\User;
+use App\Services\Analyst\MaturationCheck;
 use App\Services\Analyst\RatioIdentity;
 use App\Services\Tools\McpClient;
 use Carbon\CarbonImmutable;
@@ -140,6 +141,11 @@ class ConnectedObjectAuthoring
         $identities = app(RatioIdentity::class)->detect($object, $rows);
         $object['fields'] = $this->stampDerivedRates($object['fields'], $identities);
 
+        // The tail of a live source has not RESOLVED yet, and read literally it is a
+        // catastrophe: 0 delivered of 67, every day. This is the moment to say so —
+        // the model is about to chart it and title the chart "collapse since 9 Jul".
+        $maturation = app(MaturationCheck::class)->detect($object, $rows, $identities);
+
         // Feed the catalog so the NEXT build sees this tool's row shape in its
         // first discovery — zero sampling rounds.
         $this->catalog->rememberShape(
@@ -165,8 +171,33 @@ class ConnectedObjectAuthoring
             // for a derived rate is a different number, not an approximation. This
             // is the one moment it can be told, with the arithmetic to back it.
             'derived_rates' => $this->describeRates($identities),
+            'immature_periods' => $this->describeMaturation($maturation),
             'summary' => "Creé el objeto conectado «{$name}» (live desde {$toolName})",
         ];
+    }
+
+    /**
+     * The trailing periods that have not resolved, stated before the model charts them.
+     *
+     * @param  list<array<string, mixed>>  $maturation
+     * @return list<array<string, mixed>>
+     */
+    private function describeMaturation(array $maturation): array
+    {
+        return collect($maturation)->map(function (array $m): array {
+            $rate = (string) $m['rate']['name'];
+            $n = (int) $m['immature_periods'];
+
+            return [
+                'rate_field_id' => $m['rate']['id'],
+                'immature_periods' => $n,
+                'evidence' => "only {$m['tail_resolved_pct']}% of {$m['denominator']['name']} has any outcome in the last {$n} periods, against {$m['baseline_resolved_pct']}% normally"
+                    .($m['conclusive'] ? ' — and zero of them are late, which a real collapse never produces' : ''),
+                'rate_over_full_window' => $m['full_window_rate'],
+                'rate_over_resolved_window' => $m['mature_rate'],
+                'guidance' => "The last {$n} periods of «{$rate}» have NOT HAPPENED YET — they are not a collapse, they are data that has not matured. Charting them reports a catastrophe that did not occur ({$m['full_window_rate']}% over the raw window vs {$m['mature_rate']}% over what actually resolved). Filter them out of every KPI and chart (`lt` the cutoff on the date field), and NEVER title a block or write an insight about a 'drop' or 'collapse' at the end of the series — that drop is the calendar, not the business.",
+            ];
+        })->values()->all();
     }
 
     /**

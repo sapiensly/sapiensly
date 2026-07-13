@@ -31,6 +31,11 @@ class GroundTruth
     /** Categories worth deriving a share for; beyond this it is an id column, not a dimension. */
     private const MAX_CATEGORIES = 40;
 
+    public function __construct(
+        private RatioIdentity $ratios,
+        private MaturationCheck $maturation,
+    ) {}
+
     /**
      * The numbers, as prose FactGuard can check against.
      *
@@ -99,6 +104,19 @@ class GroundTruth
             $derived = collect($fields)->firstWhere('id', $fieldId)['derived_rate'] ?? null;
             if (is_array($derived)) {
                 $known = array_merge($known, $this->weightedRate($rows, $paths, $derived));
+
+                // And the rate over the window that has actually RESOLVED. The analyst
+                // reports 86.3% while the raw window reads 73.1%, because the last five
+                // days have not closed yet. Without this, the guard would reject an
+                // insight for quoting the one number in the whole board that is true.
+                $mature = $this->maturation->matureRows($rows, $this->maturation->detect(
+                    $object,
+                    $rows,
+                    $this->ratios->detect($object, $rows),
+                ));
+                if (count($mature) !== count($rows)) {
+                    $known = array_merge($known, $this->weightedRate($mature, $paths, $derived), [(string) count($mature)]);
+                }
             }
         }
 

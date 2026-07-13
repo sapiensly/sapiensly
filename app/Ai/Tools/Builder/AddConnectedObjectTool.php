@@ -44,8 +44,14 @@ The SERVER calls the tool as the acting user, infers every field + field_map +
 type from the real rows, and banks the object via propose_change. Use this
 instead of hand-writing the object's propose_change (slow, error-prone); use
 sample_mcp_tool first only if you still need to DISCOVER which tool to read.
-Returns {ok, object, fields, date_field_ids, derived_rates, sampled_rows} — go
-straight to prepare_dashboard next. READ `derived_rates` before you build a KPI:
+Returns {ok, object, fields, date_field_ids, derived_rates, immature_periods,
+sampled_rows} — go straight to prepare_dashboard next. READ `immature_periods`
+BEFORE YOU CHART ANYTHING: a live source reports today's orders instantly but
+cannot mark them delivered-on-time until their promised date arrives, so the last
+days of the series read as a collapse to zero when in fact nothing has happened
+there yet. Filter those periods out of every KPI and chart, and never title a
+block or write an insight about a "drop" at the end of a series — that drop is
+the calendar. READ `derived_rates` before you build a KPI:
 it names every rate column the sampled rows PROVE is derived from other columns
 (e.g. otd_pct = (delivered - late) / total, verified on 61/61 rows) and tells you
 exactly how to compute it. Averaging such a rate is NOT an approximation — it is a
@@ -125,6 +131,9 @@ DESC;
             // `guidance` on each before building any KPI from them: averaging a
             // derived rate is a different number, not an approximation.
             'derived_rates' => $authored['derived_rates'],
+            // Trailing periods that have NOT RESOLVED yet. Read literally they look
+            // like a collapse to zero; they are the calendar, not the business.
+            'immature_periods' => $authored['immature_periods'],
             'sampled_rows' => count($authored['rows']),
             'clamped_arguments' => $authored['clamped'] !== [] ? $authored['clamped'] : null,
             'message' => "Connected object «{$object['name']}» banked ({$object['slug']}, ".count($object['fields'])." fields, live via {$object['source']['operations']['list']['mcp_tool']}). Next: prepare_dashboard + add_dashboard_page.",

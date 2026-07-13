@@ -11,6 +11,7 @@ use App\Services\Analyst\DataQualityCheck;
 use App\Services\Analyst\DerivedMetricProposer;
 use App\Services\Analyst\DomainClassifier;
 use App\Services\Analyst\FindingBlock;
+use App\Services\Analyst\MaturationCheck;
 use App\Services\Analyst\RatioIdentity;
 use App\Services\Analyst\RecommendationNarrator;
 use App\Services\Builder\ChartRecommender;
@@ -127,6 +128,7 @@ function makeCore(array $rows): AnalystCore
         new DerivedMetricProposer(new SemanticProfile),
         new AnomalyFinder,
         new RatioIdentity(new SemanticProfile),
+        new MaturationCheck,
     );
 }
 
