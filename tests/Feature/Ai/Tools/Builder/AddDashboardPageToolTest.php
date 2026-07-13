@@ -5,6 +5,7 @@ use App\Ai\Tools\Builder\PlanDashboardTool;
 use App\Ai\Tools\Builder\PrepareDashboardTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Models\App;
+use App\Models\Record;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
@@ -918,4 +919,86 @@ it('honours the spec default_range across the filter bar and every range express
     expect($fallback['ok'])->toBeTrue();
     $fallbackBar = collect($fallback['page']['blocks'])->firstWhere('type', 'filter_bar');
     expect($fallbackBar['controls'][0]['default'])->toBe('30d');
+});
+
+/**
+ * An insight body is the one place the model writes figures from memory.
+ *
+ * The Yuhu board shipped "solo 92 de 265 pedidos entregados a tiempo (50.2%)" —
+ * two real numbers and one invented, in a sentence that does not even divide to
+ * the percentage it claims. It ran next to a chart that WAS real. Nothing checked
+ * it, because FactGuard guarded the narrator and never the builder.
+ */
+function adp_seedHours(App $app, array $hours): void
+{
+    foreach ($hours as $h) {
+        Record::create([
+            'app_id' => $app->id,
+            'object_definition_id' => 'obj_ticketsobj',
+            'data' => ['titulo' => 't', 'estado' => 'abierto', 'prioridad' => 'alta', 'horas' => $h, 'creado' => '2026-07-06'],
+        ]);
+    }
+}
+
+it('refuses an insight whose figure the data cannot back, and names it', function () {
+    // 4 tickets, 40 hours in total.
+    adp_seedHours($this->testApp, [10, 10, 10, 10]);
+
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new AddDashboardPageTool(
+        $this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class), $this->user,
+    );
+
+    $spec = adp_spec();
+    $spec['insights'] = [[
+        'variant' => 'risk', 'title' => 'Backlog crítico',
+        'body' => 'Se acumularon 92 horas en 4 tickets.', // 4 is real; 92 is not.
+    ]];
+
+    $result = json_decode($tool->handle(new ToolRequest($spec)), true);
+
+    expect($result['ok'])->toBeFalse()
+        ->and($result['errors'][0]['code'])->toBe('unverifiable_number')
+        // It hands back the exact figure it could not source. "This is ungrounded"
+        // is not actionable; "this says 92" is.
+        ->and($result['errors'][0]['message'])->toContain('92')
+        ->and($result['errors'][0]['path'])->toBe('/insights/0');
+
+    // And nothing was written: the page does not exist half-built.
+    expect($this->testApp->fresh()->currentVersion->manifest['pages'])->toBe([]);
+});
+
+it('accepts an insight whose every figure the data supports', function () {
+    adp_seedHours($this->testApp, [10, 10, 10, 10]);
+
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new AddDashboardPageTool(
+        $this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class), $this->user,
+    );
+
+    $spec = adp_spec();
+    $spec['insights'] = [[
+        'variant' => 'conclusion', 'title' => 'Carga pareja',
+        // 40 total, 4 tickets, 10 average. None of these is a cell except 10 —
+        // the totals and the average are derived, and must be allowed.
+        'body' => 'Son 40 horas en 4 tickets: 10 de promedio.',
+    ]];
+
+    $result = json_decode($tool->handle(new ToolRequest($spec)), true);
+
+    expect($result['ok'])->toBeTrue();
+});
+
+it('does not turn a source with no rows into an accusation', function () {
+    // No records seeded. The guard exists to catch a lie, not to make an outage or
+    // an empty object look like one — a build must still ship.
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new AddDashboardPageTool(
+        $this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class), $this->user,
+    );
+
+    $spec = adp_spec();
+    $spec['insights'] = [['variant' => 'risk', 'title' => 'X', 'body' => 'Se acumularon 92 horas.']];
+
+    expect(json_decode($tool->handle(new ToolRequest($spec)), true)['ok'])->toBeTrue();
 });

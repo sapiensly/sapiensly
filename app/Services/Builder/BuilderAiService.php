@@ -1494,7 +1494,7 @@ class BuilderAiService
             new ScaffoldAppTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
             new AddCrudPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
             new AddDetailPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
-            new AddDashboardPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
+            new AddDashboardPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class), $conversation->user),
             new SetBuildPlanTool($conversation),
             new TargetPlanStepsTool($conversation),
             new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),

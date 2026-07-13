@@ -126,9 +126,13 @@ class FactGuard
      * ways reads as one: 1,234 and 1234 are the same number, and so are 40 and
      * 40.0. Without this, a rewrite would be rejected for formatting.
      *
+     * Public because a caller that rejects prose owes the writer the specifics:
+     * "this says 92, which the data does not contain" is actionable, "this is
+     * ungrounded" is not.
+     *
      * @return list<string>
      */
-    private static function numbersIn(string $text): array
+    public static function numbersIn(string $text): array
     {
         preg_match_all(self::NUMBER, $text, $matches);
 
@@ -142,6 +146,9 @@ class FactGuard
                 if (str_contains($raw, '.')) {
                     $raw = rtrim(rtrim($raw, '0'), '.');
                 }
+                // So are 06 and 6 — otherwise "el 6 de julio" fails to match the
+                // 2026-07-06 it was read from, and a true sentence is called a lie.
+                $raw = preg_replace('/^0+(?=\d)/', '', $raw) ?? $raw;
 
                 return $raw === '' ? '0' : $raw;
             },

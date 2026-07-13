@@ -3,9 +3,13 @@
 namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
+use App\Models\User;
+use App\Services\Analyst\GroundTruth;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
+use App\Services\Records\ObjectRowSource;
+use App\Support\Ai\FactGuard;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -28,6 +32,7 @@ class AddDashboardPageTool implements Tool
         private AppManifestService $manifestService,
         private ProposeChangeTool $proposeTool,
         private AppScaffolder $scaffolder,
+        private ?User $actor = null,
     ) {}
 
     public function name(): string
@@ -91,7 +96,7 @@ DESC;
             'overrides' => $schema->object()
                 ->description('With use_suggestion: parts to replace in the suggestion (title, purpose, date_field_id, kpis, charts, insights, include_hero, include_date_filter). Each key you send replaces that whole part.'),
             'insights' => $schema->array()
-                ->description('0-4 insight cards: {variant, title, body?, compute?, metric_label?}. metric_label is a short unit under the big figure (e.g. "semanas"). At least one card is required by the dashboard lints.'),
+                ->description('0-4 insight cards: {variant, title, body?, compute?, metric_label?}. metric_label is a short unit under the big figure (e.g. "semanas"). At least one card is required by the dashboard lints. EVERY FIGURE IN A BODY IS CHECKED AGAINST THE ROWS: state only numbers the data contains or that follow from it (a total, a share, an average, the weighted rate of a derived percentage). An invented figure is rejected and named back to you — do not write one from memory, and never pair a count with a percentage unless the count actually divides to it.'),
             'include_hero' => $schema->boolean()
                 ->description('Open with a compact left-aligned brand hero (default true).'),
             'include_date_filter' => $schema->boolean()
@@ -137,6 +142,25 @@ DESC;
         if (empty($args['kpis']) || empty($args['charts'])) {
             return $this->fail('Pass `kpis` and `charts`, or set `use_suggestion: true` to compile the suggested spec.');
         }
+
+        // An insight body is the one place the model writes figures from memory,
+        // and memory invents. The Yuhu board shipped "solo 92 de 265 pedidos
+        // entregados a tiempo (50.2%)" — 265 real, 50.2% real, 92 invented, and
+        // 92/265 is not 50.2% anyway. Nothing checked it, so it went to the
+        // director next to a chart that WAS real.
+        $unknown = $this->inventedNumbers($args['insights'] ?? [], $object, $base);
+        if ($unknown !== []) {
+            return json_encode([
+                'ok' => false,
+                'errors' => array_map(fn (array $issue): array => [
+                    'path' => "/insights/{$issue['index']}",
+                    'message' => "This insight states {$issue['numbers']}, which the data does not contain. Every figure in an insight must come from the rows you sampled or be computable from them (a total, a share, an average, the weighted rate). Quote a number you can point at, or write the sentence without one — a claim you cannot source is worse than no card.",
+                    'code' => 'unverifiable_number',
+                ], $unknown),
+                'message' => 'Fix the insight bodies and call add_dashboard_page again.',
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        }
+
         $takenSlugs = array_values(array_filter(array_map(fn ($p) => $p['slug'] ?? null, $base['pages'] ?? [])));
         $palette = ColorPalette::fromAccent((string) ($base['settings']['accent'] ?? OrganizationBrand::DEFAULT_ACCENT));
         $extraObjects = collect($base['objects'] ?? [])
@@ -173,6 +197,59 @@ DESC;
         }
 
         return json_encode($result, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * The insights whose figures the data cannot back.
+     *
+     * Ground truth is derived, not literal: a real insight says "80% of the backlog
+     * sits in 4 reasons" and no cell holds the 80. GroundTruth builds the lattice of
+     * numbers the rows support — totals, shares, averages, the weighted rate — and a
+     * figure outside it was invented.
+     *
+     * If the rows cannot be read (a live source that is down, a native object with
+     * no records), nothing is claimed and nothing is blocked. This guard exists to
+     * catch a lie, not to make an outage look like one.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     * @return list<array{index: int, numbers: string}>
+     */
+    private function inventedNumbers(mixed $insights, array $object, array $manifest): array
+    {
+        if (! is_array($insights) || $insights === []) {
+            return [];
+        }
+
+        try {
+            $rows = app(ObjectRowSource::class)->sample($this->appModel, $object, $manifest, $this->actor, 500);
+        } catch (\Throwable) {
+            return [];
+        }
+        if ($rows === []) {
+            return [];
+        }
+
+        $truth = app(GroundTruth::class)->forObject($object, $rows);
+
+        $out = [];
+        foreach ($insights as $i => $insight) {
+            if (! is_array($insight)) {
+                continue;
+            }
+            $prose = trim(((string) ($insight['title'] ?? '')).' '.((string) ($insight['body'] ?? '')));
+            if ($prose === '' || FactGuard::onlyKnownNumbers($prose, $truth)) {
+                continue;
+            }
+
+            $invented = array_values(array_diff(
+                FactGuard::numbersIn($prose),
+                FactGuard::numbersIn($truth),
+            ));
+            $out[] = ['index' => (int) $i, 'numbers' => implode(', ', $invented)];
+        }
+
+        return $out;
     }
 
     private function fail(string $message): string
