@@ -3,6 +3,7 @@
 namespace App\Services\Builder;
 
 use App\Services\Express\SemanticProfile;
+use App\Services\Records\FieldPaths;
 use Illuminate\Support\Str;
 
 /**
@@ -236,7 +237,7 @@ class CrossSourceAnalyzer
      */
     private function paths(array $object, array $dimField, array $measure): array
     {
-        $index = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $index = FieldPaths::forObject($object);
 
         return [
             $index[$dimField['id']] ?? ($dimField['slug'] ?? ''),

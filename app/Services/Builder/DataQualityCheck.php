@@ -2,6 +2,7 @@
 
 namespace App\Services\Builder;
 
+use App\Services\Records\FieldPaths;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -81,7 +82,7 @@ class DataQualityCheck
         if ($rows === []) {
             return;
         }
-        $paths = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $paths = FieldPaths::forObject($object);
 
         foreach ($object['fields'] ?? [] as $field) {
             if (! is_array($field)

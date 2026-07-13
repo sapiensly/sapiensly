@@ -3,6 +3,7 @@
 namespace App\Services\Builder;
 
 use App\Services\Express\SemanticProfile;
+use App\Services\Records\FieldPaths;
 use Illuminate\Support\Str;
 
 /**
@@ -76,7 +77,7 @@ class DerivedMetricProposer
             return null;
         }
 
-        $paths = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $paths = FieldPaths::forObject($object);
         $sumNum = $this->sum($entry['rows'], $paths[$num['id']] ?? ($num['slug'] ?? ''));
         $sumDen = $this->sum($entry['rows'], $paths[$den['id']] ?? ($den['slug'] ?? ''));
         if ($sumDen <= 0 || $sumNum < 0) {

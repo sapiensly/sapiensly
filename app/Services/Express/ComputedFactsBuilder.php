@@ -2,6 +2,7 @@
 
 namespace App\Services\Express;
 
+use App\Services\Records\FieldPaths;
 use App\Services\Records\InMemoryRowFilter;
 
 /**
@@ -43,8 +44,7 @@ class ComputedFactsBuilder
         }
 
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
-        $pathByFieldId = collect($object['source']['field_map'] ?? [])
-            ->pluck('external_path', 'field_id')->all();
+        $pathByFieldId = FieldPaths::forObject($object);
         $valueOf = function (array $row, array $field) use ($pathByFieldId): mixed {
             $path = $pathByFieldId[$field['id']] ?? ($field['slug'] ?? null);
 
@@ -267,7 +267,7 @@ class ComputedFactsBuilder
             return null;
         }
 
-        $pathByFieldId = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $pathByFieldId = FieldPaths::forObject($object);
         $datePath = $pathByFieldId[$dateField['id']] ?? $dateField['slug'];
         $numPath = $pathByFieldId[$numField['id']] ?? $numField['slug'];
 
@@ -321,7 +321,7 @@ class ComputedFactsBuilder
         }
 
         $semantics = new SemanticProfile;
-        $pathByFieldId = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $pathByFieldId = FieldPaths::forObject($object);
         $measures = [];
 
         foreach ($object['fields'] ?? [] as $field) {
@@ -388,8 +388,7 @@ class ComputedFactsBuilder
         if ($dateField === null || count($rows) < 4) {
             return [$rows, []];
         }
-        $path = collect($object['source']['field_map'] ?? [])
-            ->pluck('external_path', 'field_id')[$dateField['id']] ?? ($dateField['slug'] ?? null);
+        $path = FieldPaths::forObject($object)[$dateField['id']] ?? null;
         if ($path === null) {
             return [$rows, []];
         }
@@ -449,7 +448,7 @@ class ComputedFactsBuilder
             return null;
         }
 
-        $pathByFieldId = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $pathByFieldId = FieldPaths::forObject($object);
         $datePath = $pathByFieldId[$dateField['id']] ?? ($dateField['slug'] ?? null);
         $numPath = $pathByFieldId[$measure['id']] ?? ($measure['slug'] ?? null);
         if ($datePath === null || $numPath === null) {
@@ -538,7 +537,7 @@ class ComputedFactsBuilder
             return null;
         }
 
-        $pathByFieldId = collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        $pathByFieldId = FieldPaths::forObject($object);
         $catPath = $pathByFieldId[$cat['id']] ?? ($cat['slug'] ?? null);
         $numPath = $pathByFieldId[$measure['id']] ?? ($measure['slug'] ?? null);
 

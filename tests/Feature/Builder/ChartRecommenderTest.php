@@ -2,6 +2,7 @@
 
 use App\Models\App;
 use App\Models\Integration;
+use App\Models\Record;
 use App\Models\User;
 use App\Services\Builder\ChartRecommender;
 use App\Services\Builder\CrossSourceAnalyzer;
@@ -14,6 +15,7 @@ use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Express\ComputedFactsBuilder;
 use App\Services\Express\SemanticProfile;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\ObjectRowSource;
 use App\Support\Tenancy\TenantContext;
 
 /** A connected ticket-breakdown object: reason (string) + total_tickets (additive). */
@@ -107,15 +109,11 @@ function perfRows(): array
 
 function makeRecommender(array $rows): ChartRecommender
 {
-    $reader = Mockery::mock(ConnectedObjectReader::class);
-    $reader->shouldReceive('list')->andReturn(['ok' => true, 'rows' => $rows]);
-
-    $integrations = Mockery::mock(ConnectedIntegrationResolver::class);
-    $integrations->shouldReceive('resolve')->andReturn(Mockery::mock(Integration::class));
+    $source = Mockery::mock(ObjectRowSource::class);
+    $source->shouldReceive('sample')->andReturn($rows);
 
     return new ChartRecommender(
-        $reader,
-        $integrations,
+        $source,
         new ComputedFactsBuilder,
         new SemanticProfile,
         new DomainClassifier,
@@ -379,7 +377,6 @@ it('adds a cross-source finding as an insight block', function () {
         ->and($insights->first()['body'])->toContain('%');
 });
 
-
 it('proposes a derived reopen-rate the board does not carry', function () {
     $object = [
         'id' => 'obj_ts00000000', 'name' => 'Tickets Time Series',
@@ -408,7 +405,6 @@ it('proposes a derived reopen-rate the board does not carry', function () {
         ->and($findings[0]['insight']['body'])->toContain('3.2%')
         ->and($findings[0]['insight']['type'])->toBe('insight');
 });
-
 
 it('run-rate: a declining trend gets an ETA to zero', function () {
     config(['cache.default' => 'array']);
@@ -452,4 +448,71 @@ it('run-rate: a declining trend gets an ETA to zero', function () {
         ->and($trend['why'])->toContain('semanas para llegar a 0');
 
     app(TenantContext::class)->forget();
+});
+
+it('reads a NATIVE object and recommends over its records', function () {
+    // The analyst used to read connected sources only, so an app whose data
+    // lives in its own records — the ordinary case — got zero recommendations.
+    // Nothing is mocked here: the rows come from the record store, through the
+    // same port a connected source goes through.
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    $manifest = [
+        'id' => $app->id, 'name' => 'Soporte', 'slug' => 'soporte', 'version' => 1,
+        'schema_version' => '1.0.0', 'settings' => ['default_locale' => 'es-MX'],
+        'objects' => [[
+            'id' => 'obj_native00000', 'slug' => 'tickets', 'name' => 'Tickets',
+            'fields' => [
+                ['id' => 'fld_nreason000', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+                ['id' => 'fld_ntotal0000', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+            ],
+        ]],
+        'pages' => [[
+            'id' => 'pag_n000000000', 'slug' => 'dashboard', 'name' => 'D', 'path' => '/dashboard',
+            'blocks' => [['id' => 'blk_n000000000', 'type' => 'heading', 'level' => 3, 'content' => 'Desglose']],
+        ]],
+        'permissions' => ['roles' => [['id' => 'rol_n000000000', 'slug' => 'admin', 'name' => 'Admin']]],
+        'workflows' => [],
+    ];
+    app(AppManifestService::class)->createVersion($app, $manifest, $user);
+
+    foreach (concentratedRows() as $row) {
+        Record::create([
+            'app_id' => $app->id,
+            'object_definition_id' => 'obj_native00000',
+            'organization_id' => null,
+            'data' => ['reason' => $row['reason'], 'total_tickets' => $row['total']],
+        ]);
+    }
+
+    $body = $this->actingAs($user)
+        ->getJson("/apps/{$app->id}/builder/recommendations?page=dashboard")
+        ->assertOk()
+        ->json();
+
+    expect($body['sources'])->toBe(1)
+        ->and($body['total_rows'])->toBe(7);
+
+    $pareto = collect($body['recommendations'])->firstWhere('form', 'pareto');
+    expect($pareto)->not->toBeNull()
+        // Grounded in the records themselves: Envíos is the top category.
+        ->and($pareto['preview']['values'][0])->toEqual(412)
+        ->and($body['sources_detail'][0]['measures'])->toContain('Total Tickets')
+        ->and($body['sources_detail'][0]['dimensions'])->toContain('Reason');
+
+    // And it inserts: the whole «Agregar» path works over native data too.
+    $this->actingAs($user)
+        ->postJson("/apps/{$app->id}/builder/charts/from-recommendation", [
+            'recommendation_id' => $pareto['id'],
+            'page_slug' => 'dashboard',
+        ])->assertOk();
+
+    $active = app(AppManifestService::class)->getActiveManifest($app->fresh());
+    $charts = collect($active['pages'][0]['blocks'])
+        ->flatMap(fn ($b) => $b['blocks'] ?? [$b])
+        ->where('chart_type', 'pareto');
+    expect($charts)->toHaveCount(1)
+        ->and($charts->first()['data_source']['object_id'])->toBe('obj_native00000');
 });

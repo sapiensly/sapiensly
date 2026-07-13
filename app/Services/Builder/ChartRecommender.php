@@ -5,11 +5,11 @@ namespace App\Services\Builder;
 use App\Facades\TenantCache;
 use App\Models\App;
 use App\Models\User;
-use App\Services\Connected\ConnectedIntegrationResolver;
-use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Express\ComputedFactsBuilder;
 use App\Services\Express\SemanticProfile;
+use App\Services\Records\FieldPaths;
 use App\Services\Records\InMemoryRowFilter;
+use App\Services\Records\ObjectRowSource;
 use Illuminate\Support\Str;
 
 /**
@@ -30,17 +30,13 @@ class ChartRecommender
     /** How many rows to sample per object for the facts. */
     private const SAMPLE = 500;
 
-    /** Row sample cache TTL (seconds) — the panel opens deliberately. */
-    private const ROWS_TTL = 120;
-
     /** Cached recommendation spec TTL (seconds) — long enough for a build session. */
     private const SPEC_TTL = 1800;
 
     private const MAX_RECS = 5;
 
     public function __construct(
-        private ConnectedObjectReader $reader,
-        private ConnectedIntegrationResolver $integrations,
+        private ObjectRowSource $rows,
         private ComputedFactsBuilder $facts,
         private SemanticProfile $semantics,
         private DomainClassifier $domain,
@@ -58,11 +54,15 @@ class ChartRecommender
     public function recommend(App $app, array $manifest, array $page, ?User $actor, string $lang = 'es'): array
     {
         $es = $lang !== 'en';
-        $connected = array_values(array_filter(
+        // Every object the app carries, native or connected. Reading only the
+        // connected ones left the analyst blind to the ordinary case — an app
+        // whose data lives in its own records — so it had nothing to say about
+        // most boards. {@see ObjectRowSource} resolves either kind to rows.
+        $objects = array_values(array_filter(
             $manifest['objects'] ?? [],
-            fn ($o): bool => is_array($o) && (($o['source']['type'] ?? null) === 'connected'),
+            fn ($o): bool => is_array($o) && isset($o['id']),
         ));
-        $domain = $this->domain->classify($connected, $lang);
+        $domain = $this->domain->classify($objects, $lang);
         $names = $this->fieldNames($manifest);
         // A generic dimension field ("Key") named the same across sources hides
         // WHICH dimension it is — the object's distinguishing suffix does
@@ -78,9 +78,9 @@ class ChartRecommender
         $candidates = [];
         $totalRows = 0;
         $factsByObject = [];
-        foreach ($connected as $object) {
+        foreach ($objects as $object) {
             try {
-                $rows = $this->sampleRows($app, $object, $actor);
+                $rows = $this->rows->sample($app, $object, $manifest, $actor, self::SAMPLE);
                 if ($rows === []) {
                     continue;
                 }
@@ -455,32 +455,6 @@ class ChartRecommender
     // -- data helpers --------------------------------------------------------
 
     /**
-     * A cached row sample for a connected object; empty on any read failure
-     * (recommendations degrade quietly, never surface a transport error).
-     *
-     * @param  array<string, mixed>  $object
-     * @return list<array<string, mixed>>
-     */
-    private function sampleRows(App $app, array $object, ?User $actor): array
-    {
-        $integration = $this->integrations->resolve($app, $object['source']['integration_id'] ?? null);
-        if ($integration === null) {
-            return [];
-        }
-        $key = 'chartrec:rows:'.sha1($app->id.'|'.($object['id'] ?? '').'|'.($actor?->id ?? 'x'));
-
-        try {
-            return TenantCache::remember($key, self::ROWS_TTL, function () use ($object, $integration, $actor): array {
-                $result = $this->reader->list($object, $integration, ['limit' => self::SAMPLE], $actor);
-
-                return ($result['ok'] ?? false) ? array_values($result['rows'] ?? []) : [];
-            });
-        } catch (\Throwable) {
-            return [];
-        }
-    }
-
-    /**
      * @param  array<string, mixed>  $object
      * @param  list<array<string, mixed>>  $rows
      * @param  array<string, mixed>  $dim
@@ -575,7 +549,7 @@ class ChartRecommender
     /** @return array<string, string> field_id → external_path */
     private function pathIndex(array $object): array
     {
-        return collect($object['source']['field_map'] ?? [])->pluck('external_path', 'field_id')->all();
+        return FieldPaths::forObject($object);
     }
 
     // -- identity + cache keys -----------------------------------------------
