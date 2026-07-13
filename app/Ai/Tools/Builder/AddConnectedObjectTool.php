@@ -44,8 +44,12 @@ The SERVER calls the tool as the acting user, infers every field + field_map +
 type from the real rows, and banks the object via propose_change. Use this
 instead of hand-writing the object's propose_change (slow, error-prone); use
 sample_mcp_tool first only if you still need to DISCOVER which tool to read.
-Returns {ok, object, fields, date_field_ids, sampled_rows} — go straight to
-prepare_dashboard next.
+Returns {ok, object, fields, date_field_ids, derived_rates, sampled_rows} — go
+straight to prepare_dashboard next. READ `derived_rates` before you build a KPI:
+it names every rate column the sampled rows PROVE is derived from other columns
+(e.g. otd_pct = (delivered - late) / total, verified on 61/61 rows) and tells you
+exactly how to compute it. Averaging such a rate is NOT an approximation — it is a
+different number, because the mean weights a day with 3 orders like a day with 500.
 DESC;
     }
 
@@ -117,6 +121,10 @@ DESC;
                 ->map(fn (array $f): array => ['id' => $f['id'], 'slug' => $f['slug'], 'type' => $f['type']])
                 ->values()->all(),
             'date_field_ids' => $authored['date_field_ids'],
+            // Rate columns the sampled rows PROVE are derived from others. Read the
+            // `guidance` on each before building any KPI from them: averaging a
+            // derived rate is a different number, not an approximation.
+            'derived_rates' => $authored['derived_rates'],
             'sampled_rows' => count($authored['rows']),
             'clamped_arguments' => $authored['clamped'] !== [] ? $authored['clamped'] : null,
             'message' => "Connected object «{$object['name']}» banked ({$object['slug']}, ".count($object['fields'])." fields, live via {$object['source']['operations']['list']['mcp_tool']}). Next: prepare_dashboard + add_dashboard_page.",

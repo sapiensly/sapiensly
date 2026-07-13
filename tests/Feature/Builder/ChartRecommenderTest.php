@@ -11,6 +11,7 @@ use App\Services\Analyst\DataQualityCheck;
 use App\Services\Analyst\DerivedMetricProposer;
 use App\Services\Analyst\DomainClassifier;
 use App\Services\Analyst\FindingBlock;
+use App\Services\Analyst\RatioIdentity;
 use App\Services\Analyst\RecommendationNarrator;
 use App\Services\Builder\ChartRecommender;
 use App\Services\Connected\ConnectedIntegrationResolver;
@@ -125,6 +126,7 @@ function makeCore(array $rows): AnalystCore
         new CrossSourceAnalyzer(new SemanticProfile),
         new DerivedMetricProposer(new SemanticProfile),
         new AnomalyFinder,
+        new RatioIdentity(new SemanticProfile),
     );
 }
 

@@ -4,6 +4,7 @@ namespace App\Services\Connected;
 
 use App\Models\Integration;
 use App\Models\User;
+use App\Services\Analyst\RatioIdentity;
 use App\Services\Tools\McpClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
@@ -150,8 +151,44 @@ class ConnectedObjectAuthoring
             'date_field_ids' => collect($modeled['fields'])
                 ->filter(fn (array $f): bool => in_array($f['type'], ['date', 'datetime'], true))
                 ->pluck('id')->values()->all(),
+            // A rate column the sampled rows PROVE is derived from others. The model
+            // is about to build a KPI out of it, and its instinct is avg() — which
+            // for a derived rate is a different number, not an approximation. This
+            // is the one moment it can be told, with the arithmetic to back it.
+            'derived_rates' => $this->derivedRates($object, $rows),
             'summary' => "Creé el objeto conectado «{$name}» (live desde {$toolName})",
         ];
+    }
+
+    /**
+     * Rate columns whose value the sampled rows derive from other columns, stated
+     * so the model cannot average them by accident.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function derivedRates(array $object, array $rows): array
+    {
+        return collect(app(RatioIdentity::class)->detect($object, $rows))
+            ->map(function (array $identity): array {
+                $rate = (string) $identity['rate']['name'];
+                $formula = $identity['minus'] !== null
+                    ? "({$identity['numerator']['name']} - {$identity['minus']['name']}) / {$identity['denominator']['name']}"
+                    : "{$identity['numerator']['name']} / {$identity['denominator']['name']}";
+
+                return [
+                    'rate_field_id' => $identity['rate']['id'],
+                    'formula' => $formula,
+                    'verified_on' => "{$identity['matched']}/{$identity['rows']} rows",
+                    'true_rate_pct' => $identity['true_rate'],
+                    'averaged_rate_pct' => $identity['averaged_rate'],
+                    'guidance' => $identity['expressible_as_kpi']
+                        ? "NEVER aggregate «{$rate}» with avg: the mean of per-row rates weights a small row like a big one (it reads {$identity['averaged_rate']}%, the true rate is {$identity['true_rate']}%). Build the KPI as a `stat` with aggregation sum on `{$identity['numerator']['id']}` and ratio_denominator {query, aggregation: sum, field_id: `{$identity['denominator']['id']}`} — the platform then recomputes SUM/SUM on every load. Charting «{$rate}» per row is fine; only the AGGREGATE is wrong."
+                        : "NEVER aggregate «{$rate}» with avg: it reads {$identity['averaged_rate']}%, the true rate is {$identity['true_rate']}%. Its numerator is a DIFFERENCE ({$formula}), and ratio_denominator can only point at a single column — so NO KPI on this source can state this rate honestly. Do not put it in a stat, metric_grid, gauge or hero. Chart it per row (that is correct), and show the components ({$identity['numerator']['name']}, {$identity['denominator']['name']}) as the KPIs instead.",
+                ];
+            })
+            ->values()->all();
     }
 
     /**

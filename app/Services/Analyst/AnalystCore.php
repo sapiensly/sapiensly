@@ -79,6 +79,7 @@ class AnalystCore
         private CrossSourceAnalyzer $crossSource,
         private DerivedMetricProposer $derived,
         private AnomalyFinder $anomalies,
+        private RatioIdentity $ratios,
     ) {}
 
     /**
@@ -121,6 +122,11 @@ class AnalystCore
                 }
                 $totalRows += count($rows);
                 $facts = $this->facts->build($object, $rows);
+                // A rate column the data proves is derived from others: averaging
+                // it is a different number, not an approximation. Computed once and
+                // threaded through the facts, because both the candidate pass (which
+                // must not gauge such a rate) and the warnings need it.
+                $facts['ratio_identities'] = $this->ratios->detect($object, $rows);
                 $factsByObject[$object['id']] = ['object' => $object, 'rows' => $rows, 'facts' => $facts];
 
                 $connected = FieldPaths::isConnected($object);
@@ -162,6 +168,24 @@ class AnalystCore
             $candidates[$key] = $f;
         }
 
+        // A rate is not the average of its rates. Where the data proves the rate is
+        // derived and the numerator IS a column, the board can compute it properly —
+        // so propose the KPI that does. (Where the numerator is a difference, no KPI
+        // can point at it; that becomes a warning instead, below.)
+        foreach ($factsByObject as $entry) {
+            foreach ($entry['facts']['ratio_identities'] ?? [] as $identity) {
+                if (! $identity['expressible_as_kpi']) {
+                    continue;
+                }
+                $f = $this->rateKpiFinding($entry['object'], $identity, $domain, $es);
+                $key = 'rate|'.Str::lower(Str::ascii((string) $identity['rate']['name']));
+                $f['identity'] = $key;
+                $f['semantic_key'] = $key;
+                $f['score'] = $f['base'] + ($f['flag'] !== null ? 6 : 0);
+                $candidates[$key] = $f;
+            }
+        }
+
         // Anomalies: the day something happened. The trend chart draws the spike;
         // this is the sentence that names it.
         foreach ($this->anomalies->analyze($factsByObject, $es) as $f) {
@@ -197,13 +221,103 @@ class AnalystCore
             'total_rows' => $totalRows,
             'findings' => $findings,
             'gaps' => $this->gaps($factsByObject, $shown, $domain, $es),
-            'data_quality' => $this->quality->run($factsByObject, $es),
+            'data_quality' => [
+                ...$this->rateWarnings($factsByObject, $es),
+                ...$this->quality->run($factsByObject, $es),
+            ],
             'sources_detail' => array_map(
                 fn (array $e) => $this->sourceDetail($e['object'], count($e['rows']), $es),
                 array_values($factsByObject),
             ),
             'source_suggestions' => $this->domain->sourceSuggestions($domain, $es ? 'es' : 'en'),
         ];
+    }
+
+    /**
+     * The rate, computed as a rate.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $identity
+     * @param  array{sector: string, label: string, headline: list<string>}  $domain
+     * @return array<string, mixed>
+     */
+    private function rateKpiFinding(array $object, array $identity, array $domain, bool $es): array
+    {
+        $name = (string) ($identity['rate']['name'] ?? '');
+        $formula = $this->identityFormula($identity);
+
+        return [
+            'kind' => 'rate_kpi',
+            'kicker' => ($es ? 'Tasa real · ' : 'True rate · ').Str::upper(Str::limit($name, 12, '')),
+            'title' => $name.($es ? ', bien calculada' : ', computed properly'),
+            'why' => $es
+                ? "Promediar {$name} da {$identity['averaged_rate']}%; la tasa real es {$identity['true_rate']}%. Los datos dicen que {$name} = {$formula} (se cumple en {$identity['matched']} de {$identity['rows']} filas), y promediarla pesa igual un día flojo que uno fuerte. Un KPI de ratio la recalcula bien en cada carga."
+                : "Averaging {$name} gives {$identity['averaged_rate']}%; the true rate is {$identity['true_rate']}%. The data says {$name} = {$formula} (holds on {$identity['matched']} of {$identity['rows']} rows), and averaging it weights a quiet day like a busy one. A ratio KPI recomputes it correctly on every load.",
+            'kpi' => [
+                'label' => $name,
+                'query' => ['object_id' => (string) $object['id']],
+                'field_id' => (string) $identity['numerator']['id'],
+                'aggregation' => 'sum',
+                'ratio_denominator' => [
+                    'query' => ['object_id' => (string) $object['id']],
+                    'field_id' => (string) $identity['denominator']['id'],
+                    'aggregation' => 'sum',
+                ],
+                'format' => 'percentage',
+            ],
+            'preview' => ['kind' => 'gauge', 'value' => (float) $identity['true_rate'], 'target' => 100],
+            // Above everything: a headline number that is WRONG outranks a chart
+            // that is merely missing.
+            'base' => 112 + ($this->domain->isHeadline($domain, $name) ? 12 : 0),
+            'flag' => ['tone' => 'hot', 'text' => ($es ? 'vs. ' : 'vs. ').$identity['averaged_rate'].'%'],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $identity
+     */
+    private function identityFormula(array $identity): string
+    {
+        $num = Str::lower((string) $identity['numerator']['name']);
+        $den = Str::lower((string) $identity['denominator']['name']);
+
+        return $identity['minus'] !== null
+            ? '('.$num.' − '.Str::lower((string) $identity['minus']['name']).') / '.$den
+            : $num.' / '.$den;
+    }
+
+    /**
+     * A rate the board cannot compute correctly, said out loud.
+     *
+     * The numerator is a DIFFERENCE — a source that reports delivered and late
+     * does not report on-time — and `ratio_denominator` can only point at a
+     * column. So no KPI on this source can state this rate honestly, and the one
+     * that averages it is off by a real margin. Telling the user beats showing
+     * them a confident wrong number.
+     *
+     * @param  array<string, array{object: array<string,mixed>, rows: list<array<string,mixed>>, facts: array<string,mixed>}>  $byObject
+     * @return list<array{level: string, text: string}>
+     */
+    private function rateWarnings(array $byObject, bool $es): array
+    {
+        $out = [];
+        foreach ($byObject as $entry) {
+            foreach ($entry['facts']['ratio_identities'] ?? [] as $identity) {
+                if ($identity['expressible_as_kpi']) {
+                    continue;
+                }
+                $name = (string) ($identity['rate']['name'] ?? '');
+                $gap = round(abs((float) $identity['true_rate'] - (float) $identity['averaged_rate']), 1);
+                $out[] = [
+                    'level' => 'warn',
+                    'text' => $es
+                        ? "{$name}: promediada da {$identity['averaged_rate']}%, real {$identity['true_rate']}% ({$gap} pts). Es {$this->identityFormula($identity)} — sin una columna con el numerador, ningún KPI puede calcularla bien."
+                        : "{$name}: averaged reads {$identity['averaged_rate']}%, the real rate is {$identity['true_rate']}% ({$gap} pts off). It is {$this->identityFormula($identity)} — with no column for the numerator, no KPI can state it honestly.",
+                ];
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -431,6 +545,26 @@ class AnalystCore
             ];
         }
 
+        // 3b) A RATE IS NOT THE AVERAGE OF ITS RATES.
+        //
+        // Where the data proves a rate column is derived from others — otd_pct is
+        // (delivered − late) ÷ total on all 61 rows — averaging it is not an
+        // approximation, it is a different number. The mean weights a day with 3
+        // orders exactly like a day with 500, so one late order on a quiet day
+        // reads as a 0% catastrophe. The honest rate is volume-weighted.
+        //
+        // Where the numerator IS a column, the board can compute it: a stat with
+        // `ratio_denominator` recomputes SUM(num) ÷ SUM(den) on every load. Where
+        // the numerator is a DIFFERENCE, no KPI can point at it — so the board is
+        // told the truth instead of shown a number that isn't it.
+        // Computed once in analyze() and threaded through the facts.
+        $identities = $facts['ratio_identities'] ?? [];
+        $misleadingRates = [];
+
+        foreach ($identities as $identity) {
+            $misleadingRates[$identity['rate']['id']] = $identity;
+        }
+
         // 4) GAUGE — a ratio measure read against a benchmark that EXISTS.
         //
         // This used to invent one: `$target = 80` for anything on a 0-100 scale.
@@ -444,6 +578,12 @@ class AnalystCore
                 continue;
             }
             if ($this->semantics->measureTypeIn($object, $rows, $f) !== SemanticProfile::MEASURE_RATIO) {
+                continue;
+            }
+            // A gauge renders avg(field). For a rate the data proves is derived,
+            // that average is the wrong number — so the gauge would ship it in a
+            // dial, which is the most confident way to be wrong.
+            if (isset($misleadingRates[$f['id']])) {
                 continue;
             }
             $numeric = $this->numericValuesOf($object, $rows, $f);
