@@ -553,6 +553,9 @@
                 "help_text": {
                     "type": "string",
                     "maxLength": 200
+                },
+                "derived_rate": {
+                    "$ref": "#/$defs/derived_rate"
                 }
             }
         },
@@ -679,7 +682,8 @@
                                 "thousands",
                                 "scientific"
                             ]
-                        }
+                        },
+                        "derived_rate": true
                     },
                     "required": [
                         "type"
@@ -722,7 +726,8 @@
                         },
                         "max": {
                             "type": "number"
-                        }
+                        },
+                        "derived_rate": true
                     },
                     "required": [
                         "type",
@@ -6640,6 +6645,30 @@
                     "additionalProperties": {
                         "type": "boolean"
                     }
+                }
+            }
+        },
+        "derived_rate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "numerator_field_id",
+                "denominator_field_id"
+            ],
+            "description": "PROVEN from the sampled rows: this field's value equals numerator (minus minus_field_id, when set) divided by denominator, on every row. It is therefore NOT averageable: the mean of per-row rates weights a small row like a big one, which is a different number, not an approximation. Any block that aggregates this field must express it as a ratio (aggregation sum on the numerator, plus ratio_denominator sum on the denominator). When minus_field_id is set the numerator is a DIFFERENCE, which ratio_denominator cannot point at, so no KPI can state that rate honestly: do not put the field in a stat, metric_grid, gauge or hero.",
+            "properties": {
+                "numerator_field_id": {
+                    "$ref": "#/$defs/id"
+                },
+                "minus_field_id": {
+                    "$ref": "#/$defs/id"
+                },
+                "denominator_field_id": {
+                    "$ref": "#/$defs/id"
+                },
+                "verified_on_rows": {
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         }

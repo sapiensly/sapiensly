@@ -131,6 +131,15 @@ class ConnectedObjectAuthoring
             ], fn ($v) => $v !== null),
         ];
 
+        // Stamp the proven identity onto the rate field itself. Telling the model
+        // "never average this" is advice, and advice loses to an instinct: the
+        // first build after that guidance shipped still put avg(otd_pct) in the
+        // hero. Written into the manifest, the identity outlives the conversation
+        // and the validator can REFUSE the wrong aggregation instead of asking
+        // nicely for the right one.
+        $identities = app(RatioIdentity::class)->detect($object, $rows);
+        $object['fields'] = $this->stampDerivedRates($object['fields'], $identities);
+
         // Feed the catalog so the NEXT build sees this tool's row shape in its
         // first discovery — zero sampling rounds.
         $this->catalog->rememberShape(
@@ -155,22 +164,51 @@ class ConnectedObjectAuthoring
             // is about to build a KPI out of it, and its instinct is avg() — which
             // for a derived rate is a different number, not an approximation. This
             // is the one moment it can be told, with the arithmetic to back it.
-            'derived_rates' => $this->derivedRates($object, $rows),
+            'derived_rates' => $this->describeRates($identities),
             'summary' => "Creé el objeto conectado «{$name}» (live desde {$toolName})",
         ];
+    }
+
+    /**
+     * Record each proven identity on the rate field it belongs to, so the fact
+     * survives into the manifest and the validator can enforce it on every future
+     * edit — not just on the turn that discovered it.
+     *
+     * @param  list<array<string, mixed>>  $fields
+     * @param  list<array<string, mixed>>  $identities
+     * @return list<array<string, mixed>>
+     */
+    private function stampDerivedRates(array $fields, array $identities): array
+    {
+        $byRate = collect($identities)->keyBy(fn (array $i): string => (string) $i['rate']['id']);
+
+        return collect($fields)->map(function (array $field) use ($byRate): array {
+            $identity = $byRate->get((string) ($field['id'] ?? ''));
+            if ($identity === null) {
+                return $field;
+            }
+
+            $field['derived_rate'] = array_filter([
+                'numerator_field_id' => $identity['numerator']['id'],
+                'minus_field_id' => $identity['minus']['id'] ?? null,
+                'denominator_field_id' => $identity['denominator']['id'],
+                'verified_on_rows' => $identity['matched'],
+            ], fn ($v) => $v !== null);
+
+            return $field;
+        })->values()->all();
     }
 
     /**
      * Rate columns whose value the sampled rows derive from other columns, stated
      * so the model cannot average them by accident.
      *
-     * @param  array<string, mixed>  $object
-     * @param  list<array<string, mixed>>  $rows
+     * @param  list<array<string, mixed>>  $identities
      * @return list<array<string, mixed>>
      */
-    private function derivedRates(array $object, array $rows): array
+    private function describeRates(array $identities): array
     {
-        return collect(app(RatioIdentity::class)->detect($object, $rows))
+        return collect($identities)
             ->map(function (array $identity): array {
                 $rate = (string) $identity['rate']['name'];
                 $formula = $identity['minus'] !== null
@@ -184,8 +222,8 @@ class ConnectedObjectAuthoring
                     'true_rate_pct' => $identity['true_rate'],
                     'averaged_rate_pct' => $identity['averaged_rate'],
                     'guidance' => $identity['expressible_as_kpi']
-                        ? "NEVER aggregate «{$rate}» with avg: the mean of per-row rates weights a small row like a big one (it reads {$identity['averaged_rate']}%, the true rate is {$identity['true_rate']}%). Build the KPI as a `stat` with aggregation sum on `{$identity['numerator']['id']}` and ratio_denominator {query, aggregation: sum, field_id: `{$identity['denominator']['id']}`} — the platform then recomputes SUM/SUM on every load. Charting «{$rate}» per row is fine; only the AGGREGATE is wrong."
-                        : "NEVER aggregate «{$rate}» with avg: it reads {$identity['averaged_rate']}%, the true rate is {$identity['true_rate']}%. Its numerator is a DIFFERENCE ({$formula}), and ratio_denominator can only point at a single column — so NO KPI on this source can state this rate honestly. Do not put it in a stat, metric_grid, gauge or hero. Chart it per row (that is correct), and show the components ({$identity['numerator']['name']}, {$identity['denominator']['name']}) as the KPIs instead.",
+                        ? "NEVER aggregate «{$rate}» with avg or sum — the validator now REFUSES it, so a KPI built that way will not apply: the mean of per-row rates weights a small row like a big one (it reads {$identity['averaged_rate']}%, the true rate is {$identity['true_rate']}%). Build the KPI as a `stat` with aggregation sum on `{$identity['numerator']['id']}` and ratio_denominator {query, aggregation: sum, field_id: `{$identity['denominator']['id']}`} — the platform then recomputes SUM/SUM on every load. Charting «{$rate}» per row is fine; only the AGGREGATE is wrong."
+                        : "NEVER aggregate «{$rate}» with avg or sum — the validator now REFUSES it, so a KPI built that way will not apply: it reads {$identity['averaged_rate']}%, the true rate is {$identity['true_rate']}%. Its numerator is a DIFFERENCE ({$formula}), and ratio_denominator can only point at a single column — so NO KPI on this source can state this rate honestly. Do not put it in a stat, metric_grid, gauge or hero. Chart it per row (that is correct), and show the components ({$identity['numerator']['name']}, {$identity['denominator']['name']}) as the KPIs instead.",
                 ];
             })
             ->values()->all();

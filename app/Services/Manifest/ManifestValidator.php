@@ -1583,6 +1583,28 @@ class ManifestValidator
                     );
                 }
 
+                // The hero's stat is the biggest number on the page and was the one
+                // place nothing checked. That is exactly where the averaged rate landed.
+                if (isset($block['stat']) && is_array($block['stat'])) {
+                    $heroFields = $this->resolveBlockObjectFields(
+                        $block['stat']['query'] ?? [], 'object_id',
+                        "{$blockPath}/stat/query/object_id", 'hero.stat',
+                        $objectsById, $fieldsByObjectId, $errors,
+                    );
+                    if ($heroFields !== null) {
+                        $this->checkFieldRef(
+                            $heroFields, $block['stat']['field_id'] ?? null,
+                            "{$blockPath}/stat/field_id", 'hero.stat.field_id', $errors,
+                            null, $fieldsByObjectId,
+                        );
+                        $this->checkDerivedRate(
+                            $heroFields, $block['stat']['field_id'] ?? null,
+                            (string) ($block['stat']['aggregation'] ?? ''), 'hero stat',
+                            "{$blockPath}/stat/field_id", $errors,
+                        );
+                    }
+                }
+
                 continue;
             }
 
@@ -1706,6 +1728,7 @@ class ManifestValidator
                         );
                     }
                 }
+                $this->checkDerivedRate($fields, $block['field_id'] ?? null, $aggregation, 'stat', "{$blockPath}/field_id", $errors);
                 $this->validateFilterExpression(
                     $block['query']['filter'] ?? null,
                     "{$blockPath}/query/filter",
@@ -1869,6 +1892,9 @@ class ManifestValidator
                 }
                 $this->checkFieldRef($fields, $block['field_id'] ?? null, "{$blockPath}/field_id", "{$type}.field_id", $errors,
                     in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null, $fieldsByObjectId);
+                // A gauge has no ratio_denominator at all — it can only ever render
+                // the aggregate of one column, so a derived rate has no honest form here.
+                $this->checkDerivedRate($fields, $block['field_id'] ?? null, $aggregation, $type, "{$blockPath}/field_id", $errors);
                 $this->validateFilterExpression($block['query']['filter'] ?? null, "{$blockPath}/query/filter", $fields, $errors);
             }
 
@@ -2034,6 +2060,7 @@ class ManifestValidator
                     }
                     $this->checkFieldRef($fields, $item['field_id'] ?? null, "{$itemPath}/field_id", 'metric_grid.item.field_id', $errors,
                         in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null, $fieldsByObjectId);
+                    $this->checkDerivedRate($fields, $item['field_id'] ?? null, $aggregation, 'metric_grid item', "{$itemPath}/field_id", $errors);
                     $this->validateFilterExpression($item['query']['filter'] ?? null, "{$itemPath}/query/filter", $fields, $errors);
                 }
             }
@@ -2097,7 +2124,60 @@ class ManifestValidator
      * object. No-op for null (the caller decides whether the ref is required).
      * If $allowedTypes is set, also enforces that the field's type is one of
      * them — used to reject e.g. a string field passed as a numeric y_field_id.
+     * A headline number must not be the average of a rate the data proves is derived.
      *
+     * `avg(otd_pct)` weights a day with 3 orders exactly like a day with 500, so it
+     * is not the rate — it is a different number, and one nobody can defend in a
+     * board meeting. `sum` of a percentage is worse. The identity was proven from
+     * the rows when the object was modelled and recorded on the field, so this can
+     * be enforced from the manifest alone, on every edit, forever.
+     *
+     * Advice was tried first: the authoring tool already says "NEVER aggregate this
+     * with avg" and prints both numbers. The very next build put avg(otd_pct) in the
+     * hero anyway. A rule a model may decline is not a rule.
+     *
+     * min/max/median are left alone on purpose: the worst day's rate is a real fact
+     * about the distribution. Only avg and sum claim to BE the overall rate.
+     *
+     * @param  array<string, array<string, mixed>>  $fields
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function checkDerivedRate(array $fields, ?string $fieldId, string $aggregation, string $what, string $errorPath, array &$errors): void
+    {
+        if ($fieldId === null || ! in_array($aggregation, ['avg', 'sum'], true)) {
+            return;
+        }
+
+        $field = $fields[$fieldId] ?? null;
+        $derived = is_array($field) ? ($field['derived_rate'] ?? null) : null;
+        if (! is_array($derived)) {
+            return;
+        }
+
+        $nameOf = fn (?string $id): string => (string) ($fields[$id]['name'] ?? $id ?? '?');
+        $rate = $nameOf($fieldId);
+        $numerator = $derived['numerator_field_id'] ?? null;
+        $minus = $derived['minus_field_id'] ?? null;
+        $denominator = $derived['denominator_field_id'] ?? null;
+        $rows = $derived['verified_on_rows'] ?? null;
+
+        $formula = $minus !== null
+            ? "({$nameOf($numerator)} - {$nameOf($minus)}) / {$nameOf($denominator)}"
+            : "{$nameOf($numerator)} / {$nameOf($denominator)}";
+        $proof = $rows !== null ? " (proven on {$rows} sampled rows)" : '';
+
+        $fix = $minus !== null
+            ? "Its numerator is a DIFFERENCE, and ratio_denominator can only point at a single column, so NO KPI on this object can state this rate honestly. Do not put '{$rate}' in a {$what}: chart it per row (that is correct and useful), and show its components as the KPIs instead."
+            : "Express it as a ratio: set field_id to '{$numerator}' with aggregation 'sum', and add ratio_denominator {query, aggregation: 'sum', field_id: '{$denominator}'} — the platform then recomputes SUM/SUM on every load, which IS the rate.";
+
+        $errors[] = new ManifestValidationError(
+            $errorPath,
+            "'{$rate}' is a derived rate{$proof}: it equals {$formula} on every row. Aggregating it with '{$aggregation}' does not produce that rate — the mean of per-row rates weights a small row exactly like a big one, which is a different number, not an approximation. {$fix}",
+            'incompatible_type',
+        );
+    }
+
+    /**
      * @param  array<string, array<string, mixed>>  $fields
      * @param  list<string>|null  $allowedTypes
      * @param  ManifestValidationError[]  $errors

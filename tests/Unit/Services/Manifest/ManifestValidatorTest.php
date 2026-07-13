@@ -3242,3 +3242,147 @@ it('accepts a record.date_reached trigger on a datetime field', function () {
 
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
+
+/**
+ * A derived rate may not be averaged into a headline number.
+ *
+ * This is the Yuhu board, reproduced. `otd_pct` equals (entregados - retrasados) /
+ * total on every one of the 43 sampled rows, so `avg(otd_pct)` reads 49% where the
+ * rate is 50.2% -- a different number, not an approximation, because the mean of
+ * daily percentages weights a 3-order Sunday like a 500-order Monday.
+ *
+ * The authoring tool already ADVISED against it, in capitals, with both numbers.
+ * The next build put avg(otd_pct) in the hero anyway. So the identity is now proven
+ * from the rows, stamped onto the field, and REFUSED here.
+ */
+function ratedManifest(bool $minusField = false): array
+{
+    $manifest = baseManifest();
+    $objId = $manifest['objects'][0]['id'];
+    $fldTotal = id('fld');
+    $fldOk = id('fld');
+    $fldLate = id('fld');
+    $fldRate = id('fld');
+
+    $derived = array_filter([
+        'numerator_field_id' => $fldOk,
+        'minus_field_id' => $minusField ? $fldLate : null,
+        'denominator_field_id' => $fldTotal,
+        'verified_on_rows' => 43,
+    ], fn ($v) => $v !== null);
+
+    $manifest['objects'][0]['fields'] = array_merge($manifest['objects'][0]['fields'], [
+        ['id' => $fldTotal, 'slug' => 'total_pedidos', 'name' => 'Total Pedidos', 'type' => 'number'],
+        ['id' => $fldOk, 'slug' => 'pedidos_entregados', 'name' => 'Pedidos Entregados', 'type' => 'number'],
+        ['id' => $fldLate, 'slug' => 'pedidos_retrasados', 'name' => 'Pedidos Retrasados', 'type' => 'number'],
+        ['id' => $fldRate, 'slug' => 'otd_pct', 'name' => 'Otd Pct', 'type' => 'number', 'derived_rate' => $derived],
+    ]);
+
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'dashboard', 'name' => 'Tablero', 'path' => '/dashboard',
+        'blocks' => [],
+    ]];
+
+    return [$manifest, $objId, $fldTotal, $fldOk, $fldRate];
+}
+
+it('refuses to average a derived rate in a stat, and says how to compute it', function () {
+    [$manifest, $objId, $fldTotal, $fldOk, $fldRate] = ratedManifest();
+    $manifest['pages'][0]['blocks'] = [[
+        'id' => id('blk'), 'type' => 'stat', 'label' => 'OTD',
+        'query' => ['object_id' => $objId],
+        'field_id' => $fldRate, 'aggregation' => 'avg', 'format' => 'percentage',
+    ]];
+
+    $errors = collect((new ManifestValidator)->validate($manifest)->errors);
+    $error = $errors->firstWhere('code', 'incompatible_type');
+
+    expect($error)->not->toBeNull()
+        // It names the arithmetic it proved, not a guess from the column name.
+        ->and($error->message)->toContain('Pedidos Entregados / Total Pedidos')
+        ->and($error->message)->toContain('proven on 43 sampled rows')
+        // And it hands over the block that IS right, rather than only saying no.
+        ->and($error->message)->toContain("field_id to '{$fldOk}'")
+        ->and($error->message)->toContain("field_id: '{$fldTotal}'");
+});
+
+it('accepts the ratio KPI that states the rate correctly', function () {
+    [$manifest, $objId, $fldTotal, $fldOk] = ratedManifest();
+    $manifest['pages'][0]['blocks'] = [[
+        'id' => id('blk'), 'type' => 'stat', 'label' => 'OTD',
+        'query' => ['object_id' => $objId],
+        'field_id' => $fldOk, 'aggregation' => 'sum', 'format' => 'percentage',
+        'ratio_denominator' => [
+            'query' => ['object_id' => $objId],
+            'field_id' => $fldTotal, 'aggregation' => 'sum',
+        ],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('refuses the averaged rate in the hero, the gauge and the metric grid alike', function () {
+    [$manifest, $objId, , , $fldRate] = ratedManifest();
+    $manifest['pages'][0]['blocks'] = [
+        [
+            'id' => id('hro'), 'type' => 'hero', 'title' => 'Entregas',
+            'stat' => [
+                'label' => 'OTD Hoy', 'query' => ['object_id' => $objId],
+                'field_id' => $fldRate, 'aggregation' => 'avg', 'format' => 'percentage',
+            ],
+        ],
+        [
+            'id' => id('blk'), 'type' => 'gauge', 'label' => 'Meta OTD',
+            'query' => ['object_id' => $objId],
+            'field_id' => $fldRate, 'aggregation' => 'avg', 'max_value' => 100,
+        ],
+        [
+            'id' => id('blk'), 'type' => 'metric_grid', 'columns' => 4, 'items' => [[
+                'id' => id('itm'), 'label' => 'OTD', 'query' => ['object_id' => $objId],
+                'field_id' => $fldRate, 'aggregation' => 'avg', 'format' => 'percentage',
+            ]],
+        ],
+    ];
+
+    $errors = collect((new ManifestValidator)->validate($manifest)->errors)
+        ->filter(fn ($e) => str_contains($e->message, 'derived rate'));
+
+    // One for each: the hero's stat was the biggest number on the page and the one
+    // place nothing checked at all.
+    expect($errors)->toHaveCount(3)
+        ->and($errors->pluck('path')->implode(' '))->toContain('/stat/field_id');
+});
+
+it('tells the truth when no KPI can express the rate at all', function () {
+    // (entregados - retrasados) / total. ratio_denominator points at ONE column, so
+    // there is no correct KPI to offer -- and the honest move is to say so, not to
+    // suggest a fix that would also be wrong.
+    [$manifest, $objId, , , $fldRate] = ratedManifest(minusField: true);
+    $manifest['pages'][0]['blocks'] = [[
+        'id' => id('blk'), 'type' => 'stat', 'label' => 'OTD',
+        'query' => ['object_id' => $objId],
+        'field_id' => $fldRate, 'aggregation' => 'avg', 'format' => 'percentage',
+    ]];
+
+    $error = collect((new ManifestValidator)->validate($manifest)->errors)
+        ->firstWhere('code', 'incompatible_type');
+
+    expect($error)->not->toBeNull()
+        ->and($error->message)->toContain('(Pedidos Entregados - Pedidos Retrasados) / Total Pedidos')
+        ->and($error->message)->toContain('NO KPI on this object can state this rate honestly')
+        ->and($error->message)->toContain('chart it per row');
+});
+
+it('leaves the worst day alone: min/max describe the spread and are honest', function () {
+    // The lowest daily rate is a real fact. Only avg and sum masquerade as THE rate,
+    // so only they are refused -- over-blocking would just teach people to strip the
+    // annotation.
+    [$manifest, $objId, , , $fldRate] = ratedManifest();
+    $manifest['pages'][0]['blocks'] = [[
+        'id' => id('blk'), 'type' => 'stat', 'label' => 'Peor día',
+        'query' => ['object_id' => $objId],
+        'field_id' => $fldRate, 'aggregation' => 'min', 'format' => 'percentage',
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
