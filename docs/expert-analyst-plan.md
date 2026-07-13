@@ -17,9 +17,19 @@ This document reconstructs the plan (the original lived only in a session transc
 | 3 · core extraction | **done** | `AnalystCore` emits Findings; no page, no block, no cache |
 | 6 · surfaces | **done** | `analyze_app_data` over MCP → every agent and chatbot, via one registration |
 | 8 · rendered truth | **done** | every chart aggregates where the data lives; `limit` caps categories, not evidence |
-| 4 · new finders | **partly** | 4.1 correlation → scatter · 4.2 volume-vs-rate → dual-axis combo. **Left: anomaly, rate KPI, flow (sankey), composition, distribution, seasonality, cohort** |
+| 4 · new finders | **done** | correlation → scatter · volume-vs-rate → combo · anomaly · rate KPI · flow → sankey · composition → stacked · distribution → box · seasonality → quarterly. **Cohort deliberately not built — see below** |
 | 5 · business sense | **open** | real targets (the 80% gauge is still invented), measure typing, ranking on unknown domains |
 | 7 · consolidation | **open** | four chart-recommendation engines, three narrators, sector knowledge twice |
+
+**Cohort / retention (was 4.9) is not built, on purpose.** The 2-D pivot exists in
+the query layer and is reachable from MCP, but **no block renders a matrix**.
+Faking it as a stacked bar would answer a different question than the one asked.
+Building a `pivot` block is the prerequisite — that decision is still open.
+
+The analyst now emits: pareto, area (trend), donut/hbar (breakdown), gauge, scatter
+(correlation), dual-axis combo, sankey (flow), stacked bar (composition), box
+(distribution), quarterly bar (seasonality), stat with `ratio_denominator` (rate
+KPI), and insight (cross-source join, derived metric, anomaly).
 
 Phase 8 is complete: breakdowns resolve to groups, a second categorical to a pivot
 ({group, group2, value} — the one payload a stacked bar, a radar and a sankey all
