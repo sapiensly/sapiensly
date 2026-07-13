@@ -11,6 +11,13 @@ function freshDatabaseConfig(): array
     return require base_path('config/database.php');
 }
 
+/** The process env this file is allowed to move — and must put back. */
+const ROUTING_ENV_KEYS = [
+    'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_SSLMODE', 'DB_PERSISTENT',
+    'PLATFORM_DB_HOST', 'PLATFORM_DB_PORT', 'PLATFORM_DB_DATABASE', 'PLATFORM_DB_SSLMODE',
+    'TENANT_DB_DATABASE', 'TENANT_DB_SSLMODE',
+];
+
 function setDbEnv(string $key, string $value): void
 {
     putenv("{$key}={$value}");
@@ -18,14 +25,32 @@ function setDbEnv(string $key, string $value): void
     $_SERVER[$key] = $value;
 }
 
+beforeEach(function () {
+    // What the suite was actually run with — phpunit.xml sets DB_HOST, DB_PORT and
+    // DB_DATABASE, and this file is about to move them.
+    $this->originalDbEnv = collect(ROUTING_ENV_KEYS)
+        ->mapWithKeys(fn (string $key) => [$key => getenv($key)])
+        ->all();
+});
+
 afterEach(function () {
-    foreach ([
-        'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_SSLMODE', 'DB_PERSISTENT',
-        'PLATFORM_DB_HOST', 'PLATFORM_DB_PORT', 'PLATFORM_DB_DATABASE', 'PLATFORM_DB_SSLMODE',
-        'TENANT_DB_DATABASE', 'TENANT_DB_SSLMODE',
-    ] as $key) {
-        putenv($key);
-        unset($_ENV[$key], $_SERVER[$key]);
+    // RESTORE, don't delete. This used to unset every key — including the three
+    // phpunit.xml itself provides — so once this file had run, `env('DB_DATABASE')`
+    // came back null for the rest of the suite. Config is re-evaluated per test, so
+    // any connection opened AFTER this point resolved to the default database
+    // instead of sapiensly_test: the models on the `platform` connection (providers,
+    // the model catalog, agents) then queried a database that knows nothing about
+    // them, and half a dozen tests failed hundreds of files away from the cause.
+    foreach ($this->originalDbEnv as $key => $value) {
+        if ($value === false) {
+            putenv($key);
+            unset($_ENV[$key], $_SERVER[$key]);
+
+            continue;
+        }
+        putenv("{$key}={$value}");
+        $_ENV[$key] = $value;
+        $_SERVER[$key] = $value;
     }
 });
 

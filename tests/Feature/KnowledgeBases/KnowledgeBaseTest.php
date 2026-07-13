@@ -6,9 +6,23 @@ use App\Models\Document;
 use App\Models\KnowledgeBase;
 use App\Models\KnowledgeBaseDocument;
 use App\Models\User;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
+
+    // Attaching a document ingests it, and ingestion embeds it. The queue is
+    // `sync` under test, so that ran inline and went STRAIGHT TO OPENAI — with
+    // whatever key the developer had in .env, on every full-suite run, for real
+    // money. It only surfaced when the key was taken away and the call came back
+    // 401. A test must never reach the network.
+    Http::fake([
+        '*/embeddings' => Http::response([
+            'data' => [['embedding' => array_fill(0, 1536, 0.01), 'index' => 0]],
+            'model' => 'text-embedding-3-small',
+            'usage' => ['prompt_tokens' => 8, 'total_tokens' => 8],
+        ]),
+    ]);
 });
 
 describe('index', function () {
