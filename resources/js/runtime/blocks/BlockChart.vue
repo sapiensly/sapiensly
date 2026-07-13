@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import HBarChart from '@/components/charts/HBarChart.vue';
-import TreemapChart from '@/components/charts/TreemapChart.vue';
 import ParetoChart from '@/components/charts/ParetoChart.vue';
-import { router, usePage } from '@inertiajs/vue3';
+import TreemapChart from '@/components/charts/TreemapChart.vue';
 import { useElementSize } from '@/composables/useElementSize';
+import { router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
@@ -57,7 +57,12 @@ interface RowData {
 
 const props = defineProps<{
     block: ChartBlock;
-    data: { rows: RowData[] } | undefined;
+    // A breakdown arrives already GROUPED (aggregated where the data lives, over
+    // every matching record). Only the row-level forms — scatter, box — and the
+    // multi-series ones still receive rows and fold them here.
+    data:
+        | { rows?: RowData[]; groups?: { group: unknown; value: number }[] }
+        | undefined;
     objects: ObjectDef[];
     locale: string;
     defaultCurrency: string;
@@ -165,8 +170,23 @@ const yField = computed(() => fieldOf(props.block.y_field_id));
 // backend suggester's bucketLabelField() heuristic.
 const PERIOD_LABEL_SLUG = /label|bucket|period|semana|week/i;
 
-// Aggregate rows into [{label, value}] series.
+// The series a breakdown draws. The server groups wherever it can — over every
+// record, not over the row window this chart happened to fetch — and only the
+// forms it can't group still fold their rows here.
 const series = computed<{ label: string; value: number }[]>(() => {
+    const groupSlug = groupField.value?.slug;
+    const out = props.data?.groups
+        ? props.data.groups.map((g) => ({
+              label: formatGroupKey(g.group, groupField.value),
+              value: Number(g.value) || 0,
+          }))
+        : foldRows();
+
+    return sortSeries(out, groupSlug);
+});
+
+/** Fold raw rows client-side — the fallback for the forms the server can't group. */
+function foldRows(): { label: string; value: number }[] {
     const rows = props.data?.rows ?? [];
     const groupSlug = groupField.value?.slug;
     const ySlug = yField.value?.slug;
@@ -209,12 +229,19 @@ const series = computed<{ label: string; value: number }[]>(() => {
         }
         out.push({ label, value });
     }
+
+    return out;
+}
+
+/** The reading order of a series, whoever aggregated it. */
+function sortSeries(
+    out: { label: string; value: number }[],
+    groupSlug: string | undefined,
+): { label: string; value: number }[] {
     // A bucketed date X reads chronologically; bucket keys sort lexicographically
     // in time order (YYYY-MM-DD, YYYY-MM, YYYY-Qn, YYYY).
     if (isTemporal(groupField.value)) {
-        out.sort((a, b) =>
-            a.label < b.label ? -1 : a.label > b.label ? 1 : 0,
-        );
+        out.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
     } else if (
         (props.block.chart_type === 'bar' ||
             props.block.chart_type === 'hbar' ||
@@ -228,8 +255,9 @@ const series = computed<{ label: string; value: number }[]>(() => {
         // insertion order instead.
         out.sort((a, b) => b.value - a.value);
     }
+
     return out;
-});
+}
 
 function isTemporal(field: FieldDef | undefined): boolean {
     return field?.type === 'date' || field?.type === 'datetime';
@@ -538,53 +566,71 @@ const lineChart = computed(() => {
         props.block.chart_type === 'line' || props.block.chart_type === 'area';
     if (!isLine) return null;
 
-    const rows = props.data?.rows ?? [];
     const xField = groupField.value;
-    const xSlug = xField?.slug;
-    const ySlug = yField.value?.slug;
-    const agg = props.block.aggregation;
     const serField = seriesField.value;
-    const serSlug = serField?.slug;
 
-    const cats: string[] = [];
-    const catIndex = new Map<string, number>();
-    const serLabels: string[] = [];
-    const serIndex = new Map<string, number>();
-    const cells: number[][][] = []; // [seriesIdx][catIdx] = raw values
+    let orderedCats: string[];
+    let serLabels: string[];
+    let values: number[][];
 
-    for (const r of rows) {
-        const ck = formatGroupKey(xSlug ? r.data[xSlug] : 'all', xField);
-        let ci = catIndex.get(ck);
-        if (ci === undefined) {
-            ci = cats.length;
-            cats.push(ck);
-            catIndex.set(ck, ci);
+    if (props.data?.groups) {
+        // Already aggregated where the data lives, over every matching record —
+        // and already in reading order. A grouped payload is single-series by
+        // construction (the server leaves the multi-series forms to fold here).
+        const points = series.value;
+        if (points.length === 0) return null;
+        orderedCats = points.map((p) => p.label);
+        serLabels = ['__single__'];
+        values = [points.map((p) => p.value)];
+    } else {
+        const rows = props.data?.rows ?? [];
+        const xSlug = xField?.slug;
+        const ySlug = yField.value?.slug;
+        const agg = props.block.aggregation;
+        const serSlug = serField?.slug;
+
+        const cats: string[] = [];
+        const catIndex = new Map<string, number>();
+        const labels: string[] = [];
+        const serIndex = new Map<string, number>();
+        const cells: number[][][] = []; // [seriesIdx][catIdx] = raw values
+
+        for (const r of rows) {
+            const ck = formatGroupKey(xSlug ? r.data[xSlug] : 'all', xField);
+            let ci = catIndex.get(ck);
+            if (ci === undefined) {
+                ci = cats.length;
+                cats.push(ck);
+                catIndex.set(ck, ci);
+            }
+            const sk = serField
+                ? formatGroupKey(serSlug ? r.data[serSlug] : '—', serField)
+                : '__single__';
+            let si = serIndex.get(sk);
+            if (si === undefined) {
+                si = labels.length;
+                labels.push(sk);
+                serIndex.set(sk, si);
+            }
+            const yv = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
+            ((cells[si] ??= [])[ci] ??= []).push(Number.isFinite(yv) ? yv : 0);
         }
-        const sk = serField
-            ? formatGroupKey(serSlug ? r.data[serSlug] : '—', serField)
-            : '__single__';
-        let si = serIndex.get(sk);
-        if (si === undefined) {
-            si = serLabels.length;
-            serLabels.push(sk);
-            serIndex.set(sk, si);
-        }
-        const yv = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
-        ((cells[si] ??= [])[ci] ??= []).push(Number.isFinite(yv) ? yv : 0);
-    }
-    if (cats.length === 0) return null;
+        if (cats.length === 0) return null;
 
-    // Chronological X for a bucketed date; keys sort in time order as strings.
-    let order = cats.map((_, i) => i);
-    if (isTemporal(xField)) {
-        order = order.sort((a, b) =>
-            cats[a] < cats[b] ? -1 : cats[a] > cats[b] ? 1 : 0,
+        // Chronological X for a bucketed date; keys sort in time order as strings.
+        let order = cats.map((_, i) => i);
+        if (isTemporal(xField)) {
+            order = order.sort((a, b) =>
+                cats[a] < cats[b] ? -1 : cats[a] > cats[b] ? 1 : 0,
+            );
+        }
+        orderedCats = order.map((i) => cats[i]);
+        serLabels = labels;
+        values = labels.map((_, si) =>
+            order.map((ci) => aggregateVals(cells[si]?.[ci], agg)),
         );
     }
-    const orderedCats = order.map((i) => cats[i]);
-    const values = serLabels.map((_, si) =>
-        order.map((ci) => aggregateVals(cells[si]?.[ci], agg)),
-    );
+
     const max = Math.max(1, ...values.flat());
 
     const W = 520;
@@ -1972,7 +2018,10 @@ const boxPlot = computed(() => {
                     :viewBox="`0 0 ${scatter.w} ${scatter.h}`"
                     preserveAspectRatio="xMidYMid meet"
                     class="w-full"
-                    :class="[t.text, hasExplicitHeight ? 'h-full min-h-0 flex-1' : '']"
+                    :class="[
+                        t.text,
+                        hasExplicitHeight ? 'h-full min-h-0 flex-1' : '',
+                    ]"
                 >
                     <line
                         x1="18"
@@ -2015,7 +2064,10 @@ const boxPlot = computed(() => {
                     :viewBox="`0 0 ${sankey.W} ${sankey.H}`"
                     preserveAspectRatio="xMidYMid meet"
                     class="w-full"
-                    :class="[t.text, hasExplicitHeight ? 'h-full min-h-0 flex-1' : '']"
+                    :class="[
+                        t.text,
+                        hasExplicitHeight ? 'h-full min-h-0 flex-1' : '',
+                    ]"
                 >
                     <path
                         v-for="(lk, i) in sankey.links"

@@ -155,7 +155,11 @@ class BlockDataResolver
             return $this->kpiPayload($app, $block['compute'], $manifest, $context);
         }
 
-        if (in_array($block['type'], ['chart', 'kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'gantt', 'map', 'card_grid', 'word_cloud', 'data_grid'], true)) {
+        if ($block['type'] === 'chart') {
+            return $this->chartPayload($app, $block, $manifest, $context);
+        }
+
+        if (in_array($block['type'], ['kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'gantt', 'map', 'card_grid', 'word_cloud', 'data_grid'], true)) {
             return ['rows' => $this->queryRows($app, $block['data_source'], $manifest, $context)];
         }
 
@@ -469,6 +473,111 @@ class BlockDataResolver
      * @param  array<string, mixed>  $manifest
      * @param  array<string, mixed>  $context
      */
+    /**
+     * A chart's payload — GROUPS, not rows, wherever the chart is a breakdown.
+     *
+     * A chart used to be handed raw rows and fold them in JavaScript, so what it
+     * drew was only as true as the row window it happened to fetch: a breakdown
+     * of five hundred tickets over a twelve-row limit charted twelve tickets and
+     * looked confident about it. The grouping now happens where the data lives —
+     * in SQL for an internal object, in memory for a connected one — so the chart
+     * plots every record that matches, and `limit` caps CATEGORIES (which is what
+     * it always meant) instead of silently truncating the evidence.
+     *
+     * Charts that genuinely need row-level data keep it: a scatter plots one
+     * point per record, a box needs every value to find its quartiles, and the
+     * multi-series forms (stacked, radar, sankey) still fold client-side.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function chartPayload(App $app, array $block, array $manifest, array $context): array
+    {
+        $dataSource = $block['data_source'];
+        $groupFieldId = $block['group_by_field_id'] ?? $block['x_field_id'] ?? null;
+
+        if (! is_string($groupFieldId) || ! $this->groupsInsteadOfRows($block)) {
+            return ['rows' => $this->queryRows($app, $dataSource, $manifest, $context)];
+        }
+
+        try {
+            return ['groups' => $this->groupedBlock(
+                $app,
+                $dataSource,
+                (string) ($block['aggregation'] ?? 'count'),
+                $block['y_field_id'] ?? null,
+                $groupFieldId,
+                $block['bucket'] ?? null,
+                is_numeric($dataSource['limit'] ?? null) ? (int) $dataSource['limit'] : 100,
+                $manifest,
+                $context,
+            )];
+        } catch (Throwable $e) {
+            // A chart that cannot be aggregated (a derived field in a shape SQL
+            // can't fold, a source that won't read) says so, rather than drawing
+            // a plausible picture from whatever rows it could get.
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Whether this chart reads as a breakdown the server can aggregate.
+     *
+     * @param  array<string, mixed>  $block
+     */
+    private function groupsInsteadOfRows(array $block): bool
+    {
+        // Row-level forms: a point per record (scatter), every value in a
+        // category (box), or a radial fold the client owns end to end (radar).
+        if (in_array($block['chart_type'] ?? '', ['scatter', 'box', 'radar'], true)) {
+            return false;
+        }
+
+        // A second categorical (stacked, sankey) and combo series still fold in
+        // the client — they need their own grouped shapes.
+        return ! isset($block['series_field_id']) && ! isset($block['series']);
+    }
+
+    /**
+     * One aggregate per category, over an internal object (SQL) or a connected
+     * one (in memory) — the grouped twin of {@see aggregateBlock}.
+     *
+     * @param  array<string, mixed>  $query
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return list<array{group: mixed, value: int|float}>
+     */
+    private function groupedBlock(App $app, array $query, string $aggregation, ?string $fieldId, string $groupFieldId, ?string $bucket, int $limit, array $manifest, array $context): array
+    {
+        $object = $this->findObject($manifest, $query['object_id'] ?? null);
+
+        if ($object !== null && (($object['source']['type'] ?? 'internal') === 'connected')) {
+            $rows = $this->connectedRows($app, $object, $query, $context);
+
+            return $this->aggregator->grouped(
+                $rows,
+                $aggregation,
+                $fieldId !== null ? $this->fieldSlug($object, $fieldId) : null,
+                (string) $this->fieldSlug($object, $groupFieldId),
+                $bucket,
+            );
+        }
+
+        return $this->records->groupedAggregate(
+            $app,
+            $query,
+            $aggregation,
+            $fieldId,
+            $groupFieldId,
+            $bucket,
+            $manifest,
+            $context,
+            $limit,
+        );
+    }
+
     private function aggregateBlock(App $app, array $query, string $aggregation, ?string $fieldId, array $manifest, array $context): int|float
     {
         $object = $this->findObject($manifest, $query['object_id'] ?? null);

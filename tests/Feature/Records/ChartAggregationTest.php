@@ -1,0 +1,111 @@
+<?php
+
+use App\Models\App;
+use App\Models\Record;
+use App\Models\User;
+use App\Services\Records\BlockDataResolver;
+
+/**
+ * A chart must plot every record that matches it, not the row window it happened
+ * to fetch. Charts used to be handed raw rows and fold them in JavaScript, so a
+ * breakdown of sixty tickets over a twelve-row limit charted twelve tickets — and
+ * looked entirely confident about it. The grouping now happens where the data
+ * lives, and `limit` caps CATEGORIES, which is what it always meant.
+ */
+beforeEach(function () {
+    $this->user = User::factory()->create();
+    $this->appModel = App::factory()->create(['user_id' => $this->user->id]);
+
+    $this->manifest = [
+        'schema_version' => '1.0.0',
+        'id' => $this->appModel->id,
+        'slug' => 'tickets',
+        'name' => 'Tickets',
+        'version' => 1,
+        'objects' => [[
+            'id' => 'obj_agg00000000',
+            'slug' => 'tickets',
+            'name' => 'Ticket',
+            'fields' => [
+                ['id' => 'fld_areason000', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+                ['id' => 'fld_ahours0000', 'slug' => 'hours', 'name' => 'Hours', 'type' => 'number'],
+            ],
+        ]],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_agg0000000', 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+
+    // 60 tickets across 3 reasons: 30 shipping, 20 billing, 10 returns — one hour
+    // each, so the true sums are 30 / 20 / 10 and the true count is 60.
+    foreach (['Envíos' => 30, 'Cobranza' => 20, 'Devoluciones' => 10] as $reason => $n) {
+        for ($i = 0; $i < $n; $i++) {
+            Record::create([
+                'app_id' => $this->appModel->id,
+                'object_definition_id' => 'obj_agg00000000',
+                'data' => ['reason' => $reason, 'hours' => 1],
+            ]);
+        }
+    }
+});
+
+it('sums every record behind a breakdown, not just the fetched rows', function () {
+    $blocks = [[
+        'id' => 'blk_agg0000000',
+        'type' => 'chart',
+        'label' => 'Horas por motivo',
+        'chart_type' => 'pareto',
+        'group_by_field_id' => 'fld_areason000',
+        'y_field_id' => 'fld_ahours0000',
+        'aggregation' => 'sum',
+        // The window a breakdown carries. Before, this fetched 12 of the 60
+        // records and charted those; now it caps the number of categories.
+        'data_source' => ['object_id' => 'obj_agg00000000', 'limit' => 12],
+    ]];
+
+    $data = app(BlockDataResolver::class)->resolve($this->appModel, $blocks, $this->manifest);
+    $groups = collect($data['blk_agg0000000']['groups']);
+
+    expect($groups)->toHaveCount(3)
+        ->and($groups->firstWhere('group', 'Envíos')['value'])->toEqual(30)
+        ->and($groups->firstWhere('group', 'Cobranza')['value'])->toEqual(20)
+        ->and($groups->firstWhere('group', 'Devoluciones')['value'])->toEqual(10)
+        // The whole point: 60 hours are accounted for, not the 12 that fit.
+        ->and($groups->sum('value'))->toEqual(60);
+});
+
+it('counts every record, which a row window could never do', function () {
+    $blocks = [[
+        'id' => 'blk_cnt0000000',
+        'type' => 'chart',
+        'label' => 'Tickets por motivo',
+        'chart_type' => 'donut',
+        'group_by_field_id' => 'fld_areason000',
+        'aggregation' => 'count',
+        'data_source' => ['object_id' => 'obj_agg00000000', 'limit' => 12],
+    ]];
+
+    $data = app(BlockDataResolver::class)->resolve($this->appModel, $blocks, $this->manifest);
+    $groups = collect($data['blk_cnt0000000']['groups']);
+
+    expect($groups->sum('value'))->toEqual(60)
+        ->and($groups->firstWhere('group', 'Envíos')['value'])->toEqual(30);
+});
+
+it('leaves the row-level forms their rows — a scatter plots records, not groups', function () {
+    $blocks = [[
+        'id' => 'blk_sct0000000',
+        'type' => 'chart',
+        'label' => 'Dispersión',
+        'chart_type' => 'scatter',
+        'x_field_id' => 'fld_ahours0000',
+        'y_field_id' => 'fld_ahours0000',
+        'aggregation' => 'sum',
+        'data_source' => ['object_id' => 'obj_agg00000000', 'limit' => 500],
+    ]];
+
+    $data = app(BlockDataResolver::class)->resolve($this->appModel, $blocks, $this->manifest);
+
+    expect($data['blk_sct0000000'])->toHaveKey('rows')
+        ->and($data['blk_sct0000000'])->not->toHaveKey('groups')
+        ->and($data['blk_sct0000000']['rows'])->toHaveCount(60);
+});

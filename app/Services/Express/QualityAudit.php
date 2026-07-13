@@ -96,12 +96,32 @@ class QualityAudit
      */
     private function auditChart(array $block, array $resolved, array &$issues, array &$summary): void
     {
-        $rows = is_array($resolved['rows'] ?? null) ? $resolved['rows'] : [];
         $blockId = (string) $block['id'];
         $label = (string) ($block['label'] ?? 'chart');
 
-        $points = $rows;
-        $count = count($points);
+        // A breakdown resolves to GROUPS — one per category, aggregated over every
+        // record. Those are the points the chart actually draws; the raw rows behind
+        // them never were (sixty tickets over three reasons is three bars, not
+        // sixty). The row-level forms — scatter, box — still resolve to rows.
+        $groups = is_array($resolved['groups'] ?? null) ? $resolved['groups'] : null;
+
+        if ($groups !== null) {
+            $count = count($groups);
+            $numbers = collect($groups)
+                ->map(fn (array $g): mixed => $g['value'] ?? null)
+                ->filter(fn ($v) => is_numeric($v))
+                ->map(fn ($v) => (float) $v)
+                ->values();
+        } else {
+            $rows = is_array($resolved['rows'] ?? null) ? $resolved['rows'] : [];
+            $count = count($rows);
+            $numbers = collect($rows)
+                ->map(fn (array $r): mixed => collect($r['data'] ?? [])->first(fn ($v) => is_numeric($v)))
+                ->filter(fn ($v) => is_numeric($v))
+                ->map(fn ($v) => (float) $v)
+                ->values();
+        }
+
         if ($count < 2) {
             $issues[] = [
                 'block_id' => $blockId, 'kind' => 'too_few_points',
@@ -111,22 +131,6 @@ class QualityAudit
 
             return;
         }
-
-        // Flat series: every numeric y is identical.
-        $yField = $block['y_field_id'] ?? null;
-        $numbers = collect($points)
-            ->map(function (array $r) use ($yField): mixed {
-                $data = $r['data'] ?? [];
-                if ($yField !== null) {
-                    // y values arrive keyed by slug; take any numeric.
-                    return collect($data)->first(fn ($v) => is_numeric($v));
-                }
-
-                return collect($data)->first(fn ($v) => is_numeric($v));
-            })
-            ->filter(fn ($v) => is_numeric($v))
-            ->map(fn ($v) => (float) $v)
-            ->values();
 
         if ($numbers->count() >= 3 && $numbers->unique()->count() === 1) {
             $issues[] = [
