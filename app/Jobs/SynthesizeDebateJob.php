@@ -10,6 +10,7 @@ use App\Services\Debate\DebateOrchestrator;
 use App\Services\Debate\DebateTurnStreamer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -18,6 +19,7 @@ use Throwable;
  * from the latest moderator assessment, marks the debate completed and reveals
  * the Conclusions panel.
  */
+#[Queue('debate')]
 class SynthesizeDebateJob implements ShouldQueue
 {
     use Queueable;
@@ -27,11 +29,6 @@ class SynthesizeDebateJob implements ShouldQueue
     public int $tries = 1;
 
     public function __construct(public string $turnId) {}
-
-    public function viaQueue(): string
-    {
-        return 'debate';
-    }
 
     public function handle(DebateTurnStreamer $streamer, DebateOrchestrator $orchestrator): void
     {

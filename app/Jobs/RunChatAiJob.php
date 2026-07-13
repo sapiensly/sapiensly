@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Chat\ChatAiService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\Log;
@@ -22,6 +23,7 @@ use Throwable;
  * Routes to the `ai` queue (Horizon supervisor-ai, timeout=300) — the default
  * queue's short retry_after would re-enqueue and crash long turns.
  */
+#[Queue('ai')]
 class RunChatAiJob implements ShouldQueue
 {
     use Queueable;
@@ -43,11 +45,6 @@ class RunChatAiJob implements ShouldQueue
         public bool $webSearch = false,
         public array $toolIds = [],
     ) {}
-
-    public function viaQueue(): string
-    {
-        return 'ai';
-    }
 
     public function handle(ChatAiService $service): void
     {

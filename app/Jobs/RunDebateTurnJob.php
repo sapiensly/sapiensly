@@ -13,6 +13,7 @@ use App\Services\ToolBuilderService;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -21,6 +22,7 @@ use Throwable;
  * Bus::batch so all participants of a round run in parallel on the `debate`
  * queue.
  */
+#[Queue('debate')]
 class RunDebateTurnJob implements ShouldQueue
 {
     use Batchable, Queueable;
@@ -30,11 +32,6 @@ class RunDebateTurnJob implements ShouldQueue
     public int $tries = 1;
 
     public function __construct(public string $turnId) {}
-
-    public function viaQueue(): string
-    {
-        return 'debate';
-    }
 
     public function handle(DebateTurnStreamer $streamer, DebateOrchestrator $orchestrator): void
     {

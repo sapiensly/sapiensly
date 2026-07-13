@@ -24,6 +24,13 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
+        <!--
+            Express economy is a deployment choice, not a test fixture. Left to
+            .env, a developer who switches it on makes eleven FitCheckPhase tests
+            fail on their laptop and pass on everyone else's — the same
+            whose-machine-is-it disease the blanked provider keys below cure.
+        -->
+        <env name="DASHBOARD_EXPRESS_ECONOMY" value="false"/>
         <env name="DB_CONNECTION" value="pgsql"/>
         <env name="DB_HOST" value="127.0.0.1"/>
         <env name="DB_PORT" value="5432"/>

@@ -6,6 +6,7 @@ use App\Models\Chat;
 use App\Services\Chat\ThreadSynthesizer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -14,6 +15,7 @@ use Throwable;
  * tail of the agent-response chain (auto-synthesis) and on demand from the
  * manual "Synthesize" endpoint. On the dedicated `agent-responses` queue.
  */
+#[Queue('agent-responses')]
 class SynthesizeThread implements ShouldQueue
 {
     use Queueable;
@@ -25,11 +27,6 @@ class SynthesizeThread implements ShouldQueue
     public int $tries = 1;
 
     public function __construct(public string $chatId) {}
-
-    public function viaQueue(): string
-    {
-        return 'agent-responses';
-    }
 
     public function handle(ThreadSynthesizer $synthesizer): void
     {

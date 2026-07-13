@@ -8,6 +8,7 @@ use App\Services\AiProviderService;
 use App\Services\Debate\DebateOrchestrator;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Enums\Lab;
 use Throwable;
@@ -18,6 +19,7 @@ use Throwable;
  * whether to run another rebuttal round or synthesize. Any failure is treated
  * as "no consensus reached" so the debate keeps moving.
  */
+#[Queue('debate')]
 class AssessDebateRoundJob implements ShouldQueue
 {
     use Queueable;
@@ -27,11 +29,6 @@ class AssessDebateRoundJob implements ShouldQueue
     public int $tries = 1;
 
     public function __construct(public string $roundId) {}
-
-    public function viaQueue(): string
-    {
-        return 'debate';
-    }
 
     public function handle(DebateOrchestrator $orchestrator, AiProviderService $providers): void
     {

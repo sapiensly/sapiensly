@@ -6,12 +6,14 @@ use App\Models\Debate;
 use App\Services\Debate\DebateOrchestrator;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Kicks off a debate off the HTTP request so creation returns immediately.
  * Routes to the dedicated `debate` queue (Horizon supervisor-debate).
  */
+#[Queue('debate')]
 class StartDebateJob implements ShouldQueue
 {
     use Queueable;
@@ -21,11 +23,6 @@ class StartDebateJob implements ShouldQueue
     public int $tries = 1;
 
     public function __construct(public string $debateId) {}
-
-    public function viaQueue(): string
-    {
-        return 'debate';
-    }
 
     public function handle(DebateOrchestrator $orchestrator): void
     {

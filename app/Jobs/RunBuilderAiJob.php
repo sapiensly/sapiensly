@@ -9,6 +9,7 @@ use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\Log;
@@ -19,11 +20,18 @@ use Throwable;
  * immediately. BuilderAiService::streamMessage emits BuilderStreamChunk /
  * Complete / Error broadcasts that the frontend consumes via Reverb.
  *
- * Queue selection matters here: `ai` runs on supervisor-ai which is configured
- * with timeout=300. The default queue would re-enqueue the job at retry_after
- * (~90s) — well below our $timeout — and crash it with MaxAttemptsExceeded
- * before Claude finishes its multi-tool turn.
+ * Queue selection matters here: `ai` runs on supervisor-ai (timeout=300). The
+ * default supervisor kills a worker at timeout=60, and a builder turn takes
+ * 80-115s — so landing on `default` is not a slow path, it is a coin toss the
+ * build loses whenever the model goes quiet for a minute.
+ *
+ * This used to be expressed as `viaQueue()`, which reads like the framework hook
+ * it is NOT: Illuminate\Bus\Dispatcher never calls it (only the event dispatcher
+ * and notifications do), so every AI job in this app silently ran on `default`
+ * for as long as the method existed. `#[Queue]` is the attribute the dispatcher
+ * actually reads. Pinned by tests/Feature/Jobs/QueueRoutingTest.php.
  */
+#[Queue('ai')]
 class RunBuilderAiJob implements ShouldQueue
 {
     use Queueable;
@@ -96,18 +104,6 @@ class RunBuilderAiJob implements ShouldQueue
          */
         public int $resumeRemaining = 2,
     ) {}
-
-    /**
-     * Route to the `ai` supervisor (timeout=300). The default supervisor has
-     * timeout=60 + retry_after=90s — both too short for a Claude tool-use
-     * turn, which is what produced the "MaxAttemptsExceeded" timeouts.
-     * Setting $queue directly clashes with the Queueable trait's typed
-     * property; viaQueue() is the supported override hook.
-     */
-    public function viaQueue(): string
-    {
-        return 'ai';
-    }
 
     public function handle(BuilderAiService $service): void
     {

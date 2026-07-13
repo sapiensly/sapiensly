@@ -13,6 +13,7 @@ use App\Services\Slides\DeckNarrator;
 use App\Services\Slides\DeckVersioner;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -23,6 +24,7 @@ use Illuminate\Support\Str;
  * summary for the history. A no-change refresh costs a few aggregate queries
  * and writes nothing.
  */
+#[Queue('ai')]
 class RefreshDeckJob implements ShouldQueue
 {
     use Queueable;
@@ -37,11 +39,6 @@ class RefreshDeckJob implements ShouldQueue
         public int $userId,
         public string $cause = 'scheduled_refresh',
     ) {}
-
-    public function viaQueue(): string
-    {
-        return 'ai';
-    }
 
     /**
      * @return array<int, object>

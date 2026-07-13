@@ -7,6 +7,7 @@ use App\Models\RuntimeAgentMessage;
 use App\Services\Runtime\RuntimeAgentService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -16,6 +17,7 @@ use Throwable;
  * deltas via Reverb. Routed to the `ai` supervisor (timeout=300) like
  * RunBuilderAiJob — a tool-use turn outlives the default queue's retry window.
  */
+#[Queue('ai')]
 class RunRuntimeAgentJob implements ShouldQueue
 {
     use Queueable;
@@ -28,11 +30,6 @@ class RunRuntimeAgentJob implements ShouldQueue
         public string $placeholderMessageId,
         public string $userText,
     ) {}
-
-    public function viaQueue(): string
-    {
-        return 'ai';
-    }
 
     public function handle(RuntimeAgentService $service): void
     {

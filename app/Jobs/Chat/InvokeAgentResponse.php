@@ -10,6 +10,7 @@ use App\Models\ChatMessage;
 use App\Services\Chat\ChatAiService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -21,6 +22,7 @@ use Throwable;
  * Runs on the dedicated `agent-responses` queue. Tenant scope is restored from
  * the job payload by the global queue hook (AppServiceProvider).
  */
+#[Queue('agent-responses')]
 class InvokeAgentResponse implements ShouldQueue
 {
     use Queueable;
@@ -37,11 +39,6 @@ class InvokeAgentResponse implements ShouldQueue
         public string $agentId,
         public string $userText,
     ) {}
-
-    public function viaQueue(): string
-    {
-        return 'agent-responses';
-    }
 
     public function handle(ChatAiService $service): void
     {

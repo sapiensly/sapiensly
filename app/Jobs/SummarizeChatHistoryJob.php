@@ -7,6 +7,7 @@ use App\Services\Chat\ChatAiService;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 
 /**
  * Folds the older messages of a long chat into its rolling summary (using the
@@ -17,6 +18,7 @@ use Illuminate\Foundation\Queue\Queueable;
  * Routes to the `ai` queue and is unique per chat so overlapping turns don't
  * summarize the same range twice.
  */
+#[Queue('ai')]
 class SummarizeChatHistoryJob implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
@@ -32,11 +34,6 @@ class SummarizeChatHistoryJob implements ShouldBeUnique, ShouldQueue
     public function uniqueId(): string
     {
         return $this->chatId;
-    }
-
-    public function viaQueue(): string
-    {
-        return 'ai';
     }
 
     public function handle(ChatAiService $service): void

@@ -15,6 +15,7 @@ use App\Services\Manifest\AppManifestService;
 use App\Support\Apps\AppNaming;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -28,6 +29,7 @@ use Throwable;
  * what was substituted, what the source couldn't answer, which gates fell
  * back to defaults.
  */
+#[Queue('ai')]
 class ExpressDashboardJob implements ShouldQueue
 {
     use Queueable;
@@ -50,11 +52,6 @@ class ExpressDashboardJob implements ShouldQueue
         public string $prompt,
         public ?string $modelOverride = null,
     ) {}
-
-    public function viaQueue(): string
-    {
-        return 'ai';
-    }
 
     public function handle(ExpressPipeline $pipeline, BuilderCancellation $cancellation): void
     {

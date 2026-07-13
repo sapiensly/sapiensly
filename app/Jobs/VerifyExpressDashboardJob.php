@@ -8,6 +8,7 @@ use App\Services\Express\LabelGrounding;
 use App\Services\Manifest\AppManifestService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\Log;
  * outside the menu is discarded; no fixes → no version. It raises the
  * ceiling; the floor was already enforced by the compile lints.
  */
+#[Queue('ai')]
 class VerifyExpressDashboardJob implements ShouldQueue
 {
     use Queueable;
@@ -36,11 +38,6 @@ class VerifyExpressDashboardJob implements ShouldQueue
         public string $runId,
         public ?string $modelOverride = null,
     ) {}
-
-    public function viaQueue(): string
-    {
-        return 'ai';
-    }
 
     public function handle(GateRunner $gates, AppManifestService $manifests): void
     {

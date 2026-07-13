@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Slides\SlideBuilderService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -17,6 +18,7 @@ use Throwable;
  * SlideBuilderChunk / Complete / Error broadcasts the Builder UI consumes via
  * Reverb. Routed to the `ai` queue like every other LLM turn.
  */
+#[Queue('ai')]
 class RunSlideBuilderJob implements ShouldQueue
 {
     use Queueable;
@@ -31,11 +33,6 @@ class RunSlideBuilderJob implements ShouldQueue
         public string $messageId,
         public string $userText,
     ) {}
-
-    public function viaQueue(): string
-    {
-        return 'ai';
-    }
 
     public function handle(SlideBuilderService $service): void
     {

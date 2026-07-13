@@ -6,6 +6,7 @@ use App\Events\Builder\BuilderStreamComplete;
 use App\Models\BuilderMessage;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -23,6 +24,7 @@ use Throwable;
  * is a single conditional UPDATE, so it can never race a live turn into a
  * double finalization.
  */
+#[Queue('ai')]
 class ResolveStoppedBuildJob implements ShouldQueue
 {
     use Queueable;
@@ -33,11 +35,6 @@ class ResolveStoppedBuildJob implements ShouldQueue
         public string $conversationId,
         public string $placeholderId,
     ) {}
-
-    public function viaQueue(): string
-    {
-        return 'ai';
-    }
 
     public function handle(): void
     {
