@@ -496,6 +496,108 @@ it('run-rate: a declining trend gets an ETA to zero', function () {
     app(TenantContext::class)->forget();
 });
 
+it('finds the correlation no single-measure chart can show, and draws it as a scatter', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // Two measures that move together: the longer the first response, the lower
+    // the satisfaction. No chart on the board can say this — it lives in the
+    // relationship between the columns, not in either one.
+    $obj = [
+        'id' => 'obj_corr000000', 'slug' => 'tickets_resolved', 'name' => 'Tickets Resolved',
+        'fields' => [
+            ['id' => 'f_frt', 'slug' => 'first_response_hours', 'name' => 'First Response Hours', 'type' => 'number'],
+            ['id' => 'f_csat', 'slug' => 'csat_score', 'name' => 'Csat Score', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => [
+                ['field_id' => 'f_frt', 'external_path' => 'frt'],
+                ['field_id' => 'f_csat', 'external_path' => 'csat'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'x', 'collection_path' => 'rows']],
+        ],
+    ];
+    $rows = [
+        ['frt' => 1, 'csat' => 96], ['frt' => 2, 'csat' => 92], ['frt' => 3, 'csat' => 90],
+        ['frt' => 5, 'csat' => 84], ['frt' => 6, 'csat' => 81], ['frt' => 8, 'csat' => 74],
+        ['frt' => 10, 'csat' => 70], ['frt' => 12, 'csat' => 63], ['frt' => 14, 'csat' => 58],
+        ['frt' => 16, 'csat' => 55],
+    ];
+
+    $result = makeCore($rows)->analyze(
+        $app,
+        ['objects' => [$obj], 'settings' => ['default_locale' => 'es-MX']],
+        $user,
+        'es',
+    );
+
+    $corr = collect($result['findings'])->firstWhere('kind', 'correlation');
+    expect($corr)->not->toBeNull()
+        // Inverse relationship, stated with the real coefficient.
+        ->and($corr['why'])->toContain('sentido contrario')
+        ->and($corr['why'])->toContain('10 registros')
+        ->and($corr['chart']['chart_type'])->toBe('scatter')
+        ->and($corr['chart']['x_field_id'])->toBe('f_frt')
+        ->and($corr['chart']['y_field_id'])->toBe('f_csat')
+        // A near-perfect relationship is flagged.
+        ->and($corr['flag']['tone'])->toBe('hot')
+        // The preview draws the same points the real chart will.
+        ->and($corr['preview']['kind'])->toBe('scatter')
+        ->and($corr['preview']['points'][0])->toBe([1.0, 96.0])
+        // x vs y and y vs x are the SAME finding — the pair is sorted.
+        ->and($corr['semantic_key'])->toBe('correlation|csat score|first response hours');
+
+    app(TenantContext::class)->forget();
+});
+
+it('never claims a correlation with an identifier, nor a weak one', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // ticket_id rises perfectly with insertion order — r = 1.0 against anything
+    // monotonic, and a finding a real analyst would never make. Meanwhile the
+    // two REAL measures barely relate.
+    $obj = [
+        'id' => 'obj_noise0000', 'slug' => 'noise', 'name' => 'Noise',
+        'fields' => [
+            ['id' => 'f_id', 'slug' => 'ticket_id', 'name' => 'Ticket Id', 'type' => 'number'],
+            ['id' => 'f_a', 'slug' => 'reply_count', 'name' => 'Reply Count', 'type' => 'number'],
+            ['id' => 'f_b', 'slug' => 'attachments_count', 'name' => 'Attachments Count', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => [
+                ['field_id' => 'f_id', 'external_path' => 'ticket_id'],
+                ['field_id' => 'f_a', 'external_path' => 'a'],
+                ['field_id' => 'f_b', 'external_path' => 'b'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'x', 'collection_path' => 'rows']],
+        ],
+    ];
+    $rows = [
+        ['ticket_id' => 1, 'a' => 3, 'b' => 1], ['ticket_id' => 2, 'a' => 7, 'b' => 0],
+        ['ticket_id' => 3, 'a' => 2, 'b' => 2], ['ticket_id' => 4, 'a' => 9, 'b' => 1],
+        ['ticket_id' => 5, 'a' => 4, 'b' => 3], ['ticket_id' => 6, 'a' => 6, 'b' => 0],
+        ['ticket_id' => 7, 'a' => 1, 'b' => 2], ['ticket_id' => 8, 'a' => 8, 'b' => 1],
+    ];
+
+    $result = makeCore($rows)->analyze(
+        $app,
+        ['objects' => [$obj], 'settings' => ['default_locale' => 'es-MX']],
+        $user,
+        'es',
+    );
+
+    expect(collect($result['findings'])->firstWhere('kind', 'correlation'))->toBeNull();
+
+    app(TenantContext::class)->forget();
+});
+
 it('reads a NATIVE object and recommends over its records', function () {
     // The analyst used to read connected sources only, so an app whose data
     // lives in its own records — the ordinary case — got zero recommendations.

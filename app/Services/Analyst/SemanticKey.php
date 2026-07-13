@@ -33,6 +33,17 @@ class SemanticKey
         if (($chart['__gauge'] ?? false) === true) {
             return 'gauge|'.($names[$chart['field_id'] ?? ''] ?? '').'|';
         }
+        // A scatter says «these two relate», which is symmetric: x vs y and y vs
+        // x are the same finding, so the pair is sorted rather than ordered.
+        if (($chart['chart_type'] ?? '') === 'scatter') {
+            $pair = [
+                $names[$chart['x_field_id'] ?? ''] ?? '',
+                $names[$chart['y_field_id'] ?? ''] ?? '',
+            ];
+            sort($pair);
+
+            return 'correlation|'.$pair[0].'|'.$pair[1];
+        }
         $family = in_array($chart['chart_type'] ?? '', ['area', 'line'], true)
             ? 'trend'
             : 'breakdown';

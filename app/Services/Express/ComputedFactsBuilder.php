@@ -13,6 +13,12 @@ use App\Services\Records\InMemoryRowFilter;
  */
 class ComputedFactsBuilder
 {
+    /** Points needed before a row-wise correlation is worth stating. */
+    private const CORRELATION_MIN_POINTS = 8;
+
+    /** |r| below this is noise, not a relationship. */
+    private const CORRELATION_MIN_R = 0.6;
+
     /**
      * @param  array<string, mixed>  $object  manifest object node
      * @param  list<array<string, mixed>>  $rows  raw external rows (as sampled)
@@ -31,12 +37,14 @@ class ComputedFactsBuilder
         }
 
         // The analytical pack — anomaly, cumulative concentration, trend
-        // slope — all arithmetic over the sampled rows, zero model. Each key
-        // is absent when the data can't honestly support it (guards inside).
+        // slope, correlation — all arithmetic over the sampled rows, zero
+        // model. Each key is absent when the data can't honestly support it
+        // (guards inside).
         foreach ([
             'anomalia' => $this->anomaly($object, $rows),
             'concentracion' => $this->concentration($object, $rows),
             'tendencia' => $this->trendSlope($object, $rows),
+            'correlacion' => $this->correlation($object, $rows),
         ] as $key => $fact) {
             if ($fact !== null) {
                 $facts[$key] = $fact;
@@ -227,6 +235,79 @@ class ComputedFactsBuilder
      * @param  list<float|int>  $a
      * @param  list<float|int>  $b
      */
+    /**
+     * The strongest linear relationship between two of the object's own
+     * measures — the read a single-measure chart can't make ("cuando el tiempo
+     * de primera respuesta sube, el CSAT baja"). The pair with the largest |r|
+     * wins, and only if the relationship is strong enough to be worth a claim.
+     *
+     * Row-wise (not bucketed): every row is a point, which is exactly what a
+     * scatter draws. Identifiers are excluded — a correlation with an id is an
+     * artefact of insertion order, never a finding.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{x: string, y: string, x_id: string, y_id: string, r: float, n: int, direction: string}|null
+     */
+    private function correlation(array $object, array $rows): ?array
+    {
+        $semantics = new SemanticProfile;
+        $paths = FieldPaths::forObject($object);
+        $measures = [];
+        foreach ($object['fields'] ?? [] as $field) {
+            if (! is_array($field) || ! in_array($field['type'] ?? '', ['number', 'currency'], true)) {
+                continue;
+            }
+            if ($semantics->measureTypeOf($field) === SemanticProfile::MEASURE_IDENTIFIER) {
+                continue;
+            }
+            $path = $paths[$field['id']] ?? ($field['slug'] ?? null);
+            if ($path !== null) {
+                $measures[] = ['field' => $field, 'path' => $path];
+            }
+        }
+        if (count($measures) < 2) {
+            return null;
+        }
+
+        $best = null;
+        foreach ($measures as $i => $a) {
+            foreach (array_slice($measures, $i + 1) as $b) {
+                // Pair the rows where BOTH measures are present — a correlation
+                // over misaligned series is meaningless.
+                $xs = $ys = [];
+                foreach ($rows as $row) {
+                    $x = data_get($row, $a['path']);
+                    $y = data_get($row, $b['path']);
+                    if (is_numeric($x) && is_numeric($y)) {
+                        $xs[] = (float) $x;
+                        $ys[] = (float) $y;
+                    }
+                }
+                if (count($xs) < self::CORRELATION_MIN_POINTS) {
+                    continue;
+                }
+                $r = $this->pearson($xs, $ys);
+                if ($r === null || abs($r) < self::CORRELATION_MIN_R) {
+                    continue;
+                }
+                if ($best === null || abs($r) > abs($best['r'])) {
+                    $best = [
+                        'x' => (string) ($a['field']['name'] ?? $a['field']['slug']),
+                        'y' => (string) ($b['field']['name'] ?? $b['field']['slug']),
+                        'x_id' => (string) $a['field']['id'],
+                        'y_id' => (string) $b['field']['id'],
+                        'r' => round($r, 2),
+                        'n' => count($xs),
+                        'direction' => $r >= 0 ? 'up' : 'down',
+                    ];
+                }
+            }
+        }
+
+        return $best;
+    }
+
     private function pearson(array $a, array $b): ?float
     {
         $n = min(count($a), count($b));

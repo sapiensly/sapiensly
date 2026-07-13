@@ -21,7 +21,13 @@ interface Recommendation {
     why: string;
     form: string;
     flag: { tone: 'hot' | 'gap'; text: string } | null;
-    preview: { kind: 'pareto' | 'area' | 'gauge' | 'bars'; values?: number[]; value?: number; target?: number };
+    preview: {
+        kind: 'pareto' | 'area' | 'gauge' | 'bars' | 'scatter';
+        values?: number[];
+        value?: number;
+        target?: number;
+        points?: number[][];
+    };
 }
 
 const FORM_LABEL: Record<string, string> = {

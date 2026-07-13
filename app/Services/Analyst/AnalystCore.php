@@ -289,7 +289,43 @@ class AnalystCore
             }
         }
 
-        // 3) GAUGE — a ratio measure (e.g. FCR %) read against a target.
+        // 3) CORRELATION — two measures that move together. The classic analyst
+        // read, and the one no single-measure chart can make: it lives in the
+        // relationship, so it needs a scatter.
+        if (isset($facts['correlacion'])) {
+            $c = $facts['correlacion'];
+            $strong = abs((float) $c['r']) >= 0.8;
+            $together = $c['direction'] === 'up';
+            $out[] = [
+                'kind' => 'correlation',
+                'kicker' => ($es ? 'Correlación · r=' : 'Correlation · r=').$c['r'],
+                'title' => $es
+                    ? Str::ucfirst((string) $c['x']).' vs. '.Str::lower((string) $c['y'])
+                    : Str::ucfirst((string) $c['x']).' vs. '.Str::lower((string) $c['y']),
+                'why' => $es
+                    ? Str::ucfirst((string) $c['x']).' y '.Str::lower((string) $c['y']).($together ? ' suben juntas' : ' se mueven en sentido contrario')." (r = {$c['r']} sobre {$c['n']} registros). Un scatter muestra la relación — y dónde se rompe."
+                    : Str::ucfirst((string) $c['x']).' and '.Str::lower((string) $c['y']).($together ? ' rise together' : ' move in opposite directions')." (r = {$c['r']} across {$c['n']} records). A scatter shows the relationship — and where it breaks.",
+                'chart' => [
+                    'label' => Str::ucfirst((string) $c['x']).($es ? ' vs. ' : ' vs. ').Str::lower((string) $c['y']).' · '.$objName,
+                    'chart_type' => 'scatter',
+                    'x_field_id' => $c['x_id'],
+                    'y_field_id' => $c['y_id'],
+                    // The renderer plots raw points and ignores this, but the
+                    // manifest schema requires an aggregation on every chart.
+                    'aggregation' => 'sum',
+                    'description' => $es
+                        ? 'Cada punto es un registro: '.Str::lower((string) $c['x']).' contra '.Str::lower((string) $c['y']).'.'
+                        : 'Each point is a record: '.Str::lower((string) $c['x']).' against '.Str::lower((string) $c['y']).'.',
+                ],
+                'preview' => ['kind' => 'scatter', 'points' => $this->scatterPoints($object, $rows, $c['x_id'], $c['y_id'])],
+                // A strong relationship outranks a breakdown and rivals a trend:
+                // it says something the board cannot currently say at all.
+                'base' => 90 + min(10, (int) round((abs((float) $c['r']) - 0.6) * 25)) + $head((string) $c['x'], (string) $c['y']),
+                'flag' => $strong ? ['tone' => 'hot', 'text' => 'r = '.$c['r']] : null,
+            ];
+        }
+
+        // 4) GAUGE — a ratio measure (e.g. FCR %) read against a target.
         foreach ($fields as $f) {
             if (! in_array($f['type'] ?? '', ['number', 'currency'], true)) {
                 continue;
@@ -328,7 +364,7 @@ class AnalystCore
             break; // one gauge is enough per object
         }
 
-        // 4) BREAKDOWN — a dimension worth splitting the measure by when nothing
+        // 5) BREAKDOWN — a dimension worth splitting the measure by when nothing
         // concentrated (evenly spread reads as a ranking, not a pareto).
         if (! isset($facts['concentracion']) && isset($facts['top_values'])) {
             $topName = (string) array_key_first($facts['top_values']);
@@ -458,6 +494,38 @@ class AnalystCore
         ksort($byWeek);
 
         return array_map(fn ($v) => round((float) $v, 2), array_values(array_slice($byWeek, -16)));
+    }
+
+    /**
+     * The (x, y) pairs behind a correlation, for the card's mini-scatter — the
+     * same points the real chart will draw, capped so the preview stays light.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array{0: float, 1: float}>
+     */
+    private function scatterPoints(array $object, array $rows, string $xFieldId, string $yFieldId, int $cap = 60): array
+    {
+        $paths = FieldPaths::forObject($object);
+        $xPath = $paths[$xFieldId] ?? null;
+        $yPath = $paths[$yFieldId] ?? null;
+        if ($xPath === null || $yPath === null) {
+            return [];
+        }
+
+        $points = [];
+        foreach ($rows as $row) {
+            $x = data_get($row, $xPath);
+            $y = data_get($row, $yPath);
+            if (is_numeric($x) && is_numeric($y)) {
+                $points[] = [round((float) $x, 2), round((float) $y, 2)];
+            }
+            if (count($points) >= $cap) {
+                break;
+            }
+        }
+
+        return $points;
     }
 
     /**
