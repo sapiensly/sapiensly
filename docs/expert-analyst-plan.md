@@ -19,7 +19,35 @@ This document reconstructs the plan (the original lived only in a session transc
 | 8 · rendered truth | **done** | every chart aggregates where the data lives; `limit` caps categories, not evidence |
 | 4 · new finders | **done** | correlation → scatter · volume-vs-rate → combo · anomaly · rate KPI · flow → sankey · composition → stacked · distribution → box · seasonality → quarterly. **Cohort deliberately not built — see below** |
 | 5 · business sense | **done** | benchmarks that exist (declared target → own best → say nothing); typing reads names + values; ranking survives an unknown domain; `gaps()` honours what's shown |
-| 7 · consolidation | **open** | four chart-recommendation engines, three narrators, sector knowledge twice |
+| 7 · consolidation | **done** | one analyst (builder chat + panel), one fact guard, one measure typing, one sector taxonomy. `DashboardSpecSuggester` deliberately kept — see below |
+
+### What Phase 7 found (the audit was partly wrong)
+
+**There were never "three narrators".** `FactNarrator` is a deterministic string
+formatter that *produces* the numbers; it is not an LLM rewrite at all. There are
+two LLM rewrite paths plus Express's voice gate — and `keepsFacts()` was **the only
+number-preservation check in the entire `app/` tree**. The other two accepted
+whatever the model wrote: Express validated only that the model returned the right
+*count* of cards, and the deck narrator's "NEVER touch values" was enforced by
+nothing. That is what `FactGuard` fixes; the duplication was the smaller problem.
+
+**"Four chart-recommendation engines" was two-and-a-half.** `SuggestSpecPhase` is a
+phase, not an engine. `profile_object`'s suggestion half *was* a rival and is
+retired. That leaves two, and they do different jobs:
+
+- **`AnalystCore`** — reads a board's data and proposes analyses to ADD to it.
+- **`DashboardSpecSuggester`** — builds a WHOLE dashboard from a prompt (title,
+  KPI row, charts, insights, layout), inside an 8-phase pipeline with its own
+  gates, verifier and prompts.
+
+**`DashboardSpecSuggester` is deliberately NOT merged.** They already share the
+layers where disagreement would be dangerous — `ComputedFactsBuilder` (the facts)
+and `SemanticProfile` (what may legally be summed), now including the measure
+typing, so neither can sum a percentage the other refuses to. What remains
+duplicated is chart-FORM selection (donut ≤8, hbar 9+), which produces
+differently-shaped dashboards, not wrong ones. Rewiring a production pipeline's
+spec generation to buy consistency of taste is not a trade worth making; the
+consistency that matters is already bought.
 
 **Cohort / retention (was 4.9) is not built, on purpose.** The 2-D pivot exists in
 the query layer and is reachable from MCP, but **no block renders a matrix**.
