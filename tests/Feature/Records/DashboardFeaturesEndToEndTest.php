@@ -148,7 +148,13 @@ it('the runtime resolves every dashboard feature with no block erroring', functi
         ->and((float) $items[$b['kpi']['p95']]['value'])->toBe(385.0)    // p95 of 100..400
         ->and(round((float) $items[$b['kpi']['winrate']]['value'], 4))->toBe(0.6667); // 2 won / 3 closed
 
-    expect($data[$b['combo']]['rows'])->toHaveCount(4)                  // combo reads raw rows
+    // A combo resolves to one GROUPED series per overlaid measure, each with its
+    // own aggregation — revenue summed on the left axis, deals counted on the
+    // right — rather than raw rows the client folds.
+    $combo = $data[$b['combo']]['combo'];
+    expect($combo)->toHaveCount(2)
+        ->and((float) collect($combo[0]['groups'])->sum('value'))->toBe(1000.0) // sum(amount)
+        ->and((int) collect($combo[1]['groups'])->sum('value'))->toBe(4)        // count(deals)
         ->and((float) $data[$b['insight']]['value'])->toBe(1000.0)     // computed insight: sum amount
         ->and($data[$b['funnel']]['stages'][$b['stages']['won']]['value'])->toBe(2)
         ->and($data[$b['gauge']]['value'])->toBe(4);

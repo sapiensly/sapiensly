@@ -502,17 +502,44 @@ class BlockDataResolver
             return ['rows' => $this->queryRows($app, $dataSource, $manifest, $context)];
         }
 
+        $bucket = $block['bucket'] ?? null;
+        $limit = is_numeric($dataSource['limit'] ?? null) ? (int) $dataSource['limit'] : 100;
+
         try {
+            // A combo overlays several typed measures on one X — each is its own
+            // aggregate, and each keeps its own aggregation (volume summed, rate
+            // averaged), which is exactly why they can't share one fold.
+            if (is_array($block['series'] ?? null) && $block['series'] !== []) {
+                return ['combo' => array_map(
+                    fn (array $s): array => ['groups' => $this->groupedBlock(
+                        $app,
+                        $dataSource,
+                        (string) ($s['aggregation'] ?? 'count'),
+                        $s['field_id'] ?? null,
+                        $groupFieldId,
+                        $bucket,
+                        $limit,
+                        $manifest,
+                        $context,
+                    )],
+                    array_values($block['series']),
+                )];
+            }
+
             return ['groups' => $this->groupedBlock(
                 $app,
                 $dataSource,
                 (string) ($block['aggregation'] ?? 'count'),
                 $block['y_field_id'] ?? null,
                 $groupFieldId,
-                $block['bucket'] ?? null,
-                is_numeric($dataSource['limit'] ?? null) ? (int) $dataSource['limit'] : 100,
+                $bucket,
+                $limit,
                 $manifest,
                 $context,
+                // A second categorical (a stacked bar, a radar's overlaid
+                // polygons, a sankey's target column) is a pivot, not a
+                // separate query: {group, group2, value}.
+                $block['series_field_id'] ?? null,
             )];
         } catch (Throwable $e) {
             // A chart that cannot be aggregated (a derived field in a shape SQL
@@ -529,15 +556,10 @@ class BlockDataResolver
      */
     private function groupsInsteadOfRows(array $block): bool
     {
-        // Row-level forms: a point per record (scatter), every value in a
-        // category (box), or a radial fold the client owns end to end (radar).
-        if (in_array($block['chart_type'] ?? '', ['scatter', 'box', 'radar'], true)) {
-            return false;
-        }
-
-        // A second categorical (stacked, sankey) and combo series still fold in
-        // the client — they need their own grouped shapes.
-        return ! isset($block['series_field_id']) && ! isset($block['series']);
+        // The only forms that genuinely need the records themselves: a scatter
+        // plots one point per row, and a box needs every value in a category to
+        // find its quartiles. Everything else is a breakdown.
+        return ! in_array($block['chart_type'] ?? '', ['scatter', 'box'], true);
     }
 
     /**
@@ -549,7 +571,7 @@ class BlockDataResolver
      * @param  array<string, mixed>  $context
      * @return list<array{group: mixed, value: int|float}>
      */
-    private function groupedBlock(App $app, array $query, string $aggregation, ?string $fieldId, string $groupFieldId, ?string $bucket, int $limit, array $manifest, array $context): array
+    private function groupedBlock(App $app, array $query, string $aggregation, ?string $fieldId, string $groupFieldId, ?string $bucket, int $limit, array $manifest, array $context, ?string $secondGroupFieldId = null): array
     {
         $object = $this->findObject($manifest, $query['object_id'] ?? null);
 
@@ -562,6 +584,7 @@ class BlockDataResolver
                 $fieldId !== null ? $this->fieldSlug($object, $fieldId) : null,
                 (string) $this->fieldSlug($object, $groupFieldId),
                 $bucket,
+                secondGroupSlug: $secondGroupFieldId !== null ? $this->fieldSlug($object, $secondGroupFieldId) : null,
             );
         }
 
@@ -575,6 +598,7 @@ class BlockDataResolver
             $manifest,
             $context,
             $limit,
+            $secondGroupFieldId,
         );
     }
 

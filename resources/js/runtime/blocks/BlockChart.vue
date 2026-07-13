@@ -57,11 +57,20 @@ interface RowData {
 
 const props = defineProps<{
     block: ChartBlock;
-    // A breakdown arrives already GROUPED (aggregated where the data lives, over
-    // every matching record). Only the row-level forms — scatter, box — and the
-    // multi-series ones still receive rows and fold them here.
+    // A breakdown arrives already GROUPED — aggregated where the data lives, over
+    // every matching record, not over the row window this chart happened to
+    // fetch. `groups` carries `group2` too when a second categorical makes it a
+    // pivot (stacked, radar, sankey); `combo` carries one grouped series per
+    // overlaid measure. Only the row-level forms — scatter, box — still receive
+    // rows, because they plot records rather than categories.
     data:
-        | { rows?: RowData[]; groups?: { group: unknown; value: number }[] }
+        | {
+              rows?: RowData[];
+              groups?: { group: unknown; group2?: unknown; value: number }[];
+              combo?: {
+                  groups: { group: unknown; value: number }[];
+              }[];
+          }
         | undefined;
     objects: ObjectDef[];
     locale: string;
@@ -233,6 +242,50 @@ function foldRows(): { label: string; value: number }[] {
     return out;
 }
 
+/**
+ * A server pivot ({group, group2, value}) as the category × series grid the
+ * multi-series forms fold rows into — except every cell is already aggregated,
+ * over every matching record rather than over a row window.
+ */
+function pivotGrid(
+    groups: { group: unknown; group2?: unknown; value: number }[],
+    catField: FieldDef | undefined,
+    serField: FieldDef | undefined,
+): { cats: string[]; sers: string[]; data: number[][] } {
+    const cats: string[] = [];
+    const catIndex = new Map<string, number>();
+    const sers: string[] = [];
+    const serIndex = new Map<string, number>();
+    const data: number[][] = [];
+
+    for (const g of groups) {
+        const ck = formatGroupKey(g.group, catField);
+        const sk = serField ? formatGroupKey(g.group2, serField) : '__single__';
+        let ci = catIndex.get(ck);
+        if (ci === undefined) {
+            ci = cats.length;
+            cats.push(ck);
+            catIndex.set(ck, ci);
+        }
+        let si = serIndex.get(sk);
+        if (si === undefined) {
+            si = sers.length;
+            sers.push(sk);
+            serIndex.set(sk, si);
+        }
+        (data[ci] ??= [])[si] = Number(g.value) || 0;
+    }
+    // A pivot is sparse — a category the series never touched is a real zero.
+    cats.forEach((_, ci) => {
+        data[ci] ??= [];
+        sers.forEach((_, si) => {
+            data[ci][si] ??= 0;
+        });
+    });
+
+    return { cats, sers, data };
+}
+
 /** The reading order of a series, whoever aggregated it. */
 function sortSeries(
     out: { label: string; value: number }[],
@@ -241,7 +294,9 @@ function sortSeries(
     // A bucketed date X reads chronologically; bucket keys sort lexicographically
     // in time order (YYYY-MM-DD, YYYY-MM, YYYY-Qn, YYYY).
     if (isTemporal(groupField.value)) {
-        out.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+        out.sort((a, b) =>
+            a.label < b.label ? -1 : a.label > b.label ? 1 : 0,
+        );
     } else if (
         (props.block.chart_type === 'bar' ||
             props.block.chart_type === 'hbar' ||
@@ -371,18 +426,58 @@ function paletteColorFor(
 const seriesField = computed(() => fieldOf(props.block.series_field_id));
 
 // Multi-series bar: split each category (group_by/x) into segments by a SECOND
-// field (series_field_id), then stack or group them. Two-dimensional aggregation
-// over the raw rows — only meaningful for bar charts.
+// field (series_field_id), then stack or group them — a two-dimensional
+// breakdown, which the server resolves as a pivot.
 const isMultiSeries = computed(
     () => !!seriesField.value && props.block.chart_type === 'bar',
 );
 
 const multi = computed(() => {
     if (!isMultiSeries.value) return null;
-    const rows = props.data?.rows ?? [];
     const catField = groupField.value;
     const serField = seriesField.value;
     if (!catField || !serField) return null;
+
+    const grid = props.data?.groups
+        ? pivotGrid(props.data.groups, catField, serField)
+        : foldPivotRows(catField, serField);
+    if (grid === null) return null;
+
+    const cats = grid.cats;
+    const sers = grid.sers;
+    let data = grid.data;
+
+    // Chronological order when the category axis is a bucketed date.
+    if (isTemporal(catField)) {
+        const order = cats
+            .map((_, i) => i)
+            .sort((a, b) =>
+                cats[a] < cats[b] ? -1 : cats[a] > cats[b] ? 1 : 0,
+            );
+        const sortedCats = order.map((i) => cats[i]);
+        cats.length = 0;
+        cats.push(...sortedCats);
+        data = order.map((i) => data[i]);
+    }
+    const stacked = !!props.block.stacked;
+    const max = stacked
+        ? Math.max(1, ...data.map((row) => row.reduce((a, b) => a + b, 0)))
+        : Math.max(1, ...data.flat());
+
+    const series = sers.map((label, i) => ({
+        label,
+        color: paletteColorFor(serField, label, i),
+    }));
+
+    return { cats, series, data, max, stacked };
+});
+
+/** The client-side pivot fold, for a source the server could not group. */
+function foldPivotRows(
+    catField: FieldDef,
+    serField: FieldDef,
+): { cats: string[]; sers: string[]; data: number[][] } | null {
+    const rows = props.data?.rows ?? [];
     const catSlug = catField.slug;
     const serSlug = serField.slug;
     const ySlug = yField.value?.slug;
@@ -429,31 +524,12 @@ const multi = computed(() => {
         }
     };
 
-    let data = cats.map((_, ci) =>
+    const data = cats.map((_, ci) =>
         sers.map((_, si) => aggregate(bucket[ci]?.[si])),
     );
-    // Chronological order when the category axis is a bucketed date.
-    if (isTemporal(catField)) {
-        const order = cats
-            .map((_, i) => i)
-            .sort((a, b) =>
-                cats[a] < cats[b] ? -1 : cats[a] > cats[b] ? 1 : 0,
-            );
-        const sortedCats = order.map((i) => cats[i]);
-        cats.length = 0;
-        cats.push(...sortedCats);
-        data = order.map((i) => data[i]);
-    }
-    const stacked = !!props.block.stacked;
-    const max = stacked
-        ? Math.max(1, ...data.map((row) => row.reduce((a, b) => a + b, 0)))
-        : Math.max(1, ...data.flat());
-    const series = sers.map((label, i) => ({
-        label,
-        color: paletteColorFor(serField, label, i),
-    }));
-    return { cats, series, data, max, stacked };
-});
+
+    return { cats, sers, data };
+}
 
 function formatNumber(value: number): string {
     return new Intl.NumberFormat(props.locale).format(
@@ -573,10 +649,26 @@ const lineChart = computed(() => {
     let serLabels: string[];
     let values: number[][];
 
-    if (props.data?.groups) {
+    if (props.data?.groups && serField) {
+        // Several lines over one X: a pivot, already aggregated per cell.
+        const grid = pivotGrid(props.data.groups, xField, serField);
+        if (grid.cats.length === 0) return null;
+        let order = grid.cats.map((_, i) => i);
+        if (isTemporal(xField)) {
+            order = order.sort((a, b) =>
+                grid.cats[a] < grid.cats[b]
+                    ? -1
+                    : grid.cats[a] > grid.cats[b]
+                      ? 1
+                      : 0,
+            );
+        }
+        orderedCats = order.map((i) => grid.cats[i]);
+        serLabels = grid.sers;
+        values = grid.sers.map((_, si) => order.map((ci) => grid.data[ci][si]));
+    } else if (props.data?.groups) {
         // Already aggregated where the data lives, over every matching record —
-        // and already in reading order. A grouped payload is single-series by
-        // construction (the server leaves the multi-series forms to fold here).
+        // and already in reading order.
         const points = series.value;
         if (points.length === 0) return null;
         orderedCats = points.map((p) => p.label);
@@ -722,49 +814,65 @@ const crosshair = computed(() => {
 // without it, a single polygon. Needs >= 3 axes to form an area.
 const radar = computed(() => {
     if (props.block.chart_type !== 'radar') return null;
-    const rows = props.data?.rows ?? [];
     const axisField = groupField.value;
     const serField = seriesField.value;
-    const axisSlug = axisField?.slug;
-    const serSlug = serField?.slug;
-    const ySlug = yField.value?.slug;
-    const agg = props.block.aggregation;
 
-    const axesLabels: string[] = [];
-    const axisIndex = new Map<string, number>();
-    const serLabels: string[] = [];
-    const serIndex = new Map<string, number>();
-    const cells: number[][][] = []; // [seriesIdx][axisIdx] = raw values
+    let axesLabels: string[];
+    let serLabels: string[];
+    let values: number[][];
 
-    for (const r of rows) {
-        const ak = formatGroupKey(
-            axisSlug ? r.data[axisSlug] : 'all',
-            axisField,
+    if (props.data?.groups) {
+        // Axes × overlaid polygons is a pivot, already aggregated per cell.
+        const grid = pivotGrid(props.data.groups, axisField, serField);
+        axesLabels = grid.cats;
+        serLabels = grid.sers;
+        values = grid.sers.map((_, si) =>
+            grid.cats.map((_, ai) => grid.data[ai][si]),
         );
-        let ai = axisIndex.get(ak);
-        if (ai === undefined) {
-            ai = axesLabels.length;
-            axesLabels.push(ak);
-            axisIndex.set(ak, ai);
+    } else {
+        const rows = props.data?.rows ?? [];
+        const axisSlug = axisField?.slug;
+        const serSlug = serField?.slug;
+        const ySlug = yField.value?.slug;
+        const agg = props.block.aggregation;
+
+        axesLabels = [];
+        serLabels = [];
+        const axisIndex = new Map<string, number>();
+        const serIndex = new Map<string, number>();
+        const cells: number[][][] = []; // [seriesIdx][axisIdx] = raw values
+
+        for (const r of rows) {
+            const ak = formatGroupKey(
+                axisSlug ? r.data[axisSlug] : 'all',
+                axisField,
+            );
+            let ai = axisIndex.get(ak);
+            if (ai === undefined) {
+                ai = axesLabels.length;
+                axesLabels.push(ak);
+                axisIndex.set(ak, ai);
+            }
+            const sk = serField
+                ? formatGroupKey(serSlug ? r.data[serSlug] : '—', serField)
+                : '__single__';
+            let si = serIndex.get(sk);
+            if (si === undefined) {
+                si = serLabels.length;
+                serLabels.push(sk);
+                serIndex.set(sk, si);
+            }
+            const v = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
+            ((cells[si] ??= [])[ai] ??= []).push(Number.isFinite(v) ? v : 0);
         }
-        const sk = serField
-            ? formatGroupKey(serSlug ? r.data[serSlug] : '—', serField)
-            : '__single__';
-        let si = serIndex.get(sk);
-        if (si === undefined) {
-            si = serLabels.length;
-            serLabels.push(sk);
-            serIndex.set(sk, si);
-        }
-        const v = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
-        ((cells[si] ??= [])[ai] ??= []).push(Number.isFinite(v) ? v : 0);
+
+        values = serLabels.map((_, si) =>
+            axesLabels.map((_, ai) => aggregateVals(cells[si]?.[ai], agg)),
+        );
     }
 
     const n = axesLabels.length;
     if (n < 3) return null;
-    const values = serLabels.map((_, si) =>
-        axesLabels.map((_, ai) => aggregateVals(cells[si]?.[ai], agg)),
-    );
     const max = Math.max(1, ...values.flat());
 
     const cx = 110;
@@ -861,33 +969,63 @@ const paretoNoun = computed(() => {
 const combo = computed(() => {
     if (!isCombo.value) return null;
     const defs = props.block.series!;
-    const rows = props.data?.rows ?? [];
     const xField = groupField.value; // group_by_field_id ?? x_field_id
-    const xSlug = xField?.slug;
 
-    // Ordered categories + raw per-series, per-category numeric values.
     const cats: string[] = [];
     const catIndex = new Map<string, number>();
-    const raw: number[][][] = defs.map(() => []);
-    for (const r of rows) {
-        const key = formatGroupKey(xSlug ? r.data[xSlug] : 'all', xField);
-        let ci = catIndex.get(key);
-        if (ci === undefined) {
-            ci = cats.length;
-            cats.push(key);
-            catIndex.set(key, ci);
-        }
-        defs.forEach((d, si) => {
-            const fld = fieldOf(d.field_id);
-            const v = fld ? Number(r.data[fld.slug] ?? 0) : 1; // count → 1 per row
-            (raw[si][ci] ??= []).push(Number.isFinite(v) ? v : 0);
-        });
-    }
-    if (cats.length === 0) return null;
+    let vals: number[][];
 
-    let vals = defs.map((d, si) =>
-        cats.map((_, ci) => aggregateVals(raw[si][ci], d.aggregation)),
-    );
+    const served = props.data?.combo;
+    if (served) {
+        // One grouped aggregate per overlaid measure — each keeping its OWN
+        // aggregation (volume summed, rate averaged), which is why they can't
+        // share a single fold. The categories are the union across series, so a
+        // gap in one line is a real zero, not a missing column.
+        served.forEach((s) => {
+            s.groups.forEach((g) => {
+                const key = formatGroupKey(g.group, xField);
+                if (!catIndex.has(key)) {
+                    catIndex.set(key, cats.length);
+                    cats.push(key);
+                }
+            });
+        });
+        if (cats.length === 0) return null;
+        vals = served.map((s) => {
+            const row = new Array<number>(cats.length).fill(0);
+            s.groups.forEach((g) => {
+                const ci = catIndex.get(formatGroupKey(g.group, xField));
+                if (ci !== undefined) {
+                    row[ci] = Number(g.value) || 0;
+                }
+            });
+
+            return row;
+        });
+    } else {
+        const rows = props.data?.rows ?? [];
+        const xSlug = xField?.slug;
+        const raw: number[][][] = defs.map(() => []);
+        for (const r of rows) {
+            const key = formatGroupKey(xSlug ? r.data[xSlug] : 'all', xField);
+            let ci = catIndex.get(key);
+            if (ci === undefined) {
+                ci = cats.length;
+                cats.push(key);
+                catIndex.set(key, ci);
+            }
+            defs.forEach((d, si) => {
+                const fld = fieldOf(d.field_id);
+                const v = fld ? Number(r.data[fld.slug] ?? 0) : 1; // count → 1 per row
+                (raw[si][ci] ??= []).push(Number.isFinite(v) ? v : 0);
+            });
+        }
+        if (cats.length === 0) return null;
+
+        vals = defs.map((d, si) =>
+            cats.map((_, ci) => aggregateVals(raw[si][ci], d.aggregation)),
+        );
+    }
 
     // Chronological order for a bucketed date X (keys sort in time order).
     if (isTemporal(xField)) {
@@ -1087,38 +1225,58 @@ const scatter = computed(() => {
 // flow; both columns fill the height, so ribbons form trapezoids between them.
 const sankey = computed(() => {
     if (props.block.chart_type !== 'sankey') return null;
-    const rows = props.data?.rows ?? [];
     const srcField = groupField.value;
     const tgtField = seriesField.value;
     if (!srcField || !tgtField) return null;
-    const srcSlug = srcField.slug;
-    const tgtSlug = tgtField.slug;
-    const ySlug = yField.value?.slug;
-    const agg = props.block.aggregation;
 
-    // Aggregate value per (source, target).
-    const cells = new Map<string, Map<string, number[]>>();
-    for (const r of rows) {
-        const s = formatGroupKey(r.data[srcSlug], srcField);
-        const tg = formatGroupKey(r.data[tgtSlug], tgtField);
-        const v = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
-        if (!cells.has(s)) cells.set(s, new Map());
-        const m = cells.get(s)!;
-        if (!m.has(tg)) m.set(tg, []);
-        m.get(tg)!.push(Number.isFinite(v) ? v : 0);
+    // Every (source, target) flow, with its aggregated width. A pivot IS a flow
+    // table: {group: source, group2: target, value: width}.
+    const flows: { source: string; target: string; value: number }[] = [];
+
+    if (props.data?.groups) {
+        for (const g of props.data.groups) {
+            flows.push({
+                source: formatGroupKey(g.group, srcField),
+                target: formatGroupKey(g.group2, tgtField),
+                value: Number(g.value) || 0,
+            });
+        }
+    } else {
+        const rows = props.data?.rows ?? [];
+        const srcSlug = srcField.slug;
+        const tgtSlug = tgtField.slug;
+        const ySlug = yField.value?.slug;
+        const agg = props.block.aggregation;
+
+        const cells = new Map<string, Map<string, number[]>>();
+        for (const r of rows) {
+            const s = formatGroupKey(r.data[srcSlug], srcField);
+            const tg = formatGroupKey(r.data[tgtSlug], tgtField);
+            const v = ySlug ? Number(r.data[ySlug] ?? 0) : 1;
+            if (!cells.has(s)) cells.set(s, new Map());
+            const m = cells.get(s)!;
+            if (!m.has(tg)) m.set(tg, []);
+            m.get(tg)!.push(Number.isFinite(v) ? v : 0);
+        }
+        for (const [s, m] of cells) {
+            for (const [tg, vals] of m) {
+                flows.push({
+                    source: s,
+                    target: tg,
+                    value: aggregateVals(vals, agg),
+                });
+            }
+        }
     }
 
     const rawLinks: { source: string; target: string; value: number }[] = [];
     const srcTotals = new Map<string, number>();
     const tgtTotals = new Map<string, number>();
-    for (const [s, m] of cells) {
-        for (const [tg, vals] of m) {
-            const value = aggregateVals(vals, agg);
-            if (value <= 0) continue;
-            rawLinks.push({ source: s, target: tg, value });
-            srcTotals.set(s, (srcTotals.get(s) ?? 0) + value);
-            tgtTotals.set(tg, (tgtTotals.get(tg) ?? 0) + value);
-        }
+    for (const { source: s, target: tg, value } of flows) {
+        if (value <= 0) continue;
+        rawLinks.push({ source: s, target: tg, value });
+        srcTotals.set(s, (srcTotals.get(s) ?? 0) + value);
+        tgtTotals.set(tg, (tgtTotals.get(tg) ?? 0) + value);
     }
     if (rawLinks.length === 0) return null;
 
