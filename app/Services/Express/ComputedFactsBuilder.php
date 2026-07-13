@@ -261,7 +261,7 @@ class ComputedFactsBuilder
             if (! is_array($field) || ! in_array($field['type'] ?? '', ['number', 'currency'], true)) {
                 continue;
             }
-            if ($semantics->measureTypeOf($field) === SemanticProfile::MEASURE_IDENTIFIER) {
+            if ($semantics->measureTypeIn($object, $rows, $field) === SemanticProfile::MEASURE_IDENTIFIER) {
                 continue;
             }
             $path = $paths[$field['id']] ?? ($field['slug'] ?? null);
@@ -412,7 +412,7 @@ class ComputedFactsBuilder
             if (! is_array($field) || ! in_array($field['type'] ?? '', ['number', 'currency'], true)) {
                 continue;
             }
-            $measureType = $semantics->measureTypeOf($field);
+            $measureType = $semantics->measureTypeIn($object, $rows, $field);
             if (! in_array($measureType, [SemanticProfile::MEASURE_ADDITIVE, SemanticProfile::MEASURE_RATIO, SemanticProfile::MEASURE_STATISTIC], true)) {
                 continue;
             }
@@ -526,7 +526,7 @@ class ComputedFactsBuilder
 
         $semantics = new SemanticProfile;
         $measure = $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
-            && $semantics->measureTypeOf($f) === SemanticProfile::MEASURE_ADDITIVE)
+            && $semantics->measureTypeIn($object, $rows, $f) === SemanticProfile::MEASURE_ADDITIVE)
             ?? $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true));
         if ($measure === null) {
             return null;
@@ -637,7 +637,7 @@ class ComputedFactsBuilder
             && preg_match('/label|bucket|period|semana|week|comment|descrip|nota|_id$|^id$/i', (string) ($f['slug'] ?? '')) !== 1);
         $semantics = new SemanticProfile;
         $measure = $fields->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
-            && $semantics->measureTypeOf($f) === SemanticProfile::MEASURE_ADDITIVE);
+            && $semantics->measureTypeIn($object, $rows, $f) === SemanticProfile::MEASURE_ADDITIVE);
         if ($cat === null || $measure === null) {
             return null;
         }

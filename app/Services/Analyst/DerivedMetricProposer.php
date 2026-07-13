@@ -68,7 +68,7 @@ class DerivedMetricProposer
         $additive = collect($object['fields'] ?? [])
             ->filter(fn ($f): bool => is_array($f)
                 && in_array($f['type'] ?? '', ['number', 'currency'], true)
-                && $this->semantics->measureTypeOf($f) === SemanticProfile::MEASURE_ADDITIVE);
+                && $this->semantics->measureTypeIn($object, $entry['rows'], $f) === SemanticProfile::MEASURE_ADDITIVE);
 
         $num = $additive->first(fn (array $f): bool => preg_match($ratio['num'], Str::lower((string) ($f['name'] ?? $f['slug']))) === 1);
         $den = $additive->first(fn (array $f): bool => preg_match($ratio['den'], Str::lower((string) ($f['name'] ?? $f['slug']))) === 1

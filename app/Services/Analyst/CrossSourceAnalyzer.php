@@ -37,7 +37,7 @@ class CrossSourceAnalyzer
         // its leading volume (additive) and performance (ratio) measure.
         $byDimension = [];
         foreach ($byObject as $id => $entry) {
-            $shape = $this->shapeOf($entry['object'], $names, $hints[$id] ?? '');
+            $shape = $this->shapeOf($entry['object'], $entry['rows'], $names, $hints[$id] ?? '');
             if ($shape === null) {
                 continue;
             }
@@ -75,7 +75,7 @@ class CrossSourceAnalyzer
      * @param  array<string, string>  $names
      * @return array{object_id: string, object: array<string, mixed>, dim: string, dimField: array<string, mixed>, volume: array<string, mixed>|null, perf: array<string, mixed>|null}|null
      */
-    private function shapeOf(array $object, array $names, string $hint): ?array
+    private function shapeOf(array $object, array $rows, array $names, string $hint): ?array
     {
         $fields = array_values(array_filter($object['fields'] ?? [], 'is_array'));
         $dimField = collect($fields)->first(fn (array $f): bool => in_array($f['type'] ?? '', ['string', 'single_select'], true)
@@ -95,7 +95,7 @@ class CrossSourceAnalyzer
             if (! in_array($f['type'] ?? '', ['number', 'currency'], true)) {
                 continue;
             }
-            $type = $this->semantics->measureTypeOf($f);
+            $type = $this->semantics->measureTypeIn($object, $rows, $f);
             if ($volume === null && $type === SemanticProfile::MEASURE_ADDITIVE) {
                 $volume = $f;
             }
