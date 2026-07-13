@@ -18,7 +18,7 @@ This document reconstructs the plan (the original lived only in a session transc
 | 6 · surfaces | **done** | `analyze_app_data` over MCP → every agent and chatbot, via one registration |
 | 8 · rendered truth | **done** | every chart aggregates where the data lives; `limit` caps categories, not evidence |
 | 4 · new finders | **done** | correlation → scatter · volume-vs-rate → combo · anomaly · rate KPI · flow → sankey · composition → stacked · distribution → box · seasonality → quarterly. **Cohort deliberately not built — see below** |
-| 5 · business sense | **open** | real targets (the 80% gauge is still invented), measure typing, ranking on unknown domains |
+| 5 · business sense | **done** | benchmarks that exist (declared target → own best → say nothing); typing reads names + values; ranking survives an unknown domain; `gaps()` honours what's shown |
 | 7 · consolidation | **open** | four chart-recommendation engines, three narrators, sector knowledge twice |
 
 **Cohort / retention (was 4.9) is not built, on purpose.** The 2-D pivot exists in
