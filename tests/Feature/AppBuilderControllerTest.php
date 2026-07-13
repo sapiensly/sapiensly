@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Apps\AppNamer;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Manifest\AppManifestService;
+use App\Support\Branding\ColorPalette;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
@@ -1221,9 +1222,9 @@ it('persists the palette mode and each mode yields a distinct chart palette', fu
     expect($manifest['settings']['palette_mode'])->toBe('grays');
 
     // The three modes must produce genuinely different chart series.
-    $brand = \App\Support\Branding\ColorPalette::fromAccent('#0059ff', 'brand')['chart'];
-    $accent = \App\Support\Branding\ColorPalette::fromAccent('#0059ff', 'accent')['chart'];
-    $grays = \App\Support\Branding\ColorPalette::fromAccent('#0059ff', 'grays')['chart'];
+    $brand = ColorPalette::fromAccent('#0059ff', 'brand')['chart'];
+    $accent = ColorPalette::fromAccent('#0059ff', 'accent')['chart'];
+    $grays = ColorPalette::fromAccent('#0059ff', 'grays')['chart'];
     expect($brand)->not->toBe($accent)
         ->and($accent)->not->toBe($grays)
         ->and($grays[0])->toBe('#4b5563');
@@ -1522,4 +1523,47 @@ it('above/below stay a plain vertical reorder — no row wrapping', function () 
     $active = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
     expect(collect($active['pages'][0]['blocks'])->pluck('id')->all())
         ->toBe(['blk_manualbar0', 'blk_manualtop0']);
+});
+
+it('fine tune deletes a block and prunes the row it emptied', function () {
+    $manifest = manualDashManifest($this->testApp->id);
+    $manifest['pages'][0]['blocks'][] = [
+        'id' => 'blk_manualtop0', 'type' => 'chart', 'label' => 'Backlog por reason',
+        'chart_type' => 'bar', 'aggregation' => 'sum',
+        'y_field_id' => 'fld_mbacklog00', 'group_by_field_id' => 'fld_mreason000',
+        'data_source' => ['object_id' => 'obj_manualdim0', 'limit' => 12],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/delete", [
+            'block_id' => 'blk_manualbar0',
+        ])->assertOk()->assertJson(['ok' => true]);
+
+    $active = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    // The chart is gone AND its now-empty row container went with it.
+    expect(collect($active['pages'][0]['blocks'])->pluck('id')->all())
+        ->toBe(['blk_manualtop0']);
+});
+
+it('deleting a block that no longer exists 404s', function () {
+    app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/delete", [
+            'block_id' => 'blk_doesnotexi',
+        ])->assertNotFound()->assertJson(['error' => 'not_found']);
+});
+
+it('a deleted block is revertible — the removal is a version', function () {
+    app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
+    $before = $this->testApp->fresh()->versions()->max('version_number');
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/delete", [
+            'block_id' => 'blk_manualbar0',
+        ])->assertOk()->assertJson(['version' => $before + 1]);
+
+    $active = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect($active['pages'][0]['blocks'])->toBe([]);
 });

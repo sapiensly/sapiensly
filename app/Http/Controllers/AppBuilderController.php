@@ -1183,7 +1183,7 @@ class AppBuilderController extends Controller
         }
 
         try {
-            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste manual: '.(string) ($changes['label'] ?? $block['label'] ?? $data['block_id']));
+            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste fino: '.(string) ($changes['label'] ?? $block['label'] ?? $data['block_id']));
         } catch (InvalidManifestException $e) {
             return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
         }
@@ -1292,7 +1292,7 @@ class AppBuilderController extends Controller
                 $app,
                 [['op' => 'add', 'path' => '/pages/'.$pageIndex.'/blocks/'.$insertAt, 'value' => $container]],
                 $request->user(),
-                'Ajuste manual: agregué «'.$chart['label'].'»',
+                'Ajuste fino: agregué «'.$chart['label'].'»',
             );
         } catch (InvalidManifestException $e) {
             return response()->json(['ok' => false, 'message' => 'La gráfica no pasó validación.', 'errors' => $e->result->errorsArray()], 422);
@@ -1497,7 +1497,7 @@ class AppBuilderController extends Controller
                     $app,
                     [['op' => 'replace', 'path' => '/pages/'.$pageIndex.'/blocks', 'value' => array_values($blocks)]],
                     $request->user(),
-                    'Ajuste manual: reordené «'.(string) ($source['label'] ?? $data['block_id']).'»',
+                    'Ajuste fino: reordené «'.(string) ($source['label'] ?? $data['block_id']).'»',
                 );
             } catch (InvalidManifestException $e) {
                 return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
@@ -1507,6 +1507,75 @@ class AppBuilderController extends Controller
         }
 
         return response()->json(['error' => 'not_found', 'message' => 'Ese bloque ya no existe.'], 404);
+    }
+
+    /**
+     * Fine-tune: delete ONE block from the board. Versioned like every other
+     * manual edit, so it reverts from the version history.
+     */
+    public function deleteBlock(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'block_id' => ['required', 'string'],
+        ]);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        // Cards, headings and rows: extractBlock rewrites the page's block
+        // list and prunes a row container the removal left empty.
+        foreach ($manifest['pages'] ?? [] as $pageIndex => $page) {
+            $blocks = $page['blocks'] ?? [];
+            $removed = $this->extractBlock($blocks, $data['block_id']);
+            if ($removed === null) {
+                continue;
+            }
+
+            return $this->commitBlockDeletion(
+                $app,
+                [['op' => 'replace', 'path' => '/pages/'.$pageIndex.'/blocks', 'value' => array_values($blocks)]],
+                (string) ($removed['label'] ?? $removed['content'] ?? $data['block_id']),
+                $request,
+            );
+        }
+
+        // Anything extractBlock can't reach (a metric_grid stat, a block inside
+        // a tab or accordion section) still deletes by pointer. The schema is
+        // the guard: a grid whose last item this is comes back invalid.
+        $found = $this->findBlockPath($manifest, $data['block_id']);
+        if ($found === null) {
+            return response()->json(['error' => 'not_found', 'message' => 'Ese bloque ya no existe.'], 404);
+        }
+        [$pointer, $block] = $found;
+
+        return $this->commitBlockDeletion(
+            $app,
+            [['op' => 'remove', 'path' => $pointer]],
+            (string) ($block['label'] ?? $block['content'] ?? $data['block_id']),
+            $request,
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $ops
+     */
+    private function commitBlockDeletion(App $app, array $ops, string $label, Request $request): JsonResponse
+    {
+        try {
+            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste fino: eliminé «'.$label.'»');
+        } catch (InvalidManifestException $e) {
+            return response()->json([
+                'error' => 'invalid_manifest',
+                'message' => 'No se puede eliminar este elemento por sí solo — es el único de su grupo. Elimina el bloque completo.',
+                'errors' => $e->result->errorsArray(),
+            ], 422);
+        }
+
+        return response()->json(['ok' => true, 'version' => $version->version_number]);
     }
 
     /**

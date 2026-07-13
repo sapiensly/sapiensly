@@ -13,8 +13,8 @@
  * height presets, and a sticky footer with a Restablecer action that
  * reverts to the values the card had when it was selected.
  */
+import { ChevronDown, Trash2, TrendingUp, X } from '@lucide/vue';
 import axios from 'axios';
-import { ChevronDown, TrendingUp, X } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 
@@ -35,6 +35,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: 'saved', layoutOnly: boolean): void;
+    (e: 'deleted'): void;
     (e: 'close'): void;
 }>();
 
@@ -156,14 +157,11 @@ async function apply(changes: Record<string, unknown>) {
         });
         // «light» = no data refetch needed (render/layout only). Only a
         // DATA_KEYS change (limit) requires re-reading the source.
-        emit(
-            'saved',
-            !Object.keys(changes).some((k) => DATA_KEYS.includes(k)),
-        );
+        emit('saved', !Object.keys(changes).some((k) => DATA_KEYS.includes(k)));
     } catch (e: unknown) {
         const msg =
-            (e as { response?: { data?: { message?: string } } }).response
-                ?.data?.message ?? 'No se pudo aplicar el ajuste.';
+            (e as { response?: { data?: { message?: string } } }).response?.data
+                ?.message ?? 'No se pudo aplicar el ajuste.';
         toast.error(msg);
         seed(); // revert the control to the block's real value
     } finally {
@@ -233,11 +231,47 @@ function restore() {
     if (Object.keys(changes).length === 0) return;
     for (const k of LAYOUT_KEYS) {
         if (k in changes) {
-            paintLayout(k, snap[k as keyof typeof form]);
+            paintOptimistic(k, snap[k as keyof typeof form]);
         }
     }
     apply(changes);
 }
+
+// ---- Delete the selected block ---------------------------------------------
+// Destructive, so it asks first. The server removes it through the same
+// versioned patch path, which means it reverts from the version history.
+const confirmingDelete = ref(false);
+const deleting = ref(false);
+const blockName = computed(
+    () =>
+        (isHeading.value ? form.content : form.label) ||
+        String(props.block.type ?? 'este elemento'),
+);
+
+async function destroy() {
+    deleting.value = true;
+    try {
+        await axios.post(`/apps/${props.appId}/builder/blocks/delete`, {
+            block_id: (props.block as { id: string }).id,
+        });
+        confirmingDelete.value = false;
+        toast.success('Elemento eliminado.');
+        emit('deleted');
+    } catch (e: unknown) {
+        const msg =
+            (e as { response?: { data?: { message?: string } } }).response?.data
+                ?.message ?? 'No se pudo eliminar el elemento.';
+        toast.error(msg);
+    } finally {
+        deleting.value = false;
+    }
+}
+
+// A different card selected while the confirm is open cancels it.
+watch(
+    () => (props.block as { id?: string }).id,
+    () => (confirmingDelete.value = false),
+);
 
 // ---- Collapsible sections --------------------------------------------------
 const open = reactive({ contenido: true, datos: true, diseno: true });
@@ -291,8 +325,7 @@ const miniSeries = computed<{ label: string; value: number }[]>(() => {
     } else {
         out.sort((a, b) => b.value - a.value);
     }
-    const cap =
-        form.chart_type === 'hbar' ? 5 : isTemporal.value ? 24 : 8;
+    const cap = form.chart_type === 'hbar' ? 5 : isTemporal.value ? 24 : 8;
     out = out.slice(0, cap);
     return out;
 });
@@ -346,8 +379,8 @@ const measureName = computed(
 const dimensionName = computed(() => {
     if (isTemporal.value) return 'período';
     return (
-        stringFields.value.find((f) => f.id === form.group_by_field_id)
-            ?.name ?? 'categoría'
+        stringFields.value.find((f) => f.id === form.group_by_field_id)?.name ??
+        'categoría'
     );
 });
 const previewChips = computed(() => {
@@ -378,7 +411,7 @@ const previewChips = computed(() => {
                         <span
                             class="text-[10px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
                         >
-                            Ajuste manual
+                            Ajuste fino
                         </span>
                     </div>
                     <button
@@ -511,10 +544,8 @@ const previewChips = computed(() => {
                                 class="flex-1 rounded-t-[3px] bg-current"
                                 :style="{
                                     height:
-                                        Math.max(
-                                            6,
-                                            (s.value / miniMax) * 100,
-                                        ) + '%',
+                                        Math.max(6, (s.value / miniMax) * 100) +
+                                        '%',
                                     opacity:
                                         form.chart_type === 'pareto'
                                             ? 1 - i * 0.09
@@ -670,13 +701,33 @@ const previewChips = computed(() => {
                                     </template>
                                     <template v-else-if="ct === 'bar'">
                                         <path d="M3 3v18h18" />
-                                        <rect x="7" y="11" width="3" height="6" />
-                                        <rect x="13" y="7" width="3" height="10" />
+                                        <rect
+                                            x="7"
+                                            y="11"
+                                            width="3"
+                                            height="6"
+                                        />
+                                        <rect
+                                            x="13"
+                                            y="7"
+                                            width="3"
+                                            height="10"
+                                        />
                                     </template>
                                     <template v-else-if="ct === 'hbar'">
                                         <path d="M3 3v18h18" />
-                                        <rect x="6" y="7" width="10" height="3" />
-                                        <rect x="6" y="13" width="6" height="3" />
+                                        <rect
+                                            x="6"
+                                            y="7"
+                                            width="10"
+                                            height="3"
+                                        />
+                                        <rect
+                                            x="6"
+                                            y="13"
+                                            width="6"
+                                            height="3"
+                                        />
                                     </template>
                                     <template
                                         v-else-if="
@@ -693,14 +744,35 @@ const previewChips = computed(() => {
                                         <path v-else d="M12 3v9l6.5 6.2" />
                                     </template>
                                     <template v-else-if="ct === 'treemap'">
-                                        <rect x="3" y="3" width="18" height="18" rx="1" />
+                                        <rect
+                                            x="3"
+                                            y="3"
+                                            width="18"
+                                            height="18"
+                                            rx="1"
+                                        />
                                         <path d="M12 3v18M12 12h9" />
                                     </template>
                                     <template v-else-if="ct === 'pareto'">
                                         <path d="M3 3v18h18" />
-                                        <rect x="6" y="9" width="3" height="8" />
-                                        <rect x="11" y="12" width="3" height="5" />
-                                        <rect x="16" y="14" width="3" height="3" />
+                                        <rect
+                                            x="6"
+                                            y="9"
+                                            width="3"
+                                            height="8"
+                                        />
+                                        <rect
+                                            x="11"
+                                            y="12"
+                                            width="3"
+                                            height="5"
+                                        />
+                                        <rect
+                                            x="16"
+                                            y="14"
+                                            width="3"
+                                            height="3"
+                                        />
                                         <path d="M6 8c4-3 9-5 13-5.5" />
                                     </template>
                                 </svg>
@@ -799,7 +871,8 @@ const previewChips = computed(() => {
                             type="range"
                             min="3"
                             max="25"
-                            class="w-full" style="accent-color: var(--sp-accent-blue)"
+                            class="w-full"
+                            style="accent-color: var(--sp-accent-blue)"
                         />
                         <div
                             class="flex justify-between text-[10.5px] text-ink-subtle"
@@ -881,9 +954,7 @@ const previewChips = computed(() => {
                         <div v-else class="mb-4" />
 
                         <!-- Height presets with explicit unit -->
-                        <p class="mb-1.5 text-xs text-ink-muted">
-                            Alto mínimo
-                        </p>
+                        <p class="mb-1.5 text-xs text-ink-muted">Alto mínimo</p>
                         <div class="flex gap-1.5">
                             <button
                                 v-for="h in [240, 320, 420, 0]"
@@ -904,6 +975,18 @@ const previewChips = computed(() => {
                             </button>
                         </div>
                     </div>
+                </section>
+
+                <!-- Remove the block from the board (versioned, revertible) -->
+                <section class="border-t border-soft px-4 py-4">
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-center gap-2 rounded-sp-sm border border-medium px-3 py-2 text-xs font-semibold text-ink-muted transition-colors hover:border-rose-500 hover:bg-rose-500/10 hover:text-rose-500"
+                        @click="confirmingDelete = true"
+                    >
+                        <Trash2 class="size-3.5" />
+                        Eliminar elemento
+                    </button>
                 </section>
             </div>
 
@@ -947,6 +1030,53 @@ const previewChips = computed(() => {
                     Restablecer
                 </button>
             </footer>
+
+            <!-- Confirmation: deleting is the one action here that isn't a
+                 tweak, so it never fires on a single click. -->
+            <div
+                v-if="confirmingDelete"
+                class="absolute inset-0 z-10 flex items-center justify-center bg-navy/85 px-4 backdrop-blur-sm"
+            >
+                <div
+                    class="w-full rounded-sp-md border border-medium bg-surface p-4 shadow-2xl"
+                >
+                    <div class="mb-2 flex items-center gap-2">
+                        <span
+                            class="flex size-6 items-center justify-center rounded-sp-sm bg-rose-500/10 text-rose-500"
+                        >
+                            <Trash2 class="size-3.5" />
+                        </span>
+                        <p class="text-[13px] font-semibold text-ink">
+                            ¿Eliminar este elemento?
+                        </p>
+                    </div>
+                    <p class="mb-4 text-[12px] leading-relaxed text-ink-muted">
+                        «<span class="font-semibold text-ink">{{
+                            blockName
+                        }}</span
+                        >» se quitará del dashboard. Queda versionado: puedes
+                        revertirlo desde el historial.
+                    </p>
+                    <div class="flex gap-2">
+                        <button
+                            type="button"
+                            class="flex-1 rounded-sp-sm border border-medium px-3 py-2 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+                            :disabled="deleting"
+                            @click="confirmingDelete = false"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            class="flex-1 rounded-sp-sm bg-rose-500 px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                            :disabled="deleting"
+                            @click="destroy()"
+                        >
+                            {{ deleting ? 'Eliminando…' : 'Eliminar' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
         </aside>
     </Teleport>
 </template>

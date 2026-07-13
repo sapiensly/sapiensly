@@ -39,6 +39,7 @@ Route::middleware([
     Route::get('/apps/{app}/builder/recommendations', [AppBuilderController::class, 'recommendations'])->name('apps.builder.recommendations');
     Route::post('/apps/{app}/builder/charts/from-recommendation', [AppBuilderController::class, 'addRecommendation'])->name('apps.builder.charts.recommend');
     Route::post('/apps/{app}/builder/blocks/move', [AppBuilderController::class, 'moveBlock'])->name('apps.builder.blocks.move');
+    Route::post('/apps/{app}/builder/blocks/delete', [AppBuilderController::class, 'deleteBlock'])->name('apps.builder.blocks.delete');
     Route::post('/apps/{app}/builder/messages/{message}/approve', [AppBuilderController::class, 'approve'])->name('apps.builder.approve');
     Route::post('/apps/{app}/builder/messages/{message}/reject', [AppBuilderController::class, 'reject'])->name('apps.builder.reject');
     Route::post('/apps/{app}/builder/messages/{message}/revert', [AppBuilderController::class, 'revert'])->name('apps.builder.revert');

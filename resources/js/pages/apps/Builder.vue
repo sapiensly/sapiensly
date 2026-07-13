@@ -652,6 +652,13 @@ function onDrawerSaved(light: boolean) {
     }
 }
 
+// The deleted block is gone from the manifest, so the selection (and the
+// drawer it holds open) must go with it before the board reloads.
+function onDrawerDeleted() {
+    selectedBlockId.value = null;
+    afterManualChange();
+}
+
 // On-grid resize: drag the selected card's right edge (width snaps to the
 // 12-col grid) or bottom edge (min-height snaps to 40px). The change lands
 // through the same versioned endpoint as the drawer.
@@ -2726,7 +2733,7 @@ function statusTone(status: Message['status']): string {
                             <button
                                 v-for="m in [
                                     { id: 'chat', label: 'Chat builder' },
-                                    { id: 'manual', label: 'Ajuste manual' },
+                                    { id: 'manual', label: 'Ajuste fino' },
                                 ] as const"
                                 :key="m.id"
                                 type="button"
@@ -2915,7 +2922,7 @@ function statusTone(status: Message['status']): string {
                         <SlidersHorizontal class="size-4 text-accent-blue" />
                         <div class="min-w-0">
                             <p class="text-sm font-semibold text-ink">
-                                Ajuste manual
+                                Ajuste fino
                             </p>
                             <p class="truncate text-[11px] text-ink-muted">
                                 Haz click en una card del preview para editarla
@@ -3885,6 +3892,7 @@ function statusTone(status: Message['status']): string {
                                 null
                             "
                             @saved="onDrawerSaved"
+                            @deleted="onDrawerDeleted"
                             @close="selectedBlockId = null"
                         />
                         <!-- Drop indicator while reordering: a thin bar only
