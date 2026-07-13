@@ -132,12 +132,17 @@ class ChartRecommender
                     continue;
                 }
                 if (($b['type'] ?? null) === 'chart') {
-                    $seen[SemanticKey::forChart((string) ($b['data_source']['object_id'] ?? ''), [
+                    $seen[SemanticKey::forChart((string) ($b['data_source']['object_id'] ?? ''), array_filter([
                         'chart_type' => $b['chart_type'] ?? null,
                         'group_by_field_id' => $b['group_by_field_id'] ?? null,
                         'x_field_id' => $b['x_field_id'] ?? null,
                         'y_field_id' => $b['y_field_id'] ?? null,
-                    ], $names, $hints)] = true;
+                        // A composition, a flow and a seasonal cut are told apart
+                        // by these — without them a stacked bar reads as a plain
+                        // breakdown and never dedupes.
+                        'series_field_id' => $b['series_field_id'] ?? null,
+                        'bucket' => $b['bucket'] ?? null,
+                    ], fn ($v) => $v !== null), $names, $hints)] = true;
                 }
                 if (($b['type'] ?? null) === 'gauge') {
                     $seen[SemanticKey::forChart('', ['__gauge' => true, 'field_id' => $b['field_id'] ?? ''], $names, $hints)] = true;

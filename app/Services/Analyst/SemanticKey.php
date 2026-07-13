@@ -33,9 +33,12 @@ class SemanticKey
         if (($chart['__gauge'] ?? false) === true) {
             return 'gauge|'.($names[$chart['field_id'] ?? ''] ?? '').'|';
         }
+        $type = $chart['chart_type'] ?? '';
+        $measure = $names[$chart['y_field_id'] ?? ''] ?? 'count';
+
         // A scatter says «these two relate», which is symmetric: x vs y and y vs
         // x are the same finding, so the pair is sorted rather than ordered.
-        if (($chart['chart_type'] ?? '') === 'scatter') {
+        if ($type === 'scatter') {
             $pair = [
                 $names[$chart['x_field_id'] ?? ''] ?? '',
                 $names[$chart['y_field_id'] ?? ''] ?? '',
@@ -44,19 +47,62 @@ class SemanticKey
 
             return 'correlation|'.$pair[0].'|'.$pair[1];
         }
-        $family = in_array($chart['chart_type'] ?? '', ['area', 'line'], true)
+
+        // A flow is DIRECTIONAL — reason→owner is not owner→reason — so unlike a
+        // correlation the pair keeps its order.
+        if ($type === 'sankey') {
+            return 'flow|'
+                .self::dimName($chart['group_by_field_id'] ?? '', $objectId, $names, $hints).'|'
+                .($names[$chart['series_field_id'] ?? ''] ?? '');
+        }
+
+        // The spread of a measure within a category is a different question from
+        // its total there — a box and a bar of the same cut don't say the same
+        // thing, so they must not dedupe against each other.
+        if ($type === 'box') {
+            return 'distribution|'.$measure.'|'
+                .self::dimName($chart['group_by_field_id'] ?? '', $objectId, $names, $hints);
+        }
+
+        // A second categorical splits the measure INSIDE each column — «what is it
+        // made of», not «how much is there».
+        if (isset($chart['series_field_id'])) {
+            return 'composition|'.$measure.'|'.($names[$chart['series_field_id']] ?? '');
+        }
+
+        // Seasonality is the same measure over time read at a coarser grain: a
+        // quarterly cut answers a question the weekly one cannot, so it is its
+        // own finding rather than a duplicate trend.
+        if (in_array($chart['bucket'] ?? '', ['quarter', 'year'], true)) {
+            return 'seasonality|'.$measure.'|'.$chart['bucket'];
+        }
+
+        $family = in_array($type, ['area', 'line'], true)
             ? 'trend'
             : 'breakdown';
-        $measure = $names[$chart['y_field_id'] ?? ''] ?? 'count';
         if ($family === 'trend') {
             return 'trend|'.$measure.'|time';
         }
-        $dim = $names[$chart['group_by_field_id'] ?? ''] ?? '';
+
+        return 'breakdown|'.$measure.'|'
+            .self::dimName($chart['group_by_field_id'] ?? '', $objectId, $names, $hints);
+    }
+
+    /**
+     * A dimension's name — falling back to the object's distinguishing hint when
+     * the field is generically named ("Key" says nothing about WHICH dimension).
+     *
+     * @param  array<string, string>  $names
+     * @param  array<string, string>  $hints
+     */
+    private static function dimName(string $fieldId, string $objectId, array $names, array $hints): string
+    {
+        $dim = $names[$fieldId] ?? '';
         if ($dim === '' || preg_match(self::GENERIC_DIM, $dim) === 1) {
             $dim = $hints[$objectId] ?? $dim;
         }
 
-        return 'breakdown|'.$measure.'|'.$dim;
+        return $dim;
     }
 
     /**

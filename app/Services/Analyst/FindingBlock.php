@@ -85,6 +85,10 @@ class FindingBlock
                 // second axis. Without this the chart silently degrades to a
                 // plain bar of the top-level measure.
                 'series' => $chart['series'] ?? null,
+                // The second categorical — a stacked column's parts, a sankey's
+                // target column. Drop it and a flow becomes a bar chart.
+                'series_field_id' => $chart['series_field_id'] ?? null,
+                'stacked' => $chart['stacked'] ?? null,
                 'data_source' => ['object_id' => $objectId, 'limit' => self::rowLimit($finding, $chart)],
             ], fn ($v) => $v !== null),
         ];

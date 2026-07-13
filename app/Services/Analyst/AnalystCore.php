@@ -39,6 +39,18 @@ class AnalystCore
     /** Findings returned by default — a surface may ask for fewer or more. */
     public const DEFAULT_MAX = 5;
 
+    /** A sankey with more nodes than this per side is a hairball, not a diagram. */
+    private const FLOW_MAX_NODES = 8;
+
+    /** Beyond this many parts, a stacked column is a stripe pattern. */
+    private const COMPOSITION_MAX_PARTS = 6;
+
+    /** Records a category needs before its quartiles mean anything. */
+    private const SPREAD_MIN_PER_CATEGORY = 5;
+
+    /** History needed before a seasonal read is honest (~18 months). */
+    private const SEASONALITY_MIN_DAYS = 540;
+
     public function __construct(
         private ObjectRowSource $rows,
         private ComputedFactsBuilder $facts,
@@ -431,7 +443,154 @@ class AnalystCore
             break; // one gauge is enough per object
         }
 
-        // 5) BREAKDOWN — a dimension worth splitting the measure by when nothing
+        // 5) FLOW — two categoricals that co-occur: reason → owner, channel →
+        // outcome, stage → stage. Where the work GOES, which no single-dimension
+        // chart can show. A sankey with too many nodes is a hairball, so both
+        // ends must be small enough to read.
+        $dims = collect($fields)
+            ->filter(fn (array $f): bool => in_array($f['type'] ?? '', ['string', 'single_select'], true)
+                && preg_match('/label|bucket|period|semana|week|_id$|^id$/i', (string) ($f['slug'] ?? '')) !== 1)
+            ->filter(fn (array $f): bool => $this->distinctCount($object, $rows, $f) >= 2
+                && $this->distinctCount($object, $rows, $f) <= self::FLOW_MAX_NODES)
+            ->values();
+
+        if ($dims->count() >= 2) {
+            $source = $dims[0];
+            $target = $dims[1];
+            $out[] = [
+                'kind' => 'flow',
+                'kicker' => ($es ? 'Flujo · ' : 'Flow · ').Str::upper(Str::limit($nameOf($source), 10, '')),
+                'title' => $es
+                    ? Str::ucfirst(Str::lower($nameOf($source))).' → '.Str::lower($nameOf($target))
+                    : Str::ucfirst(Str::lower($nameOf($source))).' → '.Str::lower($nameOf($target)),
+                'why' => $es
+                    ? 'Cada '.Str::lower($nameOf($source)).' se reparte entre '.Str::lower($nameOf($target)).', y el reparto no es parejo. Un diagrama de flujo muestra a dónde va cada cosa — y qué camino carga más de lo que debería.'
+                    : 'Each '.Str::lower($nameOf($source)).' splits across '.Str::lower($nameOf($target)).", and the split isn't even. A flow diagram shows where everything goes — and which path carries more than it should.",
+                'chart' => array_filter([
+                    'label' => Str::ucfirst(Str::lower($nameOf($source))).' → '.Str::lower($nameOf($target)).' · '.$objName,
+                    'chart_type' => 'sankey',
+                    'group_by_field_id' => $source['id'],
+                    'series_field_id' => $target['id'],
+                    'y_field_id' => $volume['id'] ?? null,
+                    'aggregation' => $volume !== null ? 'sum' : 'count',
+                    'description' => $es
+                        ? 'El ancho de cada cinta es el volumen que va de un '.Str::lower($nameOf($source)).' a un '.Str::lower($nameOf($target)).'.'
+                        : 'Each ribbon\'s width is the volume flowing from a '.Str::lower($nameOf($source)).' to a '.Str::lower($nameOf($target)).'.',
+                ]),
+                'preview' => ['kind' => 'bars', 'values' => $this->breakdownValues($object, $rows, $source, $volume, 6)],
+                'base' => 74 + $head($nameOf($source), $nameOf($target)),
+                'flag' => null,
+            ];
+        }
+
+        // 6) COMPOSITION over time — what the total is MADE OF, month by month.
+        // A trend says the total is rising; this says which part is doing the
+        // rising, which is the question that follows it.
+        $composeDim = $dims->first(fn (array $f): bool => $this->distinctCount($object, $rows, $f) <= self::COMPOSITION_MAX_PARTS);
+        $dateField = collect($fields)->first(fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true));
+
+        if ($composeDim && $dateField && $volume) {
+            $out[] = [
+                'kind' => 'composition',
+                'kicker' => ($es ? 'Composición · ' : 'Composition · ').Str::upper(Str::limit($nameOf($composeDim), 10, '')),
+                'title' => $es
+                    ? Str::ucfirst(Str::lower($nameOf($volume))).' por '.Str::lower($nameOf($composeDim)).' en el tiempo'
+                    : Str::ucfirst(Str::lower($nameOf($volume))).' by '.Str::lower($nameOf($composeDim)).' over time',
+                'why' => $es
+                    ? 'La tendencia dice que el total se mueve; no dice QUÉ parte lo mueve. Apilado por '.Str::lower($nameOf($composeDim)).' se ve si el crecimiento viene de todos o de uno solo.'
+                    : "The trend says the total is moving; it doesn't say WHICH part moves it. Stacked by ".Str::lower($nameOf($composeDim)).', you see whether the growth comes from everything or from one thing.',
+                'chart' => [
+                    'label' => Str::ucfirst(Str::lower($nameOf($volume))).($es ? ' por ' : ' by ').Str::lower($nameOf($composeDim)),
+                    'chart_type' => 'bar',
+                    'x_field_id' => $dateField['id'],
+                    'series_field_id' => $composeDim['id'],
+                    'y_field_id' => $volume['id'],
+                    'aggregation' => 'sum',
+                    'bucket' => 'month',
+                    'stacked' => true,
+                    'description' => $es
+                        ? 'Cada barra es un mes, partido por '.Str::lower($nameOf($composeDim)).'.'
+                        : 'Each bar is a month, split by '.Str::lower($nameOf($composeDim)).'.',
+                ],
+                'preview' => ['kind' => 'bars', 'values' => $this->weeklyValues($object, $rows, $dateField, $volume)],
+                'base' => 80 + $head($nameOf($volume), $nameOf($composeDim)),
+                'flag' => null,
+            ];
+        }
+
+        // 7) DISTRIBUTION — the average is a liar. A box plot shows the spread
+        // the mean hides, but only where there are enough records PER category
+        // for quartiles to mean anything (a pre-aggregated source has one row per
+        // category and nothing to spread).
+        $spreadMeasure = collect($fields)->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
+            && $this->semantics->measureTypeOf($f) !== SemanticProfile::MEASURE_IDENTIFIER);
+        $spreadDim = $dims->first(fn (array $f): bool => $this->distinctCount($object, $rows, $f) <= self::COMPOSITION_MAX_PARTS);
+
+        if ($spreadMeasure && $spreadDim) {
+            $spread = $this->spreadOf($object, $rows, $spreadDim, $spreadMeasure);
+            if ($spread !== null) {
+                $out[] = [
+                    'kind' => 'distribution',
+                    'kicker' => ($es ? 'Dispersión · ' : 'Spread · ').Str::upper(Str::limit($nameOf($spreadMeasure), 10, '')),
+                    'title' => $es
+                        ? Str::ucfirst(Str::lower($nameOf($spreadMeasure))).': lo que la media esconde'
+                        : Str::ucfirst(Str::lower($nameOf($spreadMeasure))).': what the average hides',
+                    'why' => $es
+                        ? "En «{$spread['category']}» la mediana de ".Str::lower($nameOf($spreadMeasure))." es {$spread['median']}, pero 1 de cada 4 supera {$spread['p75']}. Promediar eso borra justo el caso que duele."
+                        : "In \"{$spread['category']}\" the median ".Str::lower($nameOf($spreadMeasure))." is {$spread['median']}, but 1 in 4 exceeds {$spread['p75']}. Averaging that erases exactly the case that hurts.",
+                    'chart' => [
+                        'label' => ($es ? 'Dispersión de ' : 'Spread of ').Str::lower($nameOf($spreadMeasure)).($es ? ' por ' : ' by ').Str::lower($nameOf($spreadDim)),
+                        'chart_type' => 'box',
+                        'group_by_field_id' => $spreadDim['id'],
+                        'y_field_id' => $spreadMeasure['id'],
+                        // The box IS the summary; the renderer ignores this, but
+                        // the schema requires an aggregation on every chart.
+                        'aggregation' => 'avg',
+                        'description' => $es
+                            ? 'Mediana, cuartiles y atípicos de '.Str::lower($nameOf($spreadMeasure)).' en cada '.Str::lower($nameOf($spreadDim)).'.'
+                            : 'Median, quartiles and outliers of '.Str::lower($nameOf($spreadMeasure)).' within each '.Str::lower($nameOf($spreadDim)).'.',
+                    ],
+                    'preview' => ['kind' => 'bars', 'values' => $spread['medians']],
+                    'base' => 86 + $head($nameOf($spreadMeasure)),
+                    'flag' => $spread['skewed'] ? ['tone' => 'hot', 'text' => $es ? 'cola larga' : 'long tail'] : null,
+                ];
+            }
+        }
+
+        // 8) SEASONALITY — the same measure read at a coarser grain. A weekly line
+        // cannot show a yearly rhythm; only a span long enough to HAVE one earns
+        // this card.
+        if ($dateField && $volume) {
+            $span = $this->spanDays($object, $rows, $dateField);
+            if ($span >= self::SEASONALITY_MIN_DAYS) {
+                $out[] = [
+                    'kind' => 'seasonality',
+                    'kicker' => $es ? 'Estacionalidad · Trimestral' : 'Seasonality · Quarterly',
+                    'title' => $es
+                        ? Str::ucfirst(Str::lower($nameOf($volume))).' por trimestre'
+                        : Str::ucfirst(Str::lower($nameOf($volume))).' by quarter',
+                    'why' => $es
+                        ? 'Hay '.round($span / 365, 1).' años de historia: suficiente para ver si el negocio tiene estación. La vista semanal no puede mostrarlo — el ritmo anual queda enterrado en el ruido.'
+                        : round($span / 365, 1).' years of history: enough to see whether the business has a season. The weekly view cannot show it — a yearly rhythm is buried in the noise.',
+                    'chart' => [
+                        'label' => Str::ucfirst(Str::lower($nameOf($volume))).($es ? ' por trimestre' : ' by quarter'),
+                        'chart_type' => 'bar',
+                        'x_field_id' => $dateField['id'],
+                        'y_field_id' => $volume['id'],
+                        'aggregation' => 'sum',
+                        'bucket' => 'quarter',
+                        'description' => $es
+                            ? 'Cada barra es un trimestre — los picos repetidos son estación, no casualidad.'
+                            : 'Each bar is a quarter — repeated peaks are a season, not a coincidence.',
+                    ],
+                    'preview' => ['kind' => 'bars', 'values' => $this->weeklyValues($object, $rows, $dateField, $volume)],
+                    'base' => 78 + $head($nameOf($volume)),
+                    'flag' => null,
+                ];
+            }
+        }
+
+        // 9) BREAKDOWN — a dimension worth splitting the measure by when nothing
         // concentrated (evenly spread reads as a ranking, not a pareto).
         if (! isset($facts['concentracion']) && isset($facts['top_values'])) {
             $topName = (string) array_key_first($facts['top_values']);
@@ -561,6 +720,135 @@ class AnalystCore
         ksort($byWeek);
 
         return array_map(fn ($v) => round((float) $v, 2), array_values(array_slice($byWeek, -16)));
+    }
+
+    /**
+     * How many distinct values a dimension actually carries in the sample — the
+     * number that decides whether a chart is readable or a hairball.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $field
+     */
+    private function distinctCount(array $object, array $rows, array $field): int
+    {
+        $path = FieldPaths::forObject($object)[$field['id']] ?? ($field['slug'] ?? null);
+        if ($path === null) {
+            return 0;
+        }
+        $seen = [];
+        foreach ($rows as $row) {
+            $v = data_get($row, $path);
+            if (is_scalar($v) && trim((string) $v) !== '') {
+                $seen[(string) $v] = true;
+            }
+        }
+
+        return count($seen);
+    }
+
+    /**
+     * The spread a mean hides: for the category with the longest tail, its median
+     * and its 75th percentile. Null when no category carries enough records for
+     * quartiles to mean anything — which is exactly the case for a pre-aggregated
+     * source, where each category IS a single row and has no spread at all.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $dim
+     * @param  array<string, mixed>  $measure
+     * @return array{category: string, median: float, p75: float, medians: list<float>, skewed: bool}|null
+     */
+    private function spreadOf(array $object, array $rows, array $dim, array $measure): ?array
+    {
+        $paths = FieldPaths::forObject($object);
+        $dimPath = $paths[$dim['id']] ?? ($dim['slug'] ?? null);
+        $numPath = $paths[$measure['id']] ?? ($measure['slug'] ?? null);
+
+        $byCategory = [];
+        foreach ($rows as $row) {
+            $key = data_get($row, $dimPath);
+            $value = data_get($row, $numPath);
+            if (is_scalar($key) && trim((string) $key) !== '' && is_numeric($value)) {
+                $byCategory[(string) $key][] = (float) $value;
+            }
+        }
+
+        $best = null;
+        $medians = [];
+        foreach ($byCategory as $category => $values) {
+            if (count($values) < self::SPREAD_MIN_PER_CATEGORY) {
+                continue;
+            }
+            sort($values);
+            $median = $this->quantile($values, 0.5);
+            $p75 = $this->quantile($values, 0.75);
+            $medians[] = round($median, 2);
+            // The widest tail relative to the middle is the one worth showing.
+            $tail = $median > 0 ? ($p75 - $median) / $median : 0.0;
+            if ($best === null || $tail > $best['tail']) {
+                $best = [
+                    'category' => $category,
+                    'median' => round($median, 2),
+                    'p75' => round($p75, 2),
+                    'tail' => $tail,
+                ];
+            }
+        }
+
+        if ($best === null || $best['p75'] <= $best['median']) {
+            return null; // no spread worth a claim
+        }
+
+        return [
+            'category' => $best['category'],
+            'median' => $best['median'],
+            'p75' => $best['p75'],
+            'medians' => array_slice($medians, 0, 6),
+            'skewed' => $best['tail'] >= 0.5, // the top quarter is 50%+ above the middle
+        ];
+    }
+
+    /** @param  list<float>  $sorted */
+    private function quantile(array $sorted, float $q): float
+    {
+        $n = count($sorted);
+        if ($n === 0) {
+            return 0.0;
+        }
+        $pos = ($n - 1) * $q;
+        $low = (int) floor($pos);
+        $high = (int) ceil($pos);
+        if ($low === $high) {
+            return $sorted[$low];
+        }
+
+        return $sorted[$low] + ($pos - $low) * ($sorted[$high] - $sorted[$low]);
+    }
+
+    /**
+     * Days between the first and last dated row — how much history there is to
+     * read a season out of.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $date
+     */
+    private function spanDays(array $object, array $rows, array $date): int
+    {
+        $path = FieldPaths::forObject($object)[$date['id']] ?? ($date['slug'] ?? null);
+        $stamps = [];
+        foreach ($rows as $row) {
+            $ts = InMemoryRowFilter::timestamp(data_get($row, $path));
+            if ($ts !== null) {
+                $stamps[] = $ts;
+            }
+        }
+        if (count($stamps) < 2) {
+            return 0;
+        }
+
+        return (int) round((max($stamps) - min($stamps)) / 86400);
     }
 
     /**

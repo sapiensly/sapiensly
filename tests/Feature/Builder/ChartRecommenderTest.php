@@ -729,6 +729,136 @@ it('never claims a correlation with an identifier, nor a weak one', function () 
     app(TenantContext::class)->forget();
 });
 
+/** Record-level tickets: reason → owner, hours, a date. The row-level shape. */
+function ticketRows(int $n = 40): array
+{
+    $reasons = ['Envíos', 'Cobranza', 'Garantías'];
+    $owners = ['Ana', 'Beto'];
+    $rows = [];
+    for ($i = 0; $i < $n; $i++) {
+        $rows[] = [
+            'reason' => $reasons[$i % 3],
+            'owner' => $owners[$i % 2],
+            // A long tail: most tickets are quick, a few are disasters.
+            'hours' => $i % 10 === 0 ? 40 + $i : 2 + ($i % 5),
+            'day' => date('Y-m-d', strtotime('2025-01-01 +'.($i * 16).' days')),
+        ];
+    }
+
+    return $rows;
+}
+
+function ticketObject(): array
+{
+    return [
+        'id' => 'obj_tick00000', 'slug' => 'tickets', 'name' => 'Tickets',
+        'fields' => [
+            ['id' => 'f_reason', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'f_owner', 'slug' => 'owner', 'name' => 'Owner', 'type' => 'string'],
+            ['id' => 'f_hours', 'slug' => 'total_hours', 'name' => 'Total Hours', 'type' => 'number'],
+            ['id' => 'f_day', 'slug' => 'day', 'name' => 'Day', 'type' => 'date'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => [
+                ['field_id' => 'f_reason', 'external_path' => 'reason'],
+                ['field_id' => 'f_owner', 'external_path' => 'owner'],
+                ['field_id' => 'f_hours', 'external_path' => 'hours'],
+                ['field_id' => 'f_day', 'external_path' => 'day'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'x', 'collection_path' => 'rows']],
+        ],
+    ];
+}
+
+it('completes the arsenal: flow, composition, distribution and seasonality', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // 40 tickets spanning ~21 months: two categoricals that co-occur, a measure
+    // with a long tail, and enough history to have a season.
+    $result = makeCore(ticketRows())->analyze(
+        $app,
+        ['objects' => [ticketObject()], 'settings' => ['default_locale' => 'es-MX']],
+        $user,
+        'es',
+        [],
+        20, // ask for the whole arsenal, not just the top 5
+    );
+
+    $byKind = collect($result['findings'])->keyBy('kind');
+
+    // FLOW — where the work goes. Directional: reason → owner, never the reverse.
+    $flow = $byKind['flow'];
+    expect($flow['chart']['chart_type'])->toBe('sankey')
+        ->and($flow['chart']['group_by_field_id'])->toBe('f_reason')
+        ->and($flow['chart']['series_field_id'])->toBe('f_owner')
+        ->and($flow['semantic_key'])->toBe('flow|reason|owner');
+
+    // COMPOSITION — the trend says the total moves; this says which part moves it.
+    $composition = $byKind['composition'];
+    expect($composition['chart']['stacked'])->toBeTrue()
+        ->and($composition['chart']['series_field_id'])->toBe('f_reason')
+        ->and($composition['chart']['bucket'])->toBe('month')
+        ->and($composition['semantic_key'])->toBe('composition|total hours|reason');
+
+    // DISTRIBUTION — the average is a liar, and the card says so with real quartiles.
+    $distribution = $byKind['distribution'];
+    expect($distribution['chart']['chart_type'])->toBe('box')
+        ->and($distribution['why'])->toContain('mediana')
+        ->and($distribution['why'])->toContain('1 de cada 4')
+        ->and($distribution['flag']['tone'])->toBe('hot')   // the tail is long
+        ->and($distribution['semantic_key'])->toBe('distribution|total hours|reason');
+
+    // SEASONALITY — earned only by having enough history to HAVE a season.
+    $seasonality = $byKind['seasonality'];
+    expect($seasonality['chart']['bucket'])->toBe('quarter')
+        ->and($seasonality['semantic_key'])->toBe('seasonality|total hours|quarter');
+
+    // The forms all read the same object, and several share its measure and its
+    // dimension — so the thing that keeps them from cannibalising each other is
+    // that each asks a DIFFERENT question. No two findings may collapse onto one
+    // key, or the board silently loses one of them.
+    $keys = collect($result['findings'])->pluck('semantic_key');
+    expect($keys->duplicates())->toBeEmpty()
+        ->and($keys->count())->toBeGreaterThanOrEqual(5);
+
+    app(TenantContext::class)->forget();
+});
+
+it('refuses a season it has not lived, and a spread it cannot measure', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // Six tickets over six days: no year to find a season in, and one record per
+    // category — quartiles of a single value are theatre.
+    $rows = collect(range(0, 5))->map(fn (int $i) => [
+        'reason' => 'R'.$i,
+        'owner' => 'A',
+        'hours' => 3,
+        'day' => date('Y-m-d', strtotime('2026-06-01 +'.$i.' days')),
+    ])->all();
+
+    $result = makeCore($rows)->analyze(
+        $app,
+        ['objects' => [ticketObject()], 'settings' => ['default_locale' => 'es-MX']],
+        $user,
+        'es',
+        [],
+        20,
+    );
+
+    $kinds = collect($result['findings'])->pluck('kind');
+    expect($kinds)->not->toContain('seasonality')  // 6 days is not a year
+        ->and($kinds)->not->toContain('distribution'); // one row per category has no spread
+
+    app(TenantContext::class)->forget();
+});
+
 it('reads a NATIVE object and recommends over its records', function () {
     // The analyst used to read connected sources only, so an app whose data
     // lives in its own records — the ordinary case — got zero recommendations.
