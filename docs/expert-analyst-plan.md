@@ -49,10 +49,21 @@ differently-shaped dashboards, not wrong ones. Rewiring a production pipeline's
 spec generation to buy consistency of taste is not a trade worth making; the
 consistency that matters is already bought.
 
-**Cohort / retention (was 4.9) is not built, on purpose.** The 2-D pivot exists in
-the query layer and is reachable from MCP, but **no block renders a matrix**.
-Faking it as a stacked bar would answer a different question than the one asked.
-Building a `pivot` block is the prerequisite — that decision is still open.
+**Cohort / retention (4.9) — DONE.** It was blocked on a missing renderer: the 2-D
+pivot has always been computable, and nothing could draw a matrix. The `pivot`
+block now exists (`matrix` mode: rows × columns, one aggregate per cell; `cohort`
+mode: columns become the offset from each row's own start and cells become the %
+of that cohort still present), and the analyst proposes it.
+
+Two things it forced, both of which were latent bugs rather than new features:
+the pivot only ever bucketed its FIRST dimension, so a date column grouped by raw
+timestamp and every event became its own column; and retention has to count the
+entities that came back (`distinct_count`), not the events they generated — one
+customer ordering twice is one customer.
+
+It also exposed that a block type must be declared in **six** places with nothing
+checking they agree. `tests/Unit/Architecture/BlockRegistryParityTest.php` now
+holds the schema as the source of truth and fails if any registry falls behind it.
 
 The analyst now emits: pareto, area (trend), donut/hbar (breakdown), gauge, scatter
 (correlation), dual-axis combo, sankey (flow), stacked bar (composition), box
