@@ -16,15 +16,15 @@ This document reconstructs the plan (the original lived only in a session transc
 | 2 · reader port | **done** | `ObjectRowSource` + `FieldPaths`; the analyst can finally see native objects |
 | 3 · core extraction | **done** | `AnalystCore` emits Findings; no page, no block, no cache |
 | 6 · surfaces | **done** | `analyze_app_data` over MCP → every agent and chatbot, via one registration |
-| 8 · rendered truth | **done** | breakdowns aggregate in SQL; `limit` caps categories, not evidence |
+| 8 · rendered truth | **done** | every chart aggregates where the data lives; `limit` caps categories, not evidence |
 | 4 · new finders | **partly** | 4.1 correlation → scatter · 4.2 volume-vs-rate → dual-axis combo. **Left: anomaly, rate KPI, flow (sankey), composition, distribution, seasonality, cohort** |
 | 5 · business sense | **open** | real targets (the 80% gauge is still invented), measure typing, ranking on unknown domains |
 | 7 · consolidation | **open** | four chart-recommendation engines, three narrators, sector knowledge twice |
 
-Still true after Phase 8: the **multi-series** forms (stacked, radar, sankey, combo)
-still fold client-side over a row window. The combo added in 4.2 is exact for a
-connected source and windowed for a native one — moving those to grouped payloads
-is the remainder of Phase 8.
+Phase 8 is complete: breakdowns resolve to groups, a second categorical to a pivot
+({group, group2, value} — the one payload a stacked bar, a radar and a sankey all
+read), and a combo to one grouped series per overlaid measure. Only `scatter` and
+`box` still take rows, because they plot records rather than categories.
 
 ## Where we are
 
