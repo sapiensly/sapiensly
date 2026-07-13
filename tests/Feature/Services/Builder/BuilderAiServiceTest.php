@@ -8,6 +8,7 @@ use App\Ai\Tools\Builder\GeneratePaletteTool;
 use App\Ai\Tools\Builder\InspectRecordsTool;
 use App\Ai\Tools\Builder\ListAvailableComponentsTool;
 use App\Ai\Tools\Builder\ListAvailableFieldTypesTool;
+use App\Ai\Tools\Builder\ListDashboardBlueprintsTool;
 use App\Ai\Tools\Builder\ProfileObjectTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
 use App\Ai\Tools\Builder\ProposePlanTool;
@@ -26,6 +27,7 @@ use App\Models\Record;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
+use App\Services\Analyst\DomainClassifier;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
 use App\Services\Manifest\AppManifestService;
@@ -1226,9 +1228,36 @@ it('ProfileObjectTool classifies field roles and reports grounded stats', functi
         ->and($estado['high_cardinality'])->toBeFalse()
         ->and(collect($estado['top_values'])->firstWhere('value', 'vip')['count'])->toBe(2);
 
-    // And it recommends concrete, data-backed visualisations.
-    expect($result['recommended_visualizations'])->not->toBeEmpty()
-        ->and(collect($result['recommended_visualizations'])->contains(fn ($r) => str_contains($r, 'Estado')))->toBeTrue();
+    // It is the DICTIONARY, and only that. It used to also suggest charts from
+    // field shapes alone ("breakdown of count by Estado") — a second, weaker chart
+    // recommender that could not know whether the breakdown concentrates, whether
+    // two measures move together, or whether a rate exists. That question belongs
+    // to analyze_data, which reads the rows. Two engines answering one question is
+    // how they come to disagree.
+    expect($result)->not->toHaveKey('recommended_visualizations')
+        ->and($result['note'])->toContain('analyze_data')
+        // The guardrail it IS good at survives: a shape hint per field.
+        ->and($estado)->toHaveKey('viz_hint');
+});
+
+it('the sector taxonomy is declared once, not twice', function () {
+    // The blueprint says what an expert in a sector TRACKS; the classifier INFERS
+    // which sector the data belongs to. Different jobs, so they stay separate —
+    // but they name the same sectors, and a taxonomy declared twice drifts. A new
+    // sector in one and not the other silently means "no blueprint for the sector
+    // we just detected", or "a blueprint nothing can ever select".
+    $classifier = new ReflectionClass(DomainClassifier::class);
+    $blueprints = new ReflectionClass(ListDashboardBlueprintsTool::class);
+
+    $inferred = array_keys($classifier->getConstant('HEADLINE'));
+    $prescribed = array_keys($blueprints->getConstant('BLUEPRINTS'));
+
+    // `general` is the classifier's "I don't know" bucket; every sector it can
+    // actually name must have a blueprint, and every blueprint must be reachable.
+    sort($inferred);
+    sort($prescribed);
+
+    expect(array_values(array_diff($inferred, ['general'])))->toBe(array_values(array_diff($prescribed, ['general'])));
 });
 
 it('ProfileObjectTool errors cleanly on an unknown object', function () {

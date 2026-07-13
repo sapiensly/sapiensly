@@ -10,18 +10,24 @@ use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 /**
- * Profiles the REAL data under one object so the builder can choose
- * visualisations like an analyst instead of guessing. Where inspect_records
- * shows raw sample rows, this classifies every field by its analytic ROLE
- * (measure / temporal / categorical / identifier / relation) and reports the
- * stats that decide which chart fits — cardinality (a 4-value status → donut; a
- * 500-value field → top-N hbar, never a pie), numeric min/max/avg/sum, the date
- * span (enough history for a time series?) and completeness (% nulls). It then
- * suggests concrete KPIs and charts grounded in what the data actually supports.
+ * The DATA DICTIONARY for one object: what each field IS, and what it can legally
+ * back. Where inspect_records shows raw sample rows, this classifies every field
+ * by its analytic ROLE (measure / temporal / categorical / identifier / relation)
+ * and reports the stats that constrain a chart — cardinality (a 4-value status →
+ * donut; a 500-value field → top-N hbar, never a pie), numeric min/max/avg/sum,
+ * the date span (enough history for a time series?) and completeness (% nulls).
  *
- * Pair it with list_dashboard_blueprints: the blueprint says WHAT an expert in
- * the sector tracks; this says WHICH of those the data can actually back, and
- * with which block.
+ * It used to also SUGGEST charts, from field shapes alone: "breakdown (bar) of
+ * count by Estado". That made it a second chart recommender, and a strictly
+ * weaker one — a suggestion drawn from a column's cardinality cannot know whether
+ * the breakdown actually concentrates, whether two measures move together, or
+ * whether a rate exists to read the volume against. {@see AnalyzeDataTool} reads
+ * the rows and computes those facts. Two engines answering one question is how
+ * they come to disagree, so this one now answers the question it is good at.
+ *
+ * The division of labour: list_dashboard_blueprints says what an expert in the
+ * sector TRACKS, this says what the data CAN back, and analyze_data says what the
+ * data IS SAYING.
  */
 class ProfileObjectTool implements Tool
 {
@@ -57,7 +63,7 @@ class ProfileObjectTool implements Tool
 
     public function description(): string
     {
-        return 'Profile the REAL data under one object to pick the right visualisations: classifies each field by analytic role (measure/temporal/categorical/identifier/relation) and reports cardinality, numeric min/max/avg/sum, date span and % nulls, then suggests grounded KPIs + charts. Call this BEFORE building a dashboard (after list_dashboard_blueprints) so you map blueprint KPIs to fields the data can actually back, and so you never put a pie chart on a 500-value field. Pass `object_id`. Returns {object_id, total_records, fields:[{id,slug,role,...stats,viz_hint}], recommended_visualizations}.';
+        return 'The data DICTIONARY for one object — what each field is and what it can legally back. Classifies every field by analytic role (measure/temporal/categorical/identifier/relation) and reports cardinality, numeric min/max/avg/sum, date span and % nulls, so you never put a pie chart on a 500-value field or a time series on a column with three days of history. Pass `object_id`. Returns {object_id, total_records, fields:[{id,slug,role,...stats,viz_hint}]}. This says what the data CAN support; for WHICH analyses are actually worth building, call analyze_data — it reads the rows and computes the facts, instead of guessing a chart from a column\'s shape.';
     }
 
     public function schema(JsonSchema $schema): array
@@ -106,10 +112,9 @@ class ProfileObjectTool implements Tool
             'object_name' => $object['name'] ?? $object['slug'] ?? $objectId,
             'total_records' => $total,
             'fields' => $fields,
-            'recommended_visualizations' => $this->recommend($object, $fields, $total),
             'note' => $total === 0
-                ? 'No records yet — recommendations are based on field types only; verify with simulate_query once data exists.'
-                : 'Stats are computed from live data; map blueprint KPIs to the measure/temporal/categorical fields above and verify with simulate_query before propose_change.',
+                ? 'No records yet — the profile is field types only. Once there is data, call analyze_data: it reads the rows and says what they mean.'
+                : 'Stats are computed from live data. This is the DICTIONARY (what each field is and what it can legally back); for WHICH analyses are worth building, call analyze_data — it reads the rows, not just their shapes.',
         ], JSON_THROW_ON_ERROR);
     }
 
@@ -284,55 +289,5 @@ class ProfileObjectTool implements Tool
             'relation' => 'Relation — group/segment by the related entity, or surface related values via a lookup/rollup field.',
             default => 'Detail field — show in tables/record_detail; not used for KPIs or charts.',
         };
-    }
-
-    /**
-     * Turn the per-field profile into concrete, ranked dashboard suggestions.
-     *
-     * @param  array<string, mixed>  $object
-     * @param  list<array<string, mixed>>  $fields
-     * @return list<string>
-     */
-    private function recommend(array $object, array $fields, int $total): array
-    {
-        $name = (string) ($object['name'] ?? 'records');
-        $recs = ["KPI: total {$name} (count".($total > 0 ? ', with a previous-period compare via sys_created_at' : '').').'];
-
-        $measures = array_values(array_filter($fields, fn (array $f): bool => ($f['role'] ?? '') === 'measure'));
-        $temporals = array_values(array_filter($fields, fn (array $f): bool => ($f['role'] ?? '') === 'temporal'));
-        $categoricals = array_values(array_filter($fields, fn (array $f): bool => ($f['role'] ?? '') === 'categorical' && ! ($f['high_cardinality'] ?? false)));
-        $highCard = array_values(array_filter($fields, fn (array $f): bool => ($f['role'] ?? '') === 'categorical' && ($f['high_cardinality'] ?? false)));
-
-        foreach (array_slice($measures, 0, 2) as $m) {
-            $recs[] = "KPI: sum & average of \"{$m['name']}\" (metric_grid items, format ".($m['type'] === 'currency' ? 'currency' : 'number').').';
-        }
-
-        // A time series is the single most valuable dashboard chart when dated.
-        $dateField = $temporals[0] ?? null;
-        if ($dateField !== null && ($dateField['good_for_timeseries'] ?? false)) {
-            $recs[] = "Time series (line/area) of count over \"{$dateField['name']}\".";
-            if ($measures !== []) {
-                $recs[] = "Time series of sum(\"{$measures[0]['name']}\") over \"{$dateField['name']}\" — revenue/volume trend.";
-            }
-        } else {
-            // sys_created_at always exists, so a growth trend is always possible.
-            $recs[] = 'Time series (line) of count over sys_created_at — growth trend (system field, always available).';
-        }
-
-        foreach (array_slice($categoricals, 0, 3) as $c) {
-            $chart = ($c['type'] === 'single_select') ? 'donut/bar' : 'bar';
-            $recs[] = "Breakdown ({$chart}) of count by \"{$c['name']}\".";
-            if ($measures !== []) {
-                $recs[] = "Breakdown (bar) of sum(\"{$measures[0]['name']}\") by \"{$c['name']}\".";
-            }
-        }
-
-        foreach (array_slice($highCard, 0, 1) as $h) {
-            if ($measures !== []) {
-                $recs[] = "Top-N (hbar) of sum(\"{$measures[0]['name']}\") by \"{$h['name']}\" — sort desc, set a limit.";
-            }
-        }
-
-        return $recs;
     }
 }
