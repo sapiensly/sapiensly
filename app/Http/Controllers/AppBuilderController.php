@@ -1367,51 +1367,18 @@ class AppBuilderController extends Controller
             return response()->json(['ok' => false, 'message' => 'No encontré la página.'], 404);
         }
 
+        // The block was built when the analysis was presented (FindingBlock) —
+        // there is one place that decides what a finding looks like on a board,
+        // and this is not it. All that's left is to mint the id.
         $scaffolder = app(AppScaffolder::class);
-        if (($spec['kind'] ?? null) === 'insight') {
-            $ins = $spec['insight'];
-            $block = [
-                'id' => $scaffolder->id('in'),
-                'type' => 'insight',
-                'title' => $ins['title'],
-                'body' => $ins['body'],
-                'variant' => $ins['variant'] ?? 'conclusion',
-            ];
-            $label = $ins['title'];
-            $kind = 'insight';
-        } elseif (($spec['kind'] ?? null) === 'gauge') {
-            $g = $spec['chart'];
-            $block = [
-                'id' => $scaffolder->id('blk'),
-                'type' => 'gauge',
-                'label' => $g['label'],
-                'query' => ['object_id' => $spec['object_id']],
-                'field_id' => $g['field_id'],
-                'aggregation' => $g['aggregation'] ?? 'avg',
-                'max_value' => $g['max_value'],
-                'format' => $g['format'] ?? 'number',
-                'style' => (object) ['col_span' => 4, 'min_height' => 320],
-            ];
-            $label = $g['label'];
-            $kind = 'medidor';
-        } else {
-            $chart = $spec['chart'];
-            $block = array_filter([
-                'id' => $scaffolder->id('blk'),
-                'type' => 'chart',
-                'label' => $chart['label'],
-                'description' => $chart['description'] ?? null,
-                'chart_type' => $chart['chart_type'],
-                'x_field_id' => $chart['x_field_id'] ?? null,
-                'group_by_field_id' => $chart['group_by_field_id'] ?? null,
-                'y_field_id' => $chart['y_field_id'] ?? null,
-                'aggregation' => $chart['aggregation'] ?? 'count',
-                'bucket' => $chart['bucket'] ?? null,
-                'data_source' => ['object_id' => $spec['object_id'], 'limit' => isset($chart['x_field_id']) ? 500 : 12],
-            ], fn ($v) => $v !== null);
-            $label = $chart['label'];
-            $kind = $chart['chart_type'];
-        }
+        $block = $spec['block'];
+        $block = ['id' => $scaffolder->id($block['type'] === 'insight' ? 'in' : 'blk')] + $block;
+        $label = (string) $spec['label'];
+        $kind = match ($spec['kind']) {
+            'insight' => 'insight',
+            'gauge' => 'medidor',
+            default => (string) ($block['chart_type'] ?? 'chart'),
+        };
 
         $container = [
             'id' => $scaffolder->id('cn'),

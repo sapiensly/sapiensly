@@ -68,10 +68,34 @@ class FindingBlock
                 'y_field_id' => $chart['y_field_id'] ?? null,
                 'aggregation' => $chart['aggregation'] ?? 'count',
                 'bucket' => $chart['bucket'] ?? null,
-                // A time series needs the rows; a breakdown only its top slice.
-                'data_source' => ['object_id' => $objectId, 'limit' => isset($chart['x_field_id']) ? 500 : 12],
+                'data_source' => ['object_id' => $objectId, 'limit' => self::rowLimit($finding, $chart)],
             ], fn ($v) => $v !== null),
         ];
+    }
+
+    /**
+     * How many rows the chart must fetch to be TRUE.
+     *
+     * A chart block aggregates client-side over the rows it is given, so the
+     * limit decides whether the picture is right. A connected breakdown source
+     * returns one row per category — already aggregated — so a dozen is the
+     * whole story. An internal object returns one row per RECORD, so the same
+     * dozen would chart twelve tickets out of five hundred: the platform's
+     * native-chart window (AppScaffolder::DASHBOARD_ROW_LIMIT) is what makes it
+     * honest.
+     *
+     * @param  array<string, mixed>  $finding
+     * @param  array<string, mixed>  $chart
+     */
+    private static function rowLimit(array $finding, array $chart): int
+    {
+        $connected = ($finding['connected'] ?? true) === true;
+
+        if (! $connected) {
+            return 500;
+        }
+
+        return isset($chart['x_field_id']) ? 500 : 12;
     }
 
     /**

@@ -662,5 +662,11 @@ it('reads a NATIVE object and recommends over its records', function () {
         ->flatMap(fn ($b) => $b['blocks'] ?? [$b])
         ->where('chart_type', 'pareto');
     expect($charts)->toHaveCount(1)
-        ->and($charts->first()['data_source']['object_id'])->toBe('obj_native00000');
+        ->and($charts->first()['data_source']['object_id'])->toBe('obj_native00000')
+        // A chart aggregates client-side over the rows it fetches. A connected
+        // breakdown source returns one row per CATEGORY, so a dozen is the whole
+        // story; an internal object returns one row per RECORD, so a dozen would
+        // chart twelve tickets out of hundreds. The window must match the source
+        // or the picture is simply false.
+        ->and($charts->first()['data_source']['limit'])->toBe(500);
 });

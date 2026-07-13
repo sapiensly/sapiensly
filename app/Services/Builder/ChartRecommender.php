@@ -6,6 +6,7 @@ use App\Facades\TenantCache;
 use App\Models\App;
 use App\Models\User;
 use App\Services\Analyst\AnalystCore;
+use App\Services\Analyst\FindingBlock;
 use App\Services\Analyst\SemanticKey;
 
 /**
@@ -78,33 +79,20 @@ class ChartRecommender
     private function present(App $app, array $page, array $finding): array
     {
         $recId = substr(sha1($app->id.'|'.($page['id'] ?? '').'|'.$finding['identity']), 0, 16);
-
-        // Findings carrying an `insight` (cross-source joins, derived
-        // metrics) are added as INSIGHT blocks — the value isn't a single viz.
-        if (isset($finding['insight'])) {
-            TenantCache::put($this->specKey($app, $recId), [
-                'kind' => 'insight',
-                'insight' => $finding['insight'],
-            ], self::SPEC_TTL);
-
-            return [
-                'id' => $recId,
-                'kicker' => $finding['kicker'],
-                'title' => $finding['title'],
-                'why' => $finding['why'],
-                'form' => 'insight',
-                'flag' => $finding['flag'],
-                'preview' => $finding['preview'],
-            ];
-        }
-
-        $isGauge = ($finding['chart']['__gauge'] ?? false) === true;
-        $chart = $finding['chart'];
+        $rendered = FindingBlock::forFinding($finding);
+        $chart = $finding['chart'] ?? [];
         unset($chart['__gauge']);
+
+        // The finished BLOCK is what gets cached — not a spec to be rebuilt at
+        // insert time. «Agregar» then adds exactly what was previewed, and there
+        // is only one place that decides what an analysis looks like on a board.
         TenantCache::put($this->specKey($app, $recId), [
-            'kind' => $isGauge ? 'gauge' : 'chart',
+            'kind' => $rendered['type'],
+            'label' => $rendered['label'],
+            'block' => $rendered['block'],
+            // Kept for callers that read the raw analysis behind the card.
             'chart' => $chart,
-            'object_id' => $this->objectIdFor($finding),
+            'object_id' => FindingBlock::objectId($finding),
         ], self::SPEC_TTL);
 
         return [
@@ -112,7 +100,11 @@ class ChartRecommender
             'kicker' => $finding['kicker'],
             'title' => $finding['title'],
             'why' => $finding['why'],
-            'form' => $isGauge ? 'gauge' : ($chart['chart_type'] ?? 'bar'),
+            'form' => match ($rendered['type']) {
+                'insight' => 'insight',
+                'gauge' => 'gauge',
+                default => $chart['chart_type'] ?? 'bar',
+            },
             'flag' => $finding['flag'],
             'preview' => $finding['preview'],
         ];
@@ -154,21 +146,6 @@ class ChartRecommender
         $walk($blocks);
 
         return array_keys($seen);
-    }
-
-    /**
-     * @param  array<string, mixed>  $finding
-     */
-    private function objectIdFor(array $finding): string
-    {
-        // identity always starts with the object id (json array or gauge|id|…).
-        $id = $finding['identity'];
-        if (str_starts_with($id, 'gauge|')) {
-            return explode('|', $id)[1] ?? '';
-        }
-        $decoded = json_decode($id, true);
-
-        return is_array($decoded) ? (string) ($decoded[0] ?? '') : '';
     }
 
     private function specKey(App $app, string $recId): string

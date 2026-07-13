@@ -92,6 +92,7 @@ class AnalystCore
                 $facts = $this->facts->build($object, $rows);
                 $factsByObject[$object['id']] = ['object' => $object, 'rows' => $rows, 'facts' => $facts];
 
+                $connected = FieldPaths::isConnected($object);
                 foreach ($this->candidatesFor($object, $rows, $facts, $domain, $es) as $c) {
                     $semKey = SemanticKey::forChart($object['id'], $c['chart'], $names, $hints);
                     if (isset($shown[$semKey])) {
@@ -99,6 +100,9 @@ class AnalystCore
                     }
                     $c['identity'] = $this->identityOf($object['id'], $c['chart']);
                     $c['semantic_key'] = $semKey;
+                    // How many rows the rendered chart must fetch depends on what
+                    // backs it — see FindingBlock.
+                    $c['connected'] = $connected;
                     // Key candidates by the SEMANTIC cut too, so two overlapping
                     // sources don't both propose "the same chart".
                     $candidates[$semKey] = $this->rankBest($candidates[$semKey] ?? null, $c);
