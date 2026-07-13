@@ -2,6 +2,7 @@
 
 use App\Ai\Tools\Builder\AddCrudPageTool;
 use App\Ai\Tools\Builder\AddDetailPageTool;
+use App\Ai\Tools\Builder\CreateIntegrationTool;
 use App\Ai\Tools\Builder\FrameworkReferenceTool;
 use App\Ai\Tools\Builder\GeneratePaletteTool;
 use App\Ai\Tools\Builder\InspectRecordsTool;
@@ -9,6 +10,7 @@ use App\Ai\Tools\Builder\ListAvailableComponentsTool;
 use App\Ai\Tools\Builder\ListAvailableFieldTypesTool;
 use App\Ai\Tools\Builder\ProfileObjectTool;
 use App\Ai\Tools\Builder\ProposeChangeTool;
+use App\Ai\Tools\Builder\ProposePlanTool;
 use App\Ai\Tools\Builder\ReadManifestTool;
 use App\Ai\Tools\Builder\ScaffoldAppTool;
 use App\Ai\Tools\Builder\SetBuildPlanTool;
@@ -1572,6 +1574,34 @@ it('an untargeted apply still advances the plan to the first open step', functio
     expect($plan['steps'][1]['status'])->toBe('done')
         ->and($plan['steps'][1]['applied_version_id'])->toBe($version->id)
         ->and($plan['status'])->toBe('done');
+});
+
+it('the builder chat and the «Agregar gráfica» panel share ONE analyst', function () {
+    // The chat used to recommend charts through an entirely different engine than
+    // the panel of the same builder — two minds on one board, free to disagree
+    // about the same data. And the tool list was copy-pasted between sendMessage
+    // and streamMessage, so a tool added to one turn could be missing from the
+    // other. One list, one engine.
+    $user = User::factory()->create();
+    $app = App::factory()->create(['user_id' => $user->id]);
+    $conv = BuilderConversation::create(['app_id' => $app->id, 'user_id' => $user->id, 'status' => 'active']);
+
+    $service = app(BuilderAiService::class);
+    $method = new ReflectionMethod($service, 'toolsFor');
+    $tools = $method->invoke(
+        $service,
+        $conv,
+        new ProposeChangeTool($app, app(AppManifestService::class), app(ManifestValidator::class)),
+        new ProposePlanTool,
+        new CreateIntegrationTool(app(IntegrationAuthoring::class), $user),
+    );
+
+    $names = collect($tools)
+        ->map(fn ($tool) => method_exists($tool, 'name') ? $tool->name() : class_basename($tool))
+        ->all();
+
+    expect($names)->toContain('analyze_data')   // the same AnalystCore the panel asks
+        ->and($names)->toContain('propose_change');
 });
 
 it('replays history with ground-truth receipts so narration cannot masquerade as action', function () {

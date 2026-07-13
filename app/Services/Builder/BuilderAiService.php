@@ -7,6 +7,7 @@ use App\Ai\Tools\Builder\AddConnectedObjectTool;
 use App\Ai\Tools\Builder\AddCrudPageTool;
 use App\Ai\Tools\Builder\AddDashboardPageTool;
 use App\Ai\Tools\Builder\AddDetailPageTool;
+use App\Ai\Tools\Builder\AnalyzeDataTool;
 use App\Ai\Tools\Builder\CreateIntegrationTool;
 use App\Ai\Tools\Builder\DeleteBlockByIdTool;
 use App\Ai\Tools\Builder\DiscoverIntegrationTool;
@@ -176,47 +177,7 @@ class BuilderAiService
         // Connected reads act as the conversation's user (per-user OAuth tokens).
         $this->records->actingAs($conversation->user);
 
-        $tools = [
-            new ReadManifestTool($app, $this->manifestService, $proposeTool),
-            new FrameworkReferenceTool,
-            new ListAvailableComponentsTool,
-            new ListDashboardBlueprintsTool,
-            new PlanDashboardTool,
-            new ListAvailableIconsTool,
-            new GeneratePaletteTool($app->organization?->brandbook()),
-            new ListAvailableFieldTypesTool,
-            new ListAvailableActionsTool,
-            new ListAvailableTriggersTool,
-            new ListAvailableStepsTool,
-            new InspectRecordsTool($app, $conversation->user),
-            new ProfileObjectTool($app, $this->manifestService, $this->records, $proposeTool),
-            new PrepareDashboardTool($app, $this->manifestService, $this->records, $proposeTool),
-            new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
-            new ValidateManifestTool($this->validator),
-            $proposeTool,
-            $planTool,
-            new ScaffoldAppTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
-            new AddCrudPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
-            new AddDetailPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
-            new AddDashboardPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
-            new SetBuildPlanTool($conversation),
-            new TargetPlanStepsTool($conversation),
-            new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
-            new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
-            new ListAvailableIntegrationsTool($conversation->user, app(IntegrationCatalog::class)),
-            new ListConnectorActionsTool(app(ConnectorActionResolver::class), $conversation->user),
-            new VerifyWorkflowTool($app, app(WorkflowEngine::class), app(WorkflowAssertionEvaluator::class), $proposeTool, $conversation->user),
-            new DiscoverIntegrationTool($this->integrationAuthoring),
-            $createIntegrationTool,
-            new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
-            new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
-            new SampleMcpToolTool(app(McpClient::class), $conversation->user),
-            new AddConnectedObjectTool($proposeTool, app(ConnectedObjectAuthoring::class), $conversation->user),
-            // The clock every model must ground time-relative reasoning on
-            // (dashboards, date filters, "last N days"). Not in the Builder's
-            // PlatformToolsFactory path, so bridged in explicitly.
-            RuntimeToolFactory::named('current_datetime', new McpBridgeTool(CurrentDatetimeTool::class, $conversation->user)),
-        ];
+        $tools = $this->toolsFor($conversation, $proposeTool, $planTool, $createIntegrationTool);
 
         $history = $this->buildHistory($conversation);
         $prompt = array_pop($history); // the user turn just stored
@@ -386,47 +347,7 @@ class BuilderAiService
             ])->save();
         });
 
-        $tools = [
-            new ReadManifestTool($app, $this->manifestService, $proposeTool),
-            new FrameworkReferenceTool,
-            new ListAvailableComponentsTool,
-            new ListDashboardBlueprintsTool,
-            new PlanDashboardTool,
-            new ListAvailableIconsTool,
-            new GeneratePaletteTool($app->organization?->brandbook()),
-            new ListAvailableFieldTypesTool,
-            new ListAvailableActionsTool,
-            new ListAvailableTriggersTool,
-            new ListAvailableStepsTool,
-            new InspectRecordsTool($app, $conversation->user),
-            new ProfileObjectTool($app, $this->manifestService, $this->records, $proposeTool),
-            new PrepareDashboardTool($app, $this->manifestService, $this->records, $proposeTool),
-            new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
-            new ValidateManifestTool($this->validator),
-            $proposeTool,
-            $planTool,
-            new ScaffoldAppTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
-            new AddCrudPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
-            new AddDetailPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
-            new AddDashboardPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
-            new SetBuildPlanTool($conversation),
-            new TargetPlanStepsTool($conversation),
-            new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
-            new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
-            new ListAvailableIntegrationsTool($conversation->user, app(IntegrationCatalog::class)),
-            new ListConnectorActionsTool(app(ConnectorActionResolver::class), $conversation->user),
-            new VerifyWorkflowTool($app, app(WorkflowEngine::class), app(WorkflowAssertionEvaluator::class), $proposeTool, $conversation->user),
-            new DiscoverIntegrationTool($this->integrationAuthoring),
-            $createIntegrationTool,
-            new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
-            new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
-            new SampleMcpToolTool(app(McpClient::class), $conversation->user),
-            new AddConnectedObjectTool($proposeTool, app(ConnectedObjectAuthoring::class), $conversation->user),
-            // The clock every model must ground time-relative reasoning on
-            // (dashboards, date filters, "last N days"). Not in the Builder's
-            // PlatformToolsFactory path, so bridged in explicitly.
-            RuntimeToolFactory::named('current_datetime', new McpBridgeTool(CurrentDatetimeTool::class, $conversation->user)),
-        ];
+        $tools = $this->toolsFor($conversation, $proposeTool, $planTool, $createIntegrationTool);
 
         // History excludes the placeholder we're about to fill. reorder()
         // clears the relation's default created_at ASC sort so orderByDesc
@@ -1526,6 +1447,72 @@ class BuilderAiService
         }
 
         return $newVersion;
+    }
+
+    /**
+     * The tools a builder turn can call.
+     *
+     * This list was copy-pasted between sendMessage() and streamMessage(), which
+     * is the kind of duplication that only ever drifts one way: a tool added to
+     * the turn the developer happened to be testing, and missing from the other.
+     * One list, both paths.
+     *
+     * @return list<object>
+     */
+    private function toolsFor(
+        BuilderConversation $conversation,
+        ProposeChangeTool $proposeTool,
+        ProposePlanTool $planTool,
+        CreateIntegrationTool $createIntegrationTool,
+    ): array {
+        $app = $conversation->app;
+
+        return [
+            new ReadManifestTool($app, $this->manifestService, $proposeTool),
+            new FrameworkReferenceTool,
+            new ListAvailableComponentsTool,
+            new ListDashboardBlueprintsTool,
+            new PlanDashboardTool,
+            new ListAvailableIconsTool,
+            new GeneratePaletteTool($app->organization?->brandbook()),
+            new ListAvailableFieldTypesTool,
+            new ListAvailableActionsTool,
+            new ListAvailableTriggersTool,
+            new ListAvailableStepsTool,
+            new InspectRecordsTool($app, $conversation->user),
+            new ProfileObjectTool($app, $this->manifestService, $this->records, $proposeTool),
+            new PrepareDashboardTool($app, $this->manifestService, $this->records, $proposeTool),
+            new SimulateQueryTool($app, $this->manifestService, $this->records, $proposeTool),
+            // The analyst — the same AnalystCore behind the builder's «Agregar
+            // gráfica» panel. Until now the chat recommended charts through an
+            // entirely different engine than the panel of the same builder, so
+            // the two could disagree about the same data.
+            new AnalyzeDataTool($app, $this->manifestService, $conversation->user),
+            new ValidateManifestTool($this->validator),
+            $proposeTool,
+            $planTool,
+            new ScaffoldAppTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
+            new AddCrudPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
+            new AddDetailPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
+            new AddDashboardPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
+            new SetBuildPlanTool($conversation),
+            new TargetPlanStepsTool($conversation),
+            new DeleteBlockByIdTool($app, $this->manifestService, $proposeTool),
+            new SeedRecordsTool($app, $this->manifestService, $this->writer, $conversation->user, $proposeTool),
+            new ListAvailableIntegrationsTool($conversation->user, app(IntegrationCatalog::class)),
+            new ListConnectorActionsTool(app(ConnectorActionResolver::class), $conversation->user),
+            new VerifyWorkflowTool($app, app(WorkflowEngine::class), app(WorkflowAssertionEvaluator::class), $proposeTool, $conversation->user),
+            new DiscoverIntegrationTool($this->integrationAuthoring),
+            $createIntegrationTool,
+            new TestIntegrationConnectionTool($this->integrationAuthoring, $conversation->user),
+            new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
+            new SampleMcpToolTool(app(McpClient::class), $conversation->user),
+            new AddConnectedObjectTool($proposeTool, app(ConnectedObjectAuthoring::class), $conversation->user),
+            // The clock every model must ground time-relative reasoning on
+            // (dashboards, date filters, "last N days"). Not in the Builder's
+            // PlatformToolsFactory path, so bridged in explicitly.
+            RuntimeToolFactory::named('current_datetime', new McpBridgeTool(CurrentDatetimeTool::class, $conversation->user)),
+        ];
     }
 
     /**
