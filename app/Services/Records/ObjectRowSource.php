@@ -5,6 +5,7 @@ namespace App\Services\Records;
 use App\Facades\TenantCache;
 use App\Models\App;
 use App\Models\User;
+use App\Support\Tenancy\TenantCacheScopeMissingException;
 
 /**
  * A sample of an object's rows, whatever backs it.
@@ -39,25 +40,37 @@ class ObjectRowSource
         }
 
         $key = 'rows:sample:'.sha1($app->id.'|'.$objectId.'|'.($actor?->id ?? 'x').'|'.$limit);
+        $read = function () use ($app, $objectId, $manifest, $limit): array {
+            $rows = $this->blockData->queryObject(
+                $app,
+                ['object_id' => $objectId, 'limit' => $limit],
+                $manifest,
+            );
+
+            // Unwrap the block envelope ({id, data}) down to the payload the
+            // analytic primitives read: a connected object's payload is the
+            // external row verbatim (addressed by external_path), an internal
+            // one is slug-keyed (plus id and the sys_* stamps). One shape per
+            // source, both resolved by {@see FieldPaths}.
+            return array_values(array_map(
+                fn (array $row): array => is_array($row['data'] ?? null) ? $row['data'] : $row,
+                $rows,
+            ));
+        };
 
         try {
-            return TenantCache::remember($key, self::TTL, function () use ($app, $objectId, $manifest, $limit): array {
-                $rows = $this->blockData->queryObject(
-                    $app,
-                    ['object_id' => $objectId, 'limit' => $limit],
-                    $manifest,
-                );
-
-                // Unwrap the block envelope ({id, data}) down to the payload the
-                // analytic primitives read: a connected object's payload is the
-                // external row verbatim (addressed by external_path), an internal
-                // one is slug-keyed (plus id and the sys_* stamps). One shape per
-                // source, both resolved by {@see FieldPaths}.
-                return array_values(array_map(
-                    fn (array $row): array => is_array($row['data'] ?? null) ? $row['data'] : $row,
-                    $rows,
-                ));
-            });
+            return TenantCache::remember($key, self::TTL, $read);
+        } catch (TenantCacheScopeMissingException) {
+            // No tenant scope in this context, so the cache fails closed by
+            // design. The READ is still governed by RLS (and, for a connected
+            // object, by the actor's own credentials), so serve it uncached
+            // rather than reporting an empty source — a cache that can't be used
+            // must not read as "this app has no data".
+            try {
+                return $read();
+            } catch (\Throwable) {
+                return [];
+            }
         } catch (\Throwable) {
             return []; // one source that won't read never sinks the whole analysis
         }

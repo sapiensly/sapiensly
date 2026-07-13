@@ -191,6 +191,7 @@ class SapiensServer extends Server
         Tools\Data\GetRecordTool::class,
         Tools\Data\AggregateRecordsTool::class,
         Tools\Data\ProfileObjectTool::class,
+        Tools\Data\AnalyzeAppDataTool::class,
         Tools\Data\CreateRecordTool::class,
         Tools\Data\UpdateRecordTool::class,
         Tools\Data\DeleteRecordTool::class,
