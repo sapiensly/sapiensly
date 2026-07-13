@@ -21,6 +21,19 @@ class FindingBlock
     {
         $objectId = self::objectId($finding);
 
+        // A constructed metric (reopen rate, backlog share) goes up as a live KPI:
+        // `ratio_denominator` makes the platform recompute it from the data on
+        // every load, where a sentence would freeze today's number.
+        if (isset($finding['kpi'])) {
+            $kpi = $finding['kpi'];
+
+            return [
+                'type' => 'stat',
+                'label' => (string) $kpi['label'],
+                'block' => ['type' => 'stat'] + $kpi,
+            ];
+        }
+
         if (isset($finding['insight'])) {
             $insight = $finding['insight'];
 

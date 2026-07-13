@@ -48,6 +48,7 @@ class AnalystCore
         private DataQualityCheck $quality,
         private CrossSourceAnalyzer $crossSource,
         private DerivedMetricProposer $derived,
+        private AnomalyFinder $anomalies,
     ) {}
 
     /**
@@ -128,6 +129,16 @@ class AnalystCore
             $f['identity'] = $key;
             $f['semantic_key'] = $key;
             $f['score'] = $f['base'];
+            $candidates[$key] = $f;
+        }
+
+        // Anomalies: the day something happened. The trend chart draws the spike;
+        // this is the sentence that names it.
+        foreach ($this->anomalies->analyze($factsByObject, $es) as $f) {
+            $key = 'anomaly|'.($f['measure'] ?? '');
+            $f['identity'] = $key;
+            $f['semantic_key'] = $key;
+            $f['score'] = $f['base'] + ($f['flag'] !== null ? 6 : 0);
             $candidates[$key] = $f;
         }
 

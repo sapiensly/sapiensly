@@ -100,11 +100,21 @@ class DerivedMetricProposer
             'kicker' => $es ? 'Métrica derivada' : 'Derived metric',
             'title' => $label,
             'why' => $body,
-            'insight' => [
-                'type' => 'insight',
-                'title' => $label.": {$rate}%",
-                'body' => $body,
-                'variant' => 'conclusion',
+            // A ratio is a METRIC, so it belongs on the board as a live KPI, not
+            // as a sentence quoting today's number. `ratio_denominator` makes the
+            // platform recompute it from the data on every load; prose would be
+            // stale the moment a ticket is reopened.
+            'kpi' => [
+                'label' => $label,
+                'query' => ['object_id' => (string) $object['id']],
+                'field_id' => (string) $num['id'],
+                'aggregation' => 'sum',
+                'ratio_denominator' => [
+                    'query' => ['object_id' => (string) $object['id']],
+                    'field_id' => (string) $den['id'],
+                    'aggregation' => 'sum',
+                ],
+                'format' => 'percentage',
             ],
             'preview' => ['kind' => 'gauge', 'value' => $rate, 'target' => 100],
             'base' => 76,

@@ -1377,6 +1377,7 @@ class AppBuilderController extends Controller
         $kind = match ($spec['kind']) {
             'insight' => 'insight',
             'gauge' => 'medidor',
+            'stat' => 'KPI',
             default => (string) ($block['chart_type'] ?? 'chart'),
         };
 

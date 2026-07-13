@@ -5,10 +5,12 @@ use App\Models\Integration;
 use App\Models\Record;
 use App\Models\User;
 use App\Services\Analyst\AnalystCore;
+use App\Services\Analyst\AnomalyFinder;
 use App\Services\Analyst\CrossSourceAnalyzer;
 use App\Services\Analyst\DataQualityCheck;
 use App\Services\Analyst\DerivedMetricProposer;
 use App\Services\Analyst\DomainClassifier;
+use App\Services\Analyst\FindingBlock;
 use App\Services\Analyst\RecommendationNarrator;
 use App\Services\Builder\ChartRecommender;
 use App\Services\Connected\ConnectedIntegrationResolver;
@@ -122,6 +124,7 @@ function makeCore(array $rows): AnalystCore
         new DataQualityCheck,
         new CrossSourceAnalyzer(new SemanticProfile),
         new DerivedMetricProposer(new SemanticProfile),
+        new AnomalyFinder,
     );
 }
 
@@ -448,8 +451,69 @@ it('proposes a derived reopen-rate the board does not carry', function () {
     expect($findings)->toHaveCount(1)
         ->and($findings[0]['kind'])->toBe('derived')
         ->and($findings[0]['title'])->toBe('Tasa de reapertura')
-        ->and($findings[0]['insight']['body'])->toContain('3.2%')
-        ->and($findings[0]['insight']['type'])->toBe('insight');
+        // The narrative still carries today's number…
+        ->and($findings[0]['why'])->toContain('3.2%');
+
+    // …but a ratio is a METRIC, so it goes up as a LIVE KPI, not as a sentence
+    // quoting a number that is stale the moment a ticket is reopened.
+    $kpi = $findings[0]['kpi'];
+    expect($kpi['aggregation'])->toBe('sum')
+        ->and($kpi['field_id'])->toBe('m_reop')
+        ->and($kpi['ratio_denominator']['field_id'])->toBe('m_total')
+        ->and($kpi['ratio_denominator']['aggregation'])->toBe('sum')
+        ->and($kpi['format'])->toBe('percentage')
+        // …and it renders as a stat block, not an insight.
+        ->and(FindingBlock::forFinding($findings[0])['block']['type'])->toBe('stat');
+});
+
+it('names the day something happened — the outlier the trend line never says', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // A steady backlog with one violent spike. The trend chart draws the peak;
+    // nothing on the board ever SAYS it — and the outlier has been computed all
+    // along, and thrown away.
+    $obj = [
+        'id' => 'obj_anom0000', 'slug' => 'backlog_daily', 'name' => 'Backlog Daily',
+        'fields' => [
+            ['id' => 'f_d', 'slug' => 'day', 'name' => 'Day', 'type' => 'date'],
+            ['id' => 'f_b', 'slug' => 'backlog_open', 'name' => 'Backlog Open', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => [
+                ['field_id' => 'f_d', 'external_path' => 'day'],
+                ['field_id' => 'f_b', 'external_path' => 'backlog'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'x', 'collection_path' => 'rows']],
+        ],
+    ];
+    $rows = [
+        ['day' => '2026-05-04', 'backlog' => 100], ['day' => '2026-05-05', 'backlog' => 104],
+        ['day' => '2026-05-06', 'backlog' => 98], ['day' => '2026-05-07', 'backlog' => 102],
+        ['day' => '2026-05-08', 'backlog' => 101], ['day' => '2026-05-09', 'backlog' => 99],
+        ['day' => '2026-05-10', 'backlog' => 103], ['day' => '2026-05-11', 'backlog' => 412],
+    ];
+
+    $result = makeCore($rows)->analyze(
+        $app,
+        ['objects' => [$obj], 'settings' => ['default_locale' => 'es-MX']],
+        $user,
+        'es',
+    );
+
+    $anomaly = collect($result['findings'])->firstWhere('kind', 'anomaly');
+    expect($anomaly)->not->toBeNull()
+        ->and($anomaly['why'])->toContain('2026-05-11')  // the day itself
+        ->and($anomaly['why'])->toContain('412')          // what it hit
+        ->and($anomaly['why'])->toContain('σ')            // how far out that is
+        // Loud enough to be a risk to look at, not a conclusion to file away.
+        ->and($anomaly['insight']['variant'])->toBe('risk')
+        ->and($anomaly['flag']['tone'])->toBe('hot');
+
+    app(TenantContext::class)->forget();
 });
 
 it('run-rate: a declining trend gets an ETA to zero', function () {

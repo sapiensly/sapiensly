@@ -42,6 +42,7 @@ const FORM_LABEL: Record<string, string> = {
     treemap: 'Treemap',
     scatter: 'Dispersión',
     combo: 'Doble eje',
+    stat: 'KPI',
     insight: 'Hallazgo',
 };
 

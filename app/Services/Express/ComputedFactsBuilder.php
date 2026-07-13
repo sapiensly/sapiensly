@@ -13,6 +13,9 @@ use App\Services\Records\InMemoryRowFilter;
  */
 class ComputedFactsBuilder
 {
+    /** Beyond this many deviations, the exact figure says nothing more than "impossible". */
+    private const Z_CAP = 10.0;
+
     /** Points needed before a row-wise correlation is worth stating. */
     private const CORRELATION_MIN_POINTS = 8;
 
@@ -568,18 +571,35 @@ class ComputedFactsBuilder
             return null;
         }
         $values = array_column($dated['pairs'], 1);
-        $mean = array_sum($values) / count($values);
-        $variance = array_sum(array_map(fn (float $v): float => ($v - $mean) ** 2, $values)) / count($values);
-        $std = sqrt($variance);
-        if ($std <= 0.0) {
-            return null;
-        }
+        $n = count($values);
+        $sum = array_sum($values);
+        $sumSquares = array_sum(array_map(fn (float $v): float => $v * $v, $values));
 
+        // Each point is scored against the behaviour of the OTHERS, not against a
+        // mean and deviation it is itself part of. A single violent spike inflates
+        // the deviation it belongs to and so hides itself — the classic masking
+        // problem — and the point of an outlier test is precisely to catch the one
+        // point that doesn't belong with the rest.
         $peak = null;
         foreach ($dated['pairs'] as [$ts, $value]) {
-            $z = ($value - $mean) / $std;
+            $m = $n - 1;
+            $mean = ($sum - $value) / $m;
+            $variance = ($sumSquares - $value * $value) / $m - $mean * $mean;
+
+            if ($variance <= 1e-9) {
+                // The rest is perfectly steady. A point that departs from a flat
+                // baseline is the clearest outlier there is, not an undefined one
+                // — dividing by a zero deviation must not make it disappear.
+                if (abs($value - $mean) <= 1e-9) {
+                    continue;
+                }
+                $z = $value > $mean ? self::Z_CAP : -self::Z_CAP;
+            } else {
+                $z = ($value - $mean) / sqrt($variance);
+            }
+
             if ($peak === null || abs($z) > abs($peak['z'])) {
-                $peak = ['ts' => $ts, 'valor' => $value, 'z' => $z];
+                $peak = ['ts' => $ts, 'valor' => $value, 'z' => $z, 'media' => $mean];
             }
         }
         if ($peak === null || abs($peak['z']) < 2.0) {
@@ -590,9 +610,13 @@ class ComputedFactsBuilder
             'measure' => $dated['name'],
             'fecha' => date('Y-m-d', $peak['ts']),
             'valor' => round($peak['valor'], 2),
-            'z' => round(abs($peak['z']), 1),
+            // Past ~10σ the exact figure stops carrying information — it only
+            // says "this could not have come from the same process" — and a
+            // narrative claiming 144σ reads like a bug, not a finding.
+            'z' => round(min(abs($peak['z']), self::Z_CAP), 1),
             'direccion' => $peak['z'] >= 0 ? 'sobre' : 'bajo',
-            'media' => round($mean, 2),
+            // The mean of the rest — what the measure looks like WITHOUT this day.
+            'media' => round($peak['media'], 2),
         ];
     }
 
