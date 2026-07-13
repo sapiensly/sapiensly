@@ -40,11 +40,18 @@ class ObjectRowSource
         }
 
         $key = 'rows:sample:'.sha1($app->id.'|'.$objectId.'|'.($actor?->id ?? 'x').'|'.$limit);
-        $read = function () use ($app, $objectId, $manifest, $limit): array {
+        $read = function () use ($app, $objectId, $manifest, $actor, $limit): array {
             $rows = $this->blockData->queryObject(
                 $app,
                 ['object_id' => $objectId, 'limit' => $limit],
                 $manifest,
+                // The actor READS. A connected source behind per-user OAuth
+                // authenticates as the viewer, so an analysis that forgot to hand
+                // the actor down got no rows — and the swallow turned that into
+                // "this app has no data", which is a lie about the app rather than
+                // the truth about the credentials. The actor was being used for
+                // the cache key and nothing else.
+                $actor !== null ? ['__actor' => $actor] : [],
             );
 
             // Unwrap the block envelope ({id, data}) down to the payload the

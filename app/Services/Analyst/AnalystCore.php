@@ -904,8 +904,15 @@ class AnalystCore
                 return false;
             }
 
+            // A target column says it is a GOAL. It does not merely mention a
+            // service level: «sla» names the target AND the attainment of it, so
+            // matching it made `confirmation_sla_pct` — a measure in its own
+            // right — the declared target of an unrelated one, and the card said
+            // "that target comes from the source itself" with total confidence.
+            // An invented goal that sounds sourced is worse than the flat 80% this
+            // was built to kill.
             return preg_match(
-                '/(^|_|\s)(meta|target|objetivo|goal|sla)(_|$|\s)/i',
+                '/(^|_|\s)(meta|target|objetivo|goal)(_|$|\s)/i',
                 Str::lower(Str::ascii((string) ($f['name'] ?? '').' '.(string) ($f['slug'] ?? ''))),
             ) === 1;
         });

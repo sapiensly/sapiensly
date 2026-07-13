@@ -914,6 +914,58 @@ it('never invents a target — it uses the one the source declares', function ()
     app(TenantContext::class)->forget();
 });
 
+it('a measure that merely mentions an SLA is not a declared target', function () {
+    // Found auditing a real board: the analyst announced "Otd Pct está en 38.2%, a
+    // 52.7 pts de la meta de 90.9% — es la meta que trae la fuente". There was no
+    // such target. The pattern matched `confirmation_sla_pct` — a DIFFERENT
+    // measure, whose own average became the "goal" of an unrelated one. An
+    // invented target that sounds sourced is worse than the flat 80% this was
+    // built to kill.
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    $obj = [
+        'id' => 'obj_sla00000', 'slug' => 'otd_daily', 'name' => 'Otd Daily',
+        'fields' => [
+            ['id' => 'f_day', 'slug' => 'day', 'name' => 'Day', 'type' => 'date'],
+            ['id' => 'f_otd', 'slug' => 'otd_pct', 'name' => 'Otd Pct', 'type' => 'number'],
+            // Attainment of a service level — NOT a goal for otd_pct.
+            ['id' => 'f_sla', 'slug' => 'confirmation_sla_pct', 'name' => 'Confirmation Sla Pct', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => [
+                ['field_id' => 'f_day', 'external_path' => 'day'],
+                ['field_id' => 'f_otd', 'external_path' => 'otd'],
+                ['field_id' => 'f_sla', 'external_path' => 'sla'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'x', 'collection_path' => 'rows']],
+        ],
+    ];
+    $rows = collect(range(0, 9))->map(fn (int $i) => [
+        'day' => date('Y-m-d', strtotime('2026-06-13 +'.$i.' days')),
+        'otd' => 38 + ($i % 3),
+        'sla' => 91,   // consistently high — irresistible as a fake "goal"
+    ])->all();
+
+    $result = makeCore($rows)->analyze(
+        $app,
+        ['objects' => [$obj], 'settings' => ['default_locale' => 'es-MX']],
+        $user, 'es', [], 20,
+    );
+
+    $gauge = collect($result['findings'])->firstWhere('kind', 'gauge');
+    expect($gauge)->not->toBeNull()
+        // It may still benchmark against the measure's OWN best — never against
+        // another measure it mistook for a goal.
+        ->and($gauge['why'])->not->toContain('la meta que trae la fuente')
+        ->and($gauge['chart']['max_value'])->not->toEqual(91);
+
+    app(TenantContext::class)->forget();
+});
+
 it('with no declared target, it benchmarks against the best the org actually hit', function () {
     config(['cache.default' => 'array']);
     $user = User::factory()->create();
