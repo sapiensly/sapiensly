@@ -589,6 +589,12 @@ const selectedBlock = computed(() =>
 const selectedIsHeading = computed(
     () => (selectedBlock.value as { type?: string } | null)?.type === 'heading',
 );
+// The banner is selectable so its headline can be edited — but it owns its
+// own geometry (full width, its own height) and its place at the top of the
+// board, so it gets no resize or reorder handles.
+const selectedIsHero = computed(
+    () => (selectedBlock.value as { type?: string } | null)?.type === 'hero',
+);
 const selectedObject = computed(() => {
     const b = selectedBlock.value as Record<string, any> | null;
     const objId = b?.data_source?.object_id ?? b?.query?.object_id ?? null;
@@ -3936,7 +3942,8 @@ function statusTone(status: Message['status']): string {
                             v-if="
                                 panelMode === 'manual' &&
                                 selectedBlock &&
-                                selectionRect
+                                selectionRect &&
+                                !selectedIsHero
                             "
                         >
                             <button

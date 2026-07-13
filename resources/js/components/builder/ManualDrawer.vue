@@ -73,6 +73,10 @@ function paintOptimistic(key: string, value: unknown) {
 
 const isChart = computed(() => props.block.type === 'chart');
 const isHeading = computed(() => props.block.type === 'heading');
+// The board's banner. It carries no data of its own the editor can move — its
+// eyebrow, stat and gradient are the design's, not the user's — so the ONLY
+// thing this drawer offers for it is its headline.
+const isHero = computed(() => props.block.type === 'hero');
 const isTemporal = computed(() => !!props.block.x_field_id);
 const chartTypes = computed(() =>
     isTemporal.value
@@ -100,6 +104,7 @@ const stringFields = computed(() =>
 
 const form = reactive({
     label: '',
+    title: '',
     content: '',
     description: '',
     chart_type: '',
@@ -122,6 +127,7 @@ function seed() {
     seeding = true;
     const b = props.block as Record<string, any>;
     form.label = String(b.label ?? '');
+    form.title = String(b.title ?? '');
     form.content = String(b.content ?? '');
     form.description = String(b.description ?? '');
     form.chart_type = String(b.chart_type ?? '');
@@ -139,6 +145,16 @@ function seed() {
     setTimeout(() => (seeding = false), 0);
 }
 watch(() => props.block, seed, { immediate: true });
+
+/** Whichever key holds this block's own text — what the drawer names it by. */
+const blockName = computed(
+    () =>
+        (isHeading.value
+            ? form.content
+            : isHero.value
+              ? form.title
+              : form.label) || String(props.block.type ?? 'este elemento'),
+);
 
 const dirty = computed(() =>
     Object.keys(snapshot.value).some(
@@ -169,11 +185,20 @@ async function apply(changes: Record<string, unknown>) {
     }
 }
 
-/** Auto-apply: selects fire immediately; text debounces. */
-function autoApply(key: string, getter: () => unknown, debounceMs = 0) {
+/**
+ * Auto-apply: selects fire immediately; text debounces. `skip` holds back a
+ * value the server would reject anyway (an emptied hero title), so clearing
+ * the field to retype it doesn't bounce a 422 at the user.
+ */
+function autoApply(
+    key: string,
+    getter: () => unknown,
+    debounceMs = 0,
+    skip?: (next: unknown) => boolean,
+) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     watch(getter, (next) => {
-        if (seeding) return;
+        if (seeding || skip?.(next)) return;
         const b = props.block as Record<string, any>;
         const current =
             key === 'limit'
@@ -201,6 +226,13 @@ function autoApply(key: string, getter: () => unknown, debounceMs = 0) {
     });
 }
 autoApply('label', () => form.label, 700);
+// The schema requires a hero to have a headline (minLength 1).
+autoApply(
+    'title',
+    () => form.title,
+    700,
+    (v) => String(v).trim() === '',
+);
 autoApply('content', () => form.content, 500);
 autoApply('description', () => form.description, 700);
 autoApply('chart_type', () => form.chart_type);
@@ -242,11 +274,6 @@ function restore() {
 // versioned patch path, which means it reverts from the version history.
 const confirmingDelete = ref(false);
 const deleting = ref(false);
-const blockName = computed(
-    () =>
-        (isHeading.value ? form.content : form.label) ||
-        String(props.block.type ?? 'este elemento'),
-);
 
 async function destroy() {
     deleting.value = true;
@@ -423,10 +450,7 @@ const previewChips = computed(() => {
                     </button>
                 </div>
                 <p class="truncate text-[15px] font-semibold text-ink">
-                    {{
-                        (isHeading ? form.content : form.label) ||
-                        (block.type as string)
-                    }}
+                    {{ blockName }}
                 </p>
 
                 <div
@@ -608,6 +632,20 @@ const previewChips = computed(() => {
                                 type="text"
                                 maxlength="200"
                                 class="w-full rounded-sp-sm border border-medium bg-surface px-3 py-2 text-[13px] text-ink outline-none focus:border-accent-blue"
+                            />
+                        </label>
+                        <!-- The banner: its headline is the one thing that's
+                             the user's to write. -->
+                        <label
+                            v-else-if="isHero"
+                            class="block space-y-1.5 text-xs text-ink-muted"
+                        >
+                            <span>Título del reporte</span>
+                            <textarea
+                                v-model="form.title"
+                                rows="2"
+                                maxlength="200"
+                                class="w-full resize-none rounded-sp-sm border border-medium bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-accent-blue"
                             />
                         </label>
                         <template v-else>
@@ -882,8 +920,9 @@ const previewChips = computed(() => {
                     </div>
                 </section>
 
-                <!-- DISEÑO (width/height don't apply to a section heading) -->
-                <section v-if="!isHeading">
+                <!-- DISEÑO (width/height don't apply to a section heading, and
+                     the banner spans the board by design) -->
+                <section v-if="!isHeading && !isHero">
                     <button
                         type="button"
                         class="flex w-full items-center gap-2 px-4 pt-3.5 pb-2.5"

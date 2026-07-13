@@ -1567,3 +1567,39 @@ it('a deleted block is revertible — the removal is a version', function () {
     $active = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
     expect($active['pages'][0]['blocks'])->toBe([]);
 });
+
+it('fine tune edits a hero title — the banner\'s one editable field', function () {
+    $manifest = manualDashManifest($this->testApp->id);
+    array_unshift($manifest['pages'][0]['blocks'], [
+        'id' => 'blk_manualhero', 'type' => 'hero',
+        'eyebrow' => 'REPORTE', 'title' => 'Salud de Tickets',
+        'align' => 'left',
+    ]);
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/update", [
+            'block_id' => 'blk_manualhero',
+            'changes' => ['title' => 'Salud de Tickets: Volumen, Backlog y FCR'],
+        ])->assertOk();
+
+    $active = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect($active['pages'][0]['blocks'][0]['title'])
+        ->toBe('Salud de Tickets: Volumen, Backlog y FCR')
+        // Everything else the banner owns is untouched.
+        ->and($active['pages'][0]['blocks'][0]['eyebrow'])->toBe('REPORTE');
+});
+
+it('a hero title cannot be emptied — the schema requires a headline', function () {
+    $manifest = manualDashManifest($this->testApp->id);
+    array_unshift($manifest['pages'][0]['blocks'], [
+        'id' => 'blk_manualhero', 'type' => 'hero', 'title' => 'Salud de Tickets',
+    ]);
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/update", [
+            'block_id' => 'blk_manualhero',
+            'changes' => ['title' => ''],
+        ])->assertStatus(422);
+});

@@ -1092,6 +1092,9 @@ class AppBuilderController extends Controller
             'block_id' => ['required', 'string'],
             'changes' => ['required', 'array'],
             'changes.label' => ['sometimes', 'string', 'max:120'],
+            // A hero's headline. Editorial, not a data claim, so it skips the
+            // label-grounding gate below.
+            'changes.title' => ['sometimes', 'string', 'min:1', 'max:200'],
             // A section heading's / text block's own text.
             'changes.content' => ['sometimes', 'string', 'max:200'],
             'changes.description' => ['sometimes', 'nullable', 'string', 'max:300'],
@@ -1144,7 +1147,7 @@ class AppBuilderController extends Controller
         }
 
         $ops = [];
-        foreach (['label', 'content', 'description', 'chart_type', 'aggregation', 'y_field_id', 'group_by_field_id'] as $key) {
+        foreach (['label', 'title', 'content', 'description', 'chart_type', 'aggregation', 'y_field_id', 'group_by_field_id'] as $key) {
             if (array_key_exists($key, $changes)) {
                 $ops[] = $changes[$key] === null
                     ? ['op' => 'remove', 'path' => $pointer.'/'.$key]
@@ -1183,7 +1186,7 @@ class AppBuilderController extends Controller
         }
 
         try {
-            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste fino: '.(string) ($changes['label'] ?? $block['label'] ?? $data['block_id']));
+            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste fino: '.(string) ($changes['label'] ?? $changes['title'] ?? $block['label'] ?? $block['title'] ?? $data['block_id']));
         } catch (InvalidManifestException $e) {
             return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
         }

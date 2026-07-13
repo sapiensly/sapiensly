@@ -158,6 +158,9 @@ async function clickCta() {
 </script>
 
 <template>
+    <!-- data-block-* are bound explicitly: inheritAttrs:false drops the ones
+         AppRenderer passes, and the fine-tune editor needs them here to select
+         the hero (its title is editable like any other block's). -->
     <section
         :class="[
             'relative flex w-full flex-col justify-center overflow-hidden rounded-sp-md',
@@ -165,6 +168,8 @@ async function clickCta() {
             hasCustomBackground ? '' : 'bg-slate-900',
         ]"
         :style="sectionStyle"
+        :data-block-id="block.id"
+        :data-block-type="'hero'"
     >
         <div
             v-if="showOverlay"
