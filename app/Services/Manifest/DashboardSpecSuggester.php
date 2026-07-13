@@ -2,6 +2,8 @@
 
 namespace App\Services\Manifest;
 
+use App\Services\Analyst\MaturationCheck;
+use App\Services\Analyst\RatioIdentity;
 use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Express\ComputedFactsBuilder;
 use App\Services\Express\DomainLexicon;
@@ -43,6 +45,8 @@ class DashboardSpecSuggester
         private readonly SemanticProfile $semantics = new SemanticProfile,
         private readonly ComputedFactsBuilder $factsBuilder = new ComputedFactsBuilder,
         private readonly FactNarrator $narrator = new FactNarrator,
+        private readonly RatioIdentity $ratios = new RatioIdentity(new SemanticProfile),
+        private readonly MaturationCheck $maturation = new MaturationCheck,
     ) {}
 
     /**
@@ -1112,21 +1116,170 @@ class DashboardSpecSuggester
             // empty (observed: an entire benchmark scenario scored 1/5).
             'include_date_filter' => $dateField !== null,
             'default_range' => $defaultRange,
-            'kpis' => $this->suggestSparks(
+            'kpis' => $this->withoutImmaturePeriods($this->suggestSparks(
                 $this->suggestKpis($object, $grain, $numerics, $measureTypes, $booleans, $es, $promptTopics, $stats, $dateField, $defaultRange),
                 $grain,
                 $dateField,
-            ),
-            'charts' => $this->withGaugeTarget(
+            ), $object, $rows, $dateField),
+            'charts' => $this->withoutImmaturePeriods($this->ratesAtRowGrain($this->withGaugeTarget(
                 $this->suggestCharts($grain, $dateField, $categoricals, $numerics, $measureTypes, $stats, $es, $object, $promptTopics),
                 $numerics,
                 $measureTypes,
                 $es,
-            ),
+            ), $fields), $object, $rows, $dateField),
             'insights' => $this->suggestInsights($object, $categoricals, $booleans, $es, $rows),
             'category_filter' => $this->suggestCategoryFilter($categoricals, $stats),
             'table' => $this->suggestTable($object, $grain, $dateField, $categoricals, $numerics, $measureTypes, $es),
         ], fn ($v) => $v !== null && $v !== '');
+    }
+
+    /**
+     * A derived rate may only be charted at the grain its rows are stored at.
+     *
+     * The KPI rule is not enough. `avg(otd_pct)` bucketed by WEEK averages seven
+     * daily rates into one point — the same unweighted mean, at a coarser scale, and
+     * a week with three quiet days lies exactly as hard as the KPI did. The reason
+     * the per-row chart is honest at all is that a bucket holding ONE row makes the
+     * average equal to that row's value; widen the bucket and the guarantee is gone.
+     *
+     * So the bucket is pinned to the row grain. That is exact for any per-row rate,
+     * whatever the source's period is — a weekly source bucketed by day still puts
+     * one row in each bucket.
+     *
+     * @param  list<array<string, mixed>>  $charts
+     * @param  list<array<string, mixed>>  $fields
+     * @return list<array<string, mixed>>
+     */
+    private function ratesAtRowGrain(array $charts, array $fields): array
+    {
+        $derived = collect($fields)
+            ->filter(fn (array $f): bool => is_array($f['derived_rate'] ?? null))
+            ->keyBy('id');
+        if ($derived->isEmpty()) {
+            return $charts;
+        }
+
+        return collect($charts)->map(function (array $chart) use ($derived): array {
+            if (($chart['aggregation'] ?? null) === 'avg'
+                && isset($chart['bucket'])
+                && $derived->has($chart['y_field_id'] ?? '')) {
+                $chart['bucket'] = 'day';
+            }
+
+            return $chart;
+        })->values()->all();
+    }
+
+    /**
+     * The only honest KPI for a rate column — or none at all.
+     *
+     * `avg(otd_pct)` is not the rate. It is the unweighted mean of per-row rates,
+     * which weights a day with 3 orders exactly like a day with 500. Two branches
+     * of this class used to emit it (the namesake headline and the per-measure
+     * loop), and the manifest validator rejects it — so THE FAST PATH WE TELL THE
+     * MODEL TO USE GENERATED THE ONE BLOCK THE RULES FORBID. It retried five times,
+     * consulted the framework reference mid-fight, and escaped the only way it
+     * could: by deleting OTD from a board about on-time delivery.
+     *
+     * The server compiles what is mechanical. So the server has to know what the
+     * data proved:
+     *
+     *   - numerator is a real column → SUM(numerator) ÷ SUM(denominator), which the
+     *     platform recomputes on every load. That IS the rate.
+     *   - numerator is a DIFFERENCE (on-time = delivered − late) → ratio_denominator
+     *     points at ONE column, so no KPI can express it. Emit nothing. A missing
+     *     headline is honest; a wrong one is not. The rate still gets its per-row
+     *     chart, where each value is exactly right.
+     *   - nothing proven → the old average, which for an ordinary score is fine.
+     *
+     * @param  array<string, mixed>  $field
+     * @param  array<string, array{values: list<mixed>, distinct: int, null_rate: float, all_equal: bool}>  $stats
+     * @return array<string, mixed>|null
+     */
+    private function rateKpi(array $field, array $stats): ?array
+    {
+        $name = (string) ($field['name'] ?? $field['slug'] ?? '');
+        $derived = is_array($field['derived_rate'] ?? null) ? $field['derived_rate'] : null;
+
+        if ($derived === null) {
+            return [
+                // Field name only — the subtitle names it as an average.
+                'label' => $name,
+                'aggregation' => 'avg',
+                'field_id' => $field['id'],
+                'icon' => 'star',
+                ...$this->kpiDisplay($field, $stats),
+            ];
+        }
+
+        if (isset($derived['minus_field_id'])) {
+            return null;
+        }
+
+        return [
+            'label' => $name,
+            'aggregation' => 'sum',
+            'field_id' => $derived['numerator_field_id'],
+            'ratio_denominator' => [
+                'aggregation' => 'sum',
+                'field_id' => $derived['denominator_field_id'],
+            ],
+            'format' => 'percentage',
+            'icon' => 'percent',
+        ];
+    }
+
+    /**
+     * Cut the periods that have not happened yet out of every block.
+     *
+     * A live source reports an order the instant it is placed but cannot mark it
+     * delivered-on-time until the promised date arrives, so the tail of the series
+     * reads as a collapse to zero. Charted, it tells the director the operation
+     * died and sends him to shout at an innocent courier — which is precisely the
+     * board that shipped.
+     *
+     * The cutoff is a LAG, never a date: `< {{days_ago(4)}}` keeps excluding the
+     * unresolved window as it rolls forward, where a literal 2026-07-09 would rot
+     * into a lie the morning after. It is ANDed with whatever filter the block
+     * already carries, so the range picker still works.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>|null  $dateField
+     * @return list<array<string, mixed>>
+     */
+    private function withoutImmaturePeriods(array $blocks, array $object, array $rows, ?array $dateField): array
+    {
+        if ($blocks === [] || $rows === [] || $dateField === null) {
+            return $blocks;
+        }
+
+        $maturation = $this->maturation->detect(
+            $object,
+            $rows,
+            $this->ratios->detect($object, $rows),
+        );
+        $lag = 0;
+        foreach ($maturation as $m) {
+            if (($m['conclusive'] ?? false) === true) {
+                $lag = max($lag, (int) $m['lag_days']);
+            }
+        }
+        if ($lag <= 0) {
+            return $blocks;
+        }
+
+        $cut = ['op' => 'lt', 'field_id' => $dateField['id'], 'value_expression' => "{{days_ago({$lag})}}"];
+
+        return collect($blocks)->map(function (array $block) use ($cut): array {
+            $own = is_array($block['filter'] ?? null) ? $block['filter'] : null;
+            $block['filter'] = $own === null
+                ? $cut
+                : ['op' => 'and', 'conditions' => [$own, $cut]];
+
+            return $block;
+        })->values()->all();
     }
 
     /**
@@ -1286,16 +1439,14 @@ class DashboardSpecSuggester
                     && ($f['id'] ?? null) !== ($requested['id'] ?? null),
             );
             if ($namesake !== null) {
-                $kpis[] = [
-                    // Clean field name; the aggregation basis ("promedio del
-                    // periodo") is carried by the KPI subtitle the compiler
-                    // fills, so a "Promedio …" prefix would just be redundant.
-                    'label' => (string) ($namesake['name'] ?? $namesake['slug']),
-                    'aggregation' => 'avg',
-                    'field_id' => $namesake['id'],
-                    'icon' => 'star',
-                    ...$this->kpiDisplay($namesake, $stats),
-                ];
+                // The namesake is the board's headline, so it is the WORST place to
+                // average a derived rate — and the likeliest, because the object is
+                // usually named after it ("Métricas OTD Diarias" → otd_pct). This is
+                // the branch that put avg(otd_pct) in the hero.
+                $kpi = $this->rateKpi($namesake, $stats);
+                if ($kpi !== null) {
+                    $kpis[] = $kpi;
+                }
             }
 
             // Pre-aggregated grain: the headline total is the SUM of the
@@ -1360,14 +1511,10 @@ class DashboardSpecSuggester
             }
 
             if ($type === SemanticProfile::MEASURE_RATIO) {
-                $kpis[] = [
-                    // Field name only — the subtitle names it as an average.
-                    'label' => $name,
-                    'aggregation' => 'avg',
-                    'field_id' => $field['id'],
-                    'icon' => 'star',
-                    ...$this->kpiDisplay($field, $stats),
-                ];
+                $kpi = $this->rateKpi($field, $stats);
+                if ($kpi !== null) {
+                    $kpis[] = $kpi;
+                }
 
                 continue;
             }

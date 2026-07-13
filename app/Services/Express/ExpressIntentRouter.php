@@ -19,8 +19,27 @@ class ExpressIntentRouter
 
     private const BUILD_WORDS = '/\b(crea|constru|haz|genera|arma|dame|quiero|necesito|build|create|make)\w*/iu';
 
-    /** Signals the user wants the conversational/manual path — never reroute. */
-    private const OPT_OUT_WORDS = '/\b(conversando|paso a paso|manual|sin express|explica|por qu[eé]|c[oó]mo)\b/iu';
+    /**
+     * Signals the user wants the conversational path — never reroute. These are
+     * about the PROCESS ("explícame", "paso a paso"), which is unambiguous.
+     */
+    private const OPT_OUT_WORDS = '/\b(conversando|paso a paso|manual|sin express|explica)\b/iu';
+
+    /**
+     * A message that OPENS with an interrogative is a question, not a brief.
+     *
+     * "cómo" and "por qué" used to sit in the opt-out list, and they defeated the
+     * route from anywhere in the text — so a fifteen-line dashboard brief was sent
+     * to the conversational builder because one of its bullets read "cómo venimos
+     * hoy contra la semana pasada". They are ordinary Spanish interrogatives and
+     * they belong in a real brief: "quiero un tablero … cómo vamos", "por qué cayó
+     * el OTD" are things a director asks OF THE DATA, not of the builder.
+     *
+     * Anchored to the start, they keep their original job — "¿por qué mi tablero
+     * está vacío?" is still a question — without stealing every brief that happens
+     * to contain a question word.
+     */
+    private const OPT_OUT_OPENERS = '/^\s*[¿¡"\'«]*\s*(c[oó]mo|por qu[eé]|qu[eé] es|para qu[eé])\b/iu';
 
     public function shouldRunExpress(string $message, App $app): bool
     {
@@ -29,7 +48,8 @@ class ExpressIntentRouter
         }
 
         $text = Str::lower($message);
-        if (preg_match(self::OPT_OUT_WORDS, $text) === 1) {
+        if (preg_match(self::OPT_OUT_WORDS, $text) === 1
+            || preg_match(self::OPT_OUT_OPENERS, trim($text)) === 1) {
             return false;
         }
         if ((preg_match(self::DASHBOARD_WORDS, $text) !== 1 && ! $this->typoedDashboardWord($text))

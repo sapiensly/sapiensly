@@ -3,6 +3,7 @@
 namespace App\Services\Analyst;
 
 use App\Services\Records\FieldPaths;
+use Carbon\CarbonImmutable;
 
 /**
  * The most recent rows are not bad news. They are not news yet.
@@ -72,7 +73,7 @@ class MaturationCheck
         $out = [];
 
         foreach ($identities as $identity) {
-            $found = $this->immatureTail($rows, $paths, $identity);
+            $found = $this->immatureTail($object, $rows, $paths, $identity);
             if ($found !== null) {
                 $out[] = $found;
             }
@@ -113,7 +114,7 @@ class MaturationCheck
      * @param  array<string, mixed>  $identity
      * @return array<string, mixed>|null
      */
-    private function immatureTail(array $rows, array $paths, array $identity): ?array
+    private function immatureTail(array $object, array $rows, array $paths, array $identity): ?array
     {
         $numPath = $paths[$identity['numerator']['id']] ?? null;
         $denPath = $paths[$identity['denominator']['id']] ?? null;
@@ -186,11 +187,21 @@ class MaturationCheck
             }
         }
 
+        // A board must EXCLUDE these periods, and it has to keep excluding them
+        // tomorrow. So the cutoff is expressed as a LAG in days from today, never as
+        // a fixed date: `fecha < {{days_ago(4)}}` stays true as the window rolls,
+        // where a hard-coded 2026-07-09 would silently rot into a lie.
+        $cutoff = $this->dateOf($object, $tail[0] ?? []);
+
         return [
             'rate' => $identity['rate'],
             'numerator' => $identity['numerator'],
             'denominator' => $identity['denominator'],
             'immature_periods' => $run,
+            'cutoff_date' => $cutoff,
+            'lag_days' => $cutoff !== null
+                ? max(1, (int) CarbonImmutable::today()->diffInDays(CarbonImmutable::parse($cutoff), true))
+                : $run,
             // What the board shows today, dragged down by periods that have not happened.
             'full_window_rate' => $this->weightedRate($rows, $paths, $identity),
             // What the business actually did, over the window that has resolved.
@@ -233,6 +244,28 @@ class MaturationCheck
         }
 
         return $den > 0 ? round($num / $den * 100, 1) : 0.0;
+    }
+
+    /**
+     * The date this row sits on — the axis the board will filter by.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $row
+     */
+    private function dateOf(array $object, array $row): ?string
+    {
+        $paths = FieldPaths::forObject($object);
+        foreach ($object['fields'] ?? [] as $field) {
+            if (! is_array($field) || ! in_array($field['type'] ?? '', ['date', 'datetime'], true)) {
+                continue;
+            }
+            $value = data_get($row, $paths[$field['id']] ?? '');
+            if (is_string($value) && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**

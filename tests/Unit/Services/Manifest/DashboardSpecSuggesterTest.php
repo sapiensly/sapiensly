@@ -6,6 +6,7 @@ use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
 use App\Services\Manifest\ManifestValidator;
 use App\Support\Branding\ColorPalette;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -1160,4 +1161,143 @@ it('roles are assigned by CONTENT, not by which object the fit listed first', fu
         ->and($charts->where('chart_type', 'pareto'))->toHaveCount(1)
         ->and($spec['category_filter']['object_slug'] ?? null)->toBe('tickets_by_dimension') // «filtro por categoría»
         ->and($spec['category_filter']['label'] ?? '')->toBe('Category');
+});
+
+/**
+ * The fast path must not generate the block the rules forbid.
+ *
+ * This suggester is what `use_suggestion: true` compiles, and what the Express
+ * pipeline authors with. It emitted avg(otd_pct) — which the manifest validator
+ * rejects outright, because the data proves that rate is derived. So the platform
+ * fought itself: the model called add_dashboard_page five times, consulted the
+ * framework reference mid-fight, and escaped the only way it could — by deleting
+ * OTD from a board about on-time delivery. The board shipped with no OTD at all.
+ *
+ * The server compiles what is mechanical. So the server has to know what the data
+ * proved.
+ */
+function dss_otdObject(bool $difference = true): array
+{
+    $derived = [
+        'numerator_field_id' => 'fld_ok0000000',
+        'denominator_field_id' => 'fld_total00000',
+        'verified_on_rows' => 31,
+    ];
+    if ($difference) {
+        $derived['minus_field_id'] = 'fld_late000000';
+    }
+
+    return [
+        'id' => 'obj_otd0000000', 'slug' => 'metricas_otd', 'name' => 'Métricas OTD Diarias',
+        'fields' => [
+            ['id' => 'fld_fecha00000', 'slug' => 'fecha', 'name' => 'Fecha', 'type' => 'date'],
+            ['id' => 'fld_total00000', 'slug' => 'total_pedidos', 'name' => 'Total Pedidos', 'type' => 'number'],
+            ['id' => 'fld_ok0000000', 'slug' => 'pedidos_entregados', 'name' => 'Pedidos Entregados', 'type' => 'number'],
+            ['id' => 'fld_late000000', 'slug' => 'pedidos_retrasados', 'name' => 'Pedidos Retrasados', 'type' => 'number'],
+            ['id' => 'fld_otd000000', 'slug' => 'otd_pct', 'name' => 'Otd Pct', 'type' => 'number', 'derived_rate' => $derived],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => [
+                ['field_id' => 'fld_fecha00000', 'external_path' => 'fecha'],
+                ['field_id' => 'fld_total00000', 'external_path' => 'total'],
+                ['field_id' => 'fld_ok0000000', 'external_path' => 'ok'],
+                ['field_id' => 'fld_late000000', 'external_path' => 'late'],
+                ['field_id' => 'fld_otd000000', 'external_path' => 'rate'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'get-otd', 'collection_path' => 'breakdown']],
+        ],
+    ];
+}
+
+/** 26 settled days, then 5 that have not resolved: delivered AND late fall to zero. */
+function dss_otdRows(): array
+{
+    $rows = [];
+    $today = Carbon::today();
+    for ($i = 30; $i >= 5; $i--) {
+        $total = 50 + ($i % 7);
+        $ok = (int) round($total * 0.93);
+        $late = 3;
+        $rows[] = ['fecha' => $today->copy()->subDays($i)->toDateString(), 'total' => $total,
+            'ok' => $ok, 'late' => $late, 'rate' => round(($ok - $late) / $total * 100, 2)];
+    }
+    foreach ([30, 12, 0, 0, 0] as $k => $ok) {
+        $total = 55;
+        $rows[] = ['fecha' => $today->copy()->subDays(4 - $k)->toDateString(), 'total' => $total,
+            'ok' => $ok, 'late' => 0, 'rate' => round($ok / $total * 100, 2)];
+    }
+
+    return $rows;
+}
+
+it('never averages a rate the data proves is derived', function () {
+    // The numerator is a DIFFERENCE (on-time = delivered − late) and ratio_denominator
+    // points at one column, so NO KPI can state this rate. A missing headline is
+    // honest; a wrong one is not.
+    $spec = (new DashboardSpecSuggester)->suggest(dss_otdObject(), 'es', dss_otdRows());
+
+    $otd = collect($spec['kpis'])->firstWhere('field_id', 'fld_otd000000');
+    expect($otd)->toBeNull()
+        ->and(collect($spec['kpis'])->pluck('aggregation'))->not->toContain('avg');
+
+    // The rate still gets its chart — where each point IS the day's true rate.
+    $chart = collect($spec['charts'])->firstWhere('y_field_id', 'fld_otd000000');
+    expect($chart)->not->toBeNull()
+        // Pinned to the row grain. Bucketed by week, avg would average seven daily
+        // rates into one point — the same unweighted mean, at a coarser scale.
+        ->and($chart['bucket'])->toBe('day');
+});
+
+it('states a rate it CAN compute as a ratio, not as an average', function () {
+    // delivered / total: the numerator is a real column, so the rate is expressible.
+    $spec = (new DashboardSpecSuggester)->suggest(dss_otdObject(difference: false), 'es', dss_otdRows());
+
+    $kpi = collect($spec['kpis'])->firstWhere('field_id', 'fld_ok0000000');
+    expect($kpi)->not->toBeNull()
+        ->and($kpi['aggregation'])->toBe('sum')
+        ->and($kpi['ratio_denominator']['field_id'])->toBe('fld_total00000')
+        ->and($kpi['ratio_denominator']['aggregation'])->toBe('sum')
+        ->and($kpi['format'])->toBe('percentage');
+});
+
+it('cuts the periods that have not happened out of every block', function () {
+    $spec = (new DashboardSpecSuggester)->suggest(dss_otdObject(), 'es', dss_otdRows());
+
+    $cutOf = function (array $block): ?string {
+        $filter = $block['filter'] ?? null;
+        $cut = $filter['op'] === 'and' ? collect($filter['conditions'])->last() : $filter;
+
+        return $cut['op'] === 'lt' ? ($cut['value_expression'] ?? null) : null;
+    };
+
+    // A LAG, never a date: `{{days_ago(N)}}` keeps excluding the unresolved window as
+    // it rolls forward, where a literal cutoff would rot into a lie the next morning.
+    foreach ([...$spec['kpis'], ...$spec['charts']] as $block) {
+        expect($cutOf($block))->toMatch('/^\{\{days_ago\(\d+\)\}\}$/');
+    }
+});
+
+it('compiles to a page the validator accepts — the fight is over', function () {
+    // The regression that matters: suggester → compiler → validator, end to end.
+    // This round-trip was broken, and every builder turn paid for it in retries.
+    $object = dss_otdObject();
+    $spec = (new DashboardSpecSuggester)->suggest($object, 'es', dss_otdRows());
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec + ['object_slug' => $object['slug']],
+        $object, [], ColorPalette::fromAccent('#003961'), 'es', [],
+    );
+    expect($built['ok'])->toBeTrue();
+
+    $manifest = [
+        'schema_version' => '1.0.0', 'id' => 'app_'.strtolower((string) Str::ulid()),
+        'slug' => 'otd', 'name' => 'OTD', 'version' => 1,
+        'objects' => [$object], 'pages' => [$built['page']],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'name' => 'Admin', 'slug' => 'admin', 'is_default' => true]]],
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    expect($result->errors)->toBe([])
+        ->and($result->valid)->toBeTrue();
 });

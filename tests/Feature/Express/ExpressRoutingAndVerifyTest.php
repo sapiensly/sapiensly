@@ -351,3 +351,38 @@ it('ExpressDashboardJob dispatches the verifier carrying the chosen model', func
         return $job->runId === 'plr_test000000001' && $job->modelOverride === 'z-ai/glm-5v-turbo';
     });
 });
+
+it('does not let one question word inside a brief defeat the route', function () {
+    // The real message that got away. It names a tablero, it says "necesito", the
+    // tenant has a live MCP source — it is a build request by every measure. It went
+    // to the conversational builder anyway, because `cómo` sat in the opt-out list
+    // and one of its bullets read "cómo venimos hoy contra la semana pasada".
+    //
+    // "cómo" and "por qué" are ordinary Spanish interrogatives and they BELONG in a
+    // brief: a director asks them of the DATA, not of the builder. Matched anywhere
+    // in the text they steal every real brief that contains a question.
+    config(['express.enabled' => true, 'express.autoroute' => true]);
+    Integration::factory()->forUser($this->user)->create([
+        'is_mcp' => true, 'status' => 'active', 'auth_type' => 'bearer', 'auth_config' => ['token' => 'T'],
+        'base_url' => 'https://mcp.example.com/v1',
+    ]);
+
+    $router = app(ExpressIntentRouter::class);
+
+    $brief = <<<'TXT'
+    Soy director de operaciones. Necesito un tablero ejecutivo para revisar
+    la operación de entregas cada mañana. Quiero entender:
+      - cómo venimos hoy contra la semana pasada
+      - dónde se está rompiendo la operación y desde cuándo
+      - por qué se cae el cumplimiento en un mal día
+    TXT;
+
+    expect($router->shouldRunExpress($brief, $this->testApp))->toBeTrue();
+
+    // But an interrogative that OPENS the message is still a question about the app,
+    // not a brief — which is the job the opt-out was doing right.
+    expect($router->shouldRunExpress('¿por qué mi tablero se ve vacío?', $this->testApp))->toBeFalse()
+        ->and($router->shouldRunExpress('cómo genero un reporte de KPIs?', $this->testApp))->toBeFalse()
+        // And an explicit ask for the conversational path always wins.
+        ->and($router->shouldRunExpress('necesito un tablero, explícame paso a paso', $this->testApp))->toBeFalse();
+});

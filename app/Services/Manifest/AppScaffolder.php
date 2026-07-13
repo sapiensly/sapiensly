@@ -1282,12 +1282,26 @@ class AppScaffolder
                 $compare['object_id'] = $kpiObject['id'];
             }
 
+            // A RATE KPI: value = SUM(numerator) ÷ SUM(denominator), recomputed live.
+            // The compiler owns the denominator's query (same object, same window) so
+            // the spec only names the column and how to aggregate it — otherwise the
+            // ratio would silently read a different window than the block it sits in.
+            $ratio = is_array($kpi['ratio_denominator'] ?? null) ? $kpi['ratio_denominator'] : null;
+            if ($ratio !== null) {
+                $ratio = array_filter([
+                    'query' => $query,
+                    'aggregation' => (string) ($ratio['aggregation'] ?? 'sum'),
+                    'field_id' => $ratio['field_id'] ?? null,
+                ], fn ($v) => $v !== null);
+            }
+
             $items[] = array_filter([
                 'id' => $this->id('itm'),
                 'label' => (string) ($kpi['label'] ?? 'KPI'),
                 'query' => $query,
                 'aggregation' => $agg,
                 'field_id' => $needsField ? ($kpi['field_id'] ?? null) : null,
+                'ratio_denominator' => $ratio,
                 'format' => $kpi['format'] ?? null,
                 'icon' => $this->renderableIcon($kpi['icon'] ?? null),
                 'compare' => $compare,
