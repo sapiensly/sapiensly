@@ -51,6 +51,12 @@ class AnalystCore
     /** History needed before a seasonal read is honest (~18 months). */
     private const SEASONALITY_MIN_DAYS = 540;
 
+    /** Observations needed before "your best period" is a benchmark and not a fluke. */
+    private const BENCHMARK_MIN_POINTS = 6;
+
+    /** Points a benchmark must sit above today's level to be worth closing. */
+    private const BENCHMARK_MIN_GAP = 2.0;
+
     public function __construct(
         private ObjectRowSource $rows,
         private ComputedFactsBuilder $facts,
@@ -241,8 +247,17 @@ class AnalystCore
         // Business relevance: an analysis whose measure/dimension is a headline
         // concept for the detected domain (FCR, backlog, reason… for support)
         // ranks above an equally-loud but peripheral one.
+        //
+        // But an unrecognised domain has NO headline terms, so this bonus was
+        // always 0 there and the ranking silently collapsed to kind-precedence —
+        // every analysis of an unfamiliar business looked equally relevant, which
+        // is the same as having no opinion at all. So when the domain lexicon has
+        // nothing to say, the DATA does: what a source is named after is what it
+        // is about ("Tickets by reason" → tickets, reason), and a measure or
+        // dimension the source is named after outranks an incidental column.
         $head = fn (string ...$names): int => collect($names)->contains(
             fn (string $n): bool => $this->domain->isHeadline($domain, $n)
+                || $this->isCentralTo($objName, $n)
         ) ? 12 : 0;
 
         // 1) PARETO — the strongest read: the measure concentrates in few
@@ -323,9 +338,9 @@ class AnalystCore
         // semantic key, because it is the same cut told better: when a rate
         // exists, the board should get this instead, never both.
         $volume = collect($fields)->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
-            && $this->semantics->measureTypeOf($f) === SemanticProfile::MEASURE_ADDITIVE);
+            && $this->semantics->measureTypeIn($object, $rows, $f) === SemanticProfile::MEASURE_ADDITIVE);
         $rate = collect($fields)->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
-            && $this->semantics->measureTypeOf($f) === SemanticProfile::MEASURE_RATIO);
+            && $this->semantics->measureTypeIn($object, $rows, $f) === SemanticProfile::MEASURE_RATIO);
         $comboDim = isset($facts['concentracion'])
             ? $byName(Str::lower(Str::ascii((string) $facts['concentracion']['dimension'])))
             : (isset($facts['top_values']) ? $byName(Str::lower(Str::ascii((string) array_key_first($facts['top_values'])))) : null);
@@ -404,12 +419,19 @@ class AnalystCore
             ];
         }
 
-        // 4) GAUGE — a ratio measure (e.g. FCR %) read against a target.
+        // 4) GAUGE — a ratio measure read against a benchmark that EXISTS.
+        //
+        // This used to invent one: `$target = 80` for anything on a 0-100 scale.
+        // We told people they were "3.2 points from target" against a goal we made
+        // up, which is the one thing an analyst may never do. A gauge now needs a
+        // benchmark it can defend — a target the source declares, or the
+        // organisation's own best period — and when there is neither it reports
+        // the level and says nothing about a goal.
         foreach ($fields as $f) {
             if (! in_array($f['type'] ?? '', ['number', 'currency'], true)) {
                 continue;
             }
-            if ($this->semantics->measureTypeOf($f) !== SemanticProfile::MEASURE_RATIO) {
+            if ($this->semantics->measureTypeIn($object, $rows, $f) !== SemanticProfile::MEASURE_RATIO) {
                 continue;
             }
             $numeric = $this->numericValuesOf($object, $rows, $f);
@@ -420,14 +442,47 @@ class AnalystCore
             // A ratio stored 0-1 becomes a %; one already 0-100 stays as-is.
             $scale = $this->semantics->percentScale($f, $numeric) === 'fraction' ? 100 : 1;
             $value = round($avg * $scale, 1);
-            $target = $value <= 100 ? 80 : round($value * 1.15);
+            $benchmark = $this->benchmarkFor($object, $rows, $fields, $f, $numeric, $scale);
+
+            if ($benchmark === null) {
+                // No defensible goal: state the level, claim nothing. The gauge's
+                // ceiling is the scale's own (100%), not a target.
+                $out[] = [
+                    'kind' => 'gauge',
+                    'kicker' => ($es ? 'Nivel · ' : 'Level · ').Str::upper(Str::limit($nameOf($f), 12, '')),
+                    'title' => $nameOf($f).($es ? ' hoy' : ' today'),
+                    'why' => $es
+                        ? "{$nameOf($f)} promedia {$value}%. No hay meta declarada ni un mejor histórico contra el que compararlo — el medidor lo deja a la vista; la meta la pones tú."
+                        : "{$nameOf($f)} averages {$value}%. There is no declared target and no better past period to compare it against — the gauge puts it in plain sight; the goal is yours to set.",
+                    'chart' => [
+                        '__gauge' => true,
+                        'label' => $nameOf($f),
+                        'field_id' => $f['id'],
+                        'aggregation' => 'avg',
+                        'max_value' => 100,
+                        'format' => 'percentage',
+                    ],
+                    'preview' => ['kind' => 'gauge', 'value' => $value, 'target' => 100],
+                    'base' => 76 + $head($nameOf($f)),
+                    'flag' => null,
+                ];
+                break;
+            }
+
+            $target = $benchmark['value'];
+            $gap = round(abs($target - $value), 1);
+            $declared = $benchmark['source'] === 'declared';
+            $against = $declared
+                ? ($es ? 'la meta de '.$target.'%' : "the {$target}% target")
+                : ($es ? 'tu mejor periodo ('.$target.'%)' : "your own best period ({$target}%)");
+
             $out[] = [
                 'kind' => 'gauge',
                 'kicker' => ($es ? 'Medidor · ' : 'Gauge · ').Str::upper(Str::limit($nameOf($f), 12, '')),
-                'title' => $nameOf($f).($es ? ' contra la meta' : ' vs. target'),
+                'title' => $nameOf($f).($es ? ' contra '.($declared ? 'la meta' : 'tu mejor marca') : ' vs. '.($declared ? 'target' : 'your best')),
                 'why' => $es
-                    ? "{$nameOf($f)} está en {$value}%, a ".round(abs($target - $value), 1).' pts de la meta de '.$target.'%. Un medidor lo deja al frente.'
-                    : "{$nameOf($f)} is at {$value}%, ".round(abs($target - $value), 1).' pts from the '.$target.'% target. A gauge puts it up front.',
+                    ? "{$nameOf($f)} está en {$value}%, a {$gap} pts de {$against}. ".($declared ? 'Es la meta que trae la fuente.' : 'Ya lo lograste una vez, así que es alcanzable.')
+                    : "{$nameOf($f)} is at {$value}%, {$gap} pts from {$against}. ".($declared ? 'That target comes from the source itself.' : 'You have hit it before, so it is reachable.'),
                 'chart' => [
                     '__gauge' => true,
                     'label' => ($es ? 'Meta: ' : 'Target: ').$nameOf($f),
@@ -438,7 +493,7 @@ class AnalystCore
                 ],
                 'preview' => ['kind' => 'gauge', 'value' => $value, 'target' => $target],
                 'base' => 82 + $head($nameOf($f)),
-                'flag' => $value < $target ? ['tone' => 'hot', 'text' => round(abs($target - $value), 1).' pts '.($es ? 'a la meta' : 'to target')] : null,
+                'flag' => $value < $target ? ['tone' => 'gap', 'text' => $gap.' pts '.($es ? 'a la meta' : 'to target')] : null,
             ];
             break; // one gauge is enough per object
         }
@@ -523,7 +578,7 @@ class AnalystCore
         // for quartiles to mean anything (a pre-aggregated source has one row per
         // category and nothing to spread).
         $spreadMeasure = collect($fields)->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
-            && $this->semantics->measureTypeOf($f) !== SemanticProfile::MEASURE_IDENTIFIER);
+            && $this->semantics->measureTypeIn($object, $rows, $f) !== SemanticProfile::MEASURE_IDENTIFIER);
         $spreadDim = $dims->first(fn (array $f): bool => $this->distinctCount($object, $rows, $f) <= self::COMPOSITION_MAX_PARTS);
 
         if ($spreadMeasure && $spreadDim) {
@@ -597,7 +652,7 @@ class AnalystCore
             $tv = $facts['top_values'][$topName];
             $dim = $byName(Str::lower(Str::ascii($topName)));
             $measure = collect($fields)->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
-                && $this->semantics->measureTypeOf($f) === SemanticProfile::MEASURE_ADDITIVE);
+                && $this->semantics->measureTypeIn($object, $rows, $f) === SemanticProfile::MEASURE_ADDITIVE);
             if ($dim) {
                 $form = ($tv['distinct'] <= 8) ? 'donut' : 'hbar';
                 $out[] = [
@@ -650,14 +705,23 @@ class AnalystCore
         foreach ($byObject as $entry) {
             $facts = $entry['facts'];
             $object = $entry['object'];
+            $rows = $entry['rows'];
             foreach ($object['fields'] ?? [] as $f) {
                 if (! is_array($f) || ! in_array($f['type'] ?? '', ['number', 'currency'], true)) {
                     continue;
                 }
-                if ($this->semantics->measureTypeOf($f) === SemanticProfile::MEASURE_RATIO
-                    && $this->domain->isHeadline($domain, (string) ($f['name'] ?? ''))
+                // What the surface ALREADY shows is not a gap. The $shown argument
+                // was taken and never read, so the panel would tell you a measure
+                // had no gauge while its gauge sat on the board above the chip.
+                $name = (string) ($f['name'] ?? '');
+                $gaugeKey = 'gauge|'.Str::lower(Str::ascii($name)).'|';
+                if (isset($shown[$gaugeKey])) {
+                    continue;
+                }
+                if ($this->semantics->measureTypeIn($object, $rows, $f) === SemanticProfile::MEASURE_RATIO
+                    && $this->domain->isHeadline($domain, $name)
                     && count($gaps) < 3) {
-                    $gaps[(string) ($f['name'] ?? '')] = ['text' => Str::limit((string) ($f['name'] ?? ''), 18, '').($es ? ' sin medidor' : ' has no gauge')];
+                    $gaps[$name] = ['text' => Str::limit($name, 18, '').($es ? ' sin medidor' : ' has no gauge')];
                 }
             }
             if (! isset($facts['vs_periodo_anterior']) && count($gaps) < 3) {
@@ -720,6 +784,101 @@ class AnalystCore
         ksort($byWeek);
 
         return array_map(fn ($v) => round((float) $v, 2), array_values(array_slice($byWeek, -16)));
+    }
+
+    /**
+     * Whether a field is what its source is ABOUT — the data's own answer to
+     * "what matters here", for the businesses the domain lexicon has never heard
+     * of. A "Tickets by reason" source is about tickets and about reasons; its
+     * `updated_at_ms` column is not what it is for.
+     *
+     * Single-token words are ignored on both sides: matching "de", "by" or "por"
+     * would make every column central, which is the same as none being.
+     */
+    private function isCentralTo(string $objectName, string $fieldName): bool
+    {
+        $normalise = fn (string $s): array => array_values(array_filter(
+            preg_split('/[^a-z0-9]+/', Str::lower(Str::ascii($s))) ?: [],
+            fn (string $token): bool => mb_strlen($token) >= 4,
+        ));
+
+        $subject = $normalise($objectName);
+        if ($subject === []) {
+            return false;
+        }
+
+        foreach ($normalise($fieldName) as $token) {
+            if (in_array($token, $subject, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * A benchmark this measure can honestly be judged against — or nothing.
+     *
+     * Two sources, in order of authority:
+     *   1. a target the SOURCE declares (a `meta_fcr`, `sla_target`, `objetivo`
+     *      column sitting right next to the measure) — the business's own number;
+     *   2. the organisation's own best observed period (the 90th percentile of
+     *      what it has actually achieved) — not a goal, but a fact: it has done
+     *      this before, so it is reachable.
+     *
+     * A benchmark below or at the current level is not a benchmark, it's a
+     * congratulation, and there is nothing to close. Inventing a round number
+     * (the old flat 80%) is the one thing this must never do.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<array<string, mixed>>  $fields
+     * @param  array<string, mixed>  $measure
+     * @param  list<float>  $numeric  the measure's sampled values
+     * @return array{value: float, source: string}|null
+     */
+    private function benchmarkFor(array $object, array $rows, array $fields, array $measure, array $numeric, int $scale): ?array
+    {
+        $current = (array_sum($numeric) / count($numeric)) * $scale;
+
+        // 1) A declared target, sitting in the data next to the measure.
+        $targetField = collect($fields)->first(function (array $f) use ($measure): bool {
+            if (($f['id'] ?? null) === ($measure['id'] ?? null)) {
+                return false;
+            }
+            if (! in_array($f['type'] ?? '', ['number', 'currency'], true)) {
+                return false;
+            }
+
+            return preg_match(
+                '/(^|_|\s)(meta|target|objetivo|goal|sla)(_|$|\s)/i',
+                Str::lower(Str::ascii((string) ($f['name'] ?? '').' '.(string) ($f['slug'] ?? ''))),
+            ) === 1;
+        });
+
+        if (is_array($targetField)) {
+            $targetValues = $this->numericValuesOf($object, $rows, $targetField);
+            if ($targetValues !== []) {
+                $declared = round((array_sum($targetValues) / count($targetValues)) * $scale, 1);
+                if ($declared > $current) {
+                    return ['value' => $declared, 'source' => 'declared'];
+                }
+            }
+        }
+
+        // 2) The best it has actually been. Needs enough history to have a "best"
+        // that isn't just the single luckiest row.
+        if (count($numeric) < self::BENCHMARK_MIN_POINTS) {
+            return null;
+        }
+        $sorted = $numeric;
+        sort($sorted);
+        $best = round($this->quantile($sorted, 0.9) * $scale, 1);
+
+        // A best that the average already matches says nothing worth a card.
+        return ($best - $current) >= self::BENCHMARK_MIN_GAP
+            ? ['value' => $best, 'source' => 'best']
+            : null;
     }
 
     /**

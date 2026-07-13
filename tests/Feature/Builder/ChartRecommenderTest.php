@@ -859,6 +859,157 @@ it('refuses a season it has not lived, and a spread it cannot measure', function
     app(TenantContext::class)->forget();
 });
 
+/** A ratio measure over N periods, optionally alongside a declared target column. */
+function fcrObject(bool $withTarget = false): array
+{
+    $fields = [
+        ['id' => 'f_week', 'slug' => 'week', 'name' => 'Week', 'type' => 'date'],
+        ['id' => 'f_fcr', 'slug' => 'fcr_pct', 'name' => 'Fcr Pct', 'type' => 'number'],
+    ];
+    $map = [
+        ['field_id' => 'f_week', 'external_path' => 'week'],
+        ['field_id' => 'f_fcr', 'external_path' => 'fcr'],
+    ];
+    if ($withTarget) {
+        $fields[] = ['id' => 'f_meta', 'slug' => 'meta_fcr', 'name' => 'Meta Fcr', 'type' => 'number'];
+        $map[] = ['field_id' => 'f_meta', 'external_path' => 'meta'];
+    }
+
+    return [
+        'id' => 'obj_fcr00000', 'slug' => 'fcr_weekly', 'name' => 'Fcr Weekly',
+        'fields' => $fields,
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => $map,
+            'operations' => ['list' => ['mcp_tool' => 'x', 'collection_path' => 'rows']],
+        ],
+    ];
+}
+
+it('never invents a target — it uses the one the source declares', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // The source carries the business's OWN goal, right next to the measure.
+    $rows = collect(range(0, 7))->map(fn (int $i) => [
+        'week' => date('Y-m-d', strtotime('2026-04-01 +'.($i * 7).' days')),
+        'fcr' => 70 + ($i % 3),
+        'meta' => 85,
+    ])->all();
+
+    $result = makeCore($rows)->analyze(
+        $app,
+        ['objects' => [fcrObject(true)], 'settings' => ['default_locale' => 'es-MX']],
+        $user, 'es', [], 20,
+    );
+
+    $gauge = collect($result['findings'])->firstWhere('kind', 'gauge');
+    expect($gauge)->not->toBeNull()
+        ->and($gauge['chart']['max_value'])->toBe(85.0)         // the declared goal, not 80
+        ->and($gauge['why'])->toContain('la meta que trae la fuente')
+        ->and($gauge['flag']['tone'])->toBe('gap');
+
+    app(TenantContext::class)->forget();
+});
+
+it('with no declared target, it benchmarks against the best the org actually hit', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // No goal column — but the org HAS done better: it reached ~90 in its best
+    // weeks. That is a fact, not a wish, and it is reachable by definition.
+    $values = [70, 72, 68, 75, 71, 69, 90, 88];
+    $rows = collect($values)->map(fn (int $v, int $i) => [
+        'week' => date('Y-m-d', strtotime('2026-04-01 +'.($i * 7).' days')),
+        'fcr' => $v,
+    ])->all();
+
+    $result = makeCore($rows)->analyze(
+        $app,
+        ['objects' => [fcrObject()], 'settings' => ['default_locale' => 'es-MX']],
+        $user, 'es', [], 20,
+    );
+
+    $gauge = collect($result['findings'])->firstWhere('kind', 'gauge');
+    expect($gauge)->not->toBeNull()
+        ->and($gauge['why'])->toContain('tu mejor periodo')
+        ->and($gauge['why'])->toContain('Ya lo lograste una vez')
+        // The benchmark is the 90th percentile of what it actually achieved…
+        ->and($gauge['chart']['max_value'])->toBeGreaterThan(80.0)
+        // …and never the flat 80 we used to make up.
+        ->and($gauge['chart']['max_value'])->not->toBe(80);
+
+    app(TenantContext::class)->forget();
+});
+
+it('claims no goal it cannot defend', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // A flat measure with no target column and no better past: there is nothing
+    // to close, and the old code would still have announced "3.2 pts from the
+    // 80% target" — a goal nobody set.
+    $rows = collect(range(0, 7))->map(fn (int $i) => [
+        'week' => date('Y-m-d', strtotime('2026-04-01 +'.($i * 7).' days')),
+        'fcr' => 71,
+    ])->all();
+
+    $result = makeCore($rows)->analyze(
+        $app,
+        ['objects' => [fcrObject()], 'settings' => ['default_locale' => 'es-MX']],
+        $user, 'es', [], 20,
+    );
+
+    $gauge = collect($result['findings'])->firstWhere('kind', 'gauge');
+    expect($gauge)->not->toBeNull()
+        ->and($gauge['why'])->toContain('No hay meta declarada')
+        ->and($gauge['why'])->not->toContain('80%')
+        ->and($gauge['flag'])->toBeNull()          // nothing to be behind on
+        ->and($gauge['chart']['max_value'])->toBe(100); // the scale's ceiling, not a goal
+
+    app(TenantContext::class)->forget();
+});
+
+it('never sums a percentage, however the column is named', function () {
+    // A rate whose SLUG says nothing (col_7) — typed off the slug alone it was
+    // ADDITIVE, and additive means summable. A percentage that gets summed is a
+    // number that cannot exist.
+    $semantics = new SemanticProfile;
+    $object = [
+        'id' => 'o', 'name' => 'X',
+        'fields' => [['id' => 'f', 'slug' => 'col_7', 'name' => 'Tasa de reapertura', 'type' => 'number']],
+        'source' => ['field_map' => [['field_id' => 'f', 'external_path' => 'v']]],
+    ];
+    $rows = [['v' => 3.2], ['v' => 4.1], ['v' => 2.8]];
+    $field = $object['fields'][0];
+
+    expect($semantics->measureTypeIn($object, $rows, $field))->toBe(SemanticProfile::MEASURE_RATIO)
+        // …and the legality matrix then refuses to sum it.
+        ->and($semantics->legalKpiAggregations(SemanticProfile::MEASURE_RATIO, SemanticProfile::GRAIN_RAW))
+        ->not->toContain('sum');
+});
+
+it('ranks by the data when the domain is one it has never seen', function () {
+    // An unrecognised business has NO headline terms, so the relevance bonus was
+    // always zero and every analysis looked equally relevant. What a source is
+    // named after is what it is about.
+    $core = makeCore([]);
+    $method = new ReflectionMethod($core, 'isCentralTo');
+
+    expect($method->invoke($core, 'Vessel Berth Turnaround', 'Turnaround Hours'))->toBeTrue()
+        ->and($method->invoke($core, 'Vessel Berth Turnaround', 'Berth'))->toBeTrue()
+        // An incidental column is not what the source is for.
+        ->and($method->invoke($core, 'Vessel Berth Turnaround', 'Updated At Ms'))->toBeFalse()
+        // Stop-words would make everything central, which is the same as nothing.
+        ->and($method->invoke($core, 'Tickets por motivo', 'Peso por unidad'))->toBeFalse();
+});
+
 it('reads a NATIVE object and recommends over its records', function () {
     // The analyst used to read connected sources only, so an app whose data
     // lives in its own records — the ordinary case — got zero recommendations.

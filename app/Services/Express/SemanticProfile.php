@@ -2,6 +2,7 @@
 
 namespace App\Services\Express;
 
+use App\Services\Records\FieldPaths;
 use App\Services\Records\InMemoryRowFilter;
 use Illuminate\Support\Str;
 
@@ -108,27 +109,66 @@ class SemanticProfile
     }
 
     /**
+     * A field's measure type, read against the values it actually holds.
+     *
+     * The value-based fallback in {@see measureTypeOf} could never fire, because
+     * every caller in the analytic path passed a field with no values — so any
+     * numeric column whose slug missed the regexes was silently ADDITIVE, and got
+     * summed. This is the call that gives it what it needs, and the one every
+     * caller should use: two callers typing the same column differently is worse
+     * than either being wrong.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $field
+     */
+    public function measureTypeIn(array $object, array $rows, array $field): string
+    {
+        $path = FieldPaths::forObject($object)[$field['id'] ?? ''] ?? ($field['slug'] ?? null);
+        $values = $path === null ? [] : array_values(array_filter(
+            array_map(fn (array $row) => data_get($row, $path), $rows),
+            'is_numeric',
+        ));
+
+        return $this->measureTypeOf($field, $values);
+    }
+
+    /**
      * @param  array<string, mixed>  $field
      * @param  list<mixed>  $values  the field's sampled values (may be [])
      */
     public function measureTypeOf(array $field, array $values = []): string
     {
+        // Read the NAME as well as the slug. A column called «Tasa de reapertura»
+        // whose slug is `col_7` is a rate — typing it off the slug alone made it
+        // additive, which is how a percentage ends up being summed. The two are
+        // tested SEPARATELY (several patterns anchor to the end of the string, so
+        // concatenating them would break what the slug already matched), and the
+        // strictest reading wins: wrongly summing a rate prints a false number,
+        // while wrongly refusing to sum merely withholds a true one.
         $slug = (string) ($field['slug'] ?? '');
+        $name = Str::lower(Str::ascii((string) ($field['name'] ?? '')));
+        $name = trim(preg_replace('/[^a-z0-9]+/', '_', $name) ?? '', '_');
+
+        $reads = function (string $pattern) use ($slug, $name): bool {
+            return preg_match($pattern, $slug) === 1
+                || ($name !== '' && preg_match($pattern, $name) === 1);
+        };
 
         // A numeric id is a LABEL wearing a number costume — summing contact
         // ids produced a straight-faced "Suma Id" KPI in production. No
         // aggregation of an identifier means anything.
-        if (preg_match(self::IDENTIFIER_NAME, $slug) === 1) {
+        if ($reads(self::IDENTIFIER_NAME)) {
             return self::MEASURE_IDENTIFIER;
         }
 
-        if (preg_match(self::STATISTIC_NAME, $slug) === 1) {
+        if ($reads(self::STATISTIC_NAME)) {
             return self::MEASURE_STATISTIC;
         }
-        if (preg_match(self::RATIO_NAME, $slug) === 1) {
+        if ($reads(self::RATIO_NAME)) {
             return self::MEASURE_RATIO;
         }
-        if (preg_match(self::ADDITIVE_NAME, $slug) === 1) {
+        if ($reads(self::ADDITIVE_NAME)) {
             return self::MEASURE_ADDITIVE;
         }
 
