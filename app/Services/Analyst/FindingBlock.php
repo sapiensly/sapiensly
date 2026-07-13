@@ -68,6 +68,10 @@ class FindingBlock
                 'y_field_id' => $chart['y_field_id'] ?? null,
                 'aggregation' => $chart['aggregation'] ?? 'count',
                 'bucket' => $chart['bucket'] ?? null,
+                // A combo: several typed measures on one X, optionally on a
+                // second axis. Without this the chart silently degrades to a
+                // plain bar of the top-level measure.
+                'series' => $chart['series'] ?? null,
                 'data_source' => ['object_id' => $objectId, 'limit' => self::rowLimit($finding, $chart)],
             ], fn ($v) => $v !== null),
         ];

@@ -496,6 +496,73 @@ it('run-rate: a declining trend gets an ETA to zero', function () {
     app(TenantContext::class)->forget();
 });
 
+it('volume vs rate: a dual-axis combo, and it replaces the plain Pareto', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // One source that carries BOTH how much (tickets) and how well (FCR) per
+    // reason. A Pareto of the volume alone can't say where improving pays.
+    $obj = [
+        'id' => 'obj_combo0000', 'slug' => 'tickets_by_reason', 'name' => 'Tickets By Reason',
+        'fields' => [
+            ['id' => 'f_reason', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'f_total', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+            ['id' => 'f_fcr', 'slug' => 'fcr_pct', 'name' => 'Fcr Pct', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => [
+                ['field_id' => 'f_reason', 'external_path' => 'reason'],
+                ['field_id' => 'f_total', 'external_path' => 'total'],
+                ['field_id' => 'f_fcr', 'external_path' => 'fcr'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'x', 'collection_path' => 'rows']],
+        ],
+    ];
+    $rows = [
+        ['reason' => 'Envíos', 'total' => 412, 'fcr' => 61],
+        ['reason' => 'Cobranza', 'total' => 286, 'fcr' => 64],
+        ['reason' => 'Garantías', 'total' => 96, 'fcr' => 88],
+        ['reason' => 'Precompra', 'total' => 74, 'fcr' => 90],
+        ['reason' => 'Créditos', 'total' => 52, 'fcr' => 85],
+        ['reason' => 'Devoluciones', 'total' => 29, 'fcr' => 92],
+        ['reason' => 'Otros', 'total' => 15, 'fcr' => 80],
+    ];
+
+    $result = makeCore($rows)->analyze(
+        $app,
+        ['objects' => [$obj], 'settings' => ['default_locale' => 'es-MX']],
+        $user,
+        'es',
+    );
+
+    $combo = collect($result['findings'])->firstWhere('kind', 'combo');
+    expect($combo)->not->toBeNull()
+        ->and($combo['chart']['series'])->toHaveCount(2)
+        // Volume on the left as bars, the rate on its OWN axis as a line — that
+        // second axis is the entire point: the two are read against each other.
+        ->and($combo['chart']['series'][0]['type'])->toBe('bar')
+        ->and($combo['chart']['series'][0]['field_id'])->toBe('f_total')
+        ->and($combo['chart']['series'][0]['axis'])->toBe('left')
+        ->and($combo['chart']['series'][1]['type'])->toBe('line')
+        ->and($combo['chart']['series'][1]['field_id'])->toBe('f_fcr')
+        ->and($combo['chart']['series'][1]['aggregation'])->toBe('avg')
+        ->and($combo['chart']['series'][1]['axis'])->toBe('right')
+        // The preview draws both series, each on its own scale.
+        ->and($combo['preview']['kind'])->toBe('combo')
+        ->and($combo['preview']['values'][0])->toBe(412.0)
+        ->and($combo['preview']['line'][0])->toBe(61.0);
+
+    // It is the SAME cut as the Pareto, told better — so the board is never
+    // offered both. The combo wins on score; the Pareto never surfaces.
+    expect(collect($result['findings'])->firstWhere('kind', 'pareto'))->toBeNull()
+        ->and($combo['semantic_key'])->toBe('breakdown|total tickets|reason');
+
+    app(TenantContext::class)->forget();
+});
+
 it('finds the correlation no single-measure chart can show, and draws it as a scatter', function () {
     config(['cache.default' => 'array']);
     $user = User::factory()->create();

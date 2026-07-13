@@ -100,9 +100,12 @@ class ChartRecommender
             'kicker' => $finding['kicker'],
             'title' => $finding['title'],
             'why' => $finding['why'],
-            'form' => match ($rendered['type']) {
-                'insight' => 'insight',
-                'gauge' => 'gauge',
+            'form' => match (true) {
+                $rendered['type'] === 'insight' => 'insight',
+                $rendered['type'] === 'gauge' => 'gauge',
+                // A combo renders as a dual-axis chart, not as the bar its
+                // chart_type nominally says.
+                isset($chart['series']) => 'combo',
                 default => $chart['chart_type'] ?? 'bar',
             },
             'flag' => $finding['flag'],

@@ -7,8 +7,8 @@
  * when the user knows exactly what they want.
  */
 import RecommendationPreview from '@/components/builder/RecommendationPreview.vue';
-import axios from 'axios';
 import { BarChart3, Check, Send, Sparkles, TriangleAlert } from '@lucide/vue';
+import axios from 'axios';
 import { computed, onMounted, ref } from 'vue';
 
 const props = defineProps<{ appId: string; pageSlug?: string }>();
@@ -22,11 +22,12 @@ interface Recommendation {
     form: string;
     flag: { tone: 'hot' | 'gap'; text: string } | null;
     preview: {
-        kind: 'pareto' | 'area' | 'gauge' | 'bars' | 'scatter';
+        kind: 'pareto' | 'area' | 'gauge' | 'bars' | 'scatter' | 'combo';
         values?: number[];
         value?: number;
         target?: number;
         points?: number[][];
+        line?: number[];
     };
 }
 
@@ -40,6 +41,7 @@ const FORM_LABEL: Record<string, string> = {
     gauge: 'Medidor',
     treemap: 'Treemap',
     scatter: 'Dispersión',
+    combo: 'Doble eje',
     insight: 'Hallazgo',
 };
 
@@ -104,14 +106,16 @@ async function add(rec: Recommendation) {
         loadRecommendations();
     } catch (e: unknown) {
         askReply.value =
-            (e as { response?: { data?: { message?: string } } }).response
-                ?.data?.message ?? 'No se pudo agregar.';
+            (e as { response?: { data?: { message?: string } } }).response?.data
+                ?.message ?? 'No se pudo agregar.';
     } finally {
         addingId.value = null;
     }
 }
 
-const visibleRecs = computed(() => recs.value.filter((r) => !done.value.has(r.id)));
+const visibleRecs = computed(() =>
+    recs.value.filter((r) => !done.value.has(r.id)),
+);
 
 async function send() {
     const prompt = input.value.trim();
@@ -131,8 +135,8 @@ async function send() {
         }
     } catch (e: unknown) {
         askReply.value =
-            (e as { response?: { data?: { message?: string } } }).response
-                ?.data?.message ?? 'No pude derivar esa gráfica.';
+            (e as { response?: { data?: { message?: string } } }).response?.data
+                ?.message ?? 'No pude derivar esa gráfica.';
     } finally {
         asking.value = false;
     }
@@ -242,8 +246,7 @@ async function send() {
                             <span class="text-[13px] font-semibold text-ink">{{
                                 s.name
                             }}</span>
-                            <span
-                                class="shrink-0 text-[10.5px] text-ink-subtle"
+                            <span class="shrink-0 text-[10.5px] text-ink-subtle"
                                 >{{ s.rows.toLocaleString() }} filas</span
                             >
                         </div>
@@ -302,204 +305,204 @@ async function send() {
                         </span>
                     </div>
                 </div>
-                <p class="px-4 pt-1 pb-2 text-[10.5px] leading-relaxed text-ink-subtle">
-                    Conectar una fuente nueva se hace desde el chat del builder o
-                    en Integraciones.
+                <p
+                    class="px-4 pt-1 pb-2 text-[10.5px] leading-relaxed text-ink-subtle"
+                >
+                    Conectar una fuente nueva se hace desde el chat del builder
+                    o en Integraciones.
                 </p>
             </template>
 
             <template v-else>
-            <!-- Data-confidence flags: read the material before trusting it -->
-            <div
-                v-if="!loading && dataQuality.length"
-                class="flex flex-wrap gap-2 px-4 pt-3"
-            >
-                <span
-                    v-for="(q, i) in dataQuality"
-                    :key="i"
-                    class="inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px]"
-                    :class="
-                        q.level === 'warn'
-                            ? 'border-sp-warning/30 text-sp-warning'
-                            : 'border-soft bg-surface text-ink-muted'
-                    "
-                    :style="
-                        q.level === 'warn'
-                            ? { background: 'rgba(224,145,42,0.1)' }
-                            : undefined
-                    "
-                >
-                    <svg
-                        viewBox="0 0 24 24"
-                        class="size-3"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <template v-if="q.level === 'warn'">
-                            <path d="M12 9v4M12 17h.01" />
-                            <path
-                                d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6A2 2 0 0 0 22 18L13.7 3.9a2 2 0 0 0-3.4 0z"
-                            />
-                        </template>
-                        <template v-else>
-                            <circle cx="12" cy="12" r="9" />
-                            <path d="M12 16v-4M12 8h.01" />
-                        </template>
-                    </svg>
-                    {{ q.text }}
-                </span>
-            </div>
-
-            <div
-                class="px-4 pt-3.5 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
-            >
-                Análisis recomendados
-                <span
-                    v-if="!loading && visibleRecs.length"
-                    class="ml-1 rounded-pill bg-accent-blue/12 px-1.5 py-px text-[10px] text-accent-blue"
-                    >{{ visibleRecs.length }}</span
-                >
-            </div>
-
-            <!-- loading: message + skeletons -->
-            <div v-if="loading" class="space-y-2.5 px-3">
+                <!-- Data-confidence flags: read the material before trusting it -->
                 <div
-                    class="flex items-center gap-2.5 rounded-xl border border-soft bg-surface px-3.5 py-3"
+                    v-if="!loading && dataQuality.length"
+                    class="flex flex-wrap gap-2 px-4 pt-3"
                 >
                     <span
-                        class="size-4 shrink-0 animate-spin rounded-full border-2 border-accent-blue/30 border-t-accent-blue"
-                    />
-                    <span class="text-[12.5px] font-medium text-ink-muted">
-                        Cargando recomendaciones, tomará un momento…
-                    </span>
-                </div>
-                <div
-                    v-for="i in 2"
-                    :key="i"
-                    class="h-40 animate-pulse rounded-xl border border-soft bg-surface"
-                />
-            </div>
-
-            <!-- empty -->
-            <p
-                v-else-if="visibleRecs.length === 0"
-                class="px-5 py-6 text-center text-xs text-ink-subtle"
-            >
-                No encontré análisis nuevos que agregar — tu tablero ya cubre lo
-                principal. Pídeme algo específico abajo.
-            </p>
-
-            <!-- recommendation cards -->
-            <div v-else class="space-y-2.5 px-3">
-                <article
-                    v-for="rec in visibleRecs"
-                    :key="rec.id"
-                    class="overflow-hidden rounded-xl border border-soft bg-surface transition-colors hover:border-medium"
-                >
-                    <div
-                        class="relative h-28 border-b border-soft"
-                        style="
-                            background: linear-gradient(
-                                180deg,
-                                rgba(59, 130, 246, 0.05),
-                                transparent 70%
-                            );
+                        v-for="(q, i) in dataQuality"
+                        :key="i"
+                        class="inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px]"
+                        :class="
+                            q.level === 'warn'
+                                ? 'border-sp-warning/30 text-sp-warning'
+                                : 'border-soft bg-surface text-ink-muted'
+                        "
+                        :style="
+                            q.level === 'warn'
+                                ? { background: 'rgba(224,145,42,0.1)' }
+                                : undefined
                         "
                     >
-                        <span
-                            v-if="rec.flag"
-                            class="absolute top-2 right-2 z-10 inline-flex items-center gap-1.5 rounded-pill px-2 py-0.5 text-[10px] font-bold"
-                            :class="
-                                rec.flag.tone === 'hot'
-                                    ? 'text-sp-warning'
-                                    : 'text-accent-blue'
-                            "
-                            :style="{
-                                background:
-                                    rec.flag.tone === 'hot'
-                                        ? 'rgba(224,145,42,0.15)'
-                                        : 'rgba(59,130,246,0.14)',
-                            }"
+                        <svg
+                            viewBox="0 0 24 24"
+                            class="size-3"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
                         >
-                            <span
-                                class="size-1 rounded-full bg-current"
-                            />{{ rec.flag.text }}
-                        </span>
-                        <RecommendationPreview :preview="rec.preview" />
-                    </div>
-                    <div class="px-3.5 pt-2.5">
-                        <div
-                            class="text-[9.5px] font-bold tracking-[0.11em] text-ink-subtle uppercase"
-                        >
-                            {{ rec.kicker }}
-                        </div>
-                        <h3
-                            class="mt-1 text-[14px] font-semibold text-ink"
-                        >
-                            {{ rec.title }}
-                        </h3>
-                        <p
-                            class="mt-1 text-[12px] leading-relaxed text-ink-muted"
-                        >
-                            {{ rec.why }}
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-2 px-3.5 pt-2.5 pb-3">
-                        <span
-                            class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-subtle"
-                        >
-                            <BarChart3 class="size-3.5" />
-                            {{ FORM_LABEL[rec.form] ?? rec.form }}
-                        </span>
-                        <button
-                            type="button"
-                            :disabled="addingId !== null"
-                            class="ml-auto inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-[12px] font-semibold text-white transition-[filter,opacity] hover:brightness-110 disabled:opacity-50"
-                            @click="add(rec)"
-                        >
-                            <span
-                                v-if="addingId === rec.id"
-                                class="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
-                            />
-                            <template v-else>
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    class="size-3.5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2.6"
-                                    stroke-linecap="round"
-                                >
-                                    <path d="M12 5v14M5 12h14" />
-                                </svg>
+                            <template v-if="q.level === 'warn'">
+                                <path d="M12 9v4M12 17h.01" />
+                                <path
+                                    d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6A2 2 0 0 0 22 18L13.7 3.9a2 2 0 0 0-3.4 0z"
+                                />
                             </template>
-                            Agregar
-                        </button>
-                    </div>
-                </article>
-            </div>
-
-            <!-- gaps -->
-            <template v-if="!loading && gaps.length">
-                <div
-                    class="px-4 pt-4 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
-                >
-                    Lo que falta
-                </div>
-                <div class="flex flex-wrap gap-2 px-4">
-                    <span
-                        v-for="(g, i) in gaps"
-                        :key="i"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-soft bg-surface px-2.5 py-1 text-[11px] text-ink-muted"
-                    >
-                        <TriangleAlert class="size-3 text-sp-warning" />
-                        {{ g.text }}
+                            <template v-else>
+                                <circle cx="12" cy="12" r="9" />
+                                <path d="M12 16v-4M12 8h.01" />
+                            </template>
+                        </svg>
+                        {{ q.text }}
                     </span>
                 </div>
-            </template>
+
+                <div
+                    class="px-4 pt-3.5 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
+                >
+                    Análisis recomendados
+                    <span
+                        v-if="!loading && visibleRecs.length"
+                        class="ml-1 rounded-pill bg-accent-blue/12 px-1.5 py-px text-[10px] text-accent-blue"
+                        >{{ visibleRecs.length }}</span
+                    >
+                </div>
+
+                <!-- loading: message + skeletons -->
+                <div v-if="loading" class="space-y-2.5 px-3">
+                    <div
+                        class="flex items-center gap-2.5 rounded-xl border border-soft bg-surface px-3.5 py-3"
+                    >
+                        <span
+                            class="size-4 shrink-0 animate-spin rounded-full border-2 border-accent-blue/30 border-t-accent-blue"
+                        />
+                        <span class="text-[12.5px] font-medium text-ink-muted">
+                            Cargando recomendaciones, tomará un momento…
+                        </span>
+                    </div>
+                    <div
+                        v-for="i in 2"
+                        :key="i"
+                        class="h-40 animate-pulse rounded-xl border border-soft bg-surface"
+                    />
+                </div>
+
+                <!-- empty -->
+                <p
+                    v-else-if="visibleRecs.length === 0"
+                    class="px-5 py-6 text-center text-xs text-ink-subtle"
+                >
+                    No encontré análisis nuevos que agregar — tu tablero ya
+                    cubre lo principal. Pídeme algo específico abajo.
+                </p>
+
+                <!-- recommendation cards -->
+                <div v-else class="space-y-2.5 px-3">
+                    <article
+                        v-for="rec in visibleRecs"
+                        :key="rec.id"
+                        class="overflow-hidden rounded-xl border border-soft bg-surface transition-colors hover:border-medium"
+                    >
+                        <div
+                            class="relative h-28 border-b border-soft"
+                            style="
+                                background: linear-gradient(
+                                    180deg,
+                                    rgba(59, 130, 246, 0.05),
+                                    transparent 70%
+                                );
+                            "
+                        >
+                            <span
+                                v-if="rec.flag"
+                                class="absolute top-2 right-2 z-10 inline-flex items-center gap-1.5 rounded-pill px-2 py-0.5 text-[10px] font-bold"
+                                :class="
+                                    rec.flag.tone === 'hot'
+                                        ? 'text-sp-warning'
+                                        : 'text-accent-blue'
+                                "
+                                :style="{
+                                    background:
+                                        rec.flag.tone === 'hot'
+                                            ? 'rgba(224,145,42,0.15)'
+                                            : 'rgba(59,130,246,0.14)',
+                                }"
+                            >
+                                <span
+                                    class="size-1 rounded-full bg-current"
+                                />{{ rec.flag.text }}
+                            </span>
+                            <RecommendationPreview :preview="rec.preview" />
+                        </div>
+                        <div class="px-3.5 pt-2.5">
+                            <div
+                                class="text-[9.5px] font-bold tracking-[0.11em] text-ink-subtle uppercase"
+                            >
+                                {{ rec.kicker }}
+                            </div>
+                            <h3 class="mt-1 text-[14px] font-semibold text-ink">
+                                {{ rec.title }}
+                            </h3>
+                            <p
+                                class="mt-1 text-[12px] leading-relaxed text-ink-muted"
+                            >
+                                {{ rec.why }}
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2 px-3.5 pt-2.5 pb-3">
+                            <span
+                                class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-subtle"
+                            >
+                                <BarChart3 class="size-3.5" />
+                                {{ FORM_LABEL[rec.form] ?? rec.form }}
+                            </span>
+                            <button
+                                type="button"
+                                :disabled="addingId !== null"
+                                class="ml-auto inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-[12px] font-semibold text-white transition-[filter,opacity] hover:brightness-110 disabled:opacity-50"
+                                @click="add(rec)"
+                            >
+                                <span
+                                    v-if="addingId === rec.id"
+                                    class="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                                />
+                                <template v-else>
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        class="size-3.5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2.6"
+                                        stroke-linecap="round"
+                                    >
+                                        <path d="M12 5v14M5 12h14" />
+                                    </svg>
+                                </template>
+                                Agregar
+                            </button>
+                        </div>
+                    </article>
+                </div>
+
+                <!-- gaps -->
+                <template v-if="!loading && gaps.length">
+                    <div
+                        class="px-4 pt-4 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
+                    >
+                        Lo que falta
+                    </div>
+                    <div class="flex flex-wrap gap-2 px-4">
+                        <span
+                            v-for="(g, i) in gaps"
+                            :key="i"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-soft bg-surface px-2.5 py-1 text-[11px] text-ink-muted"
+                        >
+                            <TriangleAlert class="size-3 text-sp-warning" />
+                            {{ g.text }}
+                        </span>
+                    </div>
+                </template>
             </template>
         </div>
 

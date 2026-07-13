@@ -293,6 +293,58 @@ class AnalystCore
             }
         }
 
+        // 2b) VOLUME vs RATE — the executive chart: how much of it there is
+        // (bars, left axis) against how well it goes (line, right axis), over the
+        // same dimension. It answers "where does improving actually pay?", which
+        // neither series answers alone — and it deliberately shares the Pareto's
+        // semantic key, because it is the same cut told better: when a rate
+        // exists, the board should get this instead, never both.
+        $volume = collect($fields)->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
+            && $this->semantics->measureTypeOf($f) === SemanticProfile::MEASURE_ADDITIVE);
+        $rate = collect($fields)->first(fn (array $f): bool => in_array($f['type'] ?? '', ['number', 'currency'], true)
+            && $this->semantics->measureTypeOf($f) === SemanticProfile::MEASURE_RATIO);
+        $comboDim = isset($facts['concentracion'])
+            ? $byName(Str::lower(Str::ascii((string) $facts['concentracion']['dimension'])))
+            : (isset($facts['top_values']) ? $byName(Str::lower(Str::ascii((string) array_key_first($facts['top_values'])))) : null);
+
+        if ($volume && $rate && $comboDim) {
+            $pairs = $this->volumeAgainstRate($object, $rows, $comboDim, $volume, $rate, 8);
+            if ($pairs['values'] !== []) {
+                $dimName = $nameOf($comboDim);
+                $out[] = [
+                    'kind' => 'combo',
+                    'kicker' => ($es ? 'Volumen vs. tasa · ' : 'Volume vs. rate · ').Str::upper(Str::limit($dimName, 12, '')),
+                    'title' => $es
+                        ? Str::ucfirst(Str::lower($nameOf($volume))).' y '.Str::lower($nameOf($rate)).' por '.Str::lower($dimName)
+                        : Str::ucfirst(Str::lower($nameOf($volume))).' and '.Str::lower($nameOf($rate)).' by '.Str::lower($dimName),
+                    'why' => $es
+                        ? 'El volumen y '.Str::lower($nameOf($rate)).' rara vez coinciden: en un eje doble se ve de un vistazo dónde hay mucho Y va mal — ahí es donde más rinde mejorar.'
+                        : 'Volume and '.Str::lower($nameOf($rate))." rarely line up: on a dual axis you see at a glance where there's a lot AND it goes badly — that's where improving pays most.",
+                    'chart' => [
+                        'label' => Str::ucfirst(Str::lower($nameOf($volume))).($es ? ' vs. ' : ' vs. ').Str::lower($nameOf($rate)).' · '.$objName,
+                        // With `series` present the renderer ignores the top-level
+                        // mark and measure — but y_field_id still names the cut, so
+                        // this dedupes against the plain breakdown of the same measure.
+                        'chart_type' => 'bar',
+                        'group_by_field_id' => $comboDim['id'],
+                        'y_field_id' => $volume['id'],
+                        'aggregation' => 'sum',
+                        'series' => [
+                            ['type' => 'bar', 'field_id' => $volume['id'], 'aggregation' => 'sum', 'label' => $nameOf($volume), 'axis' => 'left'],
+                            ['type' => 'line', 'field_id' => $rate['id'], 'aggregation' => 'avg', 'label' => $nameOf($rate), 'axis' => 'right'],
+                        ],
+                        'description' => $es
+                            ? Str::ucfirst(Str::lower($nameOf($volume))).' en barras, '.Str::lower($nameOf($rate)).' en línea sobre el eje derecho.'
+                            : Str::ucfirst(Str::lower($nameOf($volume))).' as bars, '.Str::lower($nameOf($rate)).' as a line on the right axis.',
+                    ],
+                    'preview' => ['kind' => 'combo', 'values' => $pairs['values'], 'line' => $pairs['line']],
+                    // Above a Pareto: same cut, but it also says how well it goes.
+                    'base' => 104 + $head($dimName, $nameOf($volume), $nameOf($rate)),
+                    'flag' => null,
+                ];
+            }
+        }
+
         // 3) CORRELATION — two measures that move together. The classic analyst
         // read, and the one no single-measure chart can make: it lives in the
         // relationship, so it needs a scatter.
@@ -498,6 +550,59 @@ class AnalystCore
         ksort($byWeek);
 
         return array_map(fn ($v) => round((float) $v, 2), array_values(array_slice($byWeek, -16)));
+    }
+
+    /**
+     * Volume (summed) and rate (averaged) per category, for the top categories by
+     * volume — the two aligned series a dual-axis combo draws.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $dim
+     * @param  array<string, mixed>  $volume
+     * @param  array<string, mixed>  $rate
+     * @return array{values: list<float>, line: list<float>}
+     */
+    private function volumeAgainstRate(array $object, array $rows, array $dim, array $volume, array $rate, int $cap): array
+    {
+        $paths = FieldPaths::forObject($object);
+        $dimPath = $paths[$dim['id']] ?? ($dim['slug'] ?? null);
+        $volPath = $paths[$volume['id']] ?? ($volume['slug'] ?? null);
+        $ratePath = $paths[$rate['id']] ?? ($rate['slug'] ?? null);
+
+        $sums = [];
+        $rates = [];
+        foreach ($rows as $row) {
+            $key = data_get($row, $dimPath);
+            if (! is_scalar($key) || trim((string) $key) === '') {
+                continue;
+            }
+            $key = (string) $key;
+            $v = data_get($row, $volPath);
+            $r = data_get($row, $ratePath);
+            if (is_numeric($v)) {
+                $sums[$key] = ($sums[$key] ?? 0) + (float) $v;
+            }
+            if (is_numeric($r)) {
+                $rates[$key][] = (float) $r;
+            }
+        }
+        arsort($sums);
+        $sums = array_slice($sums, 0, $cap, true);
+
+        $values = [];
+        $line = [];
+        foreach ($sums as $key => $sum) {
+            // Only categories the rate actually covers — a combo with a hole in
+            // the line is worse than no combo.
+            if (! isset($rates[$key])) {
+                continue;
+            }
+            $values[] = round((float) $sum, 2);
+            $line[] = round(array_sum($rates[$key]) / count($rates[$key]), 2);
+        }
+
+        return ['values' => $values, 'line' => $line];
     }
 
     /**

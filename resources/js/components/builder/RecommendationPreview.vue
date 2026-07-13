@@ -10,11 +10,12 @@ import { resolveCssColor } from '@/lib/resolveCssColor';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 interface Preview {
-    kind: 'pareto' | 'area' | 'gauge' | 'bars' | 'scatter';
+    kind: 'pareto' | 'area' | 'gauge' | 'bars' | 'scatter' | 'combo';
     values?: number[];
     value?: number;
     target?: number;
     points?: number[][];
+    line?: number[];
 }
 
 const props = defineProps<{ preview: Preview }>();
@@ -41,11 +42,91 @@ function draw() {
     const inkDim = 'rgba(150,160,200,0.6)';
     const p = props.preview;
 
-    if (p.kind === 'pareto') paretoChart(ctx, w, h, p.values ?? [], accent, green, tail);
+    if (p.kind === 'pareto')
+        paretoChart(ctx, w, h, p.values ?? [], accent, green, tail);
     else if (p.kind === 'area') areaChart(ctx, w, h, p.values ?? [], accent);
-    else if (p.kind === 'gauge') gaugeChart(ctx, w, h, p.value ?? 0, p.target ?? 100, accent, ink, inkDim);
+    else if (p.kind === 'gauge')
+        gaugeChart(
+            ctx,
+            w,
+            h,
+            p.value ?? 0,
+            p.target ?? 100,
+            accent,
+            ink,
+            inkDim,
+        );
     else if (p.kind === 'bars') barsChart(ctx, w, h, p.values ?? [], accent);
-    else if (p.kind === 'scatter') scatterChart(ctx, w, h, p.points ?? [], accent);
+    else if (p.kind === 'scatter')
+        scatterChart(ctx, w, h, p.points ?? [], accent);
+    else if (p.kind === 'combo')
+        comboChart(ctx, w, h, p.values ?? [], p.line ?? [], accent, green);
+}
+
+/**
+ * Volume as bars against a rate as a line — each on its OWN scale, which is the
+ * whole point of a dual axis: the two are read against each other, not summed.
+ */
+function comboChart(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    values: number[],
+    line: number[],
+    accent: string,
+    green: string,
+) {
+    if (!values.length) return;
+    const pad = 6;
+    const base = h - pad;
+    const top = pad;
+    const maxV = Math.max(...values, 1);
+    const slot = (w - pad * 2) / values.length;
+    const barW = Math.max(3, slot * 0.55);
+
+    ctx.fillStyle = accent;
+    values.forEach((v, i) => {
+        const bh = ((v / maxV) * (base - top)) | 0;
+        const x = pad + i * slot + (slot - barW) / 2;
+        ctx.globalAlpha = i === 0 ? 1 : 0.62;
+        ctx.fillRect(x, base - bh, barW, bh);
+    });
+    ctx.globalAlpha = 1;
+
+    if (line.length < 2) return;
+    // The rate rides its own min/max, so a flat-ish rate still reads as flat
+    // rather than being flattened into the volume's scale.
+    const minL = Math.min(...line);
+    const maxL = Math.max(...line);
+    const span = maxL - minL || 1;
+    ctx.strokeStyle = green;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    line.forEach((v, i) => {
+        const x = pad + i * slot + slot / 2;
+        const y =
+            base -
+            ((v - minL) / span) * (base - top) * 0.8 -
+            (base - top) * 0.1;
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    });
+    ctx.stroke();
+
+    ctx.fillStyle = green;
+    line.forEach((v, i) => {
+        const x = pad + i * slot + slot / 2;
+        const y =
+            base -
+            ((v - minL) / span) * (base - top) * 0.8 -
+            (base - top) * 0.1;
+        ctx.beginPath();
+        ctx.arc(x, y, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+    });
 }
 
 function scatterChart(
@@ -140,13 +221,22 @@ function paretoChart(
     vals.forEach((v, j) => {
         const bh = (v / max) * ih;
         ctx.fillStyle = j < Math.max(1, vital) ? accent : tail;
-        roundedBar(ctx, padX + slot * (j + 0.5) - bw / 2, padT + ih - bh, bw, bh, 2);
+        roundedBar(
+            ctx,
+            padX + slot * (j + 0.5) - bw / 2,
+            padT + ih - bh,
+            bw,
+            bh,
+            2,
+        );
     });
     ctx.strokeStyle = green;
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     ctx.beginPath();
-    pts.forEach((pt, k) => (k ? ctx.lineTo(pt[0], pt[1]) : ctx.moveTo(pt[0], pt[1])));
+    pts.forEach((pt, k) =>
+        k ? ctx.lineTo(pt[0], pt[1]) : ctx.moveTo(pt[0], pt[1]),
+    );
     ctx.stroke();
 }
 
