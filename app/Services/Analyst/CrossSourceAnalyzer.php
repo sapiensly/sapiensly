@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\Builder;
+namespace App\Services\Analyst;
 
 use App\Services\Express\SemanticProfile;
 use App\Services\Records\FieldPaths;

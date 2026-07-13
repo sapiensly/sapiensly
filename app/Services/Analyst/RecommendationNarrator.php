@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\Builder;
+namespace App\Services\Analyst;
 
 use App\Ai\ExpressGateAgent;
 use App\Models\User;

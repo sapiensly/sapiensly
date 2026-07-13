@@ -4,12 +4,13 @@ use App\Models\App;
 use App\Models\Integration;
 use App\Models\Record;
 use App\Models\User;
+use App\Services\Analyst\AnalystCore;
+use App\Services\Analyst\CrossSourceAnalyzer;
+use App\Services\Analyst\DataQualityCheck;
+use App\Services\Analyst\DerivedMetricProposer;
+use App\Services\Analyst\DomainClassifier;
+use App\Services\Analyst\RecommendationNarrator;
 use App\Services\Builder\ChartRecommender;
-use App\Services\Builder\CrossSourceAnalyzer;
-use App\Services\Builder\DataQualityCheck;
-use App\Services\Builder\DerivedMetricProposer;
-use App\Services\Builder\DomainClassifier;
-use App\Services\Builder\RecommendationNarrator;
 use App\Services\Connected\ConnectedIntegrationResolver;
 use App\Services\Connected\ConnectedObjectReader;
 use App\Services\Express\ComputedFactsBuilder;
@@ -107,12 +108,12 @@ function perfRows(): array
     ];
 }
 
-function makeRecommender(array $rows): ChartRecommender
+function makeCore(array $rows): AnalystCore
 {
     $source = Mockery::mock(ObjectRowSource::class);
     $source->shouldReceive('sample')->andReturn($rows);
 
-    return new ChartRecommender(
+    return new AnalystCore(
         $source,
         new ComputedFactsBuilder,
         new SemanticProfile,
@@ -123,6 +124,51 @@ function makeRecommender(array $rows): ChartRecommender
         new DerivedMetricProposer(new SemanticProfile),
     );
 }
+
+function makeRecommender(array $rows): ChartRecommender
+{
+    return new ChartRecommender(makeCore($rows));
+}
+
+it('the core analyses without a page, a block or a cache — any surface can ask', function () {
+    // This is what makes the analyst reusable: no manifest page, no blocks, no
+    // TenantCache spec. A deck, an agent or MCP calls exactly this.
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    $analysis = makeCore(concentratedRows())->analyze(
+        $app,
+        ['objects' => [recObject()], 'settings' => ['default_locale' => 'es-MX']],
+        $user,
+        'es',
+    );
+
+    $pareto = collect($analysis['findings'])->firstWhere('kind', 'pareto');
+    expect($pareto)->not->toBeNull()
+        // A finding carries the analysis, not a card: the spec, the fact, the
+        // preview and the keys a surface dedupes by.
+        ->and($pareto['chart']['chart_type'])->toBe('pareto')
+        ->and($pareto['semantic_key'])->toBe('breakdown|total tickets|reason')
+        ->and($pareto['preview']['values'][0])->toBe(412.0)
+        ->and($pareto['why'])->toContain('%')
+        ->and($analysis['domain']['sector'])->toBe('support');
+
+    // And the surface tells the core what it already shows — by semantic key,
+    // not by handing over a page.
+    $deduped = makeCore(concentratedRows())->analyze(
+        $app,
+        ['objects' => [recObject()], 'settings' => ['default_locale' => 'es-MX']],
+        $user,
+        'es',
+        ['breakdown|total tickets|reason'],
+    );
+
+    expect(collect($deduped['findings'])->firstWhere('kind', 'pareto'))->toBeNull();
+
+    app(TenantContext::class)->forget();
+});
 
 it('classifies a support-ticket board as the support domain', function () {
     $classifier = new DomainClassifier;
