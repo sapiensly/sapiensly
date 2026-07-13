@@ -1731,6 +1731,26 @@ class ManifestValidator
                         'missing_required',
                     );
                 }
+
+                // A chart needs an AXIS. Without one there is nothing to plot the
+                // measure against, so every row folds into a single bucket and the
+                // chart draws exactly one bar — whatever the data, whatever the
+                // chart_type. A real board shipped four of these: "OTD Diario",
+                // "Retrasados por Día", a line and an area, each promising an
+                // evolution over time and each rendering a single mark. It looked
+                // entirely professional and said nothing.
+                //
+                // No chart type is exempt: a pie/donut/treemap/pareto/box/radar
+                // needs group_by, a line/area/scatter needs x, a sankey needs both,
+                // and a combo's `series` share one X too. A measure with no axis is
+                // a single number — which is a `stat`, not a chart.
+                if (! isset($block['group_by_field_id']) && ! isset($block['x_field_id'])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/group_by_field_id",
+                        'A chart needs an axis: set group_by_field_id (the categories, or a date to bucket) or x_field_id. Without one, every row folds into a single bucket and the chart can only ever draw ONE bar. If you meant to show a single aggregate, use a `stat` block instead.',
+                        'missing_required',
+                    );
+                }
                 $this->checkFieldRef($fields, $block['y_field_id'] ?? null, "{$blockPath}/y_field_id", 'chart.y_field_id', $errors,
                     in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null, $fieldsByObjectId);
                 $this->checkFieldRef($fields, $block['x_field_id'] ?? null, "{$blockPath}/x_field_id", 'chart.x_field_id', $errors);

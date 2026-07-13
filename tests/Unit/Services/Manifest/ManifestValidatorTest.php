@@ -1451,6 +1451,42 @@ it('rejects a pivot pointing at a field that does not exist', function () {
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
 });
 
+it('rejects a chart with no axis — it could only ever draw one bar', function () {
+    // The four charts a real board shipped: a line called "OTD Diario", an area, two
+    // bars — each with a measure and an aggregation, and NOTHING to plot it against.
+    // Every row folds into a single bucket, so the chart draws one mark, whatever the
+    // data. It looked entirely professional and said nothing, and the validator waved
+    // it through.
+    $manifest = baseManifest();
+    $obj = $manifest['objects'][0];
+    $measure = id('fld');
+    $manifest['objects'][0]['fields'][] = ['id' => $measure, 'slug' => 'otd_pct', 'name' => 'Otd Pct', 'type' => 'number'];
+
+    $chart = [
+        'id' => id('blk'), 'type' => 'chart', 'label' => 'OTD Diario', 'chart_type' => 'line',
+        'y_field_id' => $measure, 'aggregation' => 'avg',
+        'data_source' => ['object_id' => $obj['id'], 'limit' => 500],
+    ];
+
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [$chart],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    expect($result->valid)->toBeFalse()
+        ->and(json_encode($result->errorsArray()))->toContain('needs an axis');
+
+    // Give it the axis it was always missing, and it is a chart.
+    $manifest['pages'][0]['blocks'][0]['group_by_field_id'] = $obj['fields'][0]['id'];
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+
+    // An x axis works too — that is what a time series uses.
+    unset($manifest['pages'][0]['blocks'][0]['group_by_field_id']);
+    $manifest['pages'][0]['blocks'][0]['x_field_id'] = $obj['fields'][0]['id'];
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
 it('rejects a flow with fewer than 2 steps', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[

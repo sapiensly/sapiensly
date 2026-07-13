@@ -101,8 +101,12 @@ it('models and banks a connected object from one call, clamping arguments to the
         ->and($object['source']['operations']['list']['mcp_tool'])->toBe('search-tickets-tool')
         ->and($object['source']['operations']['list']['arguments']['limit'])->toBe(100)
         ->and($object['source']['operations']['list']['collection_path'])->toBe('tickets')
-        ->and($object['fields'])->toHaveCount(3)
-        ->and($object['source']['field_map'])->toHaveCount(3);
+        // Four, not three: the identity path is mapped as a field too. It used to be
+        // dropped, which left a source whose id IS its date (a daily series) with no
+        // dimension at all — and every chart built on it with no axis.
+        ->and($object['fields'])->toHaveCount(4)
+        ->and($object['source']['field_map'])->toHaveCount(4)
+        ->and(collect($object['source']['field_map'])->pluck('external_path'))->toContain('id');
 });
 
 it('rejects an unknown tool name, listing what the server exposes', function () {

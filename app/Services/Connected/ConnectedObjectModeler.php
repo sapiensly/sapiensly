@@ -57,10 +57,19 @@ class ConnectedObjectModeler
         $fieldMap = [];
         $takenSlugs = [];
         foreach ($values as $path => $observed) {
-            if ($path === $idPath) {
-                continue;
-            }
-
+            // The identity path is ALSO a field.
+            //
+            // It used to be skipped — being the row's identity looked like a
+            // reason not to model it as data. But a live source grouped by day
+            // returns one row per date and calls that date its id, and dropping it
+            // left the object with five numbers and NO dimension at all: not a
+            // date, not a category, nothing to plot a measure against. Every chart
+            // built on it was therefore axis-less, and an axis-less chart draws one
+            // bar. A real board shipped four of them, each titled "…Diario".
+            //
+            // The identity of a time series is its time. Keeping it costs a column
+            // no one has to use; dropping it costs every chart the source could
+            // ever have had.
             $slug = $this->uniqueSlug($this->slugForPath((string) $path), $takenSlugs);
             $takenSlugs[] = $slug;
             $fieldId = 'fld_'.strtolower((string) Str::ulid());

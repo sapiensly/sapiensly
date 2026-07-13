@@ -30,8 +30,13 @@ it('infers types, slugs and the id path from real rows', function () {
     $types = collect($result['fields'])->pluck('type', 'id');
     $slugs = collect($result['fields'])->pluck('slug', 'id');
 
-    // id excluded from fields; list-valued keys (tags) skipped.
-    expect($byPath)->not->toHaveKey('id')
+    // The identity path is ALSO a field. It used to be excluded — being the row's
+    // identity looked like a reason not to model it as data — and a live source
+    // grouped by day returns one row per DATE and calls that date its id. Dropping
+    // it left such an object with numbers and no dimension at all, so every chart
+    // built on it had no axis and could only draw one bar.
+    expect($byPath)->toHaveKey('id')
+        // List-valued keys are still skipped: an array is not a column.
         ->and($byPath)->not->toHaveKey('tags');
 
     expect($types[$byPath['status']])->toBe('string')
@@ -68,4 +73,33 @@ it('treats mixed or null-only values as strings and dedupes colliding slugs', fu
         ->and($slugs)->toContain('estado_2')
         ->and($types['empty'])->toBe('string')
         ->and($types['mixed'])->toBe('string');
+});
+
+it('keeps the DATE a daily series calls its id — or the source has no dimension', function () {
+    // The exact shape of a live logistics source: one row per day, and the day IS
+    // the row's identity. Modelled with the date dropped, the object was five
+    // numbers and nothing to plot them against — so the builder produced four
+    // charts titled "OTD Diario", "Retrasados por Día", a line and an area, and
+    // every one of them rendered a single bar. The board looked professional and
+    // said nothing.
+    $result = (new ConnectedObjectModeler)->model([
+        ['fecha' => '2026-06-13', 'total_pedidos' => 3, 'pedidos_entregados' => 2, 'otd_pct' => 66.67],
+        ['fecha' => '2026-06-14', 'total_pedidos' => 8, 'pedidos_entregados' => 5, 'otd_pct' => 62.50],
+    ], idPath: 'fecha');
+
+    $byPath = collect($result['field_map'])->pluck('field_id', 'external_path');
+    $types = collect($result['fields'])->pluck('type', 'id');
+
+    expect($result['id_path'])->toBe('fecha')
+        // The identity is still the identity — AND it is a field a chart can use.
+        ->and($byPath)->toHaveKey('fecha')
+        // As a DATE, so a chart can bucket it by day/week/month. A string here
+        // would still leave the series unbucketable.
+        ->and($types[$byPath['fecha']])->toBe('date');
+
+    // Which is the whole point: the object now HAS a dimension.
+    $dimensions = collect($result['fields'])
+        ->filter(fn (array $f) => in_array($f['type'], ['date', 'datetime', 'string'], true));
+
+    expect($dimensions)->not->toBeEmpty();
 });

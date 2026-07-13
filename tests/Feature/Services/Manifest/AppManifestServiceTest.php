@@ -224,7 +224,7 @@ it('tags the app as a dashboard when the version is analytics-only', function ()
             ['id' => 'mg_kpisband', 'type' => 'metric_grid', 'items' => [
                 ['id' => 'kp_totalcnt', 'label' => 'Total', 'query' => ['object_id' => 'obj_maindata'], 'aggregation' => 'count'],
             ]],
-            ['id' => 'ch_trendline', 'type' => 'chart', 'chart_type' => 'line', 'data_source' => ['object_id' => 'obj_maindata'], 'aggregation' => 'count'],
+            ['id' => 'ch_trendline', 'type' => 'chart', 'chart_type' => 'line', 'data_source' => ['object_id' => 'obj_maindata'], 'aggregation' => 'count', 'x_field_id' => 'sys_created_at', 'bucket' => 'day'],
         ],
     ]];
 
@@ -244,7 +244,7 @@ it('tags the app as an app when the version has a data-entry form, and re-tags o
     ]];
     $dash['pages'] = [[
         'id' => 'pag_dashpage', 'slug' => 'd', 'name' => 'D', 'path' => '/', 'blocks' => [
-            ['id' => 'ch_alphabar', 'type' => 'chart', 'chart_type' => 'bar', 'data_source' => ['object_id' => 'obj_maindata'], 'aggregation' => 'count'],
+            ['id' => 'ch_alphabar', 'type' => 'chart', 'chart_type' => 'bar', 'data_source' => ['object_id' => 'obj_maindata'], 'aggregation' => 'count', 'group_by_field_id' => 'sys_created_at', 'bucket' => 'month'],
         ],
     ]];
     makeService()->createVersion($app, $dash);
