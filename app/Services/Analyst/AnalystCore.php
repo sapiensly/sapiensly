@@ -57,6 +57,18 @@ class AnalystCore
     /** Points a benchmark must sit above today's level to be worth closing. */
     private const BENCHMARK_MIN_GAP = 2.0;
 
+    /** Rows carrying BOTH dates before a cohort read is worth attempting. */
+    private const COHORT_MIN_ROWS = 20;
+
+    /** The share of rows where the activity must actually follow the start. */
+    private const COHORT_MIN_FOLLOWS = 0.9;
+
+    /** Intakes needed before "cohorts" means anything — one camada is a total. */
+    private const COHORT_MIN_INTAKES = 3;
+
+    /** How unique a column must be to be an identity rather than a segment. */
+    private const COHORT_ENTITY_UNIQUENESS = 0.3;
+
     public function __construct(
         private ObjectRowSource $rows,
         private ComputedFactsBuilder $facts,
@@ -645,7 +657,49 @@ class AnalystCore
             }
         }
 
-        // 9) BREAKDOWN — a dimension worth splitting the measure by when nothing
+        // 9) COHORT — retention. Every other card on the board mixes the people
+        // who arrived in March with the people who arrived in June, and a total
+        // that mixes them cannot tell you whether the product is getting better
+        // at keeping them: a great June hides a leaking March. A cohort table
+        // reads each intake from ITS OWN beginning, so the intakes become
+        // comparable — which is the only way that question has an answer.
+        $cohort = $this->cohortPair($object, $rows, $fields);
+        if ($cohort !== null) {
+            $entityName = $cohort['entity'] !== null ? Str::lower($nameOf($cohort['entity'])) : ($es ? 'registros' : 'records');
+            $out[] = [
+                'kind' => 'cohort',
+                'kicker' => $es ? 'Cohortes · Retención' : 'Cohorts · Retention',
+                'title' => $es
+                    ? 'Retención por '.Str::lower($nameOf($cohort['start']))
+                    : 'Retention by '.Str::lower($nameOf($cohort['start'])),
+                'why' => $es
+                    ? "Hay {$cohort['cohorts']} camadas distintas según ".Str::lower($nameOf($cohort['start'])).', y el tablero las suma todas en un mismo total — así una camada que se fuga queda tapada por otra que no. Una tabla de cohortes lee cada una desde su propio mes 0 y muestra cuántos siguen ahí después.'
+                    : "There are {$cohort['cohorts']} distinct intakes by ".Str::lower($nameOf($cohort['start'])).", and the board adds them all into one total — so an intake that leaks is hidden by one that doesn't. A cohort table reads each from its own month 0 and shows how many are still there after.",
+                'chart' => array_filter([
+                    // Not a chart: a pivot. The marker mirrors __gauge.
+                    '__pivot' => true,
+                    'label' => ($es ? 'Retención de ' : 'Retention of ').$entityName,
+                    'group_by_field_id' => $cohort['start']['id'],
+                    'bucket' => 'month',
+                    'column_field_id' => $cohort['activity']['id'],
+                    'column_bucket' => 'month',
+                    'y_field_id' => $cohort['entity']['id'] ?? null,
+                    // Counting rows counts events; retention counts the entities
+                    // that came BACK, and one customer returning twice is one
+                    // customer.
+                    'aggregation' => $cohort['entity'] !== null ? 'distinct_count' : 'count',
+                    'mode' => 'cohort',
+                    'description' => $es
+                        ? 'Cada fila es la camada que llegó ese mes; cada columna, los meses transcurridos desde entonces.'
+                        : 'Each row is the intake of that month; each column, the months elapsed since.',
+                ], fn ($v) => $v !== null),
+                'preview' => ['kind' => 'bars', 'values' => $cohort['sizes']],
+                'base' => 96 + $head($nameOf($cohort['start'])),
+                'flag' => null,
+            ];
+        }
+
+        // 10) BREAKDOWN — a dimension worth splitting the measure by when nothing
         // concentrated (evenly spread reads as a ranking, not a pareto).
         if (! isset($facts['concentracion']) && isset($facts['top_values'])) {
             $topName = (string) array_key_first($facts['top_values']);
@@ -879,6 +933,114 @@ class AnalystCore
         return ($best - $current) >= self::BENCHMARK_MIN_GAP
             ? ['value' => $best, 'source' => 'best']
             : null;
+    }
+
+    /**
+     * The two dates that form a cohort — or nothing.
+     *
+     * A cohort is not "any two dates". It is a BIRTH and a RETURN: the day someone
+     * arrived, and the day they did something afterwards. So the pair only holds
+     * if the activity actually follows the start, in almost every row — two dates
+     * that cross each other are not an intake and a return, they are just two
+     * dates, and a retention table built on them would be a confident answer to a
+     * question nobody asked.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<array<string, mixed>>  $fields
+     * @return array{start: array<string,mixed>, activity: array<string,mixed>, entity: array<string,mixed>|null, cohorts: int, sizes: list<float>}|null
+     */
+    private function cohortPair(array $object, array $rows, array $fields): ?array
+    {
+        $dates = collect($fields)
+            ->filter(fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true))
+            ->values();
+        if ($dates->count() < 2) {
+            return null;
+        }
+
+        $paths = FieldPaths::forObject($object);
+
+        foreach ($dates as $i => $a) {
+            foreach ($dates->slice($i + 1) as $b) {
+                foreach ([[$a, $b], [$b, $a]] as [$start, $activity]) {
+                    $startPath = $paths[$start['id']] ?? null;
+                    $activityPath = $paths[$activity['id']] ?? null;
+                    if ($startPath === null || $activityPath === null) {
+                        continue;
+                    }
+
+                    $follows = 0;
+                    $pairs = 0;
+                    $months = [];
+                    foreach ($rows as $row) {
+                        $s = InMemoryRowFilter::timestamp(data_get($row, $startPath));
+                        $t = InMemoryRowFilter::timestamp(data_get($row, $activityPath));
+                        if ($s === null || $t === null) {
+                            continue;
+                        }
+                        $pairs++;
+                        if ($t >= $s) {
+                            $follows++;
+                        }
+                        $months[date('Y-m', $s)] = ($months[date('Y-m', $s)] ?? 0) + 1;
+                    }
+
+                    if ($pairs < self::COHORT_MIN_ROWS
+                        || $follows / $pairs < self::COHORT_MIN_FOLLOWS
+                        || count($months) < self::COHORT_MIN_INTAKES) {
+                        continue;
+                    }
+
+                    ksort($months);
+
+                    return [
+                        'start' => $start,
+                        'activity' => $activity,
+                        'entity' => $this->entityField($object, $rows, $fields),
+                        'cohorts' => count($months),
+                        'sizes' => array_map('floatval', array_slice(array_values($months), 0, 8)),
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The thing being retained — a customer, an account, a user.
+     *
+     * Retention counts the entities that came BACK, not the events they
+     * generated: one customer returning twice is one customer. Without such a
+     * field the table can still count rows, but it is counting activity, not
+     * loyalty — so the field is looked for by what it is called AND by the one
+     * property an identifier always has: it is nearly unique.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<array<string, mixed>>  $fields
+     * @return array<string, mixed>|null
+     */
+    private function entityField(array $object, array $rows, array $fields): ?array
+    {
+        $named = collect($fields)->first(function (array $f) use ($object, $rows): bool {
+            if (! in_array($f['type'] ?? '', ['string', 'number'], true)) {
+                return false;
+            }
+            $name = Str::lower(Str::ascii((string) ($f['name'] ?? '').' '.(string) ($f['slug'] ?? '')));
+            if (preg_match('/(customer|cliente|user|usuario|account|cuenta|member|socio|email|correo)/i', $name) !== 1) {
+                return false;
+            }
+
+            // A "customer name" column with six distinct values is a segment, not
+            // an identity. An entity is nearly unique by definition.
+            $distinct = $this->distinctCount($object, $rows, $f);
+
+            return count($rows) > 0 && $distinct >= count($rows) * self::COHORT_ENTITY_UNIQUENESS;
+        });
+
+        return is_array($named) ? $named : null;
     }
 
     /**

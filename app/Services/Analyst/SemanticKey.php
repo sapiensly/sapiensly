@@ -33,6 +33,14 @@ class SemanticKey
         if (($chart['__gauge'] ?? false) === true) {
             return 'gauge|'.($names[$chart['field_id'] ?? ''] ?? '').'|';
         }
+        // A cohort table is not a cut of a measure at all — it is a reading of one
+        // intake against another, so it keys on the two dates that define it.
+        if (($chart['__pivot'] ?? false) === true) {
+            return 'cohort|'
+                .($names[$chart['group_by_field_id'] ?? ''] ?? '').'|'
+                .($names[$chart['column_field_id'] ?? ''] ?? '');
+        }
+
         $type = $chart['chart_type'] ?? '';
         $measure = $names[$chart['y_field_id'] ?? ''] ?? 'count';
 

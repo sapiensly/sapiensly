@@ -159,6 +159,28 @@ class BlockDataResolver
             return $this->chartPayload($app, $block, $manifest, $context);
         }
 
+        // A pivot is the 2-D breakdown the query layer has always been able to
+        // compute and nothing could draw: rows × columns, one aggregate per cell.
+        if ($block['type'] === 'pivot') {
+            try {
+                return ['groups' => $this->groupedBlock(
+                    $app,
+                    $block['data_source'],
+                    (string) ($block['aggregation'] ?? 'count'),
+                    $block['y_field_id'] ?? null,
+                    (string) $block['group_by_field_id'],
+                    $block['bucket'] ?? null,
+                    is_numeric($block['data_source']['limit'] ?? null) ? (int) $block['data_source']['limit'] : 400,
+                    $manifest,
+                    $context,
+                    (string) $block['column_field_id'],
+                    $block['column_bucket'] ?? null,
+                )];
+            } catch (Throwable $e) {
+                return ['error' => $e->getMessage()];
+            }
+        }
+
         if (in_array($block['type'], ['kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'gantt', 'map', 'card_grid', 'word_cloud', 'data_grid'], true)) {
             return ['rows' => $this->queryRows($app, $block['data_source'], $manifest, $context)];
         }
@@ -571,7 +593,7 @@ class BlockDataResolver
      * @param  array<string, mixed>  $context
      * @return list<array{group: mixed, value: int|float}>
      */
-    private function groupedBlock(App $app, array $query, string $aggregation, ?string $fieldId, string $groupFieldId, ?string $bucket, int $limit, array $manifest, array $context, ?string $secondGroupFieldId = null): array
+    private function groupedBlock(App $app, array $query, string $aggregation, ?string $fieldId, string $groupFieldId, ?string $bucket, int $limit, array $manifest, array $context, ?string $secondGroupFieldId = null, ?string $secondBucket = null): array
     {
         $object = $this->findObject($manifest, $query['object_id'] ?? null);
 
@@ -585,6 +607,7 @@ class BlockDataResolver
                 (string) $this->fieldSlug($object, $groupFieldId),
                 $bucket,
                 secondGroupSlug: $secondGroupFieldId !== null ? $this->fieldSlug($object, $secondGroupFieldId) : null,
+                secondBucket: $secondBucket,
             );
         }
 
@@ -599,6 +622,7 @@ class BlockDataResolver
             $context,
             $limit,
             $secondGroupFieldId,
+            $secondBucket,
         );
     }
 

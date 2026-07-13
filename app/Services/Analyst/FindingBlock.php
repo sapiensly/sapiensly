@@ -51,6 +51,23 @@ class FindingBlock
 
         $chart = $finding['chart'];
 
+        // A cohort table is a pivot, not a chart: rows × columns, one aggregate
+        // per cell, and in cohort mode the columns are periods since each row's
+        // own beginning.
+        if (($chart['__pivot'] ?? false) === true) {
+            $block = $chart;
+            unset($block['__pivot']);
+
+            return [
+                'type' => 'pivot',
+                'label' => (string) $chart['label'],
+                'block' => ['type' => 'pivot'] + $block + [
+                    // A matrix reads groups, not rows: the limit caps CELLS.
+                    'data_source' => ['object_id' => $objectId, 'limit' => 400],
+                ],
+            ];
+        }
+
         if (($chart['__gauge'] ?? false) === true) {
             return [
                 'type' => 'gauge',

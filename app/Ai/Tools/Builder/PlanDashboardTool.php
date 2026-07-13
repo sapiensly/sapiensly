@@ -31,14 +31,14 @@ class PlanDashboardTool implements Tool
     /** Block types that belong on a dashboard page plan. */
     private const KNOWN_BLOCKS = [
         'metric_grid', 'chart', 'stat', 'insight', 'table', 'data_grid',
-        'sparkline', 'gauge', 'progress', 'heatmap', 'timeline', 'gantt',
+        'pivot', 'sparkline', 'gauge', 'progress', 'heatmap', 'timeline', 'gantt',
         'funnel', 'map', 'word_cloud', 'kanban', 'calendar', 'card_grid',
         'filter_bar', 'heading', 'text', 'markdown',
     ];
 
     /** Dedicated viz blocks: each is its own visual FORM (counts toward variety). */
     private const VIZ_BLOCKS = [
-        'sparkline', 'gauge', 'progress', 'heatmap', 'timeline', 'gantt',
+        'pivot', 'sparkline', 'gauge', 'progress', 'heatmap', 'timeline', 'gantt',
         'funnel', 'map', 'word_cloud', 'kanban', 'calendar', 'card_grid',
     ];
 
@@ -253,7 +253,7 @@ DESC;
         if (in_array($type, self::SHORT_BLOCKS, true)) {
             return 'short';
         }
-        if (in_array($type, ['table', 'data_grid', 'kanban', 'calendar', 'map', 'gantt'], true)) {
+        if (in_array($type, ['table', 'data_grid', 'kanban', 'calendar', 'map', 'gantt', 'pivot'], true)) {
             return 'wide';
         }
 

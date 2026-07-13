@@ -204,6 +204,7 @@ export interface BlockOther extends BlockBase {
         | 'modal'
         | 'multi_step_form'
         | 'pricing'
+        | 'pivot'
         | 'progress'
         | 'record_detail'
         | 'related_list'

@@ -32,7 +32,7 @@ const kpiCount = computed(() =>
         class="h-28 animate-pulse rounded-sp-sm border border-medium bg-current/5"
     />
     <div
-        v-else-if="kind === 'table' || kind === 'data_grid'"
+        v-else-if="kind === 'table' || kind === 'data_grid' || kind === 'pivot'"
         class="animate-pulse space-y-2 rounded-sp-sm border border-medium p-4"
     >
         <div class="h-4 w-1/3 rounded-xs bg-current/10" />

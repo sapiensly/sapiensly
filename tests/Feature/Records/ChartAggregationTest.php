@@ -31,6 +31,10 @@ beforeEach(function () {
                 ['id' => 'fld_astatus000', 'slug' => 'status', 'name' => 'Status', 'type' => 'string'],
                 ['id' => 'fld_ahours0000', 'slug' => 'hours', 'name' => 'Hours', 'type' => 'number'],
                 ['id' => 'fld_acsat00000', 'slug' => 'csat', 'name' => 'Csat', 'type' => 'number'],
+                // A cohort's two dates, and the entity being retained.
+                ['id' => 'fld_acust00000', 'slug' => 'customer', 'name' => 'Customer', 'type' => 'string'],
+                ['id' => 'fld_asignup000', 'slug' => 'signed_up_at', 'name' => 'Signed Up At', 'type' => 'date'],
+                ['id' => 'fld_aorder0000', 'slug' => 'ordered_at', 'name' => 'Ordered At', 'type' => 'date'],
             ],
         ]],
         'pages' => [],
@@ -42,16 +46,33 @@ beforeEach(function () {
     // every three are open, and CSAT is constant per reason so the average is
     // unambiguous.
     $csat = ['Envíos' => 70, 'Cobranza' => 90, 'Devoluciones' => 80];
+
+    // Two customers signed up in January and ordered again in February; one signed
+    // up in February. Ana orders TWICE in January — which is one retained
+    // customer, not two, and that is the difference distinct_count makes.
+    $cohorts = [
+        ['Ana', '2026-01-05', '2026-01-10'],
+        ['Ana', '2026-01-05', '2026-01-22'],
+        ['Ana', '2026-01-05', '2026-02-14'],
+        ['Beto', '2026-01-18', '2026-01-20'],
+        ['Beto', '2026-01-18', '2026-02-02'],
+        ['Cris', '2026-02-03', '2026-02-09'],
+    ];
+    $i = 0;
     foreach (['Envíos' => 30, 'Cobranza' => 20, 'Devoluciones' => 10] as $reason => $n) {
-        for ($i = 0; $i < $n; $i++) {
+        for ($k = 0; $k < $n; $k++, $i++) {
+            [$customer, $signup, $order] = $cohorts[$i % count($cohorts)];
             Record::create([
                 'app_id' => $this->appModel->id,
                 'object_definition_id' => 'obj_agg00000000',
                 'data' => [
                     'reason' => $reason,
-                    'status' => $i % 3 === 2 ? 'closed' : 'open',
+                    'status' => $k % 3 === 2 ? 'closed' : 'open',
                     'hours' => 1,
                     'csat' => $csat[$reason],
+                    'customer' => $customer,
+                    'signed_up_at' => $signup,
+                    'ordered_at' => $order,
                 ],
             ]);
         }
@@ -159,6 +180,39 @@ it('a combo aggregates each overlaid measure on its own terms', function () {
         // …while the line averages, per category, over those same records.
         ->and((float) $rate->firstWhere('group', 'Envíos')['value'])->toBe(70.0)
         ->and((float) $rate->firstWhere('group', 'Cobranza')['value'])->toBe(90.0);
+});
+
+it('a pivot resolves a cohort matrix, bucketing BOTH of its dates', function () {
+    // A cohort table's columns are a date too. Left unbucketed, the pivot's second
+    // dimension groups by the raw timestamp and every event becomes its own
+    // column — a table nobody can read. This is what `column_bucket` is for.
+    $blocks = [[
+        'id' => 'blk_coh0000000',
+        'type' => 'pivot',
+        'label' => 'Retención',
+        'group_by_field_id' => 'fld_asignup000',
+        'bucket' => 'month',
+        'column_field_id' => 'fld_aorder0000',
+        'column_bucket' => 'month',
+        'y_field_id' => 'fld_acust00000',
+        'aggregation' => 'distinct_count',
+        'mode' => 'cohort',
+        'data_source' => ['object_id' => 'obj_agg00000000', 'limit' => 400],
+    ]];
+
+    $data = app(BlockDataResolver::class)->resolve($this->appModel, $blocks, $this->manifest);
+    $groups = collect($data['blk_coh0000000']['groups']);
+
+    // Both axes came back as months, not as timestamps…
+    expect($groups)->not->toBeEmpty()
+        ->and($groups->every(fn ($g) => array_key_exists('group2', $g)))->toBeTrue();
+
+    $months = $groups->map(fn ($g) => substr((string) $g['group2'], 0, 7))->unique();
+    expect($months->count())->toBeLessThanOrEqual(4)  // a handful of months, not 60 timestamps
+        // …and the January intake counts CUSTOMERS, not orders: the two orders
+        // Ana placed in January are one retained customer, not two.
+        ->and($groups->first(fn ($g) => str_starts_with((string) $g['group'], '2026-01')
+            && str_starts_with((string) $g['group2'], '2026-01'))['value'])->toEqual(2);
 });
 
 it('leaves the row-level forms their rows — a scatter plots records, not groups', function () {

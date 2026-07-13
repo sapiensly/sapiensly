@@ -633,6 +633,7 @@ class RecordQueryService
         array $context = [],
         int $limit = 100,
         ?string $secondGroupFieldId = null,
+        ?string $secondBucket = null,
     ): array {
         $objectId = $query['object_id'] ?? null;
         if ($objectId === null) {
@@ -645,6 +646,19 @@ class RecordQueryService
 
         if ($bucket !== null && ! in_array($groupField['type'], ['date', 'datetime'], true)) {
             throw new InvalidArgumentException('bucket is only valid for a date or datetime group field.');
+        }
+
+        // A pivot's COLUMNS can be a date too — that is what a cohort table is:
+        // when someone arrived (rows) against when they came back (columns). Left
+        // unbucketed, a date column produces one column per raw timestamp, which
+        // is not a table anyone can read.
+        if ($secondBucket !== null) {
+            if ($group2Field === null) {
+                throw new InvalidArgumentException('second_bucket needs a second group field to bucket.');
+            }
+            if (! in_array($group2Field['type'], ['date', 'datetime'], true)) {
+                throw new InvalidArgumentException('second_bucket is only valid for a date or datetime second group field.');
+            }
         }
 
         $aggField = null;
@@ -664,6 +678,7 @@ class RecordQueryService
                 $bucket,
                 $limit,
                 $group2Field !== null ? (string) ($group2Field['slug'] ?? '') : null,
+                $secondBucket,
             );
         }
 
@@ -699,7 +714,9 @@ class RecordQueryService
 
         // Two-dimension pivot: GROUP BY both fields, returning {group, group2, value}.
         if ($group2Field !== null) {
-            $group2Expr = $this->jsonExtract('data', $group2Field);
+            $group2Expr = $secondBucket !== null
+                ? $this->dateBucketExpr($group2Field, $secondBucket)
+                : $this->jsonExtract('data', $group2Field);
             $rows = $builder->toBase()
                 ->selectRaw("{$groupExpr} as grp, {$group2Expr} as grp2, {$aggSql} as val")
                 ->groupByRaw("{$groupExpr}, {$group2Expr}")

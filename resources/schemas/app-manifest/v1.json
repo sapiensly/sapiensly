@@ -3108,6 +3108,100 @@
                 }
             ]
         },
+        "block_pivot": {
+            "description": "A 2-D matrix: rows x columns, each cell an aggregate. In `cohort` mode the columns become the period OFFSET from each row's own cohort (month 0, 1, 2...) and each cell is the % of that cohort still present - the retention table. Rows and columns may each be a date, bucketed by `bucket` / `column_bucket`; a date column left unbucketed makes every timestamp its own column.",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/block_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true,
+                        "visibility": true,
+                        "style": true,
+                        "type": {
+                            "const": "pivot"
+                        },
+                        "label": {
+                            "type": "string",
+                            "maxLength": 80
+                        },
+                        "description": {
+                            "type": "string",
+                            "maxLength": 160
+                        },
+                        "data_source": {
+                            "$ref": "#/$defs/query"
+                        },
+                        "group_by_field_id": {
+                            "$ref": "#/$defs/id"
+                        },
+                        "bucket": {
+                            "enum": [
+                                "day",
+                                "week",
+                                "month",
+                                "quarter",
+                                "year"
+                            ],
+                            "description": "Truncate the ROW field when it is a date/datetime. In cohort mode this is when the cohort was born (signup, first order)."
+                        },
+                        "column_field_id": {
+                            "$ref": "#/$defs/id"
+                        },
+                        "column_bucket": {
+                            "enum": [
+                                "day",
+                                "week",
+                                "month",
+                                "quarter",
+                                "year"
+                            ],
+                            "description": "Truncate the COLUMN field when it is a date/datetime. A cohort table needs this: in cohort mode this is the date of the activity being tracked."
+                        },
+                        "y_field_id": {
+                            "$ref": "#/$defs/id"
+                        },
+                        "aggregation": {
+                            "enum": [
+                                "count",
+                                "sum",
+                                "avg",
+                                "min",
+                                "max",
+                                "distinct_count"
+                            ],
+                            "default": "count"
+                        },
+                        "mode": {
+                            "enum": [
+                                "matrix",
+                                "cohort"
+                            ],
+                            "default": "matrix",
+                            "description": "matrix: cells are the aggregate itself. cohort: columns become the offset from each row's own start and cells become the % of that cohort still present - a retention table."
+                        },
+                        "format": {
+                            "enum": [
+                                "number",
+                                "currency",
+                                "percentage"
+                            ],
+                            "default": "number"
+                        }
+                    },
+                    "required": [
+                        "type",
+                        "data_source",
+                        "group_by_field_id",
+                        "column_field_id",
+                        "aggregation"
+                    ]
+                }
+            ]
+        },
         "block_kanban": {
             "allOf": [
                 {
@@ -4981,7 +5075,7 @@
             ]
         },
         "block": {
-            "description": "A page block. Its `type` must be one of the catalog types (container, text, heading, divider, spacer, table, stat, form, button, modal, chart, kanban, calendar, markdown, image, hero, feature_grid, cta, stat_band, insight, stepper, badge, alert, avatar, breadcrumb, carousel, testimonials, faq, pricing, word_cloud, flow, metric_grid, sparkline, gauge, heatmap, timeline, funnel, map, tabs, accordion, split_view, card_grid, multi_step_form). If this failed, the `type` is unknown or the block is missing a required prop for that type — call list_available_components for the catalog and each type's required props.",
+            "description": "A page block. Its `type` must be one of the catalog types (container, text, heading, divider, spacer, table, stat, form, button, modal, chart, pivot, kanban, calendar, markdown, image, hero, feature_grid, cta, stat_band, insight, stepper, badge, alert, avatar, breadcrumb, carousel, testimonials, faq, pricing, word_cloud, flow, metric_grid, sparkline, gauge, heatmap, timeline, funnel, map, tabs, accordion, split_view, card_grid, multi_step_form). If this failed, the `type` is unknown or the block is missing a required prop for that type — call list_available_components for the catalog and each type's required props.",
             "oneOf": [
                 {
                     "$ref": "#/$defs/block_container"
@@ -5027,6 +5121,9 @@
                 },
                 {
                     "$ref": "#/$defs/block_chart"
+                },
+                {
+                    "$ref": "#/$defs/block_pivot"
                 },
                 {
                     "$ref": "#/$defs/block_kanban"

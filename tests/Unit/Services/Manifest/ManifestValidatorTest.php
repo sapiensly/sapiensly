@@ -1373,6 +1373,84 @@ it('accepts treemap chart, word_cloud and flow blocks', function () {
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
 
+/** A pivot over an object carrying the two dates and the entity a cohort needs. */
+function pivotManifest(array $blockOverrides = []): array
+{
+    $manifest = baseManifest();
+    $objId = $manifest['objects'][0]['id'];
+    $fldCustomer = $manifest['objects'][0]['fields'][0]['id'];
+    $fldSignup = id('fld');
+    $fldOrder = id('fld');
+
+    $manifest['objects'][0]['fields'][] = ['id' => $fldSignup, 'slug' => 'signed_up_at', 'name' => 'Signed Up At', 'type' => 'date'];
+    $manifest['objects'][0]['fields'][] = ['id' => $fldOrder, 'slug' => 'ordered_at', 'name' => 'Ordered At', 'type' => 'date'];
+
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/d',
+        'blocks' => [array_replace([
+            'id' => id('blk'),
+            'type' => 'pivot',
+            'label' => 'Retención',
+            'data_source' => ['object_id' => $objId],
+            'group_by_field_id' => $fldSignup,
+            'bucket' => 'month',
+            'column_field_id' => $fldOrder,
+            'column_bucket' => 'month',
+            'y_field_id' => $fldCustomer,
+            'aggregation' => 'distinct_count',
+            'mode' => 'cohort',
+        ], $blockOverrides)],
+    ]];
+
+    return [$manifest, compact('objId', 'fldCustomer', 'fldSignup', 'fldOrder')];
+}
+
+it('accepts a cohort pivot — and it counts an ENTITY, not a number', function () {
+    // distinct_count counts the values of any field: a retention table counts
+    // customers, and a customer is not a number. The other aggregations still are.
+    [$manifest] = pivotManifest();
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects a cohort pivot with no column_bucket', function () {
+    // A cohort's columns are periods since each intake began. Without a bucket the
+    // date column groups by raw timestamp and every event becomes its own column —
+    // a matrix nobody can read, from a manifest that looked legal.
+    [$manifest] = pivotManifest(['column_bucket' => null]);
+    unset($manifest['pages'][0]['blocks'][0]['column_bucket']);
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(json_encode($result->errorsArray()))->toContain('column_bucket');
+});
+
+it('rejects a pivot that buckets a field which is not a date', function () {
+    [$manifest, $ids] = pivotManifest();
+    // `nombre` is a string; truncating it to a month is meaningless, and the query
+    // layer refuses it at run time — so say so before it ever renders.
+    $manifest['pages'][0]['blocks'][0]['column_field_id'] = $ids['fldCustomer'];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
+it('rejects a pivot summing a field that cannot be summed', function () {
+    [$manifest, $ids] = pivotManifest();
+    $manifest['pages'][0]['blocks'][0]['aggregation'] = 'sum';
+    $manifest['pages'][0]['blocks'][0]['y_field_id'] = $ids['fldCustomer']; // a string
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
+it('rejects a pivot pointing at a field that does not exist', function () {
+    [$manifest] = pivotManifest();
+    $manifest['pages'][0]['blocks'][0]['column_field_id'] = id('fld');
+
+    // Without the validator branch this passes and blows up at render.
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
 it('rejects a flow with fewer than 2 steps', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[

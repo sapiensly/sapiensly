@@ -1010,6 +1010,113 @@ it('ranks by the data when the domain is one it has never seen', function () {
         ->and($method->invoke($core, 'Tickets por motivo', 'Peso por unidad'))->toBeFalse();
 });
 
+/** Orders carrying the customer's signup date — the shape a cohort lives in. */
+function cohortObject(): array
+{
+    return [
+        'id' => 'obj_coh00000', 'slug' => 'orders', 'name' => 'Orders',
+        'fields' => [
+            ['id' => 'f_cust', 'slug' => 'customer_id', 'name' => 'Customer Id', 'type' => 'string'],
+            ['id' => 'f_signup', 'slug' => 'signed_up_at', 'name' => 'Signed Up At', 'type' => 'date'],
+            ['id' => 'f_order', 'slug' => 'ordered_at', 'name' => 'Ordered At', 'type' => 'date'],
+            ['id' => 'f_amount', 'slug' => 'amount', 'name' => 'Amount', 'type' => 'number'],
+        ],
+        'source' => [
+            'type' => 'connected', 'integration_id' => 'i',
+            'field_map' => [
+                ['field_id' => 'f_cust', 'external_path' => 'cust'],
+                ['field_id' => 'f_signup', 'external_path' => 'signup'],
+                ['field_id' => 'f_order', 'external_path' => 'ordered'],
+                ['field_id' => 'f_amount', 'external_path' => 'amount'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'x', 'collection_path' => 'rows']],
+        ],
+    ];
+}
+
+/**
+ * @param  bool  $crossed  half the rows run one way and half the other, so NEITHER
+ *                         date consistently follows the other — two dates that cross
+ *                         are not an intake and a return, whichever way you read them.
+ */
+function cohortRows(bool $crossed = false): array
+{
+    $rows = [];
+    $intakes = ['2026-01-05', '2026-02-08', '2026-03-11'];
+    for ($i = 0; $i < 30; $i++) {
+        $signup = $intakes[$i % 3];
+        $ordered = date('Y-m-d', strtotime($signup.' +'.(($i % 5) * 21).' days'));
+        $flip = $crossed && $i % 2 === 0;
+        $rows[] = [
+            'cust' => 'c'.$i,
+            'signup' => $flip ? $ordered : $signup,
+            'ordered' => $flip ? $signup : $ordered,
+            'amount' => 50 + $i,
+        ];
+    }
+
+    return $rows;
+}
+
+it('proposes the cohort table no other card on the board can be', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    $result = makeCore(cohortRows())->analyze(
+        $app,
+        ['objects' => [cohortObject()], 'settings' => ['default_locale' => 'es-MX']],
+        $user, 'es', [], 20,
+    );
+
+    $cohort = collect($result['findings'])->firstWhere('kind', 'cohort');
+    expect($cohort)->not->toBeNull()
+        // A pivot, not a chart: rows are the intake, columns the months since.
+        ->and($cohort['chart']['__pivot'])->toBeTrue()
+        ->and($cohort['chart']['mode'])->toBe('cohort')
+        ->and($cohort['chart']['group_by_field_id'])->toBe('f_signup')
+        ->and($cohort['chart']['column_field_id'])->toBe('f_order')
+        ->and($cohort['chart']['bucket'])->toBe('month')
+        // Without the column bucket every order becomes its own column.
+        ->and($cohort['chart']['column_bucket'])->toBe('month')
+        // Retention counts the customers who came BACK — one customer ordering
+        // twice is one customer, not two.
+        ->and($cohort['chart']['aggregation'])->toBe('distinct_count')
+        ->and($cohort['chart']['y_field_id'])->toBe('f_cust')
+        ->and($cohort['why'])->toContain('3 camadas');
+
+    // It renders as a `pivot` block the board can actually hold.
+    $block = FindingBlock::forFinding($cohort)['block'];
+    expect($block['type'])->toBe('pivot')
+        ->and($block['mode'])->toBe('cohort')
+        ->and($block['data_source']['object_id'])->toBe('obj_coh00000')
+        ->and($block)->not->toHaveKey('__pivot');
+
+    app(TenantContext::class)->forget();
+});
+
+it('refuses a cohort when the two dates are not an intake and a return', function () {
+    config(['cache.default' => 'array']);
+    $user = User::factory()->create();
+    app(TenantContext::class)->set(null, $user->id);
+    $app = App::factory()->create(['user_id' => $user->id, 'visibility' => 'private']);
+
+    // The same two dates, crossed: the "activity" happens BEFORE the "start". Two
+    // dates that cross each other are not a birth and a return — they are just two
+    // dates, and a retention table built on them would be a confident answer to a
+    // question nobody asked.
+    $result = makeCore(cohortRows(crossed: true))->analyze(
+        $app,
+        ['objects' => [cohortObject()], 'settings' => ['default_locale' => 'es-MX']],
+        $user, 'es', [], 20,
+    );
+
+    expect(collect($result['findings'])->pluck('kind'))->not->toContain('cohort');
+
+    app(TenantContext::class)->forget();
+});
+
 it('reads a NATIVE object and recommends over its records', function () {
     // The analyst used to read connected sources only, so an app whose data
     // lives in its own records — the ordinary case — got zero recommendations.

@@ -1865,6 +1865,50 @@ class ManifestValidator
                 $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
             }
 
+            if ($block['type'] === 'pivot') {
+                $fields = $this->resolveBlockObjectFields(
+                    $block['data_source'] ?? [], 'object_id',
+                    "{$blockPath}/data_source/object_id", 'pivot',
+                    $objectsById, $fieldsByObjectId, $errors,
+                );
+                if ($fields === null) {
+                    continue;
+                }
+                $this->checkFieldRef($fields, $block['group_by_field_id'] ?? null, "{$blockPath}/group_by_field_id", 'pivot.group_by_field_id', $errors);
+                $this->checkFieldRef($fields, $block['column_field_id'] ?? null, "{$blockPath}/column_field_id", 'pivot.column_field_id', $errors);
+
+                // A bucket truncates a date; on anything else it is meaningless,
+                // and the query layer refuses it at run time — say so here instead.
+                foreach ([['bucket', 'group_by_field_id'], ['column_bucket', 'column_field_id']] as [$bucketKey, $fieldKey]) {
+                    if (isset($block[$bucketKey])) {
+                        $this->checkFieldRef($fields, $block[$fieldKey] ?? null, "{$blockPath}/{$fieldKey}", "pivot.{$fieldKey} (required by {$bucketKey})", $errors, ['date', 'datetime']);
+                    }
+                }
+
+                $aggregation = (string) ($block['aggregation'] ?? 'count');
+                if ($aggregation !== 'count') {
+                    // distinct_count counts the values of ANY field — a retention
+                    // table counts customers, and a customer is not a number.
+                    $allowed = $aggregation === 'distinct_count'
+                        ? null
+                        : ['number', 'currency', 'rating', 'slider'];
+                    $this->checkFieldRef($fields, $block['y_field_id'] ?? null, "{$blockPath}/y_field_id", "pivot.y_field_id (required by aggregation '{$aggregation}')", $errors, $allowed);
+                }
+
+                // A cohort reads each row from its OWN beginning, so its columns
+                // must be a date it can measure an offset along.
+                if (($block['mode'] ?? 'matrix') === 'cohort' && ! isset($block['column_bucket'])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/column_bucket",
+                        'A cohort pivot needs column_bucket: its columns are periods since each cohort began, and an unbucketed date makes every timestamp its own column.',
+                        'missing_required',
+                        expected: ['day', 'week', 'month', 'quarter', 'year'],
+                    );
+                }
+
+                $this->validateFilterExpression($block['data_source']['filter'] ?? null, "{$blockPath}/data_source/filter", $fields, $errors);
+            }
+
             if ($block['type'] === 'timeline') {
                 $fields = $this->resolveBlockObjectFields(
                     $block['data_source'] ?? [], 'object_id',

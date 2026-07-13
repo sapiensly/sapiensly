@@ -41,7 +41,7 @@ enum AppKind: string
         }
 
         // Otherwise, any strongly-analytical block marks it a dashboard.
-        foreach (['chart', 'metric_grid', 'insight', 'stat', 'gauge', 'progress', 'sparkline', 'funnel', 'heatmap', 'word_cloud'] as $analytical) {
+        foreach (['chart', 'pivot', 'metric_grid', 'insight', 'stat', 'gauge', 'progress', 'sparkline', 'funnel', 'heatmap', 'word_cloud'] as $analytical) {
             if (isset($types[$analytical])) {
                 return self::Dashboard;
             }

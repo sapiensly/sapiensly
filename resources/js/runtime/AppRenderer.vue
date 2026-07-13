@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, provide, inject } from 'vue';
 import type { ComputedRef } from 'vue';
+import { computed, defineAsyncComponent, inject, provide } from 'vue';
 import type {
     AnyBlock,
     BlockData,
@@ -47,6 +47,9 @@ const BlockModal = defineAsyncComponent(
 );
 const BlockChart = defineAsyncComponent(
     () => import('./blocks/BlockChart.vue'),
+);
+const BlockPivot = defineAsyncComponent(
+    () => import('./blocks/BlockPivot.vue'),
 );
 const BlockKanban = defineAsyncComponent(
     () => import('./blocks/BlockKanban.vue'),
@@ -157,6 +160,7 @@ const componentForType = {
     button: BlockButton,
     modal: BlockModal,
     chart: BlockChart,
+    pivot: BlockPivot,
     kanban: BlockKanban,
     calendar: BlockCalendar,
     markdown: BlockMarkdown,
@@ -223,6 +227,7 @@ provide(ThemeKey, theme.value);
 // filter bar render immediately.
 const DATA_BLOCK_TYPES = new Set([
     'chart',
+    'pivot',
     'table',
     'data_grid',
     'metric_grid',
@@ -316,7 +321,9 @@ function selfPaintsBackground(block: AnyBlock): boolean {
 function hasWrapper(block: AnyBlock): boolean {
     const s = block.style;
     if (!s) return false;
-    const bg = !selfPaintsBackground(block) && (!!s.background || !!s.color || !!s.gradient);
+    const bg =
+        !selfPaintsBackground(block) &&
+        (!!s.background || !!s.color || !!s.gradient);
     return (
         bg ||
         !!s.full_bleed ||
@@ -333,7 +340,10 @@ function wrapperClass(block: AnyBlock): string {
         PADDING[s.padding ?? ''] ?? '',
         MARGIN[s.margin ?? ''] ?? '',
     ];
-    if (!selfPaintsBackground(block) && (s.background || s.color || s.gradient)) {
+    if (
+        !selfPaintsBackground(block) &&
+        (s.background || s.color || s.gradient)
+    ) {
         classes.push('sp-styled');
     }
     // full_bleed only makes sense at page level; inside a panel it overflows.

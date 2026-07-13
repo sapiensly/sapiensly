@@ -43,6 +43,7 @@ const FORM_LABEL: Record<string, string> = {
     scatter: 'Dispersión',
     combo: 'Doble eje',
     stat: 'KPI',
+    pivot: 'Cohortes',
     insight: 'Hallazgo',
 };
 

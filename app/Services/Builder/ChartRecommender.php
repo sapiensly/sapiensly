@@ -104,6 +104,7 @@ class ChartRecommender
                 $rendered['type'] === 'insight' => 'insight',
                 $rendered['type'] === 'gauge' => 'gauge',
                 $rendered['type'] === 'stat' => 'stat',
+                $rendered['type'] === 'pivot' => 'pivot',
                 // A combo renders as a dual-axis chart, not as the bar its
                 // chart_type nominally says.
                 isset($chart['series']) => 'combo',

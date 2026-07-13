@@ -43,7 +43,7 @@ class InMemoryAggregator
      * @param  list<array{id: mixed, data: array<string, mixed>}>  $rows
      * @return list<array{group: mixed, value: int|float}>
      */
-    public function grouped(array $rows, string $aggregation, ?string $fieldSlug, string $groupSlug, ?string $bucket, int $limit = 100, ?string $secondGroupSlug = null): array
+    public function grouped(array $rows, string $aggregation, ?string $fieldSlug, string $groupSlug, ?string $bucket, int $limit = 100, ?string $secondGroupSlug = null, ?string $secondBucket = null): array
     {
         // A 2D pivot keys each bucket by both group values; the composite key is
         // split back out into {group, group2} on the way out.
@@ -52,7 +52,9 @@ class InMemoryAggregator
         foreach ($rows as $row) {
             $key = $this->bucketKey((string) ($row['data'][$groupSlug] ?? ''), $bucket);
             if ($secondGroupSlug !== null) {
-                $key .= $sep.(string) ($row['data'][$secondGroupSlug] ?? '');
+                // The COLUMNS of a cohort table are a date too, and a raw
+                // timestamp per column is not a table anyone can read.
+                $key .= $sep.$this->bucketKey((string) ($row['data'][$secondGroupSlug] ?? ''), $secondBucket);
             }
             if ($aggregation === 'count') {
                 $buckets[$key][] = 1;

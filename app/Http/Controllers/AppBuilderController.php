@@ -1378,6 +1378,7 @@ class AppBuilderController extends Controller
             'insight' => 'insight',
             'gauge' => 'medidor',
             'stat' => 'KPI',
+            'pivot' => 'cohortes',
             default => (string) ($block['chart_type'] ?? 'chart'),
         };
 
