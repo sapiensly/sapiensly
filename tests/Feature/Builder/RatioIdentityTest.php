@@ -204,3 +204,46 @@ it('claims no identity the data does not carry', function () {
 
     expect((new RatioIdentity(new SemanticProfile))->detect(simpleRatioObject(), $rows))->toBeEmpty();
 });
+
+it('proves an identity on a small sample — but demands perfection for it', function () {
+    // A source that returned FIVE buckets used to get no protection at all: the
+    // 8-row floor made the detector abstain, silently, so nothing was stamped and
+    // the validator had nothing to refuse. The board shipped avg(otd_pct_global)
+    // even though the rate was a_tiempo/entregados_total, exact on all five rows,
+    // and a correct ratio KPI was there for the taking.
+    $rows = [];
+    foreach ([[147, 146], [177, 177], [107, 107], [42, 42], [8, 8]] as [$total, $ok]) {
+        $rows[] = ['total' => $total, 'ok' => $ok, 'rate' => round($ok / $total * 100, 2)];
+    }
+
+    $found = (new RatioIdentity(new SemanticProfile))->detect(simpleRatioObject(), $rows);
+
+    expect($found)->toHaveCount(1)
+        ->and($found[0]['matched'])->toBe(5)
+        ->and($found[0]['expressible_as_kpi'])->toBeTrue();
+});
+
+it('grants a small sample no slack at all', function () {
+    // Same five rows, but one no longer obeys. With a real sample a stray row is
+    // noise (a backfill, a late correction) and 90% still proves the identity; with
+    // five rows there is no room for noise, so one miss kills it.
+    $rows = [];
+    foreach ([[147, 146], [177, 177], [107, 107], [42, 42], [8, 8]] as [$total, $ok]) {
+        $rows[] = ['total' => $total, 'ok' => $ok, 'rate' => round($ok / $total * 100, 2)];
+    }
+    $rows[2]['rate'] = 61.0;
+
+    expect((new RatioIdentity(new SemanticProfile))->detect(simpleRatioObject(), $rows))->toBeEmpty();
+});
+
+it('refuses a flat rate on a small sample, which any equal pair would explain', function () {
+    // otd_pct_con_promesa was 100 on every row. So is ok/total whenever ok == total —
+    // and so is any other such pair. A constant rate proves nothing, and on five rows
+    // it is a false positive waiting to happen.
+    $rows = [];
+    foreach ([[147, 147], [177, 177], [107, 107], [42, 42], [8, 8]] as [$total, $ok]) {
+        $rows[] = ['total' => $total, 'ok' => $ok, 'rate' => 100];
+    }
+
+    expect((new RatioIdentity(new SemanticProfile))->detect(simpleRatioObject(), $rows))->toBeEmpty();
+});

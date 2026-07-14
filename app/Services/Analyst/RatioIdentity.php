@@ -23,11 +23,34 @@ use App\Services\Records\FieldPaths;
  */
 class RatioIdentity
 {
-    /** Rows needed before an identity is a fact rather than a coincidence. */
+    /**
+     * Rows needed before the identity may hold on merely MOST of them.
+     *
+     * Above this, a stray row is noise (a late correction, a backfill) and 90% is
+     * proof. Below it, there is no room for noise and none is granted — see
+     * SMALL_SAMPLE_ROWS.
+     */
     private const MIN_ROWS = 8;
 
-    /** The share of rows the identity must hold on. */
+    /** The share of rows the identity must hold on, given a real sample. */
     private const MIN_MATCH = 0.9;
+
+    /**
+     * The absolute floor — and the reason it exists.
+     *
+     * MIN_ROWS used to be the floor too, and a source that returned FIVE buckets got
+     * no protection at all: no identity, no maturation, no stamp, and therefore
+     * nothing for the validator to refuse. The board shipped avg(otd_pct_global) —
+     * even though the rate was a_tiempo/entregados_total, EXACT on all five rows, and
+     * a correct ratio KPI was there for the taking. Worse, the guard said nothing
+     * while it abstained.
+     *
+     * A two-decimal ratio that lands exactly on five rows carrying different values
+     * is not a coincidence. So a small sample is admissible — at the price of
+     * perfection: every row must match, and the rate must actually VARY (a column
+     * that is 100 on every row can be "explained" by any pair where num == den).
+     */
+    private const SMALL_SAMPLE_ROWS = 4;
 
     /** How far a row may sit from the identity and still count (percentage points). */
     private const TOLERANCE_PCT = 0.6;
@@ -92,7 +115,13 @@ class RatioIdentity
 
         // A rate stored 0-1 is a fraction; one stored 0-100 is already points.
         $rateValues = $this->valuesOf($rows, $ratePath);
-        if (count($rateValues) < self::MIN_ROWS) {
+        if (count($rateValues) < self::SMALL_SAMPLE_ROWS) {
+            return null;
+        }
+        // A rate that never moves can be "explained" by any pair where num == den.
+        // With a real sample that is merely uninformative; with five rows it is a
+        // false positive waiting to happen.
+        if (count($rateValues) < self::MIN_ROWS && count(array_unique($rateValues)) < 2) {
             return null;
         }
         $scale = $this->semantics->percentScale($rate, $rateValues) === 'fraction' ? 100 : 1;
@@ -189,7 +218,12 @@ class RatioIdentity
             }
         }
 
-        if ($checked < self::MIN_ROWS || $matched / $checked < self::MIN_MATCH || $sumDen <= 0) {
+        // A real sample may carry a stray row — a backfill, a late correction — so
+        // 90% proves it. A small sample has no room for noise and gets no slack:
+        // every row must land, or the identity is not claimed.
+        $required = $checked >= self::MIN_ROWS ? self::MIN_MATCH : 1.0;
+
+        if ($checked < self::SMALL_SAMPLE_ROWS || $matched / $checked < $required || $sumDen <= 0) {
             return null;
         }
 
