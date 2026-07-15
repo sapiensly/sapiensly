@@ -2908,9 +2908,13 @@ function statusTone(status: Message['status']): string {
                         </button>
                     </div>
 
-                    <!-- Run the app in its real runtime, in a fresh tab -->
+                    <!-- Run the app in its real runtime, in a fresh tab. Uses the
+                         LIVE slug (appMeta), not the page prop: the first prompt
+                         renames the app and changes its slug, so `app.slug` from
+                         the initial props points at the old (untitled) slug and
+                         404s until a reload. -->
                     <a
-                        :href="`/r/${app.slug}`"
+                        :href="`/r/${appMeta.slug}`"
                         target="_blank"
                         rel="noopener"
                         class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
