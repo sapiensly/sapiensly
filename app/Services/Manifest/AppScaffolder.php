@@ -1639,6 +1639,11 @@ class AppScaffolder
                     'query' => $lead['query'],
                     'aggregation' => $lead['aggregation'],
                     'field_id' => $lead['field_id'] ?? null,
+                    // A rate KPI is sum(numerator) ÷ ratio_denominator, NOT a
+                    // bare sum — carry the denominator so the hero recomputes the
+                    // ratio live. Dropping it summed the numerator alone and
+                    // printed it as a percentage (1.8M% "OTD").
+                    'ratio_denominator' => $lead['ratio_denominator'] ?? null,
                     'format' => $lead['format'] ?? null,
                 ], fn ($v) => $v !== null && $v !== '');
             }

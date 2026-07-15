@@ -3470,6 +3470,9 @@
                                 "field_id": {
                                     "type": "string"
                                 },
+                                "ratio_denominator": {
+                                    "$ref": "#/$defs/ratio_operand"
+                                },
                                 "format": {
                                     "enum": [
                                         "number",
