@@ -45,7 +45,9 @@ function toIsoLocal(d: Date): string {
 }
 
 const weeks = computed(() => props.block.weeks ?? 26);
-const color = computed(() => props.block.color ?? '#3B82F6');
+// Default to the palette's first series so the density ramp follows palette_mode
+// (grays → a grey heatmap); an explicit block.color still wins.
+const color = computed(() => props.block.color ?? 'var(--sp-chart-1, #3B82F6)');
 
 // Count rows per ISO date.
 const countsByDate = computed<Record<string, number>>(() => {

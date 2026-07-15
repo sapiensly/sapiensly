@@ -55,9 +55,27 @@ const VARIANTS: Record<
     Variant,
     { color: string; icon: string; label: string }
 > = {
-    insight: { color: '#3B82F6', icon: 'lightbulb', label: 'Insight' },
-    recommendation: { color: '#6366F1', icon: 'target', label: 'Recomendación' },
-    conclusion: { color: '#3B82F6', icon: 'bar-chart', label: 'Conclusión' },
+    // Informational variants take the app accent, so palette_mode governs them
+    // (a "Conclusión" card greys out on a grayscale board) — the hex is only the
+    // fallback. STATUS variants keep their literal colour: green/amber/red carry
+    // meaning independent of brand and must read as good/attention/bad in any
+    // palette. Used only in inline color-mix()/color, so the var() resolves live
+    // — no palette signal needed, the browser re-resolves on the switch.
+    insight: {
+        color: 'var(--sp-accent, #3B82F6)',
+        icon: 'lightbulb',
+        label: 'Insight',
+    },
+    recommendation: {
+        color: 'var(--sp-accent, #6366F1)',
+        icon: 'target',
+        label: 'Recomendación',
+    },
+    conclusion: {
+        color: 'var(--sp-accent, #3B82F6)',
+        icon: 'bar-chart',
+        label: 'Conclusión',
+    },
     positive: { color: '#10B981', icon: 'check-circle', label: 'Positivo' },
     warning: { color: '#F59E0B', icon: 'alert-triangle', label: 'Atención' },
     risk: { color: '#EF4444', icon: 'flag', label: 'Riesgo' },
@@ -125,10 +143,7 @@ const displayMetric = computed(
                 <RuntimeIcon :name="block.icon || v.icon" :size="15" />
                 <span>{{ v.label }}</span>
             </div>
-            <h3
-                class="mt-2.5 text-lg leading-snug font-bold"
-                :class="t.text"
-            >
+            <h3 class="mt-2.5 text-lg leading-snug font-bold" :class="t.text">
                 {{ block.title }}
             </h3>
             <p

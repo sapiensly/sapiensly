@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { DEFAULT_ACCENT } from '../runtimeStyle';
 import type { ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import {
@@ -33,7 +34,17 @@ const series = computed(() =>
 );
 
 const path = computed(() => buildSparkPath(series.value, W, H));
-const stroke = computed(() => props.color ?? 'var(--sp-accent, #10b981)');
+// A spark is a CHART mark, so it takes the palette's first series colour — the
+// same var the bars/lines beside it use. That is what makes it obey
+// `palette_mode`: pick "Escala grises" in the builder and --sp-chart-1 becomes
+// grey, so the spark greys out with the rest instead of staying brand-blue.
+// --sp-chart-1 is always defined at runtime (the server derives the palette even
+// when the manifest sets no accent); the accent and the platform default are
+// belt-and-braces for surfaces that render a spark outside that scope.
+const stroke = computed(
+    () =>
+        props.color ?? `var(--sp-chart-1, var(--sp-accent, ${DEFAULT_ACCENT}))`,
+);
 </script>
 
 <template>

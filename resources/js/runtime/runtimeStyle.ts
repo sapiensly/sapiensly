@@ -4,6 +4,14 @@
  * brand accent (--sp-accent, used by buttons/links/highlights) and font.
  * Shared by the runtime page and the Builder preview.
  */
+/**
+ * The platform accent an app falls back to when its manifest sets none — the
+ * client mirror of OrganizationBrand::DEFAULT_ACCENT, which the server already
+ * derives every chart palette from. Anything accent-driven must default HERE,
+ * so a brandless app still reads as one coherent colour.
+ */
+export const DEFAULT_ACCENT = '#0096ff';
+
 const FONT_STACKS: Record<string, string> = {
     sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
     serif: 'ui-serif, Georgia, Cambria, "Times New Roman", serif',
@@ -25,6 +33,7 @@ function darken(hex: string, amount: number): string {
 }
 
 export interface Palette {
+    accent?: string;
     ramp?: Record<string, string>;
     soft?: string;
     contrast?: string;
@@ -38,14 +47,19 @@ export function runtimeSettingsStyle(
         | undefined,
 ): Record<string, string> {
     const out: Record<string, string> = {};
-    if (settings?.accent) {
+    // The palette's accent is the EFFECTIVE one — `palette_mode: grays` neutralises
+    // it server-side — so it wins over the raw brand accent. `settings.accent`
+    // stays the user's authored choice (the builder's picker still shows it); only
+    // what we PAINT with follows the mode.
+    const accent = settings?.palette?.accent ?? settings?.accent;
+    if (accent) {
         // Point both the generic accent AND the button/link accent
         // (--sp-accent-blue, which `bg-accent-blue` resolves) at the brand
         // colour, scoped to the app surface — so primary buttons, links and
         // highlights all adopt it.
-        out['--sp-accent'] = settings.accent;
-        out['--sp-accent-blue'] = settings.accent;
-        out['--sp-accent-blue-hover'] = darken(settings.accent, 0.12);
+        out['--sp-accent'] = accent;
+        out['--sp-accent-blue'] = accent;
+        out['--sp-accent-blue-hover'] = darken(accent, 0.12);
     }
     // The server-derived professional palette → CSS vars the whole tree (blocks,
     // charts, custom_css) can use: a tint/shade ramp, a soft surface tint, an

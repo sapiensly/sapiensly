@@ -509,14 +509,25 @@ const PALETTE_MODES = [
 function setPaletteMode(mode: string) {
     if (mode === paletteMode.value) return;
     paletteMode.value = mode;
+    // Cover the preview while the recoloured palette loads: the pane re-resolves
+    // its blocks and the colour transition would otherwise flash the old palette
+    // under the new chrome. Mirror the applied-version flow — overlay up now,
+    // down when the partial reload settles (or the request fails).
+    previewLoading.value = true;
     axios
         .post(`/apps/${props.app.id}/builder/design`, { palette_mode: mode })
         .then(() =>
             router.reload({
                 only: ['preview', 'previewBlockData', 'manifest'],
+                onFinish: () => {
+                    previewLoading.value = false;
+                },
             }),
         )
-        .catch(() => toast.error(t('apps.builder.brand_apply_failed')));
+        .catch(() => {
+            previewLoading.value = false;
+            toast.error(t('apps.builder.brand_apply_failed'));
+        });
 }
 
 const panelMode = ref<'chat' | 'manual'>('chat');

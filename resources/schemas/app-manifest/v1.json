@@ -272,15 +272,15 @@
                         "from",
                         "to"
                     ],
-                    "description": "Linear-gradient background (overrides `background`). Keep `from`/`to` in the same tonal range so the auto-contrast text colour reads against both ends.",
+                    "description": "Linear-gradient background (overrides `background`). Keep `from`/`to` in the same tonal range so the auto-contrast text colour reads against both ends. A stop may be a literal hex, or a palette ramp variable WITH a hex fallback — `var(--sp-accent-900, #003961)` — which keeps the gradient live: it follows the app's accent and `palette_mode` (e.g. \"grays\") instead of freezing the colour that was active when the block was authored.",
                     "properties": {
                         "from": {
                             "type": "string",
-                            "pattern": "^#[0-9A-Fa-f]{6}$"
+                            "pattern": "^(#[0-9A-Fa-f]{6}|var\\(--[A-Za-z0-9-]+,\\s*#[0-9A-Fa-f]{6}\\))$"
                         },
                         "to": {
                             "type": "string",
-                            "pattern": "^#[0-9A-Fa-f]{6}$"
+                            "pattern": "^(#[0-9A-Fa-f]{6}|var\\(--[A-Za-z0-9-]+,\\s*#[0-9A-Fa-f]{6}\\))$"
                         },
                         "direction": {
                             "enum": [

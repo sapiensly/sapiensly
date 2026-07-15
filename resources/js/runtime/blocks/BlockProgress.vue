@@ -33,7 +33,9 @@ const ratio = computed(() =>
     Math.min(1, Math.max(0, value.value / Math.max(1, props.block.max_value))),
 );
 const pct = computed(() => Math.round(ratio.value * 100));
-const color = computed(() => props.block.color ?? '#3B82F6');
+// Default to the palette's first series (like its sibling gauge) so a goal bar
+// follows palette_mode; an explicit block.color still wins.
+const color = computed(() => props.block.color ?? 'var(--sp-chart-1, #3B82F6)');
 
 function format(n: number): string {
     if (props.block.format === 'currency') {

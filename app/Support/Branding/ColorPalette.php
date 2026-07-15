@@ -22,10 +22,28 @@ final class ColorPalette
     private const CHART_HUES = [0, 32, -28, 160, 64, -64];
 
     /**
-     * @return array{ramp: array<string, string>, soft: string, contrast: string, on_accent: string, chart: list<string>}
+     * The base the `grays` mode derives EVERYTHING from — a slate deep enough to
+     * stay a legitimate primary colour (buttons, the active pill) rather than
+     * reading as disabled.
+     */
+    private const NEUTRAL_ACCENT = '#4b5563';
+
+    /**
+     * `grays` is a whole-surface mode, not just a chart-series mode: the ramp
+     * feeds the hero gradient and the --sp-accent-* vars, so leaving it derived
+     * from a blue accent left a "grayscale" board with a blue hero and a blue
+     * active filter pill. Neutralise the SOURCE and every consumer follows.
+     * `accent` is the colour the surface should actually paint with — callers
+     * bind --sp-accent to it, not to the raw brand accent.
+     *
+     * @return array{accent: string, ramp: array<string, string>, soft: string, contrast: string, on_accent: string, chart: list<string>}
      */
     public static function fromAccent(string $accent, string $chartMode = 'brand'): array
     {
+        if ($chartMode === 'grays') {
+            $accent = self::NEUTRAL_ACCENT;
+        }
+
         [$r, $g, $b] = self::toRgb($accent);
 
         $ramp = [];
@@ -64,6 +82,7 @@ final class ColorPalette
         };
 
         return [
+            'accent' => $accent,
             'ramp' => $ramp,
             'soft' => $ramp['50'],
             'contrast' => self::readableOn([$r, $g, $b]),

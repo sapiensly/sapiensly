@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { DEFAULT_ACCENT } from '../runtimeStyle';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { useChartTooltip } from '../useChartTooltip';
@@ -200,7 +201,16 @@ const path = computed(() => {
     };
 });
 
-const color = computed(() => props.block.color ?? '#3B82F6');
+// An explicit block colour still wins; absent one, take the palette's first
+// series colour like every other chart mark, so `palette_mode` governs this
+// block too ("Escala grises" → --sp-chart-1 is grey → the spark is grey). Safe
+// as a var() here: the SVG marks take it as a presentation attribute and the
+// tooltip swatch as an inline style, both inside the surface that defines it.
+const color = computed(
+    () =>
+        props.block.color ??
+        `var(--sp-chart-1, var(--sp-accent, ${DEFAULT_ACCENT}))`,
+);
 
 function formatNumber(value: number): string {
     return new Intl.NumberFormat(props.locale).format(

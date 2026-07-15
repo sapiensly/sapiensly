@@ -1643,7 +1643,17 @@ class AppScaffolder
                 ], fn ($v) => $v !== null && $v !== '');
             }
             if (is_array($palette['ramp'] ?? null) && isset($palette['ramp']['900'], $palette['ramp']['600'])) {
-                $hero['style'] = ['gradient' => ['from' => $palette['ramp']['900'], 'to' => $palette['ramp']['600'], 'direction' => 'to-br']];
+                // Reference the ramp VARS, not the hexes they resolve to today.
+                // Baking the hex froze the hero at whatever palette was active
+                // when the board compiled, so switching palette_mode to "Escala
+                // grises" later left a blue hero on an otherwise grey board. The
+                // hex stays as the var's fallback, so a surface that doesn't
+                // define the ramp still renders the intended gradient.
+                $hero['style'] = ['gradient' => [
+                    'from' => "var(--sp-accent-900, {$palette['ramp']['900']})",
+                    'to' => "var(--sp-accent-600, {$palette['ramp']['600']})",
+                    'direction' => 'to-br',
+                ]];
             }
             $blocks[] = $hero; // chrome — not a lint row
         } else {

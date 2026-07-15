@@ -80,7 +80,12 @@ const accentHs = computed<[number, number]>(() => {
     }
     const l = (max + min) / 2;
     const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
-    return [h, Math.round(Math.max(0.5, Math.min(1, s)) * 100)];
+    // Take the palette's saturation AS IT IS. A floor here (there used to be one
+    // at 50%) re-saturates the colour the palette chose: the `grays` mode ships
+    // #4b5563 — hue 215° at 14% saturation — and a floor reinflated it to a vivid
+    // blue, so a grayscale board still rendered blue bars. The ramp below reads
+    // by LIGHTNESS, so it stays legible at any saturation, including zero.
+    return [h, Math.round(Math.min(1, s) * 100)];
 });
 
 const model = computed(() => {
@@ -109,7 +114,10 @@ const model = computed(() => {
             share: ((d.value / total) * 100).toFixed(1) + '%',
             cum: 'acum. ' + ((running / total) * 100).toFixed(0) + '%',
             width: ((d.value / max) * 100).toFixed(1) + '%',
-            color: `hsl(${hue}, ${Math.min(100, sat + r * 12)}%, ${60 - r * 12}%)`,
+            // Lightness carries the ranking; saturation only deepens it, and
+            // PROPORTIONALLY — a flat `+ r * 12` would tint an achromatic
+            // palette back into colour at the top of the ramp.
+            color: `hsl(${hue}, ${Math.min(100, sat * (1 + r * 0.2))}%, ${60 - r * 12}%)`,
         };
     });
 
@@ -151,7 +159,9 @@ const model = computed(() => {
 
         <div
             class="mt-1"
-            :class="fitHeight ? 'flex min-h-0 flex-1 flex-col justify-around' : ''"
+            :class="
+                fitHeight ? 'flex min-h-0 flex-1 flex-col justify-around' : ''
+            "
         >
             <div
                 v-for="row in model.rows"

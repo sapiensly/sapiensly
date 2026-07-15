@@ -375,13 +375,33 @@ function wrapperStyle(block: AnyBlock): Record<string, string> | undefined {
     return Object.keys(out).length ? out : undefined;
 }
 
+/**
+ * A gradient stop is a hex, or a live palette ramp var carrying a hex fallback
+ * (`var(--sp-accent-900, #003961)`). Read the hex out either way — feeding the
+ * raw var() string to the contrast maths below parses as NaN and paints the
+ * section's text an arbitrary colour.
+ */
+function stopHex(stop: string): string | null {
+    const value = stop.trim();
+    if (/^#[0-9a-f]{6}$/i.test(value)) return value;
+
+    return (
+        /^var\(\s*--[\w-]+\s*,\s*(#[0-9a-f]{6})\s*\)$/i.exec(value)?.[1] ?? null
+    );
+}
+
 function averageHex(a: string, b: string): string {
+    const hexA = stopHex(a);
+    const hexB = stopHex(b);
+    // Unmeasurable stop → no auto-contrast; the theme's text colour stands.
+    if (hexA === null || hexB === null) return '';
+
     const p = (h: string) =>
         [1, 3, 5].map((i) =>
             parseInt(h.replace('#', '').slice(i - 1, i + 1), 16),
         );
-    const [r1, g1, b1] = p(a);
-    const [r2, g2, b2] = p(b);
+    const [r1, g1, b1] = p(hexA);
+    const [r2, g2, b2] = p(hexB);
     const mid = (x: number, y: number) =>
         Math.round((x + y) / 2)
             .toString(16)
