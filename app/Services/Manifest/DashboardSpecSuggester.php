@@ -260,6 +260,24 @@ class DashboardSpecSuggester
         $datedInsights = [];
         $seated = 0;
         $chartedDimensions = [];
+        // Two breakdowns over the SAME category set — identical slices, only the
+        // measure differs (e.g. "total tickets by category" AND "closed count by
+        // category", both cobranza/fulfillment/garantías/…) — must not draw the
+        // same ring twice. Track the form(s) already used per category signature
+        // so a colliding breakdown is re-formed (a donut becomes a bar), keeping
+        // both measures but distinguishing them at a glance. Seed with the
+        // primary's own breakdowns so a guest can't echo the primary's ring.
+        $breakdownForms = [];
+        $primaryStats = $this->semantics->columnStats($primary, $rowsByObject[$primary['id'] ?? ''] ?? []);
+        foreach ($spec['charts'] as $primaryChart) {
+            if (($primaryChart['group_by_field_id'] ?? null) === null || isset($primaryChart['x_field_id'])) {
+                continue;
+            }
+            $sig = $this->categorySignature($primaryStats[$primaryChart['group_by_field_id']]['values'] ?? []);
+            if ($sig !== null) {
+                $breakdownForms[$sig][] = (string) ($primaryChart['chart_type'] ?? '');
+            }
+        }
         foreach ($secondaries as $secondary) {
             if ($seated >= self::MAX_SECONDARIES || count($spec['charts']) >= self::MAX_CHARTS) {
                 break;
@@ -275,6 +293,7 @@ class DashboardSpecSuggester
             $mini = $this->suggest($secondary, $lang, $rowsByObject[$secondary['id'] ?? ''] ?? [], $promptTopics, $previousRowsByObject[$secondary['id'] ?? ''] ?? []);
             $name = (string) ($secondary['name'] ?? $slug);
             $miniSlugs = $this->fieldSlugIndex($secondary);
+            $secStats = $this->semantics->columnStats($secondary, $rowsByObject[$secondary['id'] ?? ''] ?? []);
 
             $charts = collect($mini['charts'] ?? []);
             $trend = $charts->first(fn (array $c): bool => isset($c['x_field_id']));
@@ -301,7 +320,23 @@ class DashboardSpecSuggester
                 }
                 $chart['object_slug'] = $slug;
                 $chart['label'] = $this->labelWithObject((string) ($chart['label'] ?? ''), $name);
-                $spec['charts'][] = $this->varyForm($chart, $spec['charts']);
+                // Re-form a breakdown that would repeat a ring already drawn for
+                // the same category set (before the generic variety pass, so its
+                // choice starts from a form that isn't a same-signature dup).
+                $sig = ($chart['group_by_field_id'] ?? null) !== null && ! isset($chart['x_field_id'])
+                    ? $this->categorySignature($secStats[$chart['group_by_field_id']]['values'] ?? [])
+                    : null;
+                if ($sig !== null && in_array((string) ($chart['chart_type'] ?? ''), $breakdownForms[$sig] ?? [], true)) {
+                    $chart['chart_type'] = $this->pickBreakdownForm(
+                        $breakdownForms[$sig],
+                        $secStats[$chart['group_by_field_id']]['distinct'] ?? null,
+                    );
+                }
+                $seatedChart = $this->varyForm($chart, $spec['charts']);
+                $spec['charts'][] = $seatedChart;
+                if ($sig !== null) {
+                    $breakdownForms[$sig][] = (string) ($seatedChart['chart_type'] ?? '');
+                }
                 $added = true;
             }
             if ($added) {
@@ -550,6 +585,47 @@ class DashboardSpecSuggester
         }
 
         return $chart;
+    }
+
+    /**
+     * A stable fingerprint of the category values a breakdown slices by, so two
+     * breakdowns over the SAME categories can be recognised regardless of which
+     * object or dimension argument produced them. Null when there are fewer than
+     * two distinct values (not a real breakdown).
+     *
+     * @param  list<mixed>  $values  the group-by column's distinct values
+     */
+    private function categorySignature(array $values): ?string
+    {
+        $norm = collect($values)
+            ->map(fn ($v): string => is_scalar($v) ? Str::lower(Str::ascii(trim((string) $v))) : '')
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        return $norm->count() >= 2 ? $norm->implode('|') : null;
+    }
+
+    /**
+     * Choose a breakdown form that isn't already used for this category
+     * signature, honouring cardinality (a >8-slice ring is unreadable, so many
+     * categories prefer horizontal/treemap forms).
+     *
+     * @param  list<string>  $taken  forms already drawn for this signature
+     */
+    private function pickBreakdownForm(array $taken, ?int $distinct): string
+    {
+        $order = $distinct !== null && $distinct > 8
+            ? ['hbar', 'treemap', 'bar']
+            : ['bar', 'treemap', 'donut', 'hbar'];
+        foreach ($order as $form) {
+            if (! in_array($form, $taken, true)) {
+                return $form;
+            }
+        }
+
+        return $order[0];
     }
 
     /**
