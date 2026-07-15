@@ -498,6 +498,7 @@ function blockError(blockId: string): string | null {
                 <component
                     v-else
                     :is="componentForType[block.type as SupportedType]"
+                    class="sp-block-in"
                     :block="block"
                     :block-data="blockData"
                     :data="blockData[block.id]"
@@ -515,6 +516,7 @@ function blockError(blockId: string): string | null {
         <component
             v-else-if="isSupported(block.type)"
             :is="componentForType[block.type as SupportedType]"
+            class="sp-block-in"
             :block="block"
             :block-data="blockData"
             :data="blockData[block.id]"

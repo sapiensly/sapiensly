@@ -450,6 +450,58 @@
 }
 
 /*
+ * A data block materialising in — plays once when the element first mounts,
+ * which is exactly the moment its deferred data lands and the shimmer skeleton
+ * is replaced by the real chart (or on first paint). A same-id block whose data
+ * merely UPDATES keeps its element, so this does not replay on every reload.
+ */
+@keyframes sp-block-in {
+    0% {
+        opacity: 0;
+        transform: translateY(8px) scale(0.985);
+    }
+    100% {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/*
+ * Live loading surface: a resting tint plus a sheen that sweeps across, so a
+ * placeholder reads as actively loading rather than statically greyed. Base
+ * tint is always on (graceful under reduced motion); only the sweep animates.
+ */
+.sp-shimmer {
+    background-color: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .sp-block-in {
+        animation: sp-block-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .sp-shimmer {
+        background-image: linear-gradient(
+            100deg,
+            transparent 28%,
+            color-mix(in srgb, currentColor 10%, transparent) 50%,
+            transparent 72%
+        );
+        background-size: 200% 100%;
+        background-repeat: no-repeat;
+        animation: sp-shimmer 1.5s ease-in-out infinite;
+    }
+}
+
+@keyframes sp-shimmer {
+    0% {
+        background-position: 180% 0;
+    }
+    100% {
+        background-position: -180% 0;
+    }
+}
+
+/*
  * Chat assistant markdown. Tightens the default `prose` rhythm to a denser,
  * conversational feel and styles code blocks / tables / quotes so streamed
  * Markdown reads cleanly inside the thread.

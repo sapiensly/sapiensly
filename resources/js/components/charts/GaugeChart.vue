@@ -8,7 +8,7 @@
  */
 import { onPaletteChange } from '@/composables/usePaletteSignal';
 import { resolveCssColor } from '@/lib/resolveCssColor';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = withDefaults(
     defineProps<{
@@ -55,6 +55,45 @@ const accentLight = computed(() => {
     return `rgb(${r} ${g} ${b})`;
 });
 
+// The arc and the big number sweep up from 0 to the real value once, on mount
+// and whenever the value changes — the "loading in real time" reveal. The
+// STATUS pill and the distance-to-target read the final value so they never
+// flicker mid-sweep. SSR/first paint show the final value (displayValue starts
+// there, no hydration mismatch); the client resets to 0 and tweens up.
+const reducedMotion =
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+const displayValue = ref(props.value);
+let raf = 0;
+function tweenTo(target: number) {
+    if (reducedMotion || typeof requestAnimationFrame === 'undefined') {
+        displayValue.value = target;
+        return;
+    }
+    cancelAnimationFrame(raf);
+    const from = displayValue.value;
+    const start = performance.now();
+    const dur = 850;
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3); // easeOutCubic
+    const step = (now: number) => {
+        const p = Math.min(1, (now - start) / dur);
+        displayValue.value = from + (target - from) * ease(p);
+        if (p < 1) {
+            raf = requestAnimationFrame(step);
+        }
+    };
+    raf = requestAnimationFrame(step);
+}
+onMounted(() => {
+    displayValue.value = reducedMotion ? props.value : 0;
+    tweenTo(props.value);
+});
+watch(
+    () => props.value,
+    (v) => tweenTo(v),
+);
+onBeforeUnmount(() => cancelAnimationFrame(raf));
+
 const es = computed(() => !props.locale?.startsWith('en'));
 const nf = computed(() => new Intl.NumberFormat(props.locale));
 
@@ -66,18 +105,23 @@ const axisMax = computed(() =>
     isPct.value ? 100 : Math.max(1, props.target) * 1.25,
 );
 const f = computed(() =>
-    Math.max(0, Math.min(1, props.value / axisMax.value)),
+    Math.max(0, Math.min(1, displayValue.value / axisMax.value)),
 );
 const tf = computed(() =>
     Math.max(0, Math.min(1, props.target / axisMax.value)),
 );
 const onTarget = computed(() => props.value >= props.target);
 
-const valueLabel = computed(() =>
-    isPct.value
-        ? `${(Math.round(props.value * 10) / 10).toLocaleString(props.locale)}%`
-        : nf.value.format(props.value),
-);
+const valueLabel = computed(() => {
+    // At rest the tween lands exactly on props.value, so show its true precision
+    // then; while sweeping, round to keep the count-up clean.
+    const settled = displayValue.value === props.value;
+    if (isPct.value) {
+        const v = Math.round(displayValue.value * 10) / 10;
+        return `${v.toLocaleString(props.locale)}%`;
+    }
+    return nf.value.format(settled ? props.value : Math.round(displayValue.value));
+});
 const targetLabel = computed(() =>
     isPct.value ? `${nf.value.format(props.target)}%` : nf.value.format(props.target),
 );
