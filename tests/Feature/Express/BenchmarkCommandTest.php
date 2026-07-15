@@ -61,11 +61,12 @@ it('runs a benchmark scenario end-to-end and writes the report', function () {
         ],
     ];
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
-    $authoring->shouldReceive('author')->andReturn([
+    $authoring->shouldReceive('previousWindowRowsMany')->andReturn([]);
+    $authoring->shouldReceive('authorMany')->andReturn([[
         'ok' => true, 'object' => $object,
         'rows' => [['id' => 'W1', 'semana' => now()->utc()->subDays(3)->toDateString(), 'categoria' => 'Envíos', 'total' => 12]],
         'clamped' => [], 'date_field_ids' => [$ids['d']], 'summary' => 'obj',
-    ]);
+    ]]);
     app()->instance(ConnectedObjectAuthoring::class, $authoring);
 
     ExpressGateAgent::fake([

@@ -40,17 +40,160 @@ class ConnectedObjectAuthoring
      */
     public function author(User $user, Integration $integration, array $spec, array $manifest): array
     {
+        $resolved = $this->resolveCall($user, $integration, $spec);
+        if (($resolved['ok'] ?? false) !== true) {
+            return $resolved;
+        }
+
+        try {
+            try {
+                $decoded = $this->mcp->callToolData($resolved['config'], $user, $resolved['tool_name'], $resolved['arguments']);
+            } catch (\Throwable $e) {
+                // "At least one of sku/fecha_desde/fecha_hasta…" constraints
+                // live only in the tool's ERROR message — the date params are
+                // optional in the schema, so fillRequiredArguments never sees
+                // them. One retry with a synthesized rolling window over the
+                // optional date-ish params before giving up.
+                $withDates = $this->fillDateArguments($resolved['arguments'], $resolved['input_schema']);
+                if ($withDates === $resolved['arguments']) {
+                    throw $e;
+                }
+                $decoded = $this->mcp->callToolData($resolved['config'], $user, $resolved['tool_name'], $withDates);
+                $resolved['arguments'] = $withDates;
+            }
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        return $this->authorFromDecoded($integration, $spec, $resolved, $decoded, $manifest);
+    }
+
+    /**
+     * Author MANY connected objects with their tool reads POOLED into ONE
+     * round-trip: the serial author() run N times paid N network latencies;
+     * this resolves every spec, fires all fetches at once (poolToolCalls
+     * collapses the sum to the max), refires the date-constrained failures in a
+     * second pool, and models the rows afterward. Results come back in spec
+     * order, each the exact shape author() returns; a per-spec failure is
+     * isolated (ok:false) and never aborts the batch. Slugs stay unique across
+     * the batch AND against the passed manifest — each authored object grows the
+     * draft the next one dedups against, exactly as the serial path did.
+     *
+     * @param  list<array<string, mixed>>  $specs
+     * @param  array<string, mixed>  $manifest  current draft (slug uniqueness)
+     * @return list<array{ok: bool, object?: array<string, mixed>, rows?: list<array<string, mixed>>, summary?: string, error?: string}>
+     */
+    public function authorMany(User $user, Integration $integration, array $specs, array $manifest): array
+    {
+        if ($specs === []) {
+            return [];
+        }
+
+        $config = $this->integrationConfig($integration);
+
+        // 1. Resolve each spec to a concrete call. The catalog lookup is
+        //    memoized, so the whole batch shares one tools/list.
+        $resolved = [];
+        foreach ($specs as $i => $spec) {
+            $resolved[$i] = $this->resolveCall($user, $integration, $spec);
+        }
+
+        // 2. Pool the current-window fetch for every spec that resolved.
+        $calls = [];
+        foreach ($resolved as $i => $r) {
+            if (($r['ok'] ?? false) === true) {
+                $calls[(string) $i] = ['name' => $r['tool_name'], 'arguments' => $r['arguments']];
+            }
+        }
+        $pool = $this->pooledFetch($config, $user, $calls);
+
+        // 3. A failed read may be a date constraint the schema doesn't declare
+        //    (author()'s retry, batched): refire those with a synthesized
+        //    window, and remember the shifted args for the authored object.
+        $retryCalls = [];
+        foreach ($resolved as $i => $r) {
+            if (($r['ok'] ?? false) !== true || $this->poolSucceeded($pool[(string) $i] ?? null)) {
+                continue;
+            }
+            $withDates = $this->fillDateArguments($r['arguments'], $r['input_schema']);
+            if ($withDates !== $r['arguments']) {
+                $retryCalls[(string) $i] = ['name' => $r['tool_name'], 'arguments' => $withDates];
+                $resolved[$i]['arguments'] = $withDates;
+            }
+        }
+        $retry = $this->pooledFetch($config, $user, $retryCalls);
+
+        // 4. Model each result IN ORDER against a manifest that grows with every
+        //    authored object, so slugs stay unique exactly as the serial path.
+        $out = [];
+        foreach ($specs as $i => $spec) {
+            $r = $resolved[$i];
+            if (($r['ok'] ?? false) !== true) {
+                $out[] = $r; // resolve failed — carries the error verbatim
+
+                continue;
+            }
+            $result = $retry[(string) $i] ?? $pool[(string) $i] ?? null;
+            if (! $this->poolSucceeded($result)) {
+                $out[] = ['ok' => false, 'error' => (is_array($result) ? ($result['error'] ?? null) : null)
+                    ?? "The MCP tool '{$r['tool_name']}' did not return JSON rows."];
+
+                continue;
+            }
+            $authored = $this->authorFromDecoded($integration, $spec, $r, $result['data'] ?? null, $manifest);
+            $out[] = $authored;
+            if (($authored['ok'] ?? false) === true) {
+                $manifest['objects'][] = $authored['object'];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Pool a set of tool calls, never throwing: a setup-level failure (session
+     * handshake, auth, SSRF) degrades every call to ok:false — the same outcome
+     * the serial reads would reach against an unreachable endpoint — instead of
+     * aborting the batch.
+     *
+     * @param  array<string, mixed>  $config
+     * @param  array<string, array{name: string, arguments: array<string, mixed>}>  $calls
+     * @return array<string, array{ok: bool, data?: array<string, mixed>|null, error?: string}>
+     */
+    private function pooledFetch(array $config, User $user, array $calls): array
+    {
+        if ($calls === []) {
+            return [];
+        }
+        try {
+            return $this->mcp->poolToolCalls($config, $user, $calls);
+        } catch (\Throwable $e) {
+            return array_map(fn (): array => ['ok' => false, 'error' => $e->getMessage()], $calls);
+        }
+    }
+
+    private function poolSucceeded(mixed $result): bool
+    {
+        return is_array($result) && ($result['ok'] ?? false) === true;
+    }
+
+    /**
+     * Resolve a spec to a concrete MCP call — the tool from the server catalog,
+     * arguments clamped to the input_schema and required params filled — WITHOUT
+     * fetching. Split out so authorMany() can resolve many specs, pool their
+     * fetches, then model; author() composes it with one fetch. ok:false carries
+     * the same errors author() returned inline (missing tool_name, unknown tool,
+     * a catalog/clamp failure).
+     *
+     * @param  array{tool_name?: string, arguments?: array<string, mixed>}  $spec
+     * @return array{ok: bool, tool_name?: string, config?: array<string, mixed>, arguments?: array<string, mixed>, input_schema?: array<string, mixed>, clamped?: array<string, mixed>, error?: string}
+     */
+    private function resolveCall(User $user, Integration $integration, array $spec): array
+    {
         $toolName = trim((string) ($spec['tool_name'] ?? ''));
         if ($toolName === '') {
             return ['ok' => false, 'error' => '`tool_name` is required.'];
         }
-
-        $config = [
-            'endpoint' => $integration->base_url,
-            'integration_id' => $integration->id,
-            'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
-            'auth_config' => $integration->auth_config ?? [],
-        ];
 
         try {
             $serverTools = $this->catalog->tools($integration, $user);
@@ -71,25 +214,37 @@ class ConnectedObjectAuthoring
             // maximum. Without this, a from/to-requiring tool errors on the
             // very first read.
             $arguments = $this->fillRequiredArguments($arguments, $tool['input_schema']);
-
-            try {
-                $decoded = $this->mcp->callToolData($config, $user, $toolName, $arguments);
-            } catch (\Throwable $e) {
-                // "At least one of sku/fecha_desde/fecha_hasta…" constraints
-                // live only in the tool's ERROR message — the date params are
-                // optional in the schema, so fillRequiredArguments never sees
-                // them. One retry with a synthesized rolling window over the
-                // optional date-ish params before giving up.
-                $withDates = $this->fillDateArguments($arguments, $tool['input_schema']);
-                if ($withDates === $arguments) {
-                    throw $e;
-                }
-                $decoded = $this->mcp->callToolData($config, $user, $toolName, $withDates);
-                $arguments = $withDates;
-            }
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
+
+        return [
+            'ok' => true,
+            'tool_name' => $toolName,
+            'config' => $this->integrationConfig($integration),
+            'arguments' => $arguments,
+            'input_schema' => $tool['input_schema'],
+            'clamped' => $clamped,
+        ];
+    }
+
+    /**
+     * Model an already-fetched tool result into a connected object — the second
+     * half of author(), shared with authorMany() so a pooled batch and a single
+     * call produce identical objects. $decoded is what callToolData /
+     * poolToolCalls return; $resolved comes from resolveCall().
+     *
+     * @param  array<string, mixed>  $spec
+     * @param  array{tool_name: string, arguments: array<string, mixed>, clamped: array<string, mixed>}  $resolved
+     * @param  array<string, mixed>|null  $decoded
+     * @param  array<string, mixed>  $manifest  current draft (slug uniqueness)
+     * @return array{ok: bool, object?: array<string, mixed>, rows?: list<array<string, mixed>>, clamped?: array<string, mixed>, date_field_ids?: list<string>, derived_rates?: mixed, immature_periods?: mixed, summary?: string, error?: string}
+     */
+    private function authorFromDecoded(Integration $integration, array $spec, array $resolved, ?array $decoded, array $manifest): array
+    {
+        $toolName = $resolved['tool_name'];
+        $arguments = $resolved['arguments'];
+        $clamped = $resolved['clamped'];
 
         if ($decoded === null) {
             return ['ok' => false, 'error' => "The MCP tool '{$toolName}' did not return JSON rows."];
@@ -283,18 +438,101 @@ class ConnectedObjectAuthoring
      */
     public function previousWindowRows(User $user, Integration $integration, array $object): array
     {
+        $call = $this->previousWindowCall($object);
+        if ($call === null) {
+            return [];
+        }
+
+        try {
+            $decoded = $this->mcp->callToolData($this->integrationConfig($integration), $user, $call['name'], $call['arguments']);
+        } catch (\Throwable) {
+            return [];
+        }
+        if ($decoded === null) {
+            return [];
+        }
+
+        [$rows] = $this->extractRows($decoded, $call['collection_path']);
+
+        return $rows;
+    }
+
+    /**
+     * The previous-window read for MANY objects in ONE pooled round-trip — the
+     * same span-back sample previousWindowRows() computes per object, but the
+     * network latencies collapse to their max instead of their sum. Best-effort
+     * per object: a tool with no window arg, or a failed read, simply yields no
+     * delta (absent from the result), exactly as the serial path returns [].
+     *
+     * @param  list<array<string, mixed>>  $objects
+     * @return array<string, list<array<string, mixed>>> object id → previous rows
+     */
+    public function previousWindowRowsMany(User $user, Integration $integration, array $objects): array
+    {
+        $calls = [];
+        $collectionPaths = [];
+        foreach ($objects as $object) {
+            $id = $object['id'] ?? null;
+            $call = is_string($id) ? $this->previousWindowCall($object) : null;
+            if ($id === null || $call === null) {
+                continue;
+            }
+            $calls[$id] = ['name' => $call['name'], 'arguments' => $call['arguments']];
+            $collectionPaths[$id] = $call['collection_path'];
+        }
+        if ($calls === []) {
+            return [];
+        }
+
+        // Best-effort, exactly like the serial previousWindowRows: the current
+        // window already succeeded and deltas are optional, so a setup-level
+        // failure (session handshake, auth, SSRF guard) yields NO deltas rather
+        // than failing the build. Per-object failures already come back as
+        // ok:false inside the pool and are skipped below.
+        try {
+            $results = $this->mcp->poolToolCalls($this->integrationConfig($integration), $user, $calls);
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($collectionPaths as $id => $collectionPath) {
+            $result = $results[$id] ?? null;
+            if (! is_array($result) || ($result['ok'] ?? false) !== true || ! is_array($result['data'] ?? null)) {
+                continue;
+            }
+            [$rows] = $this->extractRows($result['data'], $collectionPath);
+            if ($rows !== []) {
+                $out[$id] = $rows;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Build the previous-window tool call for one authored object — the tool
+     * name, its arguments shifted one full span back, and the collection path —
+     * or null when the object's tool carries no resolvable date window. Shared
+     * by the single and pooled readers so both shift the window identically.
+     *
+     * @param  array<string, mixed>  $object
+     * @return array{name: string, arguments: array<string, mixed>, collection_path: mixed}|null
+     */
+    private function previousWindowCall(array $object): ?array
+    {
         $op = $object['source']['operations']['list'] ?? null;
         $toolName = trim((string) ($op['mcp_tool'] ?? ''));
         $arguments = is_array($op['arguments'] ?? null) ? $op['arguments'] : [];
         if ($toolName === '' || $arguments === []) {
-            return [];
+            return null;
         }
 
         $fromKey = collect(ConnectedObjectReader::DATE_FROM_ARG_KEYS)->first(fn (string $k) => array_key_exists($k, $arguments));
         $toKey = collect(ConnectedObjectReader::DATE_TO_ARG_KEYS)->first(fn (string $k) => array_key_exists($k, $arguments));
         $from = $this->windowDate($arguments[$fromKey ?? ''] ?? null);
         if ($fromKey === null || $from === null) {
-            return [];
+            return null;
         }
         $to = $this->windowDate($arguments[$toKey ?? ''] ?? null) ?? now()->utc()->startOfDay();
 
@@ -304,23 +542,24 @@ class ConnectedObjectAuthoring
             $arguments[$toKey] = $from->toDateString();
         }
 
-        try {
-            $decoded = $this->mcp->callToolData([
-                'endpoint' => $integration->base_url,
-                'integration_id' => $integration->id,
-                'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
-                'auth_config' => $integration->auth_config ?? [],
-            ], $user, $toolName, $arguments);
-        } catch (\Throwable) {
-            return [];
-        }
-        if ($decoded === null) {
-            return [];
-        }
+        return ['name' => $toolName, 'arguments' => $arguments, 'collection_path' => $op['collection_path'] ?? null];
+    }
 
-        [$rows] = $this->extractRows($decoded, $op['collection_path'] ?? null);
-
-        return $rows;
+    /**
+     * The decrypted MCP config for an integration — the shape callToolData /
+     * poolToolCalls expect. One place so the single and pooled readers can't
+     * drift on how auth is resolved.
+     *
+     * @return array<string, mixed>
+     */
+    private function integrationConfig(Integration $integration): array
+    {
+        return [
+            'endpoint' => $integration->base_url,
+            'integration_id' => $integration->id,
+            'auth_type' => $integration->auth_type->isOAuth2() ? 'oauth2' : $integration->auth_type->value,
+            'auth_config' => $integration->auth_config ?? [],
+        ];
     }
 
     /**

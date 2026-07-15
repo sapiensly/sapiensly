@@ -107,7 +107,8 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
         ],
     ];
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
-    $authoring->shouldReceive('author')->once()->andReturn([
+    $authoring->shouldReceive('previousWindowRowsMany')->andReturn([]);
+    $authoring->shouldReceive('authorMany')->once()->andReturn([[
         'ok' => true, 'object' => $object,
         'rows' => [
             ['id' => 'W1', 'semana' => now()->utc()->subDays(3)->toDateString(), 'categoria' => 'Envíos', 'total' => 12],
@@ -115,7 +116,7 @@ it('runs the job end-to-end: progress narrated, report applied, run succeeded', 
             ['id' => 'W3', 'semana' => now()->utc()->subDays(17)->toDateString(), 'categoria' => 'Envíos', 'total' => 9],
         ],
         'clamped' => [], 'date_field_ids' => [$ids['d']], 'summary' => 'Creé «Tickets Semanales»',
-    ]);
+    ]]);
     app()->instance(ConnectedObjectAuthoring::class, $authoring);
 
     ExpressGateAgent::fake([
@@ -274,7 +275,8 @@ it('writes the description with the short-summary model when the voice gate defa
         ],
     ];
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
-    $authoring->shouldReceive('author')->once()->andReturn([
+    $authoring->shouldReceive('previousWindowRowsMany')->andReturn([]);
+    $authoring->shouldReceive('authorMany')->once()->andReturn([[
         'ok' => true, 'object' => $object,
         'rows' => [
             ['id' => 'W1', 'semana' => now()->utc()->subDays(3)->toDateString(), 'categoria' => 'Envíos', 'total' => 12],
@@ -282,7 +284,7 @@ it('writes the description with the short-summary model when the voice gate defa
             ['id' => 'W3', 'semana' => now()->utc()->subDays(17)->toDateString(), 'categoria' => 'Envíos', 'total' => 9],
         ],
         'clamped' => [], 'date_field_ids' => [$ids['d']], 'summary' => 'Creé «Tickets Semanales»',
-    ]);
+    ]]);
     app()->instance(ConnectedObjectAuthoring::class, $authoring);
 
     ExpressGateAgent::fake([

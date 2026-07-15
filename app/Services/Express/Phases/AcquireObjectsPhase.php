@@ -41,94 +41,97 @@ class AcquireObjectsPhase implements ExpressPhase
             throw new \RuntimeException('The app has no active manifest.');
         }
 
-        // Every chosen tool acquires its DEFAULT cut; enum cuts re-read a
-        // chosen tool with one argument swapped ("dimension: cause") and a
-        // name that says which slice this object is.
-        $targets = array_map(
-            fn (string $name): array => ['tool' => $name, 'arguments' => null, 'cut' => null],
-            $context->chosenTools,
-        );
-        foreach ($context->chosenCuts as $cut) {
-            $targets[] = $cut;
-        }
-
         $ops = [];
         $summaries = [];
         $baseArgs = [];
         $outcomes = [];
-        foreach ($targets as $target) {
+
+        // Absorb one authored result for its target: telemetry, the applied op,
+        // the in-memory draft (slug uniqueness), and — for a base read — the
+        // resolved args a later cut dedups against. A per-target failure is
+        // noted and skipped, exactly like the serial path; zero successes fails
+        // the run below.
+        $absorb = function (array $target, array $authored) use (&$ops, &$summaries, &$baseArgs, &$outcomes, &$manifest, $context): void {
             $toolName = (string) $target['tool'];
-
-            // A cut whose swapped argument equals what the BASE read already
-            // resolved to is the same data twice (prod: dimension:category cut
-            // duplicating the by-dimension default) — skip the read, keep the
-            // slot honest.
-            if ($target['cut'] !== null && is_array($baseArgs[$toolName] ?? null)) {
-                $cutArgs = is_array($target['arguments']) ? $target['arguments'] : [];
-                $duplicate = $cutArgs !== [] && collect($cutArgs)->every(
-                    fn ($v, $k): bool => (string) ($baseArgs[$toolName][$k] ?? '') === (string) $v,
-                );
-                if ($duplicate) {
-                    $context->note('Corte '.$target['cut'].' omitido: duplica la lectura base de '.$toolName.'.');
-                    $outcomes[] = ['target' => $target['cut'].' @'.$toolName, 'outcome' => 'skipped_duplicate'];
-
-                    continue;
-                }
-            }
-            $spec = array_filter([
-                'tool_name' => $toolName,
-                'arguments' => $target['arguments'],
-                'object_name' => $target['cut'] !== null
-                    ? Str::headline((string) preg_replace(['/^get[-_]/i', '/[-_]?tool$/i'], '', $toolName)).' · '.Str::headline((string) $target['cut'])
-                    : null,
-            ], fn ($v) => $v !== null);
-
-            // One tool that throws (a slow/oversized source, a transport error)
-            // must not abort the whole build — note it and move on, exactly like
-            // an ok:false. Only ZERO successes fails the run (below).
-            $targetLabel = $target['cut'] !== null
-                ? "el corte {$target['cut']} de {$toolName}"
-                : "el tool {$toolName}";
-            try {
-                $authored = $this->authoring->author($context->user, $context->integration, $spec, $manifest);
-            } catch (\Throwable $e) {
-                $this->noteReadFailure($context, $target, $targetLabel, $e->getMessage());
-                $outcomes[] = ['target' => ($target['cut'] !== null ? $target['cut'].' @' : '').$toolName, 'outcome' => 'failed', 'error' => Str::limit($e->getMessage(), 160, '…')];
-
-                continue;
-            }
+            $label = ($target['cut'] !== null ? $target['cut'].' @' : '').$toolName;
 
             if (($authored['ok'] ?? false) !== true) {
                 $error = (string) ($authored['error'] ?? 'error desconocido');
+                $targetLabel = $target['cut'] !== null ? "el corte {$target['cut']} de {$toolName}" : "el tool {$toolName}";
                 $this->noteReadFailure($context, $target, $targetLabel, $error);
-                $outcomes[] = ['target' => ($target['cut'] !== null ? $target['cut'].' @' : '').$toolName, 'outcome' => 'failed', 'error' => Str::limit($error, 160, '…')];
+                $outcomes[] = ['target' => $label, 'outcome' => 'failed', 'error' => Str::limit($error, 160, '…')];
 
-                continue;
+                return;
             }
 
             $object = $authored['object'];
-            $outcomes[] = ['target' => ($target['cut'] !== null ? $target['cut'].' @' : '').$toolName, 'outcome' => 'ok', 'rows' => count($authored['rows'] ?? [])];
+            $outcomes[] = ['target' => $label, 'outcome' => 'ok', 'rows' => count($authored['rows'] ?? [])];
             if ($target['cut'] === null) {
                 $baseArgs[$toolName] = $object['source']['operations']['list']['arguments'] ?? [];
             }
-            // Keep the draft current so slug uniqueness sees earlier objects.
             $manifest['objects'][] = $object;
             $ops[] = ['op' => 'add', 'path' => '/objects/-', 'value' => $object];
             $summaries[] = $authored['summary'];
             $context->objects[] = $object;
             $context->rowsByObject[$object['id']] = $authored['rows'];
+        };
 
-            // Double window: sample the SAME tool one span back so the facts
-            // can say "+18% vs periodo anterior" instead of a static number.
-            // Best-effort — [] for window-less tools and on any failure.
-            try {
-                $previous = $this->authoring->previousWindowRows($context->user, $context->integration, $object);
-                if ($previous !== []) {
-                    $context->previousRowsByObject[$object['id']] = $previous;
-                }
-            } catch (\Throwable) {
-                // The current window already succeeded; deltas are optional.
+        // --- Base reads: every chosen tool's DEFAULT cut, POOLED into one
+        //     round-trip, then absorbed in order so baseArgs is populated before
+        //     any cut dedups against it. ---
+        $baseTargets = array_map(
+            fn (string $name): array => ['tool' => $name, 'arguments' => null, 'cut' => null],
+            $context->chosenTools,
+        );
+        $baseResults = $this->authoring->authorMany(
+            $context->user, $context->integration, array_map($this->specFor(...), $baseTargets), $manifest,
+        );
+        foreach ($baseTargets as $i => $target) {
+            $absorb($target, $baseResults[$i] ?? ['ok' => false, 'error' => 'sin resultado del batch']);
+        }
+
+        // --- Enum cuts: re-read a chosen tool with one argument swapped
+        //     ("dimension: cause"). A cut whose swapped arg equals what the base
+        //     read already resolved to is the same data twice — skipped. The
+        //     survivors pool against the GROWN manifest (unique slugs vs base),
+        //     and telemetry stays in chosen-cut order (skips interleaved). ---
+        $cutSurvivors = [];
+        $cutPlan = [];
+        foreach ($context->chosenCuts as $cut) {
+            $toolName = (string) $cut['tool'];
+            $duplicate = false;
+            if (is_array($baseArgs[$toolName] ?? null)) {
+                $cutArgs = is_array($cut['arguments']) ? $cut['arguments'] : [];
+                $duplicate = $cutArgs !== [] && collect($cutArgs)->every(
+                    fn ($v, $k): bool => (string) ($baseArgs[$toolName][$k] ?? '') === (string) $v,
+                );
             }
+            $cutPlan[] = ['target' => $cut, 'skip' => $duplicate];
+            if (! $duplicate) {
+                $cutSurvivors[] = $cut;
+            }
+        }
+        $cutResults = $cutSurvivors === [] ? [] : $this->authoring->authorMany(
+            $context->user, $context->integration, array_map($this->specFor(...), $cutSurvivors), $manifest,
+        );
+        $ri = 0;
+        foreach ($cutPlan as $plan) {
+            $cut = $plan['target'];
+            if ($plan['skip']) {
+                $context->note('Corte '.$cut['cut'].' omitido: duplica la lectura base de '.((string) $cut['tool']).'.');
+                $outcomes[] = ['target' => $cut['cut'].' @'.$cut['tool'], 'outcome' => 'skipped_duplicate'];
+
+                continue;
+            }
+            $absorb($cut, $cutResults[$ri++] ?? ['ok' => false, 'error' => 'sin resultado del batch']);
+        }
+
+        // Double window: sample every acquired tool ONE span back so the facts
+        // can say "+18% vs periodo anterior" instead of a static number. Pooled
+        // into one round-trip (was N serial reads); best-effort — a window-less
+        // tool or a failed read just yields no delta, exactly as before.
+        foreach ($this->authoring->previousWindowRowsMany($context->user, $context->integration, $context->objects) as $objectId => $previous) {
+            $context->previousRowsByObject[$objectId] = $previous;
         }
 
         // Every planned read's fate is telemetry: the priority cut vanished
@@ -147,6 +150,27 @@ class AcquireObjectsPhase implements ExpressPhase
         );
 
         $context->note('Objetos aplicados en la versión v'.$version->version_number.'.');
+    }
+
+    /**
+     * The author spec for one target (a base tool or an enum cut): the tool
+     * name, its swapped arguments, and a cut's slice name. One place so the
+     * base and cut batches build specs identically.
+     *
+     * @param  array{tool: string, arguments: ?array<string, string>, cut: ?string}  $target
+     * @return array<string, mixed>
+     */
+    private function specFor(array $target): array
+    {
+        $toolName = (string) $target['tool'];
+
+        return array_filter([
+            'tool_name' => $toolName,
+            'arguments' => $target['arguments'],
+            'object_name' => $target['cut'] !== null
+                ? Str::headline((string) preg_replace(['/^get[-_]/i', '/[-_]?tool$/i'], '', $toolName)).' · '.Str::headline((string) $target['cut'])
+                : null,
+        ], fn ($v) => $v !== null);
     }
 
     /**

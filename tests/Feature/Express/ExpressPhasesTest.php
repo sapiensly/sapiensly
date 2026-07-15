@@ -296,13 +296,16 @@ it('a defaulted fit_check drops org-name-only matches and stays on topic', funct
 
 it('acquire_objects banks the survivors as ONE version and notes the failures', function () {
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
+    $authoring->shouldReceive('previousWindowRowsMany')->andReturn([]);
     $object = xph_object('tickets_semanales', $this->integration->id);
-    $authoring->shouldReceive('author')
-        ->twice()
-        ->andReturn(
+    // Both base tools acquire in ONE pooled batch — authorMany returns a result
+    // per spec, in order.
+    $authoring->shouldReceive('authorMany')
+        ->once()
+        ->andReturn([
             ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «Tickets Semanales»'],
             ['ok' => false, 'error' => 'tool timed out'],
-        );
+        ]);
 
     $ctx = xph_ctx($this);
     $ctx->integration = $this->integration;
@@ -318,18 +321,19 @@ it('acquire_objects banks the survivors as ONE version and notes the failures', 
     expect(collect($manifest['objects'])->pluck('slug'))->toContain('tickets_semanales');
 });
 
-it('acquire_objects survives a tool that THROWS — noted and skipped, not fatal', function () {
-    // Prod: authoring "tickets" from the source threw (slow/oversized). Without
-    // a per-tool guard the whole build died; now the bad tool is skipped and the
-    // survivor still banks.
+it('acquire_objects survives a tool that FAILS — noted and skipped, not fatal', function () {
+    // Prod: authoring "tickets" from the source blew up (slow/oversized). Without
+    // a per-tool guard the whole build died; now the bad tool comes back ok:false
+    // from the batch, is noted, and the survivor still banks.
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
+    $authoring->shouldReceive('previousWindowRowsMany')->andReturn([]);
     $object = xph_object('tickets_semanales', $this->integration->id);
-    $authoring->shouldReceive('author')
-        ->twice()
-        ->andReturnUsing(
-            fn () => throw new RuntimeException('source read exploded'),
-            fn () => ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «Tickets Semanales»'],
-        );
+    $authoring->shouldReceive('authorMany')
+        ->once()
+        ->andReturn([
+            ['ok' => false, 'error' => 'source read exploded'],
+            ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «Tickets Semanales»'],
+        ]);
 
     $ctx = xph_ctx($this);
     $ctx->integration = $this->integration;
@@ -544,9 +548,10 @@ it('runs the whole chain end-to-end through ExpressPipeline', function () {
 
     $object = xph_object('tickets_semanales', $this->integration->id);
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
-    $authoring->shouldReceive('author')->once()->andReturn(
+    $authoring->shouldReceive('previousWindowRowsMany')->andReturn([]);
+    $authoring->shouldReceive('authorMany')->once()->andReturn([
         ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «Tickets Semanales»'],
-    );
+    ]);
 
     ExpressGateAgent::fake([
         ['tools' => ['get-tickets-time-series-tool'], 'substitutions' => [], 'unanswerable' => [], 'core_unanswerable' => false, 'alternatives' => []],
@@ -1165,12 +1170,19 @@ it('acquire reads each enum cut as its own named object', function () {
 
     $calls = [];
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
-    $authoring->shouldReceive('author')->twice()
-        ->andReturnUsing(function ($user, $integration, array $spec) use (&$calls) {
-            $calls[] = $spec;
-            $object = xph_object('cut_'.count($calls), $integration->id);
+    $authoring->shouldReceive('previousWindowRowsMany')->andReturn([]);
+    // The base batch and the cut batch each pool their specs — authorMany takes
+    // a LIST of specs and returns a result per spec, in order.
+    $authoring->shouldReceive('authorMany')->twice()
+        ->andReturnUsing(function ($user, $integration, array $specs) use (&$calls) {
+            $out = [];
+            foreach ($specs as $spec) {
+                $calls[] = $spec;
+                $object = xph_object('cut_'.count($calls), $integration->id);
+                $out[] = ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «'.$object['slug'].'»'];
+            }
 
-            return ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «'.$object['slug'].'»'];
+            return $out;
         });
 
     (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, xph_run($this));
@@ -1189,10 +1201,12 @@ it('acquire samples the previous window per object for delta facts', function ()
 
     $object = xph_object('con_ventana', $this->integration->id);
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
-    $authoring->shouldReceive('author')->once()
-        ->andReturn(['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «con_ventana»']);
-    $authoring->shouldReceive('previousWindowRows')->once()
-        ->andReturn([['bucket_start' => '2026-06-01', 'total' => 5]]);
+    $authoring->shouldReceive('authorMany')->once()
+        ->andReturn([['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «con_ventana»']]);
+    // The previous window is now read for every acquired object in ONE pooled
+    // call, keyed by object id.
+    $authoring->shouldReceive('previousWindowRowsMany')->once()
+        ->andReturn([$object['id'] => [['bucket_start' => '2026-06-01', 'total' => 5]]]);
 
     (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, xph_run($this));
 
@@ -1548,13 +1562,21 @@ it('acquire skips a cut that duplicates the base read of the same tool', functio
 
     $calls = [];
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
-    $authoring->shouldReceive('author')->twice()
-        ->andReturnUsing(function ($user, $integration, array $spec) use (&$calls) {
-            $calls[] = $spec;
-            $object = xph_object('cut_'.count($calls), $integration->id);
-            $object['source']['operations']['list']['arguments'] = ($spec['arguments'] ?? null) ?: ['dimension' => 'category'];
+    $authoring->shouldReceive('previousWindowRowsMany')->andReturn([]);
+    // Base batch resolves the default cut to dimension:category; the phase then
+    // drops the category cut as a duplicate BEFORE the cut batch, so authorMany
+    // is called twice (base, then cause only) and never sees the dup.
+    $authoring->shouldReceive('authorMany')->twice()
+        ->andReturnUsing(function ($user, $integration, array $specs) use (&$calls) {
+            $out = [];
+            foreach ($specs as $spec) {
+                $calls[] = $spec;
+                $object = xph_object('cut_'.count($calls), $integration->id);
+                $object['source']['operations']['list']['arguments'] = ($spec['arguments'] ?? null) ?: ['dimension' => 'category'];
+                $out[] = ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «'.$object['slug'].'»'];
+            }
 
-            return ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'Creé «'.$object['slug'].'»'];
+            return $out;
         });
 
     (new AcquireObjectsPhase($authoring, app(AppManifestService::class)))->run($ctx, xph_run($this));
@@ -1696,14 +1718,23 @@ it('a failed CUT read is named in the caveats — never a silent hole', function
     $ctx->chosenCuts = [['tool' => 'get-tickets-by-dimension-tool', 'arguments' => ['dimension' => 'priority'], 'cut' => 'priority']];
 
     $authoring = Mockery::mock(ConnectedObjectAuthoring::class);
-    $authoring->shouldReceive('author')->twice()
-        ->andReturnUsing(function ($user, $integration, array $spec) {
-            if (($spec['arguments']['dimension'] ?? null) === 'priority') {
-                return ['ok' => false, 'error' => 'dimension=priority not supported'];
-            }
-            $object = xph_object('base_ok', $integration->id);
+    $authoring->shouldReceive('previousWindowRowsMany')->andReturn([]);
+    // Base batch, then the surviving priority cut batch — the priority read comes
+    // back ok:false from the pool and must surface as a caveat.
+    $authoring->shouldReceive('authorMany')->twice()
+        ->andReturnUsing(function ($user, $integration, array $specs) {
+            $out = [];
+            foreach ($specs as $spec) {
+                if (($spec['arguments']['dimension'] ?? null) === 'priority') {
+                    $out[] = ['ok' => false, 'error' => 'dimension=priority not supported'];
 
-            return ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'ok'];
+                    continue;
+                }
+                $object = xph_object('base_ok', $integration->id);
+                $out[] = ['ok' => true, 'object' => $object, 'rows' => xph_rows(), 'clamped' => [], 'date_field_ids' => [], 'summary' => 'ok'];
+            }
+
+            return $out;
         });
 
     $run = xph_run($this);
