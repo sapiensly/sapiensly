@@ -3876,11 +3876,9 @@ function statusTone(status: Message['status']): string {
                             preview ? 'bg-navy-deep' : '',
                         ]"
                     >
-                        <component
-                            :is="'style'"
-                            v-if="manualSelectionCss"
-                            :text-content="manualSelectionCss"
-                        />
+                        <component :is="'style'" v-if="manualSelectionCss">{{
+                            manualSelectionCss
+                        }}</component>
                         <!-- Same load experience as the runtime: frosted veil
                              + loader over the skeletons while the deferred
                              block data resolves. -->
@@ -4080,8 +4078,8 @@ function statusTone(status: Message['status']): string {
                             <component
                                 :is="'style'"
                                 v-if="preview.custom_css"
-                                :text-content="preview.custom_css"
-                            />
+                                >{{ preview.custom_css }}</component
+                            >
 
                             <!-- Sidebar layout mirrors the runtime. -->
                             <div

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DashboardLoading from '@/components/DashboardLoading.vue';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
@@ -7,7 +8,6 @@ import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
 import type { AnyBlock, RuntimePageProps } from '@/runtime/types/manifest';
-import DashboardLoading from '@/components/DashboardLoading.vue';
 import { blockDataBus } from '@/runtime/useActionExecutor';
 import { useScrollReveal } from '@/runtime/useReveal';
 import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
@@ -189,7 +189,7 @@ useScrollReveal(sectionsEl);
     <!-- Author CSS, pre-scoped to .sp-app-surface server-side (can't leak out).
          Lives at the root so it applies in either layout. -->
     <div class="sp-app-surface" :style="surfaceStyle">
-        <component :is="'style'" v-if="customCss" :text-content="customCss" />
+        <component :is="'style'" v-if="customCss">{{ customCss }}</component>
 
         <!-- Sidebar layout: left rail + scrolling content. -->
         <div v-if="useSidebar" class="flex min-h-screen bg-navy-deep">
