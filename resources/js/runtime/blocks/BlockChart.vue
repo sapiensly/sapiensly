@@ -1110,17 +1110,40 @@ const combo = computed(() => {
         ),
     );
 
-    const W = 360;
-    const H = fitVH(W, 210, 150, 460);
-    const padL = 36;
-    const padR = hasRight ? 36 : 12;
-    const padT = 10;
+    // A combo with NO bars over a temporal X is a continuous line/area chart
+    // (marea, overlaid lines/areas): lay it out like a full-width time-series
+    // chart — a wide 760-unit viewBox (the chart-design proportions), points
+    // spanning edge-to-edge, and date ticks thinned horizontally (~6 across).
+    // The wide viewBox is what makes it read as the SAME FAMILY as the sibling
+    // full-width charts: at the container width their 8px tick text and strokes
+    // scale down the same amount (a narrow 360/520 viewBox would blow the text
+    // and lines up when stretched full-width). Bars, or a non-temporal X, keep
+    // the categorical layout (centred slots, labels rotated only when tight).
+    const continuous =
+        !defs.some((d) => d.type === 'bar') && isTemporal(xField);
+
+    const W = continuous ? 760 : 360;
+    const H = fitVH(W, continuous ? 300 : 210, 150, continuous ? 500 : 460);
+    const padL = continuous ? 44 : 36;
+    const padR = continuous ? (hasRight ? 44 : 20) : hasRight ? 36 : 12;
+    const padT = continuous ? 16 : 10;
     const innerW = W - padL - padR;
     const n = cats.length;
     const slot = innerW / n;
-    const axis = catAxisLayout(cats, slot, padL + slot / 2);
+    const axis = continuous
+        ? {
+              rotated: false,
+              padB: 32,
+              stride: Math.max(1, Math.ceil(n / 6)),
+              trim: (s: string) => s,
+          }
+        : catAxisLayout(cats, slot, padL + slot / 2);
     const innerH = H - padT - axis.padB;
-    const centerX = (ci: number) => padL + slot * (ci + 0.5);
+    const stepX = continuous ? (n <= 1 ? 0 : innerW / (n - 1)) : slot;
+    const centerX = (ci: number) =>
+        continuous
+            ? padL + (n === 1 ? innerW / 2 : ci * stepX)
+            : padL + slot * (ci + 0.5);
     const baselineY = padT + innerH;
     const yFor = (v: number, axis?: string) =>
         baselineY - (v / (axis === 'right' ? rightMax : leftMax)) * innerH;
@@ -1241,7 +1264,7 @@ const combo = computed(() => {
         padR,
         top: padT,
         baselineY,
-        stepX: slot,
+        stepX,
         xs: cats.map((_, ci) => centerX(ci)),
         bars,
         lines,
@@ -1249,7 +1272,10 @@ const combo = computed(() => {
         rightTicks: hasRight ? tickSet(rightMax, 'right') : null,
         catLabels: cats
             .map((c, ci) => ({ x: centerX(ci), label: axis.trim(c), ci }))
-            .filter((l) => l.ci % axis.stride === 0),
+            .filter(
+                (l) =>
+                    l.ci % axis.stride === 0 || (continuous && l.ci === n - 1),
+            ),
         rotatedCats: axis.rotated,
         // Per-category hover payload: every series' value there (for the tooltip)
         // and the line/area markers to highlight (bars show their own rect).
