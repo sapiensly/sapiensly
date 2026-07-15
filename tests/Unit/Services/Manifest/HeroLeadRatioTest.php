@@ -55,3 +55,41 @@ it('floats a rate KPI into the hero WITH its ratio_denominator, not a bare sum',
         ->and($hero['stat']['ratio_denominator'] ?? null)->not->toBeNull()
         ->and($hero['stat']['ratio_denominator']['field_id'])->toBe('fld_otdtotal00');
 });
+
+it('the hero prefers a VOLUME total over a bare avg-percentage share', function () {
+    // A Pareto's "% of total" is an avg-percentage with NO ratio_denominator —
+    // avg of shares ≈ 100/N, a meaningless headline. A concrete total must win.
+    $object = [
+        'id' => 'obj_par00000000',
+        'slug' => 'pareto',
+        'name' => 'Pareto',
+        'fields' => [
+            ['id' => 'fld_pardate000', 'slug' => 'bucket_start', 'name' => 'Semana', 'type' => 'date'],
+            ['id' => 'fld_partotal00', 'slug' => 'total_tickets', 'name' => 'Total Tickets', 'type' => 'number'],
+            ['id' => 'fld_parpct0000', 'slug' => 'pct_of_total', 'name' => 'Pct Of Total', 'type' => 'number'],
+        ],
+    ];
+
+    $spec = [
+        'title' => 'Pareto',
+        'date_field_id' => 'fld_pardate000',
+        'include_hero' => true,
+        'kpis' => [
+            // The avg-percentage share comes FIRST in the list — it must NOT win.
+            ['label' => 'Pct Of Total', 'field_id' => 'fld_parpct0000', 'aggregation' => 'avg', 'format' => 'percentage'],
+            ['label' => 'Total Tickets', 'field_id' => 'fld_partotal00', 'aggregation' => 'sum'],
+        ],
+        'charts' => [
+            ['label' => 'Tendencia', 'chart_type' => 'line', 'x_field_id' => 'fld_pardate000', 'y_field_id' => 'fld_partotal00', 'aggregation' => 'sum'],
+        ],
+    ];
+
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $object, [], ColorPalette::fromAccent('#0096ff'), 'es',
+    );
+    expect($built['ok'] ?? false)->toBeTrue();
+
+    $hero = collect($built['page']['blocks'])->firstWhere('type', 'hero');
+    expect($hero['stat']['field_id'])->toBe('fld_partotal00')   // the volume, not the share
+        ->and($hero['stat']['aggregation'])->toBe('sum');
+});

@@ -1626,11 +1626,14 @@ class AppScaffolder
                 'min_height' => 120,
             ];
             // Float the headline KPI into the hero as a live figure — the
-            // executive-summary number. Prefer a RATE (a percentage like OTD%, or
-            // an averaged score like NPS) over a raw volume: "96.7% OTD" is the
-            // number leadership reads, not "1.5M productos". Fall back to the
-            // first KPI when there's no rate.
-            $lead = collect($items)->first(fn (array $k): bool => ($k['format'] ?? null) === 'percentage')
+            // executive-summary number. A PROVEN rate wins ("96.7% OTD" is the
+            // number leadership reads): a KPI with a ratio_denominator is a real
+            // sum/sum rate. Next a VOLUME (a sum/count total — "1.5M tickets"), a
+            // concrete magnitude. A bare avg comes LAST: it's often a pre-computed
+            // share (e.g. avg of a Pareto's "% of total" ≈ 100/N — a meaningless
+            // headline), so it must not outrank a real total. Then the first KPI.
+            $lead = collect($items)->first(fn (array $k): bool => is_array($k['ratio_denominator'] ?? null))
+                ?? collect($items)->first(fn (array $k): bool => in_array($k['aggregation'] ?? null, ['sum', 'count'], true))
                 ?? collect($items)->first(fn (array $k): bool => ($k['aggregation'] ?? null) === 'avg')
                 ?? ($items[0] ?? null);
             if (is_array($lead) && isset($lead['query'], $lead['aggregation'])) {
