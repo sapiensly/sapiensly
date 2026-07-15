@@ -35,11 +35,6 @@ class AiProviderService
             ['id' => 'gpt-4o-mini-tts', 'label' => 'GPT-4o Mini TTS', 'capabilities' => ['speech']],
             ['id' => 'tts-1', 'label' => 'TTS 1', 'capabilities' => ['speech']],
         ],
-        'azure' => [
-            ['id' => 'gpt-4o', 'label' => 'GPT-4o (Azure)', 'capabilities' => ['chat', 'vision']],
-            ['id' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini (Azure)', 'capabilities' => ['chat', 'vision']],
-            ['id' => 'text-embedding-3-small', 'label' => 'Embedding 3 Small (Azure)', 'capabilities' => ['embeddings']],
-        ],
         'gemini' => [
             ['id' => 'gemini-2.0-flash', 'label' => 'Gemini 2.0 Flash', 'capabilities' => ['chat', 'vision']],
             ['id' => 'gemini-2.5-pro-preview-05-06', 'label' => 'Gemini 2.5 Pro', 'capabilities' => ['chat', 'vision']],
@@ -100,7 +95,6 @@ class AiProviderService
     public const DRIVER_LABELS = [
         'anthropic' => 'Anthropic',
         'openai' => 'OpenAI',
-        'azure' => 'Azure OpenAI',
         'cohere' => 'Cohere',
         'deepseek' => 'DeepSeek',
         'eleven' => 'ElevenLabs',
@@ -120,7 +114,6 @@ class AiProviderService
     public const DRIVER_CREDENTIAL_FIELDS = [
         'anthropic' => ['api_key'],
         'openai' => ['api_key'],
-        'azure' => ['api_key', 'url', 'api_version', 'deployment', 'embedding_deployment'],
         'cohere' => ['api_key'],
         'deepseek' => ['api_key'],
         'eleven' => ['api_key'],
@@ -148,8 +141,8 @@ class AiProviderService
 
     /**
      * Direct drivers that expose a usable `/models` listing endpoint, so their
-     * catalog can be refreshed live. The rest (azure deployments, local ollama,
-     * embeddings-only voyageai/jina, eleven) stay curated/manual.
+     * catalog can be refreshed live. The rest (local ollama, embeddings-only
+     * voyageai/jina, eleven) stay curated/manual.
      */
     public const SYNCABLE_DRIVERS = ['anthropic', 'openai', 'gemini', 'mistral', 'groq', 'xai', 'deepseek', 'cohere'];
 
@@ -827,9 +820,6 @@ class AiProviderService
                 'openai' => Http::withToken($apiKey)
                     ->timeout(10)
                     ->get('https://api.openai.com/v1/models'),
-                'azure' => Http::withHeaders(['api-key' => $apiKey])
-                    ->timeout(10)
-                    ->get(rtrim($credentials['url'] ?? '', '/').'/openai/models?api-version='.($credentials['api_version'] ?? '2024-02-01')),
                 'gemini' => Http::timeout(10)
                     ->get("https://generativelanguage.googleapis.com/v1beta/models?key={$apiKey}"),
                 'mistral' => Http::withToken($apiKey)
