@@ -29,11 +29,15 @@ class DataQualityCheck
     public function run(array $byObject, bool $es): array
     {
         $flags = [];
+        // The same generic column ("Total Tickets", "Key") lives on many sources;
+        // without this the strip repeats "Total Tickets: 100% vacío" once per
+        // source. One completeness flag per field NAME across the whole board.
+        $seenEmpty = [];
 
         foreach ($byObject as $entry) {
             try {
                 $this->freshness($entry, $es, $flags);
-                $this->nulls($entry, $es, $flags);
+                $this->nulls($entry, $es, $flags, $seenEmpty);
             } catch (\Throwable) {
                 continue; // one bad source never sinks the panel
             }
@@ -79,8 +83,9 @@ class DataQualityCheck
     /**
      * @param  array{object: array<string, mixed>, rows: list<array<string, mixed>>}  $entry
      * @param  list<array{level: string, text: string}>  $flags
+     * @param  array<string, true>  $seenEmpty  field-name keys already flagged
      */
-    private function nulls(array $entry, bool $es, array &$flags): void
+    private function nulls(array $entry, bool $es, array &$flags, array &$seenEmpty): void
     {
         $object = $entry['object'];
         $rows = $entry['rows'];
@@ -94,13 +99,14 @@ class DataQualityCheck
                 || ! in_array($field['type'] ?? '', ['number', 'currency', 'string', 'single_select'], true)) {
                 continue;
             }
-            $path = $paths[$field['id']] ?? ($field['slug'] ?? null);
-            if ($path === null) {
+            $slug = $field['slug'] ?? null;
+            $path = $paths[$field['id']] ?? $slug;
+            if ($path === null && $slug === null) {
                 continue;
             }
             $empty = 0;
             foreach ($rows as $row) {
-                $v = data_get($row, $path);
+                $v = $this->fieldValue($row, $path, $slug);
                 if ($v === null || $v === '' || $v === []) {
                     $empty++;
                 }
@@ -109,14 +115,41 @@ class DataQualityCheck
             if ($rate < self::NULL_RATE) {
                 continue;
             }
+            $name = (string) ($field['name'] ?? $field['slug']);
+            $key = Str::lower($name);
+            if (isset($seenEmpty[$key])) {
+                return; // this column is already on the strip from another source
+            }
+            $seenEmpty[$key] = true;
             $flags[] = [
                 'level' => 'info',
                 'text' => $es
-                    ? (string) ($field['name'] ?? $field['slug']).': '.round($rate * 100).'% vacío'
-                    : (string) ($field['name'] ?? $field['slug']).': '.round($rate * 100).'% empty',
+                    ? $name.': '.round($rate * 100).'% vacío'
+                    : $name.': '.round($rate * 100).'% empty',
             ];
 
             return; // one completeness flag per source is enough
         }
+    }
+
+    /**
+     * Read a field's value from a sampled row, tolerant of the shape the analyst
+     * actually receives. ObjectRowSource yields SLUG-keyed rows — internal
+     * records, and connected objects mapped through ConnectedObjectReader::mapRow
+     * (external_path → slug) — so the flat slug is the real key. A dotted
+     * external_path ("totals.total_tickets") would make data_get miss a slug key
+     * ("totals_total_tickets") and read every row as null: a "100% vacío" lie
+     * about a full column. Prefer the slug; fall back to the path for any nested
+     * verbatim row.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function fieldValue(array $row, ?string $path, ?string $slug): mixed
+    {
+        if ($slug !== null && array_key_exists($slug, $row)) {
+            return $row[$slug];
+        }
+
+        return $path !== null ? data_get($row, $path) : null;
     }
 }

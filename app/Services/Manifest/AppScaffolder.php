@@ -1628,13 +1628,16 @@ class AppScaffolder
             // Float the headline KPI into the hero as a live figure — the
             // executive-summary number. A PROVEN rate wins ("96.7% OTD" is the
             // number leadership reads): a KPI with a ratio_denominator is a real
-            // sum/sum rate. Next a VOLUME (a sum/count total — "1.5M tickets"), a
-            // concrete magnitude. A bare avg comes LAST: it's often a pre-computed
-            // share (e.g. avg of a Pareto's "% of total" ≈ 100/N — a meaningless
-            // headline), so it must not outrank a real total. Then the first KPI.
+            // sum/sum rate. Next a MEANINGFUL avg — a real quantity like average
+            // resolution hours or a score (aggregation avg, NOT a percentage) —
+            // which normalises for scale better than a raw total. Then a VOLUME
+            // (a sum/count total — "1.5M tickets"). A bare PERCENTAGE avg is
+            // excluded from the avg tier: it's usually a pre-computed share (a
+            // Pareto's "% of total" ≈ 100/N — a meaningless headline), so it
+            // falls to a real total or the first KPI rather than leading.
             $lead = collect($items)->first(fn (array $k): bool => is_array($k['ratio_denominator'] ?? null))
+                ?? collect($items)->first(fn (array $k): bool => ($k['aggregation'] ?? null) === 'avg' && ($k['format'] ?? null) !== 'percentage')
                 ?? collect($items)->first(fn (array $k): bool => in_array($k['aggregation'] ?? null, ['sum', 'count'], true))
-                ?? collect($items)->first(fn (array $k): bool => ($k['aggregation'] ?? null) === 'avg')
                 ?? ($items[0] ?? null);
             if (is_array($lead) && isset($lead['query'], $lead['aggregation'])) {
                 $hero['stat'] = array_filter([
