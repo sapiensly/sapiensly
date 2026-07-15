@@ -3029,7 +3029,8 @@
                             "$ref": "#/$defs/id"
                         },
                         "stacked": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "description": "Stack marks cumulatively (part-to-whole) instead of overlaying them. With `series_field_id` it stacks the bar segments. With a COMBO `series` array where EVERY series is type 'area' (≥2 of them), it renders a STACKED AREA (\"marea\"): each series is a cumulative band and the Y axis spans the total — use it to show how categories compose a total over time (e.g. tickets by area stacked to the daily total). Ignored for a combo that mixes bar/line marks."
                         },
                         "bucket": {
                             "enum": [

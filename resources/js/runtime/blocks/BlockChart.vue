@@ -1077,14 +1077,31 @@ const combo = computed(() => {
         vals = vals.map((row) => order.map((i) => row[i]));
     }
 
-    const hasRight = defs.some((d) => d.axis === 'right');
+    // Stacked-area ("marea") combo: every series is an area and `stacked` asks
+    // for cumulative bands (part-to-whole) instead of overlaid areas. The Y
+    // scale then spans the TOTAL (column sum) and all series share the left axis
+    // — a stacked area on a secondary scale is meaningless — so a right axis is
+    // ignored here. Falls back to plain overlay unless there are ≥2 area series.
+    const stacked =
+        !!props.block.stacked &&
+        defs.length >= 2 &&
+        defs.every((d) => d.type === 'area');
+
+    const hasRight = !stacked && defs.some((d) => d.axis === 'right');
+    const columnTotals = cats.map((_, ci) =>
+        defs.reduce((sum, _d, si) => sum + (vals[si][ci] || 0), 0),
+    );
     // Round each axis up to a nice top so gridlines read as clean numbers,
     // consistent with the single line/area axis.
     const leftMax = niceCeil(
-        Math.max(
-            1,
-            ...defs.flatMap((d, si) => (d.axis === 'right' ? [] : vals[si])),
-        ),
+        stacked
+            ? Math.max(1, ...columnTotals)
+            : Math.max(
+                  1,
+                  ...defs.flatMap((d, si) =>
+                      d.axis === 'right' ? [] : vals[si],
+                  ),
+              ),
     );
     const rightMax = niceCeil(
         Math.max(
@@ -1109,10 +1126,11 @@ const combo = computed(() => {
         baselineY - (v / (axis === 'right' ? rightMax : leftMax)) * innerH;
     const color = (d: ComboSeries, si: number) => d.color ?? chartColor(si);
 
-    // Grouped bars (one slot per category, bar series side by side).
-    const barDefs = defs
-        .map((d, si) => ({ d, si }))
-        .filter((x) => x.d.type === 'bar');
+    // Grouped bars (one slot per category, bar series side by side). None in
+    // stacked-area mode — every series is an area band.
+    const barDefs = stacked
+        ? []
+        : defs.map((d, si) => ({ d, si })).filter((x) => x.d.type === 'bar');
     const groupCount = Math.max(1, barDefs.length);
     const barW = (slot * 0.64) / groupCount;
     const bars: {
@@ -1137,22 +1155,76 @@ const combo = computed(() => {
         });
     });
 
-    // Line/area overlays across category centres.
-    const lines = defs
-        .map((d, si) => ({ d, si }))
-        .filter((x) => x.d.type !== 'bar')
-        .map(({ d, si }) => {
-            const pts = cats.map((_, ci) => ({
+    // Line/area marks across category centres. In stacked mode each series is a
+    // cumulative band; otherwise areas/lines overlay on a shared baseline.
+    type ComboMark = {
+        color: string;
+        path: string;
+        area: string | null;
+        points: { x: number; y: number }[];
+        fillOpacity: number;
+    };
+    let lines: ComboMark[];
+    if (stacked) {
+        // Cumulative bands, bottom-up in series order. Each band fills between
+        // the running lower edge and lower+value; its upper edge is stroked so
+        // the boundary between contributions reads crisply, and the hover
+        // markers (points) sit on that edge at the cumulative height. Bands use
+        // a solid-ish fill (unlike a single translucent area) so the parts stay
+        // distinguishable.
+        const cum = new Array<number>(cats.length).fill(0);
+        lines = defs.map((d, si) => {
+            const upper = cats.map((_, ci) => cum[ci] + (vals[si][ci] || 0));
+            const lowerPts = cats.map((_, ci) => ({
                 x: centerX(ci),
-                y: yFor(vals[si][ci], d.axis),
+                y: yFor(cum[ci]),
             }));
-            const path = smoothLine(pts);
-            const area =
-                d.type === 'area' && pts.length && path
-                    ? `${path} L ${pts[pts.length - 1].x} ${baselineY} L ${pts[0].x} ${baselineY} Z`
-                    : null;
-            return { color: color(d, si), path, area, points: pts };
+            const upperPts = upper.map((v, ci) => ({
+                x: centerX(ci),
+                y: yFor(v),
+            }));
+            for (let ci = 0; ci < cats.length; ci++) {
+                cum[ci] = upper[ci];
+            }
+            const upPath = smoothLine(upperPts);
+            const revLower = [...lowerPts].reverse();
+            // Smooth the reversed lower edge, then rewrite its leading `M x y`
+            // into an `L x y` so it continues the upper path into one closed band.
+            const lowTail = smoothLine(revLower).replace(
+                /^M\s*-?[\d.]+\s+-?[\d.]+/,
+                `L ${revLower[0].x} ${revLower[0].y}`,
+            );
+            return {
+                color: color(d, si),
+                path: upPath,
+                area: upPath && lowTail ? `${upPath} ${lowTail} Z` : null,
+                points: upperPts,
+                fillOpacity: 0.82,
+            };
         });
+    } else {
+        lines = defs
+            .map((d, si) => ({ d, si }))
+            .filter((x) => x.d.type !== 'bar')
+            .map(({ d, si }) => {
+                const pts = cats.map((_, ci) => ({
+                    x: centerX(ci),
+                    y: yFor(vals[si][ci], d.axis),
+                }));
+                const path = smoothLine(pts);
+                const area =
+                    d.type === 'area' && pts.length && path
+                        ? `${path} L ${pts[pts.length - 1].x} ${baselineY} L ${pts[0].x} ${baselineY} Z`
+                        : null;
+                return {
+                    color: color(d, si),
+                    path,
+                    area,
+                    points: pts,
+                    fillOpacity: 0.12,
+                };
+            });
+    }
 
     const tickSet = (max: number, side: 'left' | 'right') =>
         niceAxis(max).ticks.map((v) => ({
@@ -1743,7 +1815,7 @@ const boxPlot = computed(() => {
                             v-if="ln.area"
                             :d="ln.area"
                             :fill="ln.color"
-                            fill-opacity="0.12"
+                            :fill-opacity="ln.fillOpacity"
                         />
                         <path
                             :d="ln.path"
