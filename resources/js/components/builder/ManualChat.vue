@@ -15,7 +15,11 @@ import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
 
 const props = defineProps<{ appId: string; pageSlug?: string }>();
-const emit = defineEmits<{ (e: 'added', blockId: string): void }>();
+const emit = defineEmits<{
+    (e: 'added', blockId: string): void;
+    /** Route a ready-made ask into the main builder chat composer. */
+    (e: 'prefill', prompt: string): void;
+}>();
 
 interface Recommendation {
     id: string;
@@ -55,11 +59,31 @@ function formLabel(form: string): string {
     return key ? t(key) : form;
 }
 
+interface SourceMapping {
+    field: string;
+    type: string;
+    external: string;
+}
+interface SourceImplementation {
+    kind: 'connected' | 'internal';
+    integration_id?: string;
+    integration_name?: string;
+    tool?: string;
+    method?: string;
+    path?: string;
+    arguments?: Record<string, unknown>;
+    collection_path?: string;
+    id_path?: string;
+    fields?: SourceMapping[];
+}
 interface SourceDetail {
     name: string;
+    slug?: string;
+    description?: string | null;
     rows: number;
     measures: string[];
     dimensions: string[];
+    implementation?: SourceImplementation;
 }
 
 const loading = ref(true);
@@ -69,6 +93,13 @@ const dataQuality = ref<{ level: 'warn' | 'info'; text: string }[]>([]);
 const domain = ref<{ label: string } | null>(null);
 const sources = ref(0);
 const sourcesDetail = ref<SourceDetail[]>([]);
+// The source whose "how it's built" modal is open (null = closed).
+const selectedSource = ref<SourceDetail | null>(null);
+const selectedArgs = computed<[string, string][]>(() =>
+    Object.entries(selectedSource.value?.implementation?.arguments ?? {}).map(
+        ([k, v]) => [k, typeof v === 'object' ? JSON.stringify(v) : String(v)],
+    ),
+);
 const sourceSuggestions = ref<{ title: string; why: string }[]>([]);
 const showSources = ref(false);
 const addingId = ref<string | null>(null);
@@ -126,6 +157,20 @@ async function add(rec: Recommendation) {
 const visibleRecs = computed(() =>
     recs.value.filter((r) => !done.value.has(r.id)),
 );
+
+// An "enrich" suggestion names a KIND of data the org hasn't connected yet — it
+// has no board action of its own. Clicking it hands the main builder chat a
+// ready-made connect request (the flow the hint points to) so the user acts in
+// one tap instead of retyping the idea.
+function connectSource(sug: { title: string; why: string }) {
+    emit(
+        'prefill',
+        t('apps.builder.analyst.connect_request', {
+            title: sug.title,
+            why: sug.why,
+        }),
+    );
+}
 
 async function send() {
     const prompt = input.value.trim();
@@ -256,7 +301,13 @@ async function send() {
                     <div
                         v-for="(s, i) in sourcesDetail"
                         :key="i"
-                        class="rounded-xl border border-soft bg-surface px-3.5 py-3"
+                        role="button"
+                        tabindex="0"
+                        :title="t('apps.builder.analyst.view_implementation')"
+                        class="cursor-pointer rounded-xl border border-soft bg-surface px-3.5 py-3 transition-colors hover:border-strong focus:border-strong focus:outline-none"
+                        @click="selectedSource = s"
+                        @keydown.enter.prevent="selectedSource = s"
+                        @keydown.space.prevent="selectedSource = s"
                     >
                         <div class="flex items-baseline justify-between gap-2">
                             <span class="text-[13px] font-semibold text-ink">{{
@@ -305,7 +356,13 @@ async function send() {
                     <div
                         v-for="(sug, i) in sourceSuggestions"
                         :key="i"
-                        class="flex gap-2.5 rounded-xl border border-dashed border-medium px-3.5 py-2.5"
+                        role="button"
+                        tabindex="0"
+                        :title="t('apps.builder.analyst.connect_source_action')"
+                        class="flex cursor-pointer gap-2.5 rounded-xl border border-dashed border-medium px-3.5 py-2.5 transition-colors hover:border-accent-blue focus:border-accent-blue focus:outline-none"
+                        @click="connectSource(sug)"
+                        @keydown.enter.prevent="connectSource(sug)"
+                        @keydown.space.prevent="connectSource(sug)"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -567,5 +624,240 @@ async function send() {
                 </button>
             </div>
         </form>
+
+        <!-- "How this source is built" modal: opened by clicking a source card -->
+        <Teleport to="body">
+            <div
+                v-if="selectedSource"
+                class="fixed inset-0 z-[70] flex items-center justify-center p-4"
+            >
+                <div
+                    class="absolute inset-0 bg-black/50"
+                    @click="selectedSource = null"
+                />
+                <div
+                    class="relative z-10 max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-soft bg-navy-elevated p-5 shadow-xl"
+                >
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h3
+                                class="truncate text-[15px] font-semibold text-ink"
+                            >
+                                {{ selectedSource.name }}
+                            </h3>
+                            <p
+                                v-if="selectedSource.description"
+                                class="mt-1 text-[12px] leading-relaxed text-ink-muted"
+                            >
+                                {{ selectedSource.description }}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            :aria-label="t('apps.builder.analyst.close')"
+                            class="shrink-0 rounded-full p-1 text-ink-subtle transition-colors hover:text-ink"
+                            @click="selectedSource = null"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                class="size-4"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2.4"
+                                stroke-linecap="round"
+                            >
+                                <path d="M6 6l12 12M18 6L6 18" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <p
+                        class="mt-4 text-[10px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
+                    >
+                        {{ t('apps.builder.analyst.how_built') }}
+                    </p>
+                    <dl class="mt-2 space-y-1.5 text-[12px]">
+                        <div class="flex items-baseline justify-between gap-3">
+                            <dt class="text-ink-subtle">
+                                {{ t('apps.builder.analyst.source_type') }}
+                            </dt>
+                            <dd class="text-right text-ink">
+                                {{
+                                    selectedSource.implementation?.kind ===
+                                    'connected'
+                                        ? t(
+                                              'apps.builder.analyst.type_connected',
+                                          )
+                                        : t(
+                                              'apps.builder.analyst.type_internal',
+                                          )
+                                }}
+                            </dd>
+                        </div>
+                        <div
+                            v-if="
+                                selectedSource.implementation?.integration_name
+                            "
+                            class="flex items-baseline justify-between gap-3"
+                        >
+                            <dt class="text-ink-subtle">
+                                {{ t('apps.builder.analyst.connection') }}
+                            </dt>
+                            <dd class="text-right text-ink">
+                                {{
+                                    selectedSource.implementation
+                                        .integration_name
+                                }}
+                            </dd>
+                        </div>
+                        <div
+                            v-if="selectedSource.implementation?.tool"
+                            class="flex items-baseline justify-between gap-3"
+                        >
+                            <dt class="text-ink-subtle">
+                                {{ t('apps.builder.analyst.tool') }}
+                            </dt>
+                            <dd class="text-right">
+                                <code
+                                    class="rounded border border-soft px-1 py-0.5 font-mono text-[11px] text-ink"
+                                    >{{
+                                        selectedSource.implementation.tool
+                                    }}</code
+                                >
+                            </dd>
+                        </div>
+                        <div
+                            v-if="selectedSource.implementation?.path"
+                            class="flex items-baseline justify-between gap-3"
+                        >
+                            <dt class="text-ink-subtle">
+                                {{ t('apps.builder.analyst.endpoint') }}
+                            </dt>
+                            <dd class="text-right">
+                                <code
+                                    class="rounded border border-soft px-1 py-0.5 font-mono text-[11px] text-ink"
+                                    >{{ selectedSource.implementation.method }}
+                                    {{
+                                        selectedSource.implementation.path
+                                    }}</code
+                                >
+                            </dd>
+                        </div>
+                        <div
+                            v-if="
+                                selectedSource.implementation?.collection_path
+                            "
+                            class="flex items-baseline justify-between gap-3"
+                        >
+                            <dt class="text-ink-subtle">
+                                {{ t('apps.builder.analyst.collection_path') }}
+                            </dt>
+                            <dd class="text-right">
+                                <code
+                                    class="font-mono text-[11px] text-ink-muted"
+                                    >{{
+                                        selectedSource.implementation
+                                            .collection_path
+                                    }}</code
+                                >
+                            </dd>
+                        </div>
+                        <div
+                            v-if="selectedSource.implementation?.id_path"
+                            class="flex items-baseline justify-between gap-3"
+                        >
+                            <dt class="text-ink-subtle">
+                                {{ t('apps.builder.analyst.id_path') }}
+                            </dt>
+                            <dd class="text-right">
+                                <code
+                                    class="font-mono text-[11px] text-ink-muted"
+                                    >{{
+                                        selectedSource.implementation.id_path
+                                    }}</code
+                                >
+                            </dd>
+                        </div>
+                    </dl>
+
+                    <template v-if="selectedArgs.length">
+                        <p
+                            class="mt-4 text-[10px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
+                        >
+                            {{ t('apps.builder.analyst.arguments') }}
+                        </p>
+                        <div class="mt-1.5 space-y-1">
+                            <div
+                                v-for="[k, v] in selectedArgs"
+                                :key="k"
+                                class="flex items-baseline justify-between gap-3 text-[12px]"
+                            >
+                                <code
+                                    class="font-mono text-[11px] text-ink-subtle"
+                                    >{{ k }}</code
+                                >
+                                <code
+                                    class="text-right font-mono text-[11px] text-ink"
+                                    >{{ v }}</code
+                                >
+                            </div>
+                        </div>
+                    </template>
+
+                    <template
+                        v-if="selectedSource.implementation?.fields?.length"
+                    >
+                        <p
+                            class="mt-4 text-[10px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
+                        >
+                            {{ t('apps.builder.analyst.field_mapping') }}
+                        </p>
+                        <table class="mt-1.5 w-full text-[12px]">
+                            <thead>
+                                <tr class="text-left text-ink-subtle">
+                                    <th class="pb-1 font-normal">
+                                        {{
+                                            t(
+                                                'apps.builder.analyst.mapping_field',
+                                            )
+                                        }}
+                                    </th>
+                                    <th class="pb-1 text-right font-normal">
+                                        {{
+                                            t(
+                                                'apps.builder.analyst.mapping_source',
+                                            )
+                                        }}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="(m, mi) in selectedSource
+                                        .implementation.fields"
+                                    :key="mi"
+                                    class="border-t border-soft"
+                                >
+                                    <td class="py-1 text-ink">
+                                        {{ m.field
+                                        }}<span
+                                            v-if="m.type"
+                                            class="ml-1.5 text-[10px] text-ink-subtle"
+                                            >{{ m.type }}</span
+                                        >
+                                    </td>
+                                    <td class="py-1 text-right">
+                                        <code
+                                            class="font-mono text-[11px] text-ink-muted"
+                                            >{{ m.external }}</code
+                                        >
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </template>
+                </div>
+            </div>
+        </Teleport>
     </div>
 </template>

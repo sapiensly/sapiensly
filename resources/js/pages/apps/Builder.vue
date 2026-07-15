@@ -1699,6 +1699,20 @@ function onPickStep(title: string) {
     });
 }
 
+// The analyst panel's "enrich" suggestions have no board action — they name
+// data to connect. Clicking one routes here: flip back to the chat panel (the
+// manual panel hides the composer) and pre-fill it with the connect request so
+// the user just hits Enter.
+function onManualPrefill(prompt: string) {
+    panelMode.value = 'chat';
+    input.value = prompt;
+    nextTick(() => {
+        inputEl.value?.focus();
+        const len = inputEl.value?.value.length ?? 0;
+        inputEl.value?.setSelectionRange(len, len);
+    });
+}
+
 function applyChip(suggestion: ChipSuggestion) {
     input.value = suggestion.prompt;
     // Focus the textarea so the user can tweak or just hit Enter to send.
@@ -2978,6 +2992,7 @@ function statusTone(status: Message['status']): string {
                         :app-id="app.id"
                         :page-slug="preview?.page?.slug"
                         @added="afterManualChange"
+                        @prefill="onManualPrefill"
                     />
                 </section>
                 <section
@@ -3933,6 +3948,7 @@ function statusTone(status: Message['status']): string {
                                 previewBlockDataMap[selectedBlockId ?? ''] ??
                                 null
                             "
+                            :loading="previewDataPending"
                             @saved="onDrawerSaved"
                             @deleted="onDrawerDeleted"
                             @close="selectedBlockId = null"

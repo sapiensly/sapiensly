@@ -426,10 +426,12 @@ class AnalystCore
 
     /**
      * A plain-language read of what a source provides — its measures and the
-     * dimensions it can be broken down by, in business terms.
+     * dimensions it can be broken down by, in business terms — plus how it is
+     * WIRED (the tool/endpoint, arguments and field mapping), so the panel can
+     * open a "how this source is built" modal on the card.
      *
      * @param  array<string, mixed>  $object
-     * @return array{name: string, rows: int, measures: list<string>, dimensions: list<string>}
+     * @return array{name: string, slug: string, description: ?string, rows: int, measures: list<string>, dimensions: list<string>, implementation: array<string, mixed>}
      */
     private function sourceDetail(array $object, int $rowCount, bool $es): array
     {
@@ -446,10 +448,55 @@ class AnalystCore
 
         return [
             'name' => (string) ($object['name'] ?? $object['slug'] ?? ''),
+            'slug' => (string) ($object['slug'] ?? ''),
+            'description' => is_string($object['description'] ?? null) && trim($object['description']) !== '' ? (string) $object['description'] : null,
             'rows' => $rowCount,
             'measures' => $measures,
             'dimensions' => $dimensions,
+            'implementation' => $this->sourceImplementation($object),
         ];
+    }
+
+    /**
+     * How a source is wired: for a connected object, the tool (or REST
+     * method/path) it reads, the arguments baked into that read, the
+     * collection/id paths, and the external_path → field mapping. For an
+     * internal object, just that it is stored in the app. This is the payload
+     * behind the card's "how this source is built" modal.
+     *
+     * @param  array<string, mixed>  $object
+     * @return array<string, mixed>
+     */
+    private function sourceImplementation(array $object): array
+    {
+        $source = is_array($object['source'] ?? null) ? $object['source'] : [];
+        if (($source['type'] ?? 'internal') !== 'connected') {
+            return ['kind' => 'internal'];
+        }
+
+        $fieldsById = collect(array_filter($object['fields'] ?? [], 'is_array'))->keyBy('id');
+        $list = is_array($source['operations']['list'] ?? null) ? $source['operations']['list'] : [];
+        $mapping = array_values(array_map(function (array $m) use ($fieldsById): array {
+            $field = $fieldsById->get($m['field_id'] ?? '');
+
+            return [
+                'field' => (string) ($field['name'] ?? $field['slug'] ?? $m['field_id'] ?? ''),
+                'type' => (string) ($field['type'] ?? ''),
+                'external' => (string) ($m['external_path'] ?? ''),
+            ];
+        }, array_values(array_filter($source['field_map'] ?? [], 'is_array'))));
+
+        return array_filter([
+            'kind' => 'connected',
+            'integration_id' => $source['integration_id'] ?? null,
+            'tool' => $list['mcp_tool'] ?? null,
+            'method' => $list['method'] ?? null,
+            'path' => $list['path'] ?? null,
+            'arguments' => is_array($list['arguments'] ?? null) && $list['arguments'] !== [] ? $list['arguments'] : null,
+            'collection_path' => $list['collection_path'] ?? null,
+            'id_path' => $source['id_path'] ?? null,
+            'fields' => $mapping,
+        ], fn ($v) => $v !== null && $v !== []);
     }
 
     // -- candidate generation ------------------------------------------------

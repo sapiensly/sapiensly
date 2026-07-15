@@ -11,6 +11,7 @@ use App\Models\AppSetting;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
+use App\Models\Integration;
 use App\Models\PipelineRun;
 use App\Models\Record;
 use App\Services\Ai\AiDefaults;
@@ -1339,6 +1340,22 @@ class AppBuilderController extends Controller
         }
 
         $result = app(ChartRecommender::class)->recommend($app, $manifest, $page, $request->user(), $lang);
+
+        // Resolve each connected source's integration to its display name, so the
+        // card's "how this source is built" modal shows "YuhuGo", not a raw id.
+        $integrationIds = collect($result['sources_detail'] ?? [])
+            ->pluck('implementation.integration_id')->filter()->unique()->values();
+        if ($integrationIds->isNotEmpty()) {
+            $names = Integration::query()->whereKey($integrationIds)->pluck('name', 'id');
+            $result['sources_detail'] = array_map(function (array $s) use ($names): array {
+                $id = $s['implementation']['integration_id'] ?? null;
+                if ($id !== null && $names->has($id)) {
+                    $s['implementation']['integration_name'] = (string) $names->get($id);
+                }
+
+                return $s;
+            }, array_values($result['sources_detail'] ?? []));
+        }
 
         return response()->json(['ok' => true] + $result);
     }

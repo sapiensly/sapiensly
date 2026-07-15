@@ -34,6 +34,13 @@ const props = defineProps<{
     object: { fields?: FieldDef[]; name?: string } | null;
     /** The block's resolved rows (deferred previewBlockData), for the mini preview. */
     data?: { rows?: Array<{ data: Record<string, unknown> }> } | null;
+    /**
+     * The whole deferred previewBlockData prop is still in flight. This — not
+     * an empty `data` — is what tells the mini preview to say "Loading…".
+     * Once the prop resolves, a block that's simply absent from the map (or
+     * returned no rows) is EMPTY, not loading, so it stops waiting forever.
+     */
+    loading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -366,6 +373,14 @@ const miniSeries = computed<{ label: string; value: number }[]>(() => {
     return out;
 });
 
+// Show "Loading…" ONLY while the whole deferred previewBlockData prop is still
+// in flight. Once it resolves, a block with no rows — because it was omitted from
+// the resolved map, a connected source returned nothing/errored, or the y/group
+// mapping yields nothing — is EMPTY, not loading, so the preview stops waiting
+// forever and says "no data". (Keying off an empty `data` alone can't tell those
+// apart: an omitted block and an in-flight prop both read as data == null.)
+const previewLoading = computed(() => props.loading === true);
+
 const miniMax = computed(() =>
     Math.max(1, ...miniSeries.value.map((s) => s.value)),
 );
@@ -592,10 +607,16 @@ const previewChips = computed(() => {
                             />
                         </div>
                         <div
-                            v-else
+                            v-else-if="previewLoading"
                             class="flex h-14 items-center justify-center text-[11px] text-ink-subtle"
                         >
                             {{ t('apps.builder.analyst.loading_data') }}
+                        </div>
+                        <div
+                            v-else
+                            class="flex h-14 items-center justify-center text-[11px] text-ink-subtle"
+                        >
+                            {{ t('apps.builder.analyst.no_preview_data') }}
                         </div>
                     </div>
 
