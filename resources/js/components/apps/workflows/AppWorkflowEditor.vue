@@ -272,7 +272,10 @@ async function save() {
             }
             errorText.value = lines.join('\n');
         } else {
-            errorText.value = body?.message ?? err.message ?? 'Save failed';
+            errorText.value =
+                body?.message ??
+                err.message ??
+                t('apps.builder.workflows.error.save_failed');
         }
 
         console.error(
@@ -311,7 +314,9 @@ async function run() {
             response?: { data?: { message?: string } };
         };
         errorText.value =
-            err.response?.data?.message ?? err.message ?? 'Run failed';
+            err.response?.data?.message ??
+            err.message ??
+            t('apps.builder.workflows.error.run_failed');
 
         console.error('Workflow run failed:', e);
     } finally {
@@ -348,7 +353,7 @@ async function resolveProposal(id: string, decision: 'approve' | 'dismiss') {
             err.response?.data?.error ??
             err.response?.data?.message ??
             err.message ??
-            'Action failed';
+            t('apps.builder.workflows.error.action_failed');
     } finally {
         resolvingProposal.value = null;
     }
@@ -373,7 +378,9 @@ async function verify() {
             response?: { data?: { message?: string } };
         };
         errorText.value =
-            err.response?.data?.message ?? err.message ?? 'Verify failed';
+            err.response?.data?.message ??
+            err.message ??
+            t('apps.builder.workflows.error.verify_failed');
     } finally {
         verifying.value = false;
     }

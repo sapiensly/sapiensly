@@ -25,7 +25,7 @@ class RefineDashboardPhase extends CompilePhase
     {
         // Silent unless there's real enrichment to apply (progress() drops '').
         return $context->semanticEnriched && $context->page !== null
-            ? 'Refinando el dashboard con los insights…'
+            ? $context->tr('Refining the dashboard with the insights…')
             : '';
     }
 
@@ -46,7 +46,7 @@ class RefineDashboardPhase extends CompilePhase
         try {
             $page = $this->buildPage($context, $manifest);
         } catch (\Throwable) {
-            $context->note('El refinamiento no compiló; se conservó el dashboard base.');
+            $context->note($context->tr("The refinement didn't compile; the base dashboard was kept."));
 
             return;
         }
@@ -79,7 +79,7 @@ class RefineDashboardPhase extends CompilePhase
             $context->app->fresh(),
             [['op' => 'replace', 'path' => '/pages/'.$index, 'value' => $page]],
             $context->user,
-            "Refiné el dashboard «{$page['name']}» con los insights (Express)",
+            $context->tr('Refined the dashboard ":name" with the insights (Express)', ['name' => $page['name']]),
         );
 
         $context->page = [

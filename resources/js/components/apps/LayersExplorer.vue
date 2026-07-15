@@ -11,6 +11,9 @@ import {
     Workflow as WorkflowIcon,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 /**
  * Unified, at-a-glance explorer of every layer of a built app — objects &
@@ -96,7 +99,7 @@ function fmtDate(iso: string | null): string {
 function agentCapabilitySummary(): string {
     const caps = (agent.value?.capabilities ?? {}) as Record<string, unknown>;
     const fmt = (g: unknown): string => (g === 'all' ? 'all' : Array.isArray(g) ? String(g.length) : '0');
-    return `read ${fmt(caps.read)} · write ${fmt(caps.write)}`;
+    return t('apps.builder.layers.caps_summary', { read: fmt(caps.read), write: fmt(caps.write) });
 }
 </script>
 
@@ -107,16 +110,16 @@ function agentCapabilitySummary(): string {
             <button type="button" class="lx-section" @click="toggleSection('objects')">
                 <component :is="openSections.has('objects') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
                 <Database class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">Objects</span>
+                <span class="font-medium text-ink">{{ t('apps.builder.layers.objects') }}</span>
                 <Badge variant="secondary" class="ml-auto">{{ objects.length }}</Badge>
             </button>
             <div v-if="openSections.has('objects')" class="pb-1">
-                <p v-if="objects.length === 0" class="lx-empty">No objects yet.</p>
+                <p v-if="objects.length === 0" class="lx-empty">{{ t('apps.builder.layers.no_objects') }}</p>
                 <div v-for="o in objects" :key="String(o.id)">
                     <button type="button" class="lx-item" @click="toggle('obj:' + o.id)">
                         <component :is="isOpen('obj:' + o.id) ? ChevronDown : ChevronRight" class="size-3 text-ink-subtle" />
                         <span class="truncate text-ink">{{ str(o.name, str(o.slug)) }}</span>
-                        <Badge v-if="sourceType(o) === 'connected'" variant="outline" class="ml-1 text-[10px]">connected</Badge>
+                        <Badge v-if="sourceType(o) === 'connected'" variant="outline" class="ml-1 text-[10px]">{{ t('apps.builder.layers.badge_connected') }}</Badge>
                         <span v-if="recordCount(String(o.id)) !== null" class="ml-auto text-xs text-ink-subtle">
                             {{ recordCount(String(o.id)) }}
                         </span>
@@ -126,7 +129,7 @@ function agentCapabilitySummary(): string {
                             <span class="truncate text-ink-muted">{{ str(f.name, str(f.slug)) }}</span>
                             <span class="ml-auto text-[10px] text-ink-subtle">{{ str(f.type) }}</span>
                         </li>
-                        <li v-if="arr(o.fields).length === 0" class="lx-leaf text-ink-subtle">no fields</li>
+                        <li v-if="arr(o.fields).length === 0" class="lx-leaf text-ink-subtle">{{ t('apps.builder.layers.no_fields') }}</li>
                     </ul>
                 </div>
             </div>
@@ -137,11 +140,11 @@ function agentCapabilitySummary(): string {
             <button type="button" class="lx-section" @click="toggleSection('pages')">
                 <component :is="openSections.has('pages') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
                 <LayoutDashboard class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">Pages</span>
+                <span class="font-medium text-ink">{{ t('apps.builder.layers.pages') }}</span>
                 <Badge variant="secondary" class="ml-auto">{{ pages.length }}</Badge>
             </button>
             <div v-if="openSections.has('pages')" class="pb-1">
-                <p v-if="pages.length === 0" class="lx-empty">No pages yet.</p>
+                <p v-if="pages.length === 0" class="lx-empty">{{ t('apps.builder.layers.no_pages') }}</p>
                 <div v-for="p in pages" :key="String(p.id)">
                     <button type="button" class="lx-item" @click="toggle('page:' + p.id)">
                         <component :is="isOpen('page:' + p.id) ? ChevronDown : ChevronRight" class="size-3 text-ink-subtle" />
@@ -152,7 +155,7 @@ function agentCapabilitySummary(): string {
                         <li v-for="(b, i) in arr(p.blocks)" :key="String(b.id ?? i)" class="lx-leaf">
                             <span class="truncate text-ink-muted">{{ str(b.type, 'block') }}</span>
                         </li>
-                        <li v-if="arr(p.blocks).length === 0" class="lx-leaf text-ink-subtle">no blocks</li>
+                        <li v-if="arr(p.blocks).length === 0" class="lx-leaf text-ink-subtle">{{ t('apps.builder.layers.no_blocks') }}</li>
                     </ul>
                 </div>
             </div>
@@ -163,11 +166,11 @@ function agentCapabilitySummary(): string {
             <button type="button" class="lx-section" @click="toggleSection('workflows')">
                 <component :is="openSections.has('workflows') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
                 <WorkflowIcon class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">Workflows</span>
+                <span class="font-medium text-ink">{{ t('apps.builder.layers.workflows') }}</span>
                 <Badge variant="secondary" class="ml-auto">{{ workflows.length }}</Badge>
             </button>
             <div v-if="openSections.has('workflows')" class="pb-1">
-                <p v-if="workflows.length === 0" class="lx-empty">No workflows yet.</p>
+                <p v-if="workflows.length === 0" class="lx-empty">{{ t('apps.builder.layers.no_workflows') }}</p>
                 <div v-for="w in workflows" :key="String(w.id)">
                     <button type="button" class="lx-item" @click="toggle('wf:' + w.id)">
                         <component :is="isOpen('wf:' + w.id) ? ChevronDown : ChevronRight" class="size-3 text-ink-subtle" />
@@ -180,7 +183,7 @@ function agentCapabilitySummary(): string {
                         <li v-for="(s, i) in arr(w.steps)" :key="String(s.id ?? i)" class="lx-leaf">
                             <span class="truncate text-ink-muted">{{ str(s.type, 'step') }}</span>
                         </li>
-                        <li v-if="arr(w.steps).length === 0" class="lx-leaf text-ink-subtle">no steps</li>
+                        <li v-if="arr(w.steps).length === 0" class="lx-leaf text-ink-subtle">{{ t('apps.builder.layers.no_steps') }}</li>
                     </ul>
                 </div>
             </div>
@@ -191,7 +194,7 @@ function agentCapabilitySummary(): string {
             <button type="button" class="lx-section" @click="toggleSection('integrations')">
                 <component :is="openSections.has('integrations') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
                 <Link2 class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">Integrations</span>
+                <span class="font-medium text-ink">{{ t('apps.builder.layers.integrations') }}</span>
                 <Badge variant="secondary" class="ml-auto">{{ integrations.length }}</Badge>
             </button>
             <div v-if="openSections.has('integrations')" class="pb-1">
@@ -208,14 +211,14 @@ function agentCapabilitySummary(): string {
             <button type="button" class="lx-section" @click="toggleSection('agent')">
                 <component :is="openSections.has('agent') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
                 <Bot class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">Agent</span>
+                <span class="font-medium text-ink">{{ t('apps.builder.layers.agent') }}</span>
                 <Badge :variant="agent.enabled ? 'default' : 'secondary'" class="ml-auto">
-                    {{ agent.enabled ? 'on' : 'off' }}
+                    {{ agent.enabled ? t('apps.builder.layers.agent_on') : t('apps.builder.layers.agent_off') }}
                 </Badge>
             </button>
             <div v-if="openSections.has('agent')" class="px-3 pb-2 text-xs text-ink-muted">
-                <div>{{ str(agent.name, 'Assistant') }}</div>
-                <div class="mt-0.5 text-ink-subtle">{{ agentCapabilitySummary() }} · autonomy {{ str(agent.autonomy, 'propose') }}</div>
+                <div>{{ str(agent.name, t('apps.builder.layers.agent_default_name')) }}</div>
+                <div class="mt-0.5 text-ink-subtle">{{ agentCapabilitySummary() }} · {{ t('apps.builder.layers.autonomy_label') }} {{ str(agent.autonomy, 'propose') }}</div>
             </div>
         </section>
 
@@ -224,15 +227,15 @@ function agentCapabilitySummary(): string {
             <button type="button" class="lx-section" @click="toggleSection('versions')">
                 <component :is="openSections.has('versions') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
                 <Clock class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">History</span>
+                <span class="font-medium text-ink">{{ t('apps.builder.layers.history') }}</span>
                 <Badge variant="secondary" class="ml-auto">{{ versionList.length }}</Badge>
             </button>
             <div v-if="openSections.has('versions')" class="pb-2">
-                <p v-if="versionList.length === 0" class="lx-empty">No versions yet.</p>
+                <p v-if="versionList.length === 0" class="lx-empty">{{ t('apps.builder.layers.no_versions') }}</p>
                 <div v-for="v in versionList" :key="v.id" class="px-3 py-1.5">
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-ink">v{{ v.version }}</span>
-                        <Badge v-if="v.current" variant="default" class="text-[10px]">current</Badge>
+                        <Badge v-if="v.current" variant="default" class="text-[10px]">{{ t('apps.builder.layers.badge_current') }}</Badge>
                         <span class="ml-auto text-[10px] text-ink-subtle">{{ fmtDate(v.created_at) }}</span>
                     </div>
                     <p v-if="v.summary" class="mt-0.5 truncate text-xs text-ink-muted">{{ v.summary }}</p>

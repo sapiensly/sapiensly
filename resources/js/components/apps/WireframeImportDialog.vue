@@ -151,7 +151,7 @@ async function submit() {
         };
         const status = err.response?.status;
         const body = err.response?.data?.message ?? err.response?.data?.error;
-        errorText.value = status ? `HTTP ${status}${body ? ' — ' + body : ''}` : (err.message ?? 'Network error');
+        errorText.value = status ? `HTTP ${status}${body ? ' — ' + body : ''}` : (err.message ?? t('apps.builder.wireframe.network_error'));
          
         console.error('Wireframe import failed:', e);
     } finally {

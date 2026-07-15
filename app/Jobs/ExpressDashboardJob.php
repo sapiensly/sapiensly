@@ -38,7 +38,7 @@ class ExpressDashboardJob implements ShouldQueue
      * The clean, user-facing line for an interrupted build — never the raw
      * exception (which leaks a job class name or "attempted too many times").
      */
-    private const INTERRUPTED_MESSAGE = 'El build se interrumpió antes de terminar. Lo que ya se había aplicado quedó guardado. Vuelve a intentarlo — y si el tablero era muy amplio, pídelo por partes.';
+    private const INTERRUPTED_MESSAGE = 'The build was interrupted before finishing. Whatever had already been applied is saved. Try again — and if the dashboard was very large, ask for it in parts.';
 
     // A broad board (7-8 connected objects, each a live acquire + its
     // previous-window read, then the model gates and the render verify) lands
@@ -78,7 +78,7 @@ class ExpressDashboardJob implements ShouldQueue
         $user = $conversation->user;
 
         if ($cancellation->requested($conversation)) {
-            $this->finalize($message, 'none', '⏹ Build detenido por el usuario.');
+            $this->finalize($message, 'none', __('⏹ Build stopped by the user.', [], $user->preferredLocale()));
             $run->forceFill(['status' => 'stopped', 'finished_at' => now()])->save();
 
             return;
@@ -118,7 +118,7 @@ class ExpressDashboardJob implements ShouldQueue
                 'status' => $status,
                 'applied_version_id' => $context->page['version_id'] ?? null,
                 'change_summary' => $context->page !== null
-                    ? "Dashboard «{$context->page['name']}» construido con Express"
+                    ? $context->tr('Dashboard ":name" built with Express', ['name' => $context->page['name']])
                     : null,
             ]);
         });
@@ -211,67 +211,76 @@ class ExpressDashboardJob implements ShouldQueue
             $lines = [
                 "## ✅ {$context->page['name']}",
                 '',
-                "Tu dashboard está listo en **`{$context->page['path']}`** (versión {$context->page['version']}).",
+                $context->tr('Your dashboard is ready at **`:path`** (version :version).', [
+                    'path' => $context->page['path'],
+                    'version' => $context->page['version'],
+                ]),
             ];
             if ($context->objects !== []) {
                 $sources = collect($context->objects)->pluck('name')->filter()->values();
                 $lines[] = '';
-                $lines[] = '**Datos en vivo:** '.$sources->join(', ', ' y ').'.';
+                $lines[] = $context->tr('**Live data:** :sources.', [
+                    'sources' => $sources->join(', ', ' '.$context->tr('and').' '),
+                ]);
             }
 
             // The interpreter's translation is part of the contract: the user
             // corrects the INTERPRETATION, not the board.
             if ($context->interpretedPrompt !== null) {
                 $lines[] = '';
-                $lines[] = '**Interpreté tu pedido como:** «'.$context->interpretedPrompt.'» — si no era eso, dímelo y lo ajusto.';
+                $lines[] = $context->tr('**I interpreted your request as:** ":prompt" — if that\'s not it, tell me and I\'ll adjust.', ['prompt' => $context->interpretedPrompt]);
             }
 
             // Honest limitations the user asked about — kept; these are about the
             // DATA, not how the build ran.
             $caveats = [];
             foreach ($context->substitutions as $sub) {
-                $caveats[] = 'Para **'.($sub['asked'] ?? '?').'** usé **'.($sub['using'] ?? '?').'** ('.($sub['reason'] ?? '').').';
+                $caveats[] = $context->tr('For **:asked** I used **:using** (:reason).', [
+                    'asked' => $sub['asked'] ?? '?',
+                    'using' => $sub['using'] ?? '?',
+                    'reason' => $sub['reason'] ?? '',
+                ]);
             }
             foreach ($context->unanswerable as $miss) {
-                $caveats[] = '**'.($miss['asked'] ?? '?').'** no está disponible en esta fuente.';
+                $caveats[] = $context->tr('**:asked** isn\'t available in this source.', ['asked' => $miss['asked'] ?? '?']);
             }
             foreach ($context->coverageNotes as $note) {
                 $caveats[] = $note;
             }
             if ($caveats !== []) {
                 $lines[] = '';
-                $lines[] = 'Un par de notas sobre los datos:';
+                $lines[] = $context->tr('A couple of notes about the data:');
                 foreach ($caveats as $caveat) {
                     $lines[] = '- '.$caveat;
                 }
             }
 
             $lines[] = '';
-            $lines[] = '¿Ajustamos algo? Dime qué cambiar —títulos, gráficas o insights— y lo refino.';
+            $lines[] = $context->tr('Adjust anything? Tell me what to change — titles, charts, or insights — and I\'ll refine it.');
 
             return ['applied', implode("\n", $lines)];
         }
 
         if ($run->status === 'halted_unanswerable') {
-            return ['none', (string) (collect($context->notes)->last() ?: 'Esta fuente no puede responder el pedido.')];
+            return ['none', (string) (collect($context->notes)->last() ?: $context->tr('This source can\'t answer the request.'))];
         }
 
         if ($run->status === 'stopped') {
-            return ['none', '⏹ Build detenido por el usuario. El progreso ya aplicado se conserva.'];
+            return ['none', $context->tr('⏹ Build stopped by the user. Progress already applied is preserved.')];
         }
 
         // A clean, user-facing failure — no raw internal notes, no run id. The
         // data-level caveats (what the source couldn't answer) are the only
         // detail worth surfacing; the rest lives in the telemetry.
-        $lines = ['No pude terminar el dashboard esta vez.'];
+        $lines = [$context->tr('I couldn\'t finish the dashboard this time.')];
         foreach ($context->unanswerable as $miss) {
             $asked = trim((string) ($miss['asked'] ?? ''));
             if ($asked !== '' && $asked !== '?') {
-                $lines[] = '- **'.$asked.'** no está disponible en esta fuente.';
+                $lines[] = '- '.$context->tr('**:asked** isn\'t available in this source.', ['asked' => $asked]);
             }
         }
         $lines[] = '';
-        $lines[] = 'Puedes intentarlo de nuevo, o dime qué construir y lo armamos paso a paso.';
+        $lines[] = $context->tr('You can try again, or tell me what to build and we\'ll do it step by step.');
 
         return ['error', implode("\n", $lines)];
     }
@@ -314,7 +323,7 @@ class ExpressDashboardJob implements ShouldQueue
         // reassuring line. Bank-first means any dashboard/objects already
         // compiled were saved as versions, so "lo aplicado quedó guardado" is
         // honest even on a hard kill mid-enrichment.
-        $reason = self::INTERRUPTED_MESSAGE;
+        $reason = __(self::INTERRUPTED_MESSAGE, [], $message->conversation->user->preferredLocale());
         $hasNarration = trim((string) $message->content) !== '';
         if ($hasNarration) {
             // The progress narration stays; the interruption is a NEW message.

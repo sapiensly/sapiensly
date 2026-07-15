@@ -375,56 +375,56 @@ const liveSteps = ref<Array<{ tool: string; label: string }>>([]);
 
 // Friendly labels for the builder tools, so the status reads as plain language
 // ("Testing a query") rather than the raw tool name ("simulate_query").
-const TOOL_LABELS: Record<string, string> = {
-    read_manifest: 'Reading the app',
-    list_available_components: 'Checking the catalog',
-    list_available_field_types: 'Checking the catalog',
-    list_available_actions: 'Checking the catalog',
-    list_available_triggers: 'Checking the catalog',
-    list_available_steps: 'Checking the catalog',
-    inspect_records: 'Inspecting records',
-    simulate_query: 'Testing a query',
-    validate_manifest: 'Validating',
-    propose_change: 'Proposing a change',
-    delete_block_by_id: 'Removing a block',
-    seed_records: 'Adding sample data',
-    generate_demo_data: 'Adding sample data',
-    discover_integration: 'Finding the connection',
-    create_integration: 'Setting up the connection',
-    test_connection: 'Testing the connection',
-    sample_endpoint: 'Sampling the endpoint',
+const KNOWN_TOOLS = new Set<string>([
+    'read_manifest',
+    'list_available_components',
+    'list_available_field_types',
+    'list_available_actions',
+    'list_available_triggers',
+    'list_available_steps',
+    'inspect_records',
+    'simulate_query',
+    'validate_manifest',
+    'propose_change',
+    'delete_block_by_id',
+    'seed_records',
+    'generate_demo_data',
+    'discover_integration',
+    'create_integration',
+    'test_connection',
+    'sample_endpoint',
     // MCP / connected-data sampling
-    list_available_integrations: 'Finding connections',
-    sample_mcp_tool: 'Fetching data from the connector',
+    'list_available_integrations',
+    'sample_mcp_tool',
     // Dashboard flow
-    list_dashboard_blueprints: 'Choosing the layout',
-    profile_object: 'Analyzing the data',
-    aggregate_records: 'Crunching the numbers',
-    query_records: 'Reading records',
-    describe_app_data: 'Reviewing the data',
-    plan_dashboard: 'Planning the dashboard',
+    'list_dashboard_blueprints',
+    'profile_object',
+    'aggregate_records',
+    'query_records',
+    'describe_app_data',
+    'plan_dashboard',
     // Object / page scaffolding
-    add_object: 'Creating the object',
-    add_field: 'Adding a field',
-    add_relation: 'Linking objects',
-    scaffold_app: 'Scaffolding the app',
-    add_crud_page: 'Building the page',
-    add_detail_page: 'Building the detail page',
+    'add_object',
+    'add_field',
+    'add_relation',
+    'scaffold_app',
+    'add_crud_page',
+    'add_detail_page',
     // Planning & reference
-    set_build_plan: 'Planning the steps',
-    target_plan_steps: 'Advancing the plan',
-    framework_reference: 'Checking the guide',
-    get_manifest_schema: 'Checking the schema',
+    'set_build_plan',
+    'target_plan_steps',
+    'framework_reference',
+    'get_manifest_schema',
     // Brand / polish
-    get_organization_brand: 'Applying the brand',
-    generate_palette: 'Generating the palette',
-    list_available_icons: 'Finding icons',
-};
+    'get_organization_brand',
+    'generate_palette',
+    'list_available_icons',
+]);
 function toolLabel(name: string): string {
-    return (
-        TOOL_LABELS[name] ??
-        name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-    );
+    if (KNOWN_TOOLS.has(name)) {
+        return t('apps.builder.tool.' + name);
+    }
+    return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 function modelLabel(id: string | null | undefined): string {
     if (!id) {
@@ -443,15 +443,17 @@ const activityModelLabel = computed(
 const activityStatus = computed(() => {
     const a = liveActivity.value;
     if (a === null) {
-        return sending.value ? 'Working…' : 'Ready';
+        return sending.value
+            ? t('apps.builder.activity_working')
+            : t('apps.builder.activity_ready');
     }
     if (a.phase === 'tool') {
         return toolLabel(a.tool ?? '') + '…';
     }
     if (a.phase === 'writing') {
-        return 'Writing the reply…';
+        return t('apps.builder.activity_writing');
     }
-    return 'Thinking…';
+    return t('apps.builder.activity_thinking');
 });
 const isBusy = computed(() => sending.value || liveActivity.value !== null);
 
@@ -502,10 +504,14 @@ watch(
     },
 );
 const PALETTE_MODES = [
-    { id: 'brand', label: 'Brandbook' },
-    { id: 'accent', label: 'Escala acento' },
-    { id: 'grays', label: 'Escala grises' },
+    { id: 'brand', labelKey: 'apps.builder.palette_mode.brand' },
+    { id: 'accent', labelKey: 'apps.builder.palette_mode.accent' },
+    { id: 'grays', labelKey: 'apps.builder.palette_mode.grays' },
 ] as const;
+const activePaletteModeLabel = computed(() => {
+    const m = PALETTE_MODES.find((mode) => mode.id === paletteMode.value);
+    return m ? t(m.labelKey) : '';
+});
 function setPaletteMode(mode: string) {
     if (mode === paletteMode.value) return;
     paletteMode.value = mode;
@@ -753,7 +759,7 @@ function startBlockMove(down: PointerEvent) {
     const pane = previewPane.value;
     if (!blockId || !pane) return;
     down.preventDefault();
-    dragHint.value = 'Suelta sobre otra card';
+    dragHint.value = t('apps.builder.drag_drop_hint');
     document.body.style.userSelect = 'none';
     // rAF-throttled hit test: elementFromPoint + rects once per frame, not
     // once per pointer event.
@@ -897,7 +903,7 @@ function startBlockMove(down: PointerEvent) {
             })
             .then(afterLayoutChange)
             .catch(() => {
-                toast.error('No se pudo mover la card.');
+                toast.error(t('apps.builder.move_card_failed'));
                 afterManualChange();
             });
     };
@@ -970,7 +976,7 @@ function startBlockResize(axis: 'x' | 'y', down: PointerEvent) {
             })
             .then(scheduleLayoutReload)
             .catch(() => {
-                toast.error('No se pudo aplicar el tamaño.');
+                toast.error(t('apps.builder.resize_failed'));
                 afterManualChange();
             });
     };
@@ -1850,7 +1856,7 @@ function setAccent(hex: string) {
     accentSaveTimer = setTimeout(() => {
         axios
             .post(`/apps/${props.app.id}/builder/design`, { accent: hex })
-            .catch(() => toast.error('No se pudo guardar el color de acento.'));
+            .catch(() => toast.error(t('apps.builder.accent_save_failed')));
     }, 500);
 }
 
@@ -2179,7 +2185,7 @@ async function send() {
             };
         };
         if (err.code === 'ECONNABORTED') {
-            errorText.value = "Couldn't reach the server to start the request.";
+            errorText.value = t('apps.builder.send_unreachable');
         } else if (err.response?.status === 429) {
             const retry = Number(err.response.headers?.['retry-after']);
             errorText.value = t('apps.builder.rate_limited', {
@@ -2195,7 +2201,7 @@ async function send() {
             errorText.value = `HTTP ${status}${body ? ' — ' + body : ''}`;
         } else {
             errorText.value =
-                err.message ?? 'Network error — server unreachable.';
+                err.message ?? t('apps.builder.network_error');
         }
         console.error('Builder sendMessage failed:', e);
     } finally {
@@ -2212,8 +2218,7 @@ async function requestVisualReview() {
     if (requestingReview.value || sending.value) return;
     const node = previewPane.value;
     if (!node) {
-        errorText.value =
-            'No hay preview que capturar — cambia al tab Preview primero.';
+        errorText.value = t('apps.builder.no_preview_to_capture');
         return;
     }
 
@@ -2259,7 +2264,7 @@ async function requestVisualReview() {
             canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.85),
         );
         if (!blob) {
-            throw new Error('html2canvas devolvió un canvas vacío.');
+            throw new Error(t('apps.builder.capture_empty'));
         }
 
         const form = new FormData();
@@ -2299,7 +2304,7 @@ async function requestVisualReview() {
             const body = err.response?.data?.message;
             errorText.value = status
                 ? `HTTP ${status}${body ? ' — ' + body : ''}`
-                : (err.message ?? 'No se pudo capturar el preview.');
+                : (err.message ?? t('apps.builder.capture_failed'));
         }
         console.error('Visual review failed:', e);
     } finally {
@@ -2419,7 +2424,9 @@ function subscribe() {
                     ? {
                           ...m,
                           content:
-                              'Sorry — the AI request failed: ' + data.error,
+                              t('apps.builder.stream_error_prefix') +
+                              ' ' +
+                              data.error,
                           status: 'none',
                       }
                     : m,
@@ -2711,7 +2718,7 @@ function statusTone(status: Message['status']): string {
                                 class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-1.5 py-0.5 text-[10px] tracking-wider text-accent-blue uppercase"
                             >
                                 <LayoutDashboard class="size-3" />
-                                Dashboard
+                                {{ t('apps.builder.dashboard_badge') }}
                             </span>
                         </div>
                     </div>
@@ -2727,11 +2734,9 @@ function statusTone(status: Message['status']): string {
                                     class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
                                 >
                                     <Palette class="size-3.5" />
-                                    Paleta
+                                    {{ t('apps.builder.palette_button') }}
                                     <span class="text-[10px] opacity-60">{{
-                                        PALETTE_MODES.find(
-                                            (m) => m.id === paletteMode,
-                                        )?.label
+                                        activePaletteModeLabel
                                     }}</span>
                                 </button>
                             </DropdownMenuTrigger>
@@ -2742,7 +2747,7 @@ function statusTone(status: Message['status']): string {
                                     class="flex items-center justify-between gap-3"
                                     @select="setPaletteMode(m.id)"
                                 >
-                                    {{ m.label }}
+                                    {{ t(m.labelKey) }}
                                     <Check
                                         v-if="paletteMode === m.id"
                                         class="size-3.5 text-accent-blue"
@@ -2758,8 +2763,16 @@ function statusTone(status: Message['status']): string {
                         >
                             <button
                                 v-for="m in [
-                                    { id: 'chat', label: 'Chat builder' },
-                                    { id: 'manual', label: 'Ajuste fino' },
+                                    {
+                                        id: 'chat',
+                                        label: t('apps.builder.panel_mode_chat'),
+                                    },
+                                    {
+                                        id: 'manual',
+                                        label: t(
+                                            'apps.builder.panel_mode_manual',
+                                        ),
+                                    },
                                 ] as const"
                                 :key="m.id"
                                 type="button"
@@ -2790,8 +2803,8 @@ function statusTone(status: Message['status']): string {
                             class="flex items-center gap-1.5 rounded-pill px-0.5 text-[11px] text-ink-muted transition-colors hover:text-ink"
                             :title="
                                 accentOpen
-                                    ? 'Close accent colours'
-                                    : 'Accent colour — drives buttons, links and highlights'
+                                    ? t('apps.builder.accent_close')
+                                    : t('apps.builder.accent_hint')
                             "
                             :aria-expanded="accentOpen"
                             @click="accentOpen = !accentOpen"
@@ -2802,7 +2815,7 @@ function statusTone(status: Message['status']): string {
                                     background: effectiveAccent ?? '#0096ff',
                                 }"
                             />
-                            Accent
+                            {{ t('apps.builder.accent_label') }}
                         </button>
                         <template v-if="accentOpen">
                             <button
@@ -2825,7 +2838,9 @@ function statusTone(status: Message['status']): string {
                                     background: effectiveAccent ?? '#0096ff',
                                 }"
                                 :title="
-                                    'Custom: ' + (effectiveAccent ?? '#0096ff')
+                                    t('apps.builder.accent_custom') +
+                                    ' ' +
+                                    (effectiveAccent ?? '#0096ff')
                                 "
                             >
                                 <input
@@ -2867,7 +2882,7 @@ function statusTone(status: Message['status']): string {
                         @click="layersOpen = true"
                     >
                         <Layers class="size-3.5" />
-                        Layers
+                        {{ t('apps.builder.layers') }}
                     </button>
 
                     <div
@@ -2929,7 +2944,7 @@ function statusTone(status: Message['status']): string {
                         class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
                     >
                         <Play class="size-3.5" />
-                        Run
+                        {{ t('apps.builder.run') }}
                     </a>
                 </div>
             </header>
@@ -2952,11 +2967,10 @@ function statusTone(status: Message['status']): string {
                         <SlidersHorizontal class="size-4 text-accent-blue" />
                         <div class="min-w-0">
                             <p class="text-sm font-semibold text-ink">
-                                Ajuste fino
+                                {{ t('apps.builder.manual_panel_title') }}
                             </p>
                             <p class="truncate text-[11px] text-ink-muted">
-                                Haz click en una card del preview para editarla
-                                — o pide una gráfica nueva aquí abajo.
+                                {{ t('apps.builder.manual_panel_hint') }}
                             </p>
                         </div>
                     </div>
@@ -3743,13 +3757,13 @@ function statusTone(status: Message['status']): string {
                                 "
                                 :title="
                                     leftPanelHidden
-                                        ? 'Mostrar el panel para agregar gráfica'
-                                        : 'Ocultar el panel de agregar gráfica'
+                                        ? t('apps.builder.show_add_chart_panel')
+                                        : t('apps.builder.hide_add_chart_panel')
                                 "
                                 @click="leftPanelHidden = !leftPanelHidden"
                             >
                                 <BarChart3 class="size-3.5" />
-                                Agregar gráfica
+                                {{ t('apps.builder.add_chart') }}
                             </button>
                             <h2
                                 class="text-xs font-medium tracking-wide text-ink-muted uppercase"
@@ -3979,7 +3993,7 @@ function statusTone(status: Message['status']): string {
                                         'px',
                                     top: selectionRect.top - 18 + 'px',
                                 }"
-                                title="Arrastra para reordenar"
+                                :title="t('apps.builder.drag_reorder')"
                                 @pointerdown="startBlockMove($event)"
                             >
                                 <span
@@ -4005,7 +4019,7 @@ function statusTone(status: Message['status']): string {
                                             26 +
                                             'px',
                                     }"
-                                    title="Arrastra para ajustar el ancho"
+                                    :title="t('apps.builder.drag_resize_width')"
                                     @pointerdown="startBlockResize('x', $event)"
                                 >
                                     <span
@@ -4027,7 +4041,7 @@ function statusTone(status: Message['status']): string {
                                             14 +
                                             'px',
                                     }"
-                                    title="Arrastra para ajustar el alto"
+                                    :title="t('apps.builder.drag_resize_height')"
                                     @pointerdown="startBlockResize('y', $event)"
                                 >
                                     <span
@@ -4115,8 +4129,8 @@ function statusTone(status: Message['status']): string {
                                             class="grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
                                             :title="
                                                 previewSidebarCollapsed
-                                                    ? 'Expandir menú'
-                                                    : 'Colapsar menú'
+                                                    ? t('apps.builder.expand_menu')
+                                                    : t('apps.builder.collapse_menu')
                                             "
                                             @click="
                                                 previewSidebarCollapsed =
@@ -4275,7 +4289,7 @@ function statusTone(status: Message['status']): string {
                 <SheetHeader class="border-b border-soft px-4 py-3">
                     <SheetTitle class="flex items-center gap-2 text-sm">
                         <Layers class="size-4 text-accent-blue" />
-                        App layers
+                        {{ t('apps.builder.app_layers') }}
                     </SheetTitle>
                 </SheetHeader>
                 <LayersExplorer

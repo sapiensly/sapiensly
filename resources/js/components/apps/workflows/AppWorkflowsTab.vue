@@ -18,6 +18,9 @@ import { newStepId, newWorkflowId } from '@/lib/appWorkflowSerialize';
 import type { ManifestWorkflow } from '@/types/appWorkflows';
 import axios from 'axios';
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface ManifestObject {
     id: string;
@@ -79,14 +82,17 @@ function createWorkflow() {
     const seed: ManifestWorkflow = {
         id: newId,
         slug: 'workflow_' + newId.slice(-6),
-        name: 'Workflow nuevo',
+        name: t('apps.builder.workflows.new_workflow_name'),
         enabled: true,
-        trigger: { type: 'manual', label: 'Probar' },
+        trigger: {
+            type: 'manual',
+            label: t('apps.builder.workflows.new_workflow_trigger_label'),
+        },
         steps: [
             {
                 id: newStepId(),
                 type: 'log',
-                message: 'Workflow ejecutado',
+                message: t('apps.builder.workflows.new_workflow_log_message'),
             },
         ],
     };
@@ -147,7 +153,7 @@ async function onDeleted(workflowId: string) {
         // Friendly fallback — Claude can delete it via the chat.
          
         window.alert(
-            'El borrado directo desde el editor aún no está disponible — pídele a Claude: "borra el workflow ' + workflowId + '".',
+            t('apps.builder.workflows.delete_unavailable', { id: workflowId }),
         );
     }
 }

@@ -33,7 +33,7 @@ class SuggestSpecPhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return 'Derivando el spec del dashboard desde los datos…';
+        return $context->tr('Deriving the dashboard spec from the data…');
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void
@@ -101,7 +101,7 @@ class SuggestSpecPhase implements ExpressPhase
             if ($correlation !== null) {
                 $context->spec['insights'][] = [
                     'variant' => 'conclusion',
-                    'title' => 'Series relacionadas',
+                    'title' => $context->tr('Related series'),
                     'body' => $correlation,
                 ];
             }

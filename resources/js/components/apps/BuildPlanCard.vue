@@ -8,6 +8,9 @@ import {
     MinusCircle,
 } from '@lucide/vue';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface BuildPlanStep {
     id: string;
@@ -58,7 +61,7 @@ const meta: Record<
         <div class="flex items-center gap-2 text-xs font-medium text-ink">
             <ListChecks class="size-4 text-accent-blue" />
             <span class="truncate">{{
-                plan.goal || 'Plan de construcción'
+                plan.goal || t('apps.builder.plan.default_goal')
             }}</span>
             <span class="ml-auto shrink-0 text-ink-muted">
                 {{ doneCount }}/{{ plan.steps.length }}

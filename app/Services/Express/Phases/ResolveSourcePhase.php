@@ -28,7 +28,7 @@ class ResolveSourcePhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return 'Localizando la fuente de datos…';
+        return $context->tr('Locating the data source…');
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void
@@ -45,7 +45,7 @@ class ResolveSourcePhase implements ExpressPhase
         if ($integrations->isEmpty()) {
             throw new ExpressHalt(
                 'failed',
-                'No hay ninguna conexión MCP autorizada para leer datos en vivo. Conecta una integración (y autorízala) y vuelve a intentar.',
+                $context->tr("There's no authorized MCP connection to read live data. Connect an integration (and authorize it), then try again."),
             );
         }
 
@@ -68,7 +68,7 @@ class ResolveSourcePhase implements ExpressPhase
 
         throw new ExpressHalt(
             'failed',
-            'Ninguna conexión MCP respondió su lista de tools. Revisa que el servidor esté disponible y vuelve a intentar.',
+            $context->tr('No MCP connection returned its tool list. Check that the server is available and try again.'),
         );
     }
 

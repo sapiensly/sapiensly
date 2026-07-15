@@ -36,7 +36,7 @@ class CompilePhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return 'Compilando y aplicando el dashboard…';
+        return $context->tr('Compiling and applying the dashboard…');
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void
@@ -113,7 +113,7 @@ class CompilePhase implements ExpressPhase
             if (($built['ok'] ?? false) !== true) {
                 throw new \RuntimeException('Dashboard compile failed: '.json_encode($built['errors'] ?? [], JSON_UNESCAPED_UNICODE));
             }
-            $context->note('Los ajustes del modelo no compilaron; se aplicó el spec sugerido.');
+            $context->note($context->tr("The model's adjustments didn't compile; the suggested spec was applied."));
         }
 
         $lint = PlanDashboardTool::lint($built['purpose'], $built['plan_rows']);
@@ -122,7 +122,7 @@ class CompilePhase implements ExpressPhase
         }
 
         foreach ($built['dropped_charts'] ?? [] as $droppedChart) {
-            $context->note('Gráfica descartada al compilar: '.$droppedChart);
+            $context->note($context->tr('Chart dropped during compile: :chart', ['chart' => $droppedChart]));
         }
 
         return $built['page'];
@@ -142,7 +142,7 @@ class CompilePhase implements ExpressPhase
                 $context->app->fresh(),
                 [['op' => 'add', 'path' => '/pages/-', 'value' => $page]],
                 $context->user,
-                "Agregué el dashboard «{$page['name']}» (Express)",
+                $context->tr('Added the dashboard ":name" (Express)', ['name' => $page['name']]),
             );
         } catch (InvalidManifestException $e) {
             // Never let a single unrepresentable block cost the whole board. The
@@ -153,13 +153,13 @@ class CompilePhase implements ExpressPhase
             if ($repaired === null) {
                 throw $e;
             }
-            $context->note('Se omitieron KPIs que la fuente no puede expresar como una tasa honesta; el resto del dashboard se aplicó.');
+            $context->note($context->tr("KPIs the source can't express as an honest rate were omitted; the rest of the dashboard was applied."));
             $page = $repaired;
             $version = $this->manifests->applyPatch(
                 $context->app->fresh(),
                 [['op' => 'add', 'path' => '/pages/-', 'value' => $page]],
                 $context->user,
-                "Agregué el dashboard «{$page['name']}» (Express, con KPIs omitidos)",
+                $context->tr('Added the dashboard ":name" (Express, with KPIs omitted)', ['name' => $page['name']]),
             );
         }
 

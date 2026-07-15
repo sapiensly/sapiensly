@@ -37,7 +37,7 @@ class FitCheckPhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return 'Comparando tu pedido contra lo que la fuente puede responder…';
+        return $context->tr('Comparing your request against what the source can answer…');
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void
@@ -76,7 +76,7 @@ class FitCheckPhase implements ExpressPhase
                 $context->interpretedPrompt = $translated;
                 if ($this->translationGrounds($context)) {
                     $adopted = true;
-                    $context->progress('Interpretando tu pedido… → «'.$translated.'»');
+                    $context->progress($context->tr('Interpreting your request… → ":translated"', ['translated' => $translated]));
                     if ($this->economyFitSuffices($context)) {
                         $out = $this->economyOut($context, $run);
                     }
@@ -166,7 +166,7 @@ TXT,
 
             throw new ExpressHalt(
                 'halted_unanswerable',
-                "Esta conexión no puede responder el tema central de tu pedido.\n\nLo que sus datos SÍ pueden responder:\n- {$alternatives}\n\nDime cuál construyo (o conecta otra fuente).",
+                $context->tr("This connection can't answer the core of your request.\n\nWhat its data CAN answer:\n- :alternatives\n\nTell me which one to build (or connect another source).", ['alternatives' => $alternatives]),
             );
         }
 
@@ -209,7 +209,7 @@ TXT,
                     $context->substitutions[] = [
                         'asked' => (string) ($piece['asked'] ?? '?'),
                         'using' => $proxy,
-                        'reason' => 'proxy declarado por el fit-check',
+                        'reason' => $context->tr('proxy declared by the fit-check'),
                     ];
 
                     continue;
@@ -217,18 +217,17 @@ TXT,
                 $unmapped[] = (string) ($piece['asked'] ?? '?');
                 $context->unanswerable[] = [
                     'asked' => (string) ($piece['asked'] ?? '?'),
-                    'reason' => 'ningún tool de la fuente la cubre',
+                    'reason' => $context->tr('no tool in the source covers it'),
                 ];
             }
 
             if (count($unmapped) * 2 > count($pieces)) {
                 throw new ExpressHalt(
                     'halted_unanswerable',
-                    'Esta conexión no puede responder la mayor parte de tu pedido (sin datos para: '.implode(', ', $unmapped).').
-
-Los datos disponibles cubren: '.$this->sourceDomains($context).'.
-
-Dime qué construyo sobre eso (o conecta otra fuente).',
+                    $context->tr("This connection can't answer most of your request (no data for: :unmapped).\n\nThe available data covers: :domains.\n\nTell me what to build on that (or connect another source).", [
+                        'unmapped' => implode(', ', $unmapped),
+                        'domains' => $this->sourceDomains($context),
+                    ]),
                 );
             }
         } else {
@@ -246,11 +245,7 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         if ($context->chosenTools !== [] && $this->allChosenOffTopic($context)) {
             throw new ExpressHalt(
                 'halted_unanswerable',
-                'Los datos de esta conexión no tratan el tema de tu pedido.
-
-Lo que sí cubren: '.$this->sourceDomains($context).'.
-
-Dime qué construyo sobre eso (o conecta otra fuente).',
+                $context->tr("This connection's data isn't about your request's topic.\n\nWhat it does cover: :domains.\n\nTell me what to build on that (or connect another source).", ['domains' => $this->sourceDomains($context)]),
             );
         }
 
@@ -260,18 +255,28 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         // economy path and a model answer.
         $context->chosenCuts = $this->enumCuts($context);
         foreach ($context->chosenCuts as $cut) {
-            $context->note('Corte adicional: '.$cut['tool'].' con '.json_encode($cut['arguments'], JSON_UNESCAPED_UNICODE));
+            $context->note($context->tr('Extra cut: :tool with :args', [
+                'tool' => $cut['tool'],
+                'args' => json_encode($cut['arguments'], JSON_UNESCAPED_UNICODE),
+            ]));
         }
 
         foreach ($context->substitutions as $sub) {
-            $context->note('Sustitución: '.($sub['asked'] ?? '?').' → '.($sub['using'] ?? '?').' ('.($sub['reason'] ?? '').')');
+            $context->note($context->tr('Substitution: :asked → :using (:reason)', [
+                'asked' => $sub['asked'] ?? '?',
+                'using' => $sub['using'] ?? '?',
+                'reason' => $sub['reason'] ?? '',
+            ]));
         }
         foreach ($context->unanswerable as $miss) {
             $asked = trim((string) ($miss['asked'] ?? ''));
             if ($asked === '' || $asked === '?') {
                 continue; // a nameless miss is noise, not information
             }
-            $context->note('No respondible con esta fuente: '.$asked.' ('.($miss['reason'] ?? '').')');
+            $context->note($context->tr('Not answerable with this source: :asked (:reason)', [
+                'asked' => $asked,
+                'reason' => $miss['reason'] ?? '',
+            ]));
         }
     }
 
@@ -313,11 +318,10 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
         if ($unmapped->count() * 2 > $fragments->count()) {
             throw new ExpressHalt(
                 'halted_unanswerable',
-                'Esta conexión no puede responder la mayor parte de tu pedido (sin datos para: '.$unmapped->pluck('text')->implode(', ').').
-
-Los datos disponibles cubren: '.$this->sourceDomains($context).'.
-
-Dime qué construyo sobre eso (o conecta otra fuente).',
+                $context->tr("This connection can't answer most of your request (no data for: :unmapped).\n\nThe available data covers: :domains.\n\nTell me what to build on that (or connect another source).", [
+                    'unmapped' => $unmapped->pluck('text')->implode(', '),
+                    'domains' => $this->sourceDomains($context),
+                ]),
             );
         }
     }
@@ -478,7 +482,10 @@ Dime qué construyo sobre eso (o conecta otra fuente).',
             || array_diff($context->chosenTools, $prioritised) !== [];
         $context->chosenTools = $prioritised;
         if ($changed) {
-            $context->note('El pedido es sobre «'.$subjects->implode(', ').'»; se priorizaron los tools dedicados sobre mezclar otros: '.implode(', ', $prioritised).'.');
+            $context->note($context->tr('Your request is about ":subjects"; dedicated tools were prioritized over mixing in others: :tools.', [
+                'subjects' => $subjects->implode(', '),
+                'tools' => implode(', ', $prioritised),
+            ]));
         }
     }
 

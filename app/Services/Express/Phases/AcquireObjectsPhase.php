@@ -31,7 +31,7 @@ class AcquireObjectsPhase implements ExpressPhase
     {
         $n = count($context->chosenTools) + count($context->chosenCuts);
 
-        return "Modelando {$n} objeto(s) conectado(s) desde la fuente…";
+        return $context->tr('Modeling :count connected object(s) from the source…', ['count' => $n]);
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void
@@ -56,8 +56,10 @@ class AcquireObjectsPhase implements ExpressPhase
             $label = ($target['cut'] !== null ? $target['cut'].' @' : '').$toolName;
 
             if (($authored['ok'] ?? false) !== true) {
-                $error = (string) ($authored['error'] ?? 'error desconocido');
-                $targetLabel = $target['cut'] !== null ? "el corte {$target['cut']} de {$toolName}" : "el tool {$toolName}";
+                $error = (string) ($authored['error'] ?? $context->tr('unknown error'));
+                $targetLabel = $target['cut'] !== null
+                    ? $context->tr('the :cut cut of :tool', ['cut' => $target['cut'], 'tool' => $toolName])
+                    : $context->tr('the :tool tool', ['tool' => $toolName]);
                 $this->noteReadFailure($context, $target, $targetLabel, $error);
                 $outcomes[] = ['target' => $label, 'outcome' => 'failed', 'error' => Str::limit($error, 160, '…')];
 
@@ -87,7 +89,7 @@ class AcquireObjectsPhase implements ExpressPhase
             $context->user, $context->integration, array_map($this->specFor(...), $baseTargets), $manifest,
         );
         foreach ($baseTargets as $i => $target) {
-            $absorb($target, $baseResults[$i] ?? ['ok' => false, 'error' => 'sin resultado del batch']);
+            $absorb($target, $baseResults[$i] ?? ['ok' => false, 'error' => $context->tr('no result from the batch')]);
         }
 
         // --- Enum cuts: re-read a chosen tool with one argument swapped
@@ -118,12 +120,15 @@ class AcquireObjectsPhase implements ExpressPhase
         foreach ($cutPlan as $plan) {
             $cut = $plan['target'];
             if ($plan['skip']) {
-                $context->note('Corte '.$cut['cut'].' omitido: duplica la lectura base de '.((string) $cut['tool']).'.');
+                $context->note($context->tr('Cut :cut skipped: it duplicates the base read of :tool.', [
+                    'cut' => $cut['cut'],
+                    'tool' => (string) $cut['tool'],
+                ]));
                 $outcomes[] = ['target' => $cut['cut'].' @'.$cut['tool'], 'outcome' => 'skipped_duplicate'];
 
                 continue;
             }
-            $absorb($cut, $cutResults[$ri++] ?? ['ok' => false, 'error' => 'sin resultado del batch']);
+            $absorb($cut, $cutResults[$ri++] ?? ['ok' => false, 'error' => $context->tr('no result from the batch')]);
         }
 
         // Double window: sample every acquired tool ONE span back so the facts
@@ -149,7 +154,7 @@ class AcquireObjectsPhase implements ExpressPhase
             implode(' · ', $summaries),
         );
 
-        $context->note('Objetos aplicados en la versión v'.$version->version_number.'.');
+        $context->note($context->tr('Objects applied in version v:version.', ['version' => $version->version_number]));
     }
 
     /**
@@ -183,9 +188,12 @@ class AcquireObjectsPhase implements ExpressPhase
      */
     private function noteReadFailure(ExpressContext $context, array $target, string $targetLabel, string $error): void
     {
-        $context->note(ucfirst($targetLabel).' no se pudo leer: '.$error);
+        $context->note($context->tr(':label could not be read: :error', ['label' => $targetLabel, 'error' => $error]));
         if ($target['cut'] !== null) {
-            $context->coverageNotes[] = '**'.$target['cut'].'** no se pudo leer de la fuente ('.Str::limit($error, 120, '…').') — ese desglose no está en el tablero.';
+            $context->coverageNotes[] = $context->tr("**:cut** couldn't be read from the source (:error) — that breakdown isn't on the dashboard.", [
+                'cut' => $target['cut'],
+                'error' => Str::limit($error, 120, '…'),
+            ]);
         }
     }
 }

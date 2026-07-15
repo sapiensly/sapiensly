@@ -33,7 +33,7 @@ class VerifyRenderPhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return 'Verificando los números renderizados…';
+        return $context->tr('Verifying the rendered numbers…');
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void
@@ -80,7 +80,7 @@ class VerifyRenderPhase implements ExpressPhase
                 $context->app->fresh(),
                 [['op' => 'replace', 'path' => '/pages/'.$pageIndex, 'value' => $repaired]],
                 $context->user,
-                'Saneé el dashboard: retiré '.count($repairableIds).' bloque(s) sin datos suficientes',
+                $context->tr('Sanitized the dashboard: removed :count block(s) without enough data', ['count' => count($repairableIds)]),
             );
             $applied = true;
             $context->page['version'] = $version->version_number;
@@ -89,8 +89,8 @@ class VerifyRenderPhase implements ExpressPhase
 
         foreach ($result['issues'] as $issue) {
             $prefix = $issue['repairable']
-                ? ($applied ? 'Retirado del tablero: ' : 'Con datos débiles (se conservó para no vaciar el tablero): ')
-                : 'Revisar: ';
+                ? ($applied ? $context->tr('Removed from the dashboard: ') : $context->tr('Weak data (kept so as not to empty the dashboard): '))
+                : $context->tr('Review: ');
             $context->note($prefix.$issue['detail']);
         }
     }

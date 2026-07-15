@@ -136,7 +136,12 @@ const meta = computed(() => {
                 color: '#f472b6',
             };
     }
-    return { icon: Hand, label: '?', summary: '—', color: '#94a3b8' };
+    return {
+        icon: Hand,
+        label: t('apps.builder.workflows.trigger.unknown'),
+        summary: '—',
+        color: '#94a3b8',
+    };
 });
 </script>
 

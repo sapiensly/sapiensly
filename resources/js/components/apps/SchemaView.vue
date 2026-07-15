@@ -28,6 +28,9 @@ import {
 } from '@lucide/vue';
 import axios from 'axios';
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface FieldDef {
     id: string;
@@ -133,7 +136,7 @@ async function fetchRecords() {
         detailError.value =
             err.response?.data?.message ??
             err.message ??
-            'Failed to load records.';
+            t('apps.builder.schema.load_failed');
         detail.value = null;
     } finally {
         detailLoading.value = false;
@@ -318,7 +321,9 @@ async function runAggregate() {
             message?: string;
         };
         aggError.value =
-            err.response?.data?.message ?? err.message ?? 'Aggregation failed.';
+            err.response?.data?.message ??
+            err.message ??
+            t('apps.builder.schema.agg_failed');
         aggResult.value = null;
     } finally {
         aggLoading.value = false;
@@ -343,9 +348,13 @@ const aggGroupMax = computed(() => {
 
 function aggFnLabel(fn: string): string {
     return (
-        { count: 'Count', sum: 'Sum', avg: 'Average', min: 'Min', max: 'Max' }[
-            fn
-        ] ?? fn
+        {
+            count: t('apps.builder.schema.fn_count'),
+            sum: t('apps.builder.schema.fn_sum'),
+            avg: t('apps.builder.schema.fn_avg'),
+            min: t('apps.builder.schema.fn_min'),
+            max: t('apps.builder.schema.fn_max'),
+        }[fn] ?? fn
     );
 }
 
@@ -356,7 +365,8 @@ function formatAggValue(v: unknown): string {
 }
 
 function formatGroupKey(g: unknown): string {
-    if (g === null || g === undefined || g === '') return '(empty)';
+    if (g === null || g === undefined || g === '')
+        return t('apps.builder.schema.group_empty');
     return String(g);
 }
 
@@ -474,7 +484,7 @@ function formatCell(value: unknown, type: string): string {
                 : size < 1024 * 1024
                   ? `${(size / 1024).toFixed(0)} KB`
                   : `${(size / 1024 / 1024).toFixed(1)} MB`;
-        return `📎 ${f.original_name ?? '(unnamed)'} · ${sizeStr}`;
+        return `📎 ${f.original_name ?? t('apps.builder.schema.file_unnamed')} · ${sizeStr}`;
     }
     if (type === 'rich_text' && typeof value === 'string') {
         // For the schema drill-down we collapse rich text to plain so the
@@ -550,15 +560,15 @@ const relationsByObject = computed<
     return map;
 });
 
-function triggerLabel(t: string | null): string {
-    if (!t) return '';
+function triggerLabel(trigger: string | null): string {
+    if (!trigger) return '';
     return (
         {
-            'record.created': 'on create',
-            'record.updated': 'on update',
-            'record.deleted': 'on delete',
-            manual: 'manual',
-        }[t] ?? t
+            'record.created': t('apps.builder.schema.trigger_create'),
+            'record.updated': t('apps.builder.schema.trigger_update'),
+            'record.deleted': t('apps.builder.schema.trigger_delete'),
+            manual: t('apps.builder.schema.trigger_manual'),
+        }[trigger] ?? trigger
     );
 }
 </script>
@@ -569,10 +579,11 @@ function triggerLabel(t: string | null): string {
         class="flex h-full flex-col items-center justify-center gap-2 p-8 text-center"
     >
         <Database class="size-8 text-ink-subtle" />
-        <p class="text-sm text-ink-muted">No data model yet.</p>
+        <p class="text-sm text-ink-muted">
+            {{ t('apps.builder.schema.empty_title') }}
+        </p>
         <p class="max-w-xs text-xs text-ink-subtle">
-            Ask the Builder to add an object — e.g. "create a Clientes object
-            with nombre and email".
+            {{ t('apps.builder.schema.empty_hint') }}
         </p>
     </div>
 
@@ -588,7 +599,7 @@ function triggerLabel(t: string | null): string {
                     class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-strong hover:text-ink"
                 >
                     <ArrowLeft class="size-3" />
-                    Back
+                    {{ t('apps.builder.schema.back') }}
                 </button>
                 <Database class="size-3.5 shrink-0 text-accent-blue" />
                 <h3 class="truncate text-sm font-semibold text-ink">
@@ -603,7 +614,11 @@ function triggerLabel(t: string | null): string {
                     v-if="detail"
                     class="inline-flex shrink-0 items-center rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] font-medium text-ink-muted"
                 >
-                    {{ detail.total.toLocaleString() }} rows
+                    {{
+                        t('apps.builder.schema.rows', {
+                            count: detail.total.toLocaleString(),
+                        })
+                    }}
                 </span>
             </div>
 
@@ -617,10 +632,10 @@ function triggerLabel(t: string | null): string {
                             ? 'border-accent-blue/50 bg-accent-blue/10 text-accent-blue'
                             : 'border-medium bg-surface text-ink-muted hover:border-strong hover:text-ink'
                     "
-                    title="Quick aggregation"
+                    :title="t('apps.builder.schema.agg_tooltip')"
                 >
                     <Sigma class="size-3" />
-                    Insights
+                    {{ t('apps.builder.schema.insights') }}
                 </button>
                 <div class="relative">
                     <Search
@@ -629,7 +644,9 @@ function triggerLabel(t: string | null): string {
                     <input
                         v-model="searchInput"
                         type="search"
-                        placeholder="Search…"
+                        :placeholder="
+                            t('apps.builder.schema.search_placeholder')
+                        "
                         class="h-7 w-44 rounded border border-medium bg-surface pr-7 pl-7 text-[11px] text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none"
                     />
                     <button
@@ -637,7 +654,7 @@ function triggerLabel(t: string | null): string {
                         type="button"
                         @click="clearSearch"
                         class="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-ink-subtle hover:text-ink"
-                        title="Clear search"
+                        :title="t('apps.builder.schema.clear_search')"
                     >
                         <X class="size-3" />
                     </button>
@@ -646,17 +663,20 @@ function triggerLabel(t: string | null): string {
                     v-if="detail && detail.total > 0"
                     class="flex items-center gap-2 text-[11px] text-ink-muted"
                 >
-                    <span
-                        >{{ pageStart }}–{{ pageEnd }} of
-                        {{ detail.total }}</span
-                    >
+                    <span>{{
+                        t('apps.builder.schema.pagination_of', {
+                            start: pageStart,
+                            end: pageEnd,
+                            total: detail.total,
+                        })
+                    }}</span>
                     <button
                         type="button"
                         @click="prevPage"
                         :disabled="!canPrev || detailLoading"
                         class="rounded border border-medium bg-surface px-2 py-0.5 text-ink-muted transition-colors enabled:hover:text-ink disabled:opacity-40"
                     >
-                        Prev
+                        {{ t('apps.builder.schema.prev') }}
                     </button>
                     <button
                         type="button"
@@ -664,7 +684,7 @@ function triggerLabel(t: string | null): string {
                         :disabled="!canNext || detailLoading"
                         class="rounded border border-medium bg-surface px-2 py-0.5 text-ink-muted transition-colors enabled:hover:text-ink disabled:opacity-40"
                     >
-                        Next
+                        {{ t('apps.builder.schema.next') }}
                     </button>
                 </div>
             </div>
@@ -680,11 +700,21 @@ function triggerLabel(t: string | null): string {
                     v-model="aggFn"
                     class="h-7 rounded border border-medium bg-surface px-2 text-[11px] text-ink focus:border-accent-blue focus:outline-none"
                 >
-                    <option value="count">Count</option>
-                    <option value="sum">Sum</option>
-                    <option value="avg">Average</option>
-                    <option value="min">Min</option>
-                    <option value="max">Max</option>
+                    <option value="count">
+                        {{ t('apps.builder.schema.fn_count') }}
+                    </option>
+                    <option value="sum">
+                        {{ t('apps.builder.schema.fn_sum') }}
+                    </option>
+                    <option value="avg">
+                        {{ t('apps.builder.schema.fn_avg') }}
+                    </option>
+                    <option value="min">
+                        {{ t('apps.builder.schema.fn_min') }}
+                    </option>
+                    <option value="max">
+                        {{ t('apps.builder.schema.fn_max') }}
+                    </option>
                 </select>
 
                 <select
@@ -692,7 +722,9 @@ function triggerLabel(t: string | null): string {
                     v-model="aggFieldId"
                     class="h-7 rounded border border-medium bg-surface px-2 text-[11px] text-ink focus:border-accent-blue focus:outline-none"
                 >
-                    <option value="" disabled>of field…</option>
+                    <option value="" disabled>
+                        {{ t('apps.builder.schema.of_field') }}
+                    </option>
                     <option
                         v-for="f in numericFields"
                         :key="f.id"
@@ -702,12 +734,16 @@ function triggerLabel(t: string | null): string {
                     </option>
                 </select>
 
-                <span class="text-ink-subtle">by</span>
+                <span class="text-ink-subtle">{{
+                    t('apps.builder.schema.by')
+                }}</span>
                 <select
                     v-model="aggGroupBy"
                     class="h-7 rounded border border-medium bg-surface px-2 text-[11px] text-ink focus:border-accent-blue focus:outline-none"
                 >
-                    <option value="">(no grouping)</option>
+                    <option value="">
+                        {{ t('apps.builder.schema.no_grouping') }}
+                    </option>
                     <option
                         v-for="f in groupByFields"
                         :key="f.id"
@@ -722,11 +758,21 @@ function triggerLabel(t: string | null): string {
                     v-model="aggBucket"
                     class="h-7 rounded border border-medium bg-surface px-2 text-[11px] text-ink focus:border-accent-blue focus:outline-none"
                 >
-                    <option value="day">by day</option>
-                    <option value="week">by week</option>
-                    <option value="month">by month</option>
-                    <option value="quarter">by quarter</option>
-                    <option value="year">by year</option>
+                    <option value="day">
+                        {{ t('apps.builder.schema.bucket_day') }}
+                    </option>
+                    <option value="week">
+                        {{ t('apps.builder.schema.bucket_week') }}
+                    </option>
+                    <option value="month">
+                        {{ t('apps.builder.schema.bucket_month') }}
+                    </option>
+                    <option value="quarter">
+                        {{ t('apps.builder.schema.bucket_quarter') }}
+                    </option>
+                    <option value="year">
+                        {{ t('apps.builder.schema.bucket_year') }}
+                    </option>
                 </select>
 
                 <Loader2
@@ -736,7 +782,7 @@ function triggerLabel(t: string | null): string {
                 <span
                     v-if="aggFn !== 'count' && numericFields.length === 0"
                     class="text-amber-400/80"
-                    >No numeric fields to aggregate.</span
+                    >{{ t('apps.builder.schema.no_numeric_fields') }}</span
                 >
             </div>
 
@@ -756,7 +802,9 @@ function triggerLabel(t: string | null): string {
                     >{{ aggFnLabel(aggFn)
                     }}{{
                         aggFn !== 'count'
-                            ? ' of ' +
+                            ? ' ' +
+                              t('apps.builder.schema.result_of') +
+                              ' ' +
                               (numericFields.find((f) => f.id === aggFieldId)
                                   ?.name ?? '')
                             : ''
@@ -773,7 +821,7 @@ function triggerLabel(t: string | null): string {
                     v-if="aggResult.groups.length === 0"
                     class="text-[11px] text-ink-subtle"
                 >
-                    No data to group.
+                    {{ t('apps.builder.schema.no_group_data') }}
                 </p>
                 <div
                     v-for="(g, i) in aggResult.groups"
@@ -814,7 +862,7 @@ function triggerLabel(t: string | null): string {
             class="flex flex-1 items-center justify-center gap-2 text-xs text-ink-muted"
         >
             <Loader2 class="size-4 animate-spin" />
-            Loading records…
+            {{ t('apps.builder.schema.loading_records') }}
         </div>
 
         <div
@@ -830,7 +878,9 @@ function triggerLabel(t: string | null): string {
                     class="sticky top-0 z-10 border-b border-soft bg-navy text-[10px] tracking-wider text-ink-subtle uppercase"
                 >
                     <tr>
-                        <th class="px-3 py-2 text-left font-medium">ID</th>
+                        <th class="px-3 py-2 text-left font-medium">
+                            {{ t('apps.builder.schema.col_id') }}
+                        </th>
                         <th
                             v-for="f in detail.object.fields"
                             :key="f.id"
@@ -872,7 +922,7 @@ function triggerLabel(t: string | null): string {
                                 @click="toggleSort('sys_created_at')"
                                 class="group inline-flex items-center gap-1 text-left transition-colors hover:text-ink"
                             >
-                                Created
+                                {{ t('apps.builder.schema.col_created') }}
                                 <ChevronUp
                                     v-if="
                                         sortFieldId === 'sys_created_at' &&
@@ -973,20 +1023,22 @@ function triggerLabel(t: string | null): string {
                 <Database class="size-8 text-ink-subtle" />
                 <template v-if="detail.q">
                     <p class="text-sm text-ink-muted">
-                        No records match "{{ detail.q }}".
+                        {{ t('apps.builder.schema.no_match', { q: detail.q }) }}
                     </p>
                     <button
                         type="button"
                         @click="clearSearch"
                         class="text-xs text-accent-blue hover:underline"
                     >
-                        Clear search
+                        {{ t('apps.builder.schema.clear_search') }}
                     </button>
                 </template>
                 <template v-else>
-                    <p class="text-sm text-ink-muted">No records yet.</p>
+                    <p class="text-sm text-ink-muted">
+                        {{ t('apps.builder.schema.no_records') }}
+                    </p>
                     <p class="max-w-xs text-xs text-ink-subtle">
-                        Add some via the runtime forms or via the Builder.
+                        {{ t('apps.builder.schema.no_records_hint') }}
                     </p>
                 </template>
             </div>
@@ -1004,7 +1056,11 @@ function triggerLabel(t: string | null): string {
                     type="button"
                     @click="openObject(obj.id)"
                     class="group flex w-full items-center justify-between gap-3 border-b border-soft px-4 py-3 text-left transition-colors hover:bg-white/[0.03]"
-                    :title="`View ${obj.name} records`"
+                    :title="
+                        t('apps.builder.schema.view_records', {
+                            name: obj.name,
+                        })
+                    "
                 >
                     <div class="flex min-w-0 items-center gap-2">
                         <Database class="size-3.5 shrink-0 text-accent-blue" />
@@ -1019,9 +1075,12 @@ function triggerLabel(t: string | null): string {
                         class="inline-flex shrink-0 items-center rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] font-medium text-ink-muted transition-colors group-hover:text-accent-blue"
                     >
                         {{
-                            (schema.record_counts[obj.id] ?? 0).toLocaleString()
+                            t('apps.builder.schema.rows_arrow', {
+                                count: (
+                                    schema.record_counts[obj.id] ?? 0
+                                ).toLocaleString(),
+                            })
                         }}
-                        rows →
                     </span>
                 </button>
 
@@ -1080,7 +1139,7 @@ function triggerLabel(t: string | null): string {
                     <div
                         class="px-4 py-1.5 text-[9px] tracking-wider text-ink-subtle uppercase"
                     >
-                        Relations
+                        {{ t('apps.builder.schema.relations') }}
                     </div>
                     <ul class="divide-y divide-soft">
                         <li
@@ -1112,8 +1171,10 @@ function triggerLabel(t: string | null): string {
                                 >
                                     {{
                                         rel.kind === 'belongs_to'
-                                            ? '→ belongs to'
-                                            : '← has many'
+                                            ? t(
+                                                  'apps.builder.schema.belongs_to',
+                                              )
+                                            : t('apps.builder.schema.has_many')
                                     }}
                                 </span>
                                 <span class="truncate text-xs text-ink">{{
@@ -1124,7 +1185,11 @@ function triggerLabel(t: string | null): string {
                                 <code
                                     v-if="rel.from_field_slug"
                                     class="text-[10px] text-ink-subtle"
-                                    >via {{ rel.from_field_slug }}</code
+                                    >{{
+                                        t('apps.builder.schema.via', {
+                                            slug: rel.from_field_slug,
+                                        })
+                                    }}</code
                                 >
                                 <span
                                     v-if="cardinalityShort(rel.cardinality)"
@@ -1146,7 +1211,7 @@ function triggerLabel(t: string | null): string {
                     <div
                         class="px-4 py-1.5 text-[9px] tracking-wider text-ink-subtle uppercase"
                     >
-                        Virtual
+                        {{ t('apps.builder.schema.virtual') }}
                     </div>
                     <ul class="divide-y divide-soft">
                         <li

@@ -38,7 +38,7 @@ class SemanticGatesPhase implements ExpressPhase
 
     public function announce(ExpressContext $context): string
     {
-        return 'Ajustando el spec y redactando los insights…';
+        return $context->tr('Tuning the spec and writing the insights…');
     }
 
     public function run(ExpressContext $context, PipelineRun $run): void
