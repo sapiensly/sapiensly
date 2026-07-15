@@ -91,6 +91,9 @@ class AppScaffolder
     /** Max charts of each kind (breakdown / trend / value-bar) on the scaffolded dashboard. */
     private const DASHBOARD_CHART_CAP = 4;
 
+    /** Max KPI cards in the dashboard's opening metric_grid — the headline few, not a wall. */
+    private const DASHBOARD_KPI_CAP = 5;
+
     /** Rows a dashboard chart/sparkline loads so its client-side buckets reflect a real trend. */
     private const DASHBOARD_ROW_LIMIT = 500;
 
@@ -1671,6 +1674,10 @@ class AppScaffolder
             $planRows[] = ['blocks' => [['type' => 'filter_bar']]];
         }
 
+        // Keep only the headline KPIs. The suggester emits them most-important
+        // first, so the first N are the ones worth the top row; more than this
+        // reads as a wall of numbers and pushes the charts below the fold.
+        $items = array_slice($items, 0, self::DASHBOARD_KPI_CAP);
         $blocks[] = [
             'id' => $this->id('blk'),
             'type' => 'metric_grid',
