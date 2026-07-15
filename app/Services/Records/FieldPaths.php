@@ -2,6 +2,9 @@
 
 namespace App\Services\Records;
 
+use App\Services\Connected\ConnectedObjectReader;
+use Illuminate\Support\Arr;
+
 /**
  * Where a field's value lives inside a row — the one place that knows the two
  * row shapes the platform produces.
@@ -61,5 +64,60 @@ class FieldPaths
     public static function isConnected(array $object): bool
     {
         return ($object['source']['type'] ?? 'internal') === 'connected';
+    }
+
+    /**
+     * Make a connected object's rows honour the contract above: addressable by
+     * external_path. {@see ConnectedObjectReader::mapRow}
+     * actually FLATTENS each external row to manifest slugs (external_path →
+     * slug), so a nested external_path ("totals.total_tickets") no longer
+     * resolves — data_get reads the dot as nesting and misses the flat slug key
+     * ("totals_total_tickets"), and every analytic primitive that addresses by
+     * {@see forObject} reads the column as empty. Rebuild the nesting from the
+     * field_map (slug value → external_path) WITHOUT dropping the slug keys, so
+     * both an external_path read and a bare-slug fallback resolve. A no-op for
+     * flat paths (== slug) and for internal objects (no field_map).
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    public static function restoreExternalShape(array $object, array $rows): array
+    {
+        $map = $object['source']['field_map'] ?? null;
+        if (! is_array($map) || $map === []) {
+            return $rows; // internal object — already slug-keyed, no external paths
+        }
+
+        $slugById = [];
+        foreach ($object['fields'] ?? [] as $field) {
+            if (is_array($field) && isset($field['id'], $field['slug'])) {
+                $slugById[$field['id']] = $field['slug'];
+            }
+        }
+
+        // Only NESTED external paths need rebuilding — a flat path already equals
+        // its slug and resolves as-is.
+        $pairs = [];
+        foreach ($map as $entry) {
+            $path = is_array($entry) ? ($entry['external_path'] ?? null) : null;
+            $slug = is_array($entry) ? ($slugById[$entry['field_id'] ?? ''] ?? null) : null;
+            if (is_string($path) && is_string($slug) && str_contains($path, '.')) {
+                $pairs[] = [$path, $slug];
+            }
+        }
+        if ($pairs === []) {
+            return $rows;
+        }
+
+        return array_map(function (array $row) use ($pairs): array {
+            foreach ($pairs as [$path, $slug]) {
+                if (array_key_exists($slug, $row) && data_get($row, $path) === null) {
+                    Arr::set($row, $path, $row[$slug]);
+                }
+            }
+
+            return $row;
+        }, $rows);
     }
 }

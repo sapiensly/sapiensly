@@ -40,7 +40,7 @@ class ObjectRowSource
         }
 
         $key = 'rows:sample:'.sha1($app->id.'|'.$objectId.'|'.($actor?->id ?? 'x').'|'.$limit);
-        $read = function () use ($app, $objectId, $manifest, $actor, $limit): array {
+        $read = function () use ($app, $object, $objectId, $manifest, $actor, $limit): array {
             $rows = $this->blockData->queryObject(
                 $app,
                 ['object_id' => $objectId, 'limit' => $limit],
@@ -56,13 +56,18 @@ class ObjectRowSource
 
             // Unwrap the block envelope ({id, data}) down to the payload the
             // analytic primitives read: a connected object's payload is the
-            // external row verbatim (addressed by external_path), an internal
-            // one is slug-keyed (plus id and the sys_* stamps). One shape per
-            // source, both resolved by {@see FieldPaths}.
-            return array_values(array_map(
+            // external row (addressed by external_path), an internal one is
+            // slug-keyed (plus id and the sys_* stamps). One shape per source,
+            // both resolved by {@see FieldPaths}.
+            $unwrapped = array_values(array_map(
                 fn (array $row): array => is_array($row['data'] ?? null) ? $row['data'] : $row,
                 $rows,
             ));
+
+            // ConnectedObjectReader flattens each external row to manifest slugs,
+            // so a nested external_path no longer resolves — restore the nesting
+            // the analytic primitives address by (no-op for internal/flat rows).
+            return FieldPaths::restoreExternalShape($object, $unwrapped);
         };
 
         try {
