@@ -232,6 +232,51 @@ it('a combo overlays series from TWO DIFFERENT objects, each aggregated over its
         ->and($esc->firstWhere('group', 'Cobranza')['value'])->toEqual(5);
 });
 
+it('a combo series can name just object_id — the X maps by slug across shared-schema objects', function () {
+    // The shape the model naturally reaches for: object_id + field_id, no
+    // data_source, no group field. Both objects have a `reason` field (different
+    // ids), so the chart's X (reason) maps by slug into the series' object.
+    $manifest = $this->manifest;
+    $manifest['objects'][] = [
+        'id' => 'obj_esc00000000',
+        'slug' => 'escalations',
+        'name' => 'Escalation',
+        'fields' => [
+            ['id' => 'fld_ereason000', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_ecount0000', 'slug' => 'count', 'name' => 'Count', 'type' => 'number'],
+        ],
+    ];
+    foreach ([['Envíos', 4], ['Envíos', 3], ['Cobranza', 5]] as [$reason, $c]) {
+        Record::create([
+            'app_id' => $this->appModel->id,
+            'object_definition_id' => 'obj_esc00000000',
+            'data' => ['reason' => $reason, 'count' => $c],
+        ]);
+    }
+
+    $blocks = [[
+        'id' => 'blk_cmby000000',
+        'type' => 'chart',
+        'label' => 'Horas vs escalaciones',
+        'chart_type' => 'bar',
+        'group_by_field_id' => 'fld_areason000',
+        'data_source' => ['object_id' => 'obj_agg00000000'],
+        'series' => [
+            ['type' => 'bar', 'field_id' => 'fld_ahours0000', 'aggregation' => 'sum', 'label' => 'Horas'],
+            // Bare object_id shortcut — NO data_source, NO group_by_field_id.
+            ['type' => 'line', 'field_id' => 'fld_ecount0000', 'aggregation' => 'sum', 'label' => 'Escalaciones',
+                'object_id' => 'obj_esc00000000'],
+        ],
+    ]];
+
+    $combo = app(BlockDataResolver::class)->resolve($this->appModel, $blocks, $manifest)['blk_cmby000000']['combo'];
+    $esc = collect($combo[1]['groups']);
+
+    expect($combo)->toHaveCount(2)
+        ->and($esc->firstWhere('group', 'Envíos')['value'])->toEqual(7)   // mapped reason → escalations.reason
+        ->and($esc->firstWhere('group', 'Cobranza')['value'])->toEqual(5);
+});
+
 it('a pivot resolves a cohort matrix, bucketing BOTH of its dates', function () {
     // A cohort table's columns are a date too. Left unbucketed, the pivot's second
     // dimension groups by the raw timestamp and every event becomes its own

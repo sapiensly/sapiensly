@@ -3084,13 +3084,17 @@
                                         "$ref": "#/$defs/id",
                                         "description": "Numeric field for sum/avg/min/max (omit for count). Belongs to this series' object (its own data_source if set, else the chart's)."
                                     },
+                                    "object_id": {
+                                        "$ref": "#/$defs/id",
+                                        "description": "Shortcut to overlay a measure from a DIFFERENT object: set this series' object_id and its field_id, and it reads that object on the same X. When the object shares the chart's schema (e.g. OTD by sale-date vs delivery-date), the X field is mapped by slug automatically — you need not repeat group_by_field_id. Use `data_source` instead when the series needs its own filter."
+                                    },
                                     "data_source": {
                                         "$ref": "#/$defs/query",
-                                        "description": "Optional: read THIS series from a different object than the chart's, to overlay a measure from another connected/internal object on the same X. When set, this series' field_id and group_by_field_id/x_field_id must reference fields of THIS object. Omit to read the chart's data_source."
+                                        "description": "Optional: read THIS series from a different object than the chart's, to overlay a measure from another connected/internal object on the same X. When set, this series' field_id and group_by_field_id/x_field_id must reference fields of THIS object. Prefer the simpler `object_id` shortcut unless the series needs its own filter. Omit both to read the chart's data_source."
                                     },
                                     "group_by_field_id": {
                                         "$ref": "#/$defs/id",
-                                        "description": "Optional per-series X/category field, used when this series' data_source is a different object (whose X field id differs from the chart's). Defaults to the chart's group_by_field_id/x_field_id."
+                                        "description": "Optional per-series X/category field, used when this series' object differs from the chart's AND does not share its slug. Usually unnecessary — the X is mapped by slug. Defaults to the chart's group_by_field_id/x_field_id."
                                     },
                                     "x_field_id": {
                                         "$ref": "#/$defs/id",

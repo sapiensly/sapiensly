@@ -361,6 +361,69 @@ class BlockDataResolver
     }
 
     /**
+     * @param  array<string, mixed>  $object
+     */
+    private function fieldIdBySlug(array $object, string $slug): ?string
+    {
+        foreach ($object['fields'] ?? [] as $field) {
+            if (($field['slug'] ?? null) === $slug) {
+                return $field['id'] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The object a combo series reads: its full data_source if given, else a
+     * bare `object_id` shortcut (the shape the model naturally reaches for to
+     * overlay another object), else the chart's own data_source.
+     *
+     * @param  array<string, mixed>  $series
+     * @param  array<string, mixed>  $blockSource
+     * @return array<string, mixed>
+     */
+    private function seriesSource(array $series, array $blockSource): array
+    {
+        if (is_array($series['data_source'] ?? null)) {
+            return $series['data_source'];
+        }
+        if (is_string($series['object_id'] ?? null) && $series['object_id'] !== '') {
+            return ['object_id' => $series['object_id']];
+        }
+
+        return $blockSource;
+    }
+
+    /**
+     * The X field a combo series groups by. An explicit per-series field wins;
+     * otherwise, when the series reads a DIFFERENT object than the chart, map the
+     * chart's X into that object BY SLUG (shared-schema sources like venta vs
+     * entrega differ only in field ids); else the chart's own X.
+     *
+     * @param  array<string, mixed>  $series
+     * @param  array<string, mixed>  $blockSource
+     * @param  array<string, mixed>  $manifest
+     */
+    private function seriesGroupField(array $series, array $blockSource, string $groupFieldId, ?string $blockGroupSlug, array $manifest): string
+    {
+        $explicit = $series['group_by_field_id'] ?? $series['x_field_id'] ?? null;
+        if (is_string($explicit) && $explicit !== '') {
+            return $explicit;
+        }
+
+        $seriesObjectId = $this->seriesSource($series, $blockSource)['object_id'] ?? null;
+        if ($seriesObjectId !== null && $seriesObjectId !== ($blockSource['object_id'] ?? null) && $blockGroupSlug !== null) {
+            $mapped = $this->fieldIdBySlug($this->findObject($manifest, $seriesObjectId) ?? [], $blockGroupSlug);
+            if ($mapped !== null) {
+                return $mapped;
+            }
+        }
+
+        return $groupFieldId;
+    }
+
+    /**
      * Source-agnostic row fetch for a data-source query — the same routing the
      * renderer uses, exposed for callers that need rows directly (e.g. the
      * runtime agent's read tools). Returns the unified {id, data} shape for both
@@ -531,17 +594,25 @@ class BlockDataResolver
             // A combo overlays several typed measures on one X — each is its own
             // aggregate, and each keeps its own aggregation (volume summed, rate
             // averaged), which is exactly why they can't share one fold. A series
-            // may also read its OWN object (its data_source + group field), so a
-            // combo can overlay two SEPARATE objects that share an X — the client
-            // aligns the series by X VALUE, whichever object each came from.
+            // may also read its OWN object (its data_source, or a bare object_id
+            // shortcut), so a combo can overlay two SEPARATE objects that share an
+            // X — the client aligns the series by X VALUE, whichever object each
+            // came from.
             if (is_array($block['series'] ?? null) && $block['series'] !== []) {
+                // Map the block's X to the series' object BY SLUG when a series
+                // crosses objects without naming its own X: venta/entrega share
+                // the schema (same slug) but differ in field ids, and forcing the
+                // model to re-derive the id per object is the exact friction that
+                // made it give up. It provides object_id + field_id; we resolve X.
+                $blockGroupSlug = $this->fieldSlug($this->findObject($manifest, $dataSource['object_id'] ?? null) ?? [], $groupFieldId);
+
                 return ['combo' => array_map(
                     fn (array $s): array => ['groups' => $this->groupedBlock(
                         $app,
-                        is_array($s['data_source'] ?? null) ? $s['data_source'] : $dataSource,
+                        $this->seriesSource($s, $dataSource),
                         (string) ($s['aggregation'] ?? 'count'),
                         $s['field_id'] ?? null,
-                        (string) ($s['group_by_field_id'] ?? $s['x_field_id'] ?? $groupFieldId),
+                        $this->seriesGroupField($s, $dataSource, $groupFieldId, $blockGroupSlug, $manifest),
                         $bucket,
                         $limit,
                         $manifest,
