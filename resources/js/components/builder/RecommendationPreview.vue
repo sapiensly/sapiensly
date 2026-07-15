@@ -8,6 +8,9 @@
 import { onPaletteChange } from '@/composables/usePaletteSignal';
 import { resolveCssColor } from '@/lib/resolveCssColor';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Preview {
     kind: 'pareto' | 'area' | 'gauge' | 'bars' | 'scatter' | 'combo';
@@ -323,7 +326,11 @@ function gaugeChart(
     ctx.fillText(`${value}%`, cx, cy - 3);
     ctx.fillStyle = inkDim;
     ctx.font = '600 9px ui-sans-serif, system-ui, sans-serif';
-    ctx.fillText(`meta ${target}%`, cx, cy + 10);
+    ctx.fillText(
+        t('apps.builder.analyst.gauge_target', { target }),
+        cx,
+        cy + 10,
+    );
 }
 
 function barsChart(

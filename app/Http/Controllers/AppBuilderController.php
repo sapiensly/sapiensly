@@ -1323,7 +1323,12 @@ class AppBuilderController extends Controller
         if (! is_array($manifest)) {
             return response()->json(['ok' => true, 'recommendations' => [], 'gaps' => []]);
         }
-        $lang = AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null);
+        // Follow the VIEWER's language, not the app's default_locale: the analyst
+        // panel is advice shown to the person building the board (the Analyst
+        // services already branch on $lang), so an English viewer on a Spanish-
+        // authored app must still read English. The dashboard's own chrome stays
+        // on default_locale — that is a separate concern.
+        $lang = AppScaffolder::langForLocale($request->user()?->preferredLocale());
 
         $pageSlug = $request->query('page');
         $page = collect($manifest['pages'] ?? [])->first(

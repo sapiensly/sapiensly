@@ -10,6 +10,9 @@ import RecommendationPreview from '@/components/builder/RecommendationPreview.vu
 import { BarChart3, Check, Send, Sparkles, TriangleAlert } from '@lucide/vue';
 import axios from 'axios';
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{ appId: string; pageSlug?: string }>();
 const emit = defineEmits<{ (e: 'added', blockId: string): void }>();
@@ -31,21 +34,26 @@ interface Recommendation {
     };
 }
 
-const FORM_LABEL: Record<string, string> = {
-    pareto: 'Pareto',
-    area: 'Línea',
-    line: 'Línea',
-    bar: 'Barras',
-    hbar: 'Barras H',
-    donut: 'Dona',
-    gauge: 'Medidor',
-    treemap: 'Treemap',
-    scatter: 'Dispersión',
-    combo: 'Doble eje',
-    stat: 'KPI',
-    pivot: 'Cohortes',
-    insight: 'Hallazgo',
+const FORM_LABEL_KEYS: Record<string, string> = {
+    pareto: 'apps.builder.analyst.chart_type.pareto',
+    area: 'apps.builder.analyst.chart_type.area',
+    line: 'apps.builder.analyst.chart_type.line',
+    bar: 'apps.builder.analyst.chart_type.bar',
+    hbar: 'apps.builder.analyst.chart_type.hbar',
+    donut: 'apps.builder.analyst.chart_type.donut',
+    gauge: 'apps.builder.analyst.chart_type.gauge',
+    treemap: 'apps.builder.analyst.chart_type.treemap',
+    scatter: 'apps.builder.analyst.chart_type.scatter',
+    combo: 'apps.builder.analyst.chart_type.combo',
+    stat: 'apps.builder.analyst.chart_type.stat',
+    pivot: 'apps.builder.analyst.chart_type.pivot',
+    insight: 'apps.builder.analyst.chart_type.insight',
 };
+
+function formLabel(form: string): string {
+    const key = FORM_LABEL_KEYS[form];
+    return key ? t(key) : form;
+}
 
 interface SourceDetail {
     name: string;
@@ -109,7 +117,7 @@ async function add(rec: Recommendation) {
     } catch (e: unknown) {
         askReply.value =
             (e as { response?: { data?: { message?: string } } }).response?.data
-                ?.message ?? 'No se pudo agregar.';
+                ?.message ?? t('apps.builder.analyst.add_failed');
     } finally {
         addingId.value = null;
     }
@@ -138,7 +146,7 @@ async function send() {
     } catch (e: unknown) {
         askReply.value =
             (e as { response?: { data?: { message?: string } } }).response?.data
-                ?.message ?? 'No pude derivar esa gráfica.';
+                ?.message ?? t('apps.builder.analyst.derive_failed');
     } finally {
         asking.value = false;
     }
@@ -158,18 +166,20 @@ async function send() {
                 >
                     <Sparkles class="size-4" />
                 </span>
-                <span class="text-sm font-semibold text-ink">Analista</span>
+                <span class="text-sm font-semibold text-ink">{{
+                    t('apps.builder.analyst.title')
+                }}</span>
                 <span
                     v-if="loading"
                     class="ml-auto text-[11px] font-medium text-ink-subtle"
-                    >leyendo tus datos…</span
+                    >{{ t('apps.builder.analyst.reading_data') }}</span
                 >
                 <span
                     v-else
                     class="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-sp-success"
                 >
                     <span class="size-1.5 rounded-full bg-sp-success" />
-                    Listo
+                    {{ t('apps.builder.activity_ready') }}
                 </span>
             </div>
             <p
@@ -192,7 +202,11 @@ async function send() {
                     class="inline-flex items-center gap-1 rounded-pill px-1.5 py-0.5 text-ink-subtle underline decoration-dotted underline-offset-2 transition-colors hover:text-accent-blue"
                     @click="showSources = true"
                 >
-                    {{ sources }} fuentes leídas
+                    {{
+                        t('apps.builder.analyst.sources_read', {
+                            count: sources,
+                        })
+                    }}
                     <svg
                         viewBox="0 0 24 24"
                         class="size-3"
@@ -227,15 +241,15 @@ async function send() {
                     >
                         <path d="M15 18l-6-6 6-6" />
                     </svg>
-                    Recomendaciones
+                    {{ t('apps.builder.analyst.recommendations') }}
                 </button>
 
                 <div
                     class="px-4 pt-3 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
                 >
-                    Fuentes leídas
+                    {{ t('apps.builder.analyst.sources_read_heading') }}
                     <span class="ml-1 text-ink-subtle normal-case">
-                        · lo que aporta cada una
+                        · {{ t('apps.builder.analyst.sources_subtitle') }}
                     </span>
                 </div>
                 <div class="space-y-2 px-3">
@@ -248,22 +262,31 @@ async function send() {
                             <span class="text-[13px] font-semibold text-ink">{{
                                 s.name
                             }}</span>
-                            <span class="shrink-0 text-[10.5px] text-ink-subtle"
-                                >{{ s.rows.toLocaleString() }} filas</span
+                            <span
+                                class="shrink-0 text-[10.5px] text-ink-subtle"
+                                >{{
+                                    t('apps.builder.analyst.rows', {
+                                        count: s.rows.toLocaleString(),
+                                    })
+                                }}</span
                             >
                         </div>
                         <p
                             v-if="s.measures.length"
                             class="mt-1.5 text-[11.5px] leading-relaxed text-ink-muted"
                         >
-                            <span class="text-ink-subtle">Mide:</span>
+                            <span class="text-ink-subtle">{{
+                                t('apps.builder.analyst.measures_label')
+                            }}</span>
                             {{ s.measures.join(', ') }}
                         </p>
                         <p
                             v-if="s.dimensions.length"
                             class="mt-0.5 text-[11.5px] leading-relaxed text-ink-muted"
                         >
-                            <span class="text-ink-subtle">Desglosa por:</span>
+                            <span class="text-ink-subtle">{{
+                                t('apps.builder.analyst.dimensions_label')
+                            }}</span>
                             {{ s.dimensions.join(', ') }}
                         </p>
                     </div>
@@ -273,7 +296,7 @@ async function send() {
                     v-if="sourceSuggestions.length"
                     class="px-4 pt-4 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
                 >
-                    Enriquece el análisis
+                    {{ t('apps.builder.analyst.enrich') }}
                 </div>
                 <div
                     v-if="sourceSuggestions.length"
@@ -310,8 +333,7 @@ async function send() {
                 <p
                     class="px-4 pt-1 pb-2 text-[10.5px] leading-relaxed text-ink-subtle"
                 >
-                    Conectar una fuente nueva se hace desde el chat del builder
-                    o en Integraciones.
+                    {{ t('apps.builder.analyst.connect_source_hint') }}
                 </p>
             </template>
 
@@ -363,7 +385,7 @@ async function send() {
                 <div
                     class="px-4 pt-3.5 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
                 >
-                    Análisis recomendados
+                    {{ t('apps.builder.analyst.recommended_analyses') }}
                     <span
                         v-if="!loading && visibleRecs.length"
                         class="ml-1 rounded-pill bg-accent-blue/12 px-1.5 py-px text-[10px] text-accent-blue"
@@ -380,7 +402,11 @@ async function send() {
                             class="size-4 shrink-0 animate-spin rounded-full border-2 border-accent-blue/30 border-t-accent-blue"
                         />
                         <span class="text-[12.5px] font-medium text-ink-muted">
-                            Cargando recomendaciones, tomará un momento…
+                            {{
+                                t(
+                                    'apps.builder.analyst.loading_recommendations',
+                                )
+                            }}
                         </span>
                     </div>
                     <div
@@ -395,8 +421,7 @@ async function send() {
                     v-else-if="visibleRecs.length === 0"
                     class="px-5 py-6 text-center text-xs text-ink-subtle"
                 >
-                    No encontré análisis nuevos que agregar — tu tablero ya
-                    cubre lo principal. Pídeme algo específico abajo.
+                    {{ t('apps.builder.analyst.empty') }}
                 </p>
 
                 <!-- recommendation cards -->
@@ -457,7 +482,7 @@ async function send() {
                                 class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-subtle"
                             >
                                 <BarChart3 class="size-3.5" />
-                                {{ FORM_LABEL[rec.form] ?? rec.form }}
+                                {{ formLabel(rec.form) }}
                             </span>
                             <button
                                 type="button"
@@ -481,7 +506,7 @@ async function send() {
                                         <path d="M12 5v14M5 12h14" />
                                     </svg>
                                 </template>
-                                Agregar
+                                {{ t('apps.builder.analyst.add') }}
                             </button>
                         </div>
                     </article>
@@ -492,7 +517,7 @@ async function send() {
                     <div
                         class="px-4 pt-4 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
                     >
-                        Lo que falta
+                        {{ t('apps.builder.analyst.whats_missing') }}
                     </div>
                     <div class="flex flex-wrap gap-2 px-4">
                         <span
@@ -520,7 +545,7 @@ async function send() {
                 {{ askReply }}
             </p>
             <p class="mb-2 px-1 text-[11px] text-ink-subtle">
-                …o pídeme una gráfica en tus palabras.
+                {{ t('apps.builder.analyst.ask_hint') }}
             </p>
             <div
                 class="flex flex-col gap-2 rounded-sp-md border border-medium bg-navy-elevated p-2.5 focus-within:border-accent-blue"
@@ -529,7 +554,7 @@ async function send() {
                     v-model="input"
                     :disabled="asking"
                     rows="3"
-                    placeholder="¿dónde perdemos más tiempo?"
+                    :placeholder="t('apps.builder.analyst.ask_placeholder')"
                     class="min-h-[64px] w-full resize-none bg-transparent px-1 text-sm leading-relaxed text-ink outline-none placeholder:text-ink-subtle"
                     @keydown.enter.exact.prevent="send"
                 />

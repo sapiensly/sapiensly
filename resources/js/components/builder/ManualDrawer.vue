@@ -16,7 +16,10 @@
 import { ChevronDown, Trash2, TrendingUp, X } from '@lucide/vue';
 import axios from 'axios';
 import { computed, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { toast } from 'vue-sonner';
+
+const { t } = useI18n();
 
 interface FieldDef {
     id: string;
@@ -83,16 +86,21 @@ const chartTypes = computed(() =>
         ? ['area', 'line', 'bar']
         : ['bar', 'hbar', 'donut', 'pie', 'treemap', 'pareto'],
 );
-const CHART_LABELS: Record<string, string> = {
-    area: 'Área',
-    line: 'Línea',
-    bar: 'Barras',
-    hbar: 'Barras H',
-    donut: 'Dona',
-    pie: 'Pie',
-    treemap: 'Treemap',
-    pareto: 'Pareto',
+const CHART_LABEL_KEYS: Record<string, string> = {
+    area: 'apps.builder.analyst.drawer_chart.area',
+    line: 'apps.builder.analyst.drawer_chart.line',
+    bar: 'apps.builder.analyst.drawer_chart.bar',
+    hbar: 'apps.builder.analyst.drawer_chart.hbar',
+    donut: 'apps.builder.analyst.drawer_chart.donut',
+    pie: 'apps.builder.analyst.drawer_chart.pie',
+    treemap: 'apps.builder.analyst.drawer_chart.treemap',
+    pareto: 'apps.builder.analyst.drawer_chart.pareto',
 };
+
+function chartLabel(ct: string): string {
+    const key = CHART_LABEL_KEYS[ct];
+    return key ? t(key) : ct;
+}
 const numericFields = computed(() =>
     (props.object?.fields ?? []).filter((f) => f.type === 'number'),
 );
@@ -153,7 +161,8 @@ const blockName = computed(
             ? form.content
             : isHero.value
               ? form.title
-              : form.label) || String(props.block.type ?? 'este elemento'),
+              : form.label) ||
+        String(props.block.type ?? t('apps.builder.analyst.this_element')),
 );
 
 const dirty = computed(() =>
@@ -177,7 +186,7 @@ async function apply(changes: Record<string, unknown>) {
     } catch (e: unknown) {
         const msg =
             (e as { response?: { data?: { message?: string } } }).response?.data
-                ?.message ?? 'No se pudo aplicar el ajuste.';
+                ?.message ?? t('apps.builder.analyst.apply_failed');
         toast.error(msg);
         seed(); // revert the control to the block's real value
     } finally {
@@ -282,12 +291,12 @@ async function destroy() {
             block_id: (props.block as { id: string }).id,
         });
         confirmingDelete.value = false;
-        toast.success('Elemento eliminado.');
+        toast.success(t('apps.builder.analyst.element_deleted'));
         emit('deleted');
     } catch (e: unknown) {
         const msg =
             (e as { response?: { data?: { message?: string } } }).response?.data
-                ?.message ?? 'No se pudo eliminar el elemento.';
+                ?.message ?? t('apps.builder.analyst.delete_failed');
         toast.error(msg);
     } finally {
         deleting.value = false;
@@ -401,21 +410,26 @@ const miniDonut = computed(() => {
 const measureName = computed(
     () =>
         numericFields.value.find((f) => f.id === form.y_field_id)?.name ??
-        'conteo',
+        t('apps.builder.analyst.measure_fallback'),
 );
 const dimensionName = computed(() => {
-    if (isTemporal.value) return 'período';
+    if (isTemporal.value) return t('apps.builder.analyst.dimension_period');
     return (
         stringFields.value.find((f) => f.id === form.group_by_field_id)?.name ??
-        'categoría'
+        t('apps.builder.analyst.dimension_category')
     );
 });
+const plotValue = computed(() =>
+    form.y_field_id
+        ? `${form.aggregation}(${measureName.value})`
+        : t('apps.builder.analyst.the_count'),
+);
 const previewChips = computed(() => {
-    const chips = [CHART_LABELS[form.chart_type] ?? form.chart_type];
+    const chips = [chartLabel(form.chart_type)];
     chips.push(
         form.y_field_id
             ? `${form.aggregation} · ${measureName.value}`
-            : 'conteo',
+            : t('apps.builder.analyst.measure_fallback'),
     );
     return chips;
 });
@@ -438,7 +452,7 @@ const previewChips = computed(() => {
                         <span
                             class="text-[10px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
                         >
-                            Ajuste fino
+                            {{ t('apps.builder.analyst.fine_tune') }}
                         </span>
                     </div>
                     <button
@@ -461,7 +475,7 @@ const previewChips = computed(() => {
                         <span
                             class="text-[9px] font-semibold tracking-[0.1em] text-ink-subtle uppercase"
                         >
-                            Vista previa
+                            {{ t('apps.builder.tab_preview') }}
                         </span>
                         <span
                             class="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-500"
@@ -469,7 +483,7 @@ const previewChips = computed(() => {
                             <span
                                 class="size-1.5 rounded-full bg-emerald-500"
                             />
-                            En vivo
+                            {{ t('apps.builder.analyst.live') }}
                         </span>
                     </div>
 
@@ -581,7 +595,7 @@ const previewChips = computed(() => {
                             v-else
                             class="flex h-14 items-center justify-center text-[11px] text-ink-subtle"
                         >
-                            Cargando datos…
+                            {{ t('apps.builder.analyst.loading_data') }}
                         </div>
                     </div>
 
@@ -614,7 +628,7 @@ const previewChips = computed(() => {
                         <span
                             class="flex-1 text-left text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
                         >
-                            Contenido
+                            {{ t('apps.builder.analyst.content') }}
                         </span>
                         <ChevronDown
                             class="size-4 text-ink-subtle transition-transform"
@@ -626,7 +640,9 @@ const previewChips = computed(() => {
                             v-if="isHeading"
                             class="block space-y-1.5 text-xs text-ink-muted"
                         >
-                            <span>Texto de la sección</span>
+                            <span>{{
+                                t('apps.builder.analyst.section_text')
+                            }}</span>
                             <input
                                 v-model="form.content"
                                 type="text"
@@ -640,7 +656,9 @@ const previewChips = computed(() => {
                             v-else-if="isHero"
                             class="block space-y-1.5 text-xs text-ink-muted"
                         >
-                            <span>Título del reporte</span>
+                            <span>{{
+                                t('apps.builder.analyst.report_title')
+                            }}</span>
                             <textarea
                                 v-model="form.title"
                                 rows="2"
@@ -652,7 +670,9 @@ const previewChips = computed(() => {
                             <label
                                 class="block space-y-1.5 text-xs text-ink-muted"
                             >
-                                <span>Título</span>
+                                <span>{{
+                                    t('apps.builder.analyst.field_title')
+                                }}</span>
                                 <input
                                     v-model="form.label"
                                     type="text"
@@ -663,7 +683,11 @@ const previewChips = computed(() => {
                                 class="block space-y-1.5 text-xs text-ink-muted"
                             >
                                 <span class="flex items-center justify-between">
-                                    Descripción
+                                    {{
+                                        t(
+                                            'apps.builder.analyst.field_description',
+                                        )
+                                    }}
                                     <span class="text-[10.5px] text-ink-subtle">
                                         {{ form.description.length }} / 300
                                     </span>
@@ -689,7 +713,7 @@ const previewChips = computed(() => {
                         <span
                             class="flex-1 text-left text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
                         >
-                            Datos
+                            {{ t('apps.builder.analyst.data') }}
                         </span>
                         <ChevronDown
                             class="size-4 text-ink-subtle transition-transform"
@@ -699,7 +723,7 @@ const previewChips = computed(() => {
                     <div v-show="open.datos" class="px-4 pb-4">
                         <!-- Visual chart-type picker -->
                         <p class="mb-2 text-xs text-ink-muted">
-                            Tipo de gráfica
+                            {{ t('apps.builder.analyst.chart_type_label') }}
                         </p>
                         <div class="mb-4 grid grid-cols-3 gap-2">
                             <button
@@ -814,7 +838,7 @@ const previewChips = computed(() => {
                                         <path d="M6 8c4-3 9-5 13-5.5" />
                                     </template>
                                 </svg>
-                                {{ CHART_LABELS[ct] ?? ct }}
+                                {{ chartLabel(ct) }}
                             </button>
                         </div>
 
@@ -823,12 +847,20 @@ const previewChips = computed(() => {
                             <label
                                 class="min-w-0 flex-1 space-y-1.5 text-xs text-ink-muted"
                             >
-                                <span>Medida</span>
+                                <span>{{
+                                    t('apps.builder.analyst.measure')
+                                }}</span>
                                 <select
                                     v-model="form.y_field_id"
                                     class="w-full rounded-sp-sm border border-medium bg-surface px-2.5 py-2 text-[13px] text-ink outline-none focus:border-accent-blue"
                                 >
-                                    <option :value="null">— conteo —</option>
+                                    <option :value="null">
+                                        {{
+                                            t(
+                                                'apps.builder.analyst.count_option',
+                                            )
+                                        }}
+                                    </option>
                                     <option
                                         v-for="f in numericFields"
                                         :key="f.id"
@@ -841,7 +873,9 @@ const previewChips = computed(() => {
                             <label
                                 class="w-[104px] shrink-0 space-y-1.5 text-xs text-ink-muted"
                             >
-                                <span>Agregación</span>
+                                <span>{{
+                                    t('apps.builder.analyst.aggregation')
+                                }}</span>
                                 <select
                                     v-model="form.aggregation"
                                     class="w-full rounded-sp-sm border border-medium bg-surface px-2.5 py-2 text-[13px] text-ink outline-none focus:border-accent-blue"
@@ -863,22 +897,24 @@ const previewChips = computed(() => {
                             </label>
                         </div>
                         <p class="mb-4 text-[11.5px] text-ink-subtle">
-                            Se graficará
+                            {{ t('apps.builder.analyst.will_plot_prefix') }}
                             <strong class="font-semibold text-accent-blue">
-                                {{
-                                    form.y_field_id
-                                        ? `${form.aggregation}(${measureName})`
-                                        : 'el conteo'
-                                }}
+                                {{ plotValue }}
                             </strong>
-                            por {{ dimensionName }}.
+                            {{
+                                t('apps.builder.analyst.will_plot_suffix', {
+                                    dimension: dimensionName,
+                                })
+                            }}
                         </p>
 
                         <label
                             v-if="!isTemporal && stringFields.length"
                             class="mb-4 block space-y-1.5 text-xs text-ink-muted"
                         >
-                            <span>Dimensión</span>
+                            <span>{{
+                                t('apps.builder.analyst.dimension')
+                            }}</span>
                             <select
                                 v-model="form.group_by_field_id"
                                 class="w-full rounded-sp-sm border border-medium bg-surface px-2.5 py-2 text-[13px] text-ink outline-none focus:border-accent-blue"
@@ -896,7 +932,7 @@ const previewChips = computed(() => {
                         <!-- Categories slider with range context -->
                         <div class="mb-2 flex items-center justify-between">
                             <span class="text-xs text-ink-muted">
-                                Límite de categorías
+                                {{ t('apps.builder.analyst.category_limit') }}
                             </span>
                             <span
                                 class="rounded-sp-sm bg-surface px-2 py-0.5 text-xs font-semibold text-ink"
@@ -915,7 +951,12 @@ const previewChips = computed(() => {
                         <div
                             class="flex justify-between text-[10.5px] text-ink-subtle"
                         >
-                            <span>3</span><span>máx. 25</span>
+                            <span>3</span
+                            ><span>{{
+                                t('apps.builder.analyst.max_value', {
+                                    count: 25,
+                                })
+                            }}</span>
                         </div>
                     </div>
                 </section>
@@ -931,7 +972,7 @@ const previewChips = computed(() => {
                         <span
                             class="flex-1 text-left text-[10.5px] font-bold tracking-[0.12em] text-ink-subtle uppercase"
                         >
-                            Diseño
+                            {{ t('apps.builder.analyst.design') }}
                         </span>
                         <ChevronDown
                             class="size-4 text-ink-subtle transition-transform"
@@ -941,15 +982,21 @@ const previewChips = computed(() => {
                     <div v-show="open.diseno" class="px-4 pb-5">
                         <!-- Width as the real 12-column grid + stepper -->
                         <div class="mb-2 flex items-center justify-between">
-                            <span class="text-xs text-ink-muted">Ancho</span>
+                            <span class="text-xs text-ink-muted">{{
+                                t('apps.builder.analyst.width')
+                            }}</span>
                             <span class="text-xs font-semibold text-ink">
                                 <template v-if="form.col_span > 0">
                                     {{ form.col_span }}
                                     <span class="font-normal text-ink-subtle">
-                                        / 12 col
+                                        {{
+                                            t('apps.builder.analyst.of_columns')
+                                        }}
                                     </span>
                                 </template>
-                                <template v-else>Auto</template>
+                                <template v-else>{{
+                                    t('apps.builder.analyst.auto')
+                                }}</template>
                             </span>
                         </div>
                         <div class="mb-2 flex items-center gap-2">
@@ -988,12 +1035,14 @@ const previewChips = computed(() => {
                             class="mb-4 text-[11px] font-semibold text-ink-subtle transition-colors hover:text-accent-blue"
                             @click="form.col_span = 0"
                         >
-                            Volver a auto (columnas iguales)
+                            {{ t('apps.builder.analyst.back_to_auto') }}
                         </button>
                         <div v-else class="mb-4" />
 
                         <!-- Height presets with explicit unit -->
-                        <p class="mb-1.5 text-xs text-ink-muted">Alto mínimo</p>
+                        <p class="mb-1.5 text-xs text-ink-muted">
+                            {{ t('apps.builder.analyst.min_height') }}
+                        </p>
                         <div class="flex gap-1.5">
                             <button
                                 v-for="h in [240, 320, 420, 0]"
@@ -1010,7 +1059,9 @@ const previewChips = computed(() => {
                                 <template v-if="h > 0">
                                     {{ h }}<span class="opacity-55">px</span>
                                 </template>
-                                <template v-else>Auto</template>
+                                <template v-else>{{
+                                    t('apps.builder.analyst.auto')
+                                }}</template>
                             </button>
                         </div>
                     </div>
@@ -1024,7 +1075,7 @@ const previewChips = computed(() => {
                         @click="confirmingDelete = true"
                     >
                         <Trash2 class="size-3.5" />
-                        Eliminar elemento
+                        {{ t('apps.builder.analyst.delete_element') }}
                     </button>
                 </section>
             </div>
@@ -1052,8 +1103,10 @@ const previewChips = computed(() => {
                     >
                         <path d="M20 6 9 17l-5-5" />
                     </svg>
-                    Cambios en vivo ·
-                    <span class="text-ink-subtle">versionado</span>
+                    {{ t('apps.builder.analyst.live_changes') }} ·
+                    <span class="text-ink-subtle">{{
+                        t('apps.builder.analyst.versioned')
+                    }}</span>
                 </span>
                 <button
                     type="button"
@@ -1066,7 +1119,7 @@ const previewChips = computed(() => {
                     :disabled="!dirty"
                     @click="restore()"
                 >
-                    Restablecer
+                    {{ t('apps.builder.analyst.reset') }}
                 </button>
             </footer>
 
@@ -1086,15 +1139,14 @@ const previewChips = computed(() => {
                             <Trash2 class="size-3.5" />
                         </span>
                         <p class="text-[13px] font-semibold text-ink">
-                            ¿Eliminar este elemento?
+                            {{ t('apps.builder.analyst.delete_confirm_title') }}
                         </p>
                     </div>
                     <p class="mb-4 text-[12px] leading-relaxed text-ink-muted">
                         «<span class="font-semibold text-ink">{{
                             blockName
                         }}</span
-                        >» se quitará del dashboard. Queda versionado: puedes
-                        revertirlo desde el historial.
+                        >» {{ t('apps.builder.analyst.delete_confirm_body') }}
                     </p>
                     <div class="flex gap-2">
                         <button
@@ -1103,7 +1155,7 @@ const previewChips = computed(() => {
                             :disabled="deleting"
                             @click="confirmingDelete = false"
                         >
-                            Cancelar
+                            {{ t('apps.builder.wireframe.cancel') }}
                         </button>
                         <button
                             type="button"
@@ -1111,7 +1163,11 @@ const previewChips = computed(() => {
                             :disabled="deleting"
                             @click="destroy()"
                         >
-                            {{ deleting ? 'Eliminando…' : 'Eliminar' }}
+                            {{
+                                deleting
+                                    ? t('apps.builder.analyst.deleting')
+                                    : t('apps.builder.analyst.delete')
+                            }}
                         </button>
                     </div>
                 </div>
