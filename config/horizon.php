@@ -220,7 +220,12 @@ return [
             'maxJobs' => 0,
             'memory' => 256,
             'tries' => 3,
-            'timeout' => 300, // 5 minutes for embedding generation
+            // Ceiling for the ai queue: embeddings are quick, but a broad
+            // Express dashboard build (ExpressDashboardJob, timeout 600) applies
+            // its board then runs the render verify last — 300s was killing that
+            // final phase and reporting an applied board as failed. Kept ≤ the
+            // redis retry_after (900) so a job never runs past its reservation.
+            'timeout' => 600,
             'nice' => 0,
         ],
         'supervisor-debate' => [

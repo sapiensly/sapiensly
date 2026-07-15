@@ -40,7 +40,15 @@ class ExpressDashboardJob implements ShouldQueue
      */
     private const INTERRUPTED_MESSAGE = 'El build se interrumpió antes de terminar. Lo que ya se había aplicado quedó guardado. Vuelve a intentarlo — y si el tablero era muy amplio, pídelo por partes.';
 
-    public int $timeout = 300;
+    // A broad board (7-8 connected objects, each a live acquire + its
+    // previous-window read, then the model gates and the render verify) lands
+    // its APPLIED dashboard at ~refine and then runs verify_render last. On a
+    // healthy box the whole thing is ~50s; under load it stretches, and a 300s
+    // ceiling was killing the job DURING that final verify — reporting an
+    // already-applied board as "interrumpido". The budget gives the full
+    // pipeline room; it stays ≤ the redis retry_after (900) and matches the ai
+    // supervisor timeout so the worker and the job agree on the ceiling.
+    public int $timeout = 600;
 
     public int $tries = 1;
 
