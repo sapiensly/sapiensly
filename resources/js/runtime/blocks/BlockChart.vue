@@ -580,6 +580,29 @@ const pieSlices = computed<PieSlice[]>(() => {
 // read as gentle curves instead of hard elbows. Tension is kept low so the
 // curve hugs the points without big overshoots. Falls back to straight segments
 // for < 3 points (nothing to smooth).
+// A "nice" round number at or above v — 1/2/5 × a power of ten — so a Y axis
+// lands on readable gridlines (0, 50, 100, 150) instead of raw maxima.
+function niceCeil(v: number): number {
+    if (v <= 0) return 1;
+    const mag = Math.pow(10, Math.floor(Math.log10(v)));
+    const norm = v / mag;
+    const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+    return step * mag;
+}
+
+/**
+ * A Y axis from ZERO up to a nice round top, divided into round steps (~4-5
+ * gridlines). Mirrors the design system's time-series axis: discrete, legible,
+ * anchored at zero so magnitudes read honestly.
+ */
+function niceAxis(max: number): { top: number; ticks: number[] } {
+    const step = niceCeil(Math.max(1, max) / 4);
+    const top = Math.ceil(Math.max(1, max) / step) * step;
+    const ticks: number[] = [];
+    for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    return { top, ticks };
+}
+
 function smoothLine(pts: { x: number; y: number }[]): string {
     if (pts.length === 0) return '';
     if (pts.length < 3) {
@@ -724,10 +747,14 @@ const lineChart = computed(() => {
     }
 
     const max = Math.max(1, ...values.flat());
+    // A zero-anchored axis rounded to a nice top, so gridlines read as round
+    // numbers and every series shares one honest scale.
+    const axis = niceAxis(max);
+    const top = axis.top;
 
     const W = 520;
     const H = fitVH(W, 200, 150, 460);
-    const padL = 34;
+    const padL = 38;
     const padR = 12;
     const padT = 12;
     const padB = 26;
@@ -736,7 +763,7 @@ const lineChart = computed(() => {
     const n = orderedCats.length;
     const stepX = n <= 1 ? 0 : innerW / (n - 1);
     const xAt = (i: number) => padL + (n === 1 ? innerW / 2 : i * stepX);
-    const yAt = (v: number) => padT + innerH - (v / max) * innerH;
+    const yAt = (v: number) => padT + innerH - (v / top) * innerH;
     const single = !serField;
 
     const seriesOut = serLabels.map((label, si) => {
@@ -762,10 +789,18 @@ const lineChart = computed(() => {
         };
     });
 
-    const yTicks = [0, 0.5, 1].map((f) => ({
-        y: padT + innerH - f * innerH,
-        label: formatNumber(max * f),
+    // Round gridlines from zero to the nice top — discrete, legible axis.
+    const yTicks = axis.ticks.map((v) => ({
+        y: yAt(v),
+        label: formatNumber(v),
     }));
+    // A dashed mean reference for a SINGLE series — "where the period sits".
+    const flatVals = values[0] ?? [];
+    const avg =
+        single && flatVals.length
+            ? flatVals.reduce((a, b) => a + b, 0) / flatVals.length
+            : null;
+    const avgY = avg !== null ? yAt(avg) : null;
     // Thin the X labels so long date ticks never collide (~6 across).
     const stride = Math.max(1, Math.ceil(n / 6));
     const xLabels = orderedCats
@@ -786,6 +821,8 @@ const lineChart = computed(() => {
         series: seriesOut,
         yTicks,
         xLabels,
+        avgY,
+        avgLabel: avg !== null ? formatNumber(avg) : '',
     };
 });
 
@@ -1041,13 +1078,19 @@ const combo = computed(() => {
     }
 
     const hasRight = defs.some((d) => d.axis === 'right');
-    const leftMax = Math.max(
-        1,
-        ...defs.flatMap((d, si) => (d.axis === 'right' ? [] : vals[si])),
+    // Round each axis up to a nice top so gridlines read as clean numbers,
+    // consistent with the single line/area axis.
+    const leftMax = niceCeil(
+        Math.max(
+            1,
+            ...defs.flatMap((d, si) => (d.axis === 'right' ? [] : vals[si])),
+        ),
     );
-    const rightMax = Math.max(
-        1,
-        ...defs.flatMap((d, si) => (d.axis === 'right' ? vals[si] : [])),
+    const rightMax = niceCeil(
+        Math.max(
+            1,
+            ...defs.flatMap((d, si) => (d.axis === 'right' ? vals[si] : [])),
+        ),
     );
 
     const W = 360;
@@ -1112,9 +1155,9 @@ const combo = computed(() => {
         });
 
     const tickSet = (max: number, side: 'left' | 'right') =>
-        [0, 0.5, 1].map((f) => ({
-            y: baselineY - f * innerH,
-            label: formatNumber(max * f),
+        niceAxis(max).ticks.map((v) => ({
+            y: baselineY - (v / max) * innerH,
+            label: formatNumber(v),
             x: side === 'left' ? padL - 5 : W - padR + 5,
             anchor: side === 'left' ? 'end' : 'start',
         }));
@@ -1706,20 +1749,21 @@ const boxPlot = computed(() => {
                             :d="ln.path"
                             fill="none"
                             :stroke="ln.color"
-                            stroke-width="2"
+                            stroke-width="3"
                             stroke-linecap="round"
                             stroke-linejoin="round"
                         />
                     </template>
                     <!-- crosshair: dashed guide + line markers on the hovered category -->
-                    <g v-if="comboCrosshair" :class="t.textMuted">
+                    <g v-if="comboCrosshair">
                         <line
+                            :class="t.textMuted"
                             :x1="comboCrosshair.x"
                             :y1="combo.top"
                             :x2="comboCrosshair.x"
                             :y2="combo.baselineY"
                             stroke="currentColor"
-                            stroke-opacity="0.4"
+                            stroke-opacity="0.45"
                             stroke-width="1"
                             stroke-dasharray="3 3"
                         />
@@ -1728,11 +1772,10 @@ const boxPlot = computed(() => {
                             :key="'cm' + mi"
                             :cx="comboCrosshair.x"
                             :cy="m.y"
-                            r="3.5"
-                            :fill="m.color"
-                            class="text-navy"
-                            stroke="currentColor"
-                            stroke-width="2"
+                            r="4.2"
+                            fill="var(--sp-bg-secondary, #fff)"
+                            :stroke="m.color"
+                            stroke-width="2.5"
                         />
                     </g>
                     <!-- transparent full-height hover bands, one per category -->
@@ -1925,7 +1968,12 @@ const boxPlot = computed(() => {
                                 <stop
                                     offset="0%"
                                     :stop-color="s.color"
-                                    stop-opacity="0.28"
+                                    stop-opacity="0.22"
+                                />
+                                <stop
+                                    offset="60%"
+                                    :stop-color="s.color"
+                                    stop-opacity="0.05"
                                 />
                                 <stop
                                     offset="100%"
@@ -1959,6 +2007,20 @@ const boxPlot = computed(() => {
                                 {{ tk.label }}
                             </text>
                         </g>
+                        <!-- Mean reference for a single series: "where the
+                             period sits" as a faint dashed rule. -->
+                        <line
+                            v-if="lineChart.avgY !== null"
+                            :x1="lineChart.padL"
+                            :y1="lineChart.avgY"
+                            :x2="lineChart.W - lineChart.padR"
+                            :y2="lineChart.avgY"
+                            :class="t.textMuted"
+                            stroke="currentColor"
+                            stroke-opacity="0.35"
+                            stroke-width="1"
+                            stroke-dasharray="4 4"
+                        />
                         <!-- Each series. The gradient fill is what makes an
                              AREA chart an area chart — a line chart stays an
                              open stroke with point markers, so the two types
@@ -1976,14 +2038,17 @@ const boxPlot = computed(() => {
                                 :d="s.line"
                                 fill="none"
                                 :stroke="s.color"
-                                stroke-width="2"
+                                stroke-width="3"
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
                             />
-                            <!-- point markers: line charts only, and only when
-                                 they stay readable -->
+                            <!-- point markers: a SINGLE line chart only (multi-line
+                                 comparisons stay clean, no dots), and only when
+                                 they stay readable. A surface-filled dot with a
+                                 coloured ring reads as a crisp node on the line. -->
                             <template
                                 v-if="
+                                    lineChart.single &&
                                     block.chart_type === 'line' &&
                                     s.points.length <= 24
                                 "
@@ -1993,24 +2058,24 @@ const boxPlot = computed(() => {
                                     :key="'p' + pi"
                                     :cx="p.x"
                                     :cy="p.y"
-                                    r="2.6"
-                                    :fill="s.color"
-                                    class="text-navy"
-                                    stroke="currentColor"
-                                    stroke-width="1.4"
+                                    r="3.2"
+                                    fill="var(--sp-bg-secondary, #fff)"
+                                    :stroke="s.color"
+                                    stroke-width="2"
                                 />
                             </template>
                         </template>
                         <!-- crosshair: dashed vertical guide + markers on the
                              hovered category, across every series -->
-                        <g v-if="crosshair" :class="t.textMuted">
+                        <g v-if="crosshair">
                             <line
+                                :class="t.textMuted"
                                 :x1="crosshair.x"
                                 :y1="lineChart.top"
                                 :x2="crosshair.x"
                                 :y2="lineChart.baselineY"
                                 stroke="currentColor"
-                                stroke-opacity="0.4"
+                                stroke-opacity="0.45"
                                 stroke-width="1"
                                 stroke-dasharray="3 3"
                             />
@@ -2019,11 +2084,10 @@ const boxPlot = computed(() => {
                                 :key="'m' + ri"
                                 :cx="crosshair.x"
                                 :cy="r.y"
-                                r="3.5"
-                                :fill="r.color"
-                                class="text-navy"
-                                stroke="currentColor"
-                                stroke-width="2"
+                                r="4.2"
+                                fill="var(--sp-bg-secondary, #fff)"
+                                :stroke="r.color"
+                                stroke-width="2.5"
                             />
                         </g>
                         <!-- transparent full-height hover bands, one per
