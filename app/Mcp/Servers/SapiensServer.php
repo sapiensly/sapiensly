@@ -24,6 +24,14 @@ Build & debug apps (apps:build):
   - create_app starts a new app (empty valid manifest, version 1). Then
     list_apps, read_manifest, and propose_change (RFC 6902 patches, saved as
     reversible versions); validate_manifest checks a draft first.
+  - build_express_dashboard builds a WHOLE dashboard from ONE natural-language
+    prompt (the L4 Express pipeline the in-app "describe your dashboard" flow
+    runs): it picks the data source (a connected integration's tools or your
+    records), suggests the KPIs/charts, compiles and applies it, then reports
+    honestly. Runs async — it returns a run_id; poll get_builder_conversation
+    until the placeholder leaves streaming. Best for "make me a dashboard of X"
+    over live/connected data; author by hand with propose_change instead when
+    you want exact control.
   - Catalogs (call before authoring): list_available_components,
     list_available_field_types, list_available_actions, list_available_triggers,
     list_available_steps, list_available_icons, and framework_reference for deeper
@@ -126,6 +134,7 @@ class SapiensServer extends Server
         Tools\Build\GetBuilderConversationTool::class,
         Tools\Build\GetBuildCostTool::class,
         Tools\Build\ContinueBuilderConversationTool::class,
+        Tools\Build\BuildExpressDashboardTool::class,
         Tools\Build\AddObjectTool::class,
         Tools\Build\AddFieldTool::class,
         Tools\Build\AddRelationTool::class,
