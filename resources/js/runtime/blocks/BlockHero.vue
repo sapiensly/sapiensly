@@ -40,7 +40,13 @@ defineOptions({ inheritAttrs: false });
 
 const props = defineProps<{
     block: HeroBlock;
-    data?: { stat?: { value?: number; error?: string } };
+    data?: {
+        stat?: {
+            value?: number;
+            value_scale?: 'fraction' | 'unit';
+            error?: string;
+        };
+    };
     locale?: string;
     defaultCurrency?: string;
 }>();
@@ -59,9 +65,13 @@ const heroStat = computed(() => {
     let display: string;
     let unit: string | null = null;
     if (stat.format === 'percentage') {
+        // A ratio value is a 0..1 fraction (×100); a plain aggregate of a *_pct
+        // column is already 0..100. `value_scale` says which so both read right.
+        const scaled =
+            props.data?.stat?.value_scale === 'unit' ? value : value * 100;
         display = new Intl.NumberFormat(locale, {
             maximumFractionDigits: 1,
-        }).format(value * 100);
+        }).format(scaled);
         unit = '%';
     } else if (stat.format === 'currency') {
         display = new Intl.NumberFormat(locale, {

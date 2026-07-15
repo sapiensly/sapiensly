@@ -195,8 +195,8 @@
         },
         "id": {
             "type": "string",
-            "pattern": "^([a-z]{2,5}_[a-z0-9_]{8,60}|sys_[a-z_]{1,40})$",
-            "description": "Prefixed identifier: a short lowercase tag (2-5 chars) + underscore + 8-60 alphanumeric/underscore chars. A standard ULID (26 chars) fits comfortably. Examples: app_01j..., obj_01j..., fld_01j... Wider than strict ULID to forgive the AI generating slightly off-spec ids; the runtime treats the value as opaque after the validator accepts it. The sys_ namespace is reserved for system virtual fields (sys_created_at, sys_updated_at)."
+            "pattern": "^([a-z]{2,5}_[a-z0-9_]{3,60}|sys_[a-z_]{1,40})$",
+            "description": "Prefixed identifier: a short lowercase tag (2-5 chars) + underscore + 3-60 alphanumeric/underscore chars. A standard ULID (26 chars) fits comfortably, but a short readable token works too (e.g. kpi_otd001, blk_p1hero). The runtime treats the value as opaque after the validator accepts it; uniqueness in scope is checked separately. The sys_ namespace is reserved for system virtual fields (sys_created_at, sys_updated_at)."
         },
         "slug": {
             "type": "string",
@@ -3288,6 +3288,7 @@
                         "id": true,
                         "visibility": true,
                         "style": true,
+                        "label": true,
                         "type": {
                             "const": "calendar"
                         },

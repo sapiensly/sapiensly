@@ -266,6 +266,108 @@ it('accepts a stat KPI with a ratio_denominator', function () {
         ->and($result->errors)->toBe([]);
 });
 
+it('rejects a percentage KPI that sums a raw column with no ratio_denominator', function () {
+    // The 1,957,286% bug: format:percentage renders the value ×100, so summing a
+    // count (19,572 on-time products) and labelling it a percentage prints garbage.
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $numId = id('fld');
+    $manifest['objects'][0]['fields'][] = ['id' => $numId, 'slug' => 'a_tiempo', 'name' => 'A tiempo', 'type' => 'number'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'stat', 'label' => 'OTD %', 'format' => 'percentage',
+            'query' => ['object_id' => $objectId], 'aggregation' => 'sum', 'field_id' => $numId,
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->contains(
+            fn ($e) => str_ends_with($e->path, '/format') && str_contains($e->message, 'ratio_denominator'),
+        ))->toBeTrue();
+});
+
+it('rejects a hero stat that formats a raw sum as a percentage', function () {
+    // The hero stat was the one KPI nothing guarded; it is where the bug shipped.
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $numId = id('fld');
+    $manifest['objects'][0]['fields'][] = ['id' => $numId, 'slug' => 'a_tiempo', 'name' => 'A tiempo', 'type' => 'number'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'hero', 'title' => 'Ops',
+            'stat' => ['label' => 'OTD %', 'format' => 'percentage', 'query' => ['object_id' => $objectId], 'aggregation' => 'sum', 'field_id' => $numId],
+        ]],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
+it('accepts an avg of a per-row percentage column formatted as a percentage', function () {
+    // avg/min/max of a 0..100 pct column is honest — only sum/count is rejected.
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $numId = id('fld');
+    $manifest['objects'][0]['fields'][] = ['id' => $numId, 'slug' => 'otd_pct', 'name' => 'OTD pct', 'type' => 'number'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'stat', 'label' => 'OTD %', 'format' => 'percentage',
+            'query' => ['object_id' => $objectId], 'aggregation' => 'avg', 'field_id' => $numId,
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
+it('accepts a combo chart that carries its measures in series with no top-level y_field_id', function () {
+    $manifest = baseManifest();
+    $objectId = $manifest['objects'][0]['id'];
+    $nombreId = $manifest['objects'][0]['fields'][0]['id'];
+    $numId = id('fld');
+    $manifest['objects'][0]['fields'][] = ['id' => $numId, 'slug' => 'pedidos', 'name' => 'Pedidos', 'type' => 'number'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'd', 'name' => 'D', 'path' => '/',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'chart', 'chart_type' => 'bar', 'aggregation' => 'sum',
+            'data_source' => ['object_id' => $objectId], 'group_by_field_id' => $nombreId,
+            'series' => [
+                ['type' => 'bar', 'aggregation' => 'sum', 'field_id' => $numId, 'axis' => 'left', 'label' => 'Pedidos'],
+                ['type' => 'line', 'aggregation' => 'avg', 'field_id' => $numId, 'axis' => 'right', 'label' => 'Prom'],
+            ],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and($result->errors)->toBe([]);
+});
+
+it('warns when a connected object is ingested but no block references it', function () {
+    $manifest = baseManifest();
+    $orphanId = id('obj');
+    $manifest['objects'][] = [
+        'id' => $orphanId, 'slug' => 'tickets_by_dimension', 'name' => 'Tickets By Dimension',
+        'fields' => [['id' => id('fld'), 'slug' => 'key', 'name' => 'Key', 'type' => 'string']],
+        'source' => ['type' => 'connected', 'integration_id' => id('int'), 'operations' => ['list' => ['mcp_tool' => 't']], 'field_map' => []],
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    // A warning, never an error — the manifest still validates.
+    expect($result->valid)->toBeTrue()
+        ->and(collect($result->warnings)->contains(
+            fn ($w) => $w->code === 'unused_object' && str_contains($w->message, 'read live'),
+        ))->toBeTrue();
+});
+
 it('accepts a previous-period compare query using date helpers', function () {
     $manifest = baseManifest();
     $objectId = $manifest['objects'][0]['id'];
@@ -2086,8 +2188,8 @@ it('reports a short step id without the oneOf branch explosion or a stale workfl
             'id' => id('stp'), 'type' => 'branch',
             'cases' => [[
                 'condition' => '1 == 1',
-                // 6 chars after the prefix — the pattern requires 8-60.
-                'steps' => [['id' => 'stp_logone', 'type' => 'log', 'message' => 'hi']],
+                // 2 chars after the prefix — the pattern requires 3-60.
+                'steps' => [['id' => 'stp_lo', 'type' => 'log', 'message' => 'hi']],
             ]],
         ]],
     ]];

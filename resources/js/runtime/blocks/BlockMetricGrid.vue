@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type { ObjectDef, SparkSpec } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { formatPercent } from './formatPercent';
 import MiniSparkline from './MiniSparkline.vue';
 import type { SparkRow } from './sparkSeries';
 import { computeTrend } from './trend';
@@ -31,6 +32,7 @@ interface MetricGridBlock {
 interface MetricItemData {
     value: number;
     compare_value?: number;
+    value_scale?: 'fraction' | 'unit';
     spark_rows?: SparkRow[];
 }
 
@@ -86,8 +88,8 @@ const gridClass = computed(() => {
     );
 });
 
-function format(item: MetricItem, raw: number | undefined): string {
-    const v = raw ?? 0;
+function format(item: MetricItem, entry: MetricItemData | undefined): string {
+    const v = entry?.value ?? 0;
     if (item.format === 'currency') {
         const obj = props.objects.find((o) => o.id === item.query.object_id);
         const field = obj?.fields.find((f) => f.id === item.field_id);
@@ -98,10 +100,7 @@ function format(item: MetricItem, raw: number | undefined): string {
         }).format(v);
     }
     if (item.format === 'percentage') {
-        return new Intl.NumberFormat(props.locale, {
-            style: 'percent',
-            maximumFractionDigits: 1,
-        }).format(v);
+        return formatPercent(v, entry?.value_scale, props.locale);
     }
     return new Intl.NumberFormat(props.locale).format(v);
 }
@@ -132,7 +131,7 @@ function format(item: MetricItem, raw: number | undefined): string {
             </div>
             <div class="mt-2 flex items-end justify-between gap-3">
                 <p :class="['text-2xl font-bold tracking-tight', t.statTint]">
-                    {{ format(item, data?.items?.[item.id]?.value) }}
+                    {{ format(item, data?.items?.[item.id]) }}
                 </p>
                 <MiniSparkline
                     v-if="item.spark"

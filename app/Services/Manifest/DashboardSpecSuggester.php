@@ -1690,7 +1690,50 @@ class DashboardSpecSuggester
             }, $kpis);
         }
 
-        return $kpis;
+        return $this->demoteRateKpis($kpis, $object, $stats);
+    }
+
+    /**
+     * The manifest validator forbids avg()/sum() of a derived rate: the mean of
+     * per-row rates is not the overall rate, and a DIFFERENCE-numerator rate
+     * (on-time = shipped − late) has no honest KPI form at all. The per-measure
+     * loop already routes ratios through rateKpi(), but the requested-measure
+     * headline branch still emits a bare avg(<rate>) — and Express then errors
+     * the WHOLE build when createVersion rejects it (a director asked for
+     * "logística" and got no dashboard). Repair each such KPI to the sum/sum
+     * ratio form (clean numerator) or DROP it (difference numerator) — the same
+     * call rateKpi makes — so no branch can ship the block the validator refuses.
+     *
+     * @param  list<array<string, mixed>>  $kpis
+     * @param  array<string, mixed>  $object
+     * @param  array<string, array{values: list<mixed>, distinct: int, null_rate: float, all_equal: bool}>  $stats
+     * @return list<array<string, mixed>>
+     */
+    private function demoteRateKpis(array $kpis, array $object, array $stats): array
+    {
+        $fieldsById = collect($object['fields'] ?? [])->keyBy('id');
+        $out = [];
+        foreach ($kpis as $kpi) {
+            $field = $fieldsById->get($kpi['field_id'] ?? '');
+            $isDerivedRate = is_array($field) && is_array($field['derived_rate'] ?? null);
+            if ($isDerivedRate
+                && in_array($kpi['aggregation'] ?? null, ['avg', 'sum'], true)
+                && ! isset($kpi['ratio_denominator'])) {
+                $fixed = $this->rateKpi($field, $stats);
+                if ($fixed !== null) {
+                    // Keep the caller's human label; take the honest aggregation.
+                    if (($kpi['label'] ?? '') !== '') {
+                        $fixed['label'] = $kpi['label'];
+                    }
+                    $out[] = $fixed;
+                }
+
+                continue;
+            }
+            $out[] = $kpi;
+        }
+
+        return array_values($out);
     }
 
     /**

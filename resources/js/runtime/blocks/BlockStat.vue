@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type { BlockStat, ObjectDef, StatBlockData } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { formatPercent } from './formatPercent';
 import MiniSparkline from './MiniSparkline.vue';
 import { computeTrend } from './trend';
 
@@ -58,10 +59,7 @@ const formatted = computed(() => {
         }).format(v);
     }
     if (props.block.format === 'percentage') {
-        return new Intl.NumberFormat(props.locale, {
-            style: 'percent',
-            maximumFractionDigits: 1,
-        }).format(v);
+        return formatPercent(v, props.data?.value_scale, props.locale);
     }
     return new Intl.NumberFormat(props.locale).format(v);
 });

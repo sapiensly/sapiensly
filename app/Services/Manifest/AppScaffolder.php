@@ -29,7 +29,15 @@ class AppScaffolder
     /** Hard caps so one scaffold can never balloon into an unmanageable manifest. */
     private const MAX_OBJECTS = 6;
 
-    private const MAX_FIELDS_PER_OBJECT = 12;
+    /**
+     * A real fact table legitimately runs wide (a weekly-ops object had 21 columns).
+     * The old cap of 12 silently dropped the rest, so an add_object that asked for 21
+     * fields saved 12 with a success response and no warning — the surviving loop only
+     * noted coercions for fields it kept. Raised to a bound no honest object hits, and
+     * normalizeFields now emits a coercion when it truncates so it can never be silent;
+     * the typed add_object entry validates `max` and errors instead of dropping.
+     */
+    private const MAX_FIELDS_PER_OBJECT = 40;
 
     private const MAX_OPTIONS = 8;
 
@@ -309,6 +317,10 @@ class AppScaffolder
     {
         $fields = [];
         $usedSlugs = [];
+        if (count($rawFields) > self::MAX_FIELDS_PER_OBJECT) {
+            $dropped = count($rawFields) - self::MAX_FIELDS_PER_OBJECT;
+            $coercions[] = 'object has '.count($rawFields).' fields, over the '.self::MAX_FIELDS_PER_OBJECT." limit — the last {$dropped} were dropped. Split them across a second object or remove some.";
+        }
         foreach (array_slice($rawFields, 0, self::MAX_FIELDS_PER_OBJECT) as $i => $field) {
             if (! is_array($field)) {
                 continue;

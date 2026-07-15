@@ -480,10 +480,15 @@ class BlockDataResolver
             $den = $spec['ratio_denominator'];
             $denominator = $this->aggregateBlock($app, $den['query'], $den['aggregation'], $den['field_id'] ?? null, $manifest, $context);
 
-            return $this->withSpark($app, $spec, ['value' => $denominator != 0 ? $numerator / $denominator : 0], $manifest, $context);
+            // A ratio is a 0..1 fraction; the UI multiplies by 100 for format:percentage.
+            return $this->withSpark($app, $spec, ['value' => $denominator != 0 ? $numerator / $denominator : 0, 'value_scale' => 'fraction'], $manifest, $context);
         }
 
-        $payload = ['value' => $this->aggregateBlock($app, $spec['query'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest, $context)];
+        // A plain aggregate is on the field's native scale — a *_pct column already
+        // reads 0..100, so format:percentage must NOT multiply it again. `value_scale`
+        // tells the UI which so the same "percentage" format is correct for a ratio
+        // (0.85 → 85%) and for avg(otd_pct) (94.6 → 94.6%) alike.
+        $payload = ['value' => $this->aggregateBlock($app, $spec['query'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest, $context), 'value_scale' => 'unit'];
 
         if (isset($spec['compare'])) {
             $payload['compare_value'] = $this->aggregateBlock($app, $spec['compare'], $spec['aggregation'], $spec['field_id'] ?? null, $manifest, $context);

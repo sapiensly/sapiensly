@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import DashboardLoading from '@/components/DashboardLoading.vue';
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
@@ -94,10 +93,6 @@ const theme = computed(() => settings.value.theme ?? 'light');
 const contentWidthClass = computed(() =>
     props.app.kind === 'dashboard' ? 'mx-auto w-full max-w-[1200px]' : '',
 );
-const loaderAccent = computed(
-    () => (settings.value as { accent?: string }).accent ?? '#0059ff',
-);
-
 // Brand defaults to the app name so the site header is never empty.
 const brand = computed(() => ({
     name: props.app.name,
@@ -254,16 +249,6 @@ useScrollReveal(sectionsEl);
                         :default-currency="defaultCurrency"
                         :theme="theme"
                     />
-                    <Transition
-                        leave-active-class="transition-opacity duration-500"
-                        leave-to-class="opacity-0"
-                    >
-                        <DashboardLoading
-                            v-if="blockDataPending"
-                            :accent="loaderAccent"
-                            :lang="locale"
-                        />
-                    </Transition>
                 </div>
                 <div class="px-6">
                     <SiteFooter :footer="footer" :brand-name="brand.name" />
@@ -296,16 +281,6 @@ useScrollReveal(sectionsEl);
                     :default-currency="defaultCurrency"
                     :theme="theme"
                 />
-                <Transition
-                    leave-active-class="transition-opacity duration-500"
-                    leave-to-class="opacity-0"
-                >
-                    <DashboardLoading
-                        v-if="blockDataPending"
-                        :accent="loaderAccent"
-                        :lang="locale"
-                    />
-                </Transition>
             </div>
 
             <div class="px-5">

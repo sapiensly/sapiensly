@@ -4,6 +4,7 @@ import type { ObjectDef } from '../types/manifest';
 import { useChartTooltip } from '../useChartTooltip';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import ChartTooltip from './ChartTooltip.vue';
+import { formatPercent } from './formatPercent';
 
 interface ProgressBlock {
     id: string;
@@ -19,7 +20,7 @@ interface ProgressBlock {
 
 const props = defineProps<{
     block: ProgressBlock;
-    data: { value: number } | undefined;
+    data: { value: number; value_scale?: 'fraction' | 'unit' } | undefined;
     objects: ObjectDef[];
     locale: string;
     defaultCurrency: string;
@@ -50,10 +51,7 @@ function format(n: number): string {
         }).format(n);
     }
     if (props.block.format === 'percentage') {
-        return new Intl.NumberFormat(props.locale, {
-            style: 'percent',
-            maximumFractionDigits: 1,
-        }).format(n);
+        return formatPercent(n, props.data?.value_scale, props.locale);
     }
     return new Intl.NumberFormat(props.locale).format(n);
 }

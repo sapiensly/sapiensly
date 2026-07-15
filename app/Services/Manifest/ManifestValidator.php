@@ -88,8 +88,69 @@ class ManifestValidator
         }
 
         $this->lintDesign($manifest, $warnings);
+        $this->lintUnusedObjects($manifest, $warnings);
 
         return $warnings;
+    }
+
+    /**
+     * Flag an object that no block references. On a dashboard this is almost always
+     * a mistake: a connected object was INGESTED (a live external read set up, a
+     * `tickets_by_dimension` sampled from YuhuGo) and then never charted — the data
+     * costs a round-trip on every load and answers nothing. A real board shipped three
+     * such orphans. It is a warning, not an error: an object staged for a page still
+     * being built is legitimate.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintUnusedObjects(array $manifest, array &$warnings): void
+    {
+        $objects = $manifest['objects'] ?? [];
+        if ($objects === []) {
+            return;
+        }
+
+        $referenced = [];
+        $this->collectObjectIdRefs($manifest['pages'] ?? [], $referenced);
+
+        foreach ($objects as $i => $object) {
+            $id = $object['id'] ?? null;
+            if ($id === null || isset($referenced[$id])) {
+                continue;
+            }
+            $connected = ($object['source']['type'] ?? 'internal') === 'connected';
+            $name = $object['name'] ?? $object['slug'] ?? $id;
+            $warnings[] = new ManifestValidationError(
+                "/objects/{$i}",
+                $connected
+                    ? "Connected object '{$name}' is read live from its integration but NO block references it — every page load pays that external round-trip for nothing. Chart it (a block whose data_source.object_id is '{$id}'), or drop the object."
+                    : "Object '{$name}' has no block referencing it — it will never appear on any page. Add a block that reads it, or drop the object.",
+                'unused_object',
+            );
+        }
+    }
+
+    /**
+     * Recursively collect every `object_id` value anywhere under $node (block
+     * data_source/query, spark, ratio_denominator, hero.stat, metric_grid items,
+     * funnel stages, insight compute, per-series object_id, nested tabs/sections).
+     * A blanket key-scan catches all reference sites without enumerating them.
+     *
+     * @param  array<string, true>  $found
+     */
+    private function collectObjectIdRefs(mixed $node, array &$found): void
+    {
+        if (! is_array($node)) {
+            return;
+        }
+        foreach ($node as $key => $value) {
+            if ($key === 'object_id' && is_string($value)) {
+                $found[$value] = true;
+            } elseif (is_array($value)) {
+                $this->collectObjectIdRefs($value, $found);
+            }
+        }
     }
 
     /**
@@ -1602,6 +1663,12 @@ class ManifestValidator
                             (string) ($block['stat']['aggregation'] ?? ''), 'hero stat',
                             "{$blockPath}/stat/field_id", $errors,
                         );
+                        $this->checkPercentageFormat(
+                            $block['stat']['format'] ?? null,
+                            (string) ($block['stat']['aggregation'] ?? ''),
+                            isset($block['stat']['ratio_denominator']), 'hero stat',
+                            "{$blockPath}/stat/format", $errors,
+                        );
                     }
                 }
 
@@ -1729,6 +1796,7 @@ class ManifestValidator
                     }
                 }
                 $this->checkDerivedRate($fields, $block['field_id'] ?? null, $aggregation, 'stat', "{$blockPath}/field_id", $errors);
+                $this->checkPercentageFormat($block['format'] ?? null, (string) $aggregation, isset($block['ratio_denominator']), 'stat block', "{$blockPath}/format", $errors);
                 $this->validateFilterExpression(
                     $block['query']['filter'] ?? null,
                     "{$blockPath}/query/filter",
@@ -1747,10 +1815,13 @@ class ManifestValidator
                     continue;
                 }
                 $aggregation = $block['aggregation'];
-                if ($aggregation !== 'count' && ! isset($block['y_field_id'])) {
+                // A combo/marea chart carries its measures inside `series[]` (each with
+                // its own field_id), so the top-level y_field_id is ignored there — do
+                // not require it when series is present.
+                if ($aggregation !== 'count' && ! isset($block['y_field_id']) && ! isset($block['series'])) {
                     $errors[] = new ManifestValidationError(
                         "{$blockPath}/y_field_id",
-                        "chart block with aggregation '{$aggregation}' requires y_field_id",
+                        "chart block with aggregation '{$aggregation}' requires y_field_id (or a series[] array carrying the measures)",
                         'missing_required',
                     );
                 }
@@ -1895,6 +1966,9 @@ class ManifestValidator
                 // A gauge has no ratio_denominator at all — it can only ever render
                 // the aggregate of one column, so a derived rate has no honest form here.
                 $this->checkDerivedRate($fields, $block['field_id'] ?? null, $aggregation, $type, "{$blockPath}/field_id", $errors);
+                // gauge/progress have no ratio_denominator, so a percentage here can
+                // only ever be a plain aggregate of one column.
+                $this->checkPercentageFormat($block['format'] ?? null, (string) $aggregation, false, "{$type} block", "{$blockPath}/format", $errors);
                 $this->validateFilterExpression($block['query']['filter'] ?? null, "{$blockPath}/query/filter", $fields, $errors);
             }
 
@@ -2061,6 +2135,7 @@ class ManifestValidator
                     $this->checkFieldRef($fields, $item['field_id'] ?? null, "{$itemPath}/field_id", 'metric_grid.item.field_id', $errors,
                         in_array($aggregation, ['sum', 'avg', 'min', 'max'], true) ? ['number', 'currency', 'rating', 'slider'] : null, $fieldsByObjectId);
                     $this->checkDerivedRate($fields, $item['field_id'] ?? null, $aggregation, 'metric_grid item', "{$itemPath}/field_id", $errors);
+                    $this->checkPercentageFormat($item['format'] ?? null, (string) $aggregation, isset($item['ratio_denominator']), 'metric_grid item', "{$itemPath}/format", $errors);
                     $this->validateFilterExpression($item['query']['filter'] ?? null, "{$itemPath}/query/filter", $fields, $errors);
                 }
             }
@@ -2173,6 +2248,35 @@ class ManifestValidator
         $errors[] = new ManifestValidationError(
             $errorPath,
             "'{$rate}' is a derived rate{$proof}: it equals {$formula} on every row. Aggregating it with '{$aggregation}' does not produce that rate — the mean of per-row rates weights a small row exactly like a big one, which is a different number, not an approximation. {$fix}",
+            'incompatible_type',
+        );
+    }
+
+    /**
+     * A percentage KPI must be a RATIO. `format:"percentage"` on a fraction value
+     * renders it ×100 in the UI (0.85 → "85%"), so a raw `sum`/`count` labelled as a
+     * percentage blows up: summing 19,572 on-time products and formatting as a
+     * percentage prints "1,957,286%" — the exact defect that shipped on a hero stat.
+     * The honest forms are (a) a RATIO — field_id = numerator, aggregation 'sum',
+     * plus ratio_denominator {query, aggregation:'sum', field_id: denominator} — whose
+     * value is a 0..1 fraction, or (b) when the field already stores a per-row
+     * percentage (0..100), an avg/min/max of it. sum/count formatted as a percentage
+     * with no ratio_denominator is always wrong, so it is the one shape we reject.
+     *
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function checkPercentageFormat(?string $format, string $aggregation, bool $hasRatioDenominator, string $what, string $errorPath, array &$errors): void
+    {
+        if ($format !== 'percentage' || $hasRatioDenominator) {
+            return;
+        }
+        if (! in_array($aggregation, ['sum', 'count'], true)) {
+            return;
+        }
+
+        $errors[] = new ManifestValidationError(
+            $errorPath,
+            "A {$what} with format 'percentage' and aggregation '{$aggregation}' but no ratio_denominator renders the raw {$aggregation} multiplied by 100 — e.g. summing 19,572 on-time products prints \"1,957,286%\". A percentage KPI must be a RATIO: keep field_id as the numerator with aggregation 'sum' and add ratio_denominator {query, aggregation: 'sum', field_id: <denominator>} (the platform recomputes SUM/SUM on every load). If the field already stores a per-row percentage (0-100), use aggregation 'avg' (or min/max) instead of '{$aggregation}'.",
             'incompatible_type',
         );
     }

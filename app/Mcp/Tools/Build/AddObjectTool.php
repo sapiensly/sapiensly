@@ -22,10 +22,11 @@ class AddObjectTool extends SapiensTool
             'app_slug' => ['required', 'string'],
             'name' => ['required', 'string', 'max:100'],
             'slug' => ['nullable', 'string', 'regex:/^[a-z][a-z0-9_]*$/', 'max:50'],
-            'fields' => ['required', 'array', 'min:1'],
+            'fields' => ['required', 'array', 'min:1', 'max:40'],
             'with_page' => ['nullable', 'boolean'],
         ], [
             'fields.required' => 'Provide at least one field, e.g. [{"name":"Title","type":"string"}].',
+            'fields.max' => 'An object may have at most 40 fields. Split a wider table across two related objects (add_relation) rather than dropping columns.',
         ]);
 
         /** @var User $user */

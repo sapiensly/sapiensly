@@ -20,8 +20,14 @@ use Laravel\Ai\Enums\Lab;
  */
 class AppNamer
 {
-    /** Seconds — well under the builder's client-side send timeout. */
-    private const TIMEOUT = 7;
+    /**
+     * Seconds — kept under the builder's client-side send timeout. Raised from 7s:
+     * the short-summary model (OpenAI gpt-4o-mini) intermittently takes >7s to first
+     * byte from some environments, so a 7s cap fell back to the raw-prompt heuristic
+     * and shipped apps literally named after the whole prompt. 15s wins that race
+     * while the description's own call (off the request path) keeps its 20s slack.
+     */
+    private const TIMEOUT = 15;
 
     /** Description runs post-build in a queue job, off the request path — more slack. */
     private const DESCRIPTION_TIMEOUT = 20;

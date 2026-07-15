@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type { ObjectDef } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { formatPercent } from './formatPercent';
 import { computeTrend } from './trend';
 
 type Variant =
@@ -37,6 +38,7 @@ interface InsightBlock {
 interface InsightData {
     value?: number;
     compare_value?: number | null;
+    value_scale?: 'fraction' | 'unit';
 }
 
 defineOptions({ inheritAttrs: false });
@@ -103,10 +105,11 @@ const computedMetric = computed(() => {
         }).format(value);
     }
     if (c.format === 'percentage') {
-        return new Intl.NumberFormat(props.locale, {
-            style: 'percent',
-            maximumFractionDigits: 1,
-        }).format(value);
+        return formatPercent(
+            value,
+            props.data?.value_scale,
+            props.locale ?? 'en',
+        );
     }
     return new Intl.NumberFormat(props.locale).format(value);
 });

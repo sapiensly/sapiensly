@@ -491,3 +491,29 @@ it('transliterates accented single_select values and field names into clean slug
     expect($field['options'][0]['label'])->toBe('Garantías');
     expect($field['slug'])->toBe('categoria');
 });
+
+it('keeps a wide object of 21 fields instead of silently truncating to 12', function () {
+    // add_object once dropped every field past the 12th with a success response
+    // and no warning — a weekly-ops fact table lost 9 columns invisibly.
+    $raw = [];
+    for ($i = 1; $i <= 21; $i++) {
+        $raw[] = ['name' => "Metric {$i}", 'type' => 'number'];
+    }
+    $coercions = [];
+    $fields = app(AppScaffolder::class)->normalizeFields($raw, $coercions);
+
+    expect($fields)->toHaveCount(21)
+        ->and($coercions)->toBe([]);
+});
+
+it('truncates beyond 40 fields but never silently — it emits a coercion note', function () {
+    $raw = [];
+    for ($i = 1; $i <= 45; $i++) {
+        $raw[] = ['name' => "Metric {$i}", 'type' => 'number'];
+    }
+    $coercions = [];
+    $fields = app(AppScaffolder::class)->normalizeFields($raw, $coercions);
+
+    expect($fields)->toHaveCount(40)
+        ->and(collect($coercions)->contains(fn ($c) => str_contains($c, 'dropped')))->toBeTrue();
+});

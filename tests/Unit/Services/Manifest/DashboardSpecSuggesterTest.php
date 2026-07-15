@@ -1301,3 +1301,75 @@ it('compiles to a page the validator accepts — the fight is over', function ()
     expect($result->errors)->toBe([])
         ->and($result->valid)->toBeTrue();
 });
+
+it('drops a difference-numerator rate KPI instead of erroring the whole build', function () {
+    // Prod app_…932n8h: "logística de yuhu" acquired a portafolio-OTS series whose
+    // OTS% is a DIFFERENCE-numerator rate (on-time = shipped − late). The
+    // requested-measure branch emitted avg(ots_pct); the validator rejected it and
+    // Express errored the ENTIRE build (objects created, zero pages). The suggester
+    // must drop that KPI — no honest form exists — so the rest compiles + validates.
+    $object = [
+        'id' => 'obj_portaots0', 'slug' => 'portafolio_ots', 'name' => 'Portafolio Ots',
+        'fields' => [
+            ['id' => 'fld_fecha0000', 'slug' => 'fecha', 'name' => 'Fecha', 'type' => 'date'],
+            ['id' => 'fld_totped000', 'slug' => 'total_pedidos', 'name' => 'Total Pedidos', 'type' => 'number'],
+            ['id' => 'fld_enviados0', 'slug' => 'pedidos_enviados', 'name' => 'Pedidos Enviados', 'type' => 'number'],
+            ['id' => 'fld_retraso00', 'slug' => 'envios_retrasados', 'name' => 'Envios Retrasados', 'type' => 'number'],
+            ['id' => 'fld_otspct000', 'slug' => 'ots_pct', 'name' => 'Ots Pct', 'type' => 'number',
+                'derived_rate' => [
+                    'numerator_field_id' => 'fld_enviados0',
+                    'minus_field_id' => 'fld_retraso00',
+                    'denominator_field_id' => 'fld_totped000',
+                    'verified_on_rows' => 12,
+                ]],
+        ],
+        'source' => [
+            'type' => 'connected',
+            'field_map' => [
+                ['field_id' => 'fld_fecha0000', 'external_path' => 'fecha'],
+                ['field_id' => 'fld_totped000', 'external_path' => 'total_pedidos'],
+                ['field_id' => 'fld_enviados0', 'external_path' => 'pedidos_enviados'],
+                ['field_id' => 'fld_retraso00', 'external_path' => 'envios_retrasados'],
+                ['field_id' => 'fld_otspct000', 'external_path' => 'ots_pct'],
+            ],
+            'operations' => ['list' => ['mcp_tool' => 'get-portafolio-ots-tool', 'collection_path' => 'daily']],
+        ],
+    ];
+    $rows = collect(range(0, 11))->map(fn (int $i) => [
+        'fecha' => now()->utc()->subDays($i)->toDateString(),
+        'total_pedidos' => 100 + $i,
+        'pedidos_enviados' => 90 + $i,
+        'envios_retrasados' => 5 + ($i % 4),
+        'ots_pct' => 90 + ($i % 8),
+    ])->all();
+
+    $spec = app(DashboardSpecSuggester::class)->suggest($object, 'es', $rows, ['ots', 'logistica', 'entregas']);
+
+    // No KPI avg()/sum()s the difference-numerator rate — it has no honest form.
+    $badRateKpi = collect($spec['kpis'] ?? [])->first(
+        fn (array $k): bool => ($k['field_id'] ?? null) === 'fld_otspct000'
+            && in_array($k['aggregation'] ?? null, ['avg', 'sum'], true)
+            && ! isset($k['ratio_denominator']),
+    );
+    expect($badRateKpi)->toBeNull();
+
+    // And the whole board compiles + validates — the regression that killed the build.
+    $built = app(AppScaffolder::class)->buildDashboardFromSpec(
+        $spec, $object, [], ColorPalette::fromAccent('#0096ff'), 'es',
+    );
+    expect($built['ok'] ?? false)->toBeTrue();
+
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_'.strtolower((string) Str::ulid()),
+        'slug' => 'ots_board',
+        'name' => 'OTS',
+        'version' => 1,
+        'objects' => [$object],
+        'pages' => [$built['page']],
+        'permissions' => ['roles' => [
+            ['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true],
+        ]],
+    ];
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});

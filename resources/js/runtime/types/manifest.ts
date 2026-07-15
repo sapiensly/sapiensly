@@ -257,6 +257,9 @@ export interface TableBlockData {
 export interface StatBlockData {
     value: number;
     compare_value?: number;
+    // 'fraction' = a 0..1 ratio (format:percentage multiplies by 100); 'unit' = the
+    // field's native scale (a *_pct column is already 0..100, so no extra ×100).
+    value_scale?: 'fraction' | 'unit';
     spark_rows?: { id: string; data: Record<string, unknown> }[];
 }
 

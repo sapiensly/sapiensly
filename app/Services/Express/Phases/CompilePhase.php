@@ -8,6 +8,8 @@ use App\Services\Express\Contracts\ExpressPhase;
 use App\Services\Express\ExpressContext;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\InvalidManifestException;
+use App\Services\Manifest\ManifestValidationError;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use Illuminate\Support\Str;
@@ -135,12 +137,31 @@ class CompilePhase implements ExpressPhase
      */
     protected function applyPage(ExpressContext $context, array $page): void
     {
-        $version = $this->manifests->applyPatch(
-            $context->app->fresh(),
-            [['op' => 'add', 'path' => '/pages/-', 'value' => $page]],
-            $context->user,
-            "Agregué el dashboard «{$page['name']}» (Express)",
-        );
+        try {
+            $version = $this->manifests->applyPatch(
+                $context->app->fresh(),
+                [['op' => 'add', 'path' => '/pages/-', 'value' => $page]],
+                $context->user,
+                "Agregué el dashboard «{$page['name']}» (Express)",
+            );
+        } catch (InvalidManifestException $e) {
+            // Never let a single unrepresentable block cost the whole board. The
+            // suggester should not emit one (see DashboardSpecSuggester::demoteRateKpis),
+            // but if a rule we can't foresee rejects a block, drop just that block
+            // (or KPI) and bank the rest instead of failing the build outright.
+            $repaired = $this->repairPage($page, $e->result->errors);
+            if ($repaired === null) {
+                throw $e;
+            }
+            $context->note('Se omitieron KPIs que la fuente no puede expresar como una tasa honesta; el resto del dashboard se aplicó.');
+            $page = $repaired;
+            $version = $this->manifests->applyPatch(
+                $context->app->fresh(),
+                [['op' => 'add', 'path' => '/pages/-', 'value' => $page]],
+                $context->user,
+                "Agregué el dashboard «{$page['name']}» (Express, con KPIs omitidos)",
+            );
+        }
 
         $context->page = [
             'slug' => $page['slug'],
@@ -149,6 +170,67 @@ class CompilePhase implements ExpressPhase
             'version' => $version->version_number,
             'version_id' => $version->id,
         ];
+    }
+
+    /**
+     * Remove exactly the blocks/KPIs the validator rejected from a page so the
+     * rest can still be banked. Each error path is relative to the whole manifest
+     * (/pages/{n}/blocks/...); we strip the page prefix and localise it to a
+     * top-level block, a metric_grid item, or a hero's embedded stat. Returns the
+     * pruned page, or null when nothing localises (don't guess) or nothing
+     * survives (let the caller re-throw).
+     *
+     * @param  array<string, mixed>  $page
+     * @param  list<ManifestValidationError>  $errors
+     * @return array<string, mixed>|null
+     */
+    private function repairPage(array $page, array $errors): ?array
+    {
+        $dropBlocks = [];
+        $dropItems = [];
+        $stripStat = [];
+        foreach ($errors as $error) {
+            $rel = (string) preg_replace('#^/pages/\d+#', '', (string) $error->path);
+            if (preg_match('#^/blocks/(\d+)/stat(/|$)#', $rel, $m) === 1) {
+                $stripStat[(int) $m[1]] = true;
+            } elseif (preg_match('#^/blocks/(\d+)/items/(\d+)(/|$)#', $rel, $m) === 1) {
+                $dropItems[(int) $m[1]][(int) $m[2]] = true;
+            } elseif (preg_match('#^/blocks/(\d+)(/|$)#', $rel, $m) === 1) {
+                $dropBlocks[(int) $m[1]] = true;
+            } else {
+                // An error we can't tie to a top-level block (e.g. nested deep in
+                // a container) — don't blindly reshape the page.
+                return null;
+            }
+        }
+
+        $blocks = [];
+        foreach ($page['blocks'] ?? [] as $i => $block) {
+            if (isset($dropBlocks[$i])) {
+                continue;
+            }
+            if (isset($stripStat[$i])) {
+                unset($block['stat']); // a hero without its stat is still a valid title band
+            }
+            if (isset($dropItems[$i]) && isset($block['items']) && is_array($block['items'])) {
+                $block['items'] = array_values(array_filter(
+                    $block['items'],
+                    fn (int $j): bool => ! isset($dropItems[$i][$j]),
+                    ARRAY_FILTER_USE_KEY,
+                ));
+                if ($block['items'] === []) {
+                    continue; // an empty metric_grid is not worth keeping
+                }
+            }
+            $blocks[] = $block;
+        }
+
+        if ($blocks === []) {
+            return null;
+        }
+        $page['blocks'] = $blocks;
+
+        return $page;
     }
 
     /** First line only, hard-capped — titles are titles, not paragraphs. */

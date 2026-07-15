@@ -2147,7 +2147,11 @@ async function send() {
                     model: selectedModel.value || undefined,
                     autonomous: autonomous.value || undefined,
                 },
-                { timeout: 10_000 },
+                // Headroom over the server-side app-naming call (AppNamer::TIMEOUT
+                // = 15s, runs synchronously on this first-prompt request): a 10s
+                // client cap aborted the send before naming returned, so the app
+                // fell back to the raw-prompt name.
+                { timeout: 20_000 },
             );
         }
         messages.value = response.data.messages;
@@ -2388,6 +2392,11 @@ function subscribe() {
             }
             router.reload({
                 only: [
+                    // 'app' carries `kind`: the build reclassifies an app to
+                    // 'dashboard' when its first page compiles, and the header
+                    // tabs (Accent/Layers, the manual edit drawer) key off it —
+                    // refresh it here so they switch live instead of on reload.
+                    'app',
                     'preview',
                     'previewBlockData',
                     'manifest',
