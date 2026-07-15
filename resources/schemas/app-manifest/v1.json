@@ -3054,7 +3054,7 @@
                             "type": "array",
                             "minItems": 1,
                             "maxItems": 4,
-                            "description": "COMBO chart: overlay several typed measures sharing one X axis (group_by_field_id, or x_field_id). When present, the chart renders as a combo and the top-level chart_type/aggregation/y_field_id are ignored (still set chart_type, e.g. 'bar', to satisfy the schema). Each series picks its own mark and which Y axis it uses — set axis:'right' for a measure on a different scale (DUAL AXIS), e.g. revenue (bar, left) + conversion rate (line, right).",
+                            "description": "COMBO chart: overlay several typed measures on one shared X axis (group_by_field_id, or x_field_id). When present, the chart renders as a combo and the top-level chart_type/aggregation/y_field_id are ignored (still set chart_type, e.g. 'bar', to satisfy the schema). Each series picks its own mark and which Y axis it uses — set axis:'right' for a measure on a different scale (DUAL AXIS), e.g. revenue (bar, left) + conversion rate (line, right). By default every series reads the chart's data_source object; a series may instead set its OWN data_source (+ group_by_field_id/x_field_id in that object) to overlay a measure from a DIFFERENT object on the same X — this is how you plot two separate connected objects that share an X (e.g. OTD by sale-date vs OTD by delivery-date) as two lines in one chart. Series align by their X VALUE, so the X fields must bucket to the same labels (same date bucket).",
                             "items": {
                                 "type": "object",
                                 "additionalProperties": false,
@@ -3082,7 +3082,19 @@
                                     },
                                     "field_id": {
                                         "$ref": "#/$defs/id",
-                                        "description": "Numeric field for sum/avg/min/max (omit for count)."
+                                        "description": "Numeric field for sum/avg/min/max (omit for count). Belongs to this series' object (its own data_source if set, else the chart's)."
+                                    },
+                                    "data_source": {
+                                        "$ref": "#/$defs/query",
+                                        "description": "Optional: read THIS series from a different object than the chart's, to overlay a measure from another connected/internal object on the same X. When set, this series' field_id and group_by_field_id/x_field_id must reference fields of THIS object. Omit to read the chart's data_source."
+                                    },
+                                    "group_by_field_id": {
+                                        "$ref": "#/$defs/id",
+                                        "description": "Optional per-series X/category field, used when this series' data_source is a different object (whose X field id differs from the chart's). Defaults to the chart's group_by_field_id/x_field_id."
+                                    },
+                                    "x_field_id": {
+                                        "$ref": "#/$defs/id",
+                                        "description": "Alias of group_by_field_id for this series (use either)."
                                     },
                                     "label": {
                                         "type": "string",

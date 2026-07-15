@@ -530,15 +530,18 @@ class BlockDataResolver
         try {
             // A combo overlays several typed measures on one X — each is its own
             // aggregate, and each keeps its own aggregation (volume summed, rate
-            // averaged), which is exactly why they can't share one fold.
+            // averaged), which is exactly why they can't share one fold. A series
+            // may also read its OWN object (its data_source + group field), so a
+            // combo can overlay two SEPARATE objects that share an X — the client
+            // aligns the series by X VALUE, whichever object each came from.
             if (is_array($block['series'] ?? null) && $block['series'] !== []) {
                 return ['combo' => array_map(
                     fn (array $s): array => ['groups' => $this->groupedBlock(
                         $app,
-                        $dataSource,
+                        is_array($s['data_source'] ?? null) ? $s['data_source'] : $dataSource,
                         (string) ($s['aggregation'] ?? 'count'),
                         $s['field_id'] ?? null,
-                        $groupFieldId,
+                        (string) ($s['group_by_field_id'] ?? $s['x_field_id'] ?? $groupFieldId),
                         $bucket,
                         $limit,
                         $manifest,

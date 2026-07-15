@@ -182,6 +182,56 @@ it('a combo aggregates each overlaid measure on its own terms', function () {
         ->and((float) $rate->firstWhere('group', 'Cobranza')['value'])->toBe(90.0);
 });
 
+it('a combo overlays series from TWO DIFFERENT objects, each aggregated over its own', function () {
+    // The general "compare a metric across two connected sources" case: a series
+    // may set its OWN data_source (+ group field), so a combo overlays two
+    // separate objects on one X — the resolver aggregates each over its object.
+    $manifest = $this->manifest;
+    $manifest['objects'][] = [
+        'id' => 'obj_esc00000000',
+        'slug' => 'escalations',
+        'name' => 'Escalation',
+        'fields' => [
+            ['id' => 'fld_ereason000', 'slug' => 'reason', 'name' => 'Reason', 'type' => 'string'],
+            ['id' => 'fld_ecount0000', 'slug' => 'count', 'name' => 'Count', 'type' => 'number'],
+        ],
+    ];
+    foreach ([['Envíos', 4], ['Envíos', 3], ['Cobranza', 5]] as [$reason, $c]) {
+        Record::create([
+            'app_id' => $this->appModel->id,
+            'object_definition_id' => 'obj_esc00000000',
+            'data' => ['reason' => $reason, 'count' => $c],
+        ]);
+    }
+
+    $blocks = [[
+        'id' => 'blk_cmbx000000',
+        'type' => 'chart',
+        'label' => 'Horas (tickets) vs escalaciones',
+        'chart_type' => 'bar',
+        'group_by_field_id' => 'fld_areason000',
+        'data_source' => ['object_id' => 'obj_agg00000000'],
+        'series' => [
+            // Reads the CHART's object (tickets): sum hours per reason.
+            ['type' => 'bar', 'field_id' => 'fld_ahours0000', 'aggregation' => 'sum', 'label' => 'Horas'],
+            // Reads a DIFFERENT object with its OWN X field: sum count per reason.
+            ['type' => 'line', 'field_id' => 'fld_ecount0000', 'aggregation' => 'sum', 'label' => 'Escalaciones',
+                'data_source' => ['object_id' => 'obj_esc00000000'], 'group_by_field_id' => 'fld_ereason000'],
+        ],
+    ]];
+
+    $data = app(BlockDataResolver::class)->resolve($this->appModel, $blocks, $manifest);
+    $combo = $data['blk_cmbx000000']['combo'];
+
+    expect($combo)->toHaveCount(2);
+    $hours = collect($combo[0]['groups']);
+    $esc = collect($combo[1]['groups']);
+
+    expect($hours->firstWhere('group', 'Envíos')['value'])->toEqual(30)     // tickets object
+        ->and($esc->firstWhere('group', 'Envíos')['value'])->toEqual(7)     // escalations object (4+3)
+        ->and($esc->firstWhere('group', 'Cobranza')['value'])->toEqual(5);
+});
+
 it('a pivot resolves a cohort matrix, bucketing BOTH of its dates', function () {
     // A cohort table's columns are a date too. Left unbucketed, the pivot's second
     // dimension groups by the raw timestamp and every event becomes its own
