@@ -30,6 +30,13 @@ use Inertia\Response;
  */
 class AdminAiController extends Controller
 {
+    /**
+     * Per-request memo of driver → configured, populated by driverIsConfigured().
+     *
+     * @var array<string, bool>
+     */
+    private array $configuredDriverCache = [];
+
     public function __construct(
         private AiProviderService $aiProviderService,
         private AiDefaults $aiDefaults,
@@ -461,6 +468,7 @@ class AdminAiController extends Controller
             ->orderBy('driver')
             ->orderBy('label')
             ->get()
+            ->filter(fn ($m) => $this->driverIsConfigured($m->driver))
             ->map(fn ($m) => $this->serialiseModel($m))
             ->values()
             ->all();
@@ -482,6 +490,7 @@ class AdminAiController extends Controller
             ->orderBy('driver')
             ->orderBy('label')
             ->get()
+            ->filter(fn ($m) => $this->driverIsConfigured($m->driver))
             ->map(fn ($m) => $this->serialiseModel($m))
             ->values()
             ->all();
@@ -506,7 +515,7 @@ class AdminAiController extends Controller
             'enabled' => (bool) $model->is_enabled,
             // Whether the model's provider is connected (has a global key). The
             // catalog UI disables the enable toggle when this is false.
-            'providerConfigured' => $this->aiProviderService->isDriverConfigured($model->driver),
+            'providerConfigured' => $this->driverIsConfigured($model->driver),
             'contextWindow' => $model->context_window,
             'inputPricePerMTok' => $model->input_price_per_mtok,
             'outputPricePerMTok' => $model->output_price_per_mtok,
@@ -551,6 +560,16 @@ class AdminAiController extends Controller
             ->pluck('aggregate', 'driver')
             ->map(fn ($count) => (int) $count)
             ->all();
+    }
+
+    /**
+     * Whether a driver's provider is connected (has a resolvable global key),
+     * memoized per request so filtering/serialising the catalog doesn't probe
+     * the same driver once per model.
+     */
+    private function driverIsConfigured(string $driver): bool
+    {
+        return $this->configuredDriverCache[$driver] ??= $this->aiProviderService->isDriverConfigured($driver);
     }
 
     private function maskKey(string $key): string

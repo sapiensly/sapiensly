@@ -41,6 +41,7 @@ function seedEmbeddingModel(string $modelId = 'test-embedding-model-1'): AiCatal
 test('defaults tab renders per-category primary/fallback with models grouped by capability', function () {
     $admin = sysadminForAi();
     seedChatModel();
+    globalProviderFor('anthropic');
 
     $this->actingAs($admin)
         ->get('/admin/ai')
@@ -137,6 +138,7 @@ test('updateDefaults rejects a chat model for the image_generation category', fu
 
 test('OCR-PDF accepts an OpenRouter model and the picker includes it', function () {
     $admin = sysadminForAi();
+    globalProviderFor('openrouter');
     $orModel = seedCapabilityModel('chat', 'openrouter', 'mistralai/mistral-ocr');
 
     // Picker for ocr_pdf lists OpenRouter models (not just vision models).
@@ -159,6 +161,7 @@ test('OCR-PDF accepts an OpenRouter model and the picker includes it', function 
 
 test('Image Vision also accepts an OpenRouter model in its picker', function () {
     $admin = sysadminForAi();
+    globalProviderFor('openrouter');
     $orModel = seedCapabilityModel('chat', 'openrouter', 'mistralai/pixtral-12b');
 
     $this->actingAs($admin)
@@ -179,6 +182,7 @@ test('Image Vision also accepts an OpenRouter model in its picker', function () 
 
 test('Image generation also accepts an OpenRouter model in its picker', function () {
     $admin = sysadminForAi();
+    globalProviderFor('openrouter');
     $orModel = seedCapabilityModel('chat', 'openrouter', 'google/gemini-2.5-flash-image');
 
     $this->actingAs($admin)
@@ -344,6 +348,27 @@ test('catalog exposes providerConfigured per model', function () {
             ))
             ->where('models', fn ($models) => collect($models)->contains(
                 fn ($m) => $m['name'] === 'connected-1' && $m['providerConfigured'] === true
+            )));
+});
+
+test('defaults pickers hide enabled models whose provider is not connected', function () {
+    $admin = sysadminForAi();
+
+    // Two enabled chat models: one whose provider is connected, one orphaned
+    // (enabled in the catalog but its provider has no active key).
+    config(['ai.providers.deepseek.key' => '']);
+    seedChatModel('anthropic', 'connected-chat');
+    globalProviderFor('anthropic');
+    seedChatModel('deepseek', 'orphaned-chat');
+
+    $this->actingAs($admin)
+        ->get('/admin/ai')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('modelsByCapability.chat', fn ($models) => collect($models)->contains(
+                fn ($m) => $m['name'] === 'connected-chat'
+            ) && ! collect($models)->contains(
+                fn ($m) => $m['name'] === 'orphaned-chat'
             )));
 });
 
@@ -589,6 +614,7 @@ test('saveOpenRouterModels upserts the selection and prunes deselected rows', fu
 
 test('saveOpenRouterModels stores models under their output-modality capability', function () {
     $admin = sysadminForAi();
+    globalProviderFor('openrouter');
 
     $this->actingAs($admin)
         ->post('/admin/ai/providers/openrouter/models', [
