@@ -1851,6 +1851,21 @@ const boxPlot = computed(() => {
                             stroke-linecap="round"
                             stroke-linejoin="round"
                         />
+                        <!-- point markers on line series (not area/stacked
+                             bands), matching the single line chart — only when
+                             they stay readable. -->
+                        <template v-if="!ln.area && ln.points.length <= 24">
+                            <circle
+                                v-for="(p, pi) in ln.points"
+                                :key="'cp' + i + '-' + pi"
+                                :cx="p.x"
+                                :cy="p.y"
+                                r="3.2"
+                                fill="var(--sp-bg-secondary, #fff)"
+                                :stroke="ln.color"
+                                stroke-width="2"
+                            />
+                        </template>
                     </template>
                     <!-- crosshair: dashed guide + line markers on the hovered category -->
                     <g v-if="comboCrosshair">
@@ -2140,13 +2155,12 @@ const boxPlot = computed(() => {
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
                             />
-                            <!-- point markers: a SINGLE line chart only (multi-line
-                                 comparisons stay clean, no dots), and only when
-                                 they stay readable. A surface-filled dot with a
-                                 coloured ring reads as a crisp node on the line. -->
+                            <!-- point markers on every line chart, single or
+                                 multi-series, when they stay readable. A
+                                 surface-filled dot with a coloured ring reads as
+                                 a crisp node on the line. -->
                             <template
                                 v-if="
-                                    lineChart.single &&
                                     block.chart_type === 'line' &&
                                     s.points.length <= 24
                                 "

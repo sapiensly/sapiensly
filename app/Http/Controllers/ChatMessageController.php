@@ -14,6 +14,8 @@ use App\Services\AiProviderService;
 use App\Services\Chat\ChatAiService;
 use App\Services\Chat\MentionParser;
 use App\Services\Chat\MultiAgentDispatcher;
+use App\Services\Express\ExpressIntentRouter;
+use App\Services\Express\ExpressLauncher;
 use App\Support\Chat\ChatMessagePresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,6 +33,8 @@ class ChatMessageController extends Controller
         private readonly AiProviderService $providers,
         private readonly MentionParser $mentions,
         private readonly MultiAgentDispatcher $multiAgent,
+        private readonly ExpressIntentRouter $expressRouter,
+        private readonly ExpressLauncher $express,
     ) {}
 
     /**
@@ -97,6 +101,18 @@ class ChatMessageController extends Controller
             return $this->dispatchMultiAgent($chat, $user, $userMessage, $content, $agents, $mentioned['capped']);
         }
 
+        // G-0 Express autoroute: a clear "build me a dashboard" over a live MCP
+        // source builds via the deterministic Express pipeline instead of a
+        // free-form chat turn. Only plain single-model turns qualify — a
+        // selected agent, an @mention (handled above) or an attachment is a
+        // deliberate other intent, so those keep the conversational path.
+        if ($agentId === null
+            && empty($attachmentIds)
+            && $content !== ''
+            && $this->expressRouter->shouldRunExpressForUser($content, $user)) {
+            return $this->launchExpressFromChat($chat, $user, $userMessage, $content, $model);
+        }
+
         $placeholder = ChatMessage::create([
             'chat_id' => $chat->id,
             'role' => 'assistant',
@@ -153,6 +169,52 @@ class ChatMessageController extends Controller
         }
 
         return new JsonResponse($payload, 201);
+    }
+
+    /**
+     * Provision a fresh app for the dashboard and launch the Express pipeline
+     * into its builder conversation. The chat answers immediately with a
+     * "…te avisaré cuando esté listo" message linked to the run; when the build
+     * reaches a terminal state, ExpressDashboardJob flips this same message to
+     * "…listo" (or an honest failure) and rebroadcasts it, so the open chat
+     * updates in place. The build itself streams on the Builder's own surface
+     * (progress, Detener, the stale reaper all apply there).
+     */
+    private function launchExpressFromChat(Chat $chat, User $user, ChatMessage $userMessage, string $prompt, ?string $model): JsonResponse
+    {
+        $chat->update(['model' => $model, 'agent_id' => null, 'mode' => 'single']);
+
+        [$app, $conversation] = $this->express->provisionDashboardApp($user, $prompt);
+
+        $assistant = ChatMessage::create([
+            'chat_id' => $chat->id,
+            'role' => 'assistant',
+            'content' => $this->expressBuildingContent($app->name),
+            'model' => $model,
+            'status' => 'complete',
+            'message_type' => 'text',
+        ]);
+
+        // Link the run back to this chat message so the job can flip it on
+        // completion (see ExpressLauncher::notifyChatReady).
+        $this->express->launch($app, $conversation, $prompt, $model, $assistant);
+
+        return new JsonResponse([
+            'user_message' => ChatMessagePresenter::present($userMessage->load('attachments')),
+            'placeholder' => ChatMessagePresenter::present($assistant),
+        ], 201);
+    }
+
+    /**
+     * The in-progress card body: tells the user to keep chatting and that the
+     * same message will announce the dashboard when the build finishes. Markdown
+     * so it renders like any assistant bubble.
+     */
+    private function expressBuildingContent(string $appName): string
+    {
+        return "⏳ Estoy construyendo tu dashboard **{$appName}** con el pipeline Express. "
+            .'Sigue la conversación — te avisaré aquí mismo cuando esté listo '
+            .'(suele tardar entre 40 y 120 segundos).';
     }
 
     /**

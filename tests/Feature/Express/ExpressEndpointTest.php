@@ -19,7 +19,9 @@ use Illuminate\Support\Str;
 
 beforeEach(function () {
     config(['express.enabled' => true]);
-    $this->user = User::factory()->create(['email_verified_at' => now()]);
+    // Spanish-speaking viewer: the narration locale falls back to this when a
+    // prompt is too short to detect (e.g. the 'x' stop/kill fixtures below).
+    $this->user = User::factory()->create(['email_verified_at' => now(), 'locale' => 'es']);
     $this->testApp = App::factory()->create(['user_id' => $this->user->id, 'visibility' => 'private']);
     $this->conv = BuilderConversation::create([
         'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',

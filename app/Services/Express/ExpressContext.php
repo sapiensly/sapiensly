@@ -6,6 +6,7 @@ use App\Models\App;
 use App\Models\BuilderConversation;
 use App\Models\Integration;
 use App\Models\User;
+use App\Support\Locale\PromptLanguage;
 use Closure;
 
 /**
@@ -118,6 +119,9 @@ class ExpressContext
 
     public ?Closure $onProgress = null;
 
+    /** Memoised narration locale (see {@see tr}); resolved once from the prompt. */
+    private ?string $narrationLocale = null;
+
     public function __construct(
         public readonly App $app,
         public readonly User $user,
@@ -143,18 +147,27 @@ class ExpressContext
 
     /**
      * Localise a user-facing build message (progress line, note, report) to the
-     * VIEWER's language. The queued worker has no HTTP request, so App::getLocale()
-     * is the app default rather than the viewer's choice — resolve the locale
-     * explicitly from the user, exactly like RunChatAiJob::ownerLocale(). The
-     * English string IS the translation key (lang/es.json maps it to Spanish);
-     * :placeholders interpolate. The built dashboard's own chrome stays on the
-     * app's default_locale via AppScaffolder::langForLocale — that is separate.
+     * language the user WROTE THE PROMPT IN — a Spanish ask narrates in Spanish
+     * even for an English-preference viewer, and vice versa. The queued worker
+     * has no HTTP request, so App::getLocale() would be the app default; detect
+     * from the prompt instead ({@see PromptLanguage}) and fall back to the
+     * viewer's own locale when the ask is too short to tell. The English string
+     * IS the translation key (lang/es.json maps it to Spanish); :placeholders
+     * interpolate. The built dashboard's own chrome stays on the app's
+     * default_locale via AppScaffolder::langForLocale — that is separate.
      *
      * @param  array<string, string|int|float>  $replace
      */
     public function tr(string $en, array $replace = []): string
     {
-        return (string) __($en, $replace, $this->user->preferredLocale());
+        return (string) __($en, $replace, $this->narrationLocale());
+    }
+
+    /** Resolve the narration locale once: prompt language, else viewer locale. */
+    private function narrationLocale(): string
+    {
+        return $this->narrationLocale ??= PromptLanguage::detect($this->prompt)
+            ?? $this->user->preferredLocale();
     }
 
     /** Trip the run-wide provider breaker after a gate hangs (see $providerHung). */

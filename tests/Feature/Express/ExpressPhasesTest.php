@@ -25,7 +25,9 @@ use App\Services\Manifest\DashboardSpecSuggester;
 use Illuminate\Support\Str;
 
 beforeEach(function () {
-    $this->user = User::factory()->create(['email_verified_at' => now()]);
+    // Spanish-speaking viewer: narration falls back to this locale when a
+    // prompt is too short to detect a language from.
+    $this->user = User::factory()->create(['email_verified_at' => now(), 'locale' => 'es']);
     $this->testApp = App::factory()->create(['user_id' => $this->user->id]);
     $this->conv = BuilderConversation::create([
         'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',

@@ -4,6 +4,7 @@ namespace App\Services\Express;
 
 use App\Models\App;
 use App\Models\Integration;
+use App\Models\User;
 use Illuminate\Support\Str;
 
 /**
@@ -43,27 +44,63 @@ class ExpressIntentRouter
 
     public function shouldRunExpress(string $message, App $app): bool
     {
-        if (! config('express.enabled') || ! config('express.autoroute')) {
+        if (! $this->enabled() || ! $this->messageAsksForDashboard($message)) {
             return false;
         }
 
+        return $this->hasLiveMcpSource($app->organization_id, $app->user_id);
+    }
+
+    /**
+     * The same G-0 decision for a caller that has no app of its own — the
+     * general chat. Scopes the live-source check to the acting user's tenant
+     * instead of an app's owner, so a "build me a dashboard" chat message routes
+     * to Express exactly when the Builder's own autoroute would.
+     */
+    public function shouldRunExpressForUser(string $message, User $user): bool
+    {
+        if (! $this->enabled() || ! $this->messageAsksForDashboard($message)) {
+            return false;
+        }
+
+        return $this->hasLiveMcpSource($user->organization_id, $user->id);
+    }
+
+    private function enabled(): bool
+    {
+        return (bool) config('express.enabled') && (bool) config('express.autoroute');
+    }
+
+    /**
+     * The textual half of the G-0 heuristic: a clear build verb over a
+     * dashboard word, with the process opt-outs ("paso a paso", a leading
+     * interrogative) removed. Deliberately conservative — any ambiguity falls
+     * back to the conversational path.
+     */
+    private function messageAsksForDashboard(string $message): bool
+    {
         $text = Str::lower($message);
         if (preg_match(self::OPT_OUT_WORDS, $text) === 1
             || preg_match(self::OPT_OUT_OPENERS, trim($text)) === 1) {
             return false;
         }
-        if ((preg_match(self::DASHBOARD_WORDS, $text) !== 1 && ! $this->typoedDashboardWord($text))
-            || preg_match(self::BUILD_WORDS, $text) !== 1) {
-            return false;
-        }
 
-        // Without a live source Express would halt immediately — a chat turn
-        // serves that conversation better.
+        return (preg_match(self::DASHBOARD_WORDS, $text) === 1 || $this->typoedDashboardWord($text))
+            && preg_match(self::BUILD_WORDS, $text) === 1;
+    }
+
+    /**
+     * Whether the tenant has a live (non-draft) MCP connection to build from —
+     * without one Express would halt immediately, so a chat turn serves the
+     * conversation better. A null organization scopes to the personal owner.
+     */
+    private function hasLiveMcpSource(?string $organizationId, ?string $userId): bool
+    {
         return Integration::query()
-            ->where(function ($q) use ($app) {
-                $q->where('organization_id', $app->organization_id);
-                if ($app->organization_id === null) {
-                    $q->orWhere('user_id', $app->user_id);
+            ->where(function ($q) use ($organizationId, $userId) {
+                $q->where('organization_id', $organizationId);
+                if ($organizationId === null) {
+                    $q->orWhere('user_id', $userId);
                 }
             })
             ->where('is_mcp', true)

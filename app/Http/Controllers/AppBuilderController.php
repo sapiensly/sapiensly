@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Ai\BuilderAgent;
-use App\Jobs\ExpressDashboardJob;
 use App\Jobs\ResolveStoppedBuildJob;
 use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
@@ -12,7 +11,6 @@ use App\Models\AppVersion;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\Integration;
-use App\Models\PipelineRun;
 use App\Models\Record;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
@@ -24,6 +22,7 @@ use App\Services\Builder\BuilderCancellation;
 use App\Services\Builder\ChartRecommender;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Express\ExpressIntentRouter;
+use App\Services\Express\ExpressLauncher;
 use App\Services\Express\LabelGrounding;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
@@ -66,6 +65,7 @@ class AppBuilderController extends Controller
         private AppAccessResolver $accessResolver,
         private BlockVisibilityFilter $visibility,
         private AppDataOverview $dataOverview,
+        private ExpressLauncher $express,
     ) {}
 
     /**
@@ -434,35 +434,16 @@ class AppBuilderController extends Controller
     }
 
     /**
-     * Shared Express launcher: persists the user turn + placeholder, creates
-     * the PipelineRun and queues the job. Used by the explicit endpoint and by
-     * the G-0 autoroute in sendMessage.
+     * Launch an Express run for this app's builder conversation and shape the
+     * Builder's JSON response (the conversation's messages, including the new
+     * streaming placeholder). The user turn + placeholder + PipelineRun + job
+     * dispatch live in {@see ExpressLauncher::launch}, shared with the chat
+     * autoroute. Used by the explicit endpoint and by the G-0 autoroute in
+     * sendMessage.
      */
     private function startExpressRun(App $app, BuilderConversation $conversation, string $prompt, ?string $model): JsonResponse
     {
-        app(BuilderCancellation::class)->clear($conversation);
-
-        BuilderMessage::create([
-            'conversation_id' => $conversation->id,
-            'role' => 'user',
-            'content' => $prompt,
-            'status' => 'none',
-        ]);
-        $placeholder = BuilderMessage::create([
-            'conversation_id' => $conversation->id,
-            'role' => 'assistant',
-            'content' => '',
-            'status' => 'streaming',
-        ]);
-
-        $run = PipelineRun::create([
-            'app_id' => $app->id,
-            'conversation_id' => $conversation->id,
-            'kind' => 'dashboard_express',
-            'prompt' => $prompt,
-        ]);
-
-        ExpressDashboardJob::dispatch($placeholder->id, $run->id, $prompt, $model);
+        ['run' => $run, 'placeholder' => $placeholder] = $this->express->launch($app, $conversation, $prompt, $model);
 
         return response()->json([
             'ok' => true,

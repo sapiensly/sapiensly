@@ -20,6 +20,8 @@ class PipelineRun extends Model
     protected $fillable = [
         'app_id',
         'conversation_id',
+        'chat_id',
+        'chat_message_id',
         'kind',
         'status',
         'phase',

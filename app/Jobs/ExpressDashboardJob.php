@@ -10,6 +10,7 @@ use App\Services\Apps\AppNamer;
 use App\Services\Builder\BuilderCancellation;
 use App\Services\Express\DashboardExpressPhases;
 use App\Services\Express\ExpressContext;
+use App\Services\Express\ExpressLauncher;
 use App\Services\Express\ExpressPipeline;
 use App\Services\Manifest\AppManifestService;
 use App\Support\Apps\AppNaming;
@@ -73,6 +74,7 @@ class ExpressDashboardJob implements ShouldQueue
             return;
         }
 
+        $launcher = app(ExpressLauncher::class);
         $conversation = $message->conversation;
         $app = $conversation->app;
         $user = $conversation->user;
@@ -80,6 +82,7 @@ class ExpressDashboardJob implements ShouldQueue
         if ($cancellation->requested($conversation)) {
             $this->finalize($message, 'none', __('⏹ Build stopped by the user.', [], $user->preferredLocale()));
             $run->forceFill(['status' => 'stopped', 'finished_at' => now()])->save();
+            $launcher->notifyChatReady($run, $app);
 
             return;
         }
@@ -129,6 +132,10 @@ class ExpressDashboardJob implements ShouldQueue
         } catch (Throwable) {
             // UI catches up from the DB.
         }
+
+        // If this run was autorouted from the general chat, flip that chat's
+        // "…te avisaré cuando esté listo" message to its terminal state now.
+        $launcher->notifyChatReady($run, $app);
 
         // The app's DESCRIPTION describes the FINISHED dashboard, never the raw
         // prompt. Prefer the voice gate's purpose (a one-line "audience +
