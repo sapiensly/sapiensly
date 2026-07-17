@@ -3,16 +3,20 @@
 namespace App\Mcp\Tools\Build;
 
 use App\Mcp\Tools\SapiensTool;
+use App\Models\AiUsageEvent;
+use App\Models\BuilderConversation;
+use App\Models\BuilderMessage;
 use App\Models\PipelineRun;
 use App\Models\User;
 use App\Services\Ai\AiUsageReport;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Carbon;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('The real AI cost of building an app: every model call tagged with this app — across the builder and the Express dashboard pipeline — rolled up into total cost, calls and tokens, with a per-model, per-conversation and per-service (Apps/Express) split. Pass app_slug (whole app, every build) or add conversation_id to scope to one build session. Cost covers both own-key and platform-paid calls. Only calls made after usage tagging shipped are attributed. Set include_gates:true to also see, for each Express run, which MODEL ran each gate (fit_check, spec_overrides, voice_insights, verify…) with its latency and whether it fell back — the forensic view for "why did this build bill the wrong model?".')]
+#[Description('The real AI cost of building an app: every model call tagged with this app — across the builder and the Express dashboard pipeline — rolled up into total cost, calls and tokens, with a per-model, per-conversation and per-service (Apps/Express) split. Pass app_slug (whole app, every build) or add conversation_id to scope to one build session. Cost covers both own-key and platform-paid calls. IMPORTANT: totals.calls counts billing EVENTS (the builder records one aggregated event per turn — a turn is many model round-trips), not model calls; the `reconciliation` block cross-checks those events against the builder turns they should cover, exposes the true model_round_trips, and flags any turn that recorded no usage event (a silent attribution gap). Only calls made after usage tagging shipped are attributed. Set include_gates:true to also see, for each Express run, which MODEL ran each gate (fit_check, spec_overrides, voice_insights, verify…) with its latency and whether it fell back — the forensic view for "why did this build bill the wrong model?".')]
 class GetBuildCostTool extends SapiensTool
 {
     protected const ABILITY = 'apps:build';
@@ -49,6 +53,11 @@ class GetBuildCostTool extends SapiensTool
         );
 
         $report['app_slug'] = $app->slug;
+        $report['reconciliation'] = $this->reconciliation(
+            $app->id,
+            $validated['conversation_id'] ?? null,
+            $validated['days'] ?? 90,
+        );
 
         if (($report['totals']['calls'] ?? 0) === 0) {
             $report['note'] = 'No tagged AI calls found for this app in the window. Usage attribution began when the app_id/conversation_id tagging shipped — earlier builds are unattributed.';
@@ -113,6 +122,63 @@ class GetBuildCostTool extends SapiensTool
                 'gates' => $gates,
             ], fn ($v) => $v !== null && $v !== []);
         })->all();
+    }
+
+    /**
+     * Reconcile the attributed usage EVENTS against the builder activity they
+     * should cover. The builder records one aggregated usage event per turn (and
+     * a turn is many model round-trips), so `totals.calls` counts billing events,
+     * not model calls — a distinction that made a prior audit read "2 calls" as an
+     * undercount when it was 2 fully-costed turns. This exposes the true
+     * round-trip count and, crucially, flags turns that produced NO usage event —
+     * a silent attribution gap that would otherwise read as a cheap build.
+     *
+     * @return array<string, mixed>
+     */
+    private function reconciliation(string $appId, ?string $conversationId, int $days): array
+    {
+        $since = Carbon::today()->subDays($days - 1);
+
+        $conversationIds = BuilderConversation::query()
+            ->where('app_id', $appId)
+            ->when($conversationId !== null, fn ($q) => $q->where('id', $conversationId))
+            ->pluck('id');
+
+        $assistantTurns = BuilderMessage::query()
+            ->whereIn('conversation_id', $conversationIds)
+            ->where('role', 'assistant')
+            ->where('created_at', '>=', $since)
+            ->get(['id', 'timeline']);
+
+        $builderTurns = $assistantTurns->count();
+
+        // Each turn's timeline logs one 'call' event per model round-trip — the
+        // true number of model calls the aggregated usage events stand for.
+        $modelRoundTrips = $assistantTurns->reduce(function (int $carry, BuilderMessage $message): int {
+            $timeline = is_array($message->timeline) ? $message->timeline : [];
+
+            return $carry + collect($timeline)->where('event', 'call')->count();
+        }, 0);
+
+        $builderEvents = AiUsageEvent::query()
+            ->where('app_id', $appId)
+            ->where('module', 'builder')
+            ->where('created_at', '>=', $since)
+            ->when($conversationId !== null, fn ($q) => $q->where('conversation_id', $conversationId))
+            ->count();
+
+        $unattributed = max(0, $builderTurns - $builderEvents);
+
+        return [
+            'builder_turns' => $builderTurns,
+            'builder_usage_events' => $builderEvents,
+            'model_round_trips' => $modelRoundTrips,
+            'unattributed_turns' => $unattributed,
+            'complete' => $unattributed === 0,
+            'note' => $unattributed > 0
+                ? "{$unattributed} builder turn(s) recorded no usage event — that cost is NOT in the totals (untagged calls)."
+                : 'totals.calls counts billing events (one per builder turn / Express run), not model calls; model_round_trips is the underlying model-call count.',
+        ];
     }
 
     /**

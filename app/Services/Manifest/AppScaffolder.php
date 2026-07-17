@@ -9,6 +9,7 @@ use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Express\SemanticProfile;
 use App\Support\Icons\IconCatalog;
+use App\Support\Locale\Inflector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Enums\Lab;
@@ -639,7 +640,7 @@ class AppScaffolder
         $parentFieldId = $this->id('fld');
         $rollupFieldId = $this->id('fld');
 
-        $relName = ($name !== null && trim($name) !== '') ? trim($name) : (string) Str::singular($to['name']);
+        $relName = ($name !== null && trim($name) !== '') ? trim($name) : Inflector::singular($to['name'], $lang);
         $relSlug = $this->uniqueSlug($relName, array_column($from['fields'], 'slug'), 'related');
 
         // Inverse + rollup both land on the `to` object — keep their slugs unique
@@ -745,7 +746,7 @@ class AppScaffolder
     public function buildPage(array $object, string $objectId, array $fieldIndex, string $lang = 'en'): array
     {
         $modalId = $this->id('blk');
-        $singular = (string) Str::singular($object['name']);
+        $singular = Inflector::singular($object['name'], $lang);
 
         // Derived/read-only fields (rollup/lookup/formula) are computed, not
         // entered — they belong in the table but never in the create form.
@@ -2098,7 +2099,7 @@ class AppScaffolder
      */
     public function buildDetailPage(array $parentDef, array $parentPageFields, string $detailSlug, array $children, string $lang): array
     {
-        $singular = (string) Str::singular($parentDef['name']);
+        $singular = Inflector::singular($parentDef['name'], $lang);
 
         $blocks = [
             [
@@ -2122,7 +2123,7 @@ class AppScaffolder
         foreach ($children as $child) {
             $childDef = $child['def'];
             $childFieldId = $child['childFieldId'];
-            $childSingular = (string) Str::singular($childDef['name']);
+            $childSingular = Inflector::singular($childDef['name'], $lang);
 
             // The add-child form: the child's enterable fields minus the relation
             // back to this parent (preset from the page id) and computed fields.

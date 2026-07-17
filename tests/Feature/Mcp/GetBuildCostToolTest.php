@@ -5,6 +5,7 @@ use App\Mcp\Tools\Build\GetBuildCostTool;
 use App\Models\AiUsageEvent;
 use App\Models\App;
 use App\Models\BuilderConversation;
+use App\Models\BuilderMessage;
 use App\Models\PipelineRun;
 use App\Models\User;
 
@@ -84,6 +85,60 @@ it('notes when a build has no tagged calls yet', function () {
         ->tool(GetBuildCostTool::class, ['app_slug' => 'cost_target'])
         ->assertOk()
         ->assertSee('unattributed');
+});
+
+/**
+ * @param  list<array<string, mixed>>  $timeline
+ */
+function assistantTurn(string $conversationId, array $timeline): BuilderMessage
+{
+    return BuilderMessage::create([
+        'conversation_id' => $conversationId,
+        'role' => 'assistant',
+        'content' => 'built something',
+        'status' => 'applied',
+        'timeline' => $timeline,
+    ]);
+}
+
+it('reconciles usage events against builder turns and reports the real round-trip count', function () {
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+    // Two turns; the second is 6 tool round-trips but bills as ONE aggregated event.
+    assistantTurn($conv->id, [['event' => 'call', 'tool' => 'scaffold_app'], ['event' => 'result']]);
+    assistantTurn($conv->id, array_merge(
+        ...array_map(fn () => [['event' => 'call', 'tool' => 'seed_records'], ['event' => 'result']], range(1, 6)),
+    ));
+    costEvent($this->testApp->id, ['conversation_id' => $conv->id, 'cost' => 0.004]);
+    costEvent($this->testApp->id, ['conversation_id' => $conv->id, 'cost' => 0.013]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetBuildCostTool::class, ['app_slug' => 'cost_target'])
+        ->assertOk()
+        ->assertSee('reconciliation')
+        ->assertSee('"builder_turns":2')
+        ->assertSee('"builder_usage_events":2')
+        // 1 (scaffold) + 6 (seed) = 7 model round-trips behind the 2 billing events.
+        ->assertSee('"model_round_trips":7')
+        ->assertSee('"complete":true');
+});
+
+it('flags a builder turn that recorded no usage event as an attribution gap', function () {
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+    assistantTurn($conv->id, [['event' => 'call', 'tool' => 'scaffold_app']]);
+    assistantTurn($conv->id, [['event' => 'call', 'tool' => 'seed_records']]);
+    // Only ONE of the two turns produced a usage event.
+    costEvent($this->testApp->id, ['conversation_id' => $conv->id, 'cost' => 0.004]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetBuildCostTool::class, ['app_slug' => 'cost_target'])
+        ->assertOk()
+        ->assertSee('"unattributed_turns":1')
+        ->assertSee('"complete":false')
+        ->assertSee('NOT in the totals');
 });
 
 it('include_gates surfaces which model ran each Express gate', function () {
