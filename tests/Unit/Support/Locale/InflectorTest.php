@@ -41,10 +41,43 @@ it('leaves already-singular Spanish nouns untouched', function () {
     expect(Inflector::singular('Categoría', 'es'))->toBe('Categoría');
 });
 
-it('falls back to the English inflector for non-Spanish locales', function () {
+it('falls back to the English inflector for unknown locales', function () {
     expect(Inflector::singular('Products', 'en'))->toBe('Product');
     expect(Inflector::singular('Categories', 'en'))->toBe('Category');
+    expect(Inflector::singular('Boxes', 'de'))->toBe('Box');
 });
+
+it('singularizes Portuguese plurals', function (string $plural, string $singular) {
+    expect(Inflector::singular($plural, 'pt'))->toBe($singular);
+})->with([
+    ['Produtos', 'Produto'],
+    ['Clientes', 'Cliente'],
+    ['Vendas', 'Venda'],
+    ['Faturas', 'Fatura'],
+    ['Opções', 'Opção'],
+    ['Promoções', 'Promoção'],
+    ['Ordens', 'Ordem'],
+    ['Flores', 'Flor'],
+    ['Materiais', 'Material'],
+    ['Ordens de Compra', 'Ordem de Compra'],
+    ['Produto', 'Produto'], // already singular
+]);
+
+it('singularizes French plurals', function (string $plural, string $singular) {
+    expect(Inflector::singular($plural, 'fr'))->toBe($singular);
+})->with([
+    ['Commandes', 'Commande'],
+    ['Produits', 'Produit'],
+    ['Factures', 'Facture'],
+    ['Clients', 'Client'],
+    ['Chevaux', 'Cheval'],
+    ['Journaux', 'Journal'],
+    ['Bateaux', 'Bateau'],
+    ['Jeux', 'Jeu'],
+    ['Prix', 'Prix'],   // invariable
+    ['Lignes de Commande', 'Ligne de Commande'],
+    ['Plat', 'Plat'],   // already singular
+]);
 
 it('handles empty and whitespace input', function () {
     expect(Inflector::singular('', 'es'))->toBe('');
