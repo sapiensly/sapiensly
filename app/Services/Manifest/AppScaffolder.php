@@ -155,6 +155,17 @@ class AppScaffolder
      */
     private function extractSpec(string $description, ?User $user): array
     {
+        // Load the tenant's AI provider credentials into runtime config, the same
+        // as every other AI service does (ChatAiService, BuilderAiService,
+        // GateRunner, …). The web request path gets this from the
+        // InjectAiProviderConfig middleware, but the MCP route's middleware stack
+        // does NOT — so without this call scaffold_app works from the in-app
+        // builder yet SILENTLY fails over MCP (no API key on Lab::Anthropic → the
+        // model call throws → caught below → an empty, object-less app).
+        if ($user !== null) {
+            $this->providers->applyRuntimeConfig($user);
+        }
+
         $model = $this->aiDefaults->model('flows');
         $provider = $this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic;
 
