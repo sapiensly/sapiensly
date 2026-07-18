@@ -136,6 +136,72 @@ it('chains step outputs: query → branch → update', function () {
         ->and($run->refresh()->variables['count'])->toBe(2);
 });
 
+it('record.aggregate reduces a field over the record set', function () {
+    $monto = ['id' => we_id('fld'), 'slug' => 'monto', 'name' => 'Monto', 'type' => 'number'];
+    $gastos = ['id' => we_id('obj'), 'slug' => 'gastos', 'name' => 'Gastos', 'fields' => [$monto]];
+    $agg = we_id('stp');
+    $workflow = [
+        'id' => we_id('wkf'), 'slug' => 'sum', 'name' => 'Sum',
+        'trigger' => ['type' => 'manual'],
+        'steps' => [
+            ['id' => $agg, 'type' => 'record.aggregate', 'object_id' => $gastos['id'], 'aggregation' => 'sum', 'field_id' => $monto['id']],
+            ['id' => we_id('stp'), 'type' => 'set_variable', 'variable' => 'total', 'value' => '{{steps.'.$agg.'.output.value}}'],
+        ],
+    ];
+    $manifest = we_manifest($this->testApp->id, [$gastos], [$workflow]);
+    foreach ([100, 200, 300] as $m) {
+        Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $gastos['id'], 'data' => ['monto' => $m]]);
+    }
+
+    $run = $this->engine->run($this->testApp, $manifest, $workflow, 'manual');
+
+    expect($run->status)->toBe('completed')
+        ->and($run->refresh()->variables['total'])->toEqual(600);
+});
+
+it('record.aggregate keeps a parent total in sync — the cross-record pattern', function () {
+    $montoReal = ['id' => we_id('fld'), 'slug' => 'monto_real', 'name' => 'Monto Real', 'type' => 'number'];
+    $partidas = ['id' => we_id('obj'), 'slug' => 'partidas', 'name' => 'Partidas', 'fields' => [$montoReal]];
+    $monto = ['id' => we_id('fld'), 'slug' => 'monto', 'name' => 'Monto', 'type' => 'number'];
+    $partidaRel = ['id' => we_id('fld'), 'slug' => 'partida', 'name' => 'Partida', 'type' => 'relation', 'cardinality' => 'many_to_one', 'target_object_id' => $partidas['id']];
+    $gastos = ['id' => we_id('obj'), 'slug' => 'gastos', 'name' => 'Gastos', 'fields' => [$monto, $partidaRel]];
+
+    $partida = Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $partidas['id'], 'data' => ['monto_real' => 0]]);
+    $other = Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $partidas['id'], 'data' => ['monto_real' => 0]]);
+    foreach ([100, 250] as $m) {
+        Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $gastos['id'], 'data' => ['monto' => $m, 'partida' => $partida->id]]);
+    }
+    // A gasto on the OTHER partida must not be summed into this one.
+    Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $gastos['id'], 'data' => ['monto' => 999, 'partida' => $other->id]]);
+
+    $agg = we_id('stp');
+    $workflow = [
+        'id' => we_id('wkf'), 'slug' => 'sync', 'name' => 'Sync',
+        'trigger' => ['type' => 'record.updated', 'object_id' => $gastos['id']],
+        'steps' => [
+            [
+                'id' => $agg, 'type' => 'record.aggregate', 'object_id' => $gastos['id'],
+                'aggregation' => 'sum', 'field_id' => $monto['id'],
+                'filter' => ['op' => 'eq', 'field_id' => $partidaRel['id'], 'value_expression' => '{{trigger.record.data.partida}}'],
+            ],
+            [
+                'id' => we_id('stp'), 'type' => 'record.update', 'object_id' => $partidas['id'],
+                'record_id_expression' => '{{trigger.record.data.partida}}',
+                'values' => ['monto_real' => '{{steps.'.$agg.'.output.value}}'],
+            ],
+        ],
+    ];
+    $manifest = we_manifest($this->testApp->id, [$partidas, $gastos], [$workflow]);
+
+    $run = $this->engine->run($this->testApp, $manifest, $workflow, 'record.updated', [
+        'record' => ['id' => we_id('rec'), 'data' => ['monto' => 100, 'partida' => $partida->id]],
+    ]);
+
+    expect($run->status)->toBe('completed')
+        ->and($partida->refresh()->data['monto_real'])->toEqual(350)
+        ->and($other->refresh()->data['monto_real'])->toEqual(0);
+});
+
 it('marks the run failed when a step throws', function () {
     $workflow = [
         'id' => we_id('wkf'), 'slug' => 'bad', 'name' => 'Bad',

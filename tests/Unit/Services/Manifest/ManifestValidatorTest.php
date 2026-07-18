@@ -3488,3 +3488,36 @@ it('leaves the worst day alone: min/max describe the spread and are honest', fun
 
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
+
+it('accepts a record.aggregate workflow step over a numeric field', function () {
+    $manifest = baseManifest();
+    $objId = $manifest['objects'][0]['id'];
+    $montoId = id('fld');
+    $manifest['objects'][0]['fields'][] = ['id' => $montoId, 'slug' => 'monto', 'name' => 'Monto', 'type' => 'number'];
+    $manifest['workflows'] = [[
+        'id' => id('wkf'), 'slug' => 'sync', 'name' => 'Sync',
+        'trigger' => ['type' => 'manual'],
+        'steps' => [[
+            'id' => id('stp'), 'type' => 'record.aggregate',
+            'object_id' => $objId, 'aggregation' => 'sum', 'field_id' => $montoId,
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    expect($result->valid)->toBeTrue()->and($result->errors)->toBe([]);
+});
+
+it('rejects a record.aggregate that reduces a field without naming one', function () {
+    $manifest = baseManifest();
+    $objId = $manifest['objects'][0]['id'];
+    $manifest['workflows'] = [[
+        'id' => id('wkf'), 'slug' => 'bad', 'name' => 'Bad',
+        'trigger' => ['type' => 'manual'],
+        // sum needs a field_id — count would be the only field-less aggregation.
+        'steps' => [['id' => id('stp'), 'type' => 'record.aggregate', 'object_id' => $objId, 'aggregation' => 'sum']],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errorsArray())->pluck('message')->contains(fn ($m) => str_contains($m, 'requires field_id')))->toBeTrue();
+});

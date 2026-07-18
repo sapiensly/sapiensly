@@ -263,6 +263,7 @@ class WorkflowEngine
             'record.update' => $this->handleRecordUpdate($step, $context, $app, $manifest, $user),
             'record.delete' => $this->handleRecordDelete($step, $context, $app),
             'record.query' => $this->handleRecordQuery($step, $context, $app, $manifest),
+            'record.aggregate' => $this->handleRecordAggregate($step, $context, $app, $manifest),
             'branch' => $this->handleBranch($step, $context, $app, $manifest, $user, $run),
             'foreach' => $this->handleForeach($step, $context, $app, $manifest, $user, $run),
             'ai.complete' => $this->handleAiComplete($step, $context, $user),
@@ -685,6 +686,33 @@ class WorkflowEngine
             'count' => $records->count(),
             'rows' => $records->map(fn ($r) => ['id' => $r->id, 'data' => $r->data])->values()->all(),
         ];
+    }
+
+    /**
+     * Aggregate a field over a filtered record set — the cross-record primitive
+     * that lets a workflow compute "sum of this order's line amounts" or "total
+     * approved spend on this project" in one step, then write it back with
+     * record.update. Returns {value, aggregation}; the same RLS/role scoping and
+     * expression-resolved filter as record.query.
+     *
+     * @param  array<string, mixed>  $step
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $manifest
+     * @return array{value: int|float, aggregation: string}
+     */
+    private function handleRecordAggregate(array $step, array $context, App $app, array $manifest): array
+    {
+        $query = ['object_id' => $step['object_id']];
+        if (isset($step['filter'])) {
+            $query['filter'] = $step['filter'];
+        }
+
+        $aggregation = (string) ($step['aggregation'] ?? 'count');
+        $fieldId = isset($step['field_id']) ? (string) $step['field_id'] : null;
+
+        $value = $this->queries->aggregate($app, $query, $aggregation, $fieldId, $manifest, $context);
+
+        return ['value' => $value, 'aggregation' => $aggregation];
     }
 
     /**

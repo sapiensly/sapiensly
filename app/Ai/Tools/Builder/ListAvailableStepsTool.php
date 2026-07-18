@@ -64,6 +64,12 @@ class ListAvailableStepsTool implements Tool
                 'output' => '{count, rows: [{id, data}]}',
             ],
             [
+                'type' => 'record.aggregate',
+                'props' => 'object_id, aggregation (count|sum|avg|min|max|distinct_count|median|p90|p95), field_id? (required for everything but count), filter?',
+                'output' => '{value, aggregation}',
+                'note' => 'The cross-record math primitive: reduce a field over a filtered set in ONE step (no manual foreach/script.run loop). Canonical pattern for "keep a parent total in sync": on a child record.updated, record.aggregate the children (filter by the parent link, e.g. {op:eq, field_id:<parent rel>, value_expression:"{{trigger.record.data.<parent slug>}}"}) with sum over the amount field, then record.update the parent with {{steps.<id>.output.value}}. Or aggregate then branch to flag a threshold (spend > budget). The result is {{steps.<id>.output.value}}.',
+            ],
+            [
                 'type' => 'branch',
                 'props' => 'cases ([{condition, steps}]), default_steps?',
                 'output' => '{matched: case_index | "default" | null}',

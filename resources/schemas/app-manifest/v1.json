@@ -5815,7 +5815,7 @@
             }
         },
         "step": {
-            "description": "A workflow step. Its `type` must be one of: record.create, record.update, record.delete, record.query, set_variable, log, branch, foreach, ai.complete, agent.invoke, http.request, script.run, connector.call. If this failed, the step `type` is unknown or it is missing a required arg for that type — call list_available_steps for each step's required props and the canonical patterns.",
+            "description": "A workflow step. Its `type` must be one of: record.create, record.update, record.delete, record.query, record.aggregate, set_variable, log, branch, foreach, ai.complete, agent.invoke, http.request, script.run, connector.call. If this failed, the step `type` is unknown or it is missing a required arg for that type — call list_available_steps for each step's required props and the canonical patterns.",
             "oneOf": [
                 {
                     "allOf": [
@@ -5955,6 +5955,54 @@
                             "required": [
                                 "type",
                                 "object_id"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        {
+                            "$ref": "#/$defs/step_base"
+                        },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": true,
+                                "name": true,
+                                "output_variable": true,
+                                "skip_if": true,
+                                "retry": true,
+                                "type": {
+                                    "const": "record.aggregate"
+                                },
+                                "object_id": {
+                                    "$ref": "#/$defs/id"
+                                },
+                                "aggregation": {
+                                    "enum": [
+                                        "count",
+                                        "sum",
+                                        "avg",
+                                        "min",
+                                        "max",
+                                        "distinct_count",
+                                        "median",
+                                        "p90",
+                                        "p95"
+                                    ]
+                                },
+                                "field_id": {
+                                    "$ref": "#/$defs/id"
+                                },
+                                "filter": {
+                                    "$ref": "#/$defs/filter_expression"
+                                }
+                            },
+                            "required": [
+                                "type",
+                                "object_id",
+                                "aggregation"
                             ]
                         }
                     ]

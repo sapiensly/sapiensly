@@ -1365,12 +1365,37 @@ class ManifestValidator
             $stepPath = "{$pathPrefix}/{$i}";
             $type = $step['type'] ?? null;
 
-            if (in_array($type, ['record.create', 'record.update', 'record.delete', 'record.query'], true)) {
+            if (in_array($type, ['record.create', 'record.update', 'record.delete', 'record.query', 'record.aggregate'], true)) {
                 $objectId = $step['object_id'] ?? null;
                 if ($objectId === null || ! isset($objectsById[$objectId])) {
                     $errors[] = new ManifestValidationError(
                         "{$stepPath}/object_id",
                         "step '{$type}' references unknown object_id '{$objectId}'",
+                        'unresolved_ref',
+                    );
+                }
+            }
+
+            if ($type === 'record.aggregate') {
+                $aggregation = $step['aggregation'] ?? null;
+                $fieldId = $step['field_id'] ?? null;
+
+                // Every aggregation except count reduces over a FIELD's values.
+                if ($aggregation !== 'count' && ($fieldId === null || $fieldId === '')) {
+                    $errors[] = new ManifestValidationError(
+                        "{$stepPath}/field_id",
+                        "step 'record.aggregate' with aggregation '{$aggregation}' requires field_id",
+                        'missing_ref',
+                    );
+                }
+
+                // A named field_id must belong to the aggregated object.
+                $objectId = $step['object_id'] ?? null;
+                if ($fieldId !== null && isset($objectsById[$objectId])
+                    && ! in_array($fieldId, array_column($objectsById[$objectId]['fields'] ?? [], 'id'), true)) {
+                    $errors[] = new ManifestValidationError(
+                        "{$stepPath}/field_id",
+                        "step 'record.aggregate' references field_id '{$fieldId}' not on object '{$objectId}'",
                         'unresolved_ref',
                     );
                 }
