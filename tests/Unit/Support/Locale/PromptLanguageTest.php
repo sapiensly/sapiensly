@@ -20,6 +20,22 @@ it('detects English from function words', function (string $prompt) {
     'show the customer analysis with trends',
 ]);
 
+it('detects Portuguese from function words and nasal diacritics', function (string $prompt) {
+    expect(PromptLanguage::detect($prompt))->toBe('pt');
+})->with([
+    'crie um sistema de gestão de estoque para minha loja',
+    'preciso de um painel com métricas de vendas',
+    'gere um aplicativo para meus pedidos e clientes',
+]);
+
+it('detects French from function words and diacritics', function (string $prompt) {
+    expect(PromptLanguage::detect($prompt))->toBe('fr');
+})->with([
+    'créer un système de gestion des commandes pour mon restaurant',
+    'je veux un tableau de bord avec les ventes par région',
+    'génère une application pour mes rendez-vous',
+]);
+
 it('returns null when the prompt is too short or ambiguous to tell', function (string $prompt) {
     expect(PromptLanguage::detect($prompt))->toBeNull();
 })->with([

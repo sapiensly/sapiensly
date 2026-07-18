@@ -6,6 +6,7 @@ use App\Enums\AppKind;
 use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\User;
+use App\Support\Locale\PromptLanguage;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -74,7 +75,11 @@ class AppManifestService
                 ],
             ],
             'settings' => [
-                'default_locale' => 'es-MX',
+                // Language of the app's chrome (labels/POS/heuristics), derived from
+                // the name + description so an English/Portuguese/French brief gets a
+                // native app instead of Spanish. Undetermined falls back to es-MX,
+                // the product default. Timezone/currency are a separate concern.
+                'default_locale' => $this->deriveLocale($app),
                 'default_timezone' => 'America/Mexico_City',
                 'default_currency' => 'MXN',
             ],
@@ -103,6 +108,24 @@ class AppManifestService
         }
 
         return $manifest;
+    }
+
+    /**
+     * The app's chrome language as a region-qualified locale, detected from its
+     * name + description (the description doubles as the scaffold brief, so it is
+     * a rich language sample). Falls back to es-MX — the product default — when
+     * the language can't be told, preserving prior behaviour for terse names.
+     */
+    private function deriveLocale(App $app): string
+    {
+        $sample = trim(((string) $app->name).' '.((string) $app->description));
+
+        return match (PromptLanguage::detect($sample)) {
+            'en' => 'en-US',
+            'pt' => 'pt-BR',
+            'fr' => 'fr-FR',
+            default => 'es-MX',
+        };
     }
 
     /**
