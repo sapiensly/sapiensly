@@ -56,6 +56,8 @@ interface PageLink {
     slug: string;
     name: string;
     icon?: string;
+    // Record-scoped detail pages ship as `false`; the chrome hides them.
+    nav?: boolean;
 }
 
 // Live block data: seeded from the server prop, re-synced on every Inertia
@@ -119,6 +121,11 @@ const navItems = computed<NavItem[] | undefined>(
 const sidebarPages = computed<PageLink[]>(() =>
     props.manifest.pages.map((p) => ({ ...p, icon: p.icon ?? undefined })),
 );
+
+// The menu item to highlight. On a record-scoped detail page the server reports
+// the parent list's slug, so drilling into Categorías > Categoría keeps
+// "Categorías" active; otherwise it's just the current page.
+const activeSlug = computed(() => props.activeSlug ?? props.page.slug);
 
 // In the sidebar layout the top band hosts the breadcrumb (above the page
 // title). If the page authors a breadcrumb block it moves up there; otherwise
@@ -192,7 +199,7 @@ useScrollReveal(sectionsEl);
                 :brand="brand"
                 :nav-items="navItems"
                 :pages="sidebarPages"
-                :current-slug="page.slug"
+                :current-slug="activeSlug"
                 :href-for="hrefFor"
             />
             <div class="flex min-h-screen min-w-0 flex-1 flex-col">
@@ -262,7 +269,7 @@ useScrollReveal(sectionsEl);
                 <SiteHeader
                     :brand="brand"
                     :pages="manifest.pages"
-                    :current-slug="page.slug"
+                    :current-slug="activeSlug"
                     :href-for="hrefFor"
                 />
             </div>

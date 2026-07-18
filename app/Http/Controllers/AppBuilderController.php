@@ -36,6 +36,7 @@ use App\Support\Apps\AppNaming;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
+use App\Support\Manifest\PageNavigation;
 use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -255,6 +256,11 @@ class AppBuilderController extends Controller
         }
         $page ??= $pages[0];
 
+        // Which menu item the simulated menu lights: this page, or — for a
+        // drilled-into detail page — its parent list, mirroring the runtime.
+        // Computed from the unfiltered page before the visibility filter runs.
+        $activeSlug = PageNavigation::activeSlug($page, $pages);
+
         // Same access context the runtime computes (the builder author is usually
         // an admin → bypass, so they preview as themselves; a non-admin author's
         // role filters/hidden fields apply, matching what they'd see live).
@@ -284,8 +290,19 @@ class AppBuilderController extends Controller
 
         $preview = [
             'page' => $page,
+            'active_slug' => $activeSlug,
+            // `nav` mirrors the runtime: the preview sidebar/header show only nav
+            // pages, so the simulated menu matches the deployed app. (The builder's
+            // own page-switcher chips still list every page — that's an authoring
+            // affordance, not the app's menu.)
             'pages' => array_map(
-                fn (array $p) => ['id' => $p['id'], 'slug' => $p['slug'], 'name' => $p['name'], 'icon' => $p['icon'] ?? null],
+                fn (array $p) => [
+                    'id' => $p['id'],
+                    'slug' => $p['slug'],
+                    'name' => $p['name'],
+                    'icon' => $p['icon'] ?? null,
+                    'nav' => PageNavigation::isNavigable($p),
+                ],
                 $pages,
             ),
             'objects' => $manifest['objects'] ?? [],

@@ -11,6 +11,8 @@ interface Brand {
 interface PageLink {
     slug: string;
     name: string;
+    // Record-scoped detail pages ship as `false` and are kept out of the menu.
+    nav?: boolean;
 }
 
 const props = defineProps<{
@@ -22,6 +24,12 @@ const props = defineProps<{
      *  SiteSidebar's `embedded`); only the real runtime pins it. */
     embedded?: boolean;
 }>();
+
+// Only directly-addressable pages belong in the top nav; record-scoped detail
+// pages (nav === false) are reached by drilling in, never listed.
+const menuPages = computed<PageLink[]>(() =>
+    (props.pages ?? []).filter((p) => p.nav !== false),
+);
 
 /** Readable text colour (dark/light) for a #RRGGBB background by luminance. */
 function readableText(hex: string): string {
@@ -52,6 +60,14 @@ const headerStyle = computed(() => {
         backgroundColor: 'color-mix(in srgb, currentColor 4%, transparent)',
     };
 });
+
+// Active nav item — the same accent-tinted pill the sidebar uses, so the two
+// navigation layouts read as one system.
+const activeStyle = {
+    background:
+        'color-mix(in srgb, var(--sp-accent, #3b82f6) 14%, transparent)',
+    color: 'var(--sp-accent, #3b82f6)',
+};
 </script>
 
 <template>
@@ -64,7 +80,7 @@ const headerStyle = computed(() => {
     >
         <a
             class="flex items-center gap-2 font-semibold"
-            :href="hrefFor ? hrefFor(pages?.[0]?.slug ?? '') : '#'"
+            :href="hrefFor ? hrefFor(menuPages[0]?.slug ?? '') : '#'"
         >
             <img
                 v-if="brand?.logo"
@@ -78,15 +94,15 @@ const headerStyle = computed(() => {
         </a>
 
         <nav
-            v-if="pages && pages.length > 1"
+            v-if="menuPages.length > 1"
             class="hidden items-center gap-1 sm:flex"
         >
             <a
-                v-for="p in pages"
+                v-for="p in menuPages"
                 :key="p.slug"
                 :href="hrefFor ? hrefFor(p.slug) : '#'"
                 class="rounded-pill px-3 py-1.5 text-sm transition-colors"
-                :style="{ opacity: p.slug === currentSlug ? 1 : 0.7 }"
+                :style="p.slug === currentSlug ? activeStyle : { opacity: 0.7 }"
             >
                 {{ p.name }}
             </a>

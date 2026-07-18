@@ -243,6 +243,10 @@ export interface PageSummary {
     slug: string;
     name: string;
     icon: string | null;
+    // Whether the page belongs in the primary navigation. Record-scoped detail
+    // pages ship as `false`: the chrome hides them from the menu, but they stay
+    // reachable by drilling in. Absent is treated as navigable.
+    nav?: boolean;
 }
 
 export type BlockData = Record<
@@ -295,6 +299,8 @@ export interface RuntimePageProps {
         agent?: { enabled: boolean; name?: string } | null;
     };
     page: PageDef;
+    /** Menu slug to highlight — a detail page reports its parent list's slug. */
+    activeSlug?: string;
     blockData: BlockData;
     /** Current URL filter params, so a filter_bar renders pre-filled. */
     params?: Record<string, string | string[]>;

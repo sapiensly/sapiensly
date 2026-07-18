@@ -216,3 +216,65 @@ it('honors a visibility expression against page params', function () {
         ->assertJsonPath('props.blockData.'.$whenFlag.'.value', fn ($v) => $v !== null)
         ->assertJsonMissingPath('props.blockData.'.$whenNoFlag);
 });
+
+it('keeps record-scoped detail pages out of the navigation and lands on the first list page', function () {
+    $app = App::create([
+        'user_id' => $this->user->id,
+        'slug' => 'rnav',
+        'name' => 'Nav Rule',
+        'visibility' => 'private',
+    ]);
+
+    $objId = rid('obj');
+    $nombre = rid('fld');
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => $app->id,
+        'slug' => 'rnav',
+        'name' => 'Nav Rule',
+        'version' => 1,
+        'objects' => [[
+            'id' => $objId,
+            'slug' => 'clientes',
+            'name' => 'Cliente',
+            'fields' => [['id' => $nombre, 'slug' => 'nombre', 'name' => 'Nombre', 'type' => 'string']],
+        ]],
+        'pages' => [
+            ['id' => rid('pag'), 'slug' => 'clientes', 'name' => 'Clientes', 'path' => '/clientes', 'blocks' => [
+                ['id' => rid('blk'), 'type' => 'table', 'data_source' => ['object_id' => $objId], 'columns' => [
+                    ['id' => rid('col'), 'field_id' => $nombre],
+                ]],
+            ]],
+            ['id' => rid('pag'), 'slug' => 'clientes_detail', 'name' => 'Cliente', 'path' => '/clientes_detail', 'blocks' => [
+                ['id' => rid('blk'), 'type' => 'record_detail', 'object_id' => $objId, 'record_id_expression' => '{{params.id}}', 'fields' => [
+                    ['field_id' => $nombre],
+                ]],
+            ]],
+        ],
+        'permissions' => ['roles' => [['id' => rid('rol'), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    app(AppManifestService::class)->createVersion($app, $manifest, $this->user);
+
+    // Landing skips the detail page; the nav flags mark list=true, detail=false.
+    $this->actingAs($this->user)
+        ->get('/r/rnav')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('page.slug', 'clientes')
+            ->where('activeSlug', 'clientes')
+            ->where('manifest.pages.0.slug', 'clientes')
+            ->where('manifest.pages.0.nav', true)
+            ->where('manifest.pages.1.slug', 'clientes_detail')
+            ->where('manifest.pages.1.nav', false)
+        );
+
+    // The detail page stays directly reachable when drilled into — and reports
+    // its parent list's slug so the menu keeps "Clientes" active.
+    $this->actingAs($this->user)
+        ->get('/r/rnav/clientes_detail')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('page.slug', 'clientes_detail')
+            ->where('activeSlug', 'clientes')
+        );
+});

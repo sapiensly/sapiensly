@@ -157,6 +157,8 @@ interface Message {
 
 interface Preview {
     page: PageDef;
+    // Menu slug to highlight — a detail page reports its parent list's slug.
+    active_slug?: string;
     pages: PageSummary[];
     objects: ObjectDef[];
     settings: { default_locale?: string; default_currency?: string };
@@ -178,6 +180,9 @@ interface PreviewPageLink {
     slug: string;
     name: string;
     icon?: string;
+    // Record-scoped detail pages ship as `false`; the preview chrome hides them
+    // from the simulated menu (the authoring page-switcher still lists them).
+    nav?: boolean;
 }
 
 interface SchemaPayload {
@@ -1788,6 +1793,11 @@ const previewSidebarPages = computed<PreviewPageLink[]>(() =>
         ...p,
         icon: p.icon ?? undefined,
     })),
+);
+// The simulated menu highlights the parent list when a detail page is previewed,
+// mirroring the runtime; falls back to the previewed page's own slug.
+const previewActiveSlug = computed(
+    () => props.preview?.active_slug ?? props.preview?.page.slug,
 );
 // The breadcrumb lifts into the title band (above the page title); only in the
 // sidebar layout, mirroring the runtime.
@@ -4130,7 +4140,7 @@ function statusTone(status: Message['status']): string {
                                     :brand="previewBrand"
                                     :nav-items="previewNavItems"
                                     :pages="previewSidebarPages"
-                                    :current-slug="preview.page.slug"
+                                    :current-slug="previewActiveSlug"
                                 />
                                 <div class="min-w-0 flex-1">
                                     <header
@@ -4207,7 +4217,7 @@ function statusTone(status: Message['status']): string {
                                     embedded
                                     :brand="previewBrand"
                                     :pages="preview.pages"
-                                    :current-slug="preview.page.slug"
+                                    :current-slug="previewActiveSlug"
                                 />
                                 <div class="space-y-4 py-6">
                                     <AppRenderer

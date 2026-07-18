@@ -10,6 +10,7 @@ use App\Services\Records\BlockDataResolver;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
+use App\Support\Manifest\PageNavigation;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -72,8 +73,11 @@ class AppRuntimeController extends Controller
             abort(403, 'You do not have access to any page in this app.');
         }
 
+        // The default landing page is the first NAVIGABLE page (a record-scoped
+        // detail page can't render without a record, so it's never a landing).
+        $navigableViewable = array_values(array_filter($viewablePages, PageNavigation::isNavigable(...)));
         $page = $pageSlug === null
-            ? $viewablePages[0]
+            ? ($navigableViewable[0] ?? $viewablePages[0])
             : $this->findPageBySlug($pages, $pageSlug);
 
         if ($page === null) {
@@ -83,6 +87,12 @@ class AppRuntimeController extends Controller
         if (! $access->canViewPage($page['id'])) {
             abort(403, "You do not have access to page '{$pageSlug}'.");
         }
+
+        // Which menu item to light: this page itself, or — when a record-scoped
+        // detail page is drilled into — its parent list (Categorías > Categoría
+        // keeps "Categorías" active). Computed before the visibility filter mutates
+        // the blocks below.
+        $activeSlug = PageNavigation::activeSlug($page, $pages);
 
         // URL query params drive page-level filters: a block's data_source.filter
         // can read {{params.<name>}} and a filter_bar block writes them. Keep only
@@ -133,8 +143,17 @@ class AppRuntimeController extends Controller
             ],
             'manifest' => [
                 'navigation' => $manifest['navigation'] ?? null,
+                // Every viewable page ships with a `nav` flag; the chrome
+                // (SiteSidebar/SiteHeader) shows only nav pages in the menu, while
+                // record-scoped detail pages stay resolvable when drilled into.
                 'pages' => array_map(
-                    fn (array $p) => ['id' => $p['id'], 'slug' => $p['slug'], 'name' => $p['name'], 'icon' => $p['icon'] ?? null],
+                    fn (array $p) => [
+                        'id' => $p['id'],
+                        'slug' => $p['slug'],
+                        'name' => $p['name'],
+                        'icon' => $p['icon'] ?? null,
+                        'nav' => PageNavigation::isNavigable($p),
+                    ],
                     $viewablePages,
                 ),
                 'settings' => $settings,
@@ -149,6 +168,8 @@ class AppRuntimeController extends Controller
                     : null,
             ],
             'page' => $page,
+            // The menu slug to highlight (a detail page lights its parent list).
+            'activeSlug' => $activeSlug,
             // Deferred: the shell (nav, layout, filter bar, skeletons) paints
             // immediately; Inertia fetches the data in an automatic follow-up
             // request while the pooled connected reads resolve.

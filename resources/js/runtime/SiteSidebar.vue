@@ -23,6 +23,8 @@ interface PageLink {
     slug: string;
     name: string;
     icon?: string;
+    // Record-scoped detail pages ship as `false` and are kept out of the menu.
+    nav?: boolean;
 }
 interface Node {
     key: string;
@@ -64,11 +66,17 @@ function resolve(items: NavItem[]): Node[] {
     });
 }
 
+// Only directly-addressable pages belong in the menu; record-scoped detail
+// pages (nav === false) are reached by drilling in, never listed.
+const menuPages = computed<PageLink[]>(() =>
+    (props.pages ?? []).filter((p) => p.nav !== false),
+);
+
 // Authored navigation (supports nested children) when present, else the flat pages.
 const tree = computed<Node[]>(() =>
     props.navItems && props.navItems.length
         ? resolve(props.navItems)
-        : (props.pages ?? []).map((p) => ({
+        : menuPages.value.map((p) => ({
               key: p.id,
               label: p.name,
               icon: p.icon,
@@ -138,7 +146,7 @@ const activeStyle = {
                     'color-mix(in srgb, currentColor 12%, transparent)',
                 ...headerStyle,
             }"
-            :href="hrefFor && pages?.[0] ? hrefFor(pages[0].slug) : '#'"
+            :href="hrefFor && menuPages[0] ? hrefFor(menuPages[0].slug) : '#'"
         >
             <template v-if="collapsed">
                 <img
