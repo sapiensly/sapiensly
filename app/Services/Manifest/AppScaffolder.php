@@ -10,6 +10,7 @@ use App\Services\AiProviderService;
 use App\Services\Express\SemanticProfile;
 use App\Support\Icons\IconCatalog;
 use App\Support\Locale\Inflector;
+use App\Support\Locale\SemanticLexicon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Enums\Lab;
@@ -1595,7 +1596,7 @@ class AppScaffolder
             $groupSlug = $groupId !== null ? (string) ($fieldsBySlug[(string) ($chartObject['slug'] ?? $primarySlug)][$groupId]['slug'] ?? '') : '';
             if ($groupSlug !== ''
                 && ($grainBySlug[(string) ($chartObject['slug'] ?? $primarySlug)] ?? '') === SemanticProfile::GRAIN_TIME_SERIES
-                && preg_match('/label|bucket|period|semana|week/i', $groupSlug) === 1) {
+                && SemanticLexicon::for($lang)->matches('temporal', $groupSlug)) {
                 $errors[] = ['path' => "/charts/{$i}/group_by_field_id", 'message' => "'{$groupSlug}' is the series' bucket label (the time axis in costume) — chart the trend with x_field_id on the object's date field instead.", 'code' => 'illegal_aggregation'];
 
                 continue;
@@ -1764,7 +1765,7 @@ class AppScaffolder
                 'id' => $this->id('hro'),
                 'type' => 'hero',
                 'title' => $title,
-                'eyebrow' => $lang === 'es' ? 'Reporte' : 'Report',
+                'eyebrow' => SemanticLexicon::for($lang)->label('report'),
                 'eyebrow_icon' => 'bar-chart',
                 'align' => 'left',
                 'min_height' => 120,
@@ -1856,10 +1857,11 @@ class AppScaffolder
         // Emitted only when both a temporal and a categorical group exist, so
         // a small board isn't over-chaptered. Overridable via spec.sections.
         $sections = is_array($spec['sections'] ?? null) ? $spec['sections'] : [];
+        $lex = SemanticLexicon::for($lang);
         $sectionLabels = [
-            'trend' => (string) ($sections['trend'] ?? ($lang === 'es' ? 'Tendencia' : 'Trend')),
-            'breakdown' => (string) ($sections['breakdown'] ?? ($lang === 'es' ? 'Desglose' : 'Breakdown')),
-            'insights' => (string) ($sections['insights'] ?? ($lang === 'es' ? 'Lecturas clave' : 'Key readings')),
+            'trend' => (string) ($sections['trend'] ?? $lex->label('trend')),
+            'breakdown' => (string) ($sections['breakdown'] ?? $lex->label('breakdown')),
+            'insights' => (string) ($sections['insights'] ?? $lex->label('insights')),
         ];
         $rowIsTemporal = fn (array $row): bool => collect($row)->contains(
             fn (array $b): bool => isset($b['x_field_id']) || isset($b['bucket']),
@@ -1912,7 +1914,7 @@ class AppScaffolder
                 ->take(1)->values()->all();
             if ($columns->count() >= 2) {
                 if ($useSections) {
-                    $blocks[] = ['id' => $this->id('blk'), 'type' => 'heading', 'level' => 3, 'content' => $lang === 'es' ? 'Detalle' : 'Detail'];
+                    $blocks[] = ['id' => $this->id('blk'), 'type' => 'heading', 'level' => 3, 'content' => $lex->label('detail')];
                 }
                 $blocks[] = array_filter([
                     'id' => $this->id('blk'),
@@ -1983,7 +1985,9 @@ class AppScaffolder
      */
     private function chartDescription(array $chart, string $chartType, string $agg, array $object, string $lang): string
     {
-        $es = $lang !== 'en';
+        // Chart descriptions / KPI subtitles are full sentences, still es|en only;
+        // other locales fall back to English (not Spanish) until templated here.
+        $es = $lang === 'es';
         $nameOf = function (?string $fieldId) use ($object): ?string {
             if ($fieldId === null || $fieldId === '') {
                 return null;
@@ -2164,7 +2168,9 @@ class AppScaffolder
      */
     private function kpiSubtitle(string $aggregation, string $lang): string
     {
-        $es = $lang !== 'en';
+        // Chart descriptions / KPI subtitles are full sentences, still es|en only;
+        // other locales fall back to English (not Spanish) until templated here.
+        $es = $lang === 'es';
 
         return match ($aggregation) {
             'count' => $es ? 'conteo en la ventana' : 'count in window',
@@ -2332,7 +2338,7 @@ class AppScaffolder
                 $block['columns'][] = [
                     'id' => $this->id('col'),
                     'type' => 'action',
-                    'label' => $lang === 'es' ? 'Abrir' : 'Open',
+                    'label' => SemanticLexicon::for($lang)->label('open'),
                     'icon' => 'arrow-right',
                     'variant' => 'ghost',
                     'on_click' => [['type' => 'navigate', 'to' => '/'.$detailSlug.'?id={{row.id}}']],
@@ -2407,7 +2413,7 @@ class AppScaffolder
             // the triad carries sale intent. Without this a `budget`/`presupuesto`
             // currency field turns tasks/milestones into "order lines" and spawns
             // bogus POS screens (an NPD app produced two "Punto de venta" pages).
-            if (! $this->isCommerceTriad($orderDef, $built[$lineIndex]['def'], $built[$productRel['targetIndex']]['def'], $productPrice)) {
+            if (! $this->isCommerceTriad($orderDef, $built[$lineIndex]['def'], $built[$productRel['targetIndex']]['def'], $productPrice, $lang)) {
                 continue;
             }
 
@@ -2415,7 +2421,7 @@ class AppScaffolder
             $taken = array_column($lineDef['fields'], 'slug');
 
             // Quantity: reuse a number field that reads like a quantity, else add one.
-            $qty = $this->quantityFieldOf($lineDef);
+            $qty = $this->quantityFieldOf($lineDef, $lang);
             if ($qty === null) {
                 $slug = $this->uniqueSlug('cantidad', $taken, 'cantidad');
                 $taken[] = $slug;
@@ -2435,7 +2441,7 @@ class AppScaffolder
             // put on the line (convert it to the formula in place, keeping its
             // id/slug/name) instead of adding a duplicate; else synthesise one.
             $expression = '{{'.$qty['slug'].' * '.$priceSlug.'}}';
-            $existingAmount = $this->subtotalFieldOf($lineDef);
+            $existingAmount = $this->subtotalFieldOf($lineDef, $lang);
             if ($existingAmount !== null) {
                 $subtotal = [
                     'id' => $existingAmount['id'],
@@ -2495,7 +2501,7 @@ class AppScaffolder
                 'product_object_id' => $productDef['id'],
                 'product_title_field_id' => $productTitle['id'],
                 'product_price_field_id' => $productPrice['id'],
-                'product_image_field_id' => $this->imageFieldOf($productDef)['id'] ?? null,
+                'product_image_field_id' => $this->imageFieldOf($productDef, $lang)['id'] ?? null,
                 'line_order_rel_field_id' => $orderRel['childFieldId'],
                 'line_order_rel_slug' => $orderRel['childFieldSlug'],
                 'line_product_rel_field_id' => $productRel['childFieldId'],
@@ -2553,36 +2559,22 @@ class AppScaffolder
      * @param  array<string, mixed>  $productDef
      * @param  array<string, mixed>  $priceField
      */
-    private function isCommerceTriad(array $orderDef, array $lineDef, array $productDef, array $priceField): bool
+    private function isCommerceTriad(array $orderDef, array $lineDef, array $productDef, array $priceField, string $lang): bool
     {
+        $lex = SemanticLexicon::for($lang);
+        $words = fn (array $e): array => [(string) ($e['name'] ?? ''), (string) ($e['slug'] ?? '')];
+
         // A budget/cost/salary is a currency field, but it is not a sale price.
-        $notAPrice = 'budget|presupuest|cost|costo|coste|salar|sueldo|wage|payroll|nomina|estimat|estimad|funding|fondo|gasto|expens';
-        if ($this->matchesWords($priceField, $notAPrice)) {
+        if ($lex->matches('not_price', ...$words($priceField))) {
             return false;
         }
 
         // Sale intent: a price-named price field, or an order/line/product/catalog
         // name somewhere in the triad.
-        $priceWords = 'price|precio|tarifa|\brate\b|pvp|importe|subtotal|total';
-        $commerce = 'order|pedido|\bsale\b|venta|invoice|factura|\bcart\b|carrito|checkout|ticket|comanda|recibo|receipt|purchase|compra|\bpos\b|caja|\bbill\b|cuenta|product|producto|platillo|plato|\bdish\b|menu|articulo|article|\bsku\b|catalog|servicio|\bline\b|linea|renglon|reglon|item|detalle|concepto|partida';
-
-        return $this->matchesWords($priceField, $priceWords)
-            || $this->matchesWords($orderDef, $commerce)
-            || $this->matchesWords($lineDef, $commerce)
-            || $this->matchesWords($productDef, $commerce);
-    }
-
-    /**
-     * Case-insensitive match of an alternation against an object/field's name and
-     * slug together.
-     *
-     * @param  array<string, mixed>  $entity
-     */
-    private function matchesWords(array $entity, string $alternation): bool
-    {
-        $haystack = mb_strtolower(((string) ($entity['name'] ?? '')).' '.((string) ($entity['slug'] ?? '')));
-
-        return preg_match('/'.$alternation.'/iu', $haystack) === 1;
+        return $lex->matches('price', ...$words($priceField))
+            || $lex->matches('commerce', ...$words($orderDef))
+            || $lex->matches('commerce', ...$words($lineDef))
+            || $lex->matches('commerce', ...$words($productDef));
     }
 
     /**
@@ -2741,11 +2733,12 @@ class AppScaffolder
      * @param  array<string, mixed>  $def
      * @return array<string, mixed>|null
      */
-    private function quantityFieldOf(array $def): ?array
+    private function quantityFieldOf(array $def, string $lang): ?array
     {
+        $lex = SemanticLexicon::for($lang);
         foreach ($def['fields'] as $field) {
             if (($field['type'] ?? '') === 'number'
-                && preg_match('/cant|qty|quantity|unidad|piezas|count/i', ($field['slug'] ?? '').' '.($field['name'] ?? '')) === 1) {
+                && $lex->matches('quantity', (string) ($field['slug'] ?? ''), (string) ($field['name'] ?? ''))) {
                 return $field;
             }
         }
@@ -2760,15 +2753,16 @@ class AppScaffolder
      * @param  array<string, mixed>  $def
      * @return array<string, mixed>|null
      */
-    private function subtotalFieldOf(array $def): ?array
+    private function subtotalFieldOf(array $def, string $lang): ?array
     {
+        $lex = SemanticLexicon::for($lang);
         foreach ($def['fields'] as $field) {
             if (($field['type'] ?? '') !== 'currency') {
                 continue;
             }
-            $haystack = ($field['slug'] ?? '').' '.($field['name'] ?? '');
-            if (preg_match('/subtotal|sub_total|importe|monto|amount|total/i', $haystack) === 1
-                && preg_match('/unit|unitario|precio|price/i', $haystack) === 0) {
+            $slug = (string) ($field['slug'] ?? '');
+            $name = (string) ($field['name'] ?? '');
+            if ($lex->matches('amount', $slug, $name) && ! $lex->matches('unit_price', $slug, $name)) {
                 return $field;
             }
         }
@@ -2782,11 +2776,12 @@ class AppScaffolder
      * @param  array<string, mixed>  $def
      * @return array<string, mixed>|null
      */
-    private function imageFieldOf(array $def): ?array
+    private function imageFieldOf(array $def, string $lang): ?array
     {
+        $lex = SemanticLexicon::for($lang);
         foreach ($def['fields'] as $field) {
             if (($field['type'] ?? '') === 'string'
-                && preg_match('/image|imagen|photo|foto|picture|thumbnail|avatar|url/i', ($field['slug'] ?? '').' '.($field['name'] ?? '')) === 1) {
+                && $lex->matches('image', (string) ($field['slug'] ?? ''), (string) ($field['name'] ?? ''))) {
                 return $field;
             }
         }
@@ -2837,52 +2832,52 @@ class AppScaffolder
      */
     public static function langForLocale(?string $locale): string
     {
-        return str_starts_with(strtolower((string) $locale), 'es') ? 'es' : 'en';
+        return SemanticLexicon::resolve($locale);
     }
 
     private function labelNew(string $lang, string $singular): string
     {
-        return $lang === 'es' ? "Agregar {$singular}" : "New {$singular}";
+        return SemanticLexicon::for($lang)->label('new', singular: $singular);
     }
 
     private function labelSubmit(string $lang): string
     {
-        return $lang === 'es' ? 'Guardar' : 'Create';
+        return SemanticLexicon::for($lang)->label('submit');
     }
 
     private function toastSaved(string $lang, string $singular): string
     {
-        return $lang === 'es' ? 'Guardado' : "{$singular} created";
+        return SemanticLexicon::for($lang)->label('saved', singular: $singular);
     }
 
     private function labelCreatedColumn(string $lang): string
     {
-        return $lang === 'es' ? 'Creado' : 'Created';
+        return SemanticLexicon::for($lang)->label('created_col');
     }
 
     private function labelByStatus(string $lang, string $name): string
     {
-        return $lang === 'es' ? "{$name} por estado" : "{$name} by status";
+        return SemanticLexicon::for($lang)->label('by_status', name: $name);
     }
 
     private function labelTotal(string $lang, string $name): string
     {
-        return $lang === 'es' ? "Total {$name}" : "{$name} total";
+        return SemanticLexicon::for($lang)->label('total', name: $name);
     }
 
     private function labelAverage(string $lang, string $name): string
     {
-        return $lang === 'es' ? "Promedio {$name}" : "{$name} average";
+        return SemanticLexicon::for($lang)->label('average', name: $name);
     }
 
     private function labelOverTime(string $lang, string $name): string
     {
-        return $lang === 'es' ? "{$name} en el tiempo" : "{$name} over time";
+        return SemanticLexicon::for($lang)->label('over_time', name: $name);
     }
 
     private function labelValueByStatus(string $lang, string $name): string
     {
-        return $lang === 'es' ? "Valor de {$name} por estado" : "{$name} value by status";
+        return SemanticLexicon::for($lang)->label('value_by_status', name: $name);
     }
 
     /**
@@ -2890,8 +2885,17 @@ class AppScaffolder
      */
     private function posLabels(string $lang): array
     {
-        return $lang === 'es'
-            ? ['pos' => 'Punto de venta', 'new_order' => 'Nueva orden', 'order' => 'Pedido', 'qty' => 'Cantidad', 'unit_price' => 'Precio unitario', 'subtotal' => 'Subtotal', 'total' => 'Total', 'empty' => 'Abre una orden y agrega productos.']
-            : ['pos' => 'Point of Sale', 'new_order' => 'New order', 'order' => 'Order', 'qty' => 'Quantity', 'unit_price' => 'Unit price', 'subtotal' => 'Subtotal', 'total' => 'Total', 'empty' => 'Open an order and add products.'];
+        $lex = SemanticLexicon::for($lang);
+
+        return [
+            'pos' => $lex->label('pos'),
+            'new_order' => $lex->label('new_order'),
+            'order' => $lex->label('order'),
+            'qty' => $lex->label('qty'),
+            'unit_price' => $lex->label('unit_price'),
+            'subtotal' => $lex->label('subtotal'),
+            'total' => $lex->label('total_word'),
+            'empty' => $lex->label('cart_empty'),
+        ];
     }
 }

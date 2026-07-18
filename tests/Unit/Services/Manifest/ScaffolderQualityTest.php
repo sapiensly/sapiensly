@@ -686,6 +686,54 @@ it('dedups a many_to_many link given in both directions', function () {
     }
 });
 
+it('recognizes a French commerce triad and localizes the chrome (per-locale lexicon)', function () {
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_bistro', 'slug' => 'bistro', 'name' => 'Bistro', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'fr-FR', 'default_currency' => 'EUR'],
+    ];
+    $spec = [
+        'objects' => [
+            ['name' => 'Commandes', 'slug' => 'commandes', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+                ['name' => 'Statut', 'slug' => 'statut', 'type' => 'single_select', 'options' => [['value' => 'ouverte', 'label' => 'Ouverte']]],
+            ]],
+            ['name' => 'Plats', 'slug' => 'plats', 'fields' => [
+                ['name' => 'Nom', 'slug' => 'nom', 'type' => 'string', 'options' => null],
+                ['name' => 'Prix', 'slug' => 'prix', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Lignes', 'slug' => 'lignes', 'fields' => [
+                ['name' => 'Quantite', 'slug' => 'quantite', 'type' => 'number', 'options' => null],
+            ]],
+        ],
+        'links' => [
+            ['from' => 'lignes', 'to' => 'commandes', 'name' => 'commande'],
+            ['from' => 'lignes', 'to' => 'plats', 'name' => 'plat'],
+        ],
+    ];
+    $scaffolder = app(AppScaffolder::class);
+    $manifest = $scaffolder->assemble($base, $scaffolder->normalizeSpec($spec));
+
+    // The POS register is generated — invisible before per-locale vocab.
+    expect(posPageCount($manifest))->toBe(1);
+    $pos = collect($manifest['pages'])->first(fn (array $p) => collect($p['blocks'])->contains(fn (array $b) => ($b['type'] ?? '') === 'split_view'));
+    expect($pos['name'])->toBe('Point de vente');
+    expect(blockByType($pos, 'button')['label'])->toBe('Nouvelle commande');
+
+    // The line got its economics (unit-price lookup + subtotal formula), and it
+    // reused the existing "Quantite" field rather than adding a duplicate.
+    $lignes = collect($manifest['objects'])->firstWhere('slug', 'lignes');
+    expect(collect($lignes['fields'])->whereIn('type', ['lookup', 'formula'])->count())->toBeGreaterThanOrEqual(2);
+    expect(collect($lignes['fields'])->where('type', 'number')->where('slug', 'quantite')->count())->toBe(1);
+
+    // Chrome on an ordinary list page is French too ("Ajouter …", not "New …").
+    $platsPage = pageBySlug($manifest, 'plats');
+    expect(blockByType($platsPage, 'button')['label'])->toStartWith('Ajouter ');
+
+    expect((new ManifestValidator)->validate($manifest)->errors)->toBe([]);
+});
+
 it('scaffolded apps produce no design-lint warnings', function () {
     $manifests = [
         'crm' => scaffoldFor('es-MX'),
