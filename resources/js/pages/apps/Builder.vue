@@ -1757,10 +1757,36 @@ const previewLocale = computed(
 const previewCurrency = computed(
     () => props.preview?.settings.default_currency ?? 'MXN',
 );
-const previewTheme = computed<'light' | 'dark'>(
-    () =>
-        (props.preview?.settings as { theme?: 'light' | 'dark' } | undefined)
-            ?.theme ?? 'light',
+// The preview inherits the builder chrome's light/dark mode. The chrome resolves
+// light / dark / system all down to the `.dark` class on <html> (see
+// useAppearance), so we track that class reactively and let the preview follow it
+// — toggling the builder theme flips the preview with it.
+const builderIsDark = ref(
+    typeof document !== 'undefined' &&
+        document.documentElement.classList.contains('dark'),
+);
+let themeObserver: MutationObserver | null = null;
+onMounted(() => {
+    if (typeof document === 'undefined') {
+        return;
+    }
+    const root = document.documentElement;
+    const sync = () => {
+        builderIsDark.value = root.classList.contains('dark');
+    };
+    sync();
+    themeObserver = new MutationObserver(sync);
+    themeObserver.observe(root, {
+        attributes: true,
+        attributeFilter: ['class'],
+    });
+});
+onUnmounted(() => {
+    themeObserver?.disconnect();
+    themeObserver = null;
+});
+const previewTheme = computed<'light' | 'dark'>(() =>
+    builderIsDark.value ? 'dark' : 'light',
 );
 
 // Brand / footer / accent+font for the previewed site (mirrors the runtime page).
@@ -2224,8 +2250,7 @@ async function send() {
                 '';
             errorText.value = `HTTP ${status}${body ? ' — ' + body : ''}`;
         } else {
-            errorText.value =
-                err.message ?? t('apps.builder.network_error');
+            errorText.value = err.message ?? t('apps.builder.network_error');
         }
         console.error('Builder sendMessage failed:', e);
     } finally {
@@ -2789,7 +2814,9 @@ function statusTone(status: Message['status']): string {
                                 v-for="m in [
                                     {
                                         id: 'chat',
-                                        label: t('apps.builder.panel_mode_chat'),
+                                        label: t(
+                                            'apps.builder.panel_mode_chat',
+                                        ),
                                     },
                                     {
                                         id: 'manual',
@@ -3914,8 +3941,9 @@ function statusTone(status: Message['status']): string {
                         @click.capture="onManualPreviewClick"
                         :class="[
                             'relative flex-1 overflow-auto p-5 transition-colors',
-                            // Force the previewed app's own theme here (independent of the
-                            // builder chrome's mode) so the author can check light AND dark.
+                            // Scope the preview to the builder chrome's current light/dark
+                            // mode (previewTheme follows the <html> `.dark` class), so the
+                            // preview inherits the theme instead of pinning the manifest's.
                             preview
                                 ? previewTheme === 'dark'
                                     ? 'theme-dark'
@@ -4067,7 +4095,9 @@ function statusTone(status: Message['status']): string {
                                             14 +
                                             'px',
                                     }"
-                                    :title="t('apps.builder.drag_resize_height')"
+                                    :title="
+                                        t('apps.builder.drag_resize_height')
+                                    "
                                     @pointerdown="startBlockResize('y', $event)"
                                 >
                                     <span
@@ -4155,8 +4185,12 @@ function statusTone(status: Message['status']): string {
                                             class="grid size-8 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
                                             :title="
                                                 previewSidebarCollapsed
-                                                    ? t('apps.builder.expand_menu')
-                                                    : t('apps.builder.collapse_menu')
+                                                    ? t(
+                                                          'apps.builder.expand_menu',
+                                                      )
+                                                    : t(
+                                                          'apps.builder.collapse_menu',
+                                                      )
                                             "
                                             @click="
                                                 previewSidebarCollapsed =
