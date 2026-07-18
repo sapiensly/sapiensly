@@ -905,6 +905,13 @@ class AppScaffolder
             $blocks[] = $gantt;
         }
 
+        // A single date field marks an event → a month calendar (mutually
+        // exclusive with the Gantt, which needs a start + an end).
+        $calendar = $this->buildCalendar($objectId, $fieldIndex);
+        if ($calendar !== null) {
+            $blocks[] = $calendar;
+        }
+
         // A status (single_select) field turns the page into a board: a kanban
         // grouped by that status, with the title field on each card.
         $kanban = $this->buildKanban($objectId, $fieldIndex);
@@ -1000,6 +1007,43 @@ class AppScaffolder
         }
 
         return $gantt;
+    }
+
+    /**
+     * A month calendar of each record on its date, or null when the object is not
+     * a single-date EVENT. A lone date/datetime field marks a point-in-time event
+     * (a shoot day, an inspection, an appointment) — exactly what a calendar is
+     * for; two dates are a span and belong on the Gantt instead, so the two views
+     * never both fire. Coloured by the object's status when it has one.
+     *
+     * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
+     * @return array<string, mixed>|null
+     */
+    private function buildCalendar(string $objectId, array $fieldIndex): ?array
+    {
+        $dates = array_values(array_filter(
+            $fieldIndex,
+            fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true),
+        ));
+        $title = $this->titleField($fieldIndex);
+        if (count($dates) !== 1 || $title === null) {
+            return null;
+        }
+
+        $calendar = [
+            'id' => $this->id('blk'),
+            'type' => 'calendar',
+            'data_source' => ['object_id' => $objectId],
+            'date_field_id' => $dates[0]['id'],
+            'title_field_id' => $title['id'],
+        ];
+
+        $status = $this->firstFieldOfType($fieldIndex, 'single_select');
+        if ($status !== null) {
+            $calendar['color_field_id'] = $status['id'];
+        }
+
+        return $calendar;
     }
 
     /**

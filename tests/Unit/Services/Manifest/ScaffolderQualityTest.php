@@ -310,6 +310,54 @@ it('does not add a Gantt when an object has fewer than two date fields', functio
     expect(blockByType(pageBySlug($manifest, 'comandas'), 'gantt'))->toBeNull();
 });
 
+/** A single-date EVENT object (a shoot day, an appointment) — the calendar case. */
+function scaffoldEvent(): array
+{
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_ev1', 'slug' => 'agenda', 'name' => 'Agenda', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+    $spec = [
+        'objects' => [[
+            'name' => 'Citas', 'slug' => 'citas', 'fields' => [
+                ['name' => 'Titulo', 'slug' => 'titulo', 'type' => 'string', 'options' => null],
+                ['name' => 'Fecha', 'slug' => 'fecha', 'type' => 'date', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'programada', 'label' => 'Programada'], ['value' => 'realizada', 'label' => 'Realizada'],
+                ]],
+            ],
+        ]],
+        'links' => [],
+    ];
+
+    return app(AppScaffolder::class)->assemble($base, $spec);
+}
+
+it('renders a single-date event object as a calendar, coloured by status', function () {
+    $manifest = scaffoldEvent();
+    $page = pageBySlug($manifest, 'citas');
+    $calendar = blockByType($page, 'calendar');
+    expect($calendar)->not->toBeNull();
+
+    $fields = collect($manifest['objects'][0]['fields']);
+    expect($calendar['date_field_id'])->toBe($fields->firstWhere('slug', 'fecha')['id'])
+        ->and($calendar['title_field_id'])->toBe($fields->firstWhere('slug', 'titulo')['id'])
+        ->and($calendar['color_field_id'])->toBe($fields->firstWhere('slug', 'estado')['id']);
+
+    // A lone date is an event, not a span — no Gantt.
+    expect(blockByType($page, 'gantt'))->toBeNull();
+    expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('prefers a Gantt over a calendar when an object spans two dates', function () {
+    $manifest = scaffoldPlan('en');
+    $page = pageBySlug($manifest, 'tasks');
+    expect(blockByType($page, 'gantt'))->not->toBeNull()
+        ->and(blockByType($page, 'calendar'))->toBeNull();
+});
+
 it('scaffolds an editable kanban with colour-coded status options', function () {
     $manifest = scaffoldFor('es-MX');
 
