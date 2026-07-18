@@ -123,6 +123,94 @@ class SemanticLexicon
         ],
     ];
 
+    /**
+     * Dashboard narrative: a caption per chart type and per KPI aggregation, plus
+     * the time-bucket adverb — full sentences with {measure}/{dim}/{x}/{series}/
+     * {bucket} placeholders. Chart templates position {bucket} per each language's
+     * grammar (English parenthesises it, Romance languages fold it into the verb);
+     * an absent bucket collapses to nothing.
+     *
+     * @var array<string, array<string, string>>
+     */
+    private const CHART = [
+        'en' => [
+            'pareto' => '{measure} by {dim}, largest first, with the cumulative-% line — where the total concentrates.',
+            'pie' => 'Share of {measure} by {dim} over the total.',
+            'treemap' => 'Relative weight of {measure} by {dim}; area is share.',
+            'hbar' => 'Ranking of {dim} by {measure}, largest first.',
+            'line' => 'Evolution of {measure} ({bucket}) over the selected window.',
+            'scatter' => 'Relationship between {x} and {measure}; each dot is one record.',
+            'box' => 'Distribution of {measure} per {dim}: Q1–Q3 box, median line, outlier dots.',
+            'sankey' => 'Flow from {dim} to {series}; ribbon width is volume.',
+            'radar' => 'Profile across {dim} on radial axes.',
+            'default_dim' => 'Comparison of {measure} across {dim}.',
+            'default_nodim' => 'Evolution of {measure} ({bucket}) over the selected window.',
+        ],
+        'es' => [
+            'pareto' => '{measure} por {dim}, de mayor a menor, con la línea de % acumulado — dónde se concentra el total.',
+            'pie' => 'Participación de {measure} por {dim} sobre el total.',
+            'treemap' => 'Peso relativo de {measure} por {dim}; el área es la proporción.',
+            'hbar' => 'Ranking de {dim} por {measure}, de mayor a menor.',
+            'line' => 'Evolución {bucket} de {measure} en la ventana seleccionada.',
+            'scatter' => 'Relación entre {x} y {measure}; cada punto es un registro.',
+            'box' => 'Distribución de {measure} por {dim}: caja Q1–Q3, línea en la mediana, puntos atípicos.',
+            'sankey' => 'Flujo de {dim} hacia {series}; el grosor de la cinta es el volumen.',
+            'radar' => 'Perfil comparado por {dim} en ejes radiales.',
+            'default_dim' => 'Comparación de {measure} entre {dim}.',
+            'default_nodim' => 'Evolución {bucket} de {measure} en la ventana seleccionada.',
+        ],
+        'pt' => [
+            'pareto' => '{measure} por {dim}, do maior ao menor, com a linha de % acumulada — onde o total se concentra.',
+            'pie' => 'Participação de {measure} por {dim} sobre o total.',
+            'treemap' => 'Peso relativo de {measure} por {dim}; a área é a proporção.',
+            'hbar' => 'Ranking de {dim} por {measure}, do maior ao menor.',
+            'line' => 'Evolução {bucket} de {measure} na janela selecionada.',
+            'scatter' => 'Relação entre {x} e {measure}; cada ponto é um registro.',
+            'box' => 'Distribuição de {measure} por {dim}: caixa Q1–Q3, linha na mediana, pontos atípicos.',
+            'sankey' => 'Fluxo de {dim} para {series}; a espessura da faixa é o volume.',
+            'radar' => 'Perfil comparado por {dim} em eixos radiais.',
+            'default_dim' => 'Comparação de {measure} entre {dim}.',
+            'default_nodim' => 'Evolução {bucket} de {measure} na janela selecionada.',
+        ],
+        'fr' => [
+            'pareto' => '{measure} par {dim}, du plus grand au plus petit, avec la courbe du % cumulé — où le total se concentre.',
+            'pie' => 'Part de {measure} par {dim} sur le total.',
+            'treemap' => 'Poids relatif de {measure} par {dim} ; l’aire représente la part.',
+            'hbar' => 'Classement des {dim} par {measure}, du plus grand au plus petit.',
+            'line' => 'Évolution {bucket} de {measure} sur la fenêtre sélectionnée.',
+            'scatter' => 'Relation entre {x} et {measure} ; chaque point est un enregistrement.',
+            'box' => 'Distribution de {measure} par {dim} : boîte Q1–Q3, ligne médiane, points atypiques.',
+            'sankey' => 'Flux de {dim} vers {series} ; la largeur du ruban est le volume.',
+            'radar' => 'Profil par {dim} sur des axes radiaux.',
+            'default_dim' => 'Comparaison de {measure} entre {dim}.',
+            'default_nodim' => 'Évolution {bucket} de {measure} sur la fenêtre sélectionnée.',
+        ],
+    ];
+
+    /**
+     * A short KPI-card subtitle per aggregation — names the number's KIND
+     * (count/sum/avg/percentile), never a value that would go stale on filter.
+     *
+     * @var array<string, array<string, string>>
+     */
+    private const KPI = [
+        'en' => ['count' => 'count in window', 'sum' => 'total in window', 'avg' => 'period average', 'median' => 'period median', 'p90' => 'period p90', 'p95' => 'period p95', 'min' => 'period minimum', 'max' => 'period maximum', 'distinct_count' => 'distinct values'],
+        'es' => ['count' => 'conteo en la ventana', 'sum' => 'acumulado en la ventana', 'avg' => 'promedio del periodo', 'median' => 'mediana del periodo', 'p90' => 'percentil 90 del periodo', 'p95' => 'percentil 95 del periodo', 'min' => 'mínimo del periodo', 'max' => 'máximo del periodo', 'distinct_count' => 'valores distintos'],
+        'pt' => ['count' => 'contagem na janela', 'sum' => 'acumulado na janela', 'avg' => 'média do período', 'median' => 'mediana do período', 'p90' => 'percentil 90 do período', 'p95' => 'percentil 95 do período', 'min' => 'mínimo do período', 'max' => 'máximo do período', 'distinct_count' => 'valores distintos'],
+        'fr' => ['count' => 'total sur la fenêtre', 'sum' => 'cumul sur la fenêtre', 'avg' => 'moyenne de la période', 'median' => 'médiane de la période', 'p90' => 'p90 de la période', 'p95' => 'p95 de la période', 'min' => 'minimum de la période', 'max' => 'maximum de la période', 'distinct_count' => 'valeurs distinctes'],
+    ];
+
+    /** The time-bucket adverb per grain, per locale. */
+    private const BUCKET = [
+        'en' => ['day' => 'daily', 'week' => 'weekly', 'month' => 'monthly', 'quarter' => 'quarterly', 'year' => 'yearly'],
+        'es' => ['day' => 'diaria', 'week' => 'semanal', 'month' => 'mensual', 'quarter' => 'trimestral', 'year' => 'anual'],
+        'pt' => ['day' => 'diária', 'week' => 'semanal', 'month' => 'mensal', 'quarter' => 'trimestral', 'year' => 'anual'],
+        'fr' => ['day' => 'quotidienne', 'week' => 'hebdomadaire', 'month' => 'mensuelle', 'quarter' => 'trimestrielle', 'year' => 'annuelle'],
+    ];
+
+    /** The word for "records" when a chart has no explicit measure field, per locale. */
+    private const RECORDS = ['en' => 'records', 'es' => 'registros', 'pt' => 'registros', 'fr' => 'enregistrements'];
+
     private function __construct(private readonly string $locale) {}
 
     public static function for(?string $locale): self
@@ -169,5 +257,44 @@ class SemanticLexicon
         $haystack = Str::ascii(mb_strtolower(implode(' ', $haystacks)));
 
         return preg_match('/'.implode('|', $words).'/i', $haystack) === 1;
+    }
+
+    /** The KPI-card subtitle for an aggregation (falls back to English, then ''). */
+    public function kpiSubtitle(string $aggregation): string
+    {
+        return self::KPI[$this->locale][$aggregation] ?? self::KPI['en'][$aggregation] ?? '';
+    }
+
+    /**
+     * The one-line caption under a chart, written from its type and the resolved
+     * field names (any of which may be null when the chart doesn't use them).
+     * $bucketGrain is the time bucket (day/week/…) for temporal charts, or null.
+     */
+    public function chartDescription(string $chartType, ?string $measure, ?string $dim, ?string $x, ?string $series, ?string $bucketGrain): string
+    {
+        $key = match ($chartType) {
+            'donut', 'pie' => 'pie',
+            'area', 'line' => 'line',
+            'pareto', 'treemap', 'hbar', 'scatter', 'box', 'sankey', 'radar' => $chartType,
+            default => $dim !== null && $dim !== '' ? 'default_dim' : 'default_nodim',
+        };
+
+        $table = self::CHART[$this->locale] ?? self::CHART['en'];
+        $template = $table[$key] ?? self::CHART['en'][$key] ?? '';
+
+        $bucket = $bucketGrain !== null
+            ? (self::BUCKET[$this->locale][$bucketGrain] ?? self::BUCKET['en'][$bucketGrain] ?? '')
+            : '';
+
+        $out = strtr($template, [
+            '{measure}' => ($measure !== null && $measure !== '') ? $measure : (self::RECORDS[$this->locale] ?? 'records'),
+            '{dim}' => (string) $dim,
+            '{x}' => (string) $x,
+            '{series}' => (string) $series,
+            '{bucket}' => $bucket,
+        ]);
+
+        // Drop an empty "()" left by a missing bucket, then collapse whitespace.
+        return trim((string) preg_replace('/\s{2,}/', ' ', str_replace('()', '', $out)));
     }
 }

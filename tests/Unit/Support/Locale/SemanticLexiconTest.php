@@ -25,6 +25,36 @@ it('falls back to the English template for a key the locale lacks', function () 
     expect(SemanticLexicon::for('fr')->label('unknown_key'))->toBe('unknown_key');
 });
 
+it('renders KPI subtitles per locale', function () {
+    expect(SemanticLexicon::for('en')->kpiSubtitle('avg'))->toBe('period average')
+        ->and(SemanticLexicon::for('es')->kpiSubtitle('avg'))->toBe('promedio del periodo')
+        ->and(SemanticLexicon::for('pt')->kpiSubtitle('sum'))->toBe('acumulado na janela')
+        ->and(SemanticLexicon::for('fr')->kpiSubtitle('count'))->toBe('total sur la fenêtre')
+        ->and(SemanticLexicon::for('fr')->kpiSubtitle('unknown_agg'))->toBe('');
+});
+
+it('renders chart descriptions per locale, interpolating the field names', function () {
+    expect(SemanticLexicon::for('fr')->chartDescription('hbar', 'ventes', 'région', null, null, null))
+        ->toBe('Classement des région par ventes, du plus grand au plus petit.')
+        ->and(SemanticLexicon::for('pt')->chartDescription('pie', 'vendas', 'categoria', null, null, null))
+        ->toBe('Participação de vendas por categoria sobre o total.');
+});
+
+it('places the time bucket per locale and drops it cleanly when absent', function () {
+    // English parenthesises the bucket; French folds it into the verb.
+    expect(SemanticLexicon::for('en')->chartDescription('line', 'revenue', null, null, null, 'week'))
+        ->toBe('Evolution of revenue (weekly) over the selected window.')
+        ->and(SemanticLexicon::for('en')->chartDescription('line', 'revenue', null, null, null, null))
+        ->toBe('Evolution of revenue over the selected window.')
+        ->and(SemanticLexicon::for('fr')->chartDescription('line', 'ventes', null, null, null, 'month'))
+        ->toBe('Évolution mensuelle de ventes sur la fenêtre sélectionnée.');
+});
+
+it('falls back to the localized record word when a chart has no measure', function () {
+    expect(SemanticLexicon::for('fr')->chartDescription('area', null, null, null, null, null))
+        ->toBe('Évolution de enregistrements sur la fenêtre sélectionnée.');
+});
+
 it('matches vocabulary per locale, accent- and case-insensitively', function () {
     expect(SemanticLexicon::for('fr')->matches('quantity', 'Quantité'))->toBeTrue()
         ->and(SemanticLexicon::for('fr')->matches('commerce', 'Commandes'))->toBeTrue()

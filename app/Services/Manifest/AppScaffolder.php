@@ -1985,9 +1985,6 @@ class AppScaffolder
      */
     private function chartDescription(array $chart, string $chartType, string $agg, array $object, string $lang): string
     {
-        // Chart descriptions / KPI subtitles are full sentences, still es|en only;
-        // other locales fall back to English (not Spanish) until templated here.
-        $es = $lang === 'es';
         $nameOf = function (?string $fieldId) use ($object): ?string {
             if ($fieldId === null || $fieldId === '') {
                 return null;
@@ -1997,50 +1994,14 @@ class AppScaffolder
             return $field !== null ? Str::lower((string) ($field['name'] ?? $field['slug'])) : null;
         };
 
-        $measure = $nameOf($chart['y_field_id'] ?? null) ?? ($es ? 'registros' : 'records');
-        $dim = $nameOf($chart['group_by_field_id'] ?? null);
-        $x = $nameOf($chart['x_field_id'] ?? null);
-        $series = $nameOf($chart['series_field_id'] ?? null);
-        $bucketWord = match ($chart['bucket'] ?? null) {
-            'day' => $es ? 'diaria' : 'daily',
-            'week' => $es ? 'semanal' : 'weekly',
-            'month' => $es ? 'mensual' : 'monthly',
-            'quarter' => $es ? 'trimestral' : 'quarterly',
-            'year' => $es ? 'anual' : 'yearly',
-            default => null,
-        };
-
-        if (! $es) {
-            return trim((string) preg_replace('/\s{2,}/', ' ', match ($chartType) {
-                'pareto' => "{$measure} by {$dim}, largest first, with the cumulative-% line — where the total concentrates.",
-                'pie', 'donut' => "Share of {$measure} by {$dim} over the total.",
-                'treemap' => "Relative weight of {$measure} by {$dim}; area is share.",
-                'hbar' => "Ranking of {$dim} by {$measure}, largest first.",
-                'line', 'area' => 'Evolution of '.$measure.($bucketWord !== null ? " ({$bucketWord})" : '').' over the selected window.',
-                'scatter' => "Relationship between {$x} and {$measure}; each dot is one record.",
-                'box' => "Distribution of {$measure} per {$dim}: Q1–Q3 box, median line, outlier dots.",
-                'sankey' => "Flow from {$dim} to {$series}; ribbon width is volume.",
-                'radar' => "Profile across {$dim} on radial axes.",
-                default => $dim !== null
-                    ? "Comparison of {$measure} across {$dim}."
-                    : 'Evolution of '.$measure.($bucketWord !== null ? " ({$bucketWord})" : '').' over the selected window.',
-            }));
-        }
-
-        return trim((string) preg_replace('/\s{2,}/', ' ', match ($chartType) {
-            'pareto' => "{$measure} por {$dim}, de mayor a menor, con la línea de % acumulado — dónde se concentra el total.",
-            'pie', 'donut' => "Participación de {$measure} por {$dim} sobre el total.",
-            'treemap' => "Peso relativo de {$measure} por {$dim}; el área es la proporción.",
-            'hbar' => "Ranking de {$dim} por {$measure}, de mayor a menor.",
-            'line', 'area' => 'Evolución '.($bucketWord ?? '').' de '.$measure.' en la ventana seleccionada.',
-            'scatter' => "Relación entre {$x} y {$measure}; cada punto es un registro.",
-            'box' => "Distribución de {$measure} por {$dim}: caja Q1–Q3, línea en la mediana, puntos atípicos.",
-            'sankey' => "Flujo de {$dim} hacia {$series}; el grosor de la cinta es el volumen.",
-            'radar' => "Perfil comparado por {$dim} en ejes radiales.",
-            default => $dim !== null
-                ? "Comparación de {$measure} entre {$dim}."
-                : 'Evolución '.($bucketWord ?? '').' de '.$measure.' en la ventana seleccionada.',
-        }));
+        return SemanticLexicon::for($lang)->chartDescription(
+            $chartType,
+            $nameOf($chart['y_field_id'] ?? null),
+            $nameOf($chart['group_by_field_id'] ?? null),
+            $nameOf($chart['x_field_id'] ?? null),
+            $nameOf($chart['series_field_id'] ?? null),
+            is_string($chart['bucket'] ?? null) ? $chart['bucket'] : null,
+        );
     }
 
     /**
@@ -2168,22 +2129,7 @@ class AppScaffolder
      */
     private function kpiSubtitle(string $aggregation, string $lang): string
     {
-        // Chart descriptions / KPI subtitles are full sentences, still es|en only;
-        // other locales fall back to English (not Spanish) until templated here.
-        $es = $lang === 'es';
-
-        return match ($aggregation) {
-            'count' => $es ? 'conteo en la ventana' : 'count in window',
-            'sum' => $es ? 'acumulado en la ventana' : 'total in window',
-            'avg' => $es ? 'promedio del periodo' : 'period average',
-            'median' => $es ? 'mediana del periodo' : 'period median',
-            'p90' => $es ? 'percentil 90 del periodo' : 'period p90',
-            'p95' => $es ? 'percentil 95 del periodo' : 'period p95',
-            'min' => $es ? 'mínimo del periodo' : 'period minimum',
-            'max' => $es ? 'máximo del periodo' : 'period maximum',
-            'distinct_count' => $es ? 'valores distintos' : 'distinct values',
-            default => '',
-        };
+        return SemanticLexicon::for($lang)->kpiSubtitle($aggregation);
     }
 
     /**
