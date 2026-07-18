@@ -97,11 +97,16 @@ Pass `objects`: an array where each is
   text/email→string, select→single_select, money→currency). Unknown → string.
 - `options` (plain strings) for single_select / multi_select.
 
-Pass `links` for belongs-to relations: [{"from":"renglones","to":"comandas","name":"comanda"}]
+Pass `links` for relations: [{"from":"renglones","to":"comandas","name":"comanda"}]
 means "a renglón belongs to one comanda" (from/to are object slugs). Model an
 order with line items, and a line that references a priced product, as links —
 the lookup/subtotal/total/POS screen are then generated for you. Do NOT add a
 field to hold another object's id; use a link.
+
+For a MANY-TO-MANY relationship (both sides hold many: a scene features many cast
+AND a cast appears in many scenes), add `"type":"many_to_many"` to the link:
+[{"from":"escenas","to":"elenco","type":"many_to_many"}]. It builds a multi-picker
+on BOTH objects; give it just once per pair.
 
 Optional `include_pages` (default true).
 
@@ -119,7 +124,7 @@ DESC;
                 ->required(),
             'links' => $schema
                 ->array()
-                ->description('Belongs-to relations: [{from: <object slug>, to: <object slug>, name: <label on the from side>}]. A <from> belongs to one <to>. Only applied when scaffolding a fresh (empty) app.'),
+                ->description('Relations between objects: [{from: <object slug>, to: <object slug>, name?: <label on the from side>, type?: "belongs_to"|"many_to_many"}]. Default belongs_to = a <from> belongs to one <to>. Use type "many_to_many" for a symmetric link where both sides hold many (give it once per pair). Only applied when scaffolding a fresh (empty) app.'),
             'include_pages' => $schema
                 ->boolean()
                 ->description('Whether to also generate a list page (heading + table) per object. Default true.'),

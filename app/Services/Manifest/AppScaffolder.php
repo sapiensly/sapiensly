@@ -116,14 +116,14 @@ class AppScaffolder
     private const SYSTEM = <<<'SYS'
         You design simple internal business apps as a set of data objects (like database tables) with fields, and the links between them.
         Given a description, respond with ONLY a single minified JSON object — no markdown, no code fences, no commentary — using exactly this schema:
-        {"objects":[{"name":string,"slug":string,"fields":[{"name":string,"slug":string,"type":"string"|"long_text"|"number"|"currency"|"boolean"|"date"|"datetime"|"single_select"|"multi_select"|"rating","options":[{"value":string,"label":string}]|null}]}],"links":[{"from":string,"to":string,"name":string}]|null}
+        {"objects":[{"name":string,"slug":string,"fields":[{"name":string,"slug":string,"type":"string"|"long_text"|"number"|"currency"|"boolean"|"date"|"datetime"|"single_select"|"multi_select"|"rating","options":[{"value":string,"label":string}]|null}]}],"links":[{"from":string,"to":string,"name":string,"type":"belongs_to"|"many_to_many"}]|null}
         Rules:
         - objects: the main entities the app tracks (e.g. for a content engine: Ideas, Drafts, Published). At most 6. Each needs a human `name` and a snake_case `slug`.
         - fields: the columns of each object. At most 12 per object. Each needs a `name`, a snake_case `slug`, and a `type`. Give every object a short text title/name field FIRST.
         - STAY GROUNDED: only include fields the description actually implies or that are obviously essential to the entity. Do NOT pad objects with invented or generic extra fields — fewer, relevant fields beat a long speculative list.
         - type: use "string" for short text, "long_text" for paragraphs, "number" for quantities/counts, "currency" for money/prices/amounts, "boolean" for yes/no, "date"/"datetime" for dates, "single_select"/"multi_select" for a fixed set of choices, "rating" for 1-5 stars. There is NO email or url type — use "string". There is NO id/foreign-key type — never add a field to hold another object's id or name; express that as a link.
         - options: REQUIRED and non-empty ONLY for single_select / multi_select (each option a short `value` slug + a human `label`); use null for every other type. Add a status/stage single_select whenever the entity moves through states (it becomes a board) — e.g. order: pending/preparing/served/paid.
-        - links: "belongs-to" relationships between objects. Each link means "a <from> belongs to one <to>" (e.g. {"from":"drafts","to":"ideas","name":"idea"} = each Draft belongs to one Idea). `from`/`to` are object slugs; `name` is the human label of the link on the <from> side. Use null when there are no relationships. At most 8.
+        - links: relationships between objects. Default `type` "belongs_to" means "a <from> belongs to one <to>" (e.g. {"from":"drafts","to":"ideas","name":"idea"} = each Draft belongs to one Idea). Use `type` "many_to_many" for a symmetric link where BOTH sides hold many (e.g. {"from":"scenes","to":"cast","type":"many_to_many"} = a scene features many cast AND a cast appears in many scenes) — give it once per pair, it builds a picker on both. `from`/`to` are object slugs; `name` is the human label on the <from> side. Use null when there are no relationships. At most 8.
         - NEVER restate a relationship as a field: do not add a string/number field that holds a related record's name or id (e.g. on a line item do NOT add a "product"/"category" text field) — model it with a link instead. The relation, its picker, child counts and totals are generated for you.
         - Model line-item / amount structures as a parent with a child linked to it (e.g. an order/ticket with its line items, each line a currency field): the child's amount then rolls up to a total on the parent automatically. Do not add a manual "total" field to the parent — it is derived.
         - Write names/labels in the SAME language as the description.
@@ -257,13 +257,27 @@ class AppScaffolder
             }
             $from = $this->toSlug((string) ($link['from'] ?? ''));
             $to = $this->toSlug((string) ($link['to'] ?? ''));
-            $key = $from.'->'.$to;
+
+            // A link is belongs-to by default; the model marks a symmetric link
+            // `many_to_many` (a scene features many cast; a cast appears in many
+            // scenes). Any other value falls back to belongs-to.
+            $rawType = $this->toSlug((string) ($link['type'] ?? $link['cardinality'] ?? ''));
+            $isM2M = in_array($rawType, ['many_to_many', 'manytomany', 'm2m'], true);
+
+            // Belongs-to is directional (from→to ≠ to→from); many-to-many is
+            // symmetric, so dedup it on the unordered pair to avoid a double link.
+            $key = $isM2M ? 'm2m:'.min($from, $to).'|'.max($from, $to) : $from.'->'.$to;
             if ($from === $to || ! in_array($from, $objectSlugs, true) || ! in_array($to, $objectSlugs, true) || isset($seen[$key])) {
                 continue;
             }
             $seen[$key] = true;
             $name = trim((string) ($link['name'] ?? ''));
-            $links[] = ['from' => $from, 'to' => $to, 'name' => $name !== '' ? $name : null];
+            $links[] = [
+                'from' => $from,
+                'to' => $to,
+                'name' => $name !== '' ? $name : null,
+                'type' => $isM2M ? 'many_to_many' : 'belongs_to',
+            ];
         }
 
         return $links;
@@ -467,6 +481,19 @@ class AppScaffolder
             if ($fromIndex === null || $toIndex === null || $fromIndex === $toIndex) {
                 continue;
             }
+
+            // Many-to-many: a symmetric picker on each object, no parent/child and
+            // no POS/master-detail bookkeeping (that is a belongs-to concern).
+            if (($link['type'] ?? 'belongs_to') === 'many_to_many') {
+                $m2m = $this->buildManyToMany($built[$fromIndex]['def'], $built[$toIndex]['def'], $link['name'], $lang);
+                $built[$fromIndex]['def']['fields'][] = $m2m['from_field'];
+                $built[$fromIndex]['pageFields'][] = $m2m['from_index'];
+                $built[$toIndex]['def']['fields'][] = $m2m['to_field'];
+                $built[$toIndex]['pageFields'][] = $m2m['to_index'];
+
+                continue;
+            }
+
             $pair = $this->buildRelation($built[$fromIndex]['def'], $built[$toIndex]['def'], $link['name'], $lang);
             $built[$fromIndex]['def']['fields'][] = $pair['child_field'];
             $built[$fromIndex]['pageFields'][] = $pair['child_index'];
@@ -726,6 +753,55 @@ class AppScaffolder
             'parent_rollup_index' => ['id' => $rollupFieldId, 'slug' => $rollupSlug, 'type' => 'rollup'],
             'parent_sum_field' => $sumField,
             'parent_sum_index' => $sumIndex,
+        ];
+    }
+
+    /**
+     * Build a MANY-TO-MANY relation: a many_to_many picker on EACH object pointing
+     * at the other, cross-linked via inverse_field_id so the runtime resolves the
+     * link from either side (e.g. a Shoot Day lists its Scenes and a Scene lists
+     * the Days it is shot on). Symmetric — unlike buildRelation there is no
+     * "many"/"one" side and no rollup; both pickers go on their object's page.
+     *
+     * @param  array{id: string, name: string, slug: string, fields: array<int, array<string, mixed>>}  $from
+     * @param  array{id: string, name: string, slug: string, fields: array<int, array<string, mixed>>}  $to
+     * @return array{from_field: array<string, mixed>, from_index: array{id: string, slug: string, type: string}, to_field: array<string, mixed>, to_index: array{id: string, slug: string, type: string}}
+     */
+    public function buildManyToMany(array $from, array $to, ?string $name = null, string $lang = 'en'): array
+    {
+        $fromFieldId = $this->id('fld');
+        $toFieldId = $this->id('fld');
+
+        // The picker label is the RELATED collection (kept plural — it holds many).
+        $fromName = ($name !== null && trim($name) !== '') ? trim($name) : (string) $to['name'];
+        $fromSlug = $this->uniqueSlug($to['slug'], array_column($from['fields'], 'slug'), 'related');
+        $toSlug = $this->uniqueSlug($from['slug'], array_column($to['fields'], 'slug'), 'related');
+
+        $fromField = [
+            'id' => $fromFieldId,
+            'slug' => $fromSlug,
+            'name' => $fromName,
+            'type' => 'relation',
+            'target_object_id' => $to['id'],
+            'cardinality' => 'many_to_many',
+            'inverse_field_id' => $toFieldId,
+        ];
+
+        $toField = [
+            'id' => $toFieldId,
+            'slug' => $toSlug,
+            'name' => (string) $from['name'],
+            'type' => 'relation',
+            'target_object_id' => $from['id'],
+            'cardinality' => 'many_to_many',
+            'inverse_field_id' => $fromFieldId,
+        ];
+
+        return [
+            'from_field' => $fromField,
+            'from_index' => ['id' => $fromFieldId, 'slug' => $fromSlug, 'type' => 'relation'],
+            'to_field' => $toField,
+            'to_index' => ['id' => $toFieldId, 'slug' => $toSlug, 'type' => 'relation'],
         ];
     }
 

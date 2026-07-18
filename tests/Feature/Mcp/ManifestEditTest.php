@@ -155,6 +155,44 @@ it('add_relation links two objects belongs-to and wires the picker into the page
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 });
 
+it('add_relation kind=many_to_many puts a symmetric picker on both objects', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(AddObjectTool::class, [
+            'app_slug' => 'content_engine',
+            'name' => 'Tags',
+            'fields' => [['name' => 'Label', 'type' => 'string']],
+        ])
+        ->assertOk();
+
+    SapiensServer::actingAs($this->user)
+        ->tool(AddRelationTool::class, [
+            'app_slug' => 'content_engine',
+            'from_object' => 'ideas',
+            'to_object' => 'tags',
+            'kind' => 'many_to_many',
+        ])
+        ->assertOk()
+        ->assertSee('many-to-many');
+
+    $manifest = currentManifest($this->appModel);
+    $ideas = collect($manifest['objects'])->firstWhere('slug', 'ideas');
+    $tags = collect($manifest['objects'])->firstWhere('slug', 'tags');
+
+    $ideasM2M = collect($ideas['fields'])->first(fn ($f) => ($f['type'] ?? '') === 'relation' && ($f['cardinality'] ?? '') === 'many_to_many');
+    $tagsM2M = collect($tags['fields'])->first(fn ($f) => ($f['type'] ?? '') === 'relation' && ($f['cardinality'] ?? '') === 'many_to_many');
+
+    expect($ideasM2M)->not->toBeNull()
+        ->and($tagsM2M)->not->toBeNull()
+        ->and($ideasM2M['target_object_id'])->toBe($tags['id'])
+        ->and($tagsM2M['target_object_id'])->toBe($ideas['id'])
+        ->and($ideasM2M['inverse_field_id'])->toBe($tagsM2M['id'])
+        ->and($tagsM2M['inverse_field_id'])->toBe($ideasM2M['id']);
+
+    // No child-count rollup for a many-to-many (that is a belongs-to affordance).
+    expect(collect($tags['fields'])->where('type', 'rollup'))->toBeEmpty();
+    expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+});
+
 it('add_relation rejects an unknown object', function () {
     SapiensServer::actingAs($this->user)
         ->tool(AddRelationTool::class, [

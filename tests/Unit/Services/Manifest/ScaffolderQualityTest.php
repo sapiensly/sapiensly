@@ -568,6 +568,76 @@ it('dedups multiple commerce triads to a single POS screen', function () {
     expect(posPageCount($manifest))->toBe(1);
 });
 
+/**
+ * @return array<string, mixed>
+ */
+function scaffoldM2M(array $links): array
+{
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_m2m', 'slug' => 'm2m', 'name' => 'M2M', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+    $scaffolder = app(AppScaffolder::class);
+    // Route through normalizeSpec — the real MCP/builder path — so links get their
+    // type preserved, `name` filled, and symmetric m2m pairs deduped.
+    $spec = $scaffolder->normalizeSpec([
+        'objects' => [
+            ['name' => 'Escenas', 'slug' => 'escenas', 'fields' => [['name' => 'Numero', 'slug' => 'numero', 'type' => 'string', 'options' => null]]],
+            ['name' => 'Elenco', 'slug' => 'elenco', 'fields' => [['name' => 'Personaje', 'slug' => 'personaje', 'type' => 'string', 'options' => null]]],
+        ],
+        'links' => $links,
+    ]);
+
+    return $scaffolder->assemble($base, $spec);
+}
+
+/** @return array<string, mixed>|null */
+function m2mField(array $object): ?array
+{
+    return collect($object['fields'])->first(
+        fn (array $f) => ($f['type'] ?? '') === 'relation' && ($f['cardinality'] ?? '') === 'many_to_many',
+    );
+}
+
+it('builds a many_to_many link as a symmetric picker on both objects', function () {
+    $manifest = scaffoldM2M([['from' => 'escenas', 'to' => 'elenco', 'type' => 'many_to_many']]);
+
+    $escenas = collect($manifest['objects'])->firstWhere('slug', 'escenas');
+    $elenco = collect($manifest['objects'])->firstWhere('slug', 'elenco');
+    $escM2M = m2mField($escenas);
+    $eleM2M = m2mField($elenco);
+
+    expect($escM2M)->not->toBeNull()
+        ->and($eleM2M)->not->toBeNull()
+        ->and($escM2M['target_object_id'])->toBe($elenco['id'])
+        ->and($eleM2M['target_object_id'])->toBe($escenas['id'])
+        // Cross-linked so the runtime resolves from either side.
+        ->and($escM2M['inverse_field_id'])->toBe($eleM2M['id'])
+        ->and($eleM2M['inverse_field_id'])->toBe($escM2M['id']);
+
+    // Manifest stays schema + semantically valid.
+    $result = (new ManifestValidator)->validate($manifest);
+    expect($result->errors)->toBe([]);
+});
+
+it('dedups a many_to_many link given in both directions', function () {
+    $manifest = scaffoldM2M([
+        ['from' => 'escenas', 'to' => 'elenco', 'type' => 'many_to_many'],
+        ['from' => 'elenco', 'to' => 'escenas', 'type' => 'many_to_many'],
+    ]);
+
+    // Exactly one m2m field per object (a symmetric pair), not two.
+    foreach (['escenas', 'elenco'] as $slug) {
+        $object = collect($manifest['objects'])->firstWhere('slug', $slug);
+        $count = collect($object['fields'])->filter(
+            fn (array $f) => ($f['type'] ?? '') === 'relation' && ($f['cardinality'] ?? '') === 'many_to_many',
+        )->count();
+        expect($count)->toBe(1);
+    }
+});
+
 it('scaffolded apps produce no design-lint warnings', function () {
     $manifests = [
         'crm' => scaffoldFor('es-MX'),

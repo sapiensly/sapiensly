@@ -11,7 +11,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Link two existing objects with a belongs-to relation: each `from` record belongs to one `to` record (e.g. each Draft belongs to one Idea). Creates both sides (the picker on `from` and its inverse "has many" on `to`), wires the picker into the `from` create form + table, and adds a child-count rollup column on the `to` table (e.g. how many Drafts each Idea has). The typed alternative to hand-writing relation fields with propose_change. Saved as a new reversible version.')]
+#[Description('Link two existing objects. Default is a BELONGS-TO: each `from` record belongs to one `to` record (e.g. each Draft belongs to one Idea) — it creates the picker on `from`, its inverse "has many" on `to`, and a child-count rollup column on the `to` table. Set kind="many_to_many" for a SYMMETRIC link where both sides hold many (e.g. a Scene features many Cast AND a Cast appears in many Scenes) — it puts a multi-picker on BOTH objects (no parent/child, no count). The typed alternative to hand-writing relation fields with propose_change. Saved as a new reversible version.')]
 class AddRelationTool extends SapiensTool
 {
     protected const ABILITY = 'apps:build';
@@ -24,6 +24,7 @@ class AddRelationTool extends SapiensTool
             'to_object' => ['required', 'string'],
             'name' => ['nullable', 'string', 'max:100'],
             'add_to_page' => ['nullable', 'boolean'],
+            'kind' => ['nullable', 'string', 'in:belongs_to,many_to_many'],
         ]);
 
         /** @var User $user */
@@ -36,6 +37,7 @@ class AddRelationTool extends SapiensTool
         }
 
         try {
+            $kind = $validated['kind'] ?? 'belongs_to';
             $version = app(ManifestEditor::class)->addRelation(
                 $app,
                 $validated['from_object'],
@@ -43,6 +45,7 @@ class AddRelationTool extends SapiensTool
                 $validated['name'] ?? null,
                 $validated['add_to_page'] ?? true,
                 $user,
+                $kind,
             );
         } catch (\Throwable $e) {
             return Response::error('The relation could not be added: '.$e->getMessage());
@@ -51,7 +54,9 @@ class AddRelationTool extends SapiensTool
         return Response::json([
             'added' => true,
             'app_slug' => $app->slug,
-            'relation' => "{$validated['from_object']} belongs to {$validated['to_object']}",
+            'relation' => $kind === 'many_to_many'
+                ? "{$validated['from_object']} ↔ {$validated['to_object']} (many-to-many)"
+                : "{$validated['from_object']} belongs to {$validated['to_object']}",
             'version_number' => $version->version_number,
         ]);
     }
@@ -67,6 +72,7 @@ class AddRelationTool extends SapiensTool
             'to_object' => $schema->string()->description('Slug of the "one" object — the parent each `from` record points to (e.g. "ideas").')->required(),
             'name' => $schema->string()->description('Optional human label of the link on the `from` side (e.g. "Idea"); derived from the `to` object when omitted.'),
             'add_to_page' => $schema->boolean()->description('Also add the picker to the `from` object\'s create form + table (default true).'),
+            'kind' => $schema->string()->description('Relation kind: "belongs_to" (default — from belongs to one to) or "many_to_many" (symmetric, both sides hold many; from_object/to_object order does not matter).'),
         ];
     }
 }

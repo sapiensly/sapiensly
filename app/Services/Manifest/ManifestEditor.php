@@ -103,7 +103,7 @@ class ManifestEditor
      * belongs to one $toSlug record. Creates the bidirectional pair and wires the
      * picker into the $fromSlug create form + table.
      */
-    public function addRelation(App $app, string $fromSlug, string $toSlug, ?string $name = null, bool $addToPage = true, ?User $user = null): AppVersion
+    public function addRelation(App $app, string $fromSlug, string $toSlug, ?string $name = null, bool $addToPage = true, ?User $user = null, string $kind = 'belongs_to'): AppVersion
     {
         $manifest = $this->activeManifest($app);
 
@@ -112,12 +112,41 @@ class ManifestEditor
         }
         $fromIndex = $this->findObjectIndex($manifest, $fromSlug);
         $toIndex = $this->findObjectIndex($manifest, $toSlug);
+        $lang = AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null);
+
+        // Many-to-many: a symmetric picker on each object (no parent/child, no
+        // count rollup). Both pickers go on their object's form + table.
+        if ($kind === 'many_to_many') {
+            $m2m = $this->scaffolder->buildManyToMany(
+                $manifest['objects'][$fromIndex],
+                $manifest['objects'][$toIndex],
+                $name,
+                $lang,
+            );
+            $manifest['objects'][$fromIndex]['fields'][] = $m2m['from_field'];
+            $manifest['objects'][$toIndex]['fields'][] = $m2m['to_field'];
+
+            if ($addToPage) {
+                $fromObjectId = $manifest['objects'][$fromIndex]['id'];
+                $toObjectId = $manifest['objects'][$toIndex]['id'];
+                foreach ($manifest['pages'] as &$page) {
+                    if (! isset($page['blocks']) || ! is_array($page['blocks'])) {
+                        continue;
+                    }
+                    $this->injectFieldIntoBlocks($page['blocks'], $fromObjectId, $m2m['from_index']['id'], $m2m['from_index']['slug']);
+                    $this->injectFieldIntoBlocks($page['blocks'], $toObjectId, $m2m['to_index']['id'], $m2m['to_index']['slug']);
+                }
+                unset($page);
+            }
+
+            return $this->manifests->createVersion($app, $manifest, $user, "Linked \"{$fromSlug}\" and \"{$toSlug}\" (many-to-many)");
+        }
 
         $pair = $this->scaffolder->buildRelation(
             $manifest['objects'][$fromIndex],
             $manifest['objects'][$toIndex],
             $name,
-            AppScaffolder::langForLocale($manifest['settings']['default_locale'] ?? null),
+            $lang,
         );
 
         $manifest['objects'][$fromIndex]['fields'][] = $pair['child_field'];
