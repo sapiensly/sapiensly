@@ -81,12 +81,63 @@ class ExpressIntentRouter
     {
         $text = Str::lower($message);
         if (preg_match(self::OPT_OUT_WORDS, $text) === 1
-            || preg_match(self::OPT_OUT_OPENERS, trim($text)) === 1) {
+            || preg_match(self::OPT_OUT_OPENERS, trim($text)) === 1
+            || $this->describesAppBuild($text)) {
             return false;
         }
 
         return (preg_match(self::DASHBOARD_WORDS, $text) === 1 || $this->typoedDashboardWord($text))
             && preg_match(self::BUILD_WORDS, $text) === 1;
+    }
+
+    /**
+     * Data-model vocabulary a brief uses when it asks to build a whole APP, not a
+     * dashboard: objects, fields, relations, pages, forms, roles, workflows. Two
+     * distinct hits is the threshold — a real dashboard brief carries none (it
+     * talks about metrics over existing data), while an app spec is thick with
+     * them, so one incidental "campo" never suppresses a genuine dashboard route.
+     *
+     * @var list<string>
+     */
+    private const APP_BUILD_SIGNALS = [
+        'objeto',           // objeto / objetos
+        'campo',            // campo / campos
+        'relacion',         // relación / relaciones (accents folded below)
+        'pertenece a',      // belongs-to phrasing
+        'workflow',
+        'automatiz',        // automatización / automatizaciones
+        'permiso',          // roles y permisos
+        'pagina',           // página / páginas
+        'formulario',
+        'kanban',
+        'crud',
+        'entidad',          // entidad / entidades
+        'modelo de datos',
+        'sistema completo',
+    ];
+
+    /**
+     * Whether the message clearly describes building an APP / data model rather
+     * than a dashboard — in which case the autoroute must stand down and let the
+     * agentic builder (which can actually build the app) take the turn. This is
+     * the safe direction: over-suppressing only falls back to the normal builder.
+     * Guards against a full app spec ("crea un sistema … con estos objetos, sus
+     * campos, relaciones, páginas y automatizaciones") being hijacked into the
+     * dashboard-over-MCP flow just because it also mentions "dashboard"/"KPIs".
+     */
+    private function describesAppBuild(string $text): bool
+    {
+        // Fold accents so "página"/"relación"/"automatización" match ASCII needles.
+        $folded = Str::ascii($text);
+
+        $hits = 0;
+        foreach (self::APP_BUILD_SIGNALS as $needle) {
+            if (str_contains($folded, $needle) && ++$hits >= 2) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

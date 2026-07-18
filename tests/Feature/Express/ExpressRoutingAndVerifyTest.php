@@ -70,6 +70,29 @@ it('routes a clear dashboard-build message to Express when a source exists', fun
         ->and($router->shouldRunExpress('quiero un dashboard pero construido conversando paso a paso', $this->testApp))->toBeFalse();
 });
 
+it('does not hijack a full app-build brief that merely mentions a dashboard', function () {
+    config(['express.enabled' => true, 'express.autoroute' => true]);
+    Integration::factory()->forUser($this->user)->create([
+        'is_mcp' => true, 'status' => 'active', 'auth_type' => 'bearer', 'auth_config' => ['token' => 'T'],
+        'base_url' => 'https://mcp.example.com/v1',
+    ]);
+
+    $router = app(ExpressIntentRouter::class);
+
+    // The exact shape that got hijacked into Express fit_check: a data-model spec
+    // (objetos, campos, relaciones, páginas, automatizaciones) that also asks for
+    // a dashboard among its pages. It must go to the agentic builder, not Express.
+    $appBrief = 'Crea un sistema completo de gestión de obras con estos objetos: Proyectos, Fases, Tareas y Riesgos, '
+        .'con sus campos, relaciones (una tarea pertenece a una fase), páginas de detalle, roles y permisos, y '
+        .'automatizaciones. Incluye un dashboard ejecutivo con KPIs y un análisis de presupuesto.';
+
+    expect($router->shouldRunExpress($appBrief, $this->testApp))->toBeFalse()
+        // Two data-model words are enough; a genuine dashboard brief carries none.
+        ->and($router->shouldRunExpress('crea un dashboard de ventas con métricas por región y análisis de churn', $this->testApp))->toBeTrue()
+        // A single incidental app-ish word does not suppress a real dashboard route.
+        ->and($router->shouldRunExpress('crea un tablero con métricas de mis órdenes y sus campos de estado', $this->testApp))->toBeTrue();
+});
+
 it('routes typoed dashboard words — "dahsboard" defeated the route twice in prod', function () {
     config(['express.enabled' => true, 'express.autoroute' => true]);
     Integration::factory()->forUser($this->user)->create([
