@@ -4,6 +4,7 @@ namespace App\Services\Express;
 
 use App\Enums\Visibility;
 use App\Events\Chat\ChatStreamComplete;
+use App\Jobs\ExpressAppJob;
 use App\Jobs\ExpressDashboardJob;
 use App\Models\App;
 use App\Models\BuilderConversation;
@@ -45,6 +46,41 @@ class ExpressLauncher
      */
     public function launch(App $app, BuilderConversation $conversation, string $prompt, ?string $model = null, ?ChatMessage $chatMessage = null): array
     {
+        ['run' => $run, 'placeholder' => $placeholder] = $this->openRun($app, $conversation, $prompt, 'dashboard_express', $chatMessage);
+
+        ExpressDashboardJob::dispatch($placeholder->id, $run->id, $prompt, $model);
+
+        return ['run' => $run, 'placeholder' => $placeholder];
+    }
+
+    /**
+     * The app-build sibling of launch(): opens the same user-turn + streaming
+     * placeholder + PipelineRun, but runs a full-app builder turn (the complete
+     * builder tool set) via ExpressAppJob instead of the dashboard pipeline. Same
+     * chat linkage, so notifyChatReady flips the launching chat message when the
+     * app lands.
+     *
+     * @return array{run: PipelineRun, placeholder: BuilderMessage}
+     */
+    public function launchAppBuild(App $app, BuilderConversation $conversation, string $prompt, ?string $model = null, ?ChatMessage $chatMessage = null): array
+    {
+        ['run' => $run, 'placeholder' => $placeholder] = $this->openRun($app, $conversation, $prompt, 'app_express', $chatMessage);
+
+        ExpressAppJob::dispatch($placeholder->id, $run->id, $prompt, $model);
+
+        return ['run' => $run, 'placeholder' => $placeholder];
+    }
+
+    /**
+     * Persist the user turn + a streaming assistant placeholder and open the
+     * PipelineRun the background job narrates into. Shared by launch() and
+     * launchAppBuild() so both surfaces open a turn the SAME way; the only
+     * difference is the run `kind` and which job the caller dispatches.
+     *
+     * @return array{run: PipelineRun, placeholder: BuilderMessage}
+     */
+    private function openRun(App $app, BuilderConversation $conversation, string $prompt, string $kind, ?ChatMessage $chatMessage): array
+    {
         // A new turn re-arms the build machinery: clear any standing Detener
         // flag so this run (and its chain) can proceed.
         $this->cancellation->clear($conversation);
@@ -67,11 +103,9 @@ class ExpressLauncher
             'conversation_id' => $conversation->id,
             'chat_id' => $chatMessage?->chat_id,
             'chat_message_id' => $chatMessage?->id,
-            'kind' => 'dashboard_express',
+            'kind' => $kind,
             'prompt' => $prompt,
         ]);
-
-        ExpressDashboardJob::dispatch($placeholder->id, $run->id, $prompt, $model);
 
         return ['run' => $run, 'placeholder' => $placeholder];
     }
@@ -107,33 +141,42 @@ class ExpressLauncher
     }
 
     /**
-     * The terminal chat-message body: a link to the finished dashboard on
+     * The terminal chat-message body: a link to the finished dashboard/app on
      * success, or an honest "couldn't finish it" pointing at the Builder so the
-     * message never hangs on "te avisaré…".
+     * message never hangs on "te avisaré…". The noun follows the run kind so an
+     * app build reads as an app, not a dashboard.
      */
     private function chatCompletionContent(PipelineRun $run, App $app): string
     {
+        $isApp = $run->kind === 'app_express';
+
         if ($run->status === 'succeeded') {
             $url = route('apps.runtime', ['app_slug' => $app->slug]);
 
-            return "✅ Tu dashboard **{$app->name}** está listo. [Consúltalo aquí →]({$url})";
+            return $isApp
+                ? "✅ Tu app **{$app->name}** está lista. [Ábrela aquí →]({$url})"
+                : "✅ Tu dashboard **{$app->name}** está listo. [Consúltalo aquí →]({$url})";
         }
 
         $url = route('apps.builder', $app);
 
-        return "⚠️ No pude terminar el dashboard **{$app->name}**. "
-            ."Abre el Builder para ver qué pasó: [ir al Builder →]({$url})";
+        return $isApp
+            ? "⚠️ No pude terminar la app **{$app->name}**. "
+                ."Abre el Builder para ver qué pasó: [ir al Builder →]({$url})"
+            : "⚠️ No pude terminar el dashboard **{$app->name}**. "
+                ."Abre el Builder para ver qué pasó: [ir al Builder →]({$url})";
     }
 
     /**
      * Provision a fresh, empty app (named deterministically from the prompt)
      * plus its builder conversation, for a caller with no app of its own — the
      * general chat. The app opens private and inherits the org brand like any
-     * create_app; its first Express version fills it in.
+     * create_app; its first build turn (dashboard Express or full-app build)
+     * fills it in.
      *
      * @return array{0: App, 1: BuilderConversation}
      */
-    public function provisionDashboardApp(User $user, string $prompt): array
+    public function provisionApp(User $user, string $prompt): array
     {
         $name = AppNaming::nameFromPrompt($prompt) ?? AppNaming::UNTITLED;
 

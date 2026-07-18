@@ -17,6 +17,15 @@ return [
     'autoroute' => env('DASHBOARD_EXPRESS_AUTOROUTE', false),
 
     /*
+    | App-build autoroute: routes a chat message that clearly asks to BUILD AN
+    | APP (not a dashboard) into the async full-app builder handoff — the chat
+    | provisions an app + conversation, runs a real builder turn, and announces
+    | the app when it lands. Independent of `autoroute` (dashboards) so each can
+    | roll out on its own; still requires `enabled`.
+    */
+    'app_autoroute' => env('APP_EXPRESS_AUTOROUTE', false),
+
+    /*
     | Plumbing model (option B): runs invisible gates — intent routing and the
     | adversarial verifier — where latency matters and the user's voice doesn't.
     | Null = use the user's own model everywhere. Never a model the tenant has

@@ -42,6 +42,14 @@ class ExpressIntentRouter
      */
     private const OPT_OUT_OPENERS = '/^\s*[¿¡"\'«]*\s*(c[oó]mo|por qu[eé]|qu[eé] es|para qu[eé])\b/iu';
 
+    /**
+     * Nouns that name the thing being built when the ask is a whole APP, not a
+     * dashboard: "una app / aplicación / sistema / plataforma / gestor / CRM /
+     * ERP para …". Paired with a build verb (and never a clean dashboard ask),
+     * these route to the full-app builder handoff. Matched on accent-folded text.
+     */
+    private const APP_NOUN_WORDS = '/\b(app|aplicacion|sistema|plataforma|gestor|crm|erp)\b/i';
+
     public function shouldRunExpress(string $message, App $app): bool
     {
         if (! $this->enabled() || ! $this->messageAsksForDashboard($message)) {
@@ -49,6 +57,20 @@ class ExpressIntentRouter
         }
 
         return $this->hasLiveMcpSource($app->organization_id, $app->user_id);
+    }
+
+    /**
+     * G-0 for the full-app builder handoff from the general chat: a clear ask to
+     * BUILD AN APP (a build verb over an app noun, or a thick data-model spec)
+     * routes to the async builder — the chat provisions an app + conversation and
+     * runs a real builder turn, then announces the app when it lands. Unlike the
+     * dashboard route it needs NO live MCP source (an app carries its own data),
+     * and it deliberately stands down for a clean dashboard ask so the two paths
+     * stay disjoint. Gated behind its own flag so the rollout is independent.
+     */
+    public function shouldBuildAppForUser(string $message, User $user): bool
+    {
+        return $this->appAutorouteEnabled() && $this->messageAsksForApp($message);
     }
 
     /**
@@ -69,6 +91,41 @@ class ExpressIntentRouter
     private function enabled(): bool
     {
         return (bool) config('express.enabled') && (bool) config('express.autoroute');
+    }
+
+    private function appAutorouteEnabled(): bool
+    {
+        return (bool) config('express.enabled') && (bool) config('express.app_autoroute');
+    }
+
+    /**
+     * The textual half of the app-build heuristic: a build verb over an app noun
+     * (or a data-model spec), with the process opt-outs and a leading
+     * interrogative removed, and standing down for a clean dashboard ask so the
+     * dashboard route owns those. Conservative — any ambiguity falls back to the
+     * conversational chat, exactly like the dashboard heuristic.
+     */
+    private function messageAsksForApp(string $message): bool
+    {
+        $text = Str::lower($message);
+        // Fold accents for the verb + noun checks so "créame"/"aplicación" match
+        // the ASCII patterns (the raw text is kept for the opt-out openers).
+        $folded = Str::ascii($text);
+        if (preg_match(self::OPT_OUT_WORDS, $text) === 1
+            || preg_match(self::OPT_OUT_OPENERS, trim($text)) === 1
+            || preg_match(self::BUILD_WORDS, $folded) !== 1) {
+            return false;
+        }
+
+        // A clean "build me a dashboard" stays on the dashboard path; only an
+        // app spec (which suppresses the dashboard route) or a non-dashboard
+        // app noun reaches the app builder.
+        if ($this->messageAsksForDashboard($text)) {
+            return false;
+        }
+
+        return preg_match(self::APP_NOUN_WORDS, $folded) === 1
+            || $this->describesAppBuild($text);
     }
 
     /**

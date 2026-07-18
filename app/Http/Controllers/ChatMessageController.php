@@ -113,6 +113,18 @@ class ChatMessageController extends Controller
             return $this->launchExpressFromChat($chat, $user, $userMessage, $content, $model);
         }
 
+        // Full-app builder handoff: a clear "build me an app for X" (not a
+        // dashboard) provisions an app + builder conversation and runs a real
+        // builder turn in the background, announcing the app here when it lands.
+        // Same plain-single-model gate as the dashboard autoroute; the two are
+        // disjoint by construction (an app ask is never a clean dashboard ask).
+        if ($agentId === null
+            && empty($attachmentIds)
+            && $content !== ''
+            && $this->expressRouter->shouldBuildAppForUser($content, $user)) {
+            return $this->launchAppBuildFromChat($chat, $user, $userMessage, $content, $model);
+        }
+
         $placeholder = ChatMessage::create([
             'chat_id' => $chat->id,
             'role' => 'assistant',
@@ -184,7 +196,7 @@ class ChatMessageController extends Controller
     {
         $chat->update(['model' => $model, 'agent_id' => null, 'mode' => 'single']);
 
-        [$app, $conversation] = $this->express->provisionDashboardApp($user, $prompt);
+        [$app, $conversation] = $this->express->provisionApp($user, $prompt);
 
         $assistant = ChatMessage::create([
             'chat_id' => $chat->id,
@@ -206,6 +218,39 @@ class ChatMessageController extends Controller
     }
 
     /**
+     * Provision a fresh app and hand its FIRST build turn to the async builder.
+     * Mirrors launchExpressFromChat, but runs the full-app builder (scaffold_app,
+     * pages, workflows, seed) instead of the dashboard pipeline. The chat answers
+     * immediately with a "…te avisaré cuando esté lista" message linked to the
+     * run; when the build lands, ExpressAppJob flips this same message to "…lista"
+     * (or an honest failure) and rebroadcasts it, so the open chat updates in
+     * place while the user keeps chatting. The build itself streams on the
+     * Builder's own surface.
+     */
+    private function launchAppBuildFromChat(Chat $chat, User $user, ChatMessage $userMessage, string $prompt, ?string $model): JsonResponse
+    {
+        $chat->update(['model' => $model, 'agent_id' => null, 'mode' => 'single']);
+
+        [$app, $conversation] = $this->express->provisionApp($user, $prompt);
+
+        $assistant = ChatMessage::create([
+            'chat_id' => $chat->id,
+            'role' => 'assistant',
+            'content' => $this->appBuildingContent($app->name),
+            'model' => $model,
+            'status' => 'complete',
+            'message_type' => 'text',
+        ]);
+
+        $this->express->launchAppBuild($app, $conversation, $prompt, $model, $assistant);
+
+        return new JsonResponse([
+            'user_message' => ChatMessagePresenter::present($userMessage->load('attachments')),
+            'placeholder' => ChatMessagePresenter::present($assistant),
+        ], 201);
+    }
+
+    /**
      * The in-progress card body: tells the user to keep chatting and that the
      * same message will announce the dashboard when the build finishes. Markdown
      * so it renders like any assistant bubble.
@@ -215,6 +260,17 @@ class ChatMessageController extends Controller
         return "⏳ Estoy construyendo tu dashboard **{$appName}** con el pipeline Express. "
             .'Sigue la conversación — te avisaré aquí mismo cuando esté listo '
             .'(suele tardar entre 40 y 120 segundos).';
+    }
+
+    /**
+     * The in-progress card body for a full-app build: same "keep chatting, I'll
+     * announce it here" promise as the dashboard card, worded for an app.
+     */
+    private function appBuildingContent(string $appName): string
+    {
+        return "⏳ Estoy construyendo tu app **{$appName}** con el builder. "
+            .'Sigue la conversación — te avisaré aquí mismo cuando esté lista '
+            .'(suele tardar entre 1 y 3 minutos).';
     }
 
     /**
