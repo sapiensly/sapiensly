@@ -396,3 +396,71 @@ it('accepts rich_text within max_length even with heavy markup', function () {
 
     expect($rec->data['description'])->toContain('<strong>short</strong>');
 });
+
+/**
+ * A parent (categoria) + child (producto) whose `categoria` relation targets it.
+ *
+ * @return array{0: array<string,mixed>, 1: array<string,mixed>, 2: array<string,mixed>}
+ */
+function relationFixture(): array
+{
+    $cat = objectOf('categoria', [fieldOf('nombre', 'string')]);
+    $prod = objectOf('producto', [
+        fieldOf('titulo', 'string'),
+        fieldOf('categoria', 'relation', ['target_object_id' => $cat['id'], 'cardinality' => 'many_to_one']),
+    ]);
+
+    return [$cat, $prod, wmanifest([$cat, $prod])];
+}
+
+it('keeps a relation given as an existing target record id', function () {
+    [$cat, $prod, $manifest] = relationFixture();
+    $catRec = Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $cat['id'], 'data' => ['nombre' => 'Electronics']]);
+
+    $rec = $this->service->create($this->testApp, $manifest, $prod['id'], [
+        'titulo' => 'Laptop', 'categoria' => $catRec->id,
+    ]);
+
+    expect($rec->data['categoria'])->toBe($catRec->id);
+});
+
+it('resolves a relation given by the target record name (case-insensitively)', function () {
+    [$cat, $prod, $manifest] = relationFixture();
+    $catRec = Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $cat['id'], 'data' => ['nombre' => 'Electronics']]);
+
+    $rec = $this->service->create($this->testApp, $manifest, $prod['id'], [
+        'titulo' => 'Laptop', 'categoria' => 'electronics',
+    ]);
+
+    expect($rec->data['categoria'])->toBe($catRec->id);
+});
+
+it('rejects a relation that matches no record — never storing a dangling fk', function () {
+    [$cat, $prod, $manifest] = relationFixture();
+    Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $cat['id'], 'data' => ['nombre' => 'Electronics']]);
+
+    // The target OBJECT id (obj_…) — the exact value the seeding bug stored — is
+    // not a record, so it must be rejected rather than persisted.
+    expect(fn () => $this->service->create($this->testApp, $manifest, $prod['id'], [
+        'titulo' => 'Laptop', 'categoria' => $cat['id'],
+    ]))->toThrow(RecordValidationException::class);
+
+    expect(Record::where('object_definition_id', $prod['id'])->count())->toBe(0);
+});
+
+it('resolves a many_to_many relation from a list of names', function () {
+    $tag = objectOf('tag', [fieldOf('nombre', 'string')]);
+    $post = objectOf('post', [
+        fieldOf('titulo', 'string'),
+        fieldOf('tags', 'relation', ['target_object_id' => $tag['id'], 'cardinality' => 'many_to_many']),
+    ]);
+    $manifest = wmanifest([$tag, $post]);
+    $a = Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $tag['id'], 'data' => ['nombre' => 'News']]);
+    $b = Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $tag['id'], 'data' => ['nombre' => 'Sports']]);
+
+    $rec = $this->service->create($this->testApp, $manifest, $post['id'], [
+        'titulo' => 'Hello', 'tags' => ['News', $b->id],
+    ]);
+
+    expect($rec->data['tags'])->toBe([$a->id, $b->id]);
+});

@@ -68,7 +68,7 @@ class SeedRecordsTool implements Tool
                 ->required(),
             'records' => $schema
                 ->array()
-                ->description('Array of records. Each record is a JSON object keyed by FIELD SLUG (not field_id). For single_select fields, pass the option SLUG. For relation fields, pass the target record id. For booleans, true/false. For dates, ISO format (YYYY-MM-DD).')
+                ->description('Array of records. Each record is a JSON object keyed by FIELD SLUG (not field_id). For single_select fields, pass the option SLUG. For relation fields, pass the target record id OR a value that identifies the target record (e.g. its name) — it is resolved to the id; a value matching no record is rejected, so seed the parent object first. For booleans, true/false. For dates, ISO format (YYYY-MM-DD).')
                 ->required(),
         ];
     }

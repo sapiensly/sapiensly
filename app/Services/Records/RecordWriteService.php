@@ -40,7 +40,7 @@ class RecordWriteService
     {
         $object = $this->findObject($manifest, $objectId);
         $values = $this->normalizeKeys($object, $values);
-        $clean = $this->validate($object, $values, mode: 'create');
+        $clean = $this->validate($object, $values, mode: 'create', app: $app, manifest: $manifest);
 
         $record = Record::create([
             'organization_id' => $app->organization_id,
@@ -70,7 +70,7 @@ class RecordWriteService
 
         $object = $this->findObject($manifest, $record->object_definition_id);
         $values = $this->normalizeKeys($object, $values);
-        $clean = $this->validate($object, $values, mode: 'update');
+        $clean = $this->validate($object, $values, mode: 'update', app: $app, manifest: $manifest);
 
         $before = $record->data ?? [];
         $merged = array_merge($before, $clean);
@@ -145,12 +145,17 @@ class RecordWriteService
     /**
      * @param  array<string, mixed>  $object
      * @param  array<string, mixed>  $values
+     * @param  array<string, mixed>  $manifest
      * @return array<string, mixed> cleaned values ready to write to JSONB
      */
-    private function validate(array $object, array $values, string $mode): array
+    private function validate(array $object, array $values, string $mode, App $app, array $manifest): array
     {
         $errors = [];
         $clean = [];
+        // Per-target index of existing records, so relation fields resolve to a
+        // real record id (and reject a value that matches none) without querying
+        // the same target twice in one write. Keyed by target object id.
+        $relCache = [];
 
         foreach ($object['fields'] as $field) {
             $slug = $field['slug'];
@@ -177,7 +182,7 @@ class RecordWriteService
             }
 
             $fieldErrors = [];
-            $clean[$slug] = $this->castAndValidate($field, $type, $raw, $fieldErrors);
+            $clean[$slug] = $this->castAndValidate($field, $type, $raw, $fieldErrors, $app, $manifest, $relCache);
             if ($fieldErrors !== []) {
                 $errors[$slug] = array_merge($errors[$slug] ?? [], $fieldErrors);
             }
@@ -202,8 +207,10 @@ class RecordWriteService
     /**
      * @param  array<string, mixed>  $field
      * @param  list<string>  $errors
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, array{ids: array<string, true>, byValue: array<string, string>}>  $relCache
      */
-    private function castAndValidate(array $field, string $type, mixed $raw, array &$errors): mixed
+    private function castAndValidate(array $field, string $type, mixed $raw, array &$errors, App $app, array $manifest, array &$relCache): mixed
     {
         return match ($type) {
             'string' => $this->validateString($field, $raw, $errors),
@@ -215,7 +222,7 @@ class RecordWriteService
             'datetime' => $this->validateDate($field, $raw, $errors, datetime: true),
             'single_select' => $this->validateSelect($field, $raw, $errors, multi: false),
             'multi_select' => $this->validateSelect($field, $raw, $errors, multi: true),
-            'relation' => is_array($raw) ? array_values($raw) : (string) $raw,
+            'relation' => $this->validateRelation($field, $raw, $errors, $app, $manifest, $relCache),
             'rating' => $this->validateRating($field, $raw, $errors),
             'slider' => $this->validateSlider($field, $raw, $errors),
             'date_range' => $this->validateDateRange($field, $raw, $errors),
@@ -513,6 +520,134 @@ class RecordWriteService
         }
 
         return $value;
+    }
+
+    /**
+     * Resolve a relation field's value to a REAL target-record id, so a bad
+     * reference never persists as a dangling foreign key. Each reference is kept
+     * only when it is an existing record id of the target object, or a value that
+     * uniquely identifies one (its name/title — any of the target's string
+     * fields, case-insensitively). Anything else — the target OBJECT id, a
+     * hallucinated record id, an unmatched name — is a hard error, surfaced to the
+     * caller instead of silently stored. This closes the seeding bug where a demo
+     * row's `owner` held the team-members OBJECT id and rollups/related lists came
+     * up empty.
+     *
+     * @param  array<string, mixed>  $field
+     * @param  list<string>  $errors
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, array{ids: array<string, true>, byValue: array<string, string>}>  $relCache
+     * @return string|list<string>|null
+     */
+    private function validateRelation(array $field, mixed $raw, array &$errors, App $app, array $manifest, array &$relCache): string|array|null
+    {
+        $multi = ($field['cardinality'] ?? null) === 'many_to_many';
+        $target = isset($field['target_object_id'])
+            ? $this->findObjectOrNull($manifest, (string) $field['target_object_id'])
+            : null;
+
+        // A malformed relation (no resolvable target) is the manifest validator's
+        // job to flag — keep the raw ref rather than dropping the caller's data.
+        if ($target === null) {
+            return is_array($raw) ? array_values($raw) : (string) $raw;
+        }
+
+        $refs = is_array($raw) ? array_values($raw) : [$raw];
+        $resolved = [];
+        foreach ($refs as $ref) {
+            $ref = trim((string) $ref);
+            if ($ref === '') {
+                continue;
+            }
+            $id = $this->resolveRelationRef($ref, $target, $app, $relCache);
+            if ($id === null) {
+                $errors[] = "No {$target['name']} record matches '{$ref}' — pass an existing record id, or a value identifying one (e.g. its name).";
+
+                continue;
+            }
+            $resolved[] = $id;
+        }
+
+        return $multi ? array_values(array_unique($resolved)) : ($resolved[0] ?? null);
+    }
+
+    /**
+     * A reference resolves to a target-record id when it IS one, else when it
+     * matches one target record's name/title value. Null when nothing matches.
+     *
+     * @param  array<string, mixed>  $target
+     * @param  array<string, array{ids: array<string, true>, byValue: array<string, string>}>  $relCache
+     */
+    private function resolveRelationRef(string $ref, array $target, App $app, array &$relCache): ?string
+    {
+        $index = $this->relationIndex($app, $target, $relCache);
+
+        if (isset($index['ids'][$ref])) {
+            return $ref;
+        }
+
+        return $index['byValue'][mb_strtolower($ref)] ?? null;
+    }
+
+    /**
+     * Build (once per target, per write) an index of the target object's existing
+     * records: the set of record ids, and a map from each record's string-field
+     * values (lower-cased) to its id — so a relation can be given by name.
+     *
+     * @param  array<string, mixed>  $target
+     * @param  array<string, array{ids: array<string, true>, byValue: array<string, string>}>  $relCache
+     * @return array{ids: array<string, true>, byValue: array<string, string>}
+     */
+    private function relationIndex(App $app, array $target, array &$relCache): array
+    {
+        $targetId = (string) $target['id'];
+        if (isset($relCache[$targetId])) {
+            return $relCache[$targetId];
+        }
+
+        $stringSlugs = array_values(array_map(
+            fn (array $f): string => (string) $f['slug'],
+            array_filter(
+                $target['fields'] ?? [],
+                fn ($f): bool => is_array($f) && in_array($f['type'] ?? '', ['string', 'long_text'], true),
+            ),
+        ));
+
+        $ids = [];
+        $byValue = [];
+        Record::query()
+            ->where('app_id', $app->id)
+            ->where('object_definition_id', $targetId)
+            ->orderBy('created_at')
+            ->get(['id', 'data'])
+            ->each(function (Record $record) use (&$ids, &$byValue, $stringSlugs): void {
+                $ids[$record->id] = true;
+                $data = is_array($record->data) ? $record->data : [];
+                foreach ($stringSlugs as $slug) {
+                    $value = $data[$slug] ?? null;
+                    if (is_scalar($value) && trim((string) $value) !== '') {
+                        // First record wins when two share a label — deterministic.
+                        $byValue[mb_strtolower(trim((string) $value))] ??= $record->id;
+                    }
+                }
+            });
+
+        return $relCache[$targetId] = ['ids' => $ids, 'byValue' => $byValue];
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>|null
+     */
+    private function findObjectOrNull(array $manifest, string $objectId): ?array
+    {
+        foreach ($manifest['objects'] ?? [] as $object) {
+            if (is_array($object) && ($object['id'] ?? null) === $objectId) {
+                return $object;
+            }
+        }
+
+        return null;
     }
 
     /**
