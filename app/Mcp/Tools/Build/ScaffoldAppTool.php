@@ -10,6 +10,7 @@ use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Records\RecordValidationException;
 use App\Services\Records\RecordWriteService;
+use App\Support\Locale\Inflector;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -200,15 +201,42 @@ class ScaffoldAppTool extends SapiensTool
                 return $object;
             }
         }
-        $norm = $this->normalizeToken($needle);
+
+        // The seed labels come from the prompt ("Companies") but the model names
+        // the object however it likes ("Company"), so match across the
+        // singular/plural boundary — in English (Str) and Spanish (Inflector) — not
+        // just on an exact normalized token.
+        $needleForms = $this->tokenForms($needle);
         foreach ($objects as $object) {
-            if ($this->normalizeToken((string) ($object['slug'] ?? '')) === $norm
-                || $this->normalizeToken((string) ($object['name'] ?? '')) === $norm) {
+            $objectForms = array_merge(
+                $this->tokenForms((string) ($object['slug'] ?? '')),
+                $this->tokenForms((string) ($object['name'] ?? '')),
+            );
+            if (array_intersect($needleForms, $objectForms) !== []) {
                 return $object;
             }
         }
 
         return null;
+    }
+
+    /**
+     * The normalized token for a name plus its singular/plural variants, so
+     * "Companies", "Company" and "company" all resolve to one another regardless
+     * of which side is pluralized.
+     *
+     * @return list<string>
+     */
+    private function tokenForms(string $value): array
+    {
+        $forms = [
+            $this->normalizeToken($value),
+            $this->normalizeToken((string) Str::singular($value)),
+            $this->normalizeToken((string) Str::plural($value)),
+            $this->normalizeToken(Inflector::singular($value, 'es')),
+        ];
+
+        return array_values(array_unique(array_filter($forms, fn (string $f): bool => $f !== '')));
     }
 
     /**

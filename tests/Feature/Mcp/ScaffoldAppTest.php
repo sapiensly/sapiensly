@@ -213,6 +213,39 @@ it('scaffold_app seeds initial records, matching objects, fields and options tol
     expect($records[1]->data['estado'])->toBe('pendiente');
 });
 
+it('scaffold_app matches a seed object across the singular/plural boundary', function () {
+    // The model names objects however it likes (often singular), while the seed
+    // labels come from the prompt (often plural) — they must still match.
+    fakeScaffold([
+        ['name' => 'Company', 'slug' => 'company', 'fields' => [
+            ['name' => 'Name', 'slug' => 'name', 'type' => 'string', 'options' => null],
+        ]],
+        ['name' => 'Proveedor', 'slug' => 'proveedor', 'fields' => [
+            ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+        ]],
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Vendor Book',
+            'description' => 'x',
+            'seed_records' => [
+                // Plural English seed label vs singular object (Str::singular).
+                ['object' => 'Companies', 'records' => [['name' => 'Acme']]],
+                // Plural Spanish seed label vs singular object (Inflector es).
+                ['object' => 'Proveedores', 'records' => [['nombre' => 'Globex']]],
+            ],
+        ])
+        ->assertOk();
+
+    $app = App::where('user_id', $this->user->id)->where('slug', 'vendor_book')->first();
+    $data = Record::where('app_id', $app->id)->orderBy('created_at')->get()->map(fn ($r) => $r->data);
+
+    expect($data)->toHaveCount(2);
+    expect($data->pluck('name')->filter()->all())->toContain('Acme');
+    expect($data->pluck('nombre')->filter()->all())->toContain('Globex');
+});
+
 it('scaffold_app reports an unmatched seed object without failing the build', function () {
     fakeScaffold([
         ['name' => 'Ideas', 'slug' => 'ideas', 'fields' => [
