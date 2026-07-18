@@ -126,9 +126,110 @@ function scaffoldPos(string $locale): array
     return app(AppScaffolder::class)->assemble($base, $spec);
 }
 
+/**
+ * A product-development model with the POS SHAPE but no commerce: a milestone
+ * (hitos) that belongs to two BUDGET-priced parents (proyectos, productos). The
+ * structural triad matches, but a budget is not a sale price — the scaffolder
+ * must NOT generate a "Punto de venta" screen here.
+ *
+ * @return array<string, mixed>
+ */
+function scaffoldNpd(): array
+{
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_npd', 'slug' => 'npd', 'name' => 'NPD', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+    $spec = [
+        'objects' => [
+            ['name' => 'Productos', 'slug' => 'productos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+                ['name' => 'Presupuesto', 'slug' => 'presupuesto', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Proyectos', 'slug' => 'proyectos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'activo', 'label' => 'Activo'], ['value' => 'cerrado', 'label' => 'Cerrado'],
+                ]],
+                ['name' => 'Presupuesto', 'slug' => 'presupuesto', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Hitos', 'slug' => 'hitos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+                ['name' => 'Fecha', 'slug' => 'fecha', 'type' => 'date', 'options' => null],
+            ]],
+        ],
+        'links' => [
+            ['from' => 'hitos', 'to' => 'proyectos', 'name' => 'proyecto'],
+            ['from' => 'hitos', 'to' => 'productos', 'name' => 'producto'],
+        ],
+    ];
+
+    return app(AppScaffolder::class)->assemble($base, $spec);
+}
+
+/**
+ * Two genuine commerce triads (comandas←renglones→platillos AND
+ * pedidos←items→articulos). The scaffolder must dedup to a SINGLE POS screen.
+ *
+ * @return array<string, mixed>
+ */
+function scaffoldTwoPosTriads(): array
+{
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_2pos', 'slug' => 'pos2x', 'name' => 'POS', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+    $spec = [
+        'objects' => [
+            ['name' => 'Comandas', 'slug' => 'comandas', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [['value' => 'abierta', 'label' => 'Abierta']]],
+            ]],
+            ['name' => 'Platillos', 'slug' => 'platillos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+                ['name' => 'Precio', 'slug' => 'precio', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Renglones', 'slug' => 'renglones', 'fields' => [
+                ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+            ]],
+            ['name' => 'Pedidos', 'slug' => 'pedidos', 'fields' => [
+                ['name' => 'Numero', 'slug' => 'numero', 'type' => 'string', 'options' => null],
+                ['name' => 'Estatus', 'slug' => 'estatus', 'type' => 'single_select', 'options' => [['value' => 'nuevo', 'label' => 'Nuevo']]],
+            ]],
+            ['name' => 'Articulos', 'slug' => 'articulos', 'fields' => [
+                ['name' => 'Titulo', 'slug' => 'titulo', 'type' => 'string', 'options' => null],
+                ['name' => 'Precio', 'slug' => 'precio', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Items', 'slug' => 'items', 'fields' => [
+                ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+            ]],
+        ],
+        'links' => [
+            ['from' => 'renglones', 'to' => 'comandas', 'name' => 'comanda'],
+            ['from' => 'renglones', 'to' => 'platillos', 'name' => 'platillo'],
+            ['from' => 'items', 'to' => 'pedidos', 'name' => 'pedido'],
+            ['from' => 'items', 'to' => 'articulos', 'name' => 'articulo'],
+        ],
+    ];
+
+    return app(AppScaffolder::class)->assemble($base, $spec);
+}
+
 function pageBySlug(array $manifest, string $slug): ?array
 {
     return collect($manifest['pages'])->firstWhere('slug', $slug);
+}
+
+/** Count the POS screens in a manifest (a POS page carries a split_view block). */
+function posPageCount(array $manifest): int
+{
+    return collect($manifest['pages'])
+        ->filter(fn ($p) => collect($p['blocks'] ?? [])->contains(fn ($b) => ($b['type'] ?? null) === 'split_view'))
+        ->count();
 }
 
 function blocksByType(array $page, string $type): array
@@ -452,6 +553,19 @@ it('does not generate a POS screen without a priced product triad', function () 
     // The earlier parent/child (no priced product on the child's other side).
     $manifest = scaffoldWithChild('es-MX');
     expect(pageBySlug($manifest, 'pos'))->toBeNull();
+});
+
+it('does not turn a budget-priced triad into a POS (product-development, not commerce)', function () {
+    // hitos belongs to two budget-priced parents — the exact shape that spawned
+    // bogus "Punto de venta" pages. A budget is not a sale price.
+    $manifest = scaffoldNpd();
+    expect(posPageCount($manifest))->toBe(0);
+    expect(pageBySlug($manifest, 'pos'))->toBeNull();
+});
+
+it('dedups multiple commerce triads to a single POS screen', function () {
+    $manifest = scaffoldTwoPosTriads();
+    expect(posPageCount($manifest))->toBe(1);
 });
 
 it('scaffolded apps produce no design-lint warnings', function () {

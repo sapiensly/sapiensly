@@ -2270,6 +2270,16 @@ class AppScaffolder
                 continue;
             }
 
+            // Semantic guard: a structural order←line→product shape is a POINT OF
+            // SALE only when it reads like commerce — the product's currency field
+            // is an actual SALE PRICE (not a project budget or a cost) and a name in
+            // the triad carries sale intent. Without this a `budget`/`presupuesto`
+            // currency field turns tasks/milestones into "order lines" and spawns
+            // bogus POS screens (an NPD app produced two "Punto de venta" pages).
+            if (! $this->isCommerceTriad($orderDef, $built[$lineIndex]['def'], $built[$productRel['targetIndex']]['def'], $productPrice)) {
+                continue;
+            }
+
             $lineDef = &$built[$lineIndex]['def'];
             $taken = array_column($lineDef['fields'], 'slug');
 
@@ -2366,6 +2376,12 @@ class AppScaffolder
                 'order_status_field_id' => $orderStatus['id'] ?? null,
                 'new_order_values' => $newOrderValues,
             ];
+
+            // Dedup: one POS screen is the intended output. Stop after the first
+            // qualifying triad so a schema with several priced parents (a project
+            // budget AND a product budget) can't spawn duplicate "Point of Sale"
+            // pages — and we don't graft POS economics onto extra line objects.
+            break;
         }
 
         return $specs;
@@ -2391,6 +2407,51 @@ class AppScaffolder
         }
 
         return [$seed['slug'] => ($seed['type'] === 'boolean' ? false : '')];
+    }
+
+    /**
+     * Whether an order←line→product triad is genuinely a POINT OF SALE, not just
+     * three objects with the right shape. The decisive signal is the "price": a
+     * sale price sells (precio, price, tarifa), a budget/cost/salary does not — a
+     * project budget is a currency field too, and treating it as a price is what
+     * spawned bogus "Punto de venta" pages on a product-development app. A triad
+     * also needs some sale intent in its names (an order/line/product/catalog).
+     *
+     * @param  array<string, mixed>  $orderDef
+     * @param  array<string, mixed>  $lineDef
+     * @param  array<string, mixed>  $productDef
+     * @param  array<string, mixed>  $priceField
+     */
+    private function isCommerceTriad(array $orderDef, array $lineDef, array $productDef, array $priceField): bool
+    {
+        // A budget/cost/salary is a currency field, but it is not a sale price.
+        $notAPrice = 'budget|presupuest|cost|costo|coste|salar|sueldo|wage|payroll|nomina|estimat|estimad|funding|fondo|gasto|expens';
+        if ($this->matchesWords($priceField, $notAPrice)) {
+            return false;
+        }
+
+        // Sale intent: a price-named price field, or an order/line/product/catalog
+        // name somewhere in the triad.
+        $priceWords = 'price|precio|tarifa|\brate\b|pvp|importe|subtotal|total';
+        $commerce = 'order|pedido|\bsale\b|venta|invoice|factura|\bcart\b|carrito|checkout|ticket|comanda|recibo|receipt|purchase|compra|\bpos\b|caja|\bbill\b|cuenta|product|producto|platillo|plato|\bdish\b|menu|articulo|article|\bsku\b|catalog|servicio|\bline\b|linea|renglon|reglon|item|detalle|concepto|partida';
+
+        return $this->matchesWords($priceField, $priceWords)
+            || $this->matchesWords($orderDef, $commerce)
+            || $this->matchesWords($lineDef, $commerce)
+            || $this->matchesWords($productDef, $commerce);
+    }
+
+    /**
+     * Case-insensitive match of an alternation against an object/field's name and
+     * slug together.
+     *
+     * @param  array<string, mixed>  $entity
+     */
+    private function matchesWords(array $entity, string $alternation): bool
+    {
+        $haystack = mb_strtolower(((string) ($entity['name'] ?? '')).' '.((string) ($entity['slug'] ?? '')));
+
+        return preg_match('/'.$alternation.'/iu', $haystack) === 1;
     }
 
     /**
