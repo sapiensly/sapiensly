@@ -3,6 +3,7 @@
 namespace App\Services\Records;
 
 use App\Models\App;
+use App\Models\Record;
 use App\Models\User;
 use Throwable;
 
@@ -12,9 +13,11 @@ use Throwable;
  *
  * Values are generated per field type; relation (many_to_one) fields are linked
  * to records of the parent object, which is why objects are seeded
- * parent-before-child. Each row goes through RecordWriteService so the same
- * validation + tenant scoping as the real form path applies; a row that fails
- * validation is skipped rather than aborting the batch.
+ * parent-before-child. many_to_many fields can't be filled inline — a link needs
+ * ids on BOTH sides — so they're wired in a second pass once every object has
+ * records (see linkManyToMany). Each row goes through RecordWriteService so the
+ * same validation + tenant scoping as the real form path applies; a row that
+ * fails validation is skipped rather than aborting the batch.
  */
 class DemoDataGenerator
 {
@@ -58,6 +61,9 @@ class DemoDataGenerator
             $idsByObject[$object['id']] = $created;
             $summary[$object['slug']] = count($created);
         }
+
+        // Second pass: wire many_to_many links now that every object has ids.
+        $this->linkManyToMany($app, $manifest, $objects, $idsByObject, $user);
 
         return $summary;
     }
@@ -242,6 +248,125 @@ class DemoDataGenerator
         $candidates = $idsByObject[$field['target_object_id'] ?? ''] ?? [];
 
         return $candidates === [] ? null : $candidates[array_rand($candidates)];
+    }
+
+    /**
+     * Second seeding pass: populate many_to_many relation fields. This can't run
+     * inline with the row (like a many_to_one FK) because a link needs real ids on
+     * BOTH sides, and the target may not be seeded yet. Each source record gets a
+     * small random subset of the target's records; when the pair is symmetric (the
+     * field carries an inverse_field_id, as buildManyToMany produces), the same
+     * link is mirrored onto the inverse side so both pickers stay consistent.
+     * Each record is updated once, through RecordWriteService (partial update),
+     * so the same validation + trigger path as a real edit applies.
+     *
+     * @param  list<array<string, mixed>>  $objects
+     * @param  array<string, list<string>>  $idsByObject
+     */
+    private function linkManyToMany(App $app, array $manifest, array $objects, array $idsByObject, ?User $user): void
+    {
+        $slugByFieldId = $this->indexFieldSlugs($objects);
+
+        /** @var array<string, array<string, list<string>>> $assignments  recordId => [fieldSlug => targetIds] */
+        $assignments = [];
+        $handledInverse = [];
+
+        foreach ($objects as $object) {
+            if (isset($object['source'])) {
+                continue;
+            }
+            $sourceIds = $idsByObject[$object['id']] ?? [];
+            if ($sourceIds === []) {
+                continue;
+            }
+
+            foreach ($object['fields'] ?? [] as $field) {
+                if (($field['type'] ?? null) !== 'relation' || ($field['cardinality'] ?? null) !== 'many_to_many') {
+                    continue;
+                }
+                $fieldId = (string) ($field['id'] ?? '');
+                if (isset($handledInverse[$fieldId])) {
+                    continue; // already filled as the inverse of an earlier field
+                }
+                $targetIds = $idsByObject[$field['target_object_id'] ?? ''] ?? [];
+                if ($targetIds === []) {
+                    continue;
+                }
+
+                $slug = (string) $field['slug'];
+                $inverseId = (string) ($field['inverse_field_id'] ?? '');
+                $inverseSlug = $inverseId !== '' ? ($slugByFieldId[$inverseId] ?? null) : null;
+                $selfRef = ($field['target_object_id'] ?? null) === $object['id'];
+
+                foreach ($sourceIds as $sourceId) {
+                    $pool = $selfRef ? array_values(array_diff($targetIds, [$sourceId])) : $targetIds;
+                    foreach ($this->pickSubset($pool) as $targetId) {
+                        $assignments[$sourceId][$slug][] = $targetId;
+                        if ($inverseSlug !== null) {
+                            $assignments[$targetId][$inverseSlug][] = $sourceId;
+                        }
+                    }
+                }
+
+                if ($inverseId !== '') {
+                    $handledInverse[$inverseId] = true;
+                }
+            }
+        }
+
+        foreach ($assignments as $recordId => $fields) {
+            $values = [];
+            foreach ($fields as $fieldSlug => $ids) {
+                $values[$fieldSlug] = array_values(array_unique($ids));
+            }
+            try {
+                $record = Record::query()->where('app_id', $app->id)->find($recordId);
+                if ($record !== null) {
+                    $this->writer->update($app, $manifest, $record, $values, $user);
+                }
+            } catch (Throwable) {
+                // Skip a link the manifest's own rules reject; keep going.
+            }
+        }
+    }
+
+    /**
+     * Pick a small random subset (1..3, capped at pool size) of target ids for one
+     * many_to_many link, so seeded pickers look believable without linking everything.
+     *
+     * @param  list<string>  $pool
+     * @return list<string>
+     */
+    private function pickSubset(array $pool): array
+    {
+        if ($pool === []) {
+            return [];
+        }
+        $count = random_int(1, min(3, count($pool)));
+        $keys = (array) array_rand($pool, $count);
+
+        return array_values(array_map(static fn ($k): string => $pool[$k], $keys));
+    }
+
+    /**
+     * Map every field id in the manifest to its slug, so a field's inverse_field_id
+     * can be resolved to the slug to write on the other side of a symmetric pair.
+     *
+     * @param  list<array<string, mixed>>  $objects
+     * @return array<string, string>
+     */
+    private function indexFieldSlugs(array $objects): array
+    {
+        $map = [];
+        foreach ($objects as $object) {
+            foreach ($object['fields'] ?? [] as $field) {
+                if (isset($field['id'], $field['slug'])) {
+                    $map[(string) $field['id']] = (string) $field['slug'];
+                }
+            }
+        }
+
+        return $map;
     }
 
     /**
