@@ -58,8 +58,8 @@ class PlaygroundController extends Controller
         $validated = $request->validate([
             'capability' => ['required', 'string', Rule::in(array_keys(PlaygroundRunner::CAPABILITIES))],
             'model_id' => ['nullable', Rule::exists('ai_catalog_models', 'id')],
-            'prompt' => ['nullable', 'string', 'max:20000'],
-            'text' => ['nullable', 'string', 'max:20000'],
+            'prompt' => ['nullable', 'string', 'max:2000'],
+            'text' => ['nullable', 'string', 'max:2000'],
             'query' => ['nullable', 'string', 'max:2000'],
             'documents' => ['nullable', 'array', 'max:100'],
             'documents.*' => ['string', 'max:10000'],

@@ -325,7 +325,11 @@ class AppBuilderController extends Controller
 
         $data = $request->validate([
             'conversation_id' => ['required', 'string'],
-            'message' => ['required', 'string', 'max:5000'],
+            // Generous ceiling: a builder brief legitimately runs long — a full app
+            // spec lists many objects, fields, relations, pages and workflows. The
+            // builder LLM processes the whole message, so match the general chat's
+            // cap rather than truncating exactly the detailed-brief flow.
+            'message' => ['required', 'string', 'max:50000'],
             // Optional per-turn model override chosen from the Builder's model
             // picker — must be one of the tenant's enabled chat models.
             'model' => ['nullable', 'string', Rule::in(array_column($this->chatModels(), 'id'))],
@@ -441,7 +445,7 @@ class AppBuilderController extends Controller
 
         $data = $request->validate([
             'conversation_id' => ['required', 'string'],
-            'prompt' => ['required', 'string', 'max:5000'],
+            'prompt' => ['required', 'string', 'max:50000'],
             'model' => ['nullable', 'string', Rule::in(array_column($this->chatModels(), 'id'))],
         ]);
 

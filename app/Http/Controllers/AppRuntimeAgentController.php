@@ -48,7 +48,7 @@ class AppRuntimeAgentController extends Controller
 
         $data = $request->validate([
             'conversation_id' => ['required', 'string'],
-            'message' => ['required', 'string', 'max:5000'],
+            'message' => ['required', 'string', 'max:50000'],
         ]);
 
         $conversation = RuntimeAgentConversation::query()
