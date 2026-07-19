@@ -106,6 +106,7 @@ import {
     Play,
     Plus,
     Repeat2,
+    Rocket,
     RotateCcw,
     Send,
     Settings2,
@@ -129,6 +130,7 @@ import {
     reactive,
     ref,
     watch,
+    type Component,
 } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -1815,6 +1817,35 @@ const previewIsLanding = computed(
         (previewSettings.value as { surface?: string }).surface === 'landing' ||
         props.app.kind === 'landing',
 );
+// A landing's work panel needs only the preview and the manifest — the data
+// schema / workflows / access tabs return when lead capture lands. If the app
+// becomes a landing mid-conversation while one of those tabs is open, fall
+// back to the preview so the pane never shows a hidden tab's content.
+const viewTabs = computed(() => {
+    const all: { id: ViewMode; label: string; icon: Component }[] = [
+        { id: 'preview', label: t('apps.builder.tab_preview'), icon: Eye },
+        { id: 'schema', label: t('apps.builder.tab_schema'), icon: Database },
+        {
+            id: 'workflows',
+            label: t('apps.builder.tab_workflows'),
+            icon: WorkflowIcon,
+        },
+        {
+            id: 'access',
+            label: t('apps.builder.tab_access'),
+            icon: ShieldCheck,
+        },
+        { id: 'manifest', label: t('apps.builder.tab_manifest'), icon: Code },
+    ];
+    return previewIsLanding.value
+        ? all.filter((m) => m.id === 'preview' || m.id === 'manifest')
+        : all;
+});
+watch(previewIsLanding, (landing) => {
+    if (landing && !viewTabs.value.some((m) => m.id === viewMode.value)) {
+        viewMode.value = 'preview';
+    }
+});
 const previewNavItems = computed<PreviewNavItem[] | undefined>(
     () =>
         ((props.manifest?.navigation as { items?: unknown[] } | null)?.items as
@@ -2778,6 +2809,13 @@ function statusTone(status: Message['status']): string {
                                 <LayoutDashboard class="size-3" />
                                 {{ t('apps.builder.dashboard_badge') }}
                             </span>
+                            <span
+                                v-else-if="previewIsLanding"
+                                class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-1.5 py-0.5 text-[10px] tracking-wider text-accent-blue uppercase"
+                            >
+                                <Rocket class="size-3" />
+                                {{ t('apps.builder.landing_badge') }}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -2950,33 +2988,7 @@ function statusTone(status: Message['status']): string {
                         class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5"
                     >
                         <button
-                            v-for="m in [
-                                {
-                                    id: 'preview',
-                                    label: t('apps.builder.tab_preview'),
-                                    icon: Eye,
-                                },
-                                {
-                                    id: 'schema',
-                                    label: t('apps.builder.tab_schema'),
-                                    icon: Database,
-                                },
-                                {
-                                    id: 'workflows',
-                                    label: t('apps.builder.tab_workflows'),
-                                    icon: WorkflowIcon,
-                                },
-                                {
-                                    id: 'access',
-                                    label: t('apps.builder.tab_access'),
-                                    icon: ShieldCheck,
-                                },
-                                {
-                                    id: 'manifest',
-                                    label: t('apps.builder.tab_manifest'),
-                                    icon: Code,
-                                },
-                            ] as const"
+                            v-for="m in viewTabs"
                             :key="m.id"
                             type="button"
                             @click="viewMode = m.id"

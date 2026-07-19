@@ -2640,6 +2640,7 @@
     "apps.builder.palette_mode.accent": "Accent scale",
     "apps.builder.palette_mode.grays": "Gray scale",
     "apps.builder.dashboard_badge": "Dashboard",
+    "apps.builder.landing_badge": "Landing",
     "apps.builder.palette_button": "Palette",
     "apps.builder.panel_mode_chat": "Chat builder",
     "apps.builder.panel_mode_manual": "Fine-tune",
