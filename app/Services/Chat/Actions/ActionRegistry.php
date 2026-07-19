@@ -40,6 +40,7 @@ class ActionRegistry
         $this->register(new PlatformBuildAction('create_agent', CreateAgentTool::class));
         $this->register(new PlatformBuildAction('save_document', AddDocumentTool::class));
         $this->register(new PlatformBuildAction('create_presentation', CreatePresentationTool::class));
+        $this->register(new BuildLandingAction);
     }
 
     public function register(ActionHandler $handler): void

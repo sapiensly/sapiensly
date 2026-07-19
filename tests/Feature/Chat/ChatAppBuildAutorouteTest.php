@@ -10,6 +10,7 @@ use App\Models\ChatAttachment;
 use App\Models\ChatMessage;
 use App\Models\PipelineRun;
 use App\Models\User;
+use App\Services\Chat\Actions\BuildLandingAction;
 use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\ExpressLauncher;
 use Illuminate\Support\Facades\Event;
@@ -98,7 +99,7 @@ it('does not autoroute an attachment turn even with app-build intent', function 
     Queue::assertNotPushed(ExpressAppJob::class);
 });
 
-it('words the in-progress card as "tu landing" when the ask is a landing', function () {
+it('keeps a landing ask on the conversational path (the model asks the mode first)', function () {
     Queue::fake();
     $chat = Chat::factory()->forUser($this->user)->create();
 
@@ -106,10 +107,33 @@ it('words the in-progress card as "tu landing" when the ask is a landing', funct
         ->postJson(route('chat.messages.store', $chat), ['content' => 'créame una landing para mi SaaS de logística'])
         ->assertCreated();
 
+    Queue::assertNotPushed(ExpressAppJob::class);
+    Queue::assertPushed(RunChatAiJob::class);
+});
+
+it('build_landing card: provisions the app and launches the async builder turn', function () {
+    Queue::fake();
+    $chat = Chat::factory()->forUser($this->user)->create();
+
+    $result = app(BuildLandingAction::class)->execute($chat, [
+        'action_label' => 'Construir la landing',
+        'parameters' => [
+            'name' => 'Alma Yoga',
+            'brief' => 'Landing para un estudio de yoga boutique en la Condesa; el trabajo es reservar una clase muestra.',
+        ],
+    ]);
+
+    expect($result['summary'])->toContain('Alma Yoga');
+
     Queue::assertPushed(ExpressAppJob::class);
+    $app = App::query()->where('user_id', $this->user->id)->firstOrFail();
+    expect($app->name)->toBe('Alma Yoga');
+
+    // The linked progress message the async job flips to "lista" on completion.
     $assistant = ChatMessage::query()->where('chat_id', $chat->id)->where('role', 'assistant')->firstOrFail();
-    expect($assistant->content)->toContain('tu landing')
-        ->and($assistant->content)->not->toContain('tu app');
+    expect($assistant->content)->toContain('tu landing');
+    $run = PipelineRun::query()->where('app_id', $app->id)->where('kind', 'app_express')->firstOrFail();
+    expect($run->chat_message_id)->toBe($assistant->id);
 });
 
 it('announces "tu landing está lista" when the built app is a landing', function () {
@@ -183,10 +207,12 @@ it('detects app-build intent and stands down for dashboards, questions and opt-o
         ->and($router->shouldBuildAppForUser('quiero un sistema con objetos productos y clientes y sus relaciones', $user))->toBeTrue()
         ->and($router->shouldBuildAppForUser('créame una app de inventario', $user))->toBeTrue();
 
-    // Landing asks ride the same handoff (the builder's landing rule + design
-    // gate take over inside the turn).
-    expect($router->shouldBuildAppForUser('créame una landing para mi SaaS de logística', $user))->toBeTrue()
-        ->and($router->shouldBuildAppForUser('quiero una página de aterrizaje para el lanzamiento', $user))->toBeTrue();
+    // Landing asks NEVER autoroute — they're a creative-mode decision the
+    // conversational model asks about first (builder card vs. direct authoring).
+    expect($router->shouldBuildAppForUser('créame una landing para mi SaaS de logística', $user))->toBeFalse()
+        ->and($router->shouldBuildAppForUser('quiero una página de aterrizaje para el lanzamiento', $user))->toBeFalse()
+        // …even when the brief is thick with page/form spec words.
+        ->and($router->shouldBuildAppForUser('crea una landing con una página, un formulario y campos de contacto', $user))->toBeFalse();
 
     // Negative: a clean dashboard ask, a question, a process opt-out, no verb.
     expect($router->shouldBuildAppForUser('crea un dashboard de ventas con KPIs', $user))->toBeFalse()

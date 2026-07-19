@@ -45,12 +45,14 @@ class ExpressIntentRouter
     /**
      * Nouns that name the thing being built when the ask is a whole APP, not a
      * dashboard: "una app / aplicación / sistema / plataforma / gestor / CRM /
-     * ERP para …". Landing nouns ride the same handoff — the builder turn's
-     * landing rule (1d-land) + design gate take over from there. Paired with a
-     * build verb (and never a clean dashboard ask), these route to the full-app
-     * builder handoff. Matched on accent-folded text.
+     * ERP para …". LANDING nouns are deliberately NOT here: a landing ask is a
+     * creative-mode decision, so it falls to the conversational model, which
+     * ASKS the user first — hand it to the app builder (the build_landing card)
+     * or author it directly (propose_change + critique_landing_design). Paired
+     * with a build verb (and never a clean dashboard ask), these route to the
+     * full-app builder handoff. Matched on accent-folded text.
      */
-    private const APP_NOUN_WORDS = '/\b(app|aplicacion|sistema|plataforma|gestor|crm|erp|landing|pagina de aterrizaje|landing page)\b/i';
+    private const APP_NOUN_WORDS = '/\b(app|aplicacion|sistema|plataforma|gestor|crm|erp)\b/i';
 
     /** The landing subset of the nouns — drives the chat card's wording. */
     private const LANDING_NOUN_WORDS = '/\b(landing|pagina de aterrizaje|landing page)\b/i';
@@ -136,6 +138,13 @@ class ExpressIntentRouter
         // app spec (which suppresses the dashboard route) or a non-dashboard
         // app noun reaches the app builder.
         if ($this->messageAsksForDashboard($text)) {
+            return false;
+        }
+
+        // A LANDING ask never autoroutes — it's a creative-mode decision the
+        // conversational model asks the user about first (builder card vs.
+        // direct authoring), even when the brief is thick with page/form words.
+        if (preg_match(self::LANDING_NOUN_WORDS, $folded) === 1) {
             return false;
         }
 

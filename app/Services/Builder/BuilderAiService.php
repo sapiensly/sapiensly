@@ -727,6 +727,25 @@ class BuilderAiService
                 'model' => $resolvedModel,
             ]);
 
+            // Bank the turn's accumulated draft BEFORE finalizing — a mid-turn
+            // failure (provider stream drop, a tool throwing) must not discard
+            // the propose_change work that already validated. Same recovery as
+            // the timeout path (RunBuilderAiJob::failed), which this catch used
+            // to silently skip: observed losing a fully-built landing twice to
+            // one transient stream error. Banking failure falls through to the
+            // plain error note (the checkpoint stays on the message row).
+            $banked = null;
+            if (! empty($placeholder->proposed_patch)) {
+                try {
+                    $banked = $this->applyCheckpoint($placeholder);
+                } catch (\Throwable $bankError) {
+                    Log::error('Builder AI: checkpoint bank failed in stream-error path', [
+                        'message_id' => $placeholder->id,
+                        'error' => $bankError->getMessage(),
+                    ]);
+                }
+            }
+
             // Cap the error string so we don't try to persist a 5KB SQL trace
             // (which can recursively trigger the very error we're handling
             // when the original error was a column-length overflow). Fall back to
@@ -737,8 +756,11 @@ class BuilderAiService
                 $errMsg = $e::class;
             }
             $placeholder->update([
-                'content' => 'Sorry — the AI request failed: '.$errMsg,
-                'status' => 'none',
+                'content' => ($banked !== null
+                    ? "The turn was interrupted, but I saved the progress so far ({$placeholder->change_summary}). Send \"continúa\" to keep going.\n\n"
+                    : '')
+                    .'Sorry — the AI request failed: '.$errMsg,
+                'status' => $banked !== null ? 'applied' : 'none',
             ]);
 
             $this->safeBroadcast(fn () => BuilderStreamError::dispatch(

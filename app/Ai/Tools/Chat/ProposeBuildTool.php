@@ -38,6 +38,7 @@ class ProposeBuildTool implements ToolContract
     public const BUILD_TYPES = [
         'create_app',
         'scaffold_app',
+        'build_landing',
         'create_chatbot',
         'create_integration',
         'create_knowledge_base',
@@ -56,6 +57,7 @@ class ProposeBuildTool implements ToolContract
         return 'Surface an actionable "build this" card (with Execute / Dismiss buttons) proposing that the platform build something for the user. The build runs only if the user clicks Execute. Use this when you PROACTIVELY detect a need the platform can cover — instead of building silently. Put the inputs the matching tool needs in `parameters`; do NOT also run the tool yourself — the card runs it. Action types:
 - `create_app`: an empty app to refine interactively (parameters: name, slug).
 - `scaffold_app`: a COMPLETE ready-to-use app generated from a description in one step — objects, fields, list/board pages and a dashboard. Prefer this for a real "build me an app" offer, e.g. a PROJECT / PLAN TRACKER: parameters {name, description, seed_records}. Make the description spell out the entities and their fields; for a work plan describe a "Tasks" object with a start date, an end date and a status — the app then renders a Gantt timeline of the plan. ALWAYS include `seed_records` when the conversation already contains the data the app should open with (the plan\'s actual tasks, milestones, content pieces): [{object: "tasks", records: [{field: value, …}, …]}], keyed by the field names from your description, dates as absolute ISO YYYY-MM-DD (resolve "week 1" etc. from today), selects by option label. An empty tracker breaks the promise of the card.
+- `build_landing`: hand a LANDING PAGE build to the app builder\'s design pipeline (bespoke design + the design-director gate), running asynchronously — the chat announces the landing when it\'s ready. parameters {name?, brief (the full landing brief: product, audience, the ONE job of the page, personality)}. Use it only AFTER the user chose the builder over you authoring the landing directly.
 - `create_chatbot`, `create_integration`, `create_knowledge_base`, `create_agent`: parameters satisfy that create_* tool.
 - `save_document`: save a document the user can keep in Sapiensly. Use it after you produce a substantial HTML or Markdown deliverable (a report, brief, spec, plan write-up). parameters {name, body (the full content), type: "artifact" for HTML or "md" for Markdown}.
 - `create_presentation`: a polished slide deck the user can present full-screen and share, rendered on-brand by the platform. Offer it when the conversation produced content worth presenting (a strategy, pitch, plan, results review). parameters {name, theme?: executive|dark|minimal|bold, slides: [{layout, ...fields}]} — author the COMPLETE slides array in the proposal using the constrained layouts (title, section, bullets, two_column, big_number, metrics, chart, quote, timeline, roadmap, table, closing); never HTML. Keep copy tight: one message per slide.

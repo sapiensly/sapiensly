@@ -118,6 +118,58 @@ class LandingDesignCritic
     }
 
     /**
+     * Collect the judgeable surfaces from a manifest: every `html` block's
+     * content (descending through layout containers) plus the custom CSS.
+     * Shared by the builder gate (draft manifest) and the MCP tool (active
+     * manifest) so both judge the same thing.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{html: string, css: string}
+     */
+    public static function extractSurfaces(array $manifest): array
+    {
+        $parts = [];
+        foreach ($manifest['pages'] ?? [] as $page) {
+            if (is_array($page) && isset($page['blocks']) && is_array($page['blocks'])) {
+                self::walkHtmlBlocks($page['blocks'], $parts);
+            }
+        }
+
+        return [
+            'html' => implode("\n\n", $parts),
+            'css' => (string) ($manifest['settings']['custom_css'] ?? ''),
+        ];
+    }
+
+    /**
+     * @param  array<int, mixed>  $blocks
+     * @param  list<string>  $parts
+     */
+    private static function walkHtmlBlocks(array $blocks, array &$parts): void
+    {
+        foreach ($blocks as $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+            if (($block['type'] ?? null) === 'html' && is_string($block['content'] ?? null)) {
+                $parts[] = $block['content'];
+            }
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (isset($block[$key]) && is_array($block[$key])) {
+                    self::walkHtmlBlocks($block[$key], $parts);
+                }
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $sub) {
+                    if (is_array($sub) && isset($sub['blocks']) && is_array($sub['blocks'])) {
+                        self::walkHtmlBlocks($sub['blocks'], $parts);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Reliable, blocking checks for the absences that cap a landing's ceiling,
      * plus softer "tells" of generic design. Kept conservative — it only blocks
      * on the unambiguous ones so it never fights a genuinely bespoke page.

@@ -22,10 +22,13 @@ class LatestPreviewShot
 
     public function for(App $app): ?StoredImage
     {
-        $disk = $this->tenantStorage->diskName($app);
-        $path = TenantPath::scope($app->organization_id, $app->user_id, 'builder_screenshots/'.$app->id.'/latest_preview.jpg');
-
+        // EVERYTHING inside the try: diskName() itself throws when no tenant
+        // storage is configured (local without S3), and a missing shot must
+        // NEVER break the critique — it just degrades to text-only.
         try {
+            $disk = $this->tenantStorage->diskName($app);
+            $path = TenantPath::scope($app->organization_id, $app->user_id, 'builder_screenshots/'.$app->id.'/latest_preview.jpg');
+
             if (! Storage::disk($disk)->exists($path)) {
                 return null;
             }
@@ -33,10 +36,10 @@ class LatestPreviewShot
             if (now()->timestamp - $modified > self::FRESH_MINUTES * 60) {
                 return null;
             }
+
+            return new StoredImage($path, $disk);
         } catch (\Throwable) {
             return null;
         }
-
-        return new StoredImage($path, $disk);
     }
 }

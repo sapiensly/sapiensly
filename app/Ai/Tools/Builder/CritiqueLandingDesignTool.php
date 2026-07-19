@@ -86,8 +86,7 @@ DESC;
             return json_encode(['error' => 'No active manifest for this app.'], JSON_THROW_ON_ERROR);
         }
 
-        $css = (string) ($manifest['settings']['custom_css'] ?? '');
-        $html = $this->collectHtml($manifest['pages'] ?? []);
+        ['html' => $html, 'css' => $css] = LandingDesignCritic::extractSurfaces($manifest);
 
         // The visual half: attach the builder preview's freshest screenshot so
         // the director judges real pixels. Absent/stale → text-only critique.
@@ -110,51 +109,5 @@ DESC;
                 ? 'The design director approved this landing — it clears the vanguard bar. You may finish. The `direction` notes are optional polish, not required.'
                 : 'NOT vanguard yet. Fix every must_fix (and weigh the direction + tells), re-author with propose_change, then call critique_landing_design again with round='.($round + 1).'. Do not finish the landing until ship:true.',
         ], JSON_THROW_ON_ERROR);
-    }
-
-    /**
-     * Concatenate the content of every `html` block across the manifest, so the
-     * critique sees the whole authored page (descending through containers).
-     *
-     * @param  array<int, mixed>  $pages
-     */
-    private function collectHtml(array $pages): string
-    {
-        $parts = [];
-        foreach ($pages as $page) {
-            if (is_array($page) && isset($page['blocks']) && is_array($page['blocks'])) {
-                $this->walkBlocks($page['blocks'], $parts);
-            }
-        }
-
-        return implode("\n\n", $parts);
-    }
-
-    /**
-     * @param  array<int, mixed>  $blocks
-     * @param  list<string>  $parts
-     */
-    private function walkBlocks(array $blocks, array &$parts): void
-    {
-        foreach ($blocks as $block) {
-            if (! is_array($block)) {
-                continue;
-            }
-            if (($block['type'] ?? null) === 'html' && is_string($block['content'] ?? null)) {
-                $parts[] = $block['content'];
-            }
-            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
-                if (isset($block[$key]) && is_array($block[$key])) {
-                    $this->walkBlocks($block[$key], $parts);
-                }
-            }
-            foreach (['tabs', 'sections'] as $key) {
-                foreach ($block[$key] ?? [] as $sub) {
-                    if (is_array($sub) && isset($sub['blocks']) && is_array($sub['blocks'])) {
-                        $this->walkBlocks($sub['blocks'], $parts);
-                    }
-                }
-            }
-        }
     }
 }

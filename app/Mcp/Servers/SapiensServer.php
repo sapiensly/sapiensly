@@ -42,6 +42,15 @@ Build & debug apps (apps:build):
     colour palette (also live as CSS vars on every app); use named icons
     (list_available_icons) on buttons/stats/cards and custom_css for fine touches —
     keep it executive, not loud.
+  - Landing pages are a CREATIVE build — ASK the user which mode first:
+    (a) hand it to the app builder's design pipeline (continue_builder_conversation
+    with the landing brief: bespoke authoring + the design-director gate, async), or
+    (b) take the creative reins yourself: framework_reference topic=landings for
+    the playbook, author via propose_change (settings.surface="landing", html
+    sections + custom_css + data-sp-* motion, leads object + lead_form + a
+    record.created workflow), and judge every draft with critique_landing_design
+    — iterate until ship:true. Publishing is always the user's explicit call
+    (publish_landing); custom domains via manage_landing_domain.
   - Versions: list_app_versions, rollback_app.
   - Builder sessions (the in-app AI app-builder chats): list_builder_conversations
     (by app_slug) and get_builder_conversation (full transcript: each turn's
@@ -147,6 +156,7 @@ class SapiensServer extends Server
         Tools\Build\DeleteAppTool::class,
         Tools\Build\PublishLandingTool::class,
         Tools\Build\ManageLandingDomainTool::class,
+        Tools\Build\CritiqueLandingDesignTool::class,
         Tools\Build\VerifyWorkflowTool::class,
         // App access (who can use an app and in which role).
         Tools\Build\ListAppRolesTool::class,
