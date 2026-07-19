@@ -81,6 +81,7 @@ class PlatformToolsFactory
         'revoke_app_role',
         // Putting a landing on the public internet is an outward-facing action.
         'publish_landing',
+        'manage_landing_domain',
     ];
 
     /** @var array<string, list<ToolContract>> */

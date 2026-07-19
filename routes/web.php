@@ -7,13 +7,31 @@ use App\Http\Controllers\Settings\OrganizationBrandController;
 use App\Http\Controllers\Tools\ToolOAuth2Controller;
 use App\Http\Controllers\WidgetAssetController;
 use App\Http\Middleware\BindPublicLandingContext;
+use App\Services\Landing\CustomDomainService;
+use App\Support\Tenancy\TenantContext;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', fn () => Auth::check()
-    ? redirect()->route('chat.index')
-    : redirect()->route('login'));
+// The root serves two worlds by Host header: on a tenant's ACTIVE custom
+// domain it renders their published landing (Cloudflare for SaaS terminates
+// TLS and forwards here); on the platform hosts it keeps the login/chat
+// redirect. The lead form keeps working on custom domains because the
+// /l/{slug}/lead routes are host-agnostic.
+Route::get('/', function (Request $request) {
+    $app = app(CustomDomainService::class)->appForHost($request->getHost());
+    if ($app !== null) {
+        app(TenantContext::class)->set($app->organization_id, $app->user_id);
+        $request->attributes->set('publicLandingApp', $app);
+
+        return app(PublicLandingController::class)($request);
+    }
+
+    return Auth::check()
+        ? redirect()->route('chat.index')
+        : redirect()->route('login');
+});
 
 // Widget asset route (public, no auth)
 Route::get('widget/v1/widget.js', [WidgetAssetController::class, 'script'])

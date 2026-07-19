@@ -82,4 +82,16 @@ return [
         'secret_key' => env('TURNSTILE_SECRET_KEY'),
     ],
 
+    /*
+     * Cloudflare for SaaS — custom hostnames for published landings. Optional:
+     * without a token/zone the domain flow still works on the DNS check alone
+     * (local/dev, or a deployment fronted some other way). cname_target is the
+     * host customers point their CNAME at; defaults to the app host.
+     */
+    'cloudflare_saas' => [
+        'api_token' => env('CLOUDFLARE_SAAS_API_TOKEN'),
+        'zone_id' => env('CLOUDFLARE_SAAS_ZONE_ID'),
+        'cname_target' => env('CLOUDFLARE_SAAS_CNAME_TARGET'),
+    ],
+
 ];

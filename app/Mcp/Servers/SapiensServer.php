@@ -146,6 +146,7 @@ class SapiensServer extends Server
         Tools\Build\RollbackAppTool::class,
         Tools\Build\DeleteAppTool::class,
         Tools\Build\PublishLandingTool::class,
+        Tools\Build\ManageLandingDomainTool::class,
         Tools\Build\VerifyWorkflowTool::class,
         // App access (who can use an app and in which role).
         Tools\Build\ListAppRolesTool::class,
