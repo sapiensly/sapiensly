@@ -41,6 +41,7 @@ interface RuntimeSettings {
         chart?: string[];
     };
     navigation_layout?: string;
+    seo?: { title?: string; description?: string; og_image?: string };
 }
 
 interface NavItem {
@@ -99,6 +100,20 @@ const contentWidthClass = computed(() =>
 // no content gutters — the page brings its own navbar/footer section blocks and
 // each section paints itself edge to edge.
 const isLanding = computed(() => props.app.kind === 'landing');
+// Head metadata: the public controller ships a resolved top-level `seo` prop;
+// the authenticated runtime falls back to the manifest's settings.seo. A
+// landing uses the SEO title alone (no "· page" suffix — that's an app idiom).
+const seo = computed(
+    () =>
+        (props as { seo?: RuntimeSettings['seo'] }).seo ??
+        settings.value.seo ??
+        {},
+);
+const headTitle = computed(() =>
+    isLanding.value && seo.value.title
+        ? seo.value.title
+        : `${props.app.name} · ${props.page.name}`,
+);
 // Brand defaults to the app name so the site header is never empty.
 const brand = computed(() => ({
     name: props.app.name,
@@ -187,7 +202,20 @@ useScrollReveal(sectionsEl);
 </script>
 
 <template>
-    <Head :title="`${app.name} · ${page.name}`" />
+    <Head :title="headTitle">
+        <meta
+            v-if="seo.description"
+            name="description"
+            :content="seo.description"
+        />
+        <meta property="og:title" :content="headTitle" />
+        <meta
+            v-if="seo.description"
+            property="og:description"
+            :content="seo.description"
+        />
+        <meta v-if="seo.og_image" property="og:image" :content="seo.og_image" />
+    </Head>
 
     <!-- Runtime is full-screen (no platform shell), so the app owns the viewport.
          The main nav (SiteHeader) carries the user widget, which holds the

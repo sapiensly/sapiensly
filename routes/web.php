@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\AccountSwitchController;
+use App\Http\Controllers\PublicLandingController;
 use App\Http\Controllers\Settings\OrganizationBrandController;
 use App\Http\Controllers\Tools\ToolOAuth2Controller;
 use App\Http\Controllers\WidgetAssetController;
+use App\Http\Middleware\BindPublicLandingContext;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -22,6 +24,15 @@ Route::get('widget/v1/widget.js', [WidgetAssetController::class, 'script'])
 Route::get('brand-asset/{organization}/{filename}', [OrganizationBrandController::class, 'showAsset'])
     ->where('filename', '[A-Za-z0-9._-]+')
     ->name('organization.brand.asset.show');
+
+// Published landing pages (public, no auth). BindPublicLandingContext resolves
+// the app by its globally-unique public slug, 404s anything unpublished or
+// non-landing, and binds the owner's tenant scope. Throttled — this is an
+// internet-facing surface.
+Route::get('l/{public_slug}', PublicLandingController::class)
+    ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
+    ->middleware([BindPublicLandingContext::class, 'throttle:120,1'])
+    ->name('landing.public');
 
 Route::middleware([
     'auth',

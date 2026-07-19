@@ -18,11 +18,14 @@ const props = defineProps<{ block: HtmlBlock }>();
 // defense-in-depth. Styling comes entirely from settings.custom_css targeting
 // the authored classes; this component adds none of its own. data-sp-* hooks
 // are preserved (DOMPurify keeps data-* + aria-*) so the motion runtime can
-// hydrate them.
+// hydrate them. In SSR there is no DOM for DOMPurify — render the (already
+// server-sanitised) content as-is so public landings server-render for SEO.
 const html = computed(() =>
-    DOMPurify.sanitize(props.block.content ?? '', {
-        ADD_ATTR: ['target'],
-    }),
+    typeof window === 'undefined'
+        ? (props.block.content ?? '')
+        : DOMPurify.sanitize(props.block.content ?? '', {
+              ADD_ATTR: ['target'],
+          }),
 );
 
 // Hydrate the safe data-sp-* motion vocabulary over the rendered markup — after

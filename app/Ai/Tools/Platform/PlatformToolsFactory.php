@@ -79,6 +79,8 @@ class PlatformToolsFactory
         'set_organization_brand',
         'assign_app_role',
         'revoke_app_role',
+        // Putting a landing on the public internet is an outward-facing action.
+        'publish_landing',
     ];
 
     /** @var array<string, list<ToolContract>> */

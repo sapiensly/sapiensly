@@ -24,6 +24,8 @@ class App extends Model
         'user_id',
         'organization_id',
         'slug',
+        'public_slug',
+        'published_at',
         'name',
         'description',
         'icon',
@@ -38,6 +40,7 @@ class App extends Model
         return [
             'visibility' => Visibility::class,
             'kind' => AppKind::class,
+            'published_at' => 'datetime',
         ];
     }
 

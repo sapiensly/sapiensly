@@ -6667,6 +6667,29 @@
                     ],
                     "description": "Explicit product surface, overriding content-based classification. 'landing' renders a public, chrome-less full-bleed page — no site header/sidebar/footer, so the page brings its own navbar/footer section blocks and each section paints itself edge to edge. Omit to let the app be classified from its blocks (app vs dashboard)."
                 },
+                "seo": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Head metadata for the public landing page. Falls back to the app's name/description when unset — but a real landing ALWAYS authors these: the title/description are what shows up in search results and link previews.",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "maxLength": 120,
+                            "description": "The <title> / og:title — the search-result headline (~60 chars ideal)."
+                        },
+                        "description": {
+                            "type": "string",
+                            "maxLength": 300,
+                            "description": "The meta description / og:description — the search-result snippet (~155 chars ideal)."
+                        },
+                        "og_image": {
+                            "type": "string",
+                            "format": "uri",
+                            "maxLength": 500,
+                            "description": "Absolute URL of the social-share image (og:image, ~1200×630)."
+                        }
+                    }
+                },
                 "custom_css": {
                     "type": "string",
                     "maxLength": 60000,
