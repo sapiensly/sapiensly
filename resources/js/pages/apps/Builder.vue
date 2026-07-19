@@ -1817,10 +1817,10 @@ const previewIsLanding = computed(
         (previewSettings.value as { surface?: string }).surface === 'landing' ||
         props.app.kind === 'landing',
 );
-// A landing's work panel needs only the preview and the manifest — the data
-// schema / workflows / access tabs return when lead capture lands. If the app
-// becomes a landing mid-conversation while one of those tabs is open, fall
-// back to the preview so the pane never shows a hidden tab's content.
+// A landing keeps Schema (its leads object) and Flujos (the conversion loop) —
+// only Access is hidden: app-role machinery a public landing doesn't use. If
+// the app becomes a landing while a now-hidden tab is open, fall back to the
+// preview so the pane never shows a hidden tab's content.
 const viewTabs = computed(() => {
     const all: { id: ViewMode; label: string; icon: Component }[] = [
         { id: 'preview', label: t('apps.builder.tab_preview'), icon: Eye },
@@ -1837,9 +1837,7 @@ const viewTabs = computed(() => {
         },
         { id: 'manifest', label: t('apps.builder.tab_manifest'), icon: Code },
     ];
-    return previewIsLanding.value
-        ? all.filter((m) => m.id === 'preview' || m.id === 'manifest')
-        : all;
+    return previewIsLanding.value ? all.filter((m) => m.id !== 'access') : all;
 });
 watch(previewIsLanding, (landing) => {
     if (landing && !viewTabs.value.some((m) => m.id === viewMode.value)) {
