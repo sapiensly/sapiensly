@@ -98,6 +98,39 @@ it('does not autoroute an attachment turn even with app-build intent', function 
     Queue::assertNotPushed(ExpressAppJob::class);
 });
 
+it('words the in-progress card as "tu landing" when the ask is a landing', function () {
+    Queue::fake();
+    $chat = Chat::factory()->forUser($this->user)->create();
+
+    $this->actingAs($this->user)
+        ->postJson(route('chat.messages.store', $chat), ['content' => 'créame una landing para mi SaaS de logística'])
+        ->assertCreated();
+
+    Queue::assertPushed(ExpressAppJob::class);
+    $assistant = ChatMessage::query()->where('chat_id', $chat->id)->where('role', 'assistant')->firstOrFail();
+    expect($assistant->content)->toContain('tu landing')
+        ->and($assistant->content)->not->toContain('tu app');
+});
+
+it('announces "tu landing está lista" when the built app is a landing', function () {
+    Event::fake([ChatStreamComplete::class]);
+    $app = App::factory()->create(['user_id' => $this->user->id, 'kind' => 'landing']);
+    $chat = Chat::factory()->forUser($this->user)->create();
+    $message = ChatMessage::create([
+        'chat_id' => $chat->id, 'role' => 'assistant', 'status' => 'complete', 'message_type' => 'text',
+        'content' => '⏳ Estoy construyendo tu landing…',
+    ]);
+    $run = PipelineRun::create([
+        'app_id' => $app->id, 'kind' => 'app_express', 'status' => 'succeeded',
+        'chat_id' => $chat->id, 'chat_message_id' => $message->id,
+    ]);
+
+    app(ExpressLauncher::class)->notifyChatReady($run, $app);
+
+    expect($message->refresh()->content)->toContain('Tu landing')
+        ->and($message->content)->toContain('está lista');
+});
+
 it('flips the linked chat message to "app lista" and rebroadcasts it on success', function () {
     Event::fake([ChatStreamComplete::class]);
     $app = App::factory()->create(['user_id' => $this->user->id]);

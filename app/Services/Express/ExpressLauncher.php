@@ -2,6 +2,7 @@
 
 namespace App\Services\Express;
 
+use App\Enums\AppKind;
 use App\Enums\Visibility;
 use App\Events\Chat\ChatStreamComplete;
 use App\Jobs\ExpressAppJob;
@@ -143,25 +144,28 @@ class ExpressLauncher
     /**
      * The terminal chat-message body: a link to the finished dashboard/app on
      * success, or an honest "couldn't finish it" pointing at the Builder so the
-     * message never hangs on "te avisaré…". The noun follows the run kind so an
-     * app build reads as an app, not a dashboard.
+     * message never hangs on "te avisaré…". For a builder run the noun follows
+     * the BUILT app's real kind — a turn that produced a landing announces "tu
+     * landing", not "tu app" ("app" and "landing" are both feminine, so only
+     * the dashboard branch needs its own gender agreement).
      */
     private function chatCompletionContent(PipelineRun $run, App $app): string
     {
         $isApp = $run->kind === 'app_express';
+        $noun = $app->kind === AppKind::Landing ? 'landing' : 'app';
 
         if ($run->status === 'succeeded') {
             $url = route('apps.runtime', ['app_slug' => $app->slug]);
 
             return $isApp
-                ? "✅ Tu app **{$app->name}** está lista. [Ábrela aquí →]({$url})"
+                ? "✅ Tu {$noun} **{$app->name}** está lista. [Ábrela aquí →]({$url})"
                 : "✅ Tu dashboard **{$app->name}** está listo. [Consúltalo aquí →]({$url})";
         }
 
         $url = route('apps.builder', $app);
 
         return $isApp
-            ? "⚠️ No pude terminar la app **{$app->name}**. "
+            ? "⚠️ No pude terminar la {$noun} **{$app->name}**. "
                 ."Abre el Builder para ver qué pasó: [ir al Builder →]({$url})"
             : "⚠️ No pude terminar el dashboard **{$app->name}**. "
                 ."Abre el Builder para ver qué pasó: [ir al Builder →]({$url})";

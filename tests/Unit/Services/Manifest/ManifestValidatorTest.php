@@ -3119,6 +3119,34 @@ it('rejects custom_css with a forbidden construct', function () {
         ->and(collect($result->errors)->pluck('path'))->toContain('/settings/custom_css');
 });
 
+it('keeps the 20k custom_css budget for non-landing surfaces', function () {
+    $manifest = baseManifest();
+    $manifest['settings']['custom_css'] = str_repeat('.a{color:#123456;} ', 1200); // ~22.8k
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeFalse()
+        ->and(collect($result->errors)->pluck('message')->implode(' '))
+        ->toContain('20000-character limit')
+        ->toContain('landing');
+});
+
+it('grants a landing surface the full 60k custom_css budget', function () {
+    $manifest = baseManifest();
+    $manifest['settings']['surface'] = 'landing';
+    $manifest['settings']['custom_css'] = str_repeat('.a{color:#123456;} ', 1200); // ~22.8k
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects custom_css past 60k even on a landing (the schema ceiling)', function () {
+    $manifest = baseManifest();
+    $manifest['settings']['surface'] = 'landing';
+    $manifest['settings']['custom_css'] = str_repeat('.a{color:#123456;} ', 3400); // ~64.6k
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
 it('accepts two roles with exactly one default', function () {
     $manifest = baseManifest();
     $manifest['permissions']['roles'] = [

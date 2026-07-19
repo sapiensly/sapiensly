@@ -739,7 +739,12 @@ class ManifestValidator
 
         // settings.custom_css is a scoped escape hatch; reject the constructs that
         // would break the <style> sandbox or the per-app isolation, at save time.
-        foreach (ScopedAppCss::issues($manifest['settings']['custom_css'] ?? null) as $issue) {
+        // The length budget is surface-aware: a landing's bespoke look IS its CSS,
+        // so it gets the full 60k schema ceiling; every other surface keeps 20k.
+        $cssBudget = ($manifest['settings']['surface'] ?? null) === 'landing'
+            ? ScopedAppCss::LANDING_MAX_LENGTH
+            : ScopedAppCss::MAX_LENGTH;
+        foreach (ScopedAppCss::issues($manifest['settings']['custom_css'] ?? null, $cssBudget) as $issue) {
             $errors[] = new ManifestValidationError('/settings/custom_css', $issue, 'unsafe_css');
         }
 

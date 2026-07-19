@@ -52,6 +52,19 @@ class ExpressIntentRouter
      */
     private const APP_NOUN_WORDS = '/\b(app|aplicacion|sistema|plataforma|gestor|crm|erp|landing|pagina de aterrizaje|landing page)\b/i';
 
+    /** The landing subset of the nouns — drives the chat card's wording. */
+    private const LANDING_NOUN_WORDS = '/\b(landing|pagina de aterrizaje|landing page)\b/i';
+
+    /**
+     * Whether the message names a LANDING as the thing to build — used by the
+     * chat handoff to word its in-progress card ("tu landing" vs "tu app").
+     * The completion message uses the built app's real kind instead.
+     */
+    public function mentionsLanding(string $message): bool
+    {
+        return preg_match(self::LANDING_NOUN_WORDS, Str::ascii(Str::lower($message))) === 1;
+    }
+
     public function shouldRunExpress(string $message, App $app): bool
     {
         if (! $this->enabled() || ! $this->messageAsksForDashboard($message)) {

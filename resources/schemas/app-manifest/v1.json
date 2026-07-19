@@ -6669,8 +6669,8 @@
                 },
                 "custom_css": {
                     "type": "string",
-                    "maxLength": 20000,
-                    "description": "Advanced ESCAPE HATCH: raw CSS for fine visual tweaks beyond accent/font/theme/block-style. It is AUTOMATICALLY SCOPED to this app's surface (wrapped in `.sp-app-surface { … }` via CSS nesting) so it can NEVER affect the Sapiensly platform or another app — write plain selectors like `.card { … }` (no need to add the scope yourself; selectors only match inside this app). Prefer the design tokens (var(--sp-accent), var(--sp-accent-blue)) and the per-block `style` first; reach for custom_css only for what they can't express. FORBIDDEN (rejected at save): @import, <style>/<script> tags, javascript: URLs, expression(). Don't hide the header/nav (it holds the exit) and keep text/background contrast readable. See framework_reference topic=custom_css."
+                    "maxLength": 60000,
+                    "description": "Advanced ESCAPE HATCH: raw CSS for fine visual tweaks beyond accent/font/theme/block-style. Budget: up to 20,000 chars — except a landing surface (settings.surface=\"landing\"), whose bespoke look IS its CSS, which may use up to 60,000. It is AUTOMATICALLY SCOPED to this app's surface (wrapped in `.sp-app-surface { … }` via CSS nesting) so it can NEVER affect the Sapiensly platform or another app — write plain selectors like `.card { … }` (no need to add the scope yourself; selectors only match inside this app). Prefer the design tokens (var(--sp-accent), var(--sp-accent-blue)) and the per-block `style` first; reach for custom_css only for what they can't express. FORBIDDEN (rejected at save): @import, <style>/<script> tags, javascript: URLs, expression(). Don't hide the header/nav (it holds the exit) and keep text/background contrast readable. See framework_reference topic=custom_css."
                 },
                 "brand": {
                     "type": "object",

@@ -236,7 +236,10 @@ class ChatMessageController extends Controller
         $assistant = ChatMessage::create([
             'chat_id' => $chat->id,
             'role' => 'assistant',
-            'content' => $this->appBuildingContent($app->name),
+            'content' => $this->appBuildingContent(
+                $app->name,
+                $this->expressRouter->mentionsLanding($prompt) ? 'landing' : 'app',
+            ),
             'model' => $model,
             'status' => 'complete',
             'message_type' => 'text',
@@ -264,11 +267,13 @@ class ChatMessageController extends Controller
 
     /**
      * The in-progress card body for a full-app build: same "keep chatting, I'll
-     * announce it here" promise as the dashboard card, worded for an app.
+     * announce it here" promise as the dashboard card, worded for what's being
+     * built ("app" or "landing" — both feminine, so the copy needs no gender
+     * branch).
      */
-    private function appBuildingContent(string $appName): string
+    private function appBuildingContent(string $appName, string $noun = 'app'): string
     {
-        return "⏳ Estoy construyendo tu app **{$appName}** con el builder. "
+        return "⏳ Estoy construyendo tu {$noun} **{$appName}** con el builder. "
             .'Sigue la conversación — te avisaré aquí mismo cuando esté lista '
             .'(suele tardar entre 1 y 3 minutos).';
     }

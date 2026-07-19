@@ -18,6 +18,13 @@ final class ScopedAppCss
     public const MAX_LENGTH = 20000;
 
     /**
+     * The budget for a landing surface (settings.surface="landing"): a landing's
+     * bespoke look IS its CSS, so it gets 3× the app/dashboard budget. Callers
+     * pass it to issues(); the schema ceiling matches.
+     */
+    public const LANDING_MAX_LENGTH = 60000;
+
+    /**
      * Constructs never allowed in app custom CSS, mapped to author-facing reasons.
      *
      * @var array<string, string>
@@ -37,7 +44,7 @@ final class ScopedAppCss
      *
      * @return list<string>
      */
-    public static function issues(?string $css): array
+    public static function issues(?string $css, int $maxLength = self::MAX_LENGTH): array
     {
         $css = (string) $css;
         if ($css === '') {
@@ -45,8 +52,11 @@ final class ScopedAppCss
         }
 
         $issues = [];
-        if (mb_strlen($css) > self::MAX_LENGTH) {
-            $issues[] = 'Custom CSS exceeds the '.self::MAX_LENGTH.'-character limit.';
+        if (mb_strlen($css) > $maxLength) {
+            $issues[] = 'Custom CSS exceeds the '.$maxLength.'-character limit'
+                .($maxLength < self::LANDING_MAX_LENGTH
+                    ? ' (a landing surface — settings.surface="landing" — may use up to '.self::LANDING_MAX_LENGTH.').'
+                    : '.');
         }
         foreach (self::FORBIDDEN as $pattern => $message) {
             if (preg_match($pattern, $css) === 1) {
