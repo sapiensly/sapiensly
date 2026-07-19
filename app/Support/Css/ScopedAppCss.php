@@ -72,6 +72,17 @@ final class ScopedAppCss
      * defense-in-depth pass neutralizes any tag-breakout even if validation was
      * bypassed; the result is safe to drop verbatim into a <style> element's
      * textContent.
+     *
+     * Two transforms keep author intent alive inside the nesting wrapper:
+     *  - `@keyframes` blocks are HOISTED outside the scoped rule — nested inside
+     *    a style rule they are invalid CSS and silently dropped, killing every
+     *    `animation:` that references them (observed: a landing's breathing
+     *    rings and float orbs all dead).
+     *  - Top-level `:root` / `html` / `body` selectors are rewritten to `&`
+     *    (the surface itself) — nested they become descendant selectors that
+     *    match nothing, so the author's CSS variables and page background
+     *    silently die and every var() falls back to garbage (observed: an
+     *    entire landing rendering unstyled).
      */
     public static function compile(?string $css, string $scope = self::SCOPE): string
     {
@@ -83,6 +94,61 @@ final class ScopedAppCss
         // Backstop: a <style>/<script> tag could escape the sandbox — remove any.
         $css = preg_replace('/<\s*\/?\s*(?:style|script)\b[^>]*>?/i', '', $css) ?? '';
 
-        return $scope." {\n".$css."\n}";
+        [$css, $keyframes] = self::extractKeyframes($css);
+
+        // Root-level selectors that cannot work nested → the surface itself.
+        $css = preg_replace(
+            '/(^|[}{;])(\s*)(?:(?::root|html|body)\s*,?\s*)+\{/',
+            '$1$2& {',
+            $css,
+        ) ?? $css;
+
+        $out = $scope." {\n".trim($css)."\n}";
+        if ($keyframes !== '') {
+            // Keyframes are global by name; authors already prefix them.
+            $out .= "\n".$keyframes;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Split out top-level `@keyframes … { … }` blocks (balanced braces, one
+     * nesting level inside for the percent stops) so they can be emitted
+     * OUTSIDE the scope wrapper, where they are valid.
+     *
+     * @return array{0: string, 1: string} [css without keyframes, keyframes]
+     */
+    private static function extractKeyframes(string $css): array
+    {
+        $keyframes = [];
+        $offset = 0;
+        while (($start = stripos($css, '@keyframes', $offset)) !== false) {
+            $open = strpos($css, '{', $start);
+            if ($open === false) {
+                break;
+            }
+            $depth = 0;
+            $end = null;
+            for ($i = $open, $len = strlen($css); $i < $len; $i++) {
+                if ($css[$i] === '{') {
+                    $depth++;
+                } elseif ($css[$i] === '}') {
+                    $depth--;
+                    if ($depth === 0) {
+                        $end = $i;
+                        break;
+                    }
+                }
+            }
+            if ($end === null) {
+                break; // unbalanced — leave as-is rather than mangle
+            }
+            $keyframes[] = substr($css, $start, $end - $start + 1);
+            $css = substr($css, 0, $start).substr($css, $end + 1);
+            $offset = $start;
+        }
+
+        return [$css, implode("\n", $keyframes)];
     }
 }

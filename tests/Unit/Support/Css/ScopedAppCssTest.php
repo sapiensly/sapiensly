@@ -39,3 +39,32 @@ it('strips a style/script breakout as a backstop', function () {
 it('accepts a custom scope', function () {
     expect(ScopedAppCss::compile('.x{}', '#preview'))->toStartWith('#preview {');
 });
+
+it('hoists @keyframes outside the scope wrapper (nested keyframes are dead CSS)', function () {
+    $out = ScopedAppCss::compile('@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}.ring{animation:breathe 7s infinite;}');
+
+    // The keyframes live OUTSIDE the scoped rule…
+    $scopeEnd = strrpos($out, "\n}") !== false ? $out : $out;
+    expect($out)->toContain('@keyframes breathe')
+        ->and(strpos($out, '@keyframes'))->toBeGreaterThan(strpos($out, '.ring'))
+        ->and($out)->toContain('.ring{animation:breathe 7s infinite;}');
+    // …after the closing brace of the scope.
+    expect(substr($out, 0, (int) strpos($out, '@keyframes')))->toContain("\n}");
+});
+
+it('rewrites :root, html and body selectors to the surface so variables and backgrounds survive', function () {
+    $out = ScopedAppCss::compile(':root{--brand:#8B7355;}body{background:var(--brand);}html, body{margin:0;}.card{color:var(--brand);}');
+
+    expect($out)->not->toContain(':root')
+        ->and($out)->not->toContain('body{')
+        ->and($out)->not->toContain('body {')
+        ->and(substr_count($out, '& {'))->toBe(3)
+        ->and($out)->toContain('.card{color:var(--brand);}');
+});
+
+it('does not touch tbody or .body class selectors', function () {
+    $out = ScopedAppCss::compile('tbody{border:0;}.body{color:red;}');
+
+    expect($out)->toContain('tbody{border:0;}')
+        ->and($out)->toContain('.body{color:red;}');
+});
