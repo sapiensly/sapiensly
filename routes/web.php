@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountSwitchController;
 use App\Http\Controllers\PublicLandingController;
+use App\Http\Controllers\PublicLeadController;
 use App\Http\Controllers\Settings\OrganizationBrandController;
 use App\Http\Controllers\Tools\ToolOAuth2Controller;
 use App\Http\Controllers\WidgetAssetController;
@@ -33,6 +34,14 @@ Route::get('l/{public_slug}', PublicLandingController::class)
     ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
     ->middleware([BindPublicLandingContext::class, 'throttle:120,1'])
     ->name('landing.public');
+
+// Public lead capture: the ONE write a guest gets. Same publish gate + owner
+// tenant binding as the page; tighter throttle (it writes), honeypot +
+// optional Turnstile inside the controller.
+Route::post('l/{public_slug}/lead', PublicLeadController::class)
+    ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
+    ->middleware([BindPublicLandingContext::class, 'throttle:10,1'])
+    ->name('landing.public.lead');
 
 Route::middleware([
     'auth',

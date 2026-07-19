@@ -199,6 +199,7 @@ export interface BlockOther extends BlockBase {
         | 'image'
         | 'insight'
         | 'kanban'
+        | 'lead_form'
         | 'map'
         | 'markdown'
         | 'metric_grid'
@@ -307,4 +308,10 @@ export interface RuntimePageProps {
     params?: Record<string, string | string[]>;
     /** Author CSS, already compiled + scoped to `.sp-app-surface` (may be ''). */
     customCss?: string;
+    /** Head metadata resolved by the public landing controller. */
+    seo?: { title?: string; description?: string; og_image?: string };
+    /** True on the public (unauthenticated) landing surface — enables lead_form submits. */
+    publicSurface?: boolean;
+    /** Cloudflare Turnstile site key for the public lead form (null = not configured). */
+    turnstileSiteKey?: string | null;
 }

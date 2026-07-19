@@ -72,4 +72,14 @@ return [
         'binary' => env('NODE_BINARY', 'node'),
     ],
 
+    /*
+     * Cloudflare Turnstile — bot protection on the public landing lead form.
+     * Optional: with no secret configured, verification is skipped (honeypot +
+     * throttling still apply), so local/dev landings work without keys.
+     */
+    'turnstile' => [
+        'site_key' => env('TURNSTILE_SITE_KEY'),
+        'secret_key' => env('TURNSTILE_SECRET_KEY'),
+    ],
+
 ];

@@ -104,6 +104,10 @@ class PublicLandingController extends Controller
                 'description' => (string) ($seo['description'] ?? ($app->description ?? '')),
                 'og_image' => (string) ($seo['og_image'] ?? ''),
             ],
+            // Enables live lead_form submits (the preview renders them disabled)
+            // and passes the Turnstile site key when bot protection is configured.
+            'publicSurface' => true,
+            'turnstileSiteKey' => config('services.turnstile.site_key'),
         ]);
     }
 }

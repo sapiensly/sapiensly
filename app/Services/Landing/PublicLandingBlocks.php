@@ -27,6 +27,10 @@ final class PublicLandingBlocks
         'image', 'hero', 'feature_grid', 'cta', 'stat_band', 'testimonials',
         'faq', 'pricing', 'carousel', 'alert', 'avatar', 'badge', 'breadcrumb',
         'stepper', 'flow', 'tabs', 'accordion', 'split_view',
+        // The one write path a guest gets: declarative lead capture. The public
+        // endpoint only accepts the fields this block declares, so allowing it
+        // exposes no reads and no arbitrary writes.
+        'lead_form',
     ];
 
     /**

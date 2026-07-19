@@ -185,6 +185,10 @@ const hrefFor = (slug: string) => `/r/${props.app.slug}/${slug}`;
 
 // Provide the App slug so BlockForm/BlockButton can POST to /r/{slug}/actions.
 provide('appSlug', props.app.slug);
+// Public-surface flags for the lead_form block: live submits happen only on
+// the published /l page; the preview/authenticated runtime render it disabled.
+provide('publicSurface', props.publicSurface ?? false);
+provide('turnstileSiteKey', props.turnstileSiteKey ?? null);
 // Chart components that resolve CSS-var palettes to hex re-read on this signal
 // when the palette changes (see usePaletteSignal).
 provide(

@@ -34,6 +34,9 @@ class ManifestValidator
 
     private ?OpisValidator $opis = null;
 
+    /** The maxErrors=1 confirmation validator — see validateSchema(). */
+    private ?OpisValidator $strictOpis = null;
+
     private ?Lexer $lexer = null;
 
     /**
@@ -442,6 +445,18 @@ class ManifestValidator
         );
 
         if ($result->isValid()) {
+            return [];
+        }
+
+        // CONFIRMATION PASS — dodge a known Opis quirk: with maxErrors > 1 the
+        // `block` oneOf can misjudge a VALID block as invalid depending on which
+        // sibling defs exist (observed: adding block_lead_form made a valid
+        // modal-nested form fail with an error belonging to another branch).
+        // maxErrors=1 is Opis's battle-tested default path, so when the
+        // multi-error pass reports failures but the strict pass says the
+        // manifest is valid, trust the strict pass. Costs one extra validation
+        // only on the (rare) invalid path.
+        if ($this->strictOpis()->validate($this->toJsonObject($manifest), self::SCHEMA_URI)->isValid()) {
             return [];
         }
 
@@ -1520,6 +1535,29 @@ class ManifestValidator
                 || $block['type'] === 'tabs' || $block['type'] === 'accordion'
                 || $block['type'] === 'split_view') {
                 continue;
+            }
+
+            if ($block['type'] === 'lead_form') {
+                $objectId = $block['object_id'] ?? null;
+                if ($objectId === null || ! isset($objectsById[$objectId])) {
+                    $errors[] = new ManifestValidationError(
+                        "{$blockPath}/object_id",
+                        "lead_form block references unknown object_id '{$objectId}'",
+                        'unresolved_ref',
+                    );
+
+                    continue;
+                }
+                $fields = $fieldsByObjectId[$objectId] ?? [];
+                foreach ($block['fields'] ?? [] as $j => $leadField) {
+                    if (! isset($fields[$leadField['field_id']])) {
+                        $errors[] = new ManifestValidationError(
+                            "{$blockPath}/fields/{$j}/field_id",
+                            "lead_form field_id '{$leadField['field_id']}' does not belong to object '{$objectId}'",
+                            'unresolved_ref',
+                        );
+                    }
+                }
             }
 
             if ($block['type'] === 'form') {
@@ -2888,6 +2926,11 @@ class ManifestValidator
             // first. A model authoring a manifest can then fix every structural
             // error in a single edit rather than rediscovering them one round-trip
             // at a time. (Opis defaults to maxErrors=1 / stopAtFirstError=true.)
+            //
+            // KNOWN OPIS QUIRK: with maxErrors > 1 the `block` oneOf can judge a
+            // VALID block invalid depending on which sibling defs exist / their
+            // order. validateSchema() therefore CONFIRMS any failure against the
+            // strict (maxErrors=1) validator below before trusting it.
             $validator->setMaxErrors(self::MAX_SCHEMA_ERRORS)->setStopAtFirstError(false);
             $resolver = $validator->resolver();
             if ($resolver !== null) {
@@ -2897,6 +2940,25 @@ class ManifestValidator
         }
 
         return $this->opis;
+    }
+
+    /**
+     * Opis in its battle-tested default mode (maxErrors=1) — the confirmation
+     * pass validateSchema() runs before trusting a multi-error failure.
+     */
+    private function strictOpis(): OpisValidator
+    {
+        if ($this->strictOpis === null) {
+            $validator = new OpisValidator;
+            $validator->setMaxErrors(1)->setStopAtFirstError(false);
+            $resolver = $validator->resolver();
+            if ($resolver !== null) {
+                $resolver->registerFile(self::SCHEMA_URI, $this->resolveSchemaPath());
+            }
+            $this->strictOpis = $validator;
+        }
+
+        return $this->strictOpis;
     }
 
     /**
