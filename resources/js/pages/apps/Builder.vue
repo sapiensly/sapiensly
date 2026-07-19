@@ -265,6 +265,7 @@ interface Props {
         created_at: string | null;
         current: boolean;
     }>;
+    landingDomain?: { hostname: string; status: string } | null;
 }
 
 const props = defineProps<Props>();
@@ -1882,6 +1883,71 @@ async function unpublishLanding() {
         publishBusy.value = false;
     }
 }
+// Custom domain panel: connect the tenant's own hostname to this landing,
+// verify DNS until active, disconnect. Same server path as the MCP
+// manage_landing_domain tool (shared CustomDomainService).
+const landingDomain = ref<{
+    hostname: string;
+    status: string;
+    cname_target?: string;
+} | null>(props.landingDomain ?? null);
+const domainPanelOpen = ref(false);
+const domainHostnameInput = ref('');
+const domainBusy = ref(false);
+const domainError = ref('');
+const domainChecks = ref<Record<string, string>>({});
+async function connectLandingDomain() {
+    if (domainBusy.value || !domainHostnameInput.value.trim()) return;
+    domainBusy.value = true;
+    domainError.value = '';
+    try {
+        const { data } = await axios.post(
+            `/apps/${props.app.id}/builder/landing-domain/connect`,
+            { hostname: domainHostnameInput.value.trim() },
+        );
+        landingDomain.value = data;
+        domainHostnameInput.value = '';
+        domainChecks.value = {};
+    } catch (e) {
+        domainError.value =
+            (e as { response?: { data?: { message?: string } } }).response?.data
+                ?.message ?? t('apps.builder.domain_failed');
+    } finally {
+        domainBusy.value = false;
+    }
+}
+async function verifyLandingDomain() {
+    if (domainBusy.value) return;
+    domainBusy.value = true;
+    domainError.value = '';
+    try {
+        const { data } = await axios.post(
+            `/apps/${props.app.id}/builder/landing-domain/verify`,
+        );
+        landingDomain.value = data;
+        domainChecks.value = data.checks ?? {};
+    } catch {
+        domainError.value = t('apps.builder.domain_failed');
+    } finally {
+        domainBusy.value = false;
+    }
+}
+async function disconnectLandingDomain() {
+    if (domainBusy.value) return;
+    domainBusy.value = true;
+    domainError.value = '';
+    try {
+        await axios.post(
+            `/apps/${props.app.id}/builder/landing-domain/disconnect`,
+        );
+        landingDomain.value = null;
+        domainChecks.value = {};
+    } catch {
+        domainError.value = t('apps.builder.domain_failed');
+    } finally {
+        domainBusy.value = false;
+    }
+}
 const previewNavItems = computed<PreviewNavItem[] | undefined>(
     () =>
         ((props.manifest?.navigation as { items?: unknown[] } | null)?.items as
@@ -2335,6 +2401,97 @@ async function send() {
 }
 
 /**
+ * Render the preview pane to a compressed JPEG blob. Before capturing, SETTLE
+ * the landing motion: data-sp-reveal / data-sp-sequence elements below the
+ * fold sit at opacity 0 until they scroll into view, so a naive capture shows
+ * blank sections — force every motion hook to its final visible state first
+ * (the ambient canvas captures as a frozen frame, which is fine).
+ */
+async function capturePreviewJpeg(node: HTMLElement): Promise<Blob | null> {
+    node.querySelectorAll<HTMLElement>(
+        '[data-sp-reveal], [data-sp-sequence] > *',
+    ).forEach((el) => {
+        el.style.opacity = '1';
+        el.style.transform = 'none';
+    });
+
+    // backgroundColor:null preserves the element's own background (light or
+    // dark) instead of forcing white. scale:1 is enough for Claude vision —
+    // going higher just balloons the upload size.
+    const rawCanvas = await html2canvas(node, {
+        backgroundColor: null,
+        useCORS: true,
+        scale: 1,
+        logging: false,
+    });
+
+    // Downscale to a sensible max so a tall scrolling page doesn't produce a
+    // 4000×8000 monster. Claude sees screenshots up to ~1568 px efficiently;
+    // we cap at 1600 to keep crisp text without overshoot.
+    const MAX_DIM = 1600;
+    const scaleDown = Math.min(
+        1,
+        MAX_DIM / Math.max(rawCanvas.width, rawCanvas.height),
+    );
+    let canvas = rawCanvas;
+    if (scaleDown < 1) {
+        const small = document.createElement('canvas');
+        small.width = Math.round(rawCanvas.width * scaleDown);
+        small.height = Math.round(rawCanvas.height * scaleDown);
+        const ctx = small.getContext('2d');
+        if (ctx) {
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(rawCanvas, 0, 0, small.width, small.height);
+            canvas = small;
+        }
+    }
+
+    // JPEG @ 0.85 cuts the upload to roughly a fifth of the equivalent PNG
+    // without losing detail Claude needs for layout review.
+    return await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.85),
+    );
+}
+
+/**
+ * Keep the server's "latest preview shot" fresh for landings, so the design
+ * director (critique_landing_design) judges REAL PIXELS, not just code. Fires
+ * after the preview refreshes (an applied version) and once on mount, giving
+ * the motion a beat to hydrate. Best-effort and silent — a missed shot only
+ * means the critique falls back to text-only mode.
+ */
+let previewShotTimer: ReturnType<typeof setTimeout> | undefined;
+function schedulePreviewShot() {
+    if (!previewIsLanding.value) return;
+    clearTimeout(previewShotTimer);
+    previewShotTimer = setTimeout(async () => {
+        const node = previewPane.value;
+        if (!node || viewMode.value !== 'preview' || !previewIsLanding.value) {
+            return;
+        }
+        try {
+            const blob = await capturePreviewJpeg(node);
+            if (!blob) return;
+            const form = new FormData();
+            form.append('screenshot', blob, 'latest_preview.jpg');
+            await axios.post(
+                `/apps/${props.app.id}/builder/preview-shot`,
+                form,
+                {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                    timeout: 30_000,
+                },
+            );
+        } catch {
+            // Silent: the critique degrades to text-only without a shot.
+        }
+    }, 2500);
+}
+onMounted(schedulePreviewShot);
+watch(() => props.preview, schedulePreviewShot);
+onUnmounted(() => clearTimeout(previewShotTimer));
+
+/**
  * Capture the current preview pane with html2canvas, POST the PNG to the
  * visual-review endpoint, and let the existing Reverb stream handle the
  * assistant reply. Mirrors the send() flow but with a screenshot attached.
@@ -2351,43 +2508,7 @@ async function requestVisualReview() {
     errorText.value = null;
 
     try {
-        // Render the DOM to a canvas. backgroundColor:null preserves the
-        // element's own background (light or dark) instead of forcing white.
-        // scale:1 is enough for Claude vision — going higher just balloons the
-        // upload size (we were hitting PHP's post_max_size at retina × 2).
-        const rawCanvas = await html2canvas(node, {
-            backgroundColor: null,
-            useCORS: true,
-            scale: 1,
-            logging: false,
-        });
-
-        // Downscale to a sensible max so a tall scrolling page doesn't produce
-        // a 4000×8000 monster. Claude sees screenshots up to ~1568 px
-        // efficiently; we cap at 1600 to keep crisp text without overshoot.
-        const MAX_DIM = 1600;
-        const scaleDown = Math.min(
-            1,
-            MAX_DIM / Math.max(rawCanvas.width, rawCanvas.height),
-        );
-        let canvas = rawCanvas;
-        if (scaleDown < 1) {
-            const small = document.createElement('canvas');
-            small.width = Math.round(rawCanvas.width * scaleDown);
-            small.height = Math.round(rawCanvas.height * scaleDown);
-            const ctx = small.getContext('2d');
-            if (ctx) {
-                ctx.imageSmoothingQuality = 'high';
-                ctx.drawImage(rawCanvas, 0, 0, small.width, small.height);
-                canvas = small;
-            }
-        }
-
-        // JPEG @ 0.85 cuts the upload to roughly a fifth of the equivalent PNG
-        // without losing detail Claude needs for layout review.
-        const blob = await new Promise<Blob | null>((resolve) =>
-            canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.85),
-        );
+        const blob = await capturePreviewJpeg(node);
         if (!blob) {
             throw new Error(t('apps.builder.capture_empty'));
         }
@@ -3075,6 +3196,148 @@ function statusTone(status: Message['status']): string {
                             <Rocket class="size-3.5" />
                             {{ t('apps.builder.publish_landing') }}
                         </button>
+
+                        <!-- Custom domain: connect the tenant's own hostname.
+                             Only meaningful once the landing is published. -->
+                        <div v-if="landingPublicSlug" class="relative">
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
+                                :aria-expanded="domainPanelOpen"
+                                @click="domainPanelOpen = !domainPanelOpen"
+                            >
+                                <Link2 class="size-3.5" />
+                                {{
+                                    landingDomain
+                                        ? landingDomain.hostname
+                                        : t('apps.builder.domain_button')
+                                }}
+                                <span
+                                    v-if="landingDomain"
+                                    :class="[
+                                        'rounded-pill px-1.5 py-0.5 text-[10px] uppercase',
+                                        landingDomain.status === 'active'
+                                            ? 'bg-accent-blue/15 text-accent-blue'
+                                            : 'bg-surface-hover text-ink-subtle',
+                                    ]"
+                                >
+                                    {{
+                                        landingDomain.status === 'active'
+                                            ? t('apps.builder.domain_active')
+                                            : t('apps.builder.domain_pending')
+                                    }}
+                                </span>
+                            </button>
+
+                            <div
+                                v-if="domainPanelOpen"
+                                class="absolute right-0 z-50 mt-2 w-80 rounded-sp-sm border border-medium bg-navy p-4 shadow-xl"
+                            >
+                                <p
+                                    class="mb-2 text-xs font-semibold tracking-wide text-ink uppercase"
+                                >
+                                    {{ t('apps.builder.domain_title') }}
+                                </p>
+
+                                <template v-if="!landingDomain">
+                                    <input
+                                        v-model="domainHostnameInput"
+                                        type="text"
+                                        :placeholder="
+                                            t('apps.builder.domain_placeholder')
+                                        "
+                                        class="mb-2 w-full rounded-xs border border-medium bg-surface px-2.5 py-1.5 text-xs text-ink"
+                                        @keydown.enter.prevent="
+                                            connectLandingDomain
+                                        "
+                                    />
+                                    <button
+                                        type="button"
+                                        :disabled="
+                                            domainBusy ||
+                                            !domainHostnameInput.trim()
+                                        "
+                                        class="w-full rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
+                                        @click="connectLandingDomain"
+                                    >
+                                        {{ t('apps.builder.domain_connect') }}
+                                    </button>
+                                </template>
+
+                                <template v-else>
+                                    <p class="mb-1 text-xs text-ink">
+                                        {{ landingDomain.hostname }}
+                                    </p>
+                                    <p
+                                        v-if="
+                                            landingDomain.status !== 'active' &&
+                                            landingDomain.cname_target
+                                        "
+                                        class="mb-2 rounded-xs bg-surface px-2 py-1.5 font-mono text-[11px] text-ink-muted"
+                                    >
+                                        CNAME: {{ landingDomain.hostname }} →
+                                        {{ landingDomain.cname_target }}
+                                    </p>
+                                    <ul
+                                        v-if="Object.keys(domainChecks).length"
+                                        class="mb-2 space-y-1 text-[11px] text-ink-muted"
+                                    >
+                                        <li
+                                            v-for="(msg, check) in domainChecks"
+                                            :key="check"
+                                        >
+                                            <b class="uppercase">{{ check }}</b
+                                            >: {{ msg }}
+                                        </li>
+                                    </ul>
+                                    <div class="flex gap-2">
+                                        <button
+                                            v-if="
+                                                landingDomain.status !==
+                                                'active'
+                                            "
+                                            type="button"
+                                            :disabled="domainBusy"
+                                            class="flex-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
+                                            @click="verifyLandingDomain"
+                                        >
+                                            {{
+                                                t('apps.builder.domain_verify')
+                                            }}
+                                        </button>
+                                        <a
+                                            v-else
+                                            :href="`https://${landingDomain.hostname}`"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="flex-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-center text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
+                                        >
+                                            {{ t('apps.builder.landing_live') }}
+                                            →
+                                        </a>
+                                        <button
+                                            type="button"
+                                            :disabled="domainBusy"
+                                            class="rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
+                                            @click="disconnectLandingDomain"
+                                        >
+                                            {{
+                                                t(
+                                                    'apps.builder.domain_disconnect',
+                                                )
+                                            }}
+                                        </button>
+                                    </div>
+                                </template>
+
+                                <p
+                                    v-if="domainError"
+                                    class="mt-2 text-[11px] text-red-400"
+                                >
+                                    {{ domainError }}
+                                </p>
+                            </div>
+                        </div>
                     </template>
 
                     <!-- Run the app in its real runtime, in a fresh tab. Uses the

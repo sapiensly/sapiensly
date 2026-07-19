@@ -34,8 +34,12 @@ Route::middleware([
     Route::post('/apps/{app}/builder/visual-review', [AppBuilderController::class, 'visualReview'])->middleware('throttle:builder-ai')->name('apps.builder.visual-review');
     Route::post('/apps/{app}/builder/wireframe-import', [AppBuilderController::class, 'wireframeImport'])->middleware('throttle:builder-ai')->name('apps.builder.wireframe-import');
     Route::post('/apps/{app}/builder/design', [AppBuilderController::class, 'updateDesign'])->name('apps.builder.design');
+    Route::post('/apps/{app}/builder/preview-shot', [AppBuilderController::class, 'previewShot'])->middleware('throttle:60,1')->name('apps.builder.preview-shot');
     Route::post('/apps/{app}/builder/publish-landing', [AppBuilderController::class, 'publishLanding'])->name('apps.builder.publish-landing');
     Route::post('/apps/{app}/builder/unpublish-landing', [AppBuilderController::class, 'unpublishLanding'])->name('apps.builder.unpublish-landing');
+    Route::post('/apps/{app}/builder/landing-domain/connect', [AppBuilderController::class, 'landingDomainConnect'])->name('apps.builder.landing-domain.connect');
+    Route::post('/apps/{app}/builder/landing-domain/verify', [AppBuilderController::class, 'landingDomainVerify'])->middleware('throttle:30,1')->name('apps.builder.landing-domain.verify');
+    Route::post('/apps/{app}/builder/landing-domain/disconnect', [AppBuilderController::class, 'landingDomainDisconnect'])->name('apps.builder.landing-domain.disconnect');
     Route::post('/apps/{app}/builder/blocks/update', [AppBuilderController::class, 'updateBlock'])->name('apps.builder.blocks.update');
     Route::post('/apps/{app}/builder/charts', [AppBuilderController::class, 'addChart'])->name('apps.builder.charts.add');
     Route::get('/apps/{app}/builder/recommendations', [AppBuilderController::class, 'recommendations'])->name('apps.builder.recommendations');

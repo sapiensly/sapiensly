@@ -5,6 +5,7 @@ namespace App\Ai\Tools\Builder;
 use App\Models\App;
 use App\Models\User;
 use App\Services\Landing\LandingDesignCritic;
+use App\Services\Landing\LatestPreviewShot;
 use App\Services\Manifest\AppManifestService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
@@ -46,7 +47,10 @@ custom_css and returns {ship, score, must_fix, tells, direction, strengths}.
 
 A deterministic scan catches the absences that cap quality (no bespoke CSS, no
 display type scale, no motion) plus generic tells; a design-director model pass
-judges the actual composition against the intent and refuses "competent".
+judges the actual composition against the intent and refuses "competent". When
+a fresh preview screenshot exists, the director judges REAL PIXELS too
+(hierarchy, contrast, balance as rendered) — `judged_pixels` in the response
+says whether it did.
 
 Treat must_fix like blocking errors: revise with propose_change (the design
 lives in custom_css + your html sections + data-sp-* motion) and call
@@ -85,13 +89,18 @@ DESC;
         $css = (string) ($manifest['settings']['custom_css'] ?? '');
         $html = $this->collectHtml($manifest['pages'] ?? []);
 
-        $result = $this->critic->critique($intent, $html, $css, $this->user, null, $round);
+        // The visual half: attach the builder preview's freshest screenshot so
+        // the director judges real pixels. Absent/stale → text-only critique.
+        $screenshot = app(LatestPreviewShot::class)->for($this->appModel);
+
+        $result = $this->critic->critique($intent, $html, $css, $this->user, null, $round, $screenshot);
 
         return json_encode([
             'ship' => $result['ship'],
             'score' => $result['score'],
             'round' => $result['round'],
             'converged' => $result['converged'],
+            'judged_pixels' => $screenshot !== null,
             'must_fix' => $result['must_fix'],
             'tells' => $result['tells'],
             'direction' => $result['direction'],

@@ -10,6 +10,7 @@ use App\Models\AppSetting;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
+use App\Models\CustomDomain;
 use App\Models\Integration;
 use App\Models\Record;
 use App\Services\Ai\AiDefaults;
@@ -24,6 +25,7 @@ use App\Services\Builder\WireframeImporter;
 use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\ExpressLauncher;
 use App\Services\Express\LabelGrounding;
+use App\Services\Landing\CustomDomainService;
 use App\Services\Landing\LandingPublisher;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
@@ -151,6 +153,11 @@ class AppBuilderController extends Controller
 
         return Inertia::render('apps/Builder', [
             'app' => $app->only(['id', 'slug', 'name', 'description', 'kind', 'public_slug', 'published_at']),
+            // The landing's custom domain (if any) drives the header's domain
+            // panel. One indexed lookup; null for apps without one.
+            'landingDomain' => ($domain = CustomDomain::query()->where('app_id', $app->id)->latest()->first()) !== null
+                ? ['hostname' => $domain->hostname, 'status' => $domain->status]
+                : null,
             // The placeholder name a never-prompted app carries — the Builder
             // uses it to auto-discard an untouched new app on back.
             'untitledName' => AppNaming::UNTITLED,
@@ -509,6 +516,31 @@ class AppBuilderController extends Controller
         }
 
         return response()->json(['ok' => true, 'message' => 'Deteniendo el build — el progreso ya aplicado se conserva.']);
+    }
+
+    /**
+     * Store the LATEST preview screenshot for this app (deterministic path,
+     * overwritten on every capture). The design director's critique tool
+     * attaches it — when fresh — so the vanguard judgment sees real pixels,
+     * not just html/css. Best-effort from the client; nothing user-facing.
+     */
+    public function previewShot(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $request->validate([
+            'screenshot' => ['required', 'file', 'mimes:png,jpg,jpeg', 'max:4096'],
+        ]);
+
+        $diskName = $this->tenantStorage->diskName($app);
+        $path = TenantPath::scope($app->organization_id, $app->user_id, 'builder_screenshots/'.$app->id.'/latest_preview.jpg');
+        Storage::disk($diskName)->putFileAs(
+            dirname($path),
+            $request->file('screenshot'),
+            basename($path),
+        );
+
+        return response()->json(['ok' => true]);
     }
 
     public function visualReview(Request $request, App $app): JsonResponse
@@ -1813,6 +1845,63 @@ class AppBuilderController extends Controller
         app(LandingPublisher::class)->unpublish($app);
 
         return response()->json(['published' => false]);
+    }
+
+    /**
+     * Connect the tenant's own hostname to this landing (builder UI). Same
+     * lifecycle as the MCP manage_landing_domain tool (shared service).
+     */
+    public function landingDomainConnect(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate(['hostname' => ['required', 'string', 'max:253']]);
+        $service = app(CustomDomainService::class);
+
+        try {
+            $domain = $service->connect($app, $data['hostname']);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'hostname' => $domain->hostname,
+            'status' => $domain->status,
+            'cname_target' => $service->cnameTarget(),
+        ]);
+    }
+
+    /** Re-check DNS/SSL and activate the domain when everything lines up. */
+    public function landingDomainVerify(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $domain = CustomDomain::query()->where('app_id', $app->id)->latest()->first();
+        if ($domain === null) {
+            return response()->json(['message' => 'No domain connected.'], 404);
+        }
+
+        $result = app(CustomDomainService::class)->verify($domain);
+
+        return response()->json([
+            'hostname' => $result['domain']->hostname,
+            'status' => $result['domain']->status,
+            'checks' => $result['checks'],
+            'cname_target' => app(CustomDomainService::class)->cnameTarget(),
+        ]);
+    }
+
+    /** Remove the custom domain — the hostname stops serving immediately. */
+    public function landingDomainDisconnect(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $domain = CustomDomain::query()->where('app_id', $app->id)->latest()->first();
+        if ($domain !== null) {
+            app(CustomDomainService::class)->disconnect($domain);
+        }
+
+        return response()->json(['ok' => true]);
     }
 
     private function assertCanAccess(Request $request, App $app): void

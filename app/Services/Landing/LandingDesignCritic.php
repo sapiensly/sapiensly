@@ -10,6 +10,7 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Files\StoredImage;
 
 /**
  * The design director: the quality gate that pushes a landing toward VANGUARD,
@@ -63,10 +64,11 @@ class LandingDesignCritic
         ?User $user = null,
         ?string $modelOverride = null,
         int $round = 1,
+        ?StoredImage $screenshot = null,
     ): array {
         $det = $this->deterministicTells($html, $css);
         $floorFix = $det['must_fix'];
-        $ai = $this->directorCritique($intent, $html, $css, $user, $modelOverride);
+        $ai = $this->directorCritique($intent, $html, $css, $user, $modelOverride, $screenshot);
 
         $mustFix = $floorFix;
         $direction = [];
@@ -184,6 +186,7 @@ class LandingDesignCritic
         string $css,
         ?User $user,
         ?string $modelOverride,
+        ?StoredImage $screenshot = null,
     ): ?array {
         if ($user === null) {
             return null;
@@ -216,7 +219,8 @@ class LandingDesignCritic
 
         try {
             $response = $agent->prompt(
-                $this->buildPrompt($intent, $html, $css),
+                $this->buildPrompt($intent, $html, $css, $screenshot !== null),
+                attachments: $screenshot !== null ? [$screenshot] : [],
                 provider: $provider,
                 model: $model,
                 timeout: self::TIMEOUT_SECONDS,
@@ -234,11 +238,16 @@ class LandingDesignCritic
         }
     }
 
-    private function buildPrompt(string $intent, string $html, string $css): string
+    private function buildPrompt(string $intent, string $html, string $css, bool $hasScreenshot = false): string
     {
         $intent = trim($intent) === '' ? '(not stated — infer it from the page and judge whether the page makes its own purpose obvious)' : trim($intent);
 
+        $pixels = $hasScreenshot
+            ? "A SCREENSHOT of the rendered page is attached — judge the ACTUAL PIXELS first: real hierarchy, contrast, spacing, balance, how the composition actually lands. Motion was settled to its final visible state for the capture (the ambient field shows as a frozen frame). The screenshot reflects the LAST APPLIED version; where it differs from the html/css below (the current draft), trust the code for content and the pixels for rendering quality.\n\n"
+            : '';
+
         return "INTENT — what this landing is for (audience + the one job of the page):\n{$intent}\n\n"
+            .$pixels
             ."--- HTML (structure) ---\n".$this->clip($html)."\n\n"
             ."--- CUSTOM CSS (the look) ---\n".$this->clip($css)."\n\n"
             ."NOTE ON MOTION: data-sp-* attributes are LIVE motion hydrated by the runtime — you will NOT see their keyframes in the CSS, so credit them as working motion rather than asking for CSS that isn't there. data-sp-reveal = fade + rise on scroll; data-sp-sequence = the element's children stagger in one by one (e.g. a chat animating message-by-message); data-sp-motion=\"ambient-field\" = an animated connected-node field behind the element. Judge whether the motion CHOICES are ambitious enough, not whether CSS keyframes are present.\n\n"

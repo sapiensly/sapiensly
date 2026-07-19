@@ -1,7 +1,10 @@
 <?php
 
 use App\Models\App;
+use App\Models\CustomDomain;
 use App\Models\User;
+use App\Services\Landing\CustomDomainService;
+use App\Services\Landing\DnsResolver;
 use App\Services\Manifest\AppManifestService;
 use Illuminate\Support\Str;
 
@@ -69,6 +72,47 @@ it('403s a user who cannot see the app', function () {
     $this->actingAs($stranger)
         ->postJson("/apps/{$app->id}/builder/publish-landing")
         ->assertStatus(403);
+});
+
+it('connects, verifies and disconnects a custom domain from the builder UI', function () {
+    $user = User::factory()->create(['email_verified_at' => now()]);
+    $app = builderLanding($user);
+
+    $this->actingAs($user)
+        ->postJson("/apps/{$app->id}/builder/landing-domain/connect", ['hostname' => 'landing.acme.com'])
+        ->assertOk()
+        ->assertJsonPath('hostname', 'landing.acme.com')
+        ->assertJsonPath('status', 'pending');
+
+    // Point the fake DNS at us → verify activates.
+    app()->instance(DnsResolver::class, new class(app(CustomDomainService::class)->cnameTarget()) extends DnsResolver
+    {
+        public function __construct(private string $target) {}
+
+        public function cname(string $hostname): ?string
+        {
+            return $this->target;
+        }
+    });
+
+    $this->actingAs($user)
+        ->postJson("/apps/{$app->id}/builder/landing-domain/verify")
+        ->assertOk()
+        ->assertJsonPath('status', 'active');
+
+    $this->actingAs($user)
+        ->postJson("/apps/{$app->id}/builder/landing-domain/disconnect")
+        ->assertOk();
+    expect(CustomDomain::query()->count())->toBe(0);
+});
+
+it('rejects an invalid hostname with the service reason', function () {
+    $user = User::factory()->create(['email_verified_at' => now()]);
+    $app = builderLanding($user);
+
+    $this->actingAs($user)
+        ->postJson("/apps/{$app->id}/builder/landing-domain/connect", ['hostname' => 'not a host'])
+        ->assertStatus(422);
 });
 
 it('requires authentication', function () {

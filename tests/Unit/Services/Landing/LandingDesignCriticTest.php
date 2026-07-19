@@ -4,6 +4,7 @@ use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Landing\LandingDesignCritic;
+use Laravel\Ai\Files\StoredImage;
 
 function designCritic(): LandingDesignCritic
 {
@@ -68,7 +69,7 @@ function criticWithDirector(array $verdict): LandingDesignCritic
             parent::__construct($a, $b);
         }
 
-        protected function directorCritique(string $intent, string $html, string $css, ?User $user, ?string $modelOverride): ?array
+        protected function directorCritique(string $intent, string $html, string $css, ?User $user, ?string $modelOverride, ?StoredImage $screenshot = null): ?array
         {
             return $this->stub;
         }
