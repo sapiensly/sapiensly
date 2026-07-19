@@ -1806,6 +1806,15 @@ const previewSidebar = computed(
         (previewSettings.value as { navigation_layout?: string })
             .navigation_layout === 'sidebar',
 );
+// A landing previews chrome-less and full-bleed, mirroring the runtime's
+// landing branch — no SiteHeader/Sidebar/Footer, no content gutters. Reads the
+// DRAFT settings (not app.kind, which only updates on apply) so setting
+// settings.surface="landing" mid-turn flips the preview immediately.
+const previewIsLanding = computed(
+    () =>
+        (previewSettings.value as { surface?: string }).surface === 'landing' ||
+        props.app.kind === 'landing',
+);
 const previewNavItems = computed<PreviewNavItem[] | undefined>(
     () =>
         ((props.manifest?.navigation as { items?: unknown[] } | null)?.items as
@@ -4160,9 +4169,23 @@ function statusTone(status: Message['status']): string {
                                 >{{ preview.custom_css }}</component
                             >
 
+                            <!-- Landing: chrome-less + full-bleed, mirroring the
+                                 runtime — the page brings its own navbar/footer
+                                 sections, so no site chrome and no gutters. -->
+                            <div v-if="previewIsLanding">
+                                <AppRenderer
+                                    :blocks="preview.page.blocks"
+                                    :block-data="previewBlockDataMap"
+                                    :objects="preview.objects"
+                                    :locale="previewLocale"
+                                    :default-currency="previewCurrency"
+                                    :theme="previewTheme"
+                                />
+                            </div>
+
                             <!-- Sidebar layout mirrors the runtime. -->
                             <div
-                                v-if="previewSidebar"
+                                v-else-if="previewSidebar"
                                 class="flex min-h-[400px]"
                             >
                                 <SiteSidebar

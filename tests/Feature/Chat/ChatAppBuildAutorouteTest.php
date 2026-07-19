@@ -150,6 +150,11 @@ it('detects app-build intent and stands down for dashboards, questions and opt-o
         ->and($router->shouldBuildAppForUser('quiero un sistema con objetos productos y clientes y sus relaciones', $user))->toBeTrue()
         ->and($router->shouldBuildAppForUser('créame una app de inventario', $user))->toBeTrue();
 
+    // Landing asks ride the same handoff (the builder's landing rule + design
+    // gate take over inside the turn).
+    expect($router->shouldBuildAppForUser('créame una landing para mi SaaS de logística', $user))->toBeTrue()
+        ->and($router->shouldBuildAppForUser('quiero una página de aterrizaje para el lanzamiento', $user))->toBeTrue();
+
     // Negative: a clean dashboard ask, a question, a process opt-out, no verb.
     expect($router->shouldBuildAppForUser('crea un dashboard de ventas con KPIs', $user))->toBeFalse()
         ->and($router->shouldBuildAppForUser('¿cómo creo una app?', $user))->toBeFalse()

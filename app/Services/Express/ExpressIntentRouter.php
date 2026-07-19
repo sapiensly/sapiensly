@@ -45,10 +45,12 @@ class ExpressIntentRouter
     /**
      * Nouns that name the thing being built when the ask is a whole APP, not a
      * dashboard: "una app / aplicación / sistema / plataforma / gestor / CRM /
-     * ERP para …". Paired with a build verb (and never a clean dashboard ask),
-     * these route to the full-app builder handoff. Matched on accent-folded text.
+     * ERP para …". Landing nouns ride the same handoff — the builder turn's
+     * landing rule (1d-land) + design gate take over from there. Paired with a
+     * build verb (and never a clean dashboard ask), these route to the full-app
+     * builder handoff. Matched on accent-folded text.
      */
-    private const APP_NOUN_WORDS = '/\b(app|aplicacion|sistema|plataforma|gestor|crm|erp)\b/i';
+    private const APP_NOUN_WORDS = '/\b(app|aplicacion|sistema|plataforma|gestor|crm|erp|landing|pagina de aterrizaje|landing page)\b/i';
 
     public function shouldRunExpress(string $message, App $app): bool
     {
