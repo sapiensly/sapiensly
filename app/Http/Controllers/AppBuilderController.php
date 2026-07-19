@@ -532,7 +532,16 @@ class AppBuilderController extends Controller
             'screenshot' => ['required', 'file', 'mimes:png,jpg,jpeg', 'max:4096'],
         ]);
 
-        $diskName = $this->tenantStorage->diskName($app);
+        // Best-effort by contract: with no tenant storage configured (keyless
+        // local), answer 200 quietly — the client uploads on every preview
+        // refresh, and a 500 here just floods the log while the critique
+        // gracefully falls back to text-only anyway.
+        try {
+            $diskName = $this->tenantStorage->diskName($app);
+        } catch (\Throwable) {
+            return response()->json(['ok' => false, 'reason' => 'storage_not_configured']);
+        }
+
         $path = TenantPath::scope($app->organization_id, $app->user_id, 'builder_screenshots/'.$app->id.'/latest_preview.jpg');
         Storage::disk($diskName)->putFileAs(
             dirname($path),
