@@ -235,6 +235,8 @@ interface Props {
         name: string;
         description: string | null;
         kind?: string | null;
+        public_slug?: string | null;
+        published_at?: string | null;
     };
     untitledName?: string;
     manifest: Record<string, unknown> | null;
@@ -1844,6 +1846,42 @@ watch(previewIsLanding, (landing) => {
         viewMode.value = 'preview';
     }
 });
+// Publish / unpublish the landing from the header. Same gate + global slug
+// minting as the MCP tool (shared LandingPublisher server-side). The live URL
+// chip reflects the CURRENT state without a reload.
+const landingPublicSlug = ref<string | null>(props.app.public_slug ?? null);
+const publishBusy = ref(false);
+const publishError = ref('');
+async function publishLanding() {
+    if (publishBusy.value) return;
+    publishBusy.value = true;
+    publishError.value = '';
+    try {
+        const { data } = await axios.post(
+            `/apps/${props.app.id}/builder/publish-landing`,
+        );
+        landingPublicSlug.value = data.public_slug ?? null;
+    } catch (e) {
+        publishError.value =
+            (e as { response?: { data?: { message?: string } } }).response?.data
+                ?.message ?? t('apps.builder.publish_failed');
+    } finally {
+        publishBusy.value = false;
+    }
+}
+async function unpublishLanding() {
+    if (publishBusy.value) return;
+    publishBusy.value = true;
+    publishError.value = '';
+    try {
+        await axios.post(`/apps/${props.app.id}/builder/unpublish-landing`);
+        landingPublicSlug.value = null;
+    } catch {
+        publishError.value = t('apps.builder.publish_failed');
+    } finally {
+        publishBusy.value = false;
+    }
+}
 const previewNavItems = computed<PreviewNavItem[] | undefined>(
     () =>
         ((props.manifest?.navigation as { items?: unknown[] } | null)?.items as
@@ -3002,12 +3040,51 @@ function statusTone(status: Message['status']): string {
                         </button>
                     </div>
 
+                    <!-- Landing publish controls: publish to /l/{slug}, then a
+                         live-URL chip + unpublish. Same server path as the MCP
+                         publish_landing tool. -->
+                    <template v-if="previewIsLanding">
+                        <template v-if="landingPublicSlug">
+                            <a
+                                :href="`/l/${landingPublicSlug}`"
+                                target="_blank"
+                                rel="noopener"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
+                                :title="`/l/${landingPublicSlug}`"
+                            >
+                                <Rocket class="size-3.5" />
+                                {{ t('apps.builder.landing_live') }}
+                            </a>
+                            <button
+                                type="button"
+                                :disabled="publishBusy"
+                                class="inline-flex items-center rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
+                                @click="unpublishLanding"
+                            >
+                                {{ t('apps.builder.unpublish_landing') }}
+                            </button>
+                        </template>
+                        <button
+                            v-else
+                            type="button"
+                            :disabled="publishBusy"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
+                            :title="publishError || undefined"
+                            @click="publishLanding"
+                        >
+                            <Rocket class="size-3.5" />
+                            {{ t('apps.builder.publish_landing') }}
+                        </button>
+                    </template>
+
                     <!-- Run the app in its real runtime, in a fresh tab. Uses the
                          LIVE slug (appMeta), not the page prop: the first prompt
                          renames the app and changes its slug, so `app.slug` from
                          the initial props points at the old (untitled) slug and
-                         404s until a reload. -->
+                         404s until a reload. Hidden for landings — their real
+                         surface is the public /l URL (the "En vivo" chip). -->
                     <a
+                        v-if="!previewIsLanding"
                         :href="`/r/${appMeta.slug}`"
                         target="_blank"
                         rel="noopener"

@@ -24,6 +24,7 @@ use App\Services\Builder\WireframeImporter;
 use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\ExpressLauncher;
 use App\Services\Express\LabelGrounding;
+use App\Services\Landing\LandingPublisher;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
@@ -149,7 +150,7 @@ class AppBuilderController extends Controller
         }
 
         return Inertia::render('apps/Builder', [
-            'app' => $app->only(['id', 'slug', 'name', 'description', 'kind']),
+            'app' => $app->only(['id', 'slug', 'name', 'description', 'kind', 'public_slug', 'published_at']),
             // The placeholder name a never-prompted app carries — the Builder
             // uses it to auto-discard an untouched new app on back.
             'untitledName' => AppNaming::UNTITLED,
@@ -1781,6 +1782,37 @@ class AppBuilderController extends Controller
             'version_number' => $version->version_number,
             'settings' => $version->manifest['settings'] ?? [],
         ]);
+    }
+
+    /**
+     * Publish a landing to its public URL from the builder — same gate and slug
+     * minting as the MCP publish_landing tool (shared LandingPublisher).
+     */
+    public function publishLanding(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        try {
+            $result = app(LandingPublisher::class)->publish($app);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => 'not_a_landing', 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'published' => true,
+            'public_slug' => $result['public_slug'],
+            'url' => $result['url'],
+        ]);
+    }
+
+    /** Take the landing off the public internet — its /l URL starts returning 404. */
+    public function unpublishLanding(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        app(LandingPublisher::class)->unpublish($app);
+
+        return response()->json(['published' => false]);
     }
 
     private function assertCanAccess(Request $request, App $app): void

@@ -2,10 +2,9 @@
 
 namespace App\Mcp\Tools\Build;
 
-use App\Enums\AppKind;
 use App\Mcp\Tools\SapiensTool;
-use App\Models\App;
 use App\Models\User;
+use App\Services\Landing\LandingPublisher;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Laravel\Mcp\Request;
@@ -33,8 +32,10 @@ class PublishLandingTool extends SapiensTool
             return Response::error("No app named '{$validated['app_slug']}' is visible to you.");
         }
 
+        $publisher = app(LandingPublisher::class);
+
         if ((bool) ($validated['unpublish'] ?? false)) {
-            $app->forceFill(['public_slug' => null, 'published_at' => null])->save();
+            $publisher->unpublish($app);
 
             return Response::json([
                 'published' => false,
@@ -43,45 +44,18 @@ class PublishLandingTool extends SapiensTool
             ]);
         }
 
-        if ($app->kind !== AppKind::Landing) {
-            return Response::error(
-                "Only landings can be published — '{$app->slug}' is a {$app->kind->value}. "
-                .'Set settings.surface="landing" (and pass the design gate) first.',
-            );
+        try {
+            $result = $publisher->publish($app);
+        } catch (\InvalidArgumentException $e) {
+            return Response::error($e->getMessage());
         }
-
-        // Keep an already-published slug stable (republish = no-op on identity);
-        // otherwise mint a globally-unique one from the app's own slug.
-        $publicSlug = $app->public_slug ?? $this->mintPublicSlug($app);
-
-        $app->forceFill([
-            'public_slug' => $publicSlug,
-            'published_at' => $app->published_at ?? now(),
-        ])->save();
 
         return Response::json([
             'published' => true,
             'app_slug' => $app->slug,
-            'public_slug' => $publicSlug,
-            'url' => route('landing.public', ['public_slug' => $publicSlug]),
+            'public_slug' => $result['public_slug'],
+            'url' => $result['url'],
         ]);
-    }
-
-    /**
-     * App slugs are only unique per-org; the public namespace is global. Use the
-     * app's slug when free, else suffix a counter (yoga_studio, yoga_studio-2…).
-     */
-    private function mintPublicSlug(App $app): string
-    {
-        $base = $app->slug;
-        $candidate = $base;
-        $n = 2;
-        while (App::query()->where('public_slug', $candidate)->exists()) {
-            $candidate = "{$base}-{$n}";
-            $n++;
-        }
-
-        return $candidate;
     }
 
     /**

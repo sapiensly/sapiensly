@@ -34,6 +34,8 @@ Route::middleware([
     Route::post('/apps/{app}/builder/visual-review', [AppBuilderController::class, 'visualReview'])->middleware('throttle:builder-ai')->name('apps.builder.visual-review');
     Route::post('/apps/{app}/builder/wireframe-import', [AppBuilderController::class, 'wireframeImport'])->middleware('throttle:builder-ai')->name('apps.builder.wireframe-import');
     Route::post('/apps/{app}/builder/design', [AppBuilderController::class, 'updateDesign'])->name('apps.builder.design');
+    Route::post('/apps/{app}/builder/publish-landing', [AppBuilderController::class, 'publishLanding'])->name('apps.builder.publish-landing');
+    Route::post('/apps/{app}/builder/unpublish-landing', [AppBuilderController::class, 'unpublishLanding'])->name('apps.builder.unpublish-landing');
     Route::post('/apps/{app}/builder/blocks/update', [AppBuilderController::class, 'updateBlock'])->name('apps.builder.blocks.update');
     Route::post('/apps/{app}/builder/charts', [AppBuilderController::class, 'addChart'])->name('apps.builder.charts.add');
     Route::get('/apps/{app}/builder/recommendations', [AppBuilderController::class, 'recommendations'])->name('apps.builder.recommendations');
