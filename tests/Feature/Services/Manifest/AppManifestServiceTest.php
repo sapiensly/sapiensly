@@ -233,6 +233,42 @@ it('tags the app as a dashboard when the version is analytics-only', function ()
     expect($app->fresh()->kind)->toBe(AppKind::Dashboard);
 });
 
+it('sanitises html block content on save (the trust boundary)', function () {
+    $app = App::factory()->create();
+    $m = manifest('Landing');
+    $m['settings'] = ['surface' => 'landing'];
+    $m['pages'] = [[
+        'id' => 'pag_landinga1', 'slug' => 'home', 'name' => 'Home', 'path' => '/', 'blocks' => [
+            ['id' => 'htm_hero00001', 'type' => 'html', 'content' => '<section class="hero"><h1>Hi</h1><script>steal()</script><div onclick="x()">ok</div></section>'],
+        ],
+    ]];
+
+    $version = makeService()->createVersion($app, $m);
+    $stored = $version->manifest['pages'][0]['blocks'][0]['content'];
+
+    expect($stored)->toContain('<section class="hero">')
+        ->toContain('<h1>Hi</h1>')
+        ->toContain('<div>ok</div>')
+        ->not->toContain('script')
+        ->not->toContain('steal')
+        ->not->toContain('onclick');
+});
+
+it('tags the app as a landing when settings.surface is landing', function () {
+    $app = App::factory()->create();
+    $m = manifest('Lanzamiento');
+    $m['settings'] = ['surface' => 'landing'];
+    $m['pages'] = [[
+        'id' => 'pag_landinghome', 'slug' => 'home', 'name' => 'Home', 'path' => '/', 'blocks' => [
+            ['id' => 'hro_mainhero', 'type' => 'hero', 'title' => 'Bienvenido'],
+        ],
+    ]];
+
+    makeService()->createVersion($app, $m);
+
+    expect($app->fresh()->kind)->toBe(AppKind::Landing);
+});
+
 it('tags the app as an app when the version has a data-entry form, and re-tags on the next version', function () {
     $app = App::factory()->create();
 

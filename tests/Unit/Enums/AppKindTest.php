@@ -65,3 +65,38 @@ it('classifies a website (hero + feature_grid, no analytics) as an app', functio
 it('classifies an empty app as an app', function () {
     expect(AppKind::classify(manifestWith([])))->toBe(AppKind::App);
 });
+
+it('classifies a manifest with settings.surface=landing as a landing', function () {
+    $manifest = manifestWith([[
+        'id' => 'pag_home', 'slug' => 'h', 'name' => 'H', 'path' => '/', 'blocks' => [
+            ['id' => 'hro_hero', 'type' => 'hero', 'title' => 'Hi'],
+            ['id' => 'fg_feats', 'type' => 'feature_grid', 'items' => []],
+        ],
+    ]]);
+    $manifest['settings'] = ['surface' => 'landing'];
+
+    expect(AppKind::classify($manifest))->toBe(AppKind::Landing);
+});
+
+it('lets an explicit surface override content inference', function () {
+    // A form alone would classify as App; an explicit surface wins.
+    $manifest = manifestWith([[
+        'id' => 'pag_x', 'slug' => 'x', 'name' => 'X', 'path' => '/', 'blocks' => [
+            ['id' => 'fm_new', 'type' => 'form', 'object_id' => 'obj_x', 'mode' => 'create'],
+        ],
+    ]]);
+    $manifest['settings'] = ['surface' => 'dashboard'];
+
+    expect(AppKind::classify($manifest))->toBe(AppKind::Dashboard);
+});
+
+it('ignores an unknown surface value and falls back to content inference', function () {
+    $manifest = manifestWith([[
+        'id' => 'pag_d', 'slug' => 'd', 'name' => 'D', 'path' => '/', 'blocks' => [
+            ['id' => 'ch_a', 'type' => 'chart', 'chart_type' => 'bar'],
+        ],
+    ]]);
+    $manifest['settings'] = ['surface' => 'bogus'];
+
+    expect(AppKind::classify($manifest))->toBe(AppKind::Dashboard);
+});

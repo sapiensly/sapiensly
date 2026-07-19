@@ -60,6 +60,7 @@ const BlockCalendar = defineAsyncComponent(
 const BlockMarkdown = defineAsyncComponent(
     () => import('./blocks/BlockMarkdown.vue'),
 );
+const BlockHtml = defineAsyncComponent(() => import('./blocks/BlockHtml.vue'));
 const BlockImage = defineAsyncComponent(
     () => import('./blocks/BlockImage.vue'),
 );
@@ -164,6 +165,7 @@ const componentForType = {
     kanban: BlockKanban,
     calendar: BlockCalendar,
     markdown: BlockMarkdown,
+    html: BlockHtml,
     image: BlockImage,
     metric_grid: BlockMetricGrid,
     sparkline: BlockSparkline,

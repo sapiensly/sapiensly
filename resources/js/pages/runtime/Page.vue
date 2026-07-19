@@ -95,6 +95,10 @@ const theme = computed(() => settings.value.theme ?? 'light');
 const contentWidthClass = computed(() =>
     props.app.kind === 'dashboard' ? 'mx-auto w-full max-w-[1200px]' : '',
 );
+// A landing renders chrome-less and full-bleed: no site header/sidebar/footer,
+// no content gutters — the page brings its own navbar/footer section blocks and
+// each section paints itself edge to edge.
+const isLanding = computed(() => props.app.kind === 'landing');
 // Brand defaults to the app name so the site header is never empty.
 const brand = computed(() => ({
     name: props.app.name,
@@ -193,8 +197,23 @@ useScrollReveal(sectionsEl);
     <div class="sp-app-surface" :style="surfaceStyle">
         <component :is="'style'" v-if="customCss">{{ customCss }}</component>
 
+        <!-- Landing layout: chrome-less + full-bleed. No SiteHeader/Sidebar/Footer
+             — the landing brings its own navbar/footer section blocks and each
+             section paints itself edge to edge (no content gutters). -->
+        <div v-if="isLanding" ref="sectionsEl" class="min-h-screen">
+            <AppRenderer
+                :blocks="page.blocks"
+                :block-data="liveBlockData"
+                :loading="blockDataPending"
+                :objects="manifest.objects"
+                :locale="locale"
+                :default-currency="defaultCurrency"
+                :theme="theme"
+            />
+        </div>
+
         <!-- Sidebar layout: left rail + scrolling content. -->
-        <div v-if="useSidebar" class="flex min-h-screen bg-navy-deep">
+        <div v-else-if="useSidebar" class="flex min-h-screen bg-navy-deep">
             <SiteSidebar
                 :brand="brand"
                 :nav-items="navItems"

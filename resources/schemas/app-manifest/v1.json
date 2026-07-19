@@ -1857,6 +1857,34 @@
                 }
             }
         },
+        "block_html": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/block_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true,
+                        "visibility": true,
+                        "style": true,
+                        "type": {
+                            "const": "html"
+                        },
+                        "content": {
+                            "type": "string",
+                            "maxLength": 60000,
+                            "description": "Bespoke section markup — the landing design escape hatch that lets the model compose a page that isn't a recombination of fixed blocks. Author semantic HTML (section/div/span/headings/img/lists/tables) with `class`/`id`, then style it ENTIRELY through settings.custom_css: inline `style`, `<script>`, `<style>` and event handlers are stripped on save, so styling MUST live in custom_css. Opt into motion with data-sp-* hooks (e.g. data-sp-reveal, data-sp-motion=\"ambient-field\") that the runtime hydrates — never author JavaScript."
+                        }
+                    },
+                    "required": [
+                        "type",
+                        "content"
+                    ]
+                }
+            ]
+        },
         "block_container": {
             "allOf": [
                 {
@@ -5101,8 +5129,11 @@
             ]
         },
         "block": {
-            "description": "A page block. Its `type` must be one of the catalog types (container, text, heading, divider, spacer, table, stat, form, button, modal, chart, pivot, kanban, calendar, markdown, image, hero, feature_grid, cta, stat_band, insight, stepper, badge, alert, avatar, breadcrumb, carousel, testimonials, faq, pricing, word_cloud, flow, metric_grid, sparkline, gauge, heatmap, timeline, funnel, map, tabs, accordion, split_view, card_grid, multi_step_form). If this failed, the `type` is unknown or the block is missing a required prop for that type — call list_available_components for the catalog and each type's required props.",
+            "description": "A page block. Its `type` must be one of the catalog types (container, text, heading, divider, spacer, table, stat, form, button, modal, chart, pivot, kanban, calendar, markdown, image, html, hero, feature_grid, cta, stat_band, insight, stepper, badge, alert, avatar, breadcrumb, carousel, testimonials, faq, pricing, word_cloud, flow, metric_grid, sparkline, gauge, heatmap, timeline, funnel, map, tabs, accordion, split_view, card_grid, multi_step_form). If this failed, the `type` is unknown or the block is missing a required prop for that type — call list_available_components for the catalog and each type's required props.",
             "oneOf": [
+                {
+                    "$ref": "#/$defs/block_html"
+                },
                 {
                     "$ref": "#/$defs/block_container"
                 },
@@ -6625,7 +6656,16 @@
                         "sidebar"
                     ],
                     "default": "top",
-                    "description": "App chrome: 'top' (default) is a horizontal header bar — best for a few pages; 'sidebar' is a left navigation rail — best when the menu grows or needs nested groups. The sidebar renders `navigation.items` (which support nested `children`), falling back to the flat page list when no navigation is defined."
+                    "description": "App chrome: 'top' (default) is a horizontal header bar — best for a few pages; 'sidebar' is a left navigation rail — best when the menu grows or needs nested groups. The sidebar renders `navigation.items` (which support nested `children`), falling back to the flat page list when no navigation is defined. Ignored when `surface` is 'landing' (a landing renders chrome-less)."
+                },
+                "surface": {
+                    "type": "string",
+                    "enum": [
+                        "app",
+                        "dashboard",
+                        "landing"
+                    ],
+                    "description": "Explicit product surface, overriding content-based classification. 'landing' renders a public, chrome-less full-bleed page — no site header/sidebar/footer, so the page brings its own navbar/footer section blocks and each section paints itself edge to edge. Omit to let the app be classified from its blocks (app vs dashboard)."
                 },
                 "custom_css": {
                     "type": "string",

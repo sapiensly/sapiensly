@@ -195,6 +195,7 @@ export interface BlockOther extends BlockBase {
         | 'gauge'
         | 'heatmap'
         | 'hero'
+        | 'html'
         | 'image'
         | 'insight'
         | 'kanban'

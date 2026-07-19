@@ -4,19 +4,24 @@ namespace App\Enums;
 
 /**
  * Product classification for an app: a regular App (data entry / CRUD / a
- * website) versus a Dashboard (analytics — charts, KPIs, insights). Derived
- * from the manifest's content at version-write time, not authored by hand.
+ * website), a Dashboard (analytics — charts, KPIs, insights), or a Landing (a
+ * public, chrome-less marketing page). App/Dashboard are derived from the
+ * manifest's content at version-write time; Landing is declared explicitly via
+ * `settings.surface` (a landing and a dashboard can share a hero, so intent
+ * can't be inferred from blocks alone).
  */
 enum AppKind: string
 {
     case App = 'app';
     case Dashboard = 'dashboard';
+    case Landing = 'landing';
 
     public function label(): string
     {
         return match ($this) {
             self::App => __('App'),
             self::Dashboard => __('Dashboard'),
+            self::Landing => __('Landing'),
         };
     }
 
@@ -30,6 +35,13 @@ enum AppKind: string
      */
     public static function classify(array $manifest): self
     {
+        // An explicit surface declaration wins over content inference — a landing
+        // and a dashboard can share a hero, so intent is declared, not guessed.
+        $surface = $manifest['settings']['surface'] ?? null;
+        if (is_string($surface) && ($explicit = self::tryFrom($surface)) !== null) {
+            return $explicit;
+        }
+
         $types = [];
         self::collectBlockTypes($manifest['pages'] ?? [], $types);
 

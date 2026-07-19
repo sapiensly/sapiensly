@@ -6,6 +6,7 @@ use App\Enums\AppKind;
 use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\User;
+use App\Support\Html\LandingHtmlSanitizer;
 use App\Support\Locale\PromptLanguage;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\DB;
@@ -137,6 +138,12 @@ class AppManifestService
      */
     public function createVersion(App $app, array $manifest, ?User $user = null, ?string $summary = null): AppVersion
     {
+        // Sanitise bespoke `html`-block markup before it is validated or stored,
+        // so the persisted manifest (what the runtime renders) can never carry a
+        // <script>, an event handler or an inline style — the trust boundary
+        // against a prompt-injected author. No-op for manifests without html blocks.
+        $manifest = $this->sanitizeHtmlBlocks($manifest);
+
         $result = $this->validator->validate($manifest);
         if (! $result->valid) {
             throw new InvalidManifestException($result);
@@ -175,6 +182,65 @@ class AppManifestService
 
             return $version->refresh();
         });
+    }
+
+    /**
+     * Run the LandingHtmlSanitizer over every `html` block's `content`, descending
+     * through layout containers so a nested section is covered too. Returns the
+     * manifest with sanitised markup; a manifest with no html blocks is unchanged.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>
+     */
+    private function sanitizeHtmlBlocks(array $manifest): array
+    {
+        if (empty($manifest['pages']) || ! is_array($manifest['pages'])) {
+            return $manifest;
+        }
+
+        $sanitizer = new LandingHtmlSanitizer;
+        foreach ($manifest['pages'] as &$page) {
+            if (is_array($page) && isset($page['blocks']) && is_array($page['blocks'])) {
+                $page['blocks'] = $this->sanitizeBlockList($page['blocks'], $sanitizer);
+            }
+        }
+        unset($page);
+
+        return $manifest;
+    }
+
+    /**
+     * @param  array<int, mixed>  $blocks
+     * @return array<int, mixed>
+     */
+    private function sanitizeBlockList(array $blocks, LandingHtmlSanitizer $sanitizer): array
+    {
+        foreach ($blocks as &$block) {
+            if (! is_array($block)) {
+                continue;
+            }
+            if (($block['type'] ?? null) === 'html' && isset($block['content']) && is_string($block['content'])) {
+                $block['content'] = $sanitizer->sanitize($block['content']);
+            }
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (isset($block[$key]) && is_array($block[$key])) {
+                    $block[$key] = $this->sanitizeBlockList($block[$key], $sanitizer);
+                }
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                if (isset($block[$key]) && is_array($block[$key])) {
+                    foreach ($block[$key] as &$sub) {
+                        if (is_array($sub) && isset($sub['blocks']) && is_array($sub['blocks'])) {
+                            $sub['blocks'] = $this->sanitizeBlockList($sub['blocks'], $sanitizer);
+                        }
+                    }
+                    unset($sub);
+                }
+            }
+        }
+        unset($block);
+
+        return $blocks;
     }
 
     /**
