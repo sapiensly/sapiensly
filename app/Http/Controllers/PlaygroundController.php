@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Facades\TenantCache;
 use App\Jobs\ExecutePlaygroundRun;
 use App\Models\AiCatalogModel;
+use App\Models\PlaygroundBenchmark;
 use App\Models\PlaygroundRun;
 use App\Models\User;
 use App\Services\Ai\PlaygroundRunner;
@@ -214,6 +215,145 @@ class PlaygroundController extends Controller
             'finished_at' => $run->finished_at?->toIso8601String(),
             'user' => $run->user?->name,
             'created_at' => $run->created_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Enqueue a benchmark: the same prompt against N models (× repeats), one
+     * member {@see PlaygroundRun} each, all on the `ai` queue. Model/driver are
+     * pre-filled from the catalog so the comparison can group and label runs
+     * while they are still queued.
+     */
+    public function benchmark(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'capability' => ['required', Rule::in(['text', 'coding'])],
+            'prompt' => ['required', 'string', 'max:2000'],
+            'model_ids' => ['required', 'array', 'min:2', 'max:6'],
+            'model_ids.*' => ['distinct', Rule::exists('ai_catalog_models', 'id')],
+            'repeats' => ['nullable', 'integer', 'min:1', 'max:5'],
+        ]);
+
+        $catalog = AiCatalogModel::query()->enabled()->findMany($validated['model_ids']);
+        if ($catalog->count() !== count($validated['model_ids'])) {
+            return response()->json(['ok' => false, 'error' => 'One or more selected models are not enabled.'], 422);
+        }
+
+        $repeats = (int) ($validated['repeats'] ?? 1);
+        $input = ['prompt' => $validated['prompt']];
+
+        $benchmark = PlaygroundBenchmark::create([
+            'capability' => $validated['capability'],
+            'input' => $input,
+            'repeats' => $repeats,
+        ]);
+
+        $runIds = [];
+        foreach ($catalog as $model) {
+            for ($i = 0; $i < $repeats; $i++) {
+                $run = PlaygroundRun::create([
+                    'benchmark_id' => $benchmark->id,
+                    'capability' => $validated['capability'],
+                    'driver' => $model->driver,
+                    'model' => $model->model_id,
+                    'status' => PlaygroundRun::STATUS_QUEUED,
+                    'input' => $input,
+                    'queued_at' => now(),
+                ]);
+                $runIds[] = $run->id;
+
+                ExecutePlaygroundRun::dispatch($run->id, $request->user()->id, $model->id, $input);
+            }
+        }
+
+        $benchmark->load('runs');
+
+        return response()->json([
+            'ok' => true,
+            'benchmark_id' => $benchmark->id,
+            'run_ids' => $runIds,
+            'status' => $benchmark->isTerminal() ? 'complete' : 'running',
+        ], 202);
+    }
+
+    /**
+     * Polling endpoint + full detail: the benchmark header, the interpreted
+     * comparison (per-model medians, verdicts, winner) and every member run
+     * with its metrics and answer — the payload an external AI can audit.
+     */
+    public function benchmarkShow(PlaygroundBenchmark $benchmark): JsonResponse
+    {
+        $benchmark->load('runs', 'user:id,name');
+
+        return response()->json([
+            'id' => $benchmark->id,
+            'capability' => $benchmark->capability,
+            'input' => $benchmark->input,
+            'repeats' => $benchmark->repeats,
+            'user' => $benchmark->user?->name,
+            'created_at' => $benchmark->created_at?->toIso8601String(),
+            'comparison' => $benchmark->comparison(),
+            'runs' => $benchmark->runs->map(fn (PlaygroundRun $run) => [
+                'id' => $run->id,
+                'model' => $run->model,
+                'driver' => $run->driver,
+                'served_by' => $run->response['served_by'] ?? null,
+                'status' => $run->status,
+                'output_text' => $run->output_text,
+                'error' => $run->error,
+                'metrics' => $run->metrics(),
+            ])->values(),
+        ]);
+    }
+
+    /** Persist the human verdict: which member run won, and why. */
+    public function benchmarkWinner(Request $request, PlaygroundBenchmark $benchmark): JsonResponse
+    {
+        $validated = $request->validate([
+            'run_id' => ['required', 'string'],
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        if (! $benchmark->runs()->whereKey($validated['run_id'])->exists()) {
+            return response()->json(['ok' => false, 'error' => 'That run is not part of this benchmark.'], 422);
+        }
+
+        $benchmark->forceFill([
+            'winner_run_id' => $validated['run_id'],
+            'decision_note' => $validated['note'] ?? null,
+        ])->save();
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** The benchmark history for the current tenant scope, newest first. */
+    public function benchmarks(Request $request): JsonResponse
+    {
+        $request->validate(['page' => ['nullable', 'integer', 'min:1']]);
+
+        $page = PlaygroundBenchmark::query()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate(10);
+
+        $page->getCollection()->load(['runs', 'user:id,name']);
+
+        return response()->json([
+            'data' => $page->getCollection()->map(fn (PlaygroundBenchmark $benchmark) => [
+                'id' => $benchmark->id,
+                'capability' => $benchmark->capability,
+                'excerpt' => Str::limit((string) ($benchmark->input['prompt'] ?? ''), 80),
+                'models' => $benchmark->runs->pluck('model')->filter()->unique()->values(),
+                'status' => $benchmark->isTerminal() ? 'complete' : 'running',
+                'winner_model' => $benchmark->winner_run_id !== null
+                    ? $benchmark->runs->firstWhere('id', $benchmark->winner_run_id)?->model
+                    : null,
+                'user' => $benchmark->user?->name,
+                'created_at' => $benchmark->created_at?->toIso8601String(),
+            ])->values(),
+            'current_page' => $page->currentPage(),
+            'last_page' => $page->lastPage(),
+            'total' => $page->total(),
         ]);
     }
 

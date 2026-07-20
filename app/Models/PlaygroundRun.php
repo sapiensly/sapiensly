@@ -33,6 +33,7 @@ class PlaygroundRun extends Model
     public const STATUS_ERROR = 'error';
 
     protected $fillable = [
+        'benchmark_id',
         'capability',
         'driver',
         'model',
@@ -242,5 +243,10 @@ class PlaygroundRun extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function benchmark(): BelongsTo
+    {
+        return $this->belongsTo(PlaygroundBenchmark::class, 'benchmark_id');
     }
 }

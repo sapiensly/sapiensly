@@ -66,7 +66,9 @@ Build & debug apps (apps:build):
     list_workflow_proposals → approve_workflow_proposal / dismiss_workflow_proposal.
   - Playground: get_playground_run returns the full trace of one AI capability
     test run (input, response, raw provider payload, usage, timing) by the
-    pgrun_... id shown in the Playground UI.
+    pgrun_... id shown in the Playground UI. get_playground_benchmark returns a
+    multi-model comparison (per-model median metrics, verdicts, human-chosen
+    winner + note, member runs) by its pgbench_... id.
 
 Chatbots (apps:build):
   - Manage the chatbot: list_chatbots, get_chatbot (full config + roster),
@@ -183,8 +185,9 @@ class SapiensServer extends Server
         Tools\Workflows\ListWorkflowProposalsTool::class,
         Tools\Workflows\ApproveWorkflowProposalTool::class,
         Tools\Workflows\DismissWorkflowProposalTool::class,
-        // Playground (AI capability test runs).
+        // Playground (AI capability test runs + model benchmarks).
         Tools\Playground\GetPlaygroundRunTool::class,
+        Tools\Playground\GetPlaygroundBenchmarkTool::class,
         // Chatbots & bot flows.
         Tools\Chatbots\ListChatbotsTool::class,
         Tools\Chatbots\GetChatbotTool::class,

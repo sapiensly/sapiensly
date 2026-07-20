@@ -81,6 +81,7 @@ final class Schemas
         'ai_usage_daily',
         // Playground run history (model test/benchmark records)
         'playground_runs',
+        'playground_benchmarks',
         // Debates
         'debates',
         'debate_participants',

@@ -23,6 +23,7 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import BenchmarkPanel from './BenchmarkPanel.vue';
 import RunMetrics from './RunMetrics.vue';
 import type { RunMetrics as RunMetricsData } from './metrics';
 
@@ -151,6 +152,15 @@ function form(key: string): FormState {
     return forms[key];
 }
 const current = computed(() => form(selectedKey.value));
+
+// ── Benchmark mode (text/coding: one prompt, N models compared) ─────
+const benchmarkMode = ref(false);
+const benchmarkable = computed(() =>
+    ['text', 'coding'].includes(selectedKey.value),
+);
+watch(selectedKey, (key) => {
+    if (!['text', 'coding'].includes(key)) benchmarkMode.value = false;
+});
 
 const hasModel = computed(
     () => !!selected.value?.defaultModel || current.value.modelId !== '',
@@ -434,404 +444,486 @@ async function run() {
                     </button>
                 </nav>
 
-                <!-- Runner -->
-                <div
-                    v-if="selected"
-                    class="space-y-4 rounded-2xl border border-soft bg-navy p-5"
-                >
-                    <div>
-                        <h2 class="text-base font-semibold text-ink">
-                            {{ t(`app_v2.playground.cap.${selected.key}`) }}
-                        </h2>
-                        <p class="text-xs text-ink-muted">
-                            {{ t(`app_v2.playground.capdesc.${selected.key}`) }}
-                        </p>
-                    </div>
-
-                    <!-- Model picker -->
-                    <div class="space-y-1.5">
-                        <label class="text-xs text-ink-muted">{{
-                            t('app_v2.playground.model_label')
-                        }}</label>
-                        <select
-                            v-model="current.modelId"
-                            class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
-                        >
-                            <option value="">
-                                {{
-                                    selected.defaultModel
-                                        ? `${t('app_v2.playground.model_use_default')} (${selected.defaultModel})`
-                                        : t(
-                                              'app_v2.playground.model_use_default',
-                                          )
-                                }}
-                            </option>
-                            <option
-                                v-for="m in models"
-                                :key="m.id"
-                                :value="m.id"
-                            >
-                                {{ m.driver }} · {{ m.name }}
-                            </option>
-                        </select>
-                        <p v-if="!hasModel" class="text-[11px] text-sp-danger">
-                            {{ t('app_v2.playground.not_configured') }}
-                            <a
-                                href="/admin/ai"
-                                class="underline hover:text-ink"
-                                >{{ t('app_v2.playground.configure') }}</a
-                            >
-                        </p>
-                    </div>
-
-                    <!-- Inputs by kind -->
-                    <div v-if="selected.input === 'prompt'" class="space-y-1.5">
-                        <label class="text-xs text-ink-muted">{{
-                            t('app_v2.playground.field_prompt')
-                        }}</label>
-                        <textarea
-                            v-model="current.prompt"
-                            rows="4"
-                            class="w-full rounded-md border border-medium bg-surface p-2.5 text-sm text-ink"
-                        />
-                    </div>
-
-                    <div v-if="selected.input === 'text'" class="space-y-1.5">
-                        <label class="text-xs text-ink-muted">{{
-                            t('app_v2.playground.field_text')
-                        }}</label>
-                        <textarea
-                            v-model="current.text"
-                            rows="4"
-                            class="w-full rounded-md border border-medium bg-surface p-2.5 text-sm text-ink"
-                        />
-                    </div>
-
-                    <!-- Voice controls for speech generation. -->
+                <!-- Runner / Benchmark -->
+                <div v-if="selected" class="space-y-4">
                     <div
-                        v-if="selected.key === 'speech_generation'"
-                        class="grid grid-cols-2 gap-3"
+                        class="flex flex-wrap items-start justify-between gap-3"
                     >
-                        <div class="space-y-1.5">
-                            <label class="text-xs text-ink-muted">{{
-                                t('app_v2.playground.field_voice')
-                            }}</label>
-                            <input
-                                v-model="current.voice"
-                                :placeholder="
-                                    t('app_v2.playground.voice_placeholder')
-                                "
-                                class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
-                            />
+                        <div>
+                            <h2 class="text-base font-semibold text-ink">
+                                {{ t(`app_v2.playground.cap.${selected.key}`) }}
+                            </h2>
+                            <p class="text-xs text-ink-muted">
+                                {{
+                                    t(
+                                        `app_v2.playground.capdesc.${selected.key}`,
+                                    )
+                                }}
+                            </p>
                         </div>
+                        <div
+                            v-if="benchmarkable"
+                            class="flex rounded-lg border border-medium p-0.5 text-xs"
+                        >
+                            <button
+                                type="button"
+                                class="rounded-md px-2.5 py-1 transition-colors"
+                                :class="
+                                    !benchmarkMode
+                                        ? 'bg-accent-blue/15 font-medium text-accent-blue'
+                                        : 'text-ink-muted hover:text-ink'
+                                "
+                                @click="benchmarkMode = false"
+                            >
+                                {{ t('app_v2.playground.bench_mode_single') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md px-2.5 py-1 transition-colors"
+                                :class="
+                                    benchmarkMode
+                                        ? 'bg-accent-blue/15 font-medium text-accent-blue'
+                                        : 'text-ink-muted hover:text-ink'
+                                "
+                                @click="benchmarkMode = true"
+                            >
+                                {{
+                                    t('app_v2.playground.bench_mode_benchmark')
+                                }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <BenchmarkPanel
+                        v-if="benchmarkMode && benchmarkable"
+                        :capability="selectedKey"
+                        :models="models"
+                    />
+
+                    <div
+                        v-else
+                        class="space-y-4 rounded-2xl border border-soft bg-navy p-5"
+                    >
+                        <!-- Model picker -->
                         <div class="space-y-1.5">
                             <label class="text-xs text-ink-muted">{{
-                                t('app_v2.playground.field_gender')
+                                t('app_v2.playground.model_label')
                             }}</label>
                             <select
-                                v-model="current.gender"
+                                v-model="current.modelId"
                                 class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
                             >
                                 <option value="">
-                                    {{ t('app_v2.playground.gender_auto') }}
+                                    {{
+                                        selected.defaultModel
+                                            ? `${t('app_v2.playground.model_use_default')} (${selected.defaultModel})`
+                                            : t(
+                                                  'app_v2.playground.model_use_default',
+                                              )
+                                    }}
                                 </option>
-                                <option value="female">
-                                    {{ t('app_v2.playground.gender_female') }}
-                                </option>
-                                <option value="male">
-                                    {{ t('app_v2.playground.gender_male') }}
+                                <option
+                                    v-for="m in models"
+                                    :key="m.id"
+                                    :value="m.id"
+                                >
+                                    {{ m.driver }} · {{ m.name }}
                                 </option>
                             </select>
+                            <p
+                                v-if="!hasModel"
+                                class="text-[11px] text-sp-danger"
+                            >
+                                {{ t('app_v2.playground.not_configured') }}
+                                <a
+                                    href="/admin/ai"
+                                    class="underline hover:text-ink"
+                                    >{{ t('app_v2.playground.configure') }}</a
+                                >
+                            </p>
                         </div>
-                        <div class="col-span-2 space-y-1.5">
-                            <label class="text-xs text-ink-muted">{{
-                                t('app_v2.playground.field_instructions')
-                            }}</label>
-                            <input
-                                v-model="current.instructions"
-                                :placeholder="
-                                    t(
-                                        'app_v2.playground.instructions_placeholder',
-                                    )
-                                "
-                                class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
-                            />
-                        </div>
-                    </div>
 
-                    <div v-if="selected.input === 'rerank'" class="space-y-3">
-                        <div class="space-y-1.5">
-                            <label class="text-xs text-ink-muted">{{
-                                t('app_v2.playground.field_query')
-                            }}</label>
-                            <input
-                                v-model="current.query"
-                                class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
-                            />
-                        </div>
-                        <div class="space-y-1.5">
-                            <label class="text-xs text-ink-muted">{{
-                                t('app_v2.playground.field_documents')
-                            }}</label>
-                            <textarea
-                                v-model="current.documents"
-                                rows="5"
-                                class="w-full rounded-md border border-medium bg-surface p-2.5 text-sm text-ink"
-                            />
-                        </div>
-                    </div>
-
-                    <div
-                        v-if="
-                            ['pdf', 'image', 'image_q', 'audio'].includes(
-                                selected.input,
-                            )
-                        "
-                        class="space-y-3"
-                    >
-                        <div class="space-y-1.5">
-                            <label class="text-xs text-ink-muted">{{
-                                t('app_v2.playground.field_file')
-                            }}</label>
-                            <input
-                                type="file"
-                                :accept="fileAccept"
-                                class="block w-full text-sm text-ink-muted file:mr-3 file:rounded-md file:border-0 file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink"
-                                @change="onFile"
-                            />
-                        </div>
+                        <!-- Inputs by kind -->
                         <div
-                            v-if="selected.input === 'image_q'"
+                            v-if="selected.input === 'prompt'"
                             class="space-y-1.5"
                         >
                             <label class="text-xs text-ink-muted">{{
-                                t('app_v2.playground.field_question')
+                                t('app_v2.playground.field_prompt')
                             }}</label>
-                            <input
-                                v-model="current.question"
-                                class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
+                            <textarea
+                                v-model="current.prompt"
+                                rows="4"
+                                class="w-full rounded-md border border-medium bg-surface p-2.5 text-sm text-ink"
                             />
                         </div>
-                    </div>
 
-                    <div class="flex items-center gap-3">
-                        <button
-                            type="button"
-                            :disabled="current.running || !hasModel"
-                            class="inline-flex items-center gap-1.5 rounded-xl bg-accent-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:opacity-60"
-                            @click="run"
-                        >
-                            <Loader2
-                                v-if="current.running"
-                                class="size-4 animate-spin"
-                            />
-                            <Play v-else class="size-4" />
-                            {{
-                                current.running
-                                    ? t('app_v2.playground.running')
-                                    : t('app_v2.playground.run')
-                            }}
-                        </button>
-                        <!-- Live stopwatch. -->
-                        <span
-                            v-if="current.running || current.elapsedMs > 0"
-                            class="inline-flex items-center gap-1 font-mono text-sm text-ink-muted tabular-nums"
-                        >
-                            <Timer class="size-3.5" />
-                            {{ fmtDuration(current.elapsedMs) }}
-                        </span>
-                    </div>
-
-                    <!-- Result -->
-                    <div v-if="current.result" class="space-y-2">
                         <div
-                            v-if="!current.result.ok"
-                            class="rounded-xl border border-sp-danger/30 bg-sp-danger/10 p-3 text-sm text-sp-danger"
+                            v-if="selected.input === 'text'"
+                            class="space-y-1.5"
                         >
-                            {{ current.result.error }}
+                            <label class="text-xs text-ink-muted">{{
+                                t('app_v2.playground.field_text')
+                            }}</label>
+                            <textarea
+                                v-model="current.text"
+                                rows="4"
+                                class="w-full rounded-md border border-medium bg-surface p-2.5 text-sm text-ink"
+                            />
                         </div>
-                        <template v-else>
-                            <div
-                                class="flex items-center justify-between gap-2 text-xs text-ink-subtle"
-                            >
-                                <span>{{ t('app_v2.playground.result') }}</span>
-                                <div class="flex items-center gap-3">
-                                    <!-- Copy / download the result. -->
-                                    <button
-                                        v-if="
-                                            selected.output === 'text' &&
-                                            current.result.text
-                                        "
-                                        type="button"
-                                        class="inline-flex items-center gap-1 transition-colors hover:text-ink"
-                                        @click="copyText(current.result.text)"
-                                    >
-                                        <Check
-                                            v-if="copied"
-                                            class="size-3.5 text-sp-success"
-                                        />
-                                        <Copy v-else class="size-3.5" />
-                                        {{
-                                            copied
-                                                ? t('app_v2.playground.copied')
-                                                : t('app_v2.playground.copy')
-                                        }}
-                                    </button>
-                                    <button
-                                        v-if="
-                                            selected.output === 'text' &&
-                                            current.result.text
-                                        "
-                                        type="button"
-                                        class="inline-flex items-center gap-1 transition-colors hover:text-ink"
-                                        @click="
-                                            downloadText(
-                                                current.result.text,
-                                                `playground-${selected.key}.md`,
-                                            )
-                                        "
-                                    >
-                                        <Download class="size-3.5" />
-                                        {{ t('app_v2.playground.download') }}
-                                    </button>
-                                    <button
-                                        v-if="
-                                            selected.output === 'image' &&
-                                            current.result.image
-                                        "
-                                        type="button"
-                                        class="inline-flex items-center gap-1 transition-colors hover:text-ink"
-                                        @click="
-                                            triggerDownload(
-                                                current.result.image,
-                                                `playground-${selected.key}.png`,
-                                            )
-                                        "
-                                    >
-                                        <Download class="size-3.5" />
-                                        {{ t('app_v2.playground.download') }}
-                                    </button>
-                                    <button
-                                        v-if="
-                                            selected.output === 'audio' &&
-                                            current.result.audio
-                                        "
-                                        type="button"
-                                        class="inline-flex items-center gap-1 transition-colors hover:text-ink"
-                                        @click="
-                                            triggerDownload(
-                                                current.result.audio,
-                                                `playground-${selected.key}.mp3`,
-                                            )
-                                        "
-                                    >
-                                        <Download class="size-3.5" />
-                                        {{ t('app_v2.playground.download') }}
-                                    </button>
-                                    <span>
-                                        {{ current.result.model
-                                        }}<template
-                                            v-if="current.result.served_by"
-                                        >
-                                            · {{ current.result.served_by }}
-                                        </template>
-                                    </span>
-                                </div>
+
+                        <!-- Voice controls for speech generation. -->
+                        <div
+                            v-if="selected.key === 'speech_generation'"
+                            class="grid grid-cols-2 gap-3"
+                        >
+                            <div class="space-y-1.5">
+                                <label class="text-xs text-ink-muted">{{
+                                    t('app_v2.playground.field_voice')
+                                }}</label>
+                                <input
+                                    v-model="current.voice"
+                                    :placeholder="
+                                        t('app_v2.playground.voice_placeholder')
+                                    "
+                                    class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
+                                />
                             </div>
-
-                            <!-- Run performance: KPI tiles + latency split. -->
-                            <RunMetrics
-                                v-if="current.result.metrics"
-                                :metrics="current.result.metrics"
-                            />
-
-                            <!-- Run identity. -->
-                            <div
-                                v-if="current.result.run_id"
-                                class="text-[11px] text-ink-subtle"
-                            >
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center gap-1 font-mono transition-colors hover:text-ink"
-                                    :title="t('app_v2.playground.copy')"
-                                    @click="copyRunId(current.result.run_id!)"
+                            <div class="space-y-1.5">
+                                <label class="text-xs text-ink-muted">{{
+                                    t('app_v2.playground.field_gender')
+                                }}</label>
+                                <select
+                                    v-model="current.gender"
+                                    class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
                                 >
-                                    <Check
-                                        v-if="
-                                            copiedRunId ===
-                                            current.result.run_id
-                                        "
-                                        class="size-3 text-sp-success"
-                                    />
-                                    <Copy v-else class="size-3" />
-                                    {{ current.result.run_id }}
-                                </button>
+                                    <option value="">
+                                        {{ t('app_v2.playground.gender_auto') }}
+                                    </option>
+                                    <option value="female">
+                                        {{
+                                            t('app_v2.playground.gender_female')
+                                        }}
+                                    </option>
+                                    <option value="male">
+                                        {{ t('app_v2.playground.gender_male') }}
+                                    </option>
+                                </select>
                             </div>
-
-                            <div
-                                v-if="selected.output === 'text'"
-                                class="sp-chat-prose prose prose-sm max-h-[420px] max-w-none overflow-auto rounded-xl border border-soft bg-surface p-3 text-ink dark:prose-invert"
-                                v-html="renderMarkdown(current.result.text)"
-                            />
-
-                            <div
-                                v-else-if="selected.output === 'embeddings'"
-                                class="rounded-xl border border-soft bg-surface p-3 text-sm text-ink"
-                            >
-                                <p class="font-medium">
-                                    {{
-                                        t('app_v2.playground.embeddings_dims', {
-                                            n: current.result.dimensions ?? 0,
-                                        })
-                                    }}
-                                </p>
-                                <p class="mt-1 text-xs text-ink-muted">
-                                    {{
+                            <div class="col-span-2 space-y-1.5">
+                                <label class="text-xs text-ink-muted">{{
+                                    t('app_v2.playground.field_instructions')
+                                }}</label>
+                                <input
+                                    v-model="current.instructions"
+                                    :placeholder="
                                         t(
-                                            'app_v2.playground.embeddings_preview',
+                                            'app_v2.playground.instructions_placeholder',
                                         )
-                                    }}:
-                                    {{
-                                        (current.result.preview ?? []).join(
-                                            ', ',
-                                        )
-                                    }}…
-                                </p>
+                                    "
+                                    class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
+                                />
                             </div>
+                        </div>
 
-                            <img
-                                v-else-if="selected.output === 'image'"
-                                :src="current.result.image"
-                                alt="result"
-                                class="max-w-full rounded-xl border border-soft"
-                            />
+                        <div
+                            v-if="selected.input === 'rerank'"
+                            class="space-y-3"
+                        >
+                            <div class="space-y-1.5">
+                                <label class="text-xs text-ink-muted">{{
+                                    t('app_v2.playground.field_query')
+                                }}</label>
+                                <input
+                                    v-model="current.query"
+                                    class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
+                                />
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-xs text-ink-muted">{{
+                                    t('app_v2.playground.field_documents')
+                                }}</label>
+                                <textarea
+                                    v-model="current.documents"
+                                    rows="5"
+                                    class="w-full rounded-md border border-medium bg-surface p-2.5 text-sm text-ink"
+                                />
+                            </div>
+                        </div>
 
-                            <audio
-                                v-else-if="selected.output === 'audio'"
-                                :src="current.result.audio"
-                                controls
-                                class="w-full"
-                            />
-
-                            <ol
-                                v-else-if="selected.output === 'rerank'"
+                        <div
+                            v-if="
+                                ['pdf', 'image', 'image_q', 'audio'].includes(
+                                    selected.input,
+                                )
+                            "
+                            class="space-y-3"
+                        >
+                            <div class="space-y-1.5">
+                                <label class="text-xs text-ink-muted">{{
+                                    t('app_v2.playground.field_file')
+                                }}</label>
+                                <input
+                                    type="file"
+                                    :accept="fileAccept"
+                                    class="block w-full text-sm text-ink-muted file:mr-3 file:rounded-md file:border-0 file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink"
+                                    @change="onFile"
+                                />
+                            </div>
+                            <div
+                                v-if="selected.input === 'image_q'"
                                 class="space-y-1.5"
                             >
-                                <li
-                                    v-for="(r, i) in current.result.ranked ??
-                                    []"
-                                    :key="i"
-                                    class="rounded-lg border border-soft bg-surface p-2.5 text-sm text-ink"
+                                <label class="text-xs text-ink-muted">{{
+                                    t('app_v2.playground.field_question')
+                                }}</label>
+                                <input
+                                    v-model="current.question"
+                                    class="h-9 w-full rounded-md border border-medium bg-surface px-2.5 text-sm text-ink"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <button
+                                type="button"
+                                :disabled="current.running || !hasModel"
+                                class="inline-flex items-center gap-1.5 rounded-xl bg-accent-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                @click="run"
+                            >
+                                <Loader2
+                                    v-if="current.running"
+                                    class="size-4 animate-spin"
+                                />
+                                <Play v-else class="size-4" />
+                                {{
+                                    current.running
+                                        ? t('app_v2.playground.running')
+                                        : t('app_v2.playground.run')
+                                }}
+                            </button>
+                            <!-- Live stopwatch. -->
+                            <span
+                                v-if="current.running || current.elapsedMs > 0"
+                                class="inline-flex items-center gap-1 font-mono text-sm text-ink-muted tabular-nums"
+                            >
+                                <Timer class="size-3.5" />
+                                {{ fmtDuration(current.elapsedMs) }}
+                            </span>
+                        </div>
+
+                        <!-- Result -->
+                        <div v-if="current.result" class="space-y-2">
+                            <div
+                                v-if="!current.result.ok"
+                                class="rounded-xl border border-sp-danger/30 bg-sp-danger/10 p-3 text-sm text-sp-danger"
+                            >
+                                {{ current.result.error }}
+                            </div>
+                            <template v-else>
+                                <div
+                                    class="flex items-center justify-between gap-2 text-xs text-ink-subtle"
                                 >
-                                    <span class="text-xs text-ink-subtle"
-                                        >#{{ i + 1 }} · {{ r.score }}</span
-                                    >
-                                    <div class="break-words">
-                                        {{ r.document }}
+                                    <span>{{
+                                        t('app_v2.playground.result')
+                                    }}</span>
+                                    <div class="flex items-center gap-3">
+                                        <!-- Copy / download the result. -->
+                                        <button
+                                            v-if="
+                                                selected.output === 'text' &&
+                                                current.result.text
+                                            "
+                                            type="button"
+                                            class="inline-flex items-center gap-1 transition-colors hover:text-ink"
+                                            @click="
+                                                copyText(current.result.text)
+                                            "
+                                        >
+                                            <Check
+                                                v-if="copied"
+                                                class="size-3.5 text-sp-success"
+                                            />
+                                            <Copy v-else class="size-3.5" />
+                                            {{
+                                                copied
+                                                    ? t(
+                                                          'app_v2.playground.copied',
+                                                      )
+                                                    : t(
+                                                          'app_v2.playground.copy',
+                                                      )
+                                            }}
+                                        </button>
+                                        <button
+                                            v-if="
+                                                selected.output === 'text' &&
+                                                current.result.text
+                                            "
+                                            type="button"
+                                            class="inline-flex items-center gap-1 transition-colors hover:text-ink"
+                                            @click="
+                                                downloadText(
+                                                    current.result.text,
+                                                    `playground-${selected.key}.md`,
+                                                )
+                                            "
+                                        >
+                                            <Download class="size-3.5" />
+                                            {{
+                                                t('app_v2.playground.download')
+                                            }}
+                                        </button>
+                                        <button
+                                            v-if="
+                                                selected.output === 'image' &&
+                                                current.result.image
+                                            "
+                                            type="button"
+                                            class="inline-flex items-center gap-1 transition-colors hover:text-ink"
+                                            @click="
+                                                triggerDownload(
+                                                    current.result.image,
+                                                    `playground-${selected.key}.png`,
+                                                )
+                                            "
+                                        >
+                                            <Download class="size-3.5" />
+                                            {{
+                                                t('app_v2.playground.download')
+                                            }}
+                                        </button>
+                                        <button
+                                            v-if="
+                                                selected.output === 'audio' &&
+                                                current.result.audio
+                                            "
+                                            type="button"
+                                            class="inline-flex items-center gap-1 transition-colors hover:text-ink"
+                                            @click="
+                                                triggerDownload(
+                                                    current.result.audio,
+                                                    `playground-${selected.key}.mp3`,
+                                                )
+                                            "
+                                        >
+                                            <Download class="size-3.5" />
+                                            {{
+                                                t('app_v2.playground.download')
+                                            }}
+                                        </button>
+                                        <span>
+                                            {{ current.result.model
+                                            }}<template
+                                                v-if="current.result.served_by"
+                                            >
+                                                · {{ current.result.served_by }}
+                                            </template>
+                                        </span>
                                     </div>
-                                </li>
-                            </ol>
-                        </template>
+                                </div>
+
+                                <!-- Run performance: KPI tiles + latency split. -->
+                                <RunMetrics
+                                    v-if="current.result.metrics"
+                                    :metrics="current.result.metrics"
+                                />
+
+                                <!-- Run identity. -->
+                                <div
+                                    v-if="current.result.run_id"
+                                    class="text-[11px] text-ink-subtle"
+                                >
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1 font-mono transition-colors hover:text-ink"
+                                        :title="t('app_v2.playground.copy')"
+                                        @click="
+                                            copyRunId(current.result.run_id!)
+                                        "
+                                    >
+                                        <Check
+                                            v-if="
+                                                copiedRunId ===
+                                                current.result.run_id
+                                            "
+                                            class="size-3 text-sp-success"
+                                        />
+                                        <Copy v-else class="size-3" />
+                                        {{ current.result.run_id }}
+                                    </button>
+                                </div>
+
+                                <div
+                                    v-if="selected.output === 'text'"
+                                    class="sp-chat-prose prose prose-sm max-h-[420px] max-w-none overflow-auto rounded-xl border border-soft bg-surface p-3 text-ink dark:prose-invert"
+                                    v-html="renderMarkdown(current.result.text)"
+                                />
+
+                                <div
+                                    v-else-if="selected.output === 'embeddings'"
+                                    class="rounded-xl border border-soft bg-surface p-3 text-sm text-ink"
+                                >
+                                    <p class="font-medium">
+                                        {{
+                                            t(
+                                                'app_v2.playground.embeddings_dims',
+                                                {
+                                                    n:
+                                                        current.result
+                                                            .dimensions ?? 0,
+                                                },
+                                            )
+                                        }}
+                                    </p>
+                                    <p class="mt-1 text-xs text-ink-muted">
+                                        {{
+                                            t(
+                                                'app_v2.playground.embeddings_preview',
+                                            )
+                                        }}:
+                                        {{
+                                            (current.result.preview ?? []).join(
+                                                ', ',
+                                            )
+                                        }}…
+                                    </p>
+                                </div>
+
+                                <img
+                                    v-else-if="selected.output === 'image'"
+                                    :src="current.result.image"
+                                    alt="result"
+                                    class="max-w-full rounded-xl border border-soft"
+                                />
+
+                                <audio
+                                    v-else-if="selected.output === 'audio'"
+                                    :src="current.result.audio"
+                                    controls
+                                    class="w-full"
+                                />
+
+                                <ol
+                                    v-else-if="selected.output === 'rerank'"
+                                    class="space-y-1.5"
+                                >
+                                    <li
+                                        v-for="(r, i) in current.result
+                                            .ranked ?? []"
+                                        :key="i"
+                                        class="rounded-lg border border-soft bg-surface p-2.5 text-sm text-ink"
+                                    >
+                                        <span class="text-xs text-ink-subtle"
+                                            >#{{ i + 1 }} · {{ r.score }}</span
+                                        >
+                                        <div class="break-words">
+                                            {{ r.document }}
+                                        </div>
+                                    </li>
+                                </ol>
+                            </template>
+                        </div>
                     </div>
                 </div>
             </div>
