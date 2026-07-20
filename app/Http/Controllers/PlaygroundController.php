@@ -206,6 +206,7 @@ class PlaygroundController extends Controller
             'error' => $run->error,
             'duration_ms' => $run->duration_ms,
             'queue_wait_ms' => $run->queueWaitMs(),
+            'metrics' => $run->metrics(),
             'queued_at' => $run->queued_at?->toIso8601String(),
             'started_at' => $run->started_at?->toIso8601String(),
             'finished_at' => $run->finished_at?->toIso8601String(),

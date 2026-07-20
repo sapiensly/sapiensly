@@ -10,7 +10,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Full trace of one Playground run by its id (pgrun_...): the exact input tested, model/driver that served it, sanitized response, raw provider payload (inline binaries reduced to size stubs), token usage + cost, lifecycle timing (queue wait vs execution) and the error when it failed. The id is shown next to each run in the Playground UI.')]
+#[Description('Full trace of one Playground run by its id (pgrun_...): the exact input tested, model/driver that served it, sanitized response, raw provider payload (inline binaries reduced to size stubs), token usage + cost, lifecycle timing (queue wait vs execution) and the error when it failed. Includes a `metrics` block with derived latency (end-to-end, job overhead, output tokens/sec), cost (per-1k-tokens, input/output split, cost per useful output token) and efficiency (reasoning + cached-prompt ratios). The id is shown next to each run in the Playground UI.')]
 class GetPlaygroundRunTool extends SapiensTool
 {
     protected const ABILITY = 'apps:build';
@@ -58,6 +58,7 @@ class GetPlaygroundRunTool extends SapiensTool
             'error' => $run->error,
             'duration_ms' => $run->duration_ms,
             'queue_wait_ms' => $run->queueWaitMs(),
+            'metrics' => $run->metrics(),
             'queued_at' => $run->queued_at?->toIso8601String(),
             'started_at' => $run->started_at?->toIso8601String(),
             'finished_at' => $run->finished_at?->toIso8601String(),
