@@ -2602,6 +2602,7 @@
     "app_v2.playground.metrics_reasoning": "Reasoning",
     "app_v2.playground.metrics_reasoning_hint": "Proporción de tokens de salida gastados en razonamiento",
     "app_v2.playground.metrics_cache": "Caché",
+    "app_v2.playground.metrics_cache_write": "Escritura de caché",
     "app_v2.playground.metrics_cache_hint": "Proporción de tokens del prompt servidos desde caché",
     "app_v2.playground.metrics_per_1k": "$/1k tok",
     "app_v2.playground.detail_show_json": "Ver JSON crudo",

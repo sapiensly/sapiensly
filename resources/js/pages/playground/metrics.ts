@@ -26,6 +26,7 @@ export interface RunMetrics {
         reasoning_tokens: number | null;
         reasoning_ratio: number | null;
         cached_prompt_tokens: number | null;
+        cache_write_tokens: number | null;
         cached_prompt_ratio: number | null;
     };
 }

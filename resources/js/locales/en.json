@@ -2602,6 +2602,7 @@
     "app_v2.playground.metrics_reasoning": "Reasoning",
     "app_v2.playground.metrics_reasoning_hint": "Share of output tokens spent on reasoning",
     "app_v2.playground.metrics_cache": "Cache",
+    "app_v2.playground.metrics_cache_write": "Cache write",
     "app_v2.playground.metrics_cache_hint": "Share of prompt tokens served from cache",
     "app_v2.playground.metrics_per_1k": "$/1k tok",
     "app_v2.playground.detail_show_json": "Show raw JSON",

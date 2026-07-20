@@ -37,6 +37,11 @@ const tokenRows = computed(() => {
             n: e.cached_prompt_tokens,
         },
         {
+            key: 'cache_write',
+            label: t('app_v2.playground.metrics_cache_write'),
+            n: e.cache_write_tokens,
+        },
+        {
             key: 'total',
             label: t('app_v2.playground.metrics_total'),
             n: e.total_tokens,

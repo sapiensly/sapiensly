@@ -12,6 +12,7 @@ use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Files;
 use Laravel\Ai\Image;
 use Laravel\Ai\Reranking;
+use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Transcription;
 use RuntimeException;
 
@@ -52,6 +53,7 @@ class PlaygroundRunner
         private readonly AiDefaults $defaults,
         private readonly OpenRouterClient $openRouter,
         private readonly AiSpendGuard $spendGuard,
+        private readonly AiPricing $pricing,
     ) {}
 
     /**
@@ -200,20 +202,22 @@ class PlaygroundRunner
     }
 
     /**
-     * Record token usage + cost for the current run. Cost is derived from the
-     * catalog's per-Mtok prices when available.
+     * Record token usage + cost for the current run. An explicit $cost (e.g. the
+     * amount a broker like OpenRouter already reports) is authoritative; when
+     * none is given, cost is derived from the catalog's per-Mtok prices.
      *
      * @param  array{input_price: ?float, output_price: ?float, ...}  $handler
      */
-    private function recordUsage(array $handler, ?int $prompt, ?int $completion, bool $estimated = false): void
+    private function recordUsage(array $handler, ?int $prompt, ?int $completion, bool $estimated = false, ?float $cost = null): void
     {
-        $ip = $handler['input_price'] ?? null;
-        $op = $handler['output_price'] ?? null;
+        if ($cost === null) {
+            $ip = $handler['input_price'] ?? null;
+            $op = $handler['output_price'] ?? null;
 
-        $cost = null;
-        if ($ip !== null || $op !== null) {
-            $cost = round((($prompt ?? 0) / 1_000_000) * (float) ($ip ?? 0)
-                + (($completion ?? 0) / 1_000_000) * (float) ($op ?? 0), 6);
+            if ($ip !== null || $op !== null) {
+                $cost = round((($prompt ?? 0) / 1_000_000) * (float) ($ip ?? 0)
+                    + (($completion ?? 0) / 1_000_000) * (float) ($op ?? 0), 6);
+            }
         }
 
         $total = ($prompt ?? 0) + ($completion ?? 0);
@@ -224,6 +228,33 @@ class PlaygroundRunner
             'total_tokens' => $total > 0 ? $total : null,
             'cost' => $cost,
             'estimated' => $estimated ?: null,
+        ], fn ($v) => $v !== null);
+    }
+
+    /**
+     * Record usage for a Laravel AI SDK response. Cost is priced through
+     * {@see AiPricing} so prompt-cache economics are applied — cached-read input
+     * bills at ~0.1x and cache writes at ~1.25x, which the flat input+output
+     * math would get wrong for cached calls. Cache-read/write and reasoning
+     * token counts are captured too. An unpriced model keeps a null cost
+     * ("unknown"), never a misleading $0.
+     */
+    private function recordSdkUsage(array $handler, Usage $usage): void
+    {
+        $total = $usage->promptTokens + $usage->completionTokens;
+
+        $cost = $this->pricing->pricesFor($handler['model']) !== null
+            ? round($this->pricing->costFor($handler['model'], $usage), 6)
+            : null;
+
+        $this->usage = array_filter([
+            'prompt_tokens' => $usage->promptTokens ?: null,
+            'completion_tokens' => $usage->completionTokens ?: null,
+            'total_tokens' => $total > 0 ? $total : null,
+            'cache_read_tokens' => $usage->cacheReadInputTokens ?: null,
+            'cache_write_tokens' => $usage->cacheWriteInputTokens ?: null,
+            'reasoning_tokens' => $usage->reasoningTokens ?: null,
+            'cost' => $cost,
         ], fn ($v) => $v !== null);
     }
 
@@ -243,10 +274,16 @@ class PlaygroundRunner
             return;
         }
 
+        // OpenRouter reports the actual billed cost — authoritative, and
+        // independent of whether the catalog carries per-Mtok prices for this
+        // brokered model. Fall back to catalog-derived cost when it is absent.
+        $reportedCost = $usage['cost'] ?? null;
+
         $this->recordUsage(
             $handler,
             isset($usage['prompt_tokens']) ? (int) $usage['prompt_tokens'] : null,
             isset($usage['completion_tokens']) ? (int) $usage['completion_tokens'] : null,
+            cost: is_numeric($reportedCost) ? round((float) $reportedCost, 6) : null,
         );
     }
 
@@ -281,7 +318,7 @@ class PlaygroundRunner
 
         $response = (new AnonymousAgent($system, [], []))
             ->prompt($prompt, provider: $handler['provider'], model: $handler['model'], timeout: (int) config('ai.request_timeout', 180));
-        $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
+        $this->recordSdkUsage($handler, $response->usage);
 
         return (string) $response->text;
     }
@@ -340,7 +377,7 @@ class PlaygroundRunner
 
         $response = (new AnonymousAgent($instruction, [], []))
             ->prompt('Extract all text from the attached file.', attachments: [Files\Document::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model'], timeout: (int) config('ai.request_timeout', 180));
-        $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
+        $this->recordSdkUsage($handler, $response->usage);
 
         return (string) $response->text;
     }
@@ -369,7 +406,7 @@ class PlaygroundRunner
 
         $response = (new AnonymousAgent('You are a vision assistant.', [], []))
             ->prompt($instruction, attachments: [Files\Image::fromPath($file->getRealPath())], provider: $handler['provider'], model: $handler['model'], timeout: (int) config('ai.request_timeout', 180));
-        $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
+        $this->recordSdkUsage($handler, $response->usage);
 
         return (string) $response->text;
     }
@@ -398,7 +435,7 @@ class PlaygroundRunner
         }
 
         $image = Image::of($prompt)->generate($handler['provider'], $handler['model']);
-        $this->recordUsage($handler, $image->usage->promptTokens, $image->usage->completionTokens);
+        $this->recordSdkUsage($handler, $image->usage);
 
         return 'data:image/png;base64,'.base64_encode((string) $image);
     }
@@ -417,7 +454,7 @@ class PlaygroundRunner
         }
 
         $response = Transcription::fromUpload($file)->generate($handler['provider'], $handler['model']);
-        $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);
+        $this->recordSdkUsage($handler, $response->usage);
 
         return (string) $response->text;
     }

@@ -9,6 +9,7 @@ use App\Services\Ai\PlaygroundRunner;
 use App\Services\AiProviderService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Ai;
@@ -16,7 +17,10 @@ use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Embeddings;
 use Laravel\Ai\Image;
 use Laravel\Ai\Reranking;
+use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\RankedDocument;
+use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\TextResponse;
 
 function pgUser(): User
 {
@@ -353,11 +357,13 @@ test('OpenRouter text runs go direct, keeping the raw payload and the serving pr
     // Text runs are streamed (TTFT is only measurable from an SSE stream): the
     // provider rides an early chunk, content deltas accumulate, and usage lands
     // in the final chunk via stream_options.include_usage.
+    // The final chunk carries OpenRouter's own billed cost, which is
+    // authoritative — used verbatim instead of a catalog-price estimate.
     Http::fake([
         'openrouter.ai/*' => Http::response(
             'data: {"id":"gen-1","model":"z-ai/glm-5v-turbo","provider":"DeepInfra","choices":[{"delta":{"role":"assistant"}}]}'."\n\n"
             .'data: {"choices":[{"delta":{"content":"pong"}}]}'."\n\n"
-            .'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15}}'."\n\n"
+            .'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15,"cost":0.0009}}'."\n\n"
             .'data: [DONE]'."\n",
         ),
     ]);
@@ -375,7 +381,9 @@ test('OpenRouter text runs go direct, keeping the raw payload and the serving pr
     $run = PlaygroundRun::sole();
     expect($run->raw['provider'])->toBe('DeepInfra')
         ->and($run->response['served_by'])->toBe('DeepInfra')
-        ->and($run->usage['total_tokens'])->toBe(15);
+        ->and($run->usage['total_tokens'])->toBe(15)
+        // Provider-reported cost wins over the catalog estimate (~$0.000026).
+        ->and($run->usage['cost'])->toBe(0.0009);
 
     $user = $run->user;
     $this->actingAs($user ?? pgUser())
@@ -404,6 +412,39 @@ test('lifecycle timestamps persist with millisecond precision', function () {
     // Without sub-second storage these would quantize to 1000 / 5000.
     expect($fresh->queueWaitMs())->toBe(1234)
         ->and($fresh->endToEndMs())->toBe(5678);
+});
+
+test('SDK-path cost applies prompt-cache pricing, not flat input+output', function () {
+    $model = AiCatalogModel::create([
+        'driver' => 'anthropic',
+        'model_id' => 'claude-cache-test',
+        'capability' => 'chat',
+        'label' => 'Claude Cache Test',
+        'is_enabled' => true,
+        'sort_order' => 0,
+        'input_price_per_mtok' => 3,
+        'output_price_per_mtok' => 15,
+    ]);
+    setDefault('chat', $model);
+    Cache::forget('ai_pricing_map');
+
+    // 1M prompt + 1M completion + 1M cached-read input tokens.
+    Ai::fakeAgent(AnonymousAgent::class, [
+        new TextResponse(
+            'answer',
+            new Usage(promptTokens: 1_000_000, completionTokens: 1_000_000, cacheReadInputTokens: 1_000_000),
+            new Meta('anthropic', 'claude-cache-test'),
+        ),
+    ]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'text', 'prompt' => 'hi'])
+        ->assertOk();
+
+    $run = PlaygroundRun::sole();
+    // 3 (input) + 15 (output) + 0.3 (cache read @ 0.1x) = 18.3 — flat math gives 18.0.
+    expect($run->usage['cost'])->toBe(18.3)
+        ->and($run->usage['cache_read_tokens'])->toBe(1_000_000);
 });
 
 test('a streamed text run captures time-to-first-token', function () {

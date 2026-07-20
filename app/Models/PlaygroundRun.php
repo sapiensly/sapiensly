@@ -116,7 +116,7 @@ class PlaygroundRun extends Model
      * @return array{
      *     latency: array{queue_wait_ms: int|null, execution_ms: int|null, ttft_ms: int|null, end_to_end_ms: int|null, job_overhead_ms: int|null, output_tokens_per_second: float|null},
      *     cost: array{total: float|null, estimated: bool, per_1k_tokens: float|null, input: float|null, output: float|null, cached: float|null, per_useful_output_token: float|null},
-     *     efficiency: array{prompt_tokens: int|null, completion_tokens: int|null, total_tokens: int|null, reasoning_tokens: int|null, reasoning_ratio: float|null, cached_prompt_tokens: int|null, cached_prompt_ratio: float|null}
+     *     efficiency: array{prompt_tokens: int|null, completion_tokens: int|null, total_tokens: int|null, reasoning_tokens: int|null, reasoning_ratio: float|null, cached_prompt_tokens: int|null, cache_write_tokens: int|null, cached_prompt_ratio: float|null}
      * }
      */
     public function metrics(): array
@@ -127,10 +127,18 @@ class PlaygroundRun extends Model
         $totalTokens = $this->intOrNull($usage['total_tokens'] ?? null);
         $cost = isset($usage['cost']) ? (float) $usage['cost'] : null;
 
-        // Provider-specific breakdowns live in the raw payload (e.g. OpenRouter);
-        // absent for providers that don't report them.
-        $reasoningTokens = $this->intOrNull(data_get($this->raw, 'usage.completion_tokens_details.reasoning_tokens'));
-        $cachedPromptTokens = $this->intOrNull(data_get($this->raw, 'usage.prompt_tokens_details.cached_tokens'));
+        // Cache/reasoning breakdowns come from the raw payload (OpenRouter) or,
+        // on the SDK path, from the recorded usage — whichever the provider
+        // exposed; null when neither does.
+        $reasoningTokens = $this->intOrNull(
+            data_get($this->raw, 'usage.completion_tokens_details.reasoning_tokens')
+            ?? ($usage['reasoning_tokens'] ?? null)
+        );
+        $cachedPromptTokens = $this->intOrNull(
+            data_get($this->raw, 'usage.prompt_tokens_details.cached_tokens')
+            ?? ($usage['cache_read_tokens'] ?? null)
+        );
+        $cacheWriteTokens = $this->intOrNull($usage['cache_write_tokens'] ?? null);
         $inputCost = $this->floatOrNull(data_get($this->raw, 'usage.cost_details.upstream_inference_prompt_cost'));
         $outputCost = $this->floatOrNull(data_get($this->raw, 'usage.cost_details.upstream_inference_completions_cost'));
         $cachedCost = $this->floatOrNull(data_get($this->raw, 'usage.cost_details.upstream_inference_cached_cost'));
@@ -172,6 +180,7 @@ class PlaygroundRun extends Model
                     ? round($reasoningTokens / $completionTokens, 3)
                     : null,
                 'cached_prompt_tokens' => $cachedPromptTokens,
+                'cache_write_tokens' => $cacheWriteTokens,
                 'cached_prompt_ratio' => $cachedPromptTokens !== null && $promptTokens !== null && $promptTokens > 0
                     ? round($cachedPromptTokens / $promptTokens, 3)
                     : null,
