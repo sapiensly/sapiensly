@@ -8,15 +8,7 @@ import type {
     PaginatedAgents,
 } from '@/types/agents';
 import { Head, Link, router } from '@inertiajs/vue3';
-import {
-    Bot,
-    Brain,
-    Database,
-    Plus,
-    Users,
-    Wrench,
-    Zap,
-} from '@lucide/vue';
+import { Bot, Brain, Database, Plus, Users, Wrench, Zap } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -164,10 +156,7 @@ const totalAgents = computed(() =>
                 </Link>
             </div>
 
-            <div
-                v-else
-                class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-            >
+            <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <div
                     v-for="agent in agents.data"
                     :key="agent.id"
@@ -188,7 +177,9 @@ const totalAgents = computed(() =>
                                     />
                                 </div>
                                 <div class="min-w-0">
-                                    <h3 class="truncate text-sm font-semibold text-ink">
+                                    <h3
+                                        class="truncate text-sm font-semibold text-ink"
+                                    >
                                         {{ agent.name }}
                                     </h3>
                                     <p
@@ -214,7 +205,9 @@ const totalAgents = computed(() =>
                     <div
                         class="mt-4 flex items-center justify-between gap-3 border-t border-soft pt-3"
                     >
-                        <div class="flex flex-wrap items-center gap-3 text-[11px] text-ink-subtle">
+                        <div
+                            class="flex flex-wrap items-center gap-3 text-[11px] text-ink-subtle"
+                        >
                             <span
                                 class="inline-flex items-center rounded-pill border border-medium px-2 py-0.5 text-[10px] capitalize"
                             >

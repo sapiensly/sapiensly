@@ -84,6 +84,7 @@ export interface Agent {
     model: string;
     config: AgentConfig | null;
     web_search: boolean;
+    reasoning: string | null;
     knowledge_bases?: KnowledgeBaseReference[];
     tools?: ToolReference[];
     knowledge_bases_count?: number;

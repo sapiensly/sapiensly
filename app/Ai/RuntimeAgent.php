@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Services\Ai\ReasoningOptions;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Enums\Lab;
@@ -24,6 +25,9 @@ class RuntimeAgent extends AnonymousAgent implements HasProviderOptions
 {
     private ?string $cacheableSystem = null;
 
+    // Default off platform-wide: reasoning is opt-in, set per agent.
+    private ?string $reasoning = 'off';
+
     /**
      * Register a frozen system prefix as cacheable for providers that support
      * explicit cache breakpoints (Anthropic). No-op for other providers.
@@ -36,21 +40,32 @@ class RuntimeAgent extends AnonymousAgent implements HasProviderOptions
     }
 
     /**
+     * Set the reasoning preference for this run ('off'|'low'|'medium'|'high'),
+     * from the agent's own config. Default off — reasoning is opt-in per agent.
+     */
+    public function withReasoning(?string $mode): static
+    {
+        $this->reasoning = $mode;
+
+        return $this;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function providerOptions(Lab|string $provider): array
     {
+        $options = ReasoningOptions::forProvider($this->reasoning, $provider);
+
         if (($provider === Lab::Anthropic || $provider === 'anthropic')
             && $this->cacheableSystem !== null && trim($this->cacheableSystem) !== '') {
-            return [
-                'system' => [[
-                    'type' => 'text',
-                    'text' => $this->cacheableSystem,
-                    'cache_control' => ['type' => 'ephemeral'],
-                ]],
-            ];
+            $options['system'] = [[
+                'type' => 'text',
+                'text' => $this->cacheableSystem,
+                'cache_control' => ['type' => 'ephemeral'],
+            ]];
         }
 
-        return [];
+        return $options;
     }
 }

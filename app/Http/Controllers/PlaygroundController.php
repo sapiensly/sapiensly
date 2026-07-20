@@ -85,6 +85,8 @@ class PlaygroundController extends Controller
             'voice' => ['nullable', 'string', 'max:100'],
             'gender' => ['nullable', 'string', 'in:male,female'],
             'instructions' => ['nullable', 'string', 'max:2000'],
+            // Reasoning control (OpenRouter models): default keeps the model's own.
+            'reasoning' => ['nullable', Rule::in(['default', 'off', 'low', 'medium', 'high'])],
         ]);
 
         $input = array_filter([
@@ -95,6 +97,7 @@ class PlaygroundController extends Controller
             'voice' => $validated['voice'] ?? null,
             'gender' => $validated['gender'] ?? null,
             'instructions' => $validated['instructions'] ?? null,
+            'reasoning' => ($validated['reasoning'] ?? 'default') !== 'default' ? $validated['reasoning'] : null,
         ], fn ($v) => $v !== null);
 
         // Park the upload where the queue worker can read it; the job deletes it.
@@ -232,6 +235,7 @@ class PlaygroundController extends Controller
             'model_ids' => ['required', 'array', 'min:2', 'max:6'],
             'model_ids.*' => ['distinct', Rule::exists('ai_catalog_models', 'id')],
             'repeats' => ['nullable', 'integer', 'min:1', 'max:5'],
+            'reasoning' => ['nullable', Rule::in(['default', 'off', 'low', 'medium', 'high'])],
         ]);
 
         $catalog = AiCatalogModel::query()->enabled()->findMany($validated['model_ids']);
@@ -240,7 +244,10 @@ class PlaygroundController extends Controller
         }
 
         $repeats = (int) ($validated['repeats'] ?? 1);
-        $input = ['prompt' => $validated['prompt']];
+        $input = array_filter([
+            'prompt' => $validated['prompt'],
+            'reasoning' => ($validated['reasoning'] ?? 'default') !== 'default' ? $validated['reasoning'] : null,
+        ], fn ($v) => $v !== null);
 
         $benchmark = PlaygroundBenchmark::create([
             'capability' => $validated['capability'],

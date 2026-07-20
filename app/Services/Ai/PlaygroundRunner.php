@@ -112,9 +112,13 @@ class PlaygroundRunner
         $this->lastHandler = ['model' => $handler['model'], 'driver' => $handler['driver']];
         $this->spendGuard->assertWithinBudget($user, $user->organization_id, $handler['model']);
 
+        // Reasoning control (OpenRouter only): 'off'|'low'|'medium'|'high', or
+        // null/'default' to leave the model's own default.
+        $reasoning = is_string($input['reasoning'] ?? null) ? $input['reasoning'] : null;
+
         $output = match ($capability) {
-            'text' => ['text' => $this->generateText($user, $handler, (string) ($input['prompt'] ?? ''), 'You are a helpful assistant. Answer the user clearly.')],
-            'coding' => ['text' => $this->generateText($user, $handler, (string) ($input['prompt'] ?? ''), 'You are an expert programming assistant. Return correct, idiomatic code with a brief explanation.')],
+            'text' => ['text' => $this->generateText($user, $handler, (string) ($input['prompt'] ?? ''), 'You are a helpful assistant. Answer the user clearly.', $reasoning)],
+            'coding' => ['text' => $this->generateText($user, $handler, (string) ($input['prompt'] ?? ''), 'You are an expert programming assistant. Return correct, idiomatic code with a brief explanation.', $reasoning)],
             'embeddings' => $this->embeddings($handler, (string) ($input['text'] ?? '')),
             'ocr_pdf' => ['text' => $this->ocrPdf($user, $handler, $this->requireFile($file))],
             'image_vision' => ['text' => $this->imageVision($user, $handler, $this->requireFile($file), (string) ($input['prompt'] ?? ''))],
@@ -293,7 +297,7 @@ class PlaygroundRunner
     }
 
     /** @param array{model: string, driver: string, provider: Lab} $handler */
-    private function generateText(User $user, array $handler, string $prompt, string $system): string
+    private function generateText(User $user, array $handler, string $prompt, string $system, ?string $reasoning = null): string
     {
         if (trim($prompt) === '') {
             throw new RuntimeException('Provide a prompt.');
@@ -303,13 +307,14 @@ class PlaygroundRunner
             // Streamed chat-completions call: streaming is what makes TTFT
             // measurable, and the raw payload still names the upstream provider
             // OpenRouter routed to. Reuses the same telemetry recording as the
-            // blocking path via the reconstructed response.
+            // blocking path via the reconstructed response. The reasoning field
+            // (when set) tunes/disables the model's thinking — OpenRouter only.
             $stream = $this->openRouter->chatStreamed($user, $handler['model'], [], [
                 'messages' => [
                     ['role' => 'system', 'content' => $system],
                     ['role' => 'user', 'content' => [OpenRouterClient::textBlock($prompt)]],
                 ],
-            ], timeout: (int) config('ai.request_timeout', 180));
+            ] + OpenRouterClient::reasoningParams($reasoning), timeout: (int) config('ai.request_timeout', 180));
             $this->recordOpenRouterUsage($handler, $stream['response']);
             $this->ttftMs = $stream['ttft_ms'];
 

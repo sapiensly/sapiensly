@@ -14,11 +14,13 @@ it('marks the stable context as an Anthropic cacheable system block', function (
     }
 });
 
-it('folds the context into instructions and emits no marker for other providers', function () {
+it('folds the context into instructions and emits no cache marker for other providers', function () {
     $agent = new ExpressGateAgent('Eres el fit-check.', fn ($s) => [], "CATÁLOGO:\n{\"catalogo\":[]}");
 
-    expect($agent->providerOptions(Lab::OpenRouter))->toBe([])
-        ->and($agent->providerOptions('openai'))->toBe([])
+    // No Anthropic system block for other providers — only the reasoning-off
+    // default the gate always applies.
+    expect($agent->providerOptions(Lab::OpenRouter))->toBe(['reasoning' => ['enabled' => false]])
+        ->and($agent->providerOptions('openai'))->toBe(['reasoning_effort' => 'minimal'])
         ->and($agent->instructions())->toStartWith('Eres el fit-check.')
         ->and($agent->instructions())->toContain('CATÁLOGO');
 });

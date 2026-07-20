@@ -28,6 +28,7 @@ class UpdateAgentRequest extends FormRequest
             'prompt_template' => ['nullable', 'string'],
             'model' => $this->modelRule(),
             'web_search' => ['nullable', 'boolean'],
+            'reasoning' => ['nullable', 'in:default,off,low,medium,high'],
             'config' => ['nullable', 'array'],
 
             'config.temperature' => ['nullable', 'numeric', 'min:0', 'max:1'],

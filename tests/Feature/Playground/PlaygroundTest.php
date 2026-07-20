@@ -447,6 +447,29 @@ test('SDK-path cost applies prompt-cache pricing, not flat input+output', functi
         ->and($run->usage['cache_read_tokens'])->toBe(1_000_000);
 });
 
+test('the reasoning control is forwarded to OpenRouter (off disables thinking)', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = seedModel('chat', 'openrouter', 'z-ai/glm-5v-turbo');
+    setDefault('chat', $model);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response(
+            'data: {"choices":[{"delta":{"content":"hi"}}]}'."\n\n"
+            .'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1,"total_tokens":4}}'."\n\n"
+            .'data: [DONE]'."\n",
+        ),
+    ]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'text', 'prompt' => 'hi', 'reasoning' => 'off'])
+        ->assertOk();
+
+    Http::assertSent(fn ($req) => ($req['reasoning']['enabled'] ?? null) === false);
+
+    // 'default' sends no reasoning field — the model keeps its own behavior.
+    expect(PlaygroundRun::sole()->input['reasoning'])->toBe('off');
+});
+
 test('a streamed text run captures time-to-first-token', function () {
     config(['ai.providers.openrouter.key' => 'sk-or-test']);
     $model = seedModel('chat', 'openrouter', 'z-ai/glm-5v-turbo');

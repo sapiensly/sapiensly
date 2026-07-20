@@ -34,6 +34,7 @@ class Agent extends Model
         'model',
         'config',
         'web_search',
+        'reasoning',
     ];
 
     protected function casts(): array

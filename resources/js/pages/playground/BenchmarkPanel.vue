@@ -24,6 +24,7 @@ const { t } = useI18n();
 const prompt = ref('');
 const selectedIds = ref<Array<string | number>>([]);
 const repeats = ref(1);
+const reasoning = ref('off');
 const running = ref(false);
 const error = ref<string | null>(null);
 const detail = ref<BenchmarkDetail | null>(null);
@@ -81,6 +82,7 @@ async function run() {
             prompt: prompt.value,
             model_ids: selectedIds.value,
             repeats: repeats.value,
+            reasoning: reasoning.value,
         });
 
         // Poll — partial results render as each member run lands.
@@ -192,20 +194,48 @@ onMounted(() => loadHistory(1));
                 </div>
             </div>
 
-            <div class="flex items-center justify-between gap-3">
-                <label
-                    class="inline-flex items-center gap-2 text-xs text-ink-muted"
-                >
-                    {{ t('app_v2.playground.bench_repeats') }}
-                    <select
-                        v-model.number="repeats"
-                        class="rounded-lg border border-soft bg-transparent px-2 py-1 text-xs text-ink focus:outline-none"
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-4">
+                    <label
+                        class="inline-flex items-center gap-2 text-xs text-ink-muted"
                     >
-                        <option :value="1">1</option>
-                        <option :value="3">3</option>
-                        <option :value="5">5</option>
-                    </select>
-                </label>
+                        {{ t('app_v2.playground.bench_repeats') }}
+                        <select
+                            v-model.number="repeats"
+                            class="rounded-lg border border-soft bg-transparent px-2 py-1 text-xs text-ink focus:outline-none"
+                        >
+                            <option :value="1">1</option>
+                            <option :value="3">3</option>
+                            <option :value="5">5</option>
+                        </select>
+                    </label>
+                    <label
+                        class="inline-flex items-center gap-2 text-xs text-ink-muted"
+                        :title="t('app_v2.playground.reasoning_hint')"
+                    >
+                        {{ t('app_v2.playground.reasoning_label') }}
+                        <select
+                            v-model="reasoning"
+                            class="rounded-lg border border-soft bg-transparent px-2 py-1 text-xs text-ink focus:outline-none"
+                        >
+                            <option value="default">
+                                {{ t('app_v2.playground.reasoning_default') }}
+                            </option>
+                            <option value="off">
+                                {{ t('app_v2.playground.reasoning_off') }}
+                            </option>
+                            <option value="low">
+                                {{ t('app_v2.playground.reasoning_low') }}
+                            </option>
+                            <option value="medium">
+                                {{ t('app_v2.playground.reasoning_medium') }}
+                            </option>
+                            <option value="high">
+                                {{ t('app_v2.playground.reasoning_high') }}
+                            </option>
+                        </select>
+                    </label>
+                </div>
 
                 <button
                     type="button"

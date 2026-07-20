@@ -24,11 +24,11 @@ it('emits an Anthropic system cache block when a cacheable system is set', funct
     ]);
 });
 
-it('emits nothing for non-Anthropic providers even with a cacheable system', function () {
+it('emits no Anthropic cache block for other providers (only the reasoning-off default)', function () {
     $agent = makeChatAgent()->withCacheableSystem('FROZEN SYSTEM');
 
-    expect($agent->providerOptions(Lab::OpenAI))->toBe([])
-        ->and($agent->providerOptions(Lab::OpenRouter))->toBe([])
+    expect($agent->providerOptions(Lab::OpenAI))->toBe(['reasoning_effort' => 'minimal'])
+        ->and($agent->providerOptions(Lab::OpenRouter))->toBe(['reasoning' => ['enabled' => false]])
         ->and($agent->providerOptions(Lab::Gemini))->toBe([]);
 });
 

@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Services\Ai\ReasoningOptions;
 use Closure;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Agent;
@@ -51,18 +52,23 @@ class ExpressGateAgent implements Agent, HasProviderOptions, HasStructuredOutput
      */
     public function providerOptions(Lab|string $provider): array
     {
-        if (! $this->hasCacheableContext()
-            || ($provider !== Lab::Anthropic && $provider !== 'anthropic')) {
-            return [];
+        // A gate is one bounded structured question — reasoning only adds cost,
+        // latency, and (on DeepSeek) eats the max_tokens budget the JSON needs.
+        // Always off.
+        $options = ReasoningOptions::forProvider('off', $provider);
+
+        if ($this->hasCacheableContext()
+            && ($provider === Lab::Anthropic || $provider === 'anthropic')) {
+            // Replaces the gateway's plain `system` string: instructions first,
+            // then the stable context carrying the cache marker — Anthropic caches
+            // the whole prefix up to and including the marked block.
+            $options['system'] = [
+                ['type' => 'text', 'text' => $this->gateInstructions],
+                ['type' => 'text', 'text' => (string) $this->cacheableContext, 'cache_control' => ['type' => 'ephemeral']],
+            ];
         }
 
-        // Replaces the gateway's plain `system` string: instructions first,
-        // then the stable context carrying the cache marker — Anthropic caches
-        // the whole prefix up to and including the marked block.
-        return ['system' => [
-            ['type' => 'text', 'text' => $this->gateInstructions],
-            ['type' => 'text', 'text' => (string) $this->cacheableContext, 'cache_control' => ['type' => 'ephemeral']],
-        ]];
+        return $options;
     }
 
     private function hasCacheableContext(): bool

@@ -50,6 +50,7 @@ class UpdateAgentTool extends SapiensTool
             'prompt_template' => ['nullable', 'string'],
             'model' => $this->chatModelRule($user, required: false),
             'web_search' => ['sometimes', 'boolean'],
+            'reasoning' => ['sometimes', 'in:default,off,low,medium,high'],
             'knowledge_base_ids' => ['sometimes', 'array'],
             'knowledge_base_ids.*' => ['string', 'exists:tenant.knowledge_bases,id'],
             'tool_ids' => ['sometimes', 'array'],
@@ -60,7 +61,7 @@ class UpdateAgentTool extends SapiensTool
         // Partial update: only the attributes actually supplied are touched, so
         // an unset field keeps its current value rather than being nulled.
         $attributes = [];
-        foreach (['name', 'description', 'keywords', 'status', 'prompt_template', 'model', 'web_search', 'config'] as $field) {
+        foreach (['name', 'description', 'keywords', 'status', 'prompt_template', 'model', 'web_search', 'reasoning', 'config'] as $field) {
             if (array_key_exists($field, $validated)) {
                 $attributes[$field] = $validated[$field];
             }
@@ -95,6 +96,7 @@ class UpdateAgentTool extends SapiensTool
             'prompt_template' => $schema->string()->description('Replace the system prompt / instructions.'),
             'model' => $schema->string()->description('A model id from list_agent_models.'),
             'web_search' => $schema->boolean()->description('Enable or disable web search.'),
+            'reasoning' => $schema->string()->enum(['default', 'off', 'low', 'medium', 'high'])->description('Reasoning/thinking effort: off (platform default), default (model\'s own), or low/medium/high. Applies to OpenRouter and OpenAI models.'),
             'knowledge_base_ids' => $schema->array()->description('Replace the attached knowledge bases (empty array detaches all).'),
             'tool_ids' => $schema->array()->description('Replace the attached tools (empty array detaches all).'),
             'config' => $schema->object()->description('Replace tuning: { temperature, rag_params, tool_execution }.'),

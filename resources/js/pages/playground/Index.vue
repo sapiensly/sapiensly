@@ -125,6 +125,7 @@ type FormState = {
     voice: string;
     gender: string;
     instructions: string;
+    reasoning: string;
     file: File | null;
     running: boolean;
     result: RunResult | null;
@@ -143,6 +144,7 @@ function form(key: string): FormState {
             voice: '',
             gender: '',
             instructions: '',
+            reasoning: 'off',
             file: null,
             running: false,
             result: null,
@@ -372,6 +374,8 @@ async function run() {
     if (cap.input === 'prompt' || cap.input === 'image_q')
         fd.append('prompt', cap.input === 'image_q' ? f.question : f.prompt);
     if (cap.input === 'text') fd.append('text', f.text);
+    if (['text', 'coding'].includes(cap.key) && f.reasoning !== 'default')
+        fd.append('reasoning', f.reasoning);
     if (cap.key === 'speech_generation') {
         if (f.voice) fd.append('voice', f.voice);
         if (f.gender) fd.append('gender', f.gender);
@@ -541,6 +545,49 @@ async function run() {
                                     >{{ t('app_v2.playground.configure') }}</a
                                 >
                             </p>
+                        </div>
+
+                        <!-- Reasoning control (text/coding via OpenRouter). -->
+                        <div
+                            v-if="['text', 'coding'].includes(selected.key)"
+                            class="space-y-1.5"
+                        >
+                            <label
+                                class="flex items-center gap-1.5 text-xs text-ink-muted"
+                            >
+                                {{ t('app_v2.playground.reasoning_label') }}
+                                <span
+                                    class="text-ink-subtle"
+                                    :title="
+                                        t('app_v2.playground.reasoning_hint')
+                                    "
+                                    >ⓘ</span
+                                >
+                            </label>
+                            <select
+                                v-model="current.reasoning"
+                                class="h-9 w-full rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                            >
+                                <option value="default">
+                                    {{
+                                        t('app_v2.playground.reasoning_default')
+                                    }}
+                                </option>
+                                <option value="off">
+                                    {{ t('app_v2.playground.reasoning_off') }}
+                                </option>
+                                <option value="low">
+                                    {{ t('app_v2.playground.reasoning_low') }}
+                                </option>
+                                <option value="medium">
+                                    {{
+                                        t('app_v2.playground.reasoning_medium')
+                                    }}
+                                </option>
+                                <option value="high">
+                                    {{ t('app_v2.playground.reasoning_high') }}
+                                </option>
+                            </select>
                         </div>
 
                         <!-- Inputs by kind -->

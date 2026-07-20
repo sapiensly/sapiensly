@@ -75,6 +75,7 @@ interface AgentFormData {
     prompt_template: string;
     model: string;
     web_search: boolean;
+    reasoning: string;
     config: AgentFormConfig;
     knowledge_base_ids: string[];
     tool_ids: string[];
@@ -101,6 +102,7 @@ const form = useForm<AgentFormData>({
     prompt_template: '',
     model: '',
     web_search: false,
+    reasoning: 'off',
     config: {},
     knowledge_base_ids: [] as string[],
     tool_ids: [] as string[],
@@ -400,6 +402,43 @@ const webSearchMaxResults = computed<number | undefined>({
                             </p>
                         </div>
                         <Switch id="web_search" v-model="form.web_search" />
+                    </div>
+
+                    <div
+                        class="flex items-center justify-between gap-4 rounded-xs border border-soft bg-surface px-3 py-2.5"
+                    >
+                        <div class="space-y-0.5">
+                            <Label
+                                for="reasoning"
+                                class="text-xs font-medium text-ink"
+                            >
+                                {{ t('agents.edit.reasoning_label') }}
+                            </Label>
+                            <p class="text-[11px] text-ink-subtle">
+                                {{ t('agents.edit.reasoning_description') }}
+                            </p>
+                        </div>
+                        <select
+                            id="reasoning"
+                            v-model="form.reasoning"
+                            class="h-9 rounded-md border border-medium bg-surface px-2 text-sm text-ink"
+                        >
+                            <option value="off">
+                                {{ t('app_v2.playground.reasoning_off') }}
+                            </option>
+                            <option value="default">
+                                {{ t('app_v2.playground.reasoning_default') }}
+                            </option>
+                            <option value="low">
+                                {{ t('app_v2.playground.reasoning_low') }}
+                            </option>
+                            <option value="medium">
+                                {{ t('app_v2.playground.reasoning_medium') }}
+                            </option>
+                            <option value="high">
+                                {{ t('app_v2.playground.reasoning_high') }}
+                            </option>
+                        </select>
                     </div>
 
                     <div v-if="form.web_search" class="space-y-1">

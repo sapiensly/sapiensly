@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Services\Ai\ReasoningOptions;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Attributes\MaxTokens;
 use Laravel\Ai\Contracts\HasProviderOptions;
@@ -34,6 +35,20 @@ class ChatAgent extends AnonymousAgent implements HasProviderOptions
 
     private ?int $webSearchMaxResults = null;
 
+    // Default off platform-wide: reasoning is opt-in, set per agent/chatbot.
+    private ?string $reasoning = 'off';
+
+    /**
+     * Set the reasoning preference for this turn ('off'|'low'|'medium'|'high'),
+     * inherited from the agent/chatbot the conversation runs. Default off.
+     */
+    public function withReasoning(?string $mode): static
+    {
+        $this->reasoning = $mode;
+
+        return $this;
+    }
+
     /**
      * Register a frozen system prefix as cacheable for providers that support
      * explicit cache breakpoints (Anthropic). No-op for other providers.
@@ -63,7 +78,7 @@ class ChatAgent extends AnonymousAgent implements HasProviderOptions
      */
     public function providerOptions(Lab|string $provider): array
     {
-        $options = [];
+        $options = ReasoningOptions::forProvider($this->reasoning, $provider);
 
         if (($provider === Lab::Anthropic || $provider === 'anthropic')
             && $this->cacheableSystem !== null && trim($this->cacheableSystem) !== '') {

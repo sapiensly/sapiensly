@@ -31,6 +31,7 @@ trait PresentsAgent
             'keywords' => $agent->keywords ?? [],
             'model' => $agent->model,
             'web_search' => $agent->web_search,
+            'reasoning' => $agent->reasoning ?? 'off',
             'system_prompt' => $agent->prompt_template,
             'config' => $agent->config ?? [],
             'tools' => $agent->tools()->get()->map(fn (Tool $t) => [

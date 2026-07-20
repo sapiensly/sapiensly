@@ -523,6 +523,13 @@ EOT;
 
         $sdkAgent = new RuntimeAgent($instructions, $messages, $tools);
 
+        // Reasoning is off by default (RuntimeAgent); a DB agent whose owner
+        // configured it overrides for that agent only. Non-agent callers
+        // (chatbots, triage) leave it null → stays off.
+        if ($agent instanceof Agent && $agent->reasoning !== null) {
+            $sdkAgent->withReasoning($agent->reasoning);
+        }
+
         // The instructions + tool block are byte-stable across the round-trips
         // of an agentic turn (and across turns), so mark them cacheable — on
         // Anthropic the system breakpoint also covers the tools rendered before

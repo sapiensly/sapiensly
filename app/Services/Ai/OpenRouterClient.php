@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use App\Models\User;
 use App\Services\AiProviderService;
 use Illuminate\Support\Facades\Http;
+use Laravel\Ai\Enums\Lab;
 use RuntimeException;
 
 /**
@@ -261,6 +262,18 @@ class OpenRouterClient
             .'data'.pack('V', $dataLen);
 
         return $header.$pcm;
+    }
+
+    /**
+     * OpenRouter's unified `reasoning` request field for a mode, or [] to leave
+     * the model's own default. Delegates to {@see ReasoningOptions} so the OpenRouter
+     * shape stays in one place. Merged into the chat request body.
+     *
+     * @return array<string, mixed>
+     */
+    public static function reasoningParams(?string $mode): array
+    {
+        return ReasoningOptions::forProvider($mode, Lab::OpenRouter);
     }
 
     /** @return array{type: string, text: string} */

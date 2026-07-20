@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Services\Ai\ReasoningOptions;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Enums\Lab;
@@ -79,20 +80,19 @@ class BuilderAgent extends AnonymousAgent implements HasProviderOptions
      */
     public function providerOptions(Lab|string $provider): array
     {
-        if ($this->cacheableSystem === null || trim($this->cacheableSystem) === '') {
-            return [];
+        // The builder does structured, tool-driven authoring — reasoning adds
+        // cost and latency without helping, so it is always off.
+        $options = ReasoningOptions::forProvider('off', $provider);
+
+        if ($this->cacheableSystem !== null && trim($this->cacheableSystem) !== ''
+            && ($provider === Lab::Anthropic || $provider === 'anthropic')) {
+            $options['system'] = [[
+                'type' => 'text',
+                'text' => $this->cacheableSystem,
+                'cache_control' => ['type' => 'ephemeral'],
+            ]];
         }
 
-        if ($provider === Lab::Anthropic || $provider === 'anthropic') {
-            return [
-                'system' => [[
-                    'type' => 'text',
-                    'text' => $this->cacheableSystem,
-                    'cache_control' => ['type' => 'ephemeral'],
-                ]],
-            ];
-        }
-
-        return [];
+        return $options;
     }
 }

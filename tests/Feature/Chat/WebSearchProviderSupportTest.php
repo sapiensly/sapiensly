@@ -30,22 +30,30 @@ it('reports no web search support for OpenRouter and other gateways', function (
     expect(supportsWebSearch(Lab::Mistral))->toBeFalse();
 });
 
+// Reasoning is off platform-wide by default, so an OpenRouter agent always
+// carries reasoning:{enabled:false} alongside any web-search plugin.
 it('enables the OpenRouter web plugin with a configurable max_results', function () {
     $agent = (new ChatAgent(instructions: 'sys', messages: [], tools: []))->withWebSearch(7);
 
-    expect($agent->providerOptions(Lab::OpenRouter))->toBe(['plugins' => [['id' => 'web', 'max_results' => 7]]]);
-    // Other providers ignore it.
+    expect($agent->providerOptions(Lab::OpenRouter))->toBe([
+        'reasoning' => ['enabled' => false],
+        'plugins' => [['id' => 'web', 'max_results' => 7]],
+    ]);
+    // Other providers ignore web search (Anthropic reasoning-off is a no-op).
     expect($agent->providerOptions(Lab::Anthropic))->toBe([]);
 });
 
 it('omits max_results from the OpenRouter plugin when none is configured', function () {
     $agent = (new ChatAgent(instructions: 'sys', messages: [], tools: []))->withWebSearch(null);
 
-    expect($agent->providerOptions(Lab::OpenRouter))->toBe(['plugins' => [['id' => 'web']]]);
+    expect($agent->providerOptions(Lab::OpenRouter))->toBe([
+        'reasoning' => ['enabled' => false],
+        'plugins' => [['id' => 'web']],
+    ]);
 });
 
 it('does not emit the web plugin when web search is off', function () {
     $agent = new ChatAgent(instructions: 'sys', messages: [], tools: []);
 
-    expect($agent->providerOptions(Lab::OpenRouter))->toBe([]);
+    expect($agent->providerOptions(Lab::OpenRouter))->toBe(['reasoning' => ['enabled' => false]]);
 });

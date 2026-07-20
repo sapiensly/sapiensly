@@ -455,6 +455,12 @@ class ChatAiService
                 tools: $tools,
             );
 
+            // Reasoning is off by default; a chat driven by a configured agent
+            // inherits that agent's preference. Plain model chats stay off.
+            if ($agent instanceof Agent && $agent->reasoning !== null) {
+                $sdkAgent->withReasoning($agent->reasoning);
+            }
+
             // Mark the frozen prefix (system + agent/project instructions +
             // summary + artifacts guidance) as cacheable. RAG was deliberately
             // kept out of $instructions above, so this prefix is stable across

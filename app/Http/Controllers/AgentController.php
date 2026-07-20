@@ -91,6 +91,7 @@ class AgentController extends Controller
             'model' => $request->model,
             'config' => $request->config ?? [],
             'web_search' => $request->boolean('web_search'),
+            'reasoning' => $request->input('reasoning'),
         ]);
 
         if ($request->has('knowledge_base_ids')) {
@@ -148,6 +149,7 @@ class AgentController extends Controller
             'model' => $request->model,
             'config' => $request->config ?? $agent->config,
             'web_search' => $request->boolean('web_search'),
+            'reasoning' => $request->input('reasoning'),
         ]);
 
         if ($request->has('knowledge_base_ids')) {
