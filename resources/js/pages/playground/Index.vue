@@ -4,12 +4,14 @@ import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { normalizeChatMarkdown } from '@/lib/markdown';
 import { Head } from '@inertiajs/vue3';
 import {
+    Braces,
     Check,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
     Copy,
     Download,
+    Gauge,
     History,
     Loader2,
     Play,
@@ -21,6 +23,8 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import RunMetrics from './RunMetrics.vue';
+import type { RunMetrics as RunMetricsData } from './metrics';
 
 interface CapabilityModel {
     id: string;
@@ -59,6 +63,7 @@ interface RunResult {
     ranked?: { index: number; score: number; document: string }[];
     usage?: Usage;
     duration_ms?: number;
+    metrics?: RunMetricsData | null;
     error?: string;
 }
 
@@ -73,6 +78,7 @@ interface HistoryItem {
     total_tokens: number | null;
     cost: number | null;
     duration_ms: number | null;
+    tokens_per_second: number | null;
     error: string | null;
     user: string | null;
     created_at: string | null;
@@ -87,6 +93,7 @@ interface HistoryDetail extends HistoryItem {
     raw: Record<string, unknown> | null;
     usage: Usage | null;
     queue_wait_ms: number | null;
+    metrics: RunMetricsData | null;
 }
 
 const props = defineProps<{
@@ -238,6 +245,8 @@ const history = reactive({
 const expandedId = ref<string | null>(null);
 const details = reactive<Record<string, HistoryDetail | undefined>>({});
 const detailLoading = ref<string | null>(null);
+// Raw JSON payloads are opt-in per run — metrics lead, JSON is on demand.
+const rawJsonShown = reactive<Record<string, boolean>>({});
 
 async function loadHistory(page = 1) {
     history.loading = true;
@@ -730,38 +739,18 @@ async function run() {
                                 </div>
                             </div>
 
-                            <!-- Run metrics: time, tokens, cost. -->
+                            <!-- Run performance: KPI tiles + latency split. -->
+                            <RunMetrics
+                                v-if="current.result.metrics"
+                                :metrics="current.result.metrics"
+                            />
+
+                            <!-- Run identity. -->
                             <div
-                                class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-subtle"
+                                v-if="current.result.run_id"
+                                class="text-[11px] text-ink-subtle"
                             >
-                                <span
-                                    v-if="current.result.duration_ms != null"
-                                    class="inline-flex items-center gap-1"
-                                >
-                                    <Timer class="size-3" />
-                                    {{
-                                        fmtDuration(current.result.duration_ms)
-                                    }}
-                                </span>
-                                <span v-if="current.result.usage?.total_tokens">
-                                    {{
-                                        t('app_v2.playground.tokens', {
-                                            n: current.result.usage.total_tokens.toLocaleString(),
-                                        })
-                                    }}{{
-                                        current.result.usage.estimated
-                                            ? ' (~)'
-                                            : ''
-                                    }}
-                                </span>
-                                <span
-                                    v-if="current.result.usage?.cost != null"
-                                    class="font-medium text-ink-muted"
-                                >
-                                    {{ fmtCost(current.result.usage.cost) }}
-                                </span>
                                 <button
-                                    v-if="current.result.run_id"
                                     type="button"
                                     class="inline-flex items-center gap-1 font-mono transition-colors hover:text-ink"
                                     :title="t('app_v2.playground.copy')"
@@ -991,6 +980,19 @@ async function run() {
                                     <Timer class="size-3" />
                                     {{ fmtDuration(item.duration_ms) }}
                                 </span>
+                                <span
+                                    v-if="item.tokens_per_second != null"
+                                    class="hidden items-center gap-1 sm:inline-flex"
+                                    :title="
+                                        t(
+                                            'app_v2.playground.metrics_throughput',
+                                        )
+                                    "
+                                >
+                                    <Gauge class="size-3" />
+                                    {{ item.tokens_per_second }}
+                                    {{ t('app_v2.playground.metrics_tps') }}
+                                </span>
                                 <span v-if="item.total_tokens">
                                     {{
                                         t('app_v2.playground.tokens', {
@@ -1042,6 +1044,34 @@ async function run() {
                                 {{ t('app_v2.playground.running') }}
                             </p>
                             <template v-else-if="details[item.id]">
+                                <!-- Model that served the run, prominent. -->
+                                <div v-if="details[item.id]!.model">
+                                    <p class="text-base font-semibold text-ink">
+                                        {{ details[item.id]!.model }}
+                                    </p>
+                                    <p class="text-xs text-ink-muted">
+                                        <template
+                                            v-if="details[item.id]!.driver"
+                                        >
+                                            {{ details[item.id]!.driver }}
+                                        </template>
+                                        <template
+                                            v-if="details[item.id]!.served_by"
+                                        >
+                                            ·
+                                            {{
+                                                t(
+                                                    'app_v2.playground.served_by',
+                                                    {
+                                                        name: details[item.id]!
+                                                            .served_by,
+                                                    },
+                                                )
+                                            }}
+                                        </template>
+                                    </p>
+                                </div>
+
                                 <div
                                     v-if="details[item.id]!.error"
                                     class="rounded-xl border border-sp-danger/30 bg-sp-danger/10 p-3 text-sm text-sp-danger"
@@ -1049,24 +1079,11 @@ async function run() {
                                     {{ details[item.id]!.error }}
                                 </div>
 
-                                <p
-                                    v-if="
-                                        details[item.id]!.queue_wait_ms != null
-                                    "
-                                    class="text-[11px] text-ink-subtle"
-                                >
-                                    {{
-                                        t(
-                                            'app_v2.playground.detail_queue_wait',
-                                            {
-                                                wait: fmtDuration(
-                                                    details[item.id]!
-                                                        .queue_wait_ms!,
-                                                ),
-                                            },
-                                        )
-                                    }}
-                                </p>
+                                <RunMetrics
+                                    v-if="details[item.id]!.metrics"
+                                    :metrics="details[item.id]!.metrics!"
+                                    detailed
+                                />
 
                                 <div
                                     v-if="details[item.id]!.input"
@@ -1119,94 +1136,126 @@ async function run() {
                                     />
                                 </div>
 
-                                <div
-                                    v-if="details[item.id]!.output"
-                                    class="space-y-1"
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 text-[11px] text-ink-subtle transition-colors hover:text-ink"
+                                    @click="
+                                        rawJsonShown[item.id] =
+                                            !rawJsonShown[item.id]
+                                    "
                                 >
-                                    <p
-                                        class="text-[11px] font-medium text-ink-subtle uppercase"
-                                    >
-                                        {{
-                                            t(
-                                                'app_v2.playground.detail_output_data',
-                                            )
-                                        }}
-                                    </p>
-                                    <pre
-                                        class="max-h-48 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
-                                        >{{
-                                            fmtJson(details[item.id]!.output)
-                                        }}</pre
-                                    >
-                                </div>
+                                    <Braces class="size-3" />
+                                    {{
+                                        rawJsonShown[item.id]
+                                            ? t(
+                                                  'app_v2.playground.detail_hide_json',
+                                              )
+                                            : t(
+                                                  'app_v2.playground.detail_show_json',
+                                              )
+                                    }}
+                                </button>
 
-                                <div class="space-y-1">
+                                <div
+                                    v-show="rawJsonShown[item.id]"
+                                    class="space-y-3"
+                                >
                                     <div
-                                        class="flex items-center justify-between"
+                                        v-if="details[item.id]!.output"
+                                        class="space-y-1"
                                     >
                                         <p
                                             class="text-[11px] font-medium text-ink-subtle uppercase"
                                         >
                                             {{
                                                 t(
-                                                    'app_v2.playground.detail_raw_json',
+                                                    'app_v2.playground.detail_output_data',
                                                 )
                                             }}
                                         </p>
-                                        <button
-                                            v-if="details[item.id]!.raw"
-                                            type="button"
-                                            class="inline-flex items-center gap-1 text-[11px] text-ink-subtle transition-colors hover:text-ink"
-                                            @click="
-                                                copyText(
-                                                    fmtJson(
-                                                        details[item.id]!.raw,
-                                                    ),
+                                        <pre
+                                            class="max-h-48 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
+                                            >{{
+                                                fmtJson(
+                                                    details[item.id]!.output,
                                                 )
-                                            "
+                                            }}</pre
                                         >
-                                            <Copy class="size-3" />
-                                            {{ t('app_v2.playground.copy') }}
-                                        </button>
                                     </div>
-                                    <pre
-                                        v-if="details[item.id]!.raw"
-                                        class="max-h-72 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
-                                        >{{
-                                            fmtJson(details[item.id]!.raw)
-                                        }}</pre
-                                    >
-                                    <p
-                                        v-else
-                                        class="text-xs text-ink-subtle italic"
-                                    >
-                                        {{
-                                            t(
-                                                'app_v2.playground.detail_raw_none',
-                                            )
-                                        }}
-                                    </p>
-                                </div>
 
-                                <div
-                                    v-if="details[item.id]!.response"
-                                    class="space-y-1"
-                                >
-                                    <p
-                                        class="text-[11px] font-medium text-ink-subtle uppercase"
+                                    <div class="space-y-1">
+                                        <div
+                                            class="flex items-center justify-between"
+                                        >
+                                            <p
+                                                class="text-[11px] font-medium text-ink-subtle uppercase"
+                                            >
+                                                {{
+                                                    t(
+                                                        'app_v2.playground.detail_raw_json',
+                                                    )
+                                                }}
+                                            </p>
+                                            <button
+                                                v-if="details[item.id]!.raw"
+                                                type="button"
+                                                class="inline-flex items-center gap-1 text-[11px] text-ink-subtle transition-colors hover:text-ink"
+                                                @click="
+                                                    copyText(
+                                                        fmtJson(
+                                                            details[item.id]!
+                                                                .raw,
+                                                        ),
+                                                    )
+                                                "
+                                            >
+                                                <Copy class="size-3" />
+                                                {{
+                                                    t('app_v2.playground.copy')
+                                                }}
+                                            </button>
+                                        </div>
+                                        <pre
+                                            v-if="details[item.id]!.raw"
+                                            class="max-h-72 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
+                                            >{{
+                                                fmtJson(details[item.id]!.raw)
+                                            }}</pre
+                                        >
+                                        <p
+                                            v-else
+                                            class="text-xs text-ink-subtle italic"
+                                        >
+                                            {{
+                                                t(
+                                                    'app_v2.playground.detail_raw_none',
+                                                )
+                                            }}
+                                        </p>
+                                    </div>
+
+                                    <div
+                                        v-if="details[item.id]!.response"
+                                        class="space-y-1"
                                     >
-                                        {{
-                                            t(
-                                                'app_v2.playground.detail_response_json',
-                                            )
-                                        }}
-                                    </p>
-                                    <pre
-                                        class="max-h-48 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
-                                        >{{
-                                            fmtJson(details[item.id]!.response)
-                                        }}</pre
-                                    >
+                                        <p
+                                            class="text-[11px] font-medium text-ink-subtle uppercase"
+                                        >
+                                            {{
+                                                t(
+                                                    'app_v2.playground.detail_response_json',
+                                                )
+                                            }}
+                                        </p>
+                                        <pre
+                                            class="max-h-48 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
+                                            >{{
+                                                fmtJson(
+                                                    details[item.id]!.response,
+                                                )
+                                            }}</pre
+                                        >
+                                    </div>
                                 </div>
                             </template>
                         </div>

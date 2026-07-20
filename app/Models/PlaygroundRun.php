@@ -46,10 +46,20 @@ class PlaygroundRun extends Model
         'usage',
         'error',
         'duration_ms',
+        'ttft_ms',
         'queued_at',
         'started_at',
         'finished_at',
     ];
+
+    /**
+     * Persist datetimes with millisecond precision. Eloquent otherwise formats
+     * datetime attributes as `Y-m-d H:i:s` on write — dropping sub-second digits
+     * before they reach the timestamp(3) columns — which would quantize queue
+     * wait and end-to-end latency back to whole seconds regardless of the column
+     * precision.
+     */
+    protected $dateFormat = 'Y-m-d H:i:s.v';
 
     protected function casts(): array
     {
@@ -104,9 +114,9 @@ class PlaygroundRun extends Model
      * so `null` always means "not measurable", never zero.
      *
      * @return array{
-     *     latency: array{queue_wait_ms: int|null, execution_ms: int|null, end_to_end_ms: int|null, job_overhead_ms: int|null, output_tokens_per_second: float|null},
-     *     cost: array{total: float|null, estimated: bool, per_1k_tokens: float|null, input: float|null, output: float|null, per_useful_output_token: float|null},
-     *     efficiency: array{prompt_tokens: int|null, completion_tokens: int|null, reasoning_tokens: int|null, reasoning_ratio: float|null, cached_prompt_tokens: int|null, cached_prompt_ratio: float|null}
+     *     latency: array{queue_wait_ms: int|null, execution_ms: int|null, ttft_ms: int|null, end_to_end_ms: int|null, job_overhead_ms: int|null, output_tokens_per_second: float|null},
+     *     cost: array{total: float|null, estimated: bool, per_1k_tokens: float|null, input: float|null, output: float|null, cached: float|null, per_useful_output_token: float|null},
+     *     efficiency: array{prompt_tokens: int|null, completion_tokens: int|null, total_tokens: int|null, reasoning_tokens: int|null, reasoning_ratio: float|null, cached_prompt_tokens: int|null, cached_prompt_ratio: float|null}
      * }
      */
     public function metrics(): array
@@ -123,6 +133,7 @@ class PlaygroundRun extends Model
         $cachedPromptTokens = $this->intOrNull(data_get($this->raw, 'usage.prompt_tokens_details.cached_tokens'));
         $inputCost = $this->floatOrNull(data_get($this->raw, 'usage.cost_details.upstream_inference_prompt_cost'));
         $outputCost = $this->floatOrNull(data_get($this->raw, 'usage.cost_details.upstream_inference_completions_cost'));
+        $cachedCost = $this->floatOrNull(data_get($this->raw, 'usage.cost_details.upstream_inference_cached_cost'));
 
         $usefulOutputTokens = $completionTokens !== null && $reasoningTokens !== null
             ? max(0, $completionTokens - $reasoningTokens)
@@ -132,6 +143,7 @@ class PlaygroundRun extends Model
             'latency' => [
                 'queue_wait_ms' => $this->queueWaitMs(),
                 'execution_ms' => $this->duration_ms,
+                'ttft_ms' => $this->ttft_ms,
                 'end_to_end_ms' => $this->endToEndMs(),
                 'job_overhead_ms' => $this->jobOverheadMs(),
                 'output_tokens_per_second' => $completionTokens !== null && $this->duration_ms !== null && $this->duration_ms > 0
@@ -146,6 +158,7 @@ class PlaygroundRun extends Model
                     : null,
                 'input' => $inputCost,
                 'output' => $outputCost,
+                'cached' => $cachedCost,
                 'per_useful_output_token' => $cost !== null && $usefulOutputTokens !== null && $usefulOutputTokens > 0
                     ? round($cost / $usefulOutputTokens, 8)
                     : null,
@@ -153,6 +166,7 @@ class PlaygroundRun extends Model
             'efficiency' => [
                 'prompt_tokens' => $promptTokens,
                 'completion_tokens' => $completionTokens,
+                'total_tokens' => $totalTokens,
                 'reasoning_tokens' => $reasoningTokens,
                 'reasoning_ratio' => $reasoningTokens !== null && $completionTokens !== null && $completionTokens > 0
                     ? round($reasoningTokens / $completionTokens, 3)

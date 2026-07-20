@@ -174,6 +174,7 @@ class PlaygroundController extends Controller
                 'total_tokens' => $run->usage['total_tokens'] ?? null,
                 'cost' => $run->usage['cost'] ?? null,
                 'duration_ms' => $run->duration_ms,
+                'tokens_per_second' => $run->metrics()['latency']['output_tokens_per_second'],
                 'error' => $run->error !== null ? Str::limit($run->error, 140) : null,
                 'user' => $run->user?->name,
                 'created_at' => $run->created_at?->toIso8601String(),
@@ -205,6 +206,7 @@ class PlaygroundController extends Controller
             'usage' => $run->usage,
             'error' => $run->error,
             'duration_ms' => $run->duration_ms,
+            'ttft_ms' => $run->ttft_ms,
             'queue_wait_ms' => $run->queueWaitMs(),
             'metrics' => $run->metrics(),
             'queued_at' => $run->queued_at?->toIso8601String(),
@@ -248,7 +250,9 @@ class PlaygroundController extends Controller
             ], fn ($v) => $v !== null) + ($run->output ?? []);
         }
 
-        return response()->json(['ok' => true, 'run_id' => $run->id, 'status' => $run->status] + $payload);
+        return response()->json(
+            ['ok' => true, 'run_id' => $run->id, 'status' => $run->status, 'metrics' => $run->metrics()] + $payload
+        );
     }
 
     /** A short human label for a run's input: the prompt/text/query, else the file name. */

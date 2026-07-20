@@ -111,7 +111,7 @@ class ExecutePlaygroundRun implements ShouldQueue
     private function finish(PlaygroundRun $run, PlaygroundRunner $runner, array $result, ?string $error): void
     {
         $handler = $runner->lastHandler();
-        $output = array_diff_key($result, array_flip(['model', 'driver', 'usage', 'duration_ms', 'text']));
+        $output = array_diff_key($result, array_flip(['model', 'driver', 'usage', 'duration_ms', 'ttft_ms', 'text']));
 
         $run->forceFill([
             'status' => $error === null ? PlaygroundRun::STATUS_OK : PlaygroundRun::STATUS_ERROR,
@@ -124,6 +124,7 @@ class ExecutePlaygroundRun implements ShouldQueue
             'usage' => $result['usage'] ?? null,
             'error' => $error,
             'duration_ms' => $result['duration_ms'] ?? null,
+            'ttft_ms' => $result['ttft_ms'] ?? null,
             'finished_at' => now(),
         ])->save();
 

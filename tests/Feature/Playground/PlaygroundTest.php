@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Ai\PlaygroundRunner;
 use App\Services\AiProviderService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Ai;
@@ -349,13 +350,16 @@ test('OpenRouter text runs go direct, keeping the raw payload and the serving pr
     $model = seedModel('chat', 'openrouter', 'z-ai/glm-5v-turbo');
     setDefault('chat', $model);
 
+    // Text runs are streamed (TTFT is only measurable from an SSE stream): the
+    // provider rides an early chunk, content deltas accumulate, and usage lands
+    // in the final chunk via stream_options.include_usage.
     Http::fake([
-        'openrouter.ai/*' => Http::response([
-            'provider' => 'DeepInfra',
-            'model' => 'z-ai/glm-5v-turbo',
-            'choices' => [['message' => ['content' => 'pong']]],
-            'usage' => ['prompt_tokens' => 12, 'completion_tokens' => 3, 'total_tokens' => 15],
-        ]),
+        'openrouter.ai/*' => Http::response(
+            'data: {"id":"gen-1","model":"z-ai/glm-5v-turbo","provider":"DeepInfra","choices":[{"delta":{"role":"assistant"}}]}'."\n\n"
+            .'data: {"choices":[{"delta":{"content":"pong"}}]}'."\n\n"
+            .'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15}}'."\n\n"
+            .'data: [DONE]'."\n",
+        ),
     ]);
 
     $this->actingAs(pgUser())
@@ -378,6 +382,56 @@ test('OpenRouter text runs go direct, keeping the raw payload and the serving pr
         ->get('/playground/history')
         ->assertOk()
         ->assertJsonPath('data.0.served_by', 'DeepInfra');
+});
+
+test('lifecycle timestamps persist with millisecond precision', function () {
+    $user = pgUser();
+    $queued = Carbon::parse('2026-07-20 05:33:12.000');
+
+    $run = new PlaygroundRun;
+    $run->forceFill([
+        'organization_id' => $user->organization_id,
+        'user_id' => $user->id,
+        'capability' => 'text',
+        'status' => PlaygroundRun::STATUS_OK,
+        'queued_at' => $queued,
+        'started_at' => $queued->copy()->addMilliseconds(1234),
+        'finished_at' => $queued->copy()->addMilliseconds(5678),
+    ])->save();
+
+    $fresh = PlaygroundRun::findOrFail($run->id);
+
+    // Without sub-second storage these would quantize to 1000 / 5000.
+    expect($fresh->queueWaitMs())->toBe(1234)
+        ->and($fresh->endToEndMs())->toBe(5678);
+});
+
+test('a streamed text run captures time-to-first-token', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = seedModel('chat', 'openrouter', 'z-ai/glm-5v-turbo');
+    setDefault('chat', $model);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response(
+            'data: {"provider":"DeepInfra","choices":[{"delta":{"role":"assistant"}}]}'."\n\n"
+            .'data: {"choices":[{"delta":{"content":"Hello"}}]}'."\n\n"
+            .'data: {"choices":[{"delta":{"content":" there"}}]}'."\n\n"
+            .'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}'."\n\n"
+            .'data: [DONE]'."\n",
+        ),
+    ]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'text', 'prompt' => 'hi'])
+        ->assertOk()
+        ->assertJsonPath('text', 'Hello there')
+        ->assertJsonPath('metrics.latency.ttft_ms', fn ($v) => $v !== null && $v >= 0);
+
+    $run = PlaygroundRun::sole();
+    expect($run->ttft_ms)->not->toBeNull()
+        ->and($run->ttft_ms)->toBeGreaterThanOrEqual(0)
+        // TTFT never exceeds the full execution time.
+        ->and($run->ttft_ms)->toBeLessThanOrEqual($run->duration_ms + 1);
 });
 
 test('a successful run is persisted to history with input, model and output', function () {

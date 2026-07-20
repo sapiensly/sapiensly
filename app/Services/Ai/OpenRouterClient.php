@@ -59,6 +59,121 @@ class OpenRouterClient
     }
 
     /**
+     * A streamed chat completion. Streaming is what makes time-to-first-token
+     * measurable: we timestamp the first content (or reasoning) delta relative
+     * to the request send, then accumulate the rest. The final SSE chunk carries
+     * the full usage block (via stream_options.include_usage), so the returned
+     * `response` reconstructs the same shape the blocking {@see chat()} exposes —
+     * id, model, upstream provider, usage and the assembled message — plus the
+     * measured ttft_ms.
+     *
+     * @param  array<int, array<string, mixed>>  $content
+     * @param  array<string, mixed>  $extra
+     * @return array{text: string, response: array<string, mixed>, ttft_ms: int|null}
+     */
+    public function chatStreamed(User $user, string $model, array $content, array $extra = [], int $timeout = 120): array
+    {
+        $key = $this->apiKey($user);
+        if ($key === '') {
+            throw new RuntimeException('No OpenRouter API key is configured.');
+        }
+
+        $base = rtrim((string) (config('ai.providers.openrouter.url') ?: AiProviderService::OPENROUTER_BASE_URL), '/');
+
+        $startedAt = hrtime(true);
+
+        $response = Http::withToken($key)
+            ->timeout($timeout)
+            ->withOptions(['stream' => true])
+            ->post($base.'/chat/completions', array_merge([
+                'model' => $model,
+                'messages' => [['role' => 'user', 'content' => $content]],
+                'stream' => true,
+                'stream_options' => ['include_usage' => true],
+            ], $extra));
+
+        if (! $response->successful()) {
+            throw new RuntimeException('OpenRouter request failed ('.$response->status().'): '.$response->body());
+        }
+
+        $body = $response->toPsrResponse()->getBody();
+        $buffer = '';
+        $text = '';
+        $reasoning = '';
+        $ttftMs = null;
+        $usage = null;
+        $id = null;
+        $upstreamModel = null;
+        $provider = null;
+        $finishReason = null;
+
+        while (! $body->eof()) {
+            $buffer .= $body->read(8192);
+
+            while (($pos = strpos($buffer, "\n")) !== false) {
+                $line = trim(substr($buffer, 0, $pos));
+                $buffer = substr($buffer, $pos + 1);
+
+                if (! str_starts_with($line, 'data:')) {
+                    continue;
+                }
+                $data = trim(substr($line, 5));
+                if ($data === '' || $data === '[DONE]') {
+                    continue;
+                }
+
+                $json = json_decode($data, true);
+                if (! is_array($json)) {
+                    continue;
+                }
+
+                $id ??= data_get($json, 'id');
+                $upstreamModel ??= data_get($json, 'model');
+                $provider ??= data_get($json, 'provider');
+
+                $contentDelta = data_get($json, 'choices.0.delta.content');
+                $reasoningDelta = data_get($json, 'choices.0.delta.reasoning');
+
+                if ($ttftMs === null && ((is_string($contentDelta) && $contentDelta !== '') || (is_string($reasoningDelta) && $reasoningDelta !== ''))) {
+                    $ttftMs = (int) round((hrtime(true) - $startedAt) / 1_000_000);
+                }
+
+                if (is_string($contentDelta)) {
+                    $text .= $contentDelta;
+                }
+                if (is_string($reasoningDelta)) {
+                    $reasoning .= $reasoningDelta;
+                }
+
+                if (($finish = data_get($json, 'choices.0.finish_reason')) !== null) {
+                    $finishReason = $finish;
+                }
+                if (is_array($chunkUsage = data_get($json, 'usage'))) {
+                    $usage = $chunkUsage;
+                }
+            }
+        }
+
+        $raw = array_filter([
+            'id' => $id,
+            'model' => $upstreamModel,
+            'provider' => $provider,
+            'usage' => $usage,
+            'choices' => [[
+                'message' => array_filter([
+                    'role' => 'assistant',
+                    'content' => $text,
+                    'reasoning' => $reasoning !== '' ? $reasoning : null,
+                ], fn ($v) => $v !== null),
+                'finish_reason' => $finishReason,
+            ]],
+            'streamed' => true,
+        ], fn ($v) => $v !== null);
+
+        return ['text' => $text, 'response' => $raw, 'ttft_ms' => $ttftMs];
+    }
+
+    /**
      * Generate audio (TTS) via OpenRouter. Audio output requires stream:true, and
      * streamed output only supports the raw `pcm16` format — so we stream the SSE
      * response, concatenate the base64 PCM deltas, and wrap the PCM in a WAV

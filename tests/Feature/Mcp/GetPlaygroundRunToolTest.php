@@ -44,6 +44,7 @@ function playgroundRun(User $owner, array $attrs = []): PlaygroundRun
         ],
         'usage' => ['total_tokens' => 50, 'prompt_tokens' => 20, 'completion_tokens' => 30, 'cost' => 0.001],
         'duration_ms' => 1500,
+        'ttft_ms' => 320,
         'queued_at' => now()->subSeconds(3),
         'started_at' => now()->subSeconds(2),
         'finished_at' => now(),
@@ -69,6 +70,7 @@ it('returns the full trace of a run by id', function () {
         ->assertSee('Anthropic')                    // served_by
         // Derived metrics block.
         ->assertSee('"output_tokens_per_second":20')   // 30 tok / 1.5s
+        ->assertSee('"ttft_ms":320')                   // captured from the stream
         ->assertSee('"per_1k_tokens":0.02')            // 0.001 / 50 * 1000
         ->assertSee('"reasoning_ratio":0.333')         // 10 / 30
         ->assertSee('"cached_prompt_ratio":0.25')      // 5 / 20

@@ -104,6 +104,7 @@ class PlaygroundRunner
     {
         $this->usage = null;
         $this->raw = null;
+        $this->ttftMs = null;
         $this->lastHandler = null;
         $handler = $this->resolveForRun($capability, $modelId);
         $this->lastHandler = ['model' => $handler['model'], 'driver' => $handler['driver']];
@@ -138,6 +139,9 @@ class PlaygroundRunner
         if (is_string($served = data_get($this->raw, 'provider')) && $served !== '') {
             $meta['served_by'] = $served;
         }
+        if ($this->ttftMs !== null) {
+            $meta['ttft_ms'] = $this->ttftMs;
+        }
 
         return $meta + $output;
     }
@@ -147,6 +151,9 @@ class PlaygroundRunner
 
     /** Raw provider response for the current run, where the transport exposes it (OpenRouter). */
     private ?array $raw = null;
+
+    /** Time-to-first-token (ms) for the current run, when the call was streamed. */
+    private ?int $ttftMs = null;
 
     /** Model+driver resolved for the current run — available even when execution then fails. */
     private ?array $lastHandler = null;
@@ -256,18 +263,20 @@ class PlaygroundRunner
         }
 
         if ($handler['driver'] === 'openrouter') {
-            // Direct chat-completions call instead of the SDK driver so the raw
-            // payload — including which upstream provider OpenRouter routed
-            // to — lands in the run's telemetry.
-            $response = $this->openRouter->chat($user, $handler['model'], [], [
+            // Streamed chat-completions call: streaming is what makes TTFT
+            // measurable, and the raw payload still names the upstream provider
+            // OpenRouter routed to. Reuses the same telemetry recording as the
+            // blocking path via the reconstructed response.
+            $stream = $this->openRouter->chatStreamed($user, $handler['model'], [], [
                 'messages' => [
                     ['role' => 'system', 'content' => $system],
                     ['role' => 'user', 'content' => [OpenRouterClient::textBlock($prompt)]],
                 ],
             ], timeout: (int) config('ai.request_timeout', 180));
-            $this->recordOpenRouterUsage($handler, $response);
+            $this->recordOpenRouterUsage($handler, $stream['response']);
+            $this->ttftMs = $stream['ttft_ms'];
 
-            return OpenRouterClient::text($response);
+            return $stream['text'];
         }
 
         $response = (new AnonymousAgent($system, [], []))
