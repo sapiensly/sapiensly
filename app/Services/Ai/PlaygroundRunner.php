@@ -103,12 +103,15 @@ class PlaygroundRunner
     public function execute(User $user, string $capability, ?string $modelId, array $input, ?UploadedFile $file): array
     {
         $this->usage = null;
+        $this->raw = null;
+        $this->lastHandler = null;
         $handler = $this->resolveForRun($capability, $modelId);
+        $this->lastHandler = ['model' => $handler['model'], 'driver' => $handler['driver']];
         $this->spendGuard->assertWithinBudget($user, $user->organization_id, $handler['model']);
 
         $output = match ($capability) {
-            'text' => ['text' => $this->generateText($handler, (string) ($input['prompt'] ?? ''), 'You are a helpful assistant. Answer the user clearly.')],
-            'coding' => ['text' => $this->generateText($handler, (string) ($input['prompt'] ?? ''), 'You are an expert programming assistant. Return correct, idiomatic code with a brief explanation.')],
+            'text' => ['text' => $this->generateText($user, $handler, (string) ($input['prompt'] ?? ''), 'You are a helpful assistant. Answer the user clearly.')],
+            'coding' => ['text' => $this->generateText($user, $handler, (string) ($input['prompt'] ?? ''), 'You are an expert programming assistant. Return correct, idiomatic code with a brief explanation.')],
             'embeddings' => $this->embeddings($handler, (string) ($input['text'] ?? '')),
             'ocr_pdf' => ['text' => $this->ocrPdf($user, $handler, $this->requireFile($file))],
             'image_vision' => ['text' => $this->imageVision($user, $handler, $this->requireFile($file), (string) ($input['prompt'] ?? ''))],
@@ -130,12 +133,45 @@ class PlaygroundRunner
         if ($this->usage !== null) {
             $meta['usage'] = $this->usage;
         }
+        // OpenRouter is a broker: its raw response names the upstream provider
+        // that actually served the request — benchmark-relevant, surface it.
+        if (is_string($served = data_get($this->raw, 'provider')) && $served !== '') {
+            $meta['served_by'] = $served;
+        }
 
         return $meta + $output;
     }
 
     /** Token usage + cost for the current run, populated by the capability methods. */
     private ?array $usage = null;
+
+    /** Raw provider response for the current run, where the transport exposes it (OpenRouter). */
+    private ?array $raw = null;
+
+    /** Model+driver resolved for the current run — available even when execution then fails. */
+    private ?array $lastHandler = null;
+
+    /**
+     * Raw provider response of the last {@see execute()} call, or null when the
+     * transport does not expose one (SDK response objects).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function rawResponse(): ?array
+    {
+        return $this->raw;
+    }
+
+    /**
+     * Model+driver resolved by the last {@see execute()} call — set as soon as
+     * resolution succeeds, so error runs can still be attributed to a model.
+     *
+     * @return array{model: string, driver: string}|null
+     */
+    public function lastHandler(): ?array
+    {
+        return $this->lastHandler;
+    }
 
     /** @return array{model: string, driver: string, provider: Lab, input_price: ?float, output_price: ?float} */
     private function withProvider(string $model, string $driver): array
@@ -185,13 +221,16 @@ class PlaygroundRunner
     }
 
     /**
-     * Pull token usage out of a direct OpenRouter chat response.
+     * Pull token usage out of a direct OpenRouter chat response, keeping the
+     * full payload as the run's raw provider response.
      *
      * @param  array{input_price: ?float, output_price: ?float, ...}  $handler
      * @param  array<string, mixed>  $response
      */
     private function recordOpenRouterUsage(array $handler, array $response): void
     {
+        $this->raw = $response;
+
         $usage = data_get($response, 'usage');
         if (! is_array($usage)) {
             return;
@@ -210,13 +249,27 @@ class PlaygroundRunner
     }
 
     /** @param array{model: string, driver: string, provider: Lab} $handler */
-    private function generateText(array $handler, string $prompt, string $system): string
+    private function generateText(User $user, array $handler, string $prompt, string $system): string
     {
         if (trim($prompt) === '') {
             throw new RuntimeException('Provide a prompt.');
         }
 
-        // OpenRouter chat is OpenAI-compatible — the SDK driver handles plain text.
+        if ($handler['driver'] === 'openrouter') {
+            // Direct chat-completions call instead of the SDK driver so the raw
+            // payload — including which upstream provider OpenRouter routed
+            // to — lands in the run's telemetry.
+            $response = $this->openRouter->chat($user, $handler['model'], [], [
+                'messages' => [
+                    ['role' => 'system', 'content' => $system],
+                    ['role' => 'user', 'content' => [OpenRouterClient::textBlock($prompt)]],
+                ],
+            ], timeout: (int) config('ai.request_timeout', 180));
+            $this->recordOpenRouterUsage($handler, $response);
+
+            return OpenRouterClient::text($response);
+        }
+
         $response = (new AnonymousAgent($system, [], []))
             ->prompt($prompt, provider: $handler['provider'], model: $handler['model'], timeout: (int) config('ai.request_timeout', 180));
         $this->recordUsage($handler, $response->usage->promptTokens, $response->usage->completionTokens);

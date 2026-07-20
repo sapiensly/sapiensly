@@ -3,11 +3,23 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { normalizeChatMarkdown } from '@/lib/markdown';
 import { Head } from '@inertiajs/vue3';
-import { Check, Copy, Download, Loader2, Play, Timer } from '@lucide/vue';
+import {
+    Check,
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    Copy,
+    Download,
+    History,
+    Loader2,
+    Play,
+    RefreshCw,
+    Timer,
+} from '@lucide/vue';
 import axios from 'axios';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface CapabilityModel {
@@ -35,7 +47,10 @@ interface Usage {
 
 interface RunResult {
     ok: boolean;
+    run_id?: string | null;
+    status?: 'queued' | 'running' | 'ok' | 'error';
     model?: string;
+    served_by?: string;
     text?: string;
     image?: string;
     audio?: string;
@@ -45,6 +60,33 @@ interface RunResult {
     usage?: Usage;
     duration_ms?: number;
     error?: string;
+}
+
+interface HistoryItem {
+    id: string;
+    capability: string;
+    driver: string | null;
+    model: string | null;
+    served_by: string | null;
+    status: 'queued' | 'running' | 'ok' | 'error';
+    excerpt: string | null;
+    total_tokens: number | null;
+    cost: number | null;
+    duration_ms: number | null;
+    error: string | null;
+    user: string | null;
+    created_at: string | null;
+}
+
+interface HistoryDetail extends HistoryItem {
+    input: Record<string, unknown> | null;
+    file_meta: { name?: string; mime?: string; size?: number } | null;
+    output_text: string | null;
+    output: Record<string, unknown> | null;
+    response: Record<string, unknown> | null;
+    raw: Record<string, unknown> | null;
+    usage: Usage | null;
+    queue_wait_ms: number | null;
 }
 
 const props = defineProps<{
@@ -137,6 +179,17 @@ async function copyText(text: string) {
     }
 }
 
+const copiedRunId = ref<string | null>(null);
+async function copyRunId(id: string) {
+    try {
+        await navigator.clipboard.writeText(id);
+        copiedRunId.value = id;
+        setTimeout(() => (copiedRunId.value = null), 1500);
+    } catch {
+        /* clipboard unavailable */
+    }
+}
+
 function triggerDownload(href: string, filename: string) {
     const a = document.createElement('a');
     a.href = href;
@@ -173,7 +226,102 @@ function fmtCost(cost: number): string {
     return cost >= 0.01 ? `$${cost.toFixed(2)}` : `$${cost.toFixed(5)}`;
 }
 
+// ── Run history ──────────────────────────────────────────────────────
+const history = reactive({
+    items: [] as HistoryItem[],
+    page: 1,
+    lastPage: 1,
+    total: 0,
+    loading: false,
+    onlyCurrent: true,
+});
+const expandedId = ref<string | null>(null);
+const details = reactive<Record<string, HistoryDetail | undefined>>({});
+const detailLoading = ref<string | null>(null);
+
+async function loadHistory(page = 1) {
+    history.loading = true;
+    try {
+        const params: Record<string, string | number> = { page };
+        if (history.onlyCurrent) params.capability = selectedKey.value;
+        const { data } = await axios.get('/playground/history', { params });
+        history.items = data.data;
+        history.page = data.current_page;
+        history.lastPage = data.last_page;
+        history.total = data.total;
+    } catch {
+        /* history is best-effort; the runner keeps working without it */
+    } finally {
+        history.loading = false;
+    }
+}
+
+async function toggleDetail(id: string) {
+    if (expandedId.value === id) {
+        expandedId.value = null;
+        return;
+    }
+    expandedId.value = id;
+    if (!details[id]) {
+        detailLoading.value = id;
+        try {
+            const { data } = await axios.get(`/playground/history/${id}`);
+            details[id] = data;
+        } catch {
+            expandedId.value = null;
+        } finally {
+            detailLoading.value = null;
+        }
+    }
+}
+
+function toggleHistoryScope(onlyCurrent: boolean) {
+    if (history.onlyCurrent === onlyCurrent) return;
+    history.onlyCurrent = onlyCurrent;
+    loadHistory(1);
+}
+
+function fmtJson(value: unknown): string {
+    return JSON.stringify(value, null, 2);
+}
+
+function fmtTimestamp(iso: string | null): string {
+    return iso ? new Date(iso).toLocaleString() : '';
+}
+
+onMounted(() => loadHistory(1));
+watch(selectedKey, () => {
+    if (history.onlyCurrent) loadHistory(1);
+});
+
 const MAX_UPLOAD_MB = 30;
+
+// Runs execute on the queue; the browser polls until the job lands a
+// terminal state. Generous ceiling — providers themselves time out first.
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 10 * 60 * 1000;
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollRun(runId: string): Promise<RunResult> {
+    const startedAt = Date.now();
+    for (;;) {
+        await sleep(POLL_INTERVAL_MS);
+        const { data } = await axios.get<RunResult>(`/playground/run/${runId}`);
+        if (data.status === 'ok') return data;
+        if (data.status === 'error')
+            return {
+                ok: false,
+                run_id: runId,
+                error: data.error,
+                duration_ms: data.duration_ms,
+            };
+        if (Date.now() - startedAt > POLL_TIMEOUT_MS)
+            return { ok: false, error: t('app_v2.playground.poll_timeout') };
+    }
+}
 
 async function run() {
     const cap = selected.value;
@@ -223,7 +371,15 @@ async function run() {
 
     try {
         const { data } = await axios.post<RunResult>('/playground/run', fd);
-        f.result = data;
+        // Queued (async worker) → poll until terminal; sync driver returns
+        // the finished payload directly.
+        if (data.status === 'queued' || data.status === 'running') {
+            // Surface the in-flight row in the history right away.
+            loadHistory(1);
+            f.result = await pollRun(data.run_id!);
+        } else {
+            f.result = data;
+        }
     } catch (err) {
         const e = err as { response?: { data?: RunResult } };
         f.result = e.response?.data ?? {
@@ -234,6 +390,8 @@ async function run() {
         window.clearInterval(timer);
         f.elapsedMs = performance.now() - startedAt;
         f.running = false;
+        // Every run (success or error) lands in the persisted history.
+        loadHistory(1);
     }
 }
 </script>
@@ -561,7 +719,14 @@ async function run() {
                                         <Download class="size-3.5" />
                                         {{ t('app_v2.playground.download') }}
                                     </button>
-                                    <span>{{ current.result.model }}</span>
+                                    <span>
+                                        {{ current.result.model
+                                        }}<template
+                                            v-if="current.result.served_by"
+                                        >
+                                            · {{ current.result.served_by }}
+                                        </template>
+                                    </span>
                                 </div>
                             </div>
 
@@ -595,6 +760,23 @@ async function run() {
                                 >
                                     {{ fmtCost(current.result.usage.cost) }}
                                 </span>
+                                <button
+                                    v-if="current.result.run_id"
+                                    type="button"
+                                    class="inline-flex items-center gap-1 font-mono transition-colors hover:text-ink"
+                                    :title="t('app_v2.playground.copy')"
+                                    @click="copyRunId(current.result.run_id!)"
+                                >
+                                    <Check
+                                        v-if="
+                                            copiedRunId ===
+                                            current.result.run_id
+                                        "
+                                        class="size-3 text-sp-success"
+                                    />
+                                    <Copy v-else class="size-3" />
+                                    {{ current.result.run_id }}
+                                </button>
                             </div>
 
                             <div
@@ -662,6 +844,406 @@ async function run() {
                             </ol>
                         </template>
                     </div>
+                </div>
+            </div>
+
+            <!-- Run history -->
+            <div class="space-y-3 rounded-2xl border border-soft bg-navy p-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2
+                            class="inline-flex items-center gap-2 text-base font-semibold text-ink"
+                        >
+                            <History class="size-4" />
+                            {{ t('app_v2.playground.history') }}
+                            <span
+                                v-if="history.total > 0"
+                                class="text-xs font-normal text-ink-subtle"
+                            >
+                                {{
+                                    t(
+                                        'app_v2.playground.history_total',
+                                        { n: history.total },
+                                        history.total,
+                                    )
+                                }}
+                            </span>
+                        </h2>
+                        <p class="text-xs text-ink-muted">
+                            {{ t('app_v2.playground.history_desc') }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div
+                            class="flex rounded-lg border border-medium p-0.5 text-xs"
+                        >
+                            <button
+                                type="button"
+                                class="rounded-md px-2.5 py-1 transition-colors"
+                                :class="
+                                    history.onlyCurrent
+                                        ? 'bg-accent-blue/15 font-medium text-accent-blue'
+                                        : 'text-ink-muted hover:text-ink'
+                                "
+                                @click="toggleHistoryScope(true)"
+                            >
+                                {{ t('app_v2.playground.history_current') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md px-2.5 py-1 transition-colors"
+                                :class="
+                                    !history.onlyCurrent
+                                        ? 'bg-accent-blue/15 font-medium text-accent-blue'
+                                        : 'text-ink-muted hover:text-ink'
+                                "
+                                @click="toggleHistoryScope(false)"
+                            >
+                                {{ t('app_v2.playground.history_all') }}
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded-lg border border-medium p-1.5 text-ink-muted transition-colors hover:text-ink"
+                            :title="t('app_v2.playground.history_refresh')"
+                            @click="loadHistory(history.page)"
+                        >
+                            <RefreshCw
+                                class="size-3.5"
+                                :class="{ 'animate-spin': history.loading }"
+                            />
+                        </button>
+                    </div>
+                </div>
+
+                <p
+                    v-if="!history.loading && history.items.length === 0"
+                    class="py-6 text-center text-sm text-ink-subtle"
+                >
+                    {{ t('app_v2.playground.history_empty') }}
+                </p>
+
+                <ul v-else class="divide-y divide-soft">
+                    <li v-for="item in history.items" :key="item.id">
+                        <button
+                            type="button"
+                            class="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2.5 text-left transition-colors hover:bg-surface"
+                            @click="toggleDetail(item.id)"
+                        >
+                            <span
+                                class="size-2 shrink-0 rounded-full"
+                                :class="{
+                                    'bg-sp-success': item.status === 'ok',
+                                    'bg-sp-danger': item.status === 'error',
+                                    'animate-pulse bg-sp-warning':
+                                        item.status === 'queued' ||
+                                        item.status === 'running',
+                                }"
+                            />
+                            <span class="min-w-0">
+                                <span
+                                    class="block truncate text-sm text-ink"
+                                    :title="item.excerpt ?? undefined"
+                                >
+                                    {{
+                                        item.excerpt ??
+                                        t(
+                                            `app_v2.playground.cap.${item.capability}`,
+                                        )
+                                    }}
+                                </span>
+                                <span
+                                    class="block truncate text-[11px] text-ink-subtle"
+                                >
+                                    {{
+                                        t(
+                                            `app_v2.playground.cap.${item.capability}`,
+                                        )
+                                    }}
+                                    <template v-if="item.model">
+                                        · {{ item.driver }} · {{ item.model }}
+                                    </template>
+                                    <template v-if="item.served_by">
+                                        ·
+                                        {{
+                                            t('app_v2.playground.served_by', {
+                                                name: item.served_by,
+                                            })
+                                        }}
+                                    </template>
+                                    <template v-if="item.user">
+                                        ·
+                                        {{
+                                            t('app_v2.playground.by_user', {
+                                                name: item.user,
+                                            })
+                                        }}
+                                    </template>
+                                </span>
+                            </span>
+                            <span
+                                class="flex shrink-0 items-center gap-3 text-[11px] text-ink-subtle tabular-nums"
+                            >
+                                <span
+                                    v-if="item.duration_ms != null"
+                                    class="inline-flex items-center gap-1"
+                                >
+                                    <Timer class="size-3" />
+                                    {{ fmtDuration(item.duration_ms) }}
+                                </span>
+                                <span v-if="item.total_tokens">
+                                    {{
+                                        t('app_v2.playground.tokens', {
+                                            n: item.total_tokens.toLocaleString(),
+                                        })
+                                    }}
+                                </span>
+                                <span
+                                    v-if="item.cost != null"
+                                    class="text-ink-muted"
+                                >
+                                    {{ fmtCost(item.cost) }}
+                                </span>
+                                <span class="hidden sm:inline">
+                                    {{ fmtTimestamp(item.created_at) }}
+                                </span>
+                                <ChevronDown
+                                    class="size-3.5 transition-transform"
+                                    :class="{
+                                        'rotate-180': expandedId === item.id,
+                                    }"
+                                />
+                            </span>
+                        </button>
+
+                        <!-- Expanded run detail -->
+                        <div
+                            v-if="expandedId === item.id"
+                            class="space-y-3 border-t border-soft py-3 pl-5"
+                        >
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1 font-mono text-[11px] text-ink-subtle transition-colors hover:text-ink"
+                                :title="t('app_v2.playground.copy')"
+                                @click="copyRunId(item.id)"
+                            >
+                                <Check
+                                    v-if="copiedRunId === item.id"
+                                    class="size-3 text-sp-success"
+                                />
+                                <Copy v-else class="size-3" />
+                                {{ item.id }}
+                            </button>
+                            <p
+                                v-if="detailLoading === item.id"
+                                class="inline-flex items-center gap-2 text-xs text-ink-muted"
+                            >
+                                <Loader2 class="size-3.5 animate-spin" />
+                                {{ t('app_v2.playground.running') }}
+                            </p>
+                            <template v-else-if="details[item.id]">
+                                <div
+                                    v-if="details[item.id]!.error"
+                                    class="rounded-xl border border-sp-danger/30 bg-sp-danger/10 p-3 text-sm text-sp-danger"
+                                >
+                                    {{ details[item.id]!.error }}
+                                </div>
+
+                                <p
+                                    v-if="
+                                        details[item.id]!.queue_wait_ms != null
+                                    "
+                                    class="text-[11px] text-ink-subtle"
+                                >
+                                    {{
+                                        t(
+                                            'app_v2.playground.detail_queue_wait',
+                                            {
+                                                wait: fmtDuration(
+                                                    details[item.id]!
+                                                        .queue_wait_ms!,
+                                                ),
+                                            },
+                                        )
+                                    }}
+                                </p>
+
+                                <div
+                                    v-if="details[item.id]!.input"
+                                    class="space-y-1"
+                                >
+                                    <p
+                                        class="text-[11px] font-medium text-ink-subtle uppercase"
+                                    >
+                                        {{
+                                            t('app_v2.playground.detail_input')
+                                        }}
+                                    </p>
+                                    <pre
+                                        class="max-h-48 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
+                                        >{{
+                                            fmtJson(details[item.id]!.input)
+                                        }}</pre
+                                    >
+                                </div>
+
+                                <div
+                                    v-if="details[item.id]!.file_meta"
+                                    class="text-xs text-ink-muted"
+                                >
+                                    {{ t('app_v2.playground.detail_file') }}:
+                                    {{ details[item.id]!.file_meta!.name }}
+                                    ({{ details[item.id]!.file_meta!.mime }},
+                                    {{ details[item.id]!.file_meta!.size }}
+                                    bytes)
+                                </div>
+
+                                <div
+                                    v-if="details[item.id]!.output_text"
+                                    class="space-y-1"
+                                >
+                                    <p
+                                        class="text-[11px] font-medium text-ink-subtle uppercase"
+                                    >
+                                        {{
+                                            t('app_v2.playground.detail_output')
+                                        }}
+                                    </p>
+                                    <div
+                                        class="sp-chat-prose prose prose-sm max-h-72 max-w-none overflow-auto rounded-xl border border-soft bg-surface p-3 text-ink dark:prose-invert"
+                                        v-html="
+                                            renderMarkdown(
+                                                details[item.id]!.output_text,
+                                            )
+                                        "
+                                    />
+                                </div>
+
+                                <div
+                                    v-if="details[item.id]!.output"
+                                    class="space-y-1"
+                                >
+                                    <p
+                                        class="text-[11px] font-medium text-ink-subtle uppercase"
+                                    >
+                                        {{
+                                            t(
+                                                'app_v2.playground.detail_output_data',
+                                            )
+                                        }}
+                                    </p>
+                                    <pre
+                                        class="max-h-48 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
+                                        >{{
+                                            fmtJson(details[item.id]!.output)
+                                        }}</pre
+                                    >
+                                </div>
+
+                                <div class="space-y-1">
+                                    <div
+                                        class="flex items-center justify-between"
+                                    >
+                                        <p
+                                            class="text-[11px] font-medium text-ink-subtle uppercase"
+                                        >
+                                            {{
+                                                t(
+                                                    'app_v2.playground.detail_raw_json',
+                                                )
+                                            }}
+                                        </p>
+                                        <button
+                                            v-if="details[item.id]!.raw"
+                                            type="button"
+                                            class="inline-flex items-center gap-1 text-[11px] text-ink-subtle transition-colors hover:text-ink"
+                                            @click="
+                                                copyText(
+                                                    fmtJson(
+                                                        details[item.id]!.raw,
+                                                    ),
+                                                )
+                                            "
+                                        >
+                                            <Copy class="size-3" />
+                                            {{ t('app_v2.playground.copy') }}
+                                        </button>
+                                    </div>
+                                    <pre
+                                        v-if="details[item.id]!.raw"
+                                        class="max-h-72 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
+                                        >{{
+                                            fmtJson(details[item.id]!.raw)
+                                        }}</pre
+                                    >
+                                    <p
+                                        v-else
+                                        class="text-xs text-ink-subtle italic"
+                                    >
+                                        {{
+                                            t(
+                                                'app_v2.playground.detail_raw_none',
+                                            )
+                                        }}
+                                    </p>
+                                </div>
+
+                                <div
+                                    v-if="details[item.id]!.response"
+                                    class="space-y-1"
+                                >
+                                    <p
+                                        class="text-[11px] font-medium text-ink-subtle uppercase"
+                                    >
+                                        {{
+                                            t(
+                                                'app_v2.playground.detail_response_json',
+                                            )
+                                        }}
+                                    </p>
+                                    <pre
+                                        class="max-h-48 overflow-auto rounded-xl border border-soft bg-surface p-3 text-xs whitespace-pre-wrap text-ink"
+                                        >{{
+                                            fmtJson(details[item.id]!.response)
+                                        }}</pre
+                                    >
+                                </div>
+                            </template>
+                        </div>
+                    </li>
+                </ul>
+
+                <!-- Pagination -->
+                <div
+                    v-if="history.lastPage > 1"
+                    class="flex items-center justify-end gap-2 text-xs text-ink-muted"
+                >
+                    <span>
+                        {{
+                            t('app_v2.playground.history_page', {
+                                page: history.page,
+                                last: history.lastPage,
+                            })
+                        }}
+                    </span>
+                    <button
+                        type="button"
+                        :disabled="history.page <= 1 || history.loading"
+                        class="rounded-md border border-medium p-1 transition-colors hover:text-ink disabled:opacity-40"
+                        @click="loadHistory(history.page - 1)"
+                    >
+                        <ChevronLeft class="size-3.5" />
+                    </button>
+                    <button
+                        type="button"
+                        :disabled="
+                            history.page >= history.lastPage || history.loading
+                        "
+                        class="rounded-md border border-medium p-1 transition-colors hover:text-ink disabled:opacity-40"
+                        @click="loadHistory(history.page + 1)"
+                    >
+                        <ChevronRight class="size-3.5" />
+                    </button>
                 </div>
             </div>
         </div>

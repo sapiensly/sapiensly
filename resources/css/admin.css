@@ -646,6 +646,16 @@
     color: var(--sp-text-tertiary);
 }
 
+/* Native <select> popups — Chrome paints the option list by compositing the
+   select's (translucent) background over the UA default, which in dark mode
+   yields white-on-white options. `color-scheme` on the root is not enough
+   when the select's own background is translucent, so give options an
+   explicit opaque surface + ink. */
+:is(.sp-admin-shell, .sp-app-shell) select option {
+    background-color: var(--sp-bg-secondary);
+    color: var(--sp-text-primary);
+}
+
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='input']:focus-visible,
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='textarea']:focus-visible,
 :is(.sp-admin-shell, .sp-app-shell) [data-slot='select-trigger']:focus-visible {

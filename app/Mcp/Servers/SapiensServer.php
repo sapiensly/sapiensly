@@ -64,6 +64,9 @@ Build & debug apps (apps:build):
   - Workflows: verify_workflow (safe dry-run), run_workflow (real), and
     list_workflow_runs / get_workflow_run to debug; gated writes surface via
     list_workflow_proposals → approve_workflow_proposal / dismiss_workflow_proposal.
+  - Playground: get_playground_run returns the full trace of one AI capability
+    test run (input, response, raw provider payload, usage, timing) by the
+    pgrun_... id shown in the Playground UI.
 
 Chatbots (apps:build):
   - Manage the chatbot: list_chatbots, get_chatbot (full config + roster),
@@ -180,6 +183,8 @@ class SapiensServer extends Server
         Tools\Workflows\ListWorkflowProposalsTool::class,
         Tools\Workflows\ApproveWorkflowProposalTool::class,
         Tools\Workflows\DismissWorkflowProposalTool::class,
+        // Playground (AI capability test runs).
+        Tools\Playground\GetPlaygroundRunTool::class,
         // Chatbots & bot flows.
         Tools\Chatbots\ListChatbotsTool::class,
         Tools\Chatbots\GetChatbotTool::class,

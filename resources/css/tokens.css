@@ -27,6 +27,11 @@
  */
 :root,
 .theme-light {
+    /* Native widgets (select popups, scrollbars, form controls) must follow
+       the theme, or e.g. a dark-mode <select> opens a light OS popup whose
+       options inherit white text — white on white. */
+    color-scheme: light;
+
     /* ── surfaces (light) ─────────────────────────────────────────── */
     --sp-bg-primary: #f3f5fb; /* page */
     --sp-bg-secondary: #ffffff; /* cards */
@@ -87,6 +92,8 @@
 
 .dark,
 .theme-dark {
+    color-scheme: dark;
+
     /* ── surfaces ─────────────────────────────────────────────────── */
     --sp-bg-primary: #00031c; /* page */
     --sp-bg-secondary: #0b0f29; /* cards */

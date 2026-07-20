@@ -1,10 +1,15 @@
 <?php
 
+use App\Jobs\ExecutePlaygroundRun;
 use App\Models\AiCatalogModel;
 use App\Models\AppSetting;
+use App\Models\PlaygroundRun;
 use App\Models\User;
+use App\Services\Ai\PlaygroundRunner;
+use App\Services\AiProviderService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Ai;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Embeddings;
@@ -39,6 +44,19 @@ test('index renders every capability and the per-capability model picker', funct
             ->has('capabilities', 9)
             ->has('modelsByCapability.chat')
             ->has('modelsByCapability.rerank'));
+});
+
+test('the model picker only offers models whose driver has a usable key', function () {
+    seedModel('chat', 'openai', 'gpt-keyless');
+    seedModel('chat', 'anthropic', 'claude-keyed');
+    config(['ai.providers.openai.key' => '', 'ai.providers.anthropic.key' => 'sk-ant-test']);
+
+    $this->actingAs(pgUser())
+        ->get('/playground')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('modelsByCapability.chat', fn ($models) => collect($models)->pluck('driver')->doesntContain('openai')
+                && collect($models)->pluck('driver')->contains('anthropic')));
 });
 
 test('text run uses the chat hard default and returns the model reply', function () {
@@ -324,4 +342,223 @@ test('image generation routes through OpenRouter when the model is an OpenRouter
 
     Http::assertSent(fn ($req) => str_contains($req->url(), '/chat/completions')
         && $req['modalities'] === ['image', 'text']);
+});
+
+test('OpenRouter text runs go direct, keeping the raw payload and the serving provider', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = seedModel('chat', 'openrouter', 'z-ai/glm-5v-turbo');
+    setDefault('chat', $model);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response([
+            'provider' => 'DeepInfra',
+            'model' => 'z-ai/glm-5v-turbo',
+            'choices' => [['message' => ['content' => 'pong']]],
+            'usage' => ['prompt_tokens' => 12, 'completion_tokens' => 3, 'total_tokens' => 15],
+        ]),
+    ]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'text', 'prompt' => 'ping'])
+        ->assertOk()
+        ->assertJsonPath('text', 'pong')
+        ->assertJsonPath('served_by', 'DeepInfra');
+
+    // System prompt travels with the direct call.
+    Http::assertSent(fn ($req) => ($req['messages'][0]['role'] ?? null) === 'system'
+        && ($req['messages'][1]['role'] ?? null) === 'user');
+
+    $run = PlaygroundRun::sole();
+    expect($run->raw['provider'])->toBe('DeepInfra')
+        ->and($run->response['served_by'])->toBe('DeepInfra')
+        ->and($run->usage['total_tokens'])->toBe(15);
+
+    $user = $run->user;
+    $this->actingAs($user ?? pgUser())
+        ->get('/playground/history')
+        ->assertOk()
+        ->assertJsonPath('data.0.served_by', 'DeepInfra');
+});
+
+test('a successful run is persisted to history with input, model and output', function () {
+    Ai::fakeAgent(AnonymousAgent::class, ['Hello from the text model.']);
+
+    $res = $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'text', 'prompt' => 'Hi'])
+        ->assertOk()
+        ->json();
+
+    expect($res['run_id'])->toStartWith('pgrun_');
+
+    $run = PlaygroundRun::sole();
+    expect($run->capability)->toBe('text')
+        ->and($run->status)->toBe('ok')
+        ->and($run->input['prompt'])->toBe('Hi')
+        ->and($run->output_text)->toBe('Hello from the text model.')
+        ->and($run->model)->not->toBeNull()
+        ->and($run->duration_ms)->toBeGreaterThanOrEqual(0);
+});
+
+test('a failed run is persisted with status error', function () {
+    // No reranking default configured — the run fails before reaching a provider.
+    $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'reranking',
+            'query' => 'x',
+            'documents' => ['a'],
+        ])
+        ->assertStatus(422);
+
+    $run = PlaygroundRun::sole();
+    expect($run->status)->toBe('error')
+        ->and($run->capability)->toBe('reranking')
+        ->and($run->model)->toBeNull()
+        ->and($run->error)->toContain('No model is configured');
+});
+
+test('an OpenRouter run stores the raw provider payload and usage', function () {
+    config(['ai.providers.openrouter.key' => 'sk-or-test']);
+    $model = seedModel('vision', 'openrouter', 'mistralai/mistral-ocr');
+    setDefault('ocr_pdf', $model);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response([
+            'choices' => [[
+                'message' => [
+                    'content' => '',
+                    'annotations' => [[
+                        'type' => 'file',
+                        'file' => ['content' => [['type' => 'text', 'text' => 'Parsed text']]],
+                    ]],
+                ],
+            ]],
+            'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5, 'total_tokens' => 15],
+        ]),
+    ]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', [
+            'capability' => 'ocr_pdf',
+            'file' => UploadedFile::fake()->create('doc.pdf', 12, 'application/pdf'),
+        ])
+        ->assertOk();
+
+    $run = PlaygroundRun::sole();
+    expect($run->raw['usage']['total_tokens'])->toBe(15)
+        ->and($run->usage['total_tokens'])->toBe(15)
+        ->and($run->file_meta['name'])->toBe('doc.pdf')
+        ->and($run->output_text)->toBe('Parsed text');
+});
+
+test('stored responses replace big base64 payloads with a size stub', function () {
+    $model = seedModel('image', 'openai', 'gpt-image-1');
+    setDefault('image_generation', $model);
+    Image::fake([base64_encode(str_repeat('PNGDATA', 200))]);
+
+    $this->actingAs(pgUser())
+        ->post('/playground/run', ['capability' => 'image_generation', 'prompt' => 'a cat'])
+        ->assertOk();
+
+    $run = PlaygroundRun::sole();
+    expect($run->response['image'])->toStartWith('[binary image/png')
+        ->and($run->output['image'])->toStartWith('[binary image/png');
+});
+
+test('history lists runs newest-first and filters by capability', function () {
+    Ai::fakeAgent(AnonymousAgent::class, ['first', 'second']);
+
+    $user = pgUser();
+    $this->actingAs($user)->post('/playground/run', ['capability' => 'text', 'prompt' => 'One']);
+    $this->actingAs($user)->post('/playground/run', ['capability' => 'coding', 'prompt' => 'Two']);
+
+    $this->actingAs($user)
+        ->get('/playground/history')
+        ->assertOk()
+        ->assertJsonPath('total', 2)
+        ->assertJsonPath('data.0.capability', 'coding')
+        ->assertJsonPath('data.0.excerpt', 'Two')
+        ->assertJsonPath('data.0.user', $user->name);
+
+    $this->actingAs($user)
+        ->get('/playground/history?capability=text')
+        ->assertOk()
+        ->assertJsonPath('total', 1)
+        ->assertJsonPath('data.0.capability', 'text');
+});
+
+test('with an async queue the run is accepted, polled, and finished by the job', function () {
+    Queue::fake();
+    $user = pgUser();
+
+    $res = $this->actingAs($user)
+        ->post('/playground/run', ['capability' => 'text', 'prompt' => 'Hi'])
+        ->assertStatus(202)
+        ->assertJsonPath('status', 'queued')
+        ->json();
+
+    Queue::assertPushedOn('ai', ExecutePlaygroundRun::class);
+
+    // Poll while queued — no payload yet.
+    $this->actingAs($user)
+        ->get("/playground/run/{$res['run_id']}")
+        ->assertOk()
+        ->assertJsonPath('status', 'queued')
+        ->assertJsonMissingPath('text');
+
+    // Execute the job as a worker would.
+    Ai::fakeAgent(AnonymousAgent::class, ['Hello from the worker.']);
+    (new ExecutePlaygroundRun($res['run_id'], $user->id, null, ['prompt' => 'Hi']))
+        ->handle(app(PlaygroundRunner::class), app(AiProviderService::class));
+
+    // Poll again — terminal payload delivered.
+    $this->actingAs($user)
+        ->get("/playground/run/{$res['run_id']}")
+        ->assertOk()
+        ->assertJsonPath('status', 'ok')
+        ->assertJsonPath('text', 'Hello from the worker.');
+
+    // Telemetry: lifecycle timestamps + execution-only duration are recorded.
+    $run = PlaygroundRun::findOrFail($res['run_id']);
+    expect($run->queued_at)->not->toBeNull()
+        ->and($run->started_at)->not->toBeNull()
+        ->and($run->finished_at)->not->toBeNull()
+        ->and($run->duration_ms)->toBeGreaterThanOrEqual(0)
+        ->and($run->queueWaitMs())->toBeGreaterThanOrEqual(0);
+});
+
+test('a crashed job lands the run in error instead of leaving it stuck', function () {
+    Queue::fake();
+    $user = pgUser();
+
+    $res = $this->actingAs($user)
+        ->post('/playground/run', ['capability' => 'text', 'prompt' => 'Hi'])
+        ->assertStatus(202)
+        ->json();
+
+    (new ExecutePlaygroundRun($res['run_id'], $user->id, null, ['prompt' => 'Hi']))
+        ->failed(new RuntimeException('worker died'));
+
+    $this->actingAs($user)
+        ->get("/playground/run/{$res['run_id']}")
+        ->assertOk()
+        ->assertJsonPath('status', 'error')
+        ->assertJsonPath('error', 'worker died');
+});
+
+test('history detail returns the full stored run', function () {
+    Ai::fakeAgent(AnonymousAgent::class, ['Hello!']);
+
+    $user = pgUser();
+    $runId = $this->actingAs($user)
+        ->post('/playground/run', ['capability' => 'text', 'prompt' => 'Hi'])
+        ->json('run_id');
+
+    $this->actingAs($user)
+        ->get("/playground/history/{$runId}")
+        ->assertOk()
+        ->assertJsonPath('id', $runId)
+        ->assertJsonPath('status', 'ok')
+        ->assertJsonPath('input.prompt', 'Hi')
+        ->assertJsonPath('output_text', 'Hello!')
+        ->assertJsonPath('response.text', 'Hello!');
 });

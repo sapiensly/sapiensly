@@ -79,6 +79,8 @@ final class Schemas
         // AI spend tracking (org-level usage + cost)
         'ai_usage_events',
         'ai_usage_daily',
+        // Playground run history (model test/benchmark records)
+        'playground_runs',
         // Debates
         'debates',
         'debate_participants',
