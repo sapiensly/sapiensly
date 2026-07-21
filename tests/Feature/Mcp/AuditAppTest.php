@@ -63,7 +63,7 @@ function manyToOneSlug(array $manifest, string $objectSlug): string
         ->first(fn (array $f) => ($f['type'] ?? null) === 'relation' && ($f['cardinality'] ?? null) === 'many_to_one')['slug'];
 }
 
-function seedRecord(string $appId, string $objectId, array $data): Record
+function seedAuditRecord(string $appId, string $objectId, array $data): Record
 {
     return Record::factory()->create([
         'app_id' => $appId,
@@ -73,8 +73,8 @@ function seedRecord(string $appId, string $objectId, array $data): Record
 }
 
 it('reports ok for an app whose records honour the manifest', function () {
-    $cat = seedRecord($this->appModel->id, $this->categoriasId, ['nombre' => 'Electrónica']);
-    seedRecord($this->appModel->id, $this->productosId, [$this->relationSlug => $cat->id, 'estado' => 'activo']);
+    $cat = seedAuditRecord($this->appModel->id, $this->categoriasId, ['nombre' => 'Electrónica']);
+    seedAuditRecord($this->appModel->id, $this->productosId, [$this->relationSlug => $cat->id, 'estado' => 'activo']);
 
     $report = app(AppAuditService::class)->audit($this->appModel);
 
@@ -84,7 +84,7 @@ it('reports ok for an app whose records honour the manifest', function () {
 });
 
 it('flags a dangling relation FK', function () {
-    seedRecord($this->appModel->id, $this->productosId, [$this->relationSlug => 'rec_does_not_exist', 'estado' => 'activo']);
+    seedAuditRecord($this->appModel->id, $this->productosId, [$this->relationSlug => 'rec_does_not_exist', 'estado' => 'activo']);
 
     $report = app(AppAuditService::class)->audit($this->appModel);
 
@@ -96,8 +96,8 @@ it('flags a dangling relation FK', function () {
 });
 
 it('flags a select value that is not in the field options', function () {
-    $cat = seedRecord($this->appModel->id, $this->categoriasId, ['nombre' => 'Electrónica']);
-    seedRecord($this->appModel->id, $this->productosId, [$this->relationSlug => $cat->id, 'estado' => 'descatalogado']);
+    $cat = seedAuditRecord($this->appModel->id, $this->categoriasId, ['nombre' => 'Electrónica']);
+    seedAuditRecord($this->appModel->id, $this->productosId, [$this->relationSlug => $cat->id, 'estado' => 'descatalogado']);
 
     $report = app(AppAuditService::class)->audit($this->appModel);
 
@@ -108,8 +108,8 @@ it('flags a select value that is not in the field options', function () {
 });
 
 it('flags records whose object was removed from the manifest', function () {
-    seedRecord($this->appModel->id, 'obj_ghost_deleted', ['whatever' => 1]);
-    seedRecord($this->appModel->id, 'obj_ghost_deleted', ['whatever' => 2]);
+    seedAuditRecord($this->appModel->id, 'obj_ghost_deleted', ['whatever' => 1]);
+    seedAuditRecord($this->appModel->id, 'obj_ghost_deleted', ['whatever' => 2]);
 
     $report = app(AppAuditService::class)->audit($this->appModel);
 
@@ -119,7 +119,7 @@ it('flags records whose object was removed from the manifest', function () {
 });
 
 it('audit_app returns a report over MCP and is gated on apps:build', function () {
-    seedRecord($this->appModel->id, $this->productosId, [$this->relationSlug => 'rec_missing', 'estado' => 'activo']);
+    seedAuditRecord($this->appModel->id, $this->productosId, [$this->relationSlug => 'rec_missing', 'estado' => 'activo']);
 
     SapiensServer::actingAs($this->user)
         ->tool(AuditAppTool::class, ['app_slug' => 'audit_demo'])
