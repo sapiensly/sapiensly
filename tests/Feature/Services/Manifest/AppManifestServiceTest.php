@@ -260,7 +260,9 @@ it('tags the app as a landing when settings.surface is landing', function () {
     $m['settings'] = ['surface' => 'landing'];
     $m['pages'] = [[
         'id' => 'pag_landinghome', 'slug' => 'home', 'name' => 'Home', 'path' => '/', 'blocks' => [
-            ['id' => 'hro_mainhero', 'type' => 'hero', 'title' => 'Bienvenido'],
+            // A landing must be bespoke html — the generic marketing blocks
+            // (hero & co.) are now rejected outright on this surface.
+            ['id' => 'htm_mainhero', 'type' => 'html', 'content' => '<section class="lp-hero"><h1>Bienvenido</h1></section>'],
         ],
     ]];
 

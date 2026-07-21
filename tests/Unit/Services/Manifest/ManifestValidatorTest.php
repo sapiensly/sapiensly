@@ -3147,6 +3147,56 @@ it('rejects custom_css past 60k even on a landing (the schema ceiling)', functio
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
 });
 
+// --- landing surface: the generic marketing blocks are rejected (rule 1d-land) ---
+
+it('rejects generic marketing blocks on a landing surface, even nested', function () {
+    $manifest = baseManifest();
+    $manifest['settings']['surface'] = 'landing';
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/', 'blocks' => [
+            ['id' => id('blk'), 'type' => 'hero', 'title' => 'Generic'],
+            ['id' => id('blk'), 'type' => 'container', 'blocks' => [
+                ['id' => id('blk'), 'type' => 'feature_grid', 'items' => [['title' => 'A', 'description' => 'B']]],
+            ]],
+        ],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+    $codes = collect($result->errors)->pluck('code');
+
+    expect($result->valid)->toBeFalse()
+        ->and($codes->filter(fn ($c) => $c === 'generic_block_on_landing'))->toHaveCount(2)
+        ->and(collect($result->errors)->pluck('message')->implode(' '))->toContain('html');
+});
+
+it('keeps the same blocks legal on a non-landing surface', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/', 'blocks' => [
+            ['id' => id('blk'), 'type' => 'hero', 'title' => 'Fine here'],
+        ],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('accepts a bespoke landing: html sections + lead_form', function () {
+    $manifest = baseManifest();
+    $objId = $manifest['objects'][0]['id'];
+    $fldId = $manifest['objects'][0]['fields'][0]['id'];
+    $manifest['settings']['surface'] = 'landing';
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'home', 'name' => 'Home', 'path' => '/', 'blocks' => [
+            ['id' => id('blk'), 'type' => 'html', 'content' => '<section class="lp-hero"><h1>Bespoke</h1></section>'],
+            ['id' => id('blk'), 'type' => 'lead_form', 'object_id' => $objId, 'fields' => [
+                ['field_id' => $fldId, 'label' => 'Nombre'],
+            ]],
+        ],
+    ]];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
 it('accepts two roles with exactly one default', function () {
     $manifest = baseManifest();
     $manifest['permissions']['roles'] = [

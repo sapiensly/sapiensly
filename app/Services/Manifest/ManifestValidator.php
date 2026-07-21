@@ -739,6 +739,46 @@ class ManifestValidator
     }
 
     /**
+     * The generic marketing-block cluster a landing must not use — these render
+     * the same everywhere and read as AI-generated design (a landing composes
+     * bespoke `html` sections styled in custom_css instead).
+     */
+    private const GENERIC_MARKETING_BLOCKS = ['hero', 'feature_grid', 'cta', 'testimonials', 'pricing', 'faq', 'stat_band'];
+
+    /**
+     * @param  array<int, mixed>  $blocks
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function rejectGenericLandingBlocks(array $blocks, string $path, array &$errors): void
+    {
+        foreach ($blocks as $i => $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+            $type = $block['type'] ?? null;
+            if (in_array($type, self::GENERIC_MARKETING_BLOCKS, true)) {
+                $errors[] = new ManifestValidationError(
+                    "{$path}/{$i}",
+                    "Block type '{$type}' is not allowed on a landing surface — the generic marketing blocks read as templated design. Compose the section as an `html` block with your own semantic markup and style it in settings.custom_css (see framework_reference topic 'landings').",
+                    'generic_block_on_landing',
+                );
+            }
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (isset($block[$key]) && is_array($block[$key])) {
+                    $this->rejectGenericLandingBlocks($block[$key], "{$path}/{$i}/{$key}", $errors);
+                }
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $j => $sub) {
+                    if (is_array($sub) && isset($sub['blocks']) && is_array($sub['blocks'])) {
+                        $this->rejectGenericLandingBlocks($sub['blocks'], "{$path}/{$i}/{$key}/{$j}/blocks", $errors);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $manifest
      * @return ManifestValidationError[]
      */
@@ -761,6 +801,17 @@ class ManifestValidator
             : ScopedAppCss::MAX_LENGTH;
         foreach (ScopedAppCss::issues($manifest['settings']['custom_css'] ?? null, $cssBudget) as $issue) {
             $errors[] = new ManifestValidationError('/settings/custom_css', $issue, 'unsafe_css');
+        }
+
+        // A landing surface is bespoke-designed (rule 1d-land): the generic
+        // marketing blocks are exactly the AI-cluster look the design gate
+        // exists to reject, so they fail at SAVE time — the author gets the
+        // correction while composing instead of burning a critique round
+        // discovering it (observed live: a whole generic v1, then a rewrite).
+        if (($manifest['settings']['surface'] ?? null) === 'landing') {
+            foreach ($pages as $i => $page) {
+                $this->rejectGenericLandingBlocks($page['blocks'] ?? [], "/pages/{$i}/blocks", $errors);
+            }
         }
 
         $objectsById = [];
