@@ -1,5 +1,8 @@
 export type FieldType =
     | 'string'
+    | 'email'
+    | 'url'
+    | 'phone'
     | 'long_text'
     | 'number'
     | 'currency'

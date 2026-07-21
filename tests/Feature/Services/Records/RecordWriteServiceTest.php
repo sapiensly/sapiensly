@@ -464,3 +464,44 @@ it('resolves a many_to_many relation from a list of names', function () {
 
     expect($rec->data['tags'])->toBe([$a->id, $b->id]);
 });
+
+it('validates the contact trio: email, url and phone formats', function () {
+    $object = objectOf('contacto', [
+        fieldOf('correo', 'email'),
+        fieldOf('sitio', 'url'),
+        fieldOf('telefono', 'phone'),
+    ]);
+    $manifest = wmanifest([$object]);
+
+    $record = $this->service->create($this->testApp, $manifest, $object['id'], [
+        'correo' => 'ana@nebula.mx',
+        'sitio' => 'https://nebula.mx',
+        'telefono' => '+52 (55) 1234-5678',
+    ]);
+
+    expect($record->data['correo'])->toBe('ana@nebula.mx')
+        ->and($record->data['sitio'])->toBe('https://nebula.mx')
+        ->and($record->data['telefono'])->toBe('+52 (55) 1234-5678');
+
+    expect(fn () => $this->service->create($this->testApp, $manifest, $object['id'], [
+        'correo' => 'no-es-un-correo',
+    ]))->toThrow(RecordValidationException::class);
+
+    // url must be http(s) — javascript:/ftp: shapes are rejected outright.
+    expect(fn () => $this->service->create($this->testApp, $manifest, $object['id'], [
+        'sitio' => 'javascript:alert(1)',
+    ]))->toThrow(RecordValidationException::class);
+
+    expect(fn () => $this->service->create($this->testApp, $manifest, $object['id'], [
+        'telefono' => 'llámame cuando puedas',
+    ]))->toThrow(RecordValidationException::class);
+});
+
+it('accepts an empty optional contact field', function () {
+    $object = objectOf('contacto', [fieldOf('correo', 'email')]);
+    $manifest = wmanifest([$object]);
+
+    $record = $this->service->create($this->testApp, $manifest, $object['id'], ['correo' => '']);
+
+    expect($record->data['correo'] ?? null)->toBeNull();
+});

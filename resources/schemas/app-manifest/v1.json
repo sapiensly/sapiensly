@@ -603,6 +603,120 @@
                 }
             ]
         },
+        "field_email": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/field_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true,
+                        "slug": true,
+                        "name": true,
+                        "description": true,
+                        "required": true,
+                        "unique": true,
+                        "indexed": true,
+                        "readonly": true,
+                        "hidden": true,
+                        "help_text": true,
+                        "type": {
+                            "const": "email"
+                        },
+                        "default": {
+                            "type": "string"
+                        },
+                        "max_length": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 5000
+                        }
+                    },
+                    "required": [
+                        "type"
+                    ],
+                    "description": "An email address. Writes validate the format server-side; forms render an email input."
+                }
+            ]
+        },
+        "field_url": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/field_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true,
+                        "slug": true,
+                        "name": true,
+                        "description": true,
+                        "required": true,
+                        "unique": true,
+                        "indexed": true,
+                        "readonly": true,
+                        "hidden": true,
+                        "help_text": true,
+                        "type": {
+                            "const": "url"
+                        },
+                        "default": {
+                            "type": "string"
+                        },
+                        "max_length": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 5000
+                        }
+                    },
+                    "required": [
+                        "type"
+                    ],
+                    "description": "A web URL (http/https). Writes validate the format server-side; forms render a url input."
+                }
+            ]
+        },
+        "field_phone": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/field_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true,
+                        "slug": true,
+                        "name": true,
+                        "description": true,
+                        "required": true,
+                        "unique": true,
+                        "indexed": true,
+                        "readonly": true,
+                        "hidden": true,
+                        "help_text": true,
+                        "type": {
+                            "const": "phone"
+                        },
+                        "default": {
+                            "type": "string"
+                        },
+                        "max_length": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 5000
+                        }
+                    },
+                    "required": [
+                        "type"
+                    ],
+                    "description": "A phone number (digits, spaces, +()-. allowed). Forms render a tel input."
+                }
+            ]
+        },
         "field_long_text": {
             "allOf": [
                 {
@@ -1443,13 +1557,22 @@
             ]
         },
         "field_definition": {
-            "description": "An object field. Its `type` must be one of the catalog types (string, long_text, number, currency, boolean, date, datetime, single_select, multi_select, relation, formula, lookup, rollup, rating, slider, rich_text, file, date_range, color). If this failed, the `type` is unknown or required props for that type are missing — call list_available_field_types. Derived types (formula/lookup/rollup) require readonly:true.",
+            "description": "An object field. Its `type` must be one of the catalog types (string, email, url, phone, long_text, number, currency, boolean, date, datetime, single_select, multi_select, relation, formula, lookup, rollup, rating, slider, rich_text, file, date_range, color). If this failed, the `type` is unknown or required props for that type are missing — call list_available_field_types. Derived types (formula/lookup/rollup) require readonly:true.",
             "oneOf": [
                 {
                     "$ref": "#/$defs/field_color"
                 },
                 {
                     "$ref": "#/$defs/field_string"
+                },
+                {
+                    "$ref": "#/$defs/field_email"
+                },
+                {
+                    "$ref": "#/$defs/field_url"
+                },
+                {
+                    "$ref": "#/$defs/field_phone"
                 },
                 {
                     "$ref": "#/$defs/field_long_text"

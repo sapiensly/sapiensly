@@ -30,6 +30,9 @@ class ListAvailableFieldTypesTool implements Tool
     {
         $catalog = [
             ['type' => 'string', 'props' => 'default?, min_length?, max_length?, pattern?'],
+            ['type' => 'email', 'props' => 'default?, max_length?. Validated server-side on write; forms render an email input. Use for any email-address field (leads, contacts) instead of a plain string.'],
+            ['type' => 'url', 'props' => 'default?, max_length?. Validated as http(s) on write; forms render a url input.'],
+            ['type' => 'phone', 'props' => 'default?, max_length?. Light format validation on write (digits, spaces, +()-.); forms render a tel input.'],
             ['type' => 'long_text', 'props' => 'default?, max_length?'],
             ['type' => 'number', 'props' => 'default?, min?, max?, precision?, format?'],
             ['type' => 'currency', 'props' => 'currency_code (3-letter ISO, required), default?, min?, max?'],

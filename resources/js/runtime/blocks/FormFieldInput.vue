@@ -529,12 +529,22 @@ function isInMulti(value: string): boolean {
         />
     </template>
 
+    <!-- Fall-through text input: string and the contact trio, which get the
+         matching native input type (mobile keyboards + browser validation). -->
     <template v-else>
         <input
             :id="inputId"
             :value="(modelValue as string) ?? ''"
             @input="onInput"
-            type="text"
+            :type="
+                field.type === 'email'
+                    ? 'email'
+                    : field.type === 'url'
+                      ? 'url'
+                      : field.type === 'phone'
+                        ? 'tel'
+                        : 'text'
+            "
             :class="[
                 'h-9 w-full rounded-md border px-3 text-sm',
                 t.surfaceMuted,

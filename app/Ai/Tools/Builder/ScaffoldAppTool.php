@@ -35,16 +35,17 @@ class ScaffoldAppTool implements Tool
      * types are intentionally excluded — they need refs/expressions and must be
      * added with propose_change after scaffolding.
      */
-    private const SIMPLE_TYPES = ['string', 'long_text', 'number', 'boolean', 'date', 'datetime', 'currency', 'single_select', 'multi_select'];
+    private const SIMPLE_TYPES = ['string', 'email', 'url', 'phone', 'long_text', 'number', 'boolean', 'date', 'datetime', 'currency', 'single_select', 'multi_select'];
 
     /**
      * Forgiving aliases for the type names a model is likely to reach for.
      */
     private const TYPE_ALIASES = [
         'text' => 'string',
-        'email' => 'string',
-        'phone' => 'string',
-        'url' => 'string',
+        'tel' => 'phone',
+        'telephone' => 'phone',
+        'link' => 'url',
+        'website' => 'url',
         'textarea' => 'long_text',
         'longtext' => 'long_text',
         'int' => 'number',

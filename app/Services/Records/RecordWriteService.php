@@ -214,6 +214,9 @@ class RecordWriteService
     {
         return match ($type) {
             'string' => $this->validateString($field, $raw, $errors),
+            'email' => $this->validateContact($field, $raw, $errors, 'email'),
+            'url' => $this->validateContact($field, $raw, $errors, 'url'),
+            'phone' => $this->validateContact($field, $raw, $errors, 'phone'),
             'long_text' => $this->validateLongText($field, $raw, $errors),
             'number' => $this->validateNumber($field, $raw, $errors),
             'currency' => $this->validateNumber($field, $raw, $errors),
@@ -426,6 +429,41 @@ class RecordWriteService
         }
         if (isset($field['pattern']) && @preg_match("/{$field['pattern']}/u", $value) === 0) {
             $errors[] = "{$field['name']} does not match the required pattern.";
+        }
+
+        return $value;
+    }
+
+    /**
+     * The contact trio (email / url / phone): string semantics plus a format
+     * check when a non-empty value arrives (empty passes through — `required`
+     * is enforced upstream like every other type).
+     *
+     * @param  array<string, mixed>  $field
+     * @param  list<string>  $errors
+     */
+    private function validateContact(array $field, mixed $raw, array &$errors, string $kind): string
+    {
+        $value = trim((string) $raw);
+        if (isset($field['max_length']) && mb_strlen($value) > $field['max_length']) {
+            $errors[] = "{$field['name']} must be at most {$field['max_length']} characters.";
+        }
+        if ($value === '') {
+            return $value;
+        }
+
+        $ok = match ($kind) {
+            'email' => filter_var($value, FILTER_VALIDATE_EMAIL) !== false,
+            'url' => filter_var($value, FILTER_VALIDATE_URL) !== false
+                && in_array(parse_url($value, PHP_URL_SCHEME), ['http', 'https'], true),
+            'phone' => preg_match('/^\+?[0-9()\/\.\-\s]{5,30}$/', $value) === 1,
+        };
+        if (! $ok) {
+            $errors[] = match ($kind) {
+                'email' => "{$field['name']} must be a valid email address.",
+                'url' => "{$field['name']} must be a valid http(s) URL.",
+                'phone' => "{$field['name']} must be a valid phone number.",
+            };
         }
 
         return $value;

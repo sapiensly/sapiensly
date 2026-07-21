@@ -99,6 +99,9 @@ class DemoDataGenerator
 
         return match ($field['type'] ?? 'string') {
             'string' => $this->stringValue($slug, $index, $field),
+            'email' => $this->emailValue(),
+            'phone' => $this->phoneValue(),
+            'url' => $this->urlValue(),
             'long_text', 'rich_text' => ucfirst($this->words(random_int(8, 16))).'.',
             'number' => $this->numericInRange($field, defaultMin: 1, defaultMax: 100, decimals: 0),
             'currency' => $this->numericInRange($field, defaultMin: 50, defaultMax: 500, decimals: 2),

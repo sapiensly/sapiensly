@@ -81,10 +81,10 @@ class AddFieldTool extends SapiensTool
             'name' => $schema->string()->description('Human name of the field, e.g. "Priority".')->required(),
             'slug' => $schema->string()->description('Optional snake_case slug; derived from the name when omitted.'),
             'type' => $schema->string()->enum([
-                'string', 'long_text', 'number', 'currency', 'boolean', 'date', 'datetime',
+                'string', 'email', 'url', 'phone', 'long_text', 'number', 'currency', 'boolean', 'date', 'datetime',
                 'single_select', 'multi_select', 'rating', 'slider', 'date_range', 'file',
                 'rich_text', 'relation', 'formula', 'lookup', 'rollup',
-            ])->description('Field type (default string). There is no email/url type — use string. For belongs-to links prefer add_relation (it builds the inverse + a count). Computed types (formula/lookup/rollup) are made read-only automatically.'),
+            ])->description('Field type (default string). email/url/phone validate their format on write and render the matching input. For belongs-to links prefer add_relation (it builds the inverse + a count). Computed types (formula/lookup/rollup) are made read-only automatically.'),
             'options' => $schema->array()->description('REQUIRED only for single_select/multi_select: an array of {value, label}. Ignored for other types.'),
             'config' => $schema->object()->description('Type-specific props for the advanced types — call list_available_field_types for the exact `params` and an `example` per type. e.g. formula → {expression, return_type}; rollup → {via_relation_field_id, aggregator, target_field_id?}; lookup → {via_relation_field_id, target_field_id}; relation → {target_object_id, cardinality, on_delete?, inverse_field_id?}; slider → {min, max, step?}; file → {max_size_mb?, mime_types?}; rich_text → {max_length?}. Also accepts common base props: required, unique, indexed, hidden, help_text, description.'),
             'add_to_page' => $schema->boolean()->description('Also add the field to the object\'s table + create form (default true). Computed fields skip the form.'),

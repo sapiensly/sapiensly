@@ -42,7 +42,7 @@ const object = computed<ObjectDef | undefined>(() =>
 
 // Field types whose value can be edited with a simple inline input. Computed
 // fields (formula/lookup/rollup), relations and files stay read-only.
-const EDITABLE_TYPES = ['string', 'long_text', 'number', 'currency', 'slider', 'single_select', 'boolean', 'date', 'datetime'];
+const EDITABLE_TYPES = ['string', 'email', 'url', 'phone', 'long_text', 'number', 'currency', 'slider', 'single_select', 'boolean', 'date', 'datetime'];
 
 const columns = computed(() =>
     props.block.columns.map((c) => {
