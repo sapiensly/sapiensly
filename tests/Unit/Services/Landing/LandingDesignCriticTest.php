@@ -69,7 +69,7 @@ function criticWithDirector(array $verdict): LandingDesignCritic
             parent::__construct($a, $b);
         }
 
-        protected function directorCritique(string $intent, string $html, string $css, ?User $user, ?string $modelOverride, ?StoredImage $screenshot = null): ?array
+        protected function directorCritique(string $intent, string $html, string $css, ?User $user, ?string $modelOverride, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false): ?array
         {
             return $this->stub;
         }
