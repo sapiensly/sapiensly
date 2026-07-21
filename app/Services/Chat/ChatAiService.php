@@ -457,6 +457,9 @@ class ChatAiService
 
             // Reasoning is off by default; a chat driven by a configured agent
             // inherits that agent's preference. Plain model chats stay off.
+            // Pinning the model lets the off-block be omitted for models that
+            // mandate reasoning (their endpoints 400 an explicit disable).
+            $sdkAgent->forModel($resolvedModel);
             if ($agent instanceof Agent && $agent->reasoning !== null) {
                 $sdkAgent->withReasoning($agent->reasoning);
             }

@@ -17,9 +17,14 @@ const props = withDefaults(
 
 const { t } = useI18n();
 
-/** Token breakdown rows (input / output / cache / total), skipping null lines. */
+/**
+ * Token breakdown rows (input / output / cache / total), skipping null lines.
+ * When the provider reports reasoning tokens, the output line splits into
+ * reasoning vs answer sub-rows; a run with zero reasoning skips the split.
+ */
 const tokenRows = computed(() => {
     const e = props.metrics.efficiency;
+    const reasoned = (e.reasoning_tokens ?? 0) > 0;
     return [
         {
             key: 'input',
@@ -30,6 +35,18 @@ const tokenRows = computed(() => {
             key: 'output',
             label: t('app_v2.playground.metrics_output'),
             n: e.completion_tokens,
+        },
+        {
+            key: 'reasoning',
+            label: t('app_v2.playground.metrics_reasoning'),
+            n: reasoned ? e.reasoning_tokens : null,
+            sub: true,
+        },
+        {
+            key: 'answer',
+            label: t('app_v2.playground.metrics_answer'),
+            n: reasoned ? e.useful_output_tokens : null,
+            sub: true,
         },
         {
             key: 'cache',
@@ -50,9 +67,14 @@ const tokenRows = computed(() => {
     ].filter((r) => r.n != null);
 });
 
-/** Cost breakdown rows (input / output / cache / total), skipping null lines. */
+/**
+ * Cost breakdown rows (input / output / cache / total), skipping null lines.
+ * Reasoning bills at the completion rate, so the output line splits exactly
+ * into reasoning vs answer sub-rows whenever reasoning tokens were spent.
+ */
 const costRows = computed(() => {
     const c = props.metrics.cost;
+    const reasoned = (c.reasoning ?? 0) > 0;
     return [
         {
             key: 'input',
@@ -63,6 +85,18 @@ const costRows = computed(() => {
             key: 'output',
             label: t('app_v2.playground.metrics_output'),
             v: c.output,
+        },
+        {
+            key: 'reasoning',
+            label: t('app_v2.playground.metrics_reasoning'),
+            v: reasoned ? c.reasoning : null,
+            sub: true,
+        },
+        {
+            key: 'answer',
+            label: t('app_v2.playground.metrics_answer'),
+            v: reasoned ? c.answer : null,
+            sub: true,
         },
         {
             key: 'cache',
@@ -305,11 +339,12 @@ function widthPct(ms: number): string {
                         v-for="r in tokenRows"
                         :key="r.key"
                         class="flex items-center justify-between text-xs"
-                        :class="
+                        :class="[
                             r.strong
                                 ? 'border-t border-soft pt-1 font-medium text-ink'
-                                : 'text-ink-muted'
-                        "
+                                : 'text-ink-muted',
+                            r.sub ? 'pl-3 text-[11px] text-ink-subtle' : '',
+                        ]"
                     >
                         <span>{{ r.label }}</span>
                         <span class="tabular-nums">{{ fmtInt(r.n) }}</span>
@@ -331,11 +366,12 @@ function widthPct(ms: number): string {
                         v-for="r in costRows"
                         :key="r.key"
                         class="flex items-center justify-between text-xs"
-                        :class="
+                        :class="[
                             r.strong
                                 ? 'border-t border-soft pt-1 font-medium text-ink'
-                                : 'text-ink-muted'
-                        "
+                                : 'text-ink-muted',
+                            r.sub ? 'pl-3 text-[11px] text-ink-subtle' : '',
+                        ]"
                     >
                         <span>{{ r.label }}</span>
                         <span class="tabular-nums">{{

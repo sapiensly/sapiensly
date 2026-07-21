@@ -86,7 +86,7 @@ class GateRunner
                 $model = $modelOverride;
             }
 
-            $agent = new ExpressGateAgent($instructions, $schema, $stableContext);
+            $agent = (new ExpressGateAgent($instructions, $schema, $stableContext))->forModel($model);
 
             $attempts = 0;
             while ($attempts < 2 && $output === null) {

@@ -634,3 +634,22 @@
     margin: 1.2em 0;
     border-color: color-mix(in srgb, currentColor 12%, transparent);
 }
+
+/*
+ * Native <select> chrome. The browser pins its dropdown arrow flush against
+ * the right edge, which clashes with the rounded inputs of the design system.
+ * Strip it and paint the themed chevron (--sp-select-chevron, per theme in
+ * tokens.css) with a breathing margin instead. Everything is em-based so it
+ * scales with each select's own font size. List boxes ([multiple]/[size]) and
+ * selects that already opt into fully custom chrome (.appearance-none) are
+ * left alone. Deliberately unlayered: it must win over per-element padding
+ * utilities like `px-2` (unlayered author styles beat @layer utilities).
+ */
+select:not([multiple]):not([size]):not(.appearance-none) {
+    appearance: none;
+    background-image: var(--sp-select-chevron);
+    background-repeat: no-repeat;
+    background-position: right 0.75em center;
+    background-size: 1.05em;
+    padding-right: 2.4em;
+}

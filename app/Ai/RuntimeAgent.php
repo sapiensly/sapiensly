@@ -28,6 +28,8 @@ class RuntimeAgent extends AnonymousAgent implements HasProviderOptions
     // Default off platform-wide: reasoning is opt-in, set per agent.
     private ?string $reasoning = 'off';
 
+    private ?string $model = null;
+
     /**
      * Register a frozen system prefix as cacheable for providers that support
      * explicit cache breakpoints (Anthropic). No-op for other providers.
@@ -51,11 +53,22 @@ class RuntimeAgent extends AnonymousAgent implements HasProviderOptions
     }
 
     /**
+     * Pin the resolved model so the reasoning-off block can be omitted for
+     * models that mandate reasoning (their endpoints 400 an explicit disable).
+     */
+    public function forModel(?string $model): static
+    {
+        $this->model = $model;
+
+        return $this;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function providerOptions(Lab|string $provider): array
     {
-        $options = ReasoningOptions::forProvider($this->reasoning, $provider);
+        $options = ReasoningOptions::forProvider($this->reasoning, $provider, $this->model);
 
         if (($provider === Lab::Anthropic || $provider === 'anthropic')
             && $this->cacheableSystem !== null && trim($this->cacheableSystem) !== '') {

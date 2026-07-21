@@ -680,3 +680,33 @@ test('history detail returns the full stored run', function () {
         ->assertJsonPath('output_text', 'Hello!')
         ->assertJsonPath('response.text', 'Hello!');
 });
+
+test('run metrics split the output cost into reasoning vs answer', function () {
+    // Reasoning bills at the completion rate, so the split is exact: the
+    // figures mirror a real Grok run (75% of output tokens were reasoning).
+    $run = new PlaygroundRun([
+        'usage' => ['cost' => 0.0092104, 'prompt_tokens' => 322, 'completion_tokens' => 1464, 'total_tokens' => 1786],
+        'raw' => [
+            'usage' => [
+                'cost_details' => [
+                    'upstream_inference_prompt_cost' => 0.0004264,
+                    'upstream_inference_completions_cost' => 0.008784,
+                ],
+                'completion_tokens_details' => ['reasoning_tokens' => 1098],
+            ],
+        ],
+    ]);
+
+    $metrics = $run->metrics();
+
+    expect($metrics['cost']['reasoning'])->toEqualWithDelta(0.006588, 1e-9)
+        ->and($metrics['cost']['answer'])->toEqualWithDelta(0.002196, 1e-9)
+        ->and($metrics['efficiency']['useful_output_tokens'])->toBe(366);
+
+    // Without reasoning info the split is not measurable — null, never guessed.
+    $plain = new PlaygroundRun(['usage' => ['cost' => 0.001, 'completion_tokens' => 100]]);
+
+    expect($plain->metrics()['cost']['reasoning'])->toBeNull()
+        ->and($plain->metrics()['cost']['answer'])->toBeNull()
+        ->and($plain->metrics()['efficiency']['useful_output_tokens'])->toBeNull();
+});

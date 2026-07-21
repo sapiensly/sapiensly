@@ -314,7 +314,7 @@ class PlaygroundRunner
                     ['role' => 'system', 'content' => $system],
                     ['role' => 'user', 'content' => [OpenRouterClient::textBlock($prompt)]],
                 ],
-            ] + OpenRouterClient::reasoningParams($reasoning), timeout: (int) config('ai.request_timeout', 180));
+            ] + OpenRouterClient::reasoningParams($reasoning, $handler['model']), timeout: (int) config('ai.request_timeout', 180));
             $this->recordOpenRouterUsage($handler, $stream['response']);
             $this->ttftMs = $stream['ttft_ms'];
 

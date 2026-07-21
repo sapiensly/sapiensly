@@ -38,6 +38,8 @@ class ChatAgent extends AnonymousAgent implements HasProviderOptions
     // Default off platform-wide: reasoning is opt-in, set per agent/chatbot.
     private ?string $reasoning = 'off';
 
+    private ?string $model = null;
+
     /**
      * Set the reasoning preference for this turn ('off'|'low'|'medium'|'high'),
      * inherited from the agent/chatbot the conversation runs. Default off.
@@ -45,6 +47,17 @@ class ChatAgent extends AnonymousAgent implements HasProviderOptions
     public function withReasoning(?string $mode): static
     {
         $this->reasoning = $mode;
+
+        return $this;
+    }
+
+    /**
+     * Pin the resolved model so the reasoning-off block can be omitted for
+     * models that mandate reasoning (their endpoints 400 an explicit disable).
+     */
+    public function forModel(?string $model): static
+    {
+        $this->model = $model;
 
         return $this;
     }
@@ -78,7 +91,7 @@ class ChatAgent extends AnonymousAgent implements HasProviderOptions
      */
     public function providerOptions(Lab|string $provider): array
     {
-        $options = ReasoningOptions::forProvider($this->reasoning, $provider);
+        $options = ReasoningOptions::forProvider($this->reasoning, $provider, $this->model);
 
         if (($provider === Lab::Anthropic || $provider === 'anthropic')
             && $this->cacheableSystem !== null && trim($this->cacheableSystem) !== '') {

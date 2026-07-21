@@ -525,7 +525,9 @@ EOT;
 
         // Reasoning is off by default (RuntimeAgent); a DB agent whose owner
         // configured it overrides for that agent only. Non-agent callers
-        // (chatbots, triage) leave it null → stays off.
+        // (chatbots, triage) leave it null → stays off. Pinning the model lets
+        // the off-block be omitted for models that mandate reasoning.
+        $sdkAgent->forModel($agent->model);
         if ($agent instanceof Agent && $agent->reasoning !== null) {
             $sdkAgent->withReasoning($agent->reasoning);
         }

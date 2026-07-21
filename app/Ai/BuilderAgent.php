@@ -81,8 +81,9 @@ class BuilderAgent extends AnonymousAgent implements HasProviderOptions
     public function providerOptions(Lab|string $provider): array
     {
         // The builder does structured, tool-driven authoring — reasoning adds
-        // cost and latency without helping, so it is always off.
-        $options = ReasoningOptions::forProvider('off', $provider);
+        // cost and latency without helping, so it is always off (unless the
+        // model mandates reasoning, where an explicit disable would 400).
+        $options = ReasoningOptions::forProvider('off', $provider, $this->model);
 
         if ($this->cacheableSystem !== null && trim($this->cacheableSystem) !== ''
             && ($provider === Lab::Anthropic || $provider === 'anthropic')) {

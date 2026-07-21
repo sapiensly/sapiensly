@@ -31,6 +31,8 @@ class ExpressGateAgent implements Agent, HasProviderOptions, HasStructuredOutput
 {
     use Promptable;
 
+    private ?string $model = null;
+
     /**
      * @param  Closure(JsonSchema): array<string, mixed>  $schemaFn
      */
@@ -39,6 +41,17 @@ class ExpressGateAgent implements Agent, HasProviderOptions, HasStructuredOutput
         private readonly Closure $schemaFn,
         private readonly ?string $cacheableContext = null,
     ) {}
+
+    /**
+     * Pin the resolved model so the reasoning-off block can be omitted for
+     * models that mandate reasoning (their endpoints 400 an explicit disable).
+     */
+    public function forModel(?string $model): static
+    {
+        $this->model = $model;
+
+        return $this;
+    }
 
     public function instructions(): string
     {
@@ -54,8 +67,9 @@ class ExpressGateAgent implements Agent, HasProviderOptions, HasStructuredOutput
     {
         // A gate is one bounded structured question — reasoning only adds cost,
         // latency, and (on DeepSeek) eats the max_tokens budget the JSON needs.
-        // Always off.
-        $options = ReasoningOptions::forProvider('off', $provider);
+        // Always off (unless the model mandates reasoning, where an explicit
+        // disable would 400).
+        $options = ReasoningOptions::forProvider('off', $provider, $this->model);
 
         if ($this->hasCacheableContext()
             && ($provider === Lab::Anthropic || $provider === 'anthropic')) {

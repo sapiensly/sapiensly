@@ -2603,6 +2603,7 @@
     "app_v2.playground.metrics_estimated": "Estimated cost",
     "app_v2.playground.metrics_reasoning": "Reasoning",
     "app_v2.playground.metrics_reasoning_hint": "Share of output tokens spent on reasoning",
+    "app_v2.playground.metrics_answer": "Answer",
     "app_v2.playground.metrics_cache": "Cache",
     "app_v2.playground.metrics_cache_write": "Cache write",
     "app_v2.playground.metrics_cache_hint": "Share of prompt tokens served from cache",

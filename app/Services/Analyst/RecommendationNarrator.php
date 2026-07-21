@@ -119,7 +119,7 @@ class RecommendationNarrator
             // best-effort resolution — fall through with Anthropic default
         }
 
-        $agent = new ExpressGateAgent($instructions, $schema);
+        $agent = (new ExpressGateAgent($instructions, $schema))->forModel($model);
         $response = $agent->prompt(
             ($es ? "Análisis:\n" : "Analyses:\n").$lines,
             provider: $provider,

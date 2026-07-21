@@ -16,6 +16,8 @@ export interface RunMetrics {
         per_1k_tokens: number | null;
         input: number | null;
         output: number | null;
+        reasoning: number | null;
+        answer: number | null;
         cached: number | null;
         per_useful_output_token: number | null;
     };
@@ -24,6 +26,7 @@ export interface RunMetrics {
         completion_tokens: number | null;
         total_tokens: number | null;
         reasoning_tokens: number | null;
+        useful_output_tokens: number | null;
         reasoning_ratio: number | null;
         cached_prompt_tokens: number | null;
         cache_write_tokens: number | null;

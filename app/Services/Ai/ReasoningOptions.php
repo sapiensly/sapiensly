@@ -2,6 +2,7 @@
 
 namespace App\Services\Ai;
 
+use Illuminate\Support\Str;
 use Laravel\Ai\Enums\Lab;
 
 /**
@@ -22,14 +23,43 @@ class ReasoningOptions
     public const MODES = ['off', 'low', 'medium', 'high'];
 
     /**
+     * Model-id patterns (Str::is) whose endpoints reason unconditionally and
+     * REJECT an explicit disable outright — OpenRouter 400s "Reasoning is
+     * mandatory for this endpoint and cannot be disabled" — rather than
+     * ignoring it. For these, 'off' sends nothing and the provider's default
+     * wins. Wildcards cover prefixed/suffixed variants (aliases, ':nitro', …).
+     * {@see OpenRouterClient::reasoningRejected} is the runtime safety net for
+     * models this list doesn't know yet.
+     */
+    public const MANDATORY_REASONING_MODELS = [
+        '*claude-fable-5*',
+        '*claude-mythos-5*',
+        // OpenAI o-series are reasoning-only models.
+        'o1*', 'o3*', 'o4*',
+        '*/o1*', '*/o3*', '*/o4*',
+    ];
+
+    /** Whether the model reasons unconditionally and rejects an explicit disable. */
+    public static function reasoningIsMandatory(?string $model): bool
+    {
+        return $model !== null && Str::is(self::MANDATORY_REASONING_MODELS, $model);
+    }
+
+    /**
      * The request-body fragment to apply $mode for $provider. Empty for a
-     * null/'default'/unknown mode, or a provider with no reachable control.
+     * null/'default'/unknown mode, a provider with no reachable control, or an
+     * 'off' aimed at a model whose endpoint mandates reasoning (sending the
+     * disable would 400 the whole request).
      *
      * @return array<string, mixed>
      */
-    public static function forProvider(?string $mode, Lab|string $provider): array
+    public static function forProvider(?string $mode, Lab|string $provider, ?string $model = null): array
     {
         if ($mode === null || $mode === 'default' || ! in_array($mode, self::MODES, true)) {
+            return [];
+        }
+
+        if ($mode === 'off' && self::reasoningIsMandatory($model)) {
             return [];
         }
 

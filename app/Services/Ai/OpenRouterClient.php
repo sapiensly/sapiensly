@@ -45,12 +45,21 @@ class OpenRouterClient
 
         $base = rtrim((string) (config('ai.providers.openrouter.url') ?: AiProviderService::OPENROUTER_BASE_URL), '/');
 
-        $response = Http::withToken($key)
+        $body = array_merge([
+            'model' => $model,
+            'messages' => [['role' => 'user', 'content' => $content]],
+        ], $extra);
+
+        $send = fn (array $body) => Http::withToken($key)
             ->timeout($timeout)
-            ->post($base.'/chat/completions', array_merge([
-                'model' => $model,
-                'messages' => [['role' => 'user', 'content' => $content]],
-            ], $extra));
+            ->post($base.'/chat/completions', $body);
+
+        $response = $send($body);
+
+        if (! $response->successful() && self::reasoningRejected($response->status(), $response->body(), $body)) {
+            unset($body['reasoning']);
+            $response = $send($body);
+        }
 
         if (! $response->successful()) {
             throw new RuntimeException('OpenRouter request failed ('.$response->status().'): '.$response->body());
@@ -81,17 +90,32 @@ class OpenRouterClient
 
         $base = rtrim((string) (config('ai.providers.openrouter.url') ?: AiProviderService::OPENROUTER_BASE_URL), '/');
 
-        $startedAt = hrtime(true);
+        $body = array_merge([
+            'model' => $model,
+            'messages' => [['role' => 'user', 'content' => $content]],
+            'stream' => true,
+            'stream_options' => ['include_usage' => true],
+        ], $extra);
 
-        $response = Http::withToken($key)
+        $send = fn (array $body) => Http::withToken($key)
             ->timeout($timeout)
             ->withOptions(['stream' => true])
-            ->post($base.'/chat/completions', array_merge([
-                'model' => $model,
-                'messages' => [['role' => 'user', 'content' => $content]],
-                'stream' => true,
-                'stream_options' => ['include_usage' => true],
-            ], $extra));
+            ->post($base.'/chat/completions', $body);
+
+        $startedAt = hrtime(true);
+        $reasoningStripped = false;
+
+        $response = $send($body);
+
+        // Only a failed response may have its body read here: body() on a
+        // successful streamed response would consume the SSE stream.
+        if (! $response->successful() && self::reasoningRejected($response->status(), $response->body(), $body)) {
+            unset($body['reasoning']);
+            $reasoningStripped = true;
+            // Restart the TTFT clock: the rejected request never streamed a token.
+            $startedAt = hrtime(true);
+            $response = $send($body);
+        }
 
         if (! $response->successful()) {
             throw new RuntimeException('OpenRouter request failed ('.$response->status().'): '.$response->body());
@@ -169,6 +193,7 @@ class OpenRouterClient
                 'finish_reason' => $finishReason,
             ]],
             'streamed' => true,
+            'reasoning_forced_by_provider' => $reasoningStripped ?: null,
         ], fn ($v) => $v !== null);
 
         return ['text' => $text, 'response' => $raw, 'ttft_ms' => $ttftMs];
@@ -267,13 +292,34 @@ class OpenRouterClient
     /**
      * OpenRouter's unified `reasoning` request field for a mode, or [] to leave
      * the model's own default. Delegates to {@see ReasoningOptions} so the OpenRouter
-     * shape stays in one place. Merged into the chat request body.
+     * shape stays in one place (passing the model skips the off-block for models
+     * that mandate reasoning). Merged into the chat request body.
      *
      * @return array<string, mixed>
      */
-    public static function reasoningParams(?string $mode): array
+    public static function reasoningParams(?string $mode, ?string $model = null): array
     {
-        return ReasoningOptions::forProvider($mode, Lab::OpenRouter);
+        return ReasoningOptions::forProvider($mode, Lab::OpenRouter, $model);
+    }
+
+    /**
+     * Whether a failed response is the endpoint rejecting the `reasoning` block
+     * because the model reasons unconditionally (e.g. claude-fable-5 returns 400
+     * "Reasoning is mandatory for this endpoint and cannot be disabled"). The
+     * caller retries once without the block, letting the provider's default win.
+     *
+     * @param  array<string, mixed>  $requestBody
+     */
+    public static function reasoningRejected(int $status, string $responseBody, array $requestBody): bool
+    {
+        if ($status !== 400 || ! array_key_exists('reasoning', $requestBody)) {
+            return false;
+        }
+
+        $message = strtolower($responseBody);
+
+        return str_contains($message, 'reasoning is mandatory')
+            || str_contains($message, 'reasoning cannot be disabled');
     }
 
     /** @return array{type: string, text: string} */

@@ -116,8 +116,8 @@ class PlaygroundRun extends Model
      *
      * @return array{
      *     latency: array{queue_wait_ms: int|null, execution_ms: int|null, ttft_ms: int|null, end_to_end_ms: int|null, job_overhead_ms: int|null, output_tokens_per_second: float|null},
-     *     cost: array{total: float|null, estimated: bool, per_1k_tokens: float|null, input: float|null, output: float|null, cached: float|null, per_useful_output_token: float|null},
-     *     efficiency: array{prompt_tokens: int|null, completion_tokens: int|null, total_tokens: int|null, reasoning_tokens: int|null, reasoning_ratio: float|null, cached_prompt_tokens: int|null, cache_write_tokens: int|null, cached_prompt_ratio: float|null}
+     *     cost: array{total: float|null, estimated: bool, per_1k_tokens: float|null, input: float|null, output: float|null, reasoning: float|null, answer: float|null, cached: float|null, per_useful_output_token: float|null},
+     *     efficiency: array{prompt_tokens: int|null, completion_tokens: int|null, total_tokens: int|null, reasoning_tokens: int|null, useful_output_tokens: int|null, reasoning_ratio: float|null, cached_prompt_tokens: int|null, cache_write_tokens: int|null, cached_prompt_ratio: float|null}
      * }
      */
     public function metrics(): array
@@ -148,6 +148,16 @@ class PlaygroundRun extends Model
             ? max(0, $completionTokens - $reasoningTokens)
             : $completionTokens;
 
+        // Reasoning tokens bill at the same completion rate as visible output,
+        // so the reasoning share of the output cost is exact, not an estimate.
+        $reasoningCost = $outputCost !== null && $reasoningTokens !== null
+            && $completionTokens !== null && $completionTokens > 0
+            ? round($outputCost * $reasoningTokens / $completionTokens, 8)
+            : null;
+        $answerCost = $outputCost !== null && $reasoningCost !== null
+            ? round($outputCost - $reasoningCost, 8)
+            : null;
+
         return [
             'latency' => [
                 'queue_wait_ms' => $this->queueWaitMs(),
@@ -167,6 +177,8 @@ class PlaygroundRun extends Model
                     : null,
                 'input' => $inputCost,
                 'output' => $outputCost,
+                'reasoning' => $reasoningCost,
+                'answer' => $answerCost,
                 'cached' => $cachedCost,
                 'per_useful_output_token' => $cost !== null && $usefulOutputTokens !== null && $usefulOutputTokens > 0
                     ? round($cost / $usefulOutputTokens, 8)
@@ -177,6 +189,7 @@ class PlaygroundRun extends Model
                 'completion_tokens' => $completionTokens,
                 'total_tokens' => $totalTokens,
                 'reasoning_tokens' => $reasoningTokens,
+                'useful_output_tokens' => $reasoningTokens !== null ? $usefulOutputTokens : null,
                 'reasoning_ratio' => $reasoningTokens !== null && $completionTokens !== null && $completionTokens > 0
                     ? round($reasoningTokens / $completionTokens, 3)
                     : null,
