@@ -39,9 +39,9 @@ it('publishes and unpublishes a landing from the builder UI endpoints', function
         ->postJson("/apps/{$app->id}/builder/publish-landing")
         ->assertOk()
         ->assertJsonPath('published', true)
-        ->assertJsonPath('public_slug', $app->slug);
+        ->assertJsonPath('public_slug', str_replace('_', '-', $app->slug));
 
-    expect($app->refresh()->public_slug)->toBe($app->slug);
+    expect($app->refresh()->public_slug)->toBe(str_replace('_', '-', $app->slug));
     $this->get("/l/{$app->public_slug}")->assertOk();
 
     $slug = $app->public_slug;

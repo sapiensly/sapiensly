@@ -39,10 +39,12 @@ it('publishes a landing: mints a public slug and returns the live URL', function
     SapiensServer::actingAs($this->user)
         ->tool(PublishLandingTool::class, ['app_slug' => 'promo_site'])
         ->assertOk()
-        ->assertSee('promo_site');
+        ->assertSee('promo-site');
 
+    // The public slug is the kebab-cased app slug (public URLs read
+    // /l/promo-site, not /l/promo_site).
     $app->refresh();
-    expect($app->public_slug)->toBe('promo_site')
+    expect($app->public_slug)->toBe('promo-site')
         ->and($app->published_at)->not->toBeNull();
 
     // The public URL actually serves the landing.
@@ -52,7 +54,7 @@ it('publishes a landing: mints a public slug and returns the live URL', function
 it('suffixes the public slug when another org already took it', function () {
     $other = User::factory()->create();
     makeLandingApp($other, 'promo_site')
-        ->forceFill(['public_slug' => 'promo_site', 'published_at' => now()])->save();
+        ->forceFill(['public_slug' => 'promo-site', 'published_at' => now()])->save();
 
     $app = makeLandingApp($this->user, 'promo_site');
 
@@ -60,7 +62,7 @@ it('suffixes the public slug when another org already took it', function () {
         ->tool(PublishLandingTool::class, ['app_slug' => 'promo_site'])
         ->assertOk();
 
-    expect($app->refresh()->public_slug)->toBe('promo_site-2');
+    expect($app->refresh()->public_slug)->toBe('promo-site-2');
 });
 
 it('refuses to publish an app that is not a landing', function () {

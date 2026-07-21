@@ -4,6 +4,7 @@ namespace App\Services\Landing;
 
 use App\Enums\AppKind;
 use App\Models\App;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -49,12 +50,18 @@ class LandingPublisher
     }
 
     /**
-     * App slugs are only unique per-org; the public namespace is global. Use the
-     * app's slug when free, else suffix a counter (yoga_studio, yoga_studio-2…).
+     * App slugs are only unique per-org; the public namespace is global. The
+     * public slug is kebab-case (app slugs use underscores, but a public URL
+     * reads /l/cafe-nebula, not /l/cafe_nebula). Use the kebabed app slug when
+     * free, else suffix a counter (yoga-studio, yoga-studio-2…). Already-
+     * published apps keep their existing slug whatever its shape.
      */
     private function mintPublicSlug(App $app): string
     {
-        $base = $app->slug;
+        $base = Str::slug(str_replace('_', '-', $app->slug));
+        if ($base === '') {
+            $base = 'landing';
+        }
         $candidate = $base;
         $n = 2;
         while (App::query()->where('public_slug', $candidate)->exists()) {

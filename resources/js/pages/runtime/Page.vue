@@ -231,8 +231,12 @@ useScrollReveal(sectionsEl);
 
         <!-- Landing layout: chrome-less + full-bleed. No SiteHeader/Sidebar/Footer
              — the landing brings its own navbar/footer section blocks and each
-             section paints itself edge to edge (no content gutters). -->
-        <div v-if="isLanding" ref="sectionsEl" class="min-h-screen">
+             section paints itself edge to edge (no content gutters).
+             overflow-x-clip: decorative absolutely-positioned elements (orbs,
+             constellations) routinely poke past the viewport edge; clip keeps
+             them from minting a page-level horizontal scrollbar without
+             creating a scroll container (sticky still works). -->
+        <div v-if="isLanding" ref="sectionsEl" class="min-h-screen overflow-x-clip">
             <AppRenderer
                 :blocks="page.blocks"
                 :block-data="liveBlockData"
