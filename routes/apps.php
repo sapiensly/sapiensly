@@ -35,6 +35,10 @@ Route::middleware([
     Route::post('/apps/{app}/builder/wireframe-import', [AppBuilderController::class, 'wireframeImport'])->middleware('throttle:builder-ai')->name('apps.builder.wireframe-import');
     Route::post('/apps/{app}/builder/design', [AppBuilderController::class, 'updateDesign'])->name('apps.builder.design');
     Route::post('/apps/{app}/builder/preview-shot', [AppBuilderController::class, 'previewShot'])->middleware('throttle:60,1')->name('apps.builder.preview-shot');
+    // Mid-turn draft screenshots for the design director (Stage 2 eyes): the
+    // UI claims the draft payload it was asked to render, then posts the shot.
+    Route::get('/apps/{app}/builder/draft-shot/{nonce}', [AppBuilderController::class, 'draftShotClaim'])->middleware('throttle:60,1')->name('apps.builder.draft-shot.claim');
+    Route::post('/apps/{app}/builder/draft-shot/{nonce}', [AppBuilderController::class, 'draftShotStore'])->middleware('throttle:60,1')->name('apps.builder.draft-shot.store');
     Route::post('/apps/{app}/builder/publish-landing', [AppBuilderController::class, 'publishLanding'])->name('apps.builder.publish-landing');
     Route::post('/apps/{app}/builder/unpublish-landing', [AppBuilderController::class, 'unpublishLanding'])->name('apps.builder.unpublish-landing');
     Route::post('/apps/{app}/builder/landing-domain/connect', [AppBuilderController::class, 'landingDomainConnect'])->name('apps.builder.landing-domain.connect');

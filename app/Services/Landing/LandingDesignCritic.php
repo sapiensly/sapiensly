@@ -65,10 +65,11 @@ class LandingDesignCritic
         ?string $modelOverride = null,
         int $round = 1,
         ?StoredImage $screenshot = null,
+        bool $screenshotIsCurrentDraft = false,
     ): array {
         $det = $this->deterministicTells($html, $css);
         $floorFix = $det['must_fix'];
-        $ai = $this->directorCritique($intent, $html, $css, $user, $modelOverride, $screenshot);
+        $ai = $this->directorCritique($intent, $html, $css, $user, $modelOverride, $screenshot, $screenshotIsCurrentDraft);
 
         $mustFix = $floorFix;
         $direction = [];
@@ -239,6 +240,7 @@ class LandingDesignCritic
         ?User $user,
         ?string $modelOverride,
         ?StoredImage $screenshot = null,
+        bool $screenshotIsCurrentDraft = false,
     ): ?array {
         if ($user === null) {
             return null;
@@ -267,11 +269,11 @@ class LandingDesignCritic
                 ->description('What already works and must be kept.'),
         ];
 
-        $agent = new ExpressGateAgent(self::DIRECTOR_INSTRUCTIONS, $schemaFn);
+        $agent = (new ExpressGateAgent(self::DIRECTOR_INSTRUCTIONS, $schemaFn))->forModel($model);
 
         try {
             $response = $agent->prompt(
-                $this->buildPrompt($intent, $html, $css, $screenshot !== null),
+                $this->buildPrompt($intent, $html, $css, $screenshot !== null, $screenshotIsCurrentDraft),
                 attachments: $screenshot !== null ? [$screenshot] : [],
                 provider: $provider,
                 model: $model,
@@ -290,13 +292,17 @@ class LandingDesignCritic
         }
     }
 
-    private function buildPrompt(string $intent, string $html, string $css, bool $hasScreenshot = false): string
+    private function buildPrompt(string $intent, string $html, string $css, bool $hasScreenshot = false, bool $screenshotIsCurrentDraft = false): string
     {
         $intent = trim($intent) === '' ? '(not stated — infer it from the page and judge whether the page makes its own purpose obvious)' : trim($intent);
 
-        $pixels = $hasScreenshot
-            ? "A SCREENSHOT of the rendered page is attached — judge the ACTUAL PIXELS first: real hierarchy, contrast, spacing, balance, how the composition actually lands. Motion was settled to its final visible state for the capture (the ambient field shows as a frozen frame). The screenshot reflects the LAST APPLIED version; where it differs from the html/css below (the current draft), trust the code for content and the pixels for rendering quality.\n\n"
-            : '';
+        $pixels = '';
+        if ($hasScreenshot) {
+            $freshness = $screenshotIsCurrentDraft
+                ? 'The screenshot is a LIVE RENDER of the exact html/css below — pixels and code describe the same draft, so judge them as one.'
+                : 'The screenshot reflects the LAST APPLIED version; where it differs from the html/css below (the current draft), trust the code for content and the pixels for rendering quality.';
+            $pixels = "A SCREENSHOT of the rendered page is attached — judge the ACTUAL PIXELS first: real hierarchy, contrast, spacing, balance, how the composition actually lands. Motion was settled to its final visible state for the capture (the ambient field shows as a frozen frame). {$freshness}\n\n";
+        }
 
         return "INTENT — what this landing is for (audience + the one job of the page):\n{$intent}\n\n"
             .$pixels

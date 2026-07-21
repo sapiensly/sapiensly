@@ -26,6 +26,7 @@ use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\ExpressLauncher;
 use App\Services\Express\LabelGrounding;
 use App\Services\Landing\CustomDomainService;
+use App\Services\Landing\DraftPreviewShot;
 use App\Services\Landing\LandingPublisher;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
@@ -550,6 +551,46 @@ class AppBuilderController extends Controller
         );
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Stage 2 of the design director's eyes: the builder UI fetching the DRAFT
+     * payload it was asked (via BuilderDraftShotRequested) to render off-screen.
+     * The fetch doubles as the "a browser is listening" ack — the mid-turn
+     * critique bails fast when nobody claims the nonce.
+     */
+    public function draftShotClaim(Request $request, App $app, string $nonce): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $payload = app(DraftPreviewShot::class)->claim($app, $nonce);
+        if ($payload === null) {
+            return response()->json(['ok' => false], 404);
+        }
+
+        return response()->json($payload);
+    }
+
+    /**
+     * The captured draft screenshot coming back. Cache-rendezvous (not tenant
+     * storage) so the mid-turn critique can attach it even on keyless local
+     * envs; only accepted for a nonce that was actually requested and claimed.
+     */
+    public function draftShotStore(Request $request, App $app, string $nonce): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $request->validate([
+            'screenshot' => ['required', 'file', 'mimes:png,jpg,jpeg', 'max:4096'],
+        ]);
+
+        $stored = app(DraftPreviewShot::class)->storeShot(
+            $app,
+            $nonce,
+            (string) file_get_contents($request->file('screenshot')->getRealPath()),
+        );
+
+        return response()->json(['ok' => $stored], $stored ? 200 : 404);
     }
 
     public function visualReview(Request $request, App $app): JsonResponse

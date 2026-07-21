@@ -1497,7 +1497,7 @@ class BuilderAiService
             new ListAvailableComponentsTool,
             new ListDashboardBlueprintsTool,
             new PlanDashboardTool,
-            new CritiqueLandingDesignTool($app, $this->manifestService, app(LandingDesignCritic::class), $conversation->user, $proposeTool),
+            new CritiqueLandingDesignTool($app, $this->manifestService, app(LandingDesignCritic::class), $conversation->user, $proposeTool, $conversation->id),
             new ListAvailableIconsTool,
             new GeneratePaletteTool($app->organization?->brandbook()),
             new ListAvailableFieldTypesTool,

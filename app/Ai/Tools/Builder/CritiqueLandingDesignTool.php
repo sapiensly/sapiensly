@@ -4,6 +4,7 @@ namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
 use App\Models\User;
+use App\Services\Landing\DraftPreviewShot;
 use App\Services\Landing\LandingDesignCritic;
 use App\Services\Landing\LatestPreviewShot;
 use App\Services\Manifest\AppManifestService;
@@ -30,6 +31,8 @@ class CritiqueLandingDesignTool implements Tool
         private ?User $user = null,
         /** Reads the running turn's draft so it judges what you JUST authored. */
         private ?ProposeChangeTool $proposeTool = null,
+        /** Set in builder turns: lets Stage 2 ask the open UI for a DRAFT shot. */
+        private ?string $conversationId = null,
     ) {}
 
     public function name(): string
@@ -47,10 +50,12 @@ custom_css and returns {ship, score, must_fix, tells, direction, strengths}.
 
 A deterministic scan catches the absences that cap quality (no bespoke CSS, no
 display type scale, no motion) plus generic tells; a design-director model pass
-judges the actual composition against the intent and refuses "competent". When
-a fresh preview screenshot exists, the director judges REAL PIXELS too
-(hierarchy, contrast, balance as rendered) — `judged_pixels` in the response
-says whether it did.
+judges the actual composition against the intent and refuses "competent".
+Whenever possible the director judges REAL PIXELS too (hierarchy, contrast,
+balance as rendered): the open builder UI renders the CURRENT DRAFT and
+screenshots it live for each round. `judged_pixels` in the response says what
+it saw — 'draft' (this exact draft), 'applied' (the last applied version), or
+false (text-only).
 
 Treat must_fix like blocking errors: revise with propose_change (the design
 lives in custom_css + your html sections + data-sp-* motion) and call
@@ -88,18 +93,38 @@ DESC;
 
         ['html' => $html, 'css' => $css] = LandingDesignCritic::extractSurfaces($manifest);
 
-        // The visual half: attach the builder preview's freshest screenshot so
-        // the director judges real pixels. Absent/stale → text-only critique.
-        $screenshot = app(LatestPreviewShot::class)->for($this->appModel);
+        // The visual half, freshest first: (Stage 2) ask the open builder UI to
+        // render THIS DRAFT and screenshot it — so a brand-new landing gets
+        // pixel judgment on round 1, before anything is applied. No browser /
+        // capture failed → (Stage 1) the last APPLIED version's shot. Neither →
+        // text-only critique.
+        $draftShots = $this->conversationId !== null ? app(DraftPreviewShot::class) : null;
+        $screenshot = $draftShots?->capture($this->appModel, $this->conversationId, $manifest);
+        $pixelSource = $screenshot !== null ? 'draft' : false;
+        if ($screenshot === null) {
+            $screenshot = app(LatestPreviewShot::class)->for($this->appModel);
+            $pixelSource = $screenshot !== null ? 'applied' : false;
+        }
 
-        $result = $this->critic->critique($intent, $html, $css, $this->user, null, $round, $screenshot);
+        try {
+            $result = $this->critic->critique(
+                $intent, $html, $css, $this->user, null, $round, $screenshot,
+                screenshotIsCurrentDraft: $pixelSource === 'draft',
+            );
+        } finally {
+            if ($pixelSource === 'draft') {
+                $draftShots?->cleanup($screenshot);
+            }
+        }
 
         return json_encode([
             'ship' => $result['ship'],
             'score' => $result['score'],
             'round' => $result['round'],
             'converged' => $result['converged'],
-            'judged_pixels' => $screenshot !== null,
+            // 'draft' = live pixels of the html/css judged this round (Stage 2);
+            // 'applied' = the last applied version's shot; false = text-only.
+            'judged_pixels' => $pixelSource,
             'must_fix' => $result['must_fix'],
             'tells' => $result['tells'],
             'direction' => $result['direction'],

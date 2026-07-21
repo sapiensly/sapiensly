@@ -2492,6 +2492,68 @@ watch(() => props.preview, schedulePreviewShot);
 onUnmounted(() => clearTimeout(previewShotTimer));
 
 /**
+ * Stage 2 of the design director's eyes. Mid-turn, the critique broadcasts a
+ * BuilderDraftShotRequested nonce; we claim the DRAFT payload over HTTP (the
+ * claim doubles as the "a browser is listening" ack), mount it in an
+ * off-screen copy of the landing preview (same renderer — BlockHtml hydrates
+ * the data-sp-* motion itself), settle the motion, and post the JPEG back.
+ * Best-effort and silent: a missed shot only degrades the critique to the
+ * applied-version shot or text-only.
+ */
+const draftShot = ref<{
+    nonce: string;
+    page: { blocks: AnyBlock[] };
+    objects: Record<string, unknown>[];
+    settings: Record<string, unknown>;
+    custom_css: string | null;
+} | null>(null);
+const draftShotPane = ref<HTMLElement | null>(null);
+let capturingDraftShot = false;
+
+const draftShotSurfaceStyle = computed(() => ({
+    '--sp-bleed': '1.25rem',
+    ...runtimeSettingsStyle({
+        accent: draftShot.value?.settings.accent as string | undefined,
+        font: draftShot.value?.settings.font as string | undefined,
+        palette: draftShot.value?.settings.palette as PaletteVars | undefined,
+    }),
+}));
+
+async function captureDraftShot(nonce: string) {
+    if (capturingDraftShot) return;
+    capturingDraftShot = true;
+    try {
+        const { data } = await axios.get(
+            `/apps/${props.app.id}/builder/draft-shot/${nonce}`,
+            { timeout: 10_000 },
+        );
+        draftShot.value = { nonce, ...data };
+        await nextTick();
+        // A beat for BlockHtml to hydrate motion and fonts/layout to settle.
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        const node = draftShotPane.value;
+        if (!node) return;
+        const blob = await capturePreviewJpeg(node);
+        if (!blob) return;
+        const form = new FormData();
+        form.append('screenshot', blob, 'draft.jpg');
+        await axios.post(
+            `/apps/${props.app.id}/builder/draft-shot/${nonce}`,
+            form,
+            {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: 30_000,
+            },
+        );
+    } catch {
+        // Silent by contract.
+    } finally {
+        draftShot.value = null;
+        capturingDraftShot = false;
+    }
+}
+
+/**
  * Capture the current preview pane with html2canvas, POST the PNG to the
  * visual-review endpoint, and let the existing Reverb stream handle the
  * assistant reply. Mirrors the send() flow but with a screenshot attached.
@@ -2592,6 +2654,12 @@ function subscribe() {
             }
         },
     );
+
+    // The mid-turn design critique asking THIS browser to render + screenshot
+    // the current draft (Stage 2 of the director's eyes).
+    channel.listen('.BuilderDraftShotRequested', (data: { nonce: string }) => {
+        void captureDraftShot(data.nonce);
+    });
 
     // Server-driven autonomous continuation: append the new user turn +
     // assistant placeholder so the next step streams live (no HTTP response
@@ -4294,6 +4362,42 @@ function statusTone(status: Message['status']): string {
                         </div>
                     </header>
 
+                    <!-- Off-screen draft render for the design director's
+                         Stage 2 eyes: mounted only while a draft-shot capture
+                         is in flight, mirroring the landing preview branch
+                         (same renderer + pre-scoped author CSS), screenshotted
+                         with capturePreviewJpeg and posted back. -->
+                    <div
+                        v-if="draftShot"
+                        aria-hidden="true"
+                        class="pointer-events-none fixed top-0 -z-10 w-[1440px]"
+                        style="left: -12000px"
+                        :class="
+                            previewTheme === 'dark'
+                                ? 'theme-dark'
+                                : 'theme-light'
+                        "
+                    >
+                        <div
+                            ref="draftShotPane"
+                            class="sp-app-surface relative text-ink"
+                            :style="draftShotSurfaceStyle"
+                        >
+                            <component
+                                :is="'style'"
+                                v-if="draftShot.custom_css"
+                                >{{ draftShot.custom_css }}</component
+                            >
+                            <AppRenderer
+                                :blocks="draftShot.page.blocks"
+                                :block-data="{}"
+                                :objects="draftShot.objects"
+                                :locale="previewLocale"
+                                :default-currency="previewCurrency"
+                                :theme="previewTheme"
+                            />
+                        </div>
+                    </div>
                     <div
                         v-if="viewMode === 'preview'"
                         ref="previewPane"
