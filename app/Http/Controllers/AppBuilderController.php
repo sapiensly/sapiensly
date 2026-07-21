@@ -20,6 +20,7 @@ use App\Services\Apps\AppNamer;
 use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
+use App\Services\Builder\BuildPlan;
 use App\Services\Builder\ChartRecommender;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Express\ExpressIntentRouter;
@@ -963,6 +964,35 @@ class AppBuilderController extends Controller
         $this->builder->rejectProposal($message);
 
         return back()->with('success', 'Proposal rejected.');
+    }
+
+    /**
+     * Discard a proposed plan (the FR-1 plan card) DETERMINISTICALLY: stamp the
+     * card discarded and mark the build-plan steps the proposal targeted as
+     * skipped. Without this, "discard" was only a chat message — the step
+     * stayed pending and the autonomous loop would happily build the very
+     * thing the user just said no to.
+     */
+    public function discardPlanProposal(Request $request, App $app, BuilderMessage $message): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+        $this->assertMessageBelongsToApp($message, $app);
+
+        $plan = $message->plan;
+        if (! is_array($plan)) {
+            throw new HttpException(422, 'This message carries no plan proposal.');
+        }
+
+        $plan['status'] = 'discarded';
+        $message->update(['plan' => $plan]);
+
+        $conversation = $message->conversation;
+        $stepIds = array_values(array_filter((array) ($message->plan_step_ids ?? []), 'is_string'));
+        if ($conversation !== null && is_array($conversation->build_plan) && $stepIds !== []) {
+            $conversation->update(['build_plan' => BuildPlan::skip($conversation->build_plan, $stepIds)]);
+        }
+
+        return response()->json(['ok' => true, 'skipped_step_ids' => $stepIds]);
     }
 
     /**

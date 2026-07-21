@@ -611,6 +611,7 @@
     "apps.builder.plan.change": "Cambiar",
     "apps.builder.plan.build": "Construir",
     "apps.builder.plan.discard": "Descartar",
+    "apps.builder.plan.discarded": "Plan descartado",
     "apps.builder.plan.approve_message": "Se ve bien — constrúyelo.",
     "apps.builder.plan.discard_message": "Descarta ese plan, mejor no lo construyas.",
     "apps.builder.plan.change_prefix": "Cambia :label a",

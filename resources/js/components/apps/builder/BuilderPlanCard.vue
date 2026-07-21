@@ -34,6 +34,8 @@ export interface Plan {
     steps?: PlanStep[];
     touches?: PlanTouch[];
     assumptions?: PlanAssumption[];
+    /** Set server-side when the user discards the proposal — the card goes inert. */
+    status?: 'discarded' | null;
 }
 
 defineProps<{ plan: Plan }>();
@@ -172,8 +174,19 @@ const { t } = useI18n();
             </div>
         </div>
 
-        <!-- Actions -->
+        <!-- Actions — or the inert "discarded" chip once the user said no -->
         <div
+            v-if="plan.status === 'discarded'"
+            class="flex items-center justify-end border-t border-soft px-3 py-2.5"
+        >
+            <span
+                class="rounded-pill bg-surface px-2 py-0.5 text-[10px] tracking-wider text-ink-subtle uppercase"
+            >
+                {{ t('apps.builder.plan.discarded') }}
+            </span>
+        </div>
+        <div
+            v-else
             class="flex items-center justify-end gap-2 border-t border-soft px-3 py-2.5"
         >
             <button

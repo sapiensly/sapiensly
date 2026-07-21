@@ -613,6 +613,7 @@
     "apps.builder.plan.change": "Change",
     "apps.builder.plan.build": "Build it",
     "apps.builder.plan.discard": "Discard",
+    "apps.builder.plan.discarded": "Plan discarded",
     "apps.builder.plan.approve_message": "Looks good — build it.",
     "apps.builder.plan.discard_message": "Discard that plan, let's not build it.",
     "apps.builder.plan.change_prefix": "Change :label to",

@@ -204,6 +204,31 @@ class BuildPlan
     }
 
     /**
+     * Mark the given steps 'skipped' — the user explicitly rejected the work
+     * (discarded its plan proposal). Deterministic: skipped steps are not
+     * targetable, so the autonomous loop can never resurrect a step the user
+     * said no to. Done steps stay done (their version already applied).
+     *
+     * @param  array<string, mixed>  $plan
+     * @param  list<string>  $stepIds
+     * @return array<string, mixed>
+     */
+    public static function skip(array $plan, array $stepIds): array
+    {
+        $wanted = array_flip($stepIds);
+        $plan['steps'] = array_map(function (array $step) use ($wanted): array {
+            if (isset($wanted[$step['id'] ?? '']) && ($step['status'] ?? 'pending') !== 'done') {
+                $step['status'] = 'skipped';
+                $step['error'] = null;
+            }
+
+            return $step;
+        }, $plan['steps'] ?? []);
+
+        return self::withDerivedStatus($plan);
+    }
+
+    /**
      * Reopen steps that were closed by a version being reverted, so the plan
      * never claims 'done' over work no longer live in the manifest.
      *

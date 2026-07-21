@@ -39,6 +39,9 @@ Route::middleware([
     // UI claims the draft payload it was asked to render, then posts the shot.
     Route::get('/apps/{app}/builder/draft-shot/{nonce}', [AppBuilderController::class, 'draftShotClaim'])->middleware('throttle:60,1')->name('apps.builder.draft-shot.claim');
     Route::post('/apps/{app}/builder/draft-shot/{nonce}', [AppBuilderController::class, 'draftShotStore'])->middleware('throttle:60,1')->name('apps.builder.draft-shot.store');
+    // Discarding a plan proposal is deterministic: it skips the targeted
+    // build-plan steps so the autonomous loop cannot build rejected work.
+    Route::post('/apps/{app}/builder/messages/{message}/discard-plan', [AppBuilderController::class, 'discardPlanProposal'])->name('apps.builder.messages.discard-plan');
     Route::post('/apps/{app}/builder/publish-landing', [AppBuilderController::class, 'publishLanding'])->name('apps.builder.publish-landing');
     Route::post('/apps/{app}/builder/unpublish-landing', [AppBuilderController::class, 'unpublishLanding'])->name('apps.builder.unpublish-landing');
     Route::post('/apps/{app}/builder/landing-domain/connect', [AppBuilderController::class, 'landingDomainConnect'])->name('apps.builder.landing-domain.connect');

@@ -141,3 +141,17 @@ it('closeApplied prefers the targeted step over the fallback', function () {
     expect($plan['steps'][0]['status'])->toBe('pending')
         ->and($plan['steps'][1]['status'])->toBe('done');
 });
+
+it('skip marks rejected steps skipped, never touches done, and can complete the plan', function () {
+    $plan = BuildPlan::reconcile(null, null, [['title' => 'A'], ['title' => 'B']]);
+    $idA = $plan['steps'][0]['id'];
+    $idB = $plan['steps'][1]['id'];
+    $plan = BuildPlan::closeApplied(BuildPlan::markInProgress($plan, [$idA]), 'apv_x', 1, null);
+
+    // Skipping the done A is a no-op; skipping pending B closes the plan.
+    $plan = BuildPlan::skip($plan, [$idA, $idB, 'stp_unknown']);
+
+    expect($plan['steps'][0]['status'])->toBe('done')
+        ->and($plan['steps'][1]['status'])->toBe('skipped')
+        ->and($plan['status'])->toBe('done');
+});

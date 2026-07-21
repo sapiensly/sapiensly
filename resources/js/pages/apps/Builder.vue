@@ -2838,7 +2838,22 @@ function buildFromPlan() {
     send();
 }
 
-function discardPlan() {
+function discardPlan(message: Message) {
+    // Deterministic first: the endpoint stamps the card discarded and marks
+    // the proposal's build-plan steps skipped, so the autonomous loop can
+    // never build work the user just rejected. The chat message below only
+    // keeps the model in the loop — it is no longer what enforces the "no".
+    if (message.plan) {
+        message.plan.status = 'discarded';
+    }
+    axios
+        .post(
+            `/apps/${props.app.id}/builder/messages/${message.id}/discard-plan`,
+        )
+        .catch(() => {
+            // The chat message still tells the model; worst case the card
+            // stays interactive after a reload.
+        });
     input.value = tInConversationLocale('apps.builder.plan.discard_message');
     send();
 }
@@ -3863,7 +3878,7 @@ function statusTone(status: Message['status']): string {
                                 v-if="m.plan"
                                 :plan="m.plan"
                                 @build="buildFromPlan"
-                                @discard="discardPlan"
+                                @discard="discardPlan(m)"
                                 @change="changePlanAssumption"
                             />
 
