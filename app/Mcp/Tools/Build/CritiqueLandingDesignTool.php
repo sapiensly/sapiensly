@@ -4,6 +4,7 @@ namespace App\Mcp\Tools\Build;
 
 use App\Mcp\Tools\SapiensTool;
 use App\Models\User;
+use App\Services\Ai\AiDefaults;
 use App\Services\Landing\LandingDesignCritic;
 use App\Services\Landing\LatestPreviewShot;
 use App\Services\Manifest\AppManifestService;
@@ -44,12 +45,14 @@ class CritiqueLandingDesignTool extends SapiensTool
         $screenshot = app(LatestPreviewShot::class)->for($app);
         $round = max(1, (int) ($validated['round'] ?? 1));
 
+        // Same bar, same eyes, same MODEL as the builder gate: the director
+        // judges on the landing_builder default when one is configured.
         $result = app(LandingDesignCritic::class)->critique(
             trim($validated['intent']),
             $html,
             $css,
             $user,
-            null,
+            app(AiDefaults::class)->primary('landing_builder'),
             $round,
             $screenshot,
         );

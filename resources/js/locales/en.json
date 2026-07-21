@@ -2007,6 +2007,8 @@
     "admin.ai.defaults.module.summary_large.description": "Model that condenses long, costly conversations into an optimized summarized context.",
     "admin.ai.defaults.module.builder.title": "App Builder",
     "admin.ai.defaults.module.builder.description": "Model that powers the app builder agent.",
+    "admin.ai.defaults.module.landing_builder.title": "Landing Builder",
+    "admin.ai.defaults.module.landing_builder.description": "The builder switches to this model the moment an app is tagged as a landing (design-heavy work). Leave unset to keep the App Builder model.",
     "admin.ai.defaults.module.flows.title": "Flows",
     "admin.ai.defaults.module.flows.description": "Model for flow steps not pinned to an agent.",
     "admin.ai.defaults.module.chatbots.title": "Chatbots",

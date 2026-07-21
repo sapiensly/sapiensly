@@ -144,11 +144,13 @@ class AppBuilderController extends Controller
 
         $models = $this->chatModels();
         $modelIds = array_column($models, 'id');
-        $defaultModel = BuilderAiService::defaultModel();
+        // App-aware: a landing app pre-selects the landing_builder default
+        // (when configured) so the picker shows what the turn will run.
+        $defaultModel = BuilderAiService::defaultModel($app);
         // The configured builder backup, surfaced so the composer can offer a
         // one-tap primary↔backup switch. Only when it's a distinct, selectable
         // model (present in the picker list) — otherwise the switch hides.
-        $backupModel = app(AiDefaults::class)->fallback('builder');
+        $backupModel = app(AiDefaults::class)->fallback(BuilderAiService::moduleFor($app));
         if ($backupModel === $defaultModel || ! in_array($backupModel, $modelIds, true)) {
             $backupModel = null;
         }

@@ -65,6 +65,7 @@ export {
     TrendingUp,
     Activity,
     Star,
+    Rocket,
 
     // narrative (three-layer story)
     Shield as Shield, // alias for reach-around; also as NavAccess

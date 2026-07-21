@@ -38,8 +38,12 @@ class AiDefaults
      * @var list<string>
      */
     public const MODULES = [
-        // Product modules (chat capability).
-        'chat', 'summary_short', 'summary_large', 'builder', 'flows', 'chatbots',
+        // Product modules (chat capability). `landing_builder` is OPTIONAL by
+        // design: when unset the builder keeps its normal model, and when set
+        // the builder switches to it as soon as an app is tagged as a landing
+        // (landings live or die on design, so they often warrant a stronger
+        // model than the cheap-and-fast general builder default).
+        'chat', 'summary_short', 'summary_large', 'builder', 'landing_builder', 'flows', 'chatbots',
         // Specialized capability handlers.
         'embeddings', 'coding', 'ocr_pdf', 'image_vision', 'image_generation',
         'audio_recognition', 'speech_generation', 'reranking',
@@ -67,6 +71,7 @@ class AiDefaults
         'summary_short' => 'chat',
         'summary_large' => 'chat',
         'builder' => 'chat',
+        'landing_builder' => 'chat',
         'flows' => 'chat',
         'chatbots' => 'chat',
         'embeddings' => 'embeddings',

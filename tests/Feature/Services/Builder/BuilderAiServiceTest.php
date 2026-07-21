@@ -18,7 +18,9 @@ use App\Ai\Tools\Builder\SetBuildPlanTool;
 use App\Ai\Tools\Builder\SimulateQueryTool;
 use App\Ai\Tools\Builder\TargetPlanStepsTool;
 use App\Ai\Tools\Builder\ValidateManifestTool;
+use App\Enums\AppKind;
 use App\Jobs\RunBuilderAiJob;
+use App\Models\AiCatalogModel;
 use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
@@ -558,6 +560,31 @@ it('the pause note surfaces a plain pending question from the turn', function ()
 
     Queue::assertNotPushed(RunBuilderAiJob::class);
     expect($conv->messages()->where('content', 'like', '%te hizo una pregunta%')->exists())->toBeTrue();
+});
+
+it('moduleFor routes a landing app to landing_builder ONLY when one is configured', function () {
+    $landing = App::factory()->create(['user_id' => $this->user->id, 'kind' => AppKind::Landing]);
+    $regular = App::factory()->create(['user_id' => $this->user->id, 'kind' => AppKind::App]);
+
+    // Unconfigured → everything resolves through the normal builder module.
+    expect(BuilderAiService::moduleFor($landing))->toBe('builder')
+        ->and(BuilderAiService::moduleFor($regular))->toBe('builder')
+        ->and(BuilderAiService::moduleFor(null))->toBe('builder');
+
+    // Configure a landing_builder primary in admin AI > Defaults.
+    $model = AiCatalogModel::firstOrCreate(
+        ['driver' => 'anthropic', 'model_id' => 'claude-sonnet-5', 'capability' => 'chat'],
+        ['label' => 'Sonnet', 'is_enabled' => true, 'sort_order' => 0],
+    );
+    app(AiDefaults::class)->setCatalogId('landing_builder', 'primary', $model->id);
+
+    // The landing app switches; a regular app does not.
+    expect(BuilderAiService::moduleFor($landing))->toBe('landing_builder')
+        ->and(BuilderAiService::moduleFor($regular))->toBe('builder')
+        ->and(BuilderAiService::defaultModel($landing))->toBe('claude-sonnet-5')
+        // An explicit per-turn override still wins over the landing default.
+        ->and(app(AiDefaults::class)->model(BuilderAiService::moduleFor($landing), 'claude-haiku-4-5-20251001'))
+        ->toBe('claude-haiku-4-5-20251001');
 });
 
 it('a discarded plan card does not word the pause as awaiting a decision', function () {

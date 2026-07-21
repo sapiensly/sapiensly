@@ -42,6 +42,7 @@ use App\Ai\Tools\Builder\ValidateManifestTool;
 use App\Ai\Tools\Builder\VerifyWorkflowTool;
 use App\Ai\Tools\Platform\McpBridgeTool;
 use App\Ai\Tools\RuntimeToolFactory;
+use App\Enums\AppKind;
 use App\Events\Builder\BuilderActivity;
 use App\Events\Builder\BuilderStreamChunk;
 use App\Events\Builder\BuilderStreamComplete;
@@ -120,10 +121,31 @@ class BuilderAiService
      */
     public const AUTONOMOUS_MAX_TURNS = 8;
 
-    /** The default builder model id, exposed so the UI can pre-select it in the model picker. */
-    public static function defaultModel(): string
+    /**
+     * The default builder model id, exposed so the UI can pre-select it in the
+     * model picker. App-aware: a LANDING app resolves through the
+     * `landing_builder` module (when one is configured) so the picker shows the
+     * model the turn will actually run.
+     */
+    public static function defaultModel(?App $app = null): string
     {
-        return app(AiDefaults::class)->model('builder');
+        return app(AiDefaults::class)->model(self::moduleFor($app));
+    }
+
+    /**
+     * The AiDefaults module a turn on this app resolves its model through.
+     * `landing_builder` the moment the app is TAGGED as a landing — but only
+     * when the admin actually configured one (admin AI > Defaults > Landing
+     * builder); unset, the builder keeps its normal model. An explicit per-turn
+     * override from the model picker still wins over either module (it is the
+     * first candidate in AiDefaults::model()).
+     */
+    public static function moduleFor(?App $app): string
+    {
+        return $app?->kind === AppKind::Landing
+            && app(AiDefaults::class)->primary('landing_builder') !== null
+                ? 'landing_builder'
+                : 'builder';
     }
 
     public function __construct(
@@ -208,9 +230,10 @@ class BuilderAiService
             $promptText = $prompt instanceof UserMessage ? ($prompt->content ?? '') : $userText;
             $promptText = $this->withPlanContext($promptText, $conversation);
 
-            // Resolve the builder's primary model; on an LLM/provider error,
-            // withFallback re-runs the prompt with the configured fallback.
-            $response = $this->aiDefaults->withFallback('builder', function (string $model) use ($sdkAgent, $promptText, $user, $conversation) {
+            // Resolve the builder's primary model (module-aware: a landing app
+            // runs the landing_builder default when one is configured); on an
+            // LLM/provider error, withFallback re-runs with the next candidate.
+            $response = $this->aiDefaults->withFallback(self::moduleFor($app), function (string $model) use ($sdkAgent, $promptText, $user, $conversation) {
                 $provider = $user !== null
                     ? ($this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic)
                     : Lab::Anthropic;
@@ -408,8 +431,10 @@ class BuilderAiService
         // Pick the model: the caller can override (visual review uses Sonnet
         // 4.5 because Haiku tended to ignore the "don't add new features"
         // hard scope limit when the screenshot looked incomplete). Default
-        // stays at Haiku for the cheap-and-fast common chat path.
-        $resolvedModel = $this->aiDefaults->model('builder', $modelOverride);
+        // stays at Haiku for the cheap-and-fast common chat path — except a
+        // LANDING app, which switches to the landing_builder default the
+        // moment it's tagged (when the admin configured one).
+        $resolvedModel = $this->aiDefaults->model(self::moduleFor($app), $modelOverride);
         $sdkAgent->forModel($resolvedModel);
 
         try {
