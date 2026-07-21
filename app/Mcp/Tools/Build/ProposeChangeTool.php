@@ -26,7 +26,7 @@ class ProposeChangeTool extends SapiensTool
             'change_summary' => ['nullable', 'string', 'max:500'],
             'idempotency_key' => ['nullable', 'string', 'max:200'],
         ], [
-            'ops.required' => 'Provide at least one RFC 6902 operation, e.g. {"op":"add","path":"/objects/-","value":{...}}.',
+            'ops.required' => 'Provide at least one RFC 6902 operation, e.g. {"op":"add","path":"/objects/-","value":{...}}. One extension: {"op":"append","path","value"} concatenates onto a string value — use it to write/revise LONG strings (settings.custom_css) in chunks instead of resending the whole value in a replace.',
         ]);
 
         /** @var User $user */

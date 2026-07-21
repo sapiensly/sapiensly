@@ -49,6 +49,12 @@ final class ManifestPatch
         $target = json_decode(json_encode($document, JSON_THROW_ON_ERROR));
 
         foreach ($ops as $op) {
+            if (($op['op'] ?? null) === 'append') {
+                self::applyAppend($target, $op);
+
+                continue;
+            }
+
             if (self::isIndexedArrayInsert($target, $op)) {
                 self::applyInsert($target, $op);
 
@@ -161,6 +167,49 @@ final class ManifestPatch
         }
 
         array_splice($parent, $index, 0, [$value]);
+    }
+
+    /**
+     * The one extension over RFC 6902: `{op:"append", path, value}` concatenates
+     * a string onto the string at `path` (absent/null leaf starts from "").
+     * A `replace` on a LONG string (settings.custom_css can run 60k chars on a
+     * landing) forces the author to resend the ENTIRE value on every revision —
+     * which is exactly the tool-argument size that truncates in transit and
+     * forces patch-splitting. Append lets long text be written and revised in
+     * small chunks (CSS's cascade makes appended overrides a natural revision
+     * idiom). Ops apply sequentially, so consecutive appends to the same path
+     * stack within one call.
+     *
+     * @param  array<string, mixed>  $op
+     */
+    private static function applyAppend(mixed &$target, array $op): void
+    {
+        $path = (string) ($op['path'] ?? '');
+        $value = $op['value'] ?? null;
+        if (! is_string($value)) {
+            throw new \InvalidArgumentException('append requires a string `value`.');
+        }
+
+        $tokens = self::tokens($path);
+        if ($tokens === []) {
+            throw new \InvalidArgumentException('append cannot target the document root.');
+        }
+
+        $parentTokens = $tokens;
+        $leaf = array_pop($parentTokens);
+        $parent = self::resolve($target, $parentTokens);
+        if (! is_object($parent) && ! is_array($parent)) {
+            throw new \InvalidArgumentException("append: the parent of '{$path}' does not exist — add it first.");
+        }
+
+        $existing = self::resolve($target, $tokens);
+        if ($existing !== null && ! is_string($existing)) {
+            throw new \InvalidArgumentException("append only works on string values — '{$path}' holds ".gettype($existing).'.');
+        }
+
+        $ref = &self::reference($target, $tokens);
+        $ref = ($existing ?? '').$value;
+        unset($ref, $leaf);
     }
 
     /**
