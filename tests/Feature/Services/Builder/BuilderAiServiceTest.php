@@ -520,6 +520,64 @@ it('continueAutonomously halts and notes when the turn did not advance the plan'
     expect($conv->messages()->where('content', 'like', '%no avanzó%')->exists())->toBeTrue();
 });
 
+it('the pause note surfaces a pending plan proposal instead of claiming no progress', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+    ]]]);
+
+    // The turn deliberately STOPPED to ask: it proposed a plan (FR-1 card).
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => '¿Apruebas este plan?',
+        'status' => 'none', 'applied_version_id' => null, 'plan_step_ids' => null,
+        'plan' => ['summary' => 'Email de bienvenida', 'trigger' => 'record.created', 'steps' => []],
+    ]);
+
+    $this->service->continueAutonomously($finished, 5, null);
+
+    Queue::assertNotPushed(RunBuilderAiJob::class);
+    expect($conv->messages()->where('content', 'like', '%esperando tu decisión%')->exists())->toBeTrue()
+        ->and($conv->messages()->where('content', 'like', '%no avanzó%')->exists())->toBeFalse();
+});
+
+it('the pause note surfaces a plain pending question from the turn', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+    ]]]);
+
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant',
+        'content' => '¿Prefieres el formulario al final o en el hero?',
+        'status' => 'none', 'applied_version_id' => null, 'plan_step_ids' => null,
+    ]);
+
+    $this->service->continueAutonomously($finished, 5, null);
+
+    Queue::assertNotPushed(RunBuilderAiJob::class);
+    expect($conv->messages()->where('content', 'like', '%te hizo una pregunta%')->exists())->toBeTrue();
+});
+
+it('a discarded plan card does not word the pause as awaiting a decision', function () {
+    Queue::fake();
+    $conv = $this->service->startConversation($this->testApp, $this->user);
+    $conv->update(['build_plan' => ['schema' => 1, 'goal' => null, 'status' => 'active', 'steps' => [
+        ['id' => 'stp_a', 'title' => 'A', 'detail' => null, 'status' => 'pending', 'applied_version_id' => null, 'version_number' => null, 'closed_by_summary' => null, 'error' => null],
+    ]]]);
+
+    $finished = BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'content' => 'dije que lo hice',
+        'status' => 'none', 'applied_version_id' => null, 'plan_step_ids' => null,
+        'plan' => ['summary' => 'Plan viejo', 'status' => 'discarded'],
+    ]);
+
+    $this->service->continueAutonomously($finished, 5, null);
+
+    expect($conv->messages()->where('content', 'like', '%no avanzó%')->exists())->toBeTrue();
+});
+
 it('ProposeChangeTool fires the onProgress checkpoint only on a successful proposal', function () {
     $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
 

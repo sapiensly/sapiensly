@@ -1073,7 +1073,7 @@ class BuilderAiService
         );
 
         if (! $decision['continue']) {
-            $this->noteAutonomousStop($conversation, $decision['reason']);
+            $this->noteAutonomousStop($conversation, $decision['reason'], $finished);
 
             return;
         }
@@ -1120,12 +1120,12 @@ class BuilderAiService
      * Post a one-line assistant note when the autonomous loop stops, so the user
      * sees why. Silent for an ordinary completed plan with nothing left to say.
      */
-    private function noteAutonomousStop(BuilderConversation $conversation, string $reason): void
+    private function noteAutonomousStop(BuilderConversation $conversation, string $reason, ?BuilderMessage $finished = null): void
     {
         $text = match ($reason) {
             'plan_complete' => '✅ Plan completado.',
             'cap' => 'Pausé el modo autónomo tras varios pasos automáticos. Dime «continúa» para seguir.',
-            'no_progress' => 'Pausé el modo autónomo: el último turno no avanzó el plan. ¿Cómo quieres que siga?',
+            'no_progress' => $this->noProgressNote($finished),
             default => null,
         };
         if ($text === null) {
@@ -1142,6 +1142,28 @@ class BuilderAiService
         $this->safeBroadcast(fn () => BuilderTurnQueued::dispatch($conversation->id, [
             $this->autonomousTurnDto($note),
         ]));
+    }
+
+    /**
+     * The honest no-progress note. "El último turno no avanzó el plan" was
+     * MISLEADING whenever the turn deliberately stopped to ask something —
+     * observed live: the turn proposed a workflow plan and asked for approval,
+     * and the pause note then claimed nothing had happened, burying the actual
+     * pending question. Word the pause by what the turn left waiting.
+     */
+    private function noProgressNote(?BuilderMessage $finished): string
+    {
+        if ($finished !== null && is_array($finished->plan) && (($finished->plan['status'] ?? null) !== 'discarded')) {
+            return 'Pausé el modo autónomo: hay un plan propuesto esperando tu decisión — apruébalo o descártalo desde la tarjeta de arriba.';
+        }
+        if ($finished !== null && ! empty($finished->integration_proposal)) {
+            return 'Pausé el modo autónomo: hay una conexión propuesta esperando tu autorización — revísala en la tarjeta de arriba.';
+        }
+        if ($finished !== null && str_ends_with(rtrim((string) $finished->content), '?')) {
+            return 'Pausé el modo autónomo: el builder te hizo una pregunta arriba — al responderla seguimos.';
+        }
+
+        return 'Pausé el modo autónomo: el último turno no avanzó el plan. ¿Cómo quieres que siga?';
     }
 
     /**
