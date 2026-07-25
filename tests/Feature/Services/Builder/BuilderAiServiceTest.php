@@ -1798,3 +1798,24 @@ it('replays history with ground-truth receipts so narration cannot masquerade as
         ->and($withPrefix('✅ Eliminé el sankey'))->toContain('NO changes were applied in this turn')
         ->and($withPrefix('quita el sankey'))->not->toContain('SYSTEM RECEIPT'); // user turns replay untouched
 });
+
+it('pre-loads the landings playbook into the system prompt for landing work only', function () {
+    $svc = app(BuilderAiService::class);
+    $method = new ReflectionMethod($svc, 'systemPrompt');
+
+    $landing = App::factory()->create(['user_id' => $this->user->id, 'kind' => AppKind::Landing]);
+    $regular = App::factory()->create(['user_id' => $this->user->id, 'kind' => AppKind::App]);
+
+    // Tagged landing → preloaded (even with no intent text).
+    $tagged = $method->invoke($svc, $landing, null);
+    expect($tagged)->toContain('PRE-LOADED REFERENCE')
+        ->and($tagged)->toContain('LANDING PAGES — bespoke-designed');
+
+    // Untagged app + landing-intent brief → preloaded from turn one.
+    $intent = $method->invoke($svc, $regular, 'Quiero una landing para mi vivero');
+    expect($intent)->toContain('PRE-LOADED REFERENCE');
+
+    // Plain app work → no landing payload in the prompt.
+    $plain = $method->invoke($svc, $regular, 'crea una app de inventario');
+    expect($plain)->not->toContain('PRE-LOADED REFERENCE');
+});

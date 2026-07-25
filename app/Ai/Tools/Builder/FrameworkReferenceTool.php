@@ -83,6 +83,11 @@ COPY IS DESIGN TOO: quotes/testimonials must be quotable from memory (specific, 
 5. THE CONVERSION LOOP: a dedicated leads object (nombre + email/phone with their REAL field types + mensaje…) + a `lead_form` block (object_id + fields) + a workflow {trigger: record.created on that object} whose steps handle each lead (agent.invoke to qualify/reply, record.update…). On the published page the form posts to the public lead endpoint (honeypot + optional Turnstile + throttle built in). NEVER the app `form` block — it is stripped from the public surface. THE FORM MUST BELONG TO THE DESIGN (both are enforced by the design gate): (a) PLACE it — put an empty `<div data-sp-slot="lead_form"></div>` inside the html section where the form should live (the CTA panel, the closing section) and the runtime moves the form into it; without a slot the sibling block renders after your sections, typically orphaned below the footer. (b) STYLE it — .sp-lead-form, .sp-lead-field label/input/textarea, the submit button and .sp-lead-form-success in custom_css, same palette and type system as the rest of the page (the defaults are bare white inputs).
 6. THE DESIGN GATE: call `critique_landing_design` with the page's intent; treat must_fix as blocking, revise with propose_change, re-call with round incremented until ship:true (score ≥85 ships; by round 3 remaining notes demote to polish). A landing that hasn't shipped is not done.
 7. PUBLISH: publishing is a human decision (the builder's Publicar button, or the publish_landing tool with explicit user confirmation) — it mints the globally-unique public slug for /l/{slug}. Custom domains connect via manage_landing_domain (CNAME → verify).
+EXACT SHAPES (get these right the FIRST time — every wrong guess wastes a paid round-trip):
+- PAGE: {id: "pag_<ulid>", slug, name, path: "/", blocks: [...]} — required: id, slug, name, path, blocks. There is NO `is_home` (the "/" path IS home) and NO title/seo on the page (seo lives in settings.seo).
+- WORKFLOW: {id: "wkf_<ulid>", slug, name, trigger: {type: "record.created", object_id: "<the leads object id>"}, steps: [{id: "stp_<ulid>", type: "record.update", ...}]} — required: id, SLUG, name, trigger, steps (≥1 step; a minimal valid step is a record.update stamping a field on {{trigger.record.id}}).
+- LEAD_FORM BLOCK: {id: "ldf_<ulid>", type: "lead_form", object_id, fields: [{field_id, label, required?, placeholder?, input?: "text"|"email"|"phone"|"textarea"}], submit_label?, success_message?}.
+- CSS VARS: define your custom properties ONCE on your own wrapper class (`.lp{--ink:#…}`) and reference them consistently — a var referenced but never defined silently renders as nothing and reads as a broken palette.
 Only presentational blocks render on the public surface (data-backed blocks are stripped, fail-closed) — the landing shows sections + the lead form, never tenant data.
 TXT,
         'design' => <<<'TXT'
@@ -320,6 +325,16 @@ TXT,
         $topics = implode(', ', array_keys(self::TOPICS));
 
         return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `palette` (brand-derived colour palette + CSS vars), `icons` (named icons + emoji for any block icon), `custom_css` (the scoped raw-CSS escape hatch + targeting hooks), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
+    }
+
+    /**
+     * A topic's reference text, for callers that PRE-INJECT it instead of
+     * waiting for the model to ask (landing turns preload `landings` into the
+     * system prompt — same words, zero round-trips). Null for unknown topics.
+     */
+    public static function topic(string $name): ?string
+    {
+        return self::TOPICS[$name] ?? null;
     }
 
     public function schema(JsonSchema $schema): array

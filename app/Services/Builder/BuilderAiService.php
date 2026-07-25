@@ -154,6 +154,30 @@ class BuilderAiService
     }
 
     /**
+     * Pre-load the landings playbook into the system prompt for landing work
+     * (tagged app, or a landing-intent request). Same words the model would
+     * pull via framework_reference('landings') — delivered without the paid
+     * round-trips of discovering it needs them. The block's TEXT is constant
+     * and the condition is stable within a conversation (the founding brief
+     * doesn't change; kind only flips once), so prompt caching keeps working.
+     */
+    private function landingReferenceSection(App $app, ?string $intentText): string
+    {
+        $isLandingWork = $app->kind === AppKind::Landing
+            || LandingIntent::matches($intentText);
+        if (! $isLandingWork) {
+            return '';
+        }
+
+        $topic = FrameworkReferenceTool::topic('landings');
+        if ($topic === null) {
+            return '';
+        }
+
+        return "\nPRE-LOADED REFERENCE — this is LANDING work, so the `landings` playbook is included below. Do NOT call framework_reference(\"landings\") (you already have it; re-fetching wastes a round-trip). Other topics remain on demand.\n\n{$topic}\n";
+    }
+
+    /**
      * The conversation text the landing-intent heuristics read: the FIRST user
      * message (the founding brief — so a "continúa" after a dead first turn
      * still counts as landing work) plus the LATEST (the current request).
@@ -228,7 +252,7 @@ class BuilderAiService
         $history = $this->buildHistory($conversation);
         $prompt = array_pop($history); // the user turn just stored
 
-        $systemPrompt = $this->systemPrompt($app);
+        $systemPrompt = $this->systemPrompt($app, self::conversationIntentText($conversation));
         $sdkAgent = new BuilderAgent(
             instructions: $systemPrompt,
             messages: $history,
@@ -435,7 +459,7 @@ class BuilderAiService
         $promptText = $lastUser?->content ?? $userText;
         $promptText = $this->withPlanContext($promptText, $conversation);
 
-        $systemPrompt = $this->systemPrompt($app);
+        $systemPrompt = $this->systemPrompt($app, self::conversationIntentText($conversation));
         $sdkAgent = new BuilderAgent(
             instructions: $systemPrompt,
             messages: $sdkHistory,
@@ -1678,10 +1702,11 @@ class BuilderAiService
         return "\n\n[SYSTEM RECEIPT — NO changes were applied in this turn. Any action claims above did NOT happen.]";
     }
 
-    private function systemPrompt(App $app): string
+    private function systemPrompt(App $app, ?string $intentText = null): string
     {
         $brandbook = $this->brandbookSection($app);
         $now = CurrentDateTime::promptLine();
+        $landingReference = $this->landingReferenceSection($app, $intentText);
 
         return <<<PROMPT
 {$now}
@@ -1696,7 +1721,7 @@ App details:
   name: {$app->name}
 
 {$brandbook}
-
+{$landingReference}
 Language:
 0. ALWAYS reply in the same language as the most recent user message. If the user writes in Spanish, your assistant turn (including confirmations, error messages, clarifications and the `change_summary` you pass to propose_change) is in Spanish. If they switch to English mid-conversation, switch with them. Don't mix languages within a single reply. Default to the user's language even if your internal reasoning was in English.
 
