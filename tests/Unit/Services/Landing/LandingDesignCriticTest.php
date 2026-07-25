@@ -132,3 +132,34 @@ it('does not converge before the threshold or the round cap', function () {
         ->and($r['converged'])->toBeFalse()
         ->and(implode(' ', $r['must_fix']))->toContain('Add tension');
 });
+
+it('extractSurfaces marks a lead_form block so the judges know a form renders', function () {
+    $surfaces = LandingDesignCritic::extractSurfaces([
+        'pages' => [[
+            'blocks' => [
+                ['id' => 'htm_1', 'type' => 'html', 'content' => '<section class="cta"></section>'],
+                ['id' => 'ldf_1', 'type' => 'lead_form', 'object_id' => 'obj_x', 'fields' => []],
+            ],
+        ]],
+        'settings' => ['custom_css' => '.x{}'],
+    ]);
+
+    expect($surfaces['html'])->toContain('platform block: lead_form');
+});
+
+it('the floor blocks an unstyled or unplaced lead_form', function () {
+    $htmlWithForm = RICH_HTML.' <!-- platform block: lead_form (renders .sp-lead-form here) -->';
+
+    // Neither styled nor slotted → two blocking fixes.
+    $bare = designCritic()->deterministicTells($htmlWithForm, RICH_CSS);
+    $joined = implode(' | ', $bare['must_fix']);
+    expect($joined)->toContain('.sp-lead-form')
+        ->and($joined)->toContain('data-sp-slot');
+
+    // Styled AND slotted → the floor is clean again.
+    $good = designCritic()->deterministicTells(
+        $htmlWithForm.' <div data-sp-slot="lead_form"></div>',
+        RICH_CSS.' .sp-lead-form input{background:transparent;border:1px solid #223049}',
+    );
+    expect(implode(' | ', $good['must_fix']))->not->toContain('sp-lead-form');
+});

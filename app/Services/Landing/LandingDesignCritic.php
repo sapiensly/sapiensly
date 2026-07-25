@@ -155,6 +155,12 @@ class LandingDesignCritic
             if (($block['type'] ?? null) === 'html' && is_string($block['content'] ?? null)) {
                 $parts[] = $block['content'];
             }
+            // Surface the platform-rendered form to the judges: the floor
+            // requires it styled + slotted, and the director should judge the
+            // page KNOWING a form renders here.
+            if (($block['type'] ?? null) === 'lead_form') {
+                $parts[] = '<!-- platform block: lead_form (renders .sp-lead-form here) -->';
+            }
             foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
                 if (isset($block[$key]) && is_array($block[$key])) {
                     self::walkHtmlBlocks($block[$key], $parts);
@@ -205,6 +211,18 @@ class LandingDesignCritic
         // Motion is not optional for a top-tier landing.
         if (! str_contains($html, 'data-sp-')) {
             $must[] = 'The page is static — add motion: at minimum data-sp-reveal on sections; ideally an ambient (data-sp-motion="ambient-field") or a live sequence (data-sp-sequence) moment in the hero.';
+        }
+
+        // A lead_form left unstyled/unplaced renders as raw white default
+        // inputs orphaned after the last section — the single ugliest thing a
+        // shipped landing can do to its ONE conversion point (observed live).
+        if (str_contains($html, 'platform block: lead_form')) {
+            if (! str_contains($css, '.sp-lead-form')) {
+                $must[] = 'The lead_form block is UNSTYLED — it will render as raw default inputs. Style .sp-lead-form (and .sp-lead-field label/input, the submit button) in custom_css so the form belongs to this design.';
+            }
+            if (! str_contains($html, 'data-sp-slot')) {
+                $must[] = 'The lead_form has no placement slot — as a sibling block it renders AFTER your sections (often below the footer). Put an empty <div data-sp-slot="lead_form"></div> inside the section where the form belongs (e.g. the CTA panel); the runtime moves the form into it.';
+            }
         }
 
         // ---- softer tells (reported, not blocking) ----

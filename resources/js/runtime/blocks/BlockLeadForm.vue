@@ -41,6 +41,28 @@ const error = ref('');
 const inputType = (f: LeadField): string =>
     f.input === 'email' ? 'email' : f.input === 'phone' ? 'tel' : 'text';
 
+// Bespoke placement: a landing's html can declare WHERE the form lives with an
+// empty <div data-sp-slot="lead_form"></div> (e.g. inside the CTA panel). As a
+// sibling block the form would otherwise always render between/after sections —
+// observed live: below the footer, visually orphaned. On mount we move the
+// form's element into the first free slot in the same app surface; without a
+// slot, block order keeps working as before.
+const rootEl = ref<HTMLElement | null>(null);
+onMounted(() => {
+    const el = rootEl.value;
+    if (!el) return;
+    const surface = el.closest('.sp-app-surface');
+    const slots = surface?.querySelectorAll(
+        '[data-sp-slot="lead_form"], [data-sp-slot="lead-form"]',
+    );
+    for (const slot of slots ?? []) {
+        if (slot.childElementCount === 0) {
+            slot.appendChild(el);
+            break;
+        }
+    }
+});
+
 // Cloudflare Turnstile: load + render only on the public page and only when a
 // site key is configured. Failure to load never blocks the form — the server
 // verifies (or skips when keyless) and the honeypot/throttle floor remains.
@@ -110,7 +132,7 @@ async function submit() {
 
 <template>
     <!-- Structural classes only — the landing's custom_css owns the look. -->
-    <div class="sp-lead-form">
+    <div ref="rootEl" class="sp-lead-form">
         <div v-if="done" class="sp-lead-form-success" role="status">
             {{ doneMessage }}
         </div>
