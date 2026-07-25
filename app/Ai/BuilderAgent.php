@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Ai\Gateway\CachingAnthropicGateway;
 use App\Services\Ai\ReasoningOptions;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\HasProviderOptions;
@@ -92,6 +93,13 @@ class BuilderAgent extends AnonymousAgent implements HasProviderOptions
                 'text' => $this->cacheableSystem,
                 'cache_control' => ['type' => 'ephemeral'],
             ]];
+
+            // Also cache the CONVERSATION: a moving breakpoint on the last
+            // message (applied by CachingAnthropicGateway, which strips this
+            // flag from the body). Without it every round trip of an agentic
+            // turn re-bills the whole growing history at the full input rate —
+            // measured live at ~60% of a landing build's Anthropic bill.
+            $options[CachingAnthropicGateway::CACHE_MESSAGES_FLAG] = true;
         }
 
         return $options;

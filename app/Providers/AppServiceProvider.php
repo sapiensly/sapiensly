@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Ai\Gateway\CachingAnthropicGateway;
 use App\Models\OrganizationMembership;
 use App\Observers\OrganizationMembershipObserver;
 use App\Services\Security\Ssrf\DnsResolver;
@@ -13,6 +14,7 @@ use App\Support\Tenancy\TenantCache;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Contracts\Events\Dispatcher as EventDispatcher;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobProcessing;
@@ -24,6 +26,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\AiManager;
+use Laravel\Ai\Providers\AnthropicProvider;
 use Laravel\Passport\Passport;
 use Pgvector\Laravel\Schema;
 use Psr\Http\Message\RequestInterface;
@@ -66,6 +70,18 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
+        // Anthropic driver with incremental prompt caching of the conversation
+        // (a moving cache_control breakpoint on the last message, opted into
+        // via an agent's providerOptions). Without it only the system prompt
+        // caches and every agentic round trip re-bills the whole history at
+        // the full input rate. See CachingAnthropicGateway.
+        $this->app->afterResolving(AiManager::class, function (AiManager $manager): void {
+            $manager->extend('anthropic', fn ($app, array $config) => new AnthropicProvider(
+                new CachingAnthropicGateway($app['events']),
+                $config,
+                $app->make(EventDispatcher::class),
+            ));
+        });
     }
 
     /**
