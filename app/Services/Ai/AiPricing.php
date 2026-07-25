@@ -9,10 +9,13 @@ use Laravel\Ai\Responses\Data\Usage;
 /**
  * Converts token usage into a USD cost using the per-model prices already kept
  * in `ai_catalog_models` (input/output per million tokens, synced from the
- * providers). Cache reads/writes are billed relative to the input price
- * (Anthropic: reads ~0.1x, writes ~1.25x). Unknown/unpriced models cost 0 (we
- * still record the tokens). Pricing is global/platform config, so it uses the
- * shared Cache, not the tenant cache.
+ * providers). Cache reads bill at the model's `cached_input_price_per_mtok`
+ * when the catalog declares one — providers set their own ratio (xAI bills
+ * Grok's cached input at 0.15x, reconciled against a live invoice) — falling
+ * back to Anthropic's 0.1x of the input price when NULL. Cache writes bill at
+ * 1.25x input (an Anthropic-only concept; other providers report 0 writes).
+ * Unknown/unpriced models cost 0 (we still record the tokens). Pricing is
+ * global/platform config, so it uses the shared Cache, not the tenant cache.
  */
 class AiPricing
 {
@@ -47,14 +50,21 @@ class AiPricing
             $fullRateInput = max(0, $fullRateInput - $usage->cacheReadInputTokens);
         }
 
+        // The model's declared cached-input price wins; the 0.1x-of-input
+        // multiplier is the fallback for models whose ratio isn't in the
+        // catalog (exact for Anthropic, approximate elsewhere).
+        $cachedReadPerToken = ($price['cached_input'] ?? null) !== null
+            ? $price['cached_input'] / 1_000_000
+            : $inPerToken * self::CACHE_READ_MULTIPLIER;
+
         return ($fullRateInput * $inPerToken)
             + ($usage->completionTokens * $outPerToken)
             + ($usage->cacheWriteInputTokens * $inPerToken * self::CACHE_WRITE_MULTIPLIER)
-            + ($usage->cacheReadInputTokens * $inPerToken * self::CACHE_READ_MULTIPLIER);
+            + ($usage->cacheReadInputTokens * $cachedReadPerToken);
     }
 
     /**
-     * @return array{input: float, output: float, driver: string}|null
+     * @return array{input: float, output: float, cached_input: ?float, driver: string}|null
      */
     public function pricesFor(string $model): ?array
     {
@@ -98,18 +108,19 @@ class AiPricing
     }
 
     /**
-     * @return array<string, array{input: float, output: float}>
+     * @return array<string, array{input: float, output: float, cached_input: ?float, driver: string}>
      */
     private function priceMap(): array
     {
         return Cache::remember('ai_pricing_map', self::PRICE_CACHE_TTL, function (): array {
             return AiCatalogModel::query()
                 ->whereNotNull('input_price_per_mtok')
-                ->get(['model_id', 'driver', 'input_price_per_mtok', 'output_price_per_mtok'])
+                ->get(['model_id', 'driver', 'input_price_per_mtok', 'cached_input_price_per_mtok', 'output_price_per_mtok'])
                 ->keyBy('model_id')
                 ->map(fn (AiCatalogModel $m) => [
                     'input' => (float) $m->input_price_per_mtok,
                     'output' => (float) ($m->output_price_per_mtok ?? 0),
+                    'cached_input' => $m->cached_input_price_per_mtok !== null ? (float) $m->cached_input_price_per_mtok : null,
                     'driver' => (string) $m->driver,
                 ])
                 ->all();

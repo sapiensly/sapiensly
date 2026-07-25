@@ -91,6 +91,36 @@ it('does not double-bill cached tokens on OpenAI-compatible providers', function
     expect(round($anthropic, 4))->toBe(3.0 + 1.5 + 0.27); // 3 in + 1.5 out + 0.27 cache
 });
 
+it('bills cache reads at the model-declared cached-input price when the catalog has one', function () {
+    // Providers set their own cached-input ratio: xAI bills Grok's cached
+    // input at $0.30/MTok (0.15x), not Anthropic's 0.1x — reconciled against
+    // a live OpenRouter invoice ($0.481 real vs $0.428 recorded, ~12% under).
+    AiCatalogModel::create([
+        'driver' => 'openrouter',
+        'model_id' => '~test/grokish-model',
+        'label' => 'Grokish',
+        'capability' => 'chat',
+        'input_price_per_mtok' => 2.0,
+        'cached_input_price_per_mtok' => 0.30,
+        'output_price_per_mtok' => 6.0,
+        'is_enabled' => true,
+        'sort_order' => 0,
+    ]);
+    Cache::forget('ai_pricing_map');
+
+    $cost = app(AiPricing::class)->costFor('~test/grokish-model', new Usage(
+        promptTokens: 1_000_000,          // includes the 900k cached below
+        completionTokens: 100_000,
+        cacheReadInputTokens: 900_000,
+    ));
+
+    // 100k full-rate (0.2) + 100k out (0.6) + 900k cached at $0.30/M (0.27)
+    expect(round($cost, 4))->toBe(1.07);
+
+    // A model WITHOUT a declared cached price keeps the 0.1x-of-input fallback
+    // (covered by the OpenAI-compat test above: same shape costs 0.98).
+});
+
 it('records a system-source event when the org has no own provider for the driver', function () {
     $user = User::factory()->create();
 
