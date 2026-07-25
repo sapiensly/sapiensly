@@ -47,20 +47,37 @@ const inputType = (f: LeadField): string =>
 // observed live: below the footer, visually orphaned. On mount we move the
 // form's element into the first free slot in the same app surface; without a
 // slot, block order keeps working as before.
+//
+// The move must RETRY: every block is a defineAsyncComponent, so the form's
+// chunk can mount before the html block carrying the slot exists (observed
+// live — the race is network-order-dependent). A MutationObserver watches the
+// surface until the slot shows up, then disconnects (5s safety cutoff).
 const rootEl = ref<HTMLElement | null>(null);
 onMounted(() => {
     const el = rootEl.value;
     if (!el) return;
     const surface = el.closest('.sp-app-surface');
-    const slots = surface?.querySelectorAll(
-        '[data-sp-slot="lead_form"], [data-sp-slot="lead-form"]',
-    );
-    for (const slot of slots ?? []) {
-        if (slot.childElementCount === 0) {
-            slot.appendChild(el);
-            break;
+    if (!surface) return;
+
+    const tryMove = (): boolean => {
+        const slots = surface.querySelectorAll(
+            '[data-sp-slot="lead_form"], [data-sp-slot="lead-form"]',
+        );
+        for (const slot of slots) {
+            if (slot.childElementCount === 0) {
+                slot.appendChild(el);
+                return true;
+            }
         }
-    }
+        return false;
+    };
+
+    if (tryMove()) return;
+    const observer = new MutationObserver(() => {
+        if (tryMove()) observer.disconnect();
+    });
+    observer.observe(surface, { childList: true, subtree: true });
+    setTimeout(() => observer.disconnect(), 5000);
 });
 
 // Cloudflare Turnstile: load + render only on the public page and only when a
