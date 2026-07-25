@@ -113,12 +113,14 @@ DESC;
             // `landing_director` default (+ its backup as the retry) when one
             // is configured, inheriting the landing_builder → builder chain
             // otherwise. See LandingDesignCritic::directorCandidates().
-            $result = $this->critic->critique(
-                $intent, $html, $css, $this->user,
-                null,
-                $round, $screenshot,
-                screenshotIsCurrentDraft: $pixelSource === 'draft',
-            );
+            $result = $this->critic
+                ->forSubject($this->appModel->id, $this->conversationId)
+                ->critique(
+                    $intent, $html, $css, $this->user,
+                    null,
+                    $round, $screenshot,
+                    screenshotIsCurrentDraft: $pixelSource === 'draft',
+                );
         } finally {
             if ($pixelSource === 'draft') {
                 $draftShots?->cleanup($screenshot);

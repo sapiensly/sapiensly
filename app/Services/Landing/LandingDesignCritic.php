@@ -5,6 +5,7 @@ namespace App\Services\Landing;
 use App\Ai\ExpressGateAgent;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
+use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Contracts\Support\Arrayable;
@@ -70,6 +71,26 @@ class LandingDesignCritic
      * degraded-ship policy in {@see self::critique()}.
      */
     protected string $directorStatus = 'skipped';
+
+    /** The app/conversation the director passes bill against (see forSubject). */
+    protected ?string $subjectAppId = null;
+
+    protected ?string $subjectConversationId = null;
+
+    /**
+     * Tag the director passes with the build they belong to, so each pass lands
+     * in the usage ledger against the app (and conversation) like the builder's
+     * own turns do — without it the director's spend is invisible to
+     * get_build_cost (observed: a 3-pass hybrid build billed only the
+     * constructor).
+     */
+    public function forSubject(?string $appId, ?string $conversationId = null): static
+    {
+        $this->subjectAppId = $appId;
+        $this->subjectConversationId = $conversationId;
+
+        return $this;
+    }
 
     /**
      * Judge a landing's authored design. `$round` is the 1-based iteration of the
@@ -390,6 +411,20 @@ class LandingDesignCritic
                 model: $model,
                 timeout: self::TIMEOUT_SECONDS,
             );
+
+            // Every pass bills — including ones whose verdict fails to decode —
+            // so it lands in the ledger either way. Best-effort, like every
+            // other usage-recording call site.
+            try {
+                app(AiUsageRecorder::class)->record(
+                    'landing_director', $model, $user, $user->organization_id,
+                    $response->usage ?? null,
+                    appId: $this->subjectAppId, conversationId: $this->subjectConversationId,
+                );
+            } catch (\Throwable) {
+                // Usage accounting is best-effort.
+            }
+
             $decoded = $response instanceof Arrayable ? $response->toArray() : null;
             if (! is_array($decoded) || $decoded === []) {
                 $decoded = $this->decodeLenient($response->text ?? null);

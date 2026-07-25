@@ -47,7 +47,7 @@ class CritiqueLandingDesignTool extends SapiensTool
         // Same bar, same eyes, same MODEL as the builder gate: the critic
         // resolves the director chain itself (`landing_director` default + its
         // backup, inheriting landing_builder → builder when unset).
-        $result = app(LandingDesignCritic::class)->critique(
+        $result = app(LandingDesignCritic::class)->forSubject($app->id)->critique(
             trim($validated['intent']),
             $html,
             $css,

@@ -263,6 +263,7 @@ class AiUsageReport
         return match ($module) {
             'chat' => 'Chat',
             'builder', 'runtime_agent', 'workflow' => 'Apps',
+            'landing_director' => 'Landing Director',
             'agent' => 'Agents',
             'debate' => 'Debate',
             'embeddings', 'document_ocr' => 'Knowledge',

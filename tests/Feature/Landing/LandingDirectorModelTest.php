@@ -1,6 +1,9 @@
 <?php
 
+use App\Ai\ExpressGateAgent;
 use App\Models\AiCatalogModel;
+use App\Models\AiUsageEvent;
+use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\Landing\LandingDesignCritic;
 
@@ -54,6 +57,29 @@ it('puts an explicit override first', function () {
 
     expect(app(LandingDesignCritic::class)->directorCandidates('explicit-model'))
         ->toBe(['explicit-model', 'director-model']);
+});
+
+it('records each director pass in the usage ledger, tagged to the app', function () {
+    // Without this, the director's spend is invisible: a live 3-pass hybrid
+    // build billed only the constructor and get_build_cost reported ~40% of
+    // the true cost.
+    $user = User::factory()->create();
+    app(AiDefaults::class)->setCatalogId('landing_director', 'primary', seedDirectorCatalogModel('director-model')->id);
+
+    ExpressGateAgent::fake([
+        ['ship' => true, 'score' => 92, 'must_fix' => [], 'direction' => [], 'strengths' => ['bold hero']],
+    ]);
+
+    $result = app(LandingDesignCritic::class)
+        ->forSubject('app_01subject00000000000000', 'cnv_01subject00000000000000')
+        ->critique('midnight cinema list', '<section class="x">hi</section>', '.x{}', $user);
+
+    expect($result['director'])->toBe('ok');
+
+    $event = AiUsageEvent::query()->where('module', 'landing_director')->firstOrFail();
+    expect($event->model)->toBe('director-model')
+        ->and($event->app_id)->toBe('app_01subject00000000000000')
+        ->and($event->conversation_id)->toBe('cnv_01subject00000000000000');
 });
 
 it('exposes landing_director as a configurable chat module', function () {
