@@ -5,6 +5,7 @@ namespace App\Ai\Tools\Builder;
 use App\Models\App;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
+use App\Support\Landing\LandingIntent;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool;
@@ -69,6 +70,8 @@ class ScaffoldAppTool implements Tool
         private AppManifestService $manifestService,
         private ProposeChangeTool $proposeTool,
         private AppScaffolder $scaffolder,
+        /** The turn's user request (first + current message), for the landing-intent guard. */
+        private ?string $intentText = null,
     ) {}
 
     public function name(): string
@@ -81,7 +84,9 @@ class ScaffoldAppTool implements Tool
         return <<<'DESC'
 Generate a complete, valid app in ONE step — THE first move for any "create an
 app for X" / "build me an app that …" request, instead of hand-building objects,
-relations and pages op-by-op (which is slow and fragile). On an EMPTY app it
+relations and pages op-by-op (which is slow and fragile). NOT for landings or
+websites: a landing-intent request is REFUSED (rule 1d-land — compose it bespoke
+with html blocks + custom_css instead). On an EMPTY app it
 assembles the whole thing: objects with correct ids/slugs, the belongs-to
 RELATIONS from `links`, derived fields (a parent count + money total, and for an
 order→line→priced-product shape a unit-price lookup + line subtotal), a list
@@ -129,6 +134,9 @@ DESC;
             'include_pages' => $schema
                 ->boolean()
                 ->description('Whether to also generate a list page (heading + table) per object. Default true.'),
+            'confirm_not_landing' => $schema
+                ->boolean()
+                ->description('Set true ONLY if the request looked like a landing/website but the user genuinely wants a data APP (CRUD/forms/records). scaffold_app refuses landing-intent requests otherwise — landings are bespoke-designed (rule 1d-land), never scaffolded.'),
         ];
     }
 
@@ -137,6 +145,21 @@ DESC;
         $args = $request->all();
         $objectsSpec = $args['objects'] ?? [];
         $includePages = $args['include_pages'] ?? true;
+
+        // The deterministic half of rule 1d-land's "do NOT scaffold_app a
+        // landing": a landing/website request must be composed bespoke, and a
+        // scaffolded CRUD skeleton is the single most expensive wrong first
+        // move (observed live, twice). Overridable for false positives.
+        if (LandingIntent::matches($this->intentText) && ! (bool) ($args['confirm_not_landing'] ?? false)) {
+            return json_encode([
+                'ok' => false,
+                'errors' => [[
+                    'path' => '/',
+                    'code' => 'landing_intent',
+                    'message' => 'This request reads as a LANDING/WEBSITE — do NOT scaffold it. Landings are bespoke-designed (rule 1d-land): set settings.surface="landing", compose each section as an `html` block styled in settings.custom_css, add the leads object + `lead_form` + workflow, and finish through critique_landing_design. See framework_reference topic "landings". If the user truly wants a data APP (CRUD/records), re-call scaffold_app with confirm_not_landing: true.',
+                ]],
+            ], JSON_THROW_ON_ERROR);
+        }
 
         if (! is_array($objectsSpec) || $objectsSpec === []) {
             return $this->fail('`objects` must be a non-empty array of {name, fields?}.');

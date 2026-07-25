@@ -191,6 +191,44 @@ it('ScaffoldAppTool builds a valid object + list page from a high-level spec', f
     expect($this->validator->validate($draft)->valid)->toBeTrue();
 });
 
+it('ScaffoldAppTool refuses a landing-intent request unless explicitly confirmed', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new ScaffoldAppTool(
+        $this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class),
+        intentText: 'Quiero una landing para mi estudio de arquitectura',
+    );
+
+    $refused = json_decode($tool->handle(new ToolRequest([
+        'objects' => [['name' => 'Leads']],
+    ])), true);
+
+    expect($refused['ok'])->toBeFalse()
+        ->and($refused['errors'][0]['code'])->toBe('landing_intent')
+        ->and($refused['errors'][0]['message'])->toContain('1d-land');
+
+    // The escape hatch for false positives still scaffolds.
+    $confirmed = json_decode($tool->handle(new ToolRequest([
+        'objects' => [['name' => 'Leads']],
+        'confirm_not_landing' => true,
+    ])), true);
+
+    expect($confirmed['ok'])->toBeTrue();
+});
+
+it('ScaffoldAppTool scaffolds normally when the request is an app build', function () {
+    $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
+    $tool = new ScaffoldAppTool(
+        $this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class),
+        intentText: 'crea una app para gestionar pedidos con páginas de clientes',
+    );
+
+    $result = json_decode($tool->handle(new ToolRequest([
+        'objects' => [['name' => 'Pedidos']],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue();
+});
+
 it('ScaffoldAppTool gives an object with no fields a default field, and coerces unsupported types', function () {
     $propose = new ProposeChangeTool($this->testApp->fresh(), $this->manifestService, $this->validator);
     $tool = new ScaffoldAppTool($this->testApp->fresh(), $this->manifestService, $propose, app(AppScaffolder::class));
@@ -585,6 +623,11 @@ it('moduleFor routes a landing app to landing_builder ONLY when one is configure
         // An explicit per-turn override still wins over the landing default.
         ->and(app(AiDefaults::class)->model(BuilderAiService::moduleFor($landing), 'claude-haiku-4-5-20251001'))
         ->toBe('claude-haiku-4-5-20251001');
+
+    // Landing INTENT routes an untagged app from turn one — the fatal
+    // scaffold-vs-bespoke decision must not run on the weak model.
+    expect(BuilderAiService::moduleFor($regular, 'Quiero una landing para mi vivero'))->toBe('landing_builder')
+        ->and(BuilderAiService::moduleFor($regular, 'crea una app de inventario'))->toBe('builder');
 });
 
 it('a discarded plan card does not word the pause as awaiting a decision', function () {
