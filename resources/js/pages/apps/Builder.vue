@@ -295,6 +295,24 @@ const selectedModel = ref<string>(
     props.defaultModel ?? props.models?.[0]?.id ?? '',
 );
 
+// Whether the USER explicitly chose a model (gear picker / primary↔backup
+// toggle) this session. Only then does a turn send `model` — otherwise the
+// server resolves the module default per turn, which lets it switch to the
+// admin's landing_builder model the moment the app is tagged as a landing
+// (an always-sent picker value would pin the page-load default as an
+// explicit override and the switch could never engage).
+const userPickedModel = ref(false);
+watch(
+    () => props.defaultModel,
+    (m) => {
+        // Keep the picker DISPLAY in sync with the live default (it changes
+        // when the app is retagged) unless the user explicitly chose.
+        if (!userPickedModel.value && m) {
+            selectedModel.value = m;
+        }
+    },
+);
+
 // Human label of the currently-selected model, for the gear button's tooltip.
 const selectedModelLabel = computed(
     () =>
@@ -322,6 +340,7 @@ function toggleModel() {
     }
     // Flip to the "other" configured model — from anywhere (even a third model
     // picked via the gear) a tap lands on primary, then alternates.
+    userPickedModel.value = true;
     selectedModel.value = isOnBackupModel.value
         ? primaryModelId.value
         : backupModelId.value;
@@ -2326,7 +2345,8 @@ async function send() {
             form.append('conversation_id', conversationId.value);
             form.append('message', messageText);
             form.append('attachment', stagedFile);
-            if (selectedModel.value) form.append('model', selectedModel.value);
+            if (userPickedModel.value && selectedModel.value)
+                form.append('model', selectedModel.value);
             if (autonomous.value) form.append('autonomous', '1');
             response = await axios.post(
                 `/apps/${props.app.id}/builder/messages`,
@@ -2342,7 +2362,9 @@ async function send() {
                 {
                     conversation_id: conversationId.value,
                     message: messageText,
-                    model: selectedModel.value || undefined,
+                    model:
+                        (userPickedModel.value && selectedModel.value) ||
+                        undefined,
                     autonomous: autonomous.value || undefined,
                 },
                 // Headroom over the server-side app-naming call (AppNamer::TIMEOUT
@@ -2720,6 +2742,12 @@ function subscribe() {
                     'previewBlockData',
                     'manifest',
                     'conversation',
+                    // Module-aware model defaults: when this turn tagged the
+                    // app as a landing, the refreshed defaults carry the
+                    // admin's landing_builder model and the picker follows
+                    // (unless the user explicitly chose one).
+                    'defaultModel',
+                    'backupModel',
                 ],
                 onFinish: () => {
                     previewLoading.value = false;
@@ -4128,6 +4156,9 @@ function statusTone(status: Message['status']): string {
                                             </DropdownMenuLabel>
                                             <DropdownMenuRadioGroup
                                                 v-model="selectedModel"
+                                                @update:model-value="
+                                                    userPickedModel = true
+                                                "
                                             >
                                                 <DropdownMenuRadioItem
                                                     v-for="m in props.models"
