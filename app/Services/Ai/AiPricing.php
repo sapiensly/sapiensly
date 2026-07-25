@@ -33,14 +33,28 @@ class AiPricing
         $inPerToken = $price['input'] / 1_000_000;
         $outPerToken = $price['output'] / 1_000_000;
 
-        return ($usage->promptTokens * $inPerToken)
+        // Cache-token semantics differ by provider family and the formula MUST
+        // match the gateway's mapping or cached tokens get billed twice:
+        //  - Anthropic reports input_tokens EXCLUSIVE of cache reads/writes
+        //    (three disjoint buckets) → every bucket is added.
+        //  - The OpenAI-compatible APIs (OpenRouter, OpenAI, xAI, Groq, …)
+        //    report prompt_tokens INCLUSIVE of cached_tokens (a subset) → the
+        //    cached share must come OUT of the full-rate input before its
+        //    discounted rate is added, or a 90%-cached build overbills ~5x
+        //    (observed live: $1.47 recorded vs $0.30 on the provider invoice).
+        $fullRateInput = $usage->promptTokens;
+        if (($this->priceMap()[$model]['driver'] ?? null) !== 'anthropic') {
+            $fullRateInput = max(0, $fullRateInput - $usage->cacheReadInputTokens);
+        }
+
+        return ($fullRateInput * $inPerToken)
             + ($usage->completionTokens * $outPerToken)
             + ($usage->cacheWriteInputTokens * $inPerToken * self::CACHE_WRITE_MULTIPLIER)
             + ($usage->cacheReadInputTokens * $inPerToken * self::CACHE_READ_MULTIPLIER);
     }
 
     /**
-     * @return array{input: float, output: float}|null
+     * @return array{input: float, output: float, driver: string}|null
      */
     public function pricesFor(string $model): ?array
     {
@@ -91,11 +105,12 @@ class AiPricing
         return Cache::remember('ai_pricing_map', self::PRICE_CACHE_TTL, function (): array {
             return AiCatalogModel::query()
                 ->whereNotNull('input_price_per_mtok')
-                ->get(['model_id', 'input_price_per_mtok', 'output_price_per_mtok'])
+                ->get(['model_id', 'driver', 'input_price_per_mtok', 'output_price_per_mtok'])
                 ->keyBy('model_id')
                 ->map(fn (AiCatalogModel $m) => [
                     'input' => (float) $m->input_price_per_mtok,
                     'output' => (float) ($m->output_price_per_mtok ?? 0),
+                    'driver' => (string) $m->driver,
                 ])
                 ->all();
         });

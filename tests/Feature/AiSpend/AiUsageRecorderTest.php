@@ -8,6 +8,7 @@ use App\Models\SystemAiUsageEvent;
 use App\Models\User;
 use App\Services\Ai\AiPricing;
 use App\Services\Ai\AiUsageRecorder;
+use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Responses\Data\Usage;
 
 /**
@@ -53,6 +54,41 @@ it('prices usage from the catalog (input + output + cache)', function () {
 
 it('costs zero for an unpriced model but still records tokens', function () {
     expect(app(AiPricing::class)->costFor('unknown-model', new Usage(promptTokens: 999)))->toBe(0.0);
+});
+
+it('does not double-bill cached tokens on OpenAI-compatible providers', function () {
+    // OpenAI-compat semantics: prompt_tokens INCLUDES cached_tokens (a
+    // subset) — unlike Anthropic, whose buckets are disjoint. Billing the
+    // full prompt AND the cache line item overcharged ~5x on cache-heavy
+    // builder turns (observed: $1.47 recorded vs $0.30 provider invoice).
+    AiCatalogModel::create([
+        'driver' => 'openrouter',
+        'model_id' => '~test/orouter-model',
+        'label' => 'OR Test',
+        'capability' => 'chat',
+        'input_price_per_mtok' => 2.0,
+        'output_price_per_mtok' => 6.0,
+        'is_enabled' => true,
+        'sort_order' => 0,
+    ]);
+    Cache::forget('ai_pricing_map');
+
+    $cost = app(AiPricing::class)->costFor('~test/orouter-model', new Usage(
+        promptTokens: 1_000_000,          // includes the 900k cached below
+        completionTokens: 100_000,
+        cacheReadInputTokens: 900_000,
+    ));
+
+    // 100k full-rate input (0.2) + 100k out (0.6) + 900k cached at 0.1x (0.18)
+    expect(round($cost, 4))->toBe(0.98);
+
+    // Anthropic keeps disjoint-bucket math: 1M in + 1M cached ≠ subset.
+    $anthropic = app(AiPricing::class)->costFor('claude-test', new Usage(
+        promptTokens: 1_000_000,
+        completionTokens: 100_000,
+        cacheReadInputTokens: 900_000,
+    ));
+    expect(round($anthropic, 4))->toBe(3.0 + 1.5 + 0.27); // 3 in + 1.5 out + 0.27 cache
 });
 
 it('records a system-source event when the org has no own provider for the driver', function () {
