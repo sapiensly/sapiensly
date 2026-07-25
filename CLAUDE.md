@@ -88,7 +88,7 @@ Landings are apps with `settings.surface="landing"` (auto-tagged `kind=landing`)
 
 **Model routing**: the optional `landing_builder` module in `AiDefaults` (admin AI > Defaults > "Landing Builder") switches the builder to a dedicated model for landing work — from turn ONE via `BuilderAiService::moduleFor()` (app tagged landing, or the request matches `LandingIntent`). The UI picker only sends an explicit `model` override when the user actually picked one; the director critiques on the same landing model.
 
-**Typography**: five self-hosted OFL families (Fraunces, Instrument Serif, Bricolage Grotesque, Archivo variable-width, IBM Plex Mono) declared in `resources/css/landing-fonts.css`, referenced by family name in custom_css — no external font requests on public pages.
+**Typography**: seven self-hosted OFL families (Fraunces, Instrument Serif, Bricolage Grotesque, Archivo variable-width, IBM Plex Mono, plus the poster voices Alfa Slab One and Anton) declared in `resources/css/landing-fonts.css`, referenced by family name in custom_css — no external font requests on public pages. The playbook matches face to intent (poster brief → poster face).
 
 **Working notes**: long strings (custom_css, big html) are written/revised in chunks with the `{op:"append", path, value}` extension in `ManifestPatch` — never resend a huge `replace`. The landing surface wrapper clips horizontal overflow (`overflow-x-clip` in `runtime/Page.vue`). Tests live in `tests/Feature/Landing/`, `tests/Unit/Services/Landing/`, `tests/Unit/Support/Landing/`; the authoring playbook the builder reads is the `landings` topic in `FrameworkReferenceTool` + rule 1d-land in `BuilderAiService` — keep those in sync with any behavior change here.
 
