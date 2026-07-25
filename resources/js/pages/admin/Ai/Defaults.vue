@@ -103,6 +103,7 @@ const moduleMeta: Record<string, { icon: Component; tint?: string }> = {
     summary_large: { icon: ScrollText, tint: 'var(--sp-spectrum-indigo)' },
     builder: { icon: Cpu, tint: 'var(--sp-accent-cyan)' },
     landing_builder: { icon: Rocket, tint: 'var(--sp-spectrum-magenta)' },
+    landing_director: { icon: Eye, tint: 'var(--sp-spectrum-magenta)' },
     flows: { icon: Zap, tint: 'var(--sp-spectrum-indigo)' },
     chatbots: { icon: Bot, tint: 'var(--sp-spectrum-magenta)' },
     embeddings: { icon: Database, tint: 'var(--sp-spectrum-cyan)' },

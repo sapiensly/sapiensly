@@ -51,6 +51,13 @@ class LandingDesignCritic
 
     private const MAX_ROUNDS = 3;
 
+    /**
+     * How many director models one pass may try (the configured director, then
+     * its backup). Each attempt can burn up to TIMEOUT_SECONDS, so the list is
+     * deliberately short — the gate loop provides further retries.
+     */
+    private const MAX_DIRECTOR_ATTEMPTS = 2;
+
     public function __construct(
         private readonly AiDefaults $aiDefaults,
         private readonly AiProviderService $providers,
@@ -270,9 +277,10 @@ class LandingDesignCritic
     }
 
     /**
-     * The design-director model pass. Returns the decoded critique, or null when
-     * the model can't run (missing provider, timeout, unparseable) so the caller
-     * falls back to the deterministic floor.
+     * The design-director model pass. Tries the director candidates in order
+     * (the configured director, then its backup) and returns the first decoded
+     * critique — or null when every attempt fails (timeout, error, unparseable)
+     * so the caller falls back to the deterministic floor.
      *
      * @return array<string, mixed>|null
      */
@@ -292,13 +300,69 @@ class LandingDesignCritic
         }
 
         try {
-            $model = $this->aiDefaults->model('builder', $modelOverride);
             $this->providers->applyRuntimeConfig($user);
-            $provider = $this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic;
+            $candidates = $this->directorCandidates($modelOverride);
         } catch (\Throwable) {
             return null;
         }
 
+        foreach ($candidates as $model) {
+            $decoded = $this->directorAttempt($intent, $html, $css, $user, $model, $screenshot, $screenshotIsCurrentDraft);
+
+            if ($decoded !== null) {
+                $this->directorStatus = 'ok';
+
+                return $decoded;
+            }
+
+            $this->directorStatus = 'failed';
+        }
+
+        return null;
+    }
+
+    /**
+     * The ordered models the director pass may run on, capped at the primary +
+     * one backup (each attempt can burn up to TIMEOUT_SECONDS, and the gate
+     * loop itself retries). Resolution: an explicit override, then the
+     * dedicated `landing_director` module (primary, fallback), then — so a
+     * platform without a dedicated director behaves exactly as before — the
+     * `landing_builder` chain and finally the general builder chain.
+     *
+     * @return list<string>
+     */
+    public function directorCandidates(?string $explicit = null): array
+    {
+        $explicit = $explicit !== null && trim($explicit) !== '' ? trim($explicit) : null;
+
+        $chain = array_values(array_unique(array_filter([
+            $explicit,
+            $this->aiDefaults->primary('landing_director'),
+            $this->aiDefaults->fallback('landing_director'),
+            $this->aiDefaults->primary('landing_builder'),
+            $this->aiDefaults->fallback('landing_builder'),
+            ...$this->aiDefaults->candidates('builder'),
+        ])));
+
+        return array_slice($chain, 0, self::MAX_DIRECTOR_ATTEMPTS);
+    }
+
+    /**
+     * One director pass on one model. Returns the decoded critique, or null on
+     * any failure (missing provider, timeout, unparseable) so the caller can
+     * advance to the backup model.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function directorAttempt(
+        string $intent,
+        string $html,
+        string $css,
+        User $user,
+        string $model,
+        ?StoredImage $screenshot = null,
+        bool $screenshotIsCurrentDraft = false,
+    ): ?array {
         $schemaFn = fn (JsonSchema $schema): array => [
             'ship' => $schema->boolean()
                 ->description('true ONLY if this landing is genuinely vanguard — distinctive, specific to the intent, and crafted, the kind of page a design-led company ships. "Competent" is false.')
@@ -314,9 +378,11 @@ class LandingDesignCritic
                 ->description('What already works and must be kept.'),
         ];
 
-        $agent = (new ExpressGateAgent(self::DIRECTOR_INSTRUCTIONS, $schemaFn))->forModel($model);
-
         try {
+            $provider = $this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic;
+
+            $agent = (new ExpressGateAgent(self::DIRECTOR_INSTRUCTIONS, $schemaFn))->forModel($model);
+
             $response = $agent->prompt(
                 $this->buildPrompt($intent, $html, $css, $screenshot !== null, $screenshotIsCurrentDraft),
                 attachments: $screenshot !== null ? [$screenshot] : [],
@@ -329,18 +395,9 @@ class LandingDesignCritic
                 $decoded = $this->decodeLenient($response->text ?? null);
             }
 
-            if (is_array($decoded) && $decoded !== []) {
-                $this->directorStatus = 'ok';
-
-                return $decoded;
-            }
-
-            $this->directorStatus = 'failed';
-
-            return null;
+            return is_array($decoded) && $decoded !== [] ? $decoded : null;
         } catch (\Throwable $e) {
-            $this->directorStatus = 'failed';
-            Log::info('LandingDesignCritic: director pass failed', ['error' => $e->getMessage()]);
+            Log::info('LandingDesignCritic: director pass failed', ['model' => $model, 'error' => $e->getMessage()]);
 
             return null;
         }

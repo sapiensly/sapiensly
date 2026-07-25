@@ -169,6 +169,36 @@ it('ships floor-only at the round cap even when the director keeps failing', fun
         ->and($r['director'])->toBe('failed');
 });
 
+it('retries the director on its backup model after a failed primary attempt', function () {
+    // The director chain is primary + one backup (see directorCandidates): a
+    // timed-out primary must not degrade the gate while a backup exists.
+    $critic = new class(Mockery::mock(AiDefaults::class), Mockery::mock(AiProviderService::class)->shouldIgnoreMissing()) extends LandingDesignCritic
+    {
+        public array $attempted = [];
+
+        public function directorCandidates(?string $explicit = null): array
+        {
+            return ['director-primary', 'director-backup'];
+        }
+
+        protected function directorAttempt(string $intent, string $html, string $css, User $user, string $model, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false): ?array
+        {
+            $this->attempted[] = $model;
+
+            return $model === 'director-backup'
+                ? ['ship' => true, 'score' => 90, 'must_fix' => [], 'direction' => [], 'strengths' => []]
+                : null;
+        }
+    };
+
+    $r = $critic->critique('x', RICH_HTML, RICH_CSS, new User);
+
+    expect($critic->attempted)->toBe(['director-primary', 'director-backup'])
+        ->and($r['director'])->toBe('ok')
+        ->and($r['judged_by'])->toBe('design-director')
+        ->and($r['ship'])->toBeTrue();
+});
+
 it('extractSurfaces marks a lead_form block so the judges know a form renders', function () {
     $surfaces = LandingDesignCritic::extractSurfaces([
         'pages' => [[

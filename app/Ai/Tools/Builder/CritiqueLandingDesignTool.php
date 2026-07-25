@@ -4,7 +4,6 @@ namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
 use App\Models\User;
-use App\Services\Ai\AiDefaults;
 use App\Services\Landing\DraftPreviewShot;
 use App\Services\Landing\LandingDesignCritic;
 use App\Services\Landing\LatestPreviewShot;
@@ -110,12 +109,13 @@ DESC;
         }
 
         try {
-            // The director judges on the landing_builder default when one is
-            // configured (design judgment is where a stronger model pays);
-            // null keeps the critic's normal builder-module resolution.
+            // The critic resolves the director model itself: the dedicated
+            // `landing_director` default (+ its backup as the retry) when one
+            // is configured, inheriting the landing_builder → builder chain
+            // otherwise. See LandingDesignCritic::directorCandidates().
             $result = $this->critic->critique(
                 $intent, $html, $css, $this->user,
-                app(AiDefaults::class)->primary('landing_builder'),
+                null,
                 $round, $screenshot,
                 screenshotIsCurrentDraft: $pixelSource === 'draft',
             );

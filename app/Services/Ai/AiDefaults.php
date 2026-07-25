@@ -43,7 +43,11 @@ class AiDefaults
         // the builder switches to it as soon as an app is tagged as a landing
         // (landings live or die on design, so they often warrant a stronger
         // model than the cheap-and-fast general builder default).
-        'chat', 'summary_short', 'summary_large', 'builder', 'landing_builder', 'flows', 'chatbots',
+        // `landing_director` splits the design gate's JUDGE from the builder:
+        // when set, critique_landing_design judges on it (its fallback is the
+        // retry when the primary pass fails); when unset the director inherits
+        // the landing_builder chain — see LandingDesignCritic::directorCandidates.
+        'chat', 'summary_short', 'summary_large', 'builder', 'landing_builder', 'landing_director', 'flows', 'chatbots',
         // Specialized capability handlers.
         'embeddings', 'coding', 'ocr_pdf', 'image_vision', 'image_generation',
         'audio_recognition', 'speech_generation', 'reranking',
@@ -72,6 +76,7 @@ class AiDefaults
         'summary_large' => 'chat',
         'builder' => 'chat',
         'landing_builder' => 'chat',
+        'landing_director' => 'chat',
         'flows' => 'chat',
         'chatbots' => 'chat',
         'embeddings' => 'embeddings',
