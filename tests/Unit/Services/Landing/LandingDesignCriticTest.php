@@ -60,6 +60,20 @@ it('reports generic tells: centered-everything and a timid palette', function ()
         ->toContain('palette');
 });
 
+it('reports forced <br> breaks in display headlines as a spaghetti tell', function () {
+    // Observed live: a hero h1 with hard breaks rendered one word per line
+    // ("como espagueti a la izquierda") — the fix is a measured container +
+    // natural wrapping, so the floor at least names it.
+    $spaghetti = '<section><h1>La película<br>se anuncia<br>cuando se<br>apagan</h1></section>';
+    $r = designCritic()->deterministicTells($spaghetti, RICH_CSS);
+
+    expect(implode(' | ', $r['tells']))->toContain('forced <br>');
+
+    // A headline that wraps naturally (or a single intentional break) is fine.
+    $clean = designCritic()->deterministicTells('<section><h1>La película se anuncia<br>cuando se apagan las luces.</h1></section>', RICH_CSS);
+    expect(implode(' | ', $clean['tells']))->not->toContain('forced <br>');
+});
+
 /** A critic whose director pass is stubbed to a fixed verdict, to test the merge. */
 function criticWithDirector(array $verdict): LandingDesignCritic
 {

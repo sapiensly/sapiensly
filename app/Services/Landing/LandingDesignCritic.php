@@ -294,6 +294,20 @@ class LandingDesignCritic
             $tells[] = 'No label/eyebrow system — small uppercase, letter-spaced (ideally mono) labels give a page editorial structure and hierarchy.';
         }
 
+        // Forced line breaks inside display headings produce the one-word-per-
+        // line "spaghetti" stack at other viewports (reported live: "el texto
+        // del hero está como espagueti"). A deliberate poster lockup is a
+        // narrow measured container + tight line-height, not hard breaks.
+        if (preg_match_all('/<h[12]\b[^>]*>(.*?)<\/h[12]>/is', $html, $headings) > 0) {
+            $forcedBreaks = 0;
+            foreach ($headings[1] as $inner) {
+                $forcedBreaks += (int) preg_match_all('/<br\b/i', $inner);
+            }
+            if ($forcedBreaks >= 2) {
+                $tells[] = "Display headlines carry {$forcedBreaks} forced <br> breaks — size the type with clamp() against a measured container and let it wrap (text-wrap: balance); hard breaks read as a one-word-per-line stack at other widths.";
+            }
+        }
+
         return ['must_fix' => $must, 'tells' => $tells];
     }
 
@@ -508,12 +522,13 @@ The bar — push toward all of these:
 - Typography as identity: a real, decisive type scale; confident display sizing (big, tight tracking, weight/width contrast); a characterful or mono accent for labels. Never one flat size. The platform ships a curated font catalog the page can use directly in custom_css — 'Fraunces', 'Instrument Serif', 'Bricolage Grotesque', 'Archivo' (variable width), 'IBM Plex Mono', 'Alfa Slab One' (poster slab), 'Anton' (condensed poster) — so a landing set entirely in system faces is leaving identity on the table; push toward a catalog display face when the type reads default, and toward the POSTER faces when the intent is loud (an elegant serif on a cartel brief is a miscast, not restraint).
 - Commit to the intent's visual GRAMMAR, not just its palette. A loud/poster/street intent has its own vocabulary — hard borders, offset solid shadows, rotated stamps/badges, marquee ribbons, halftone/paper texture, outline display type — and vanguard means COMMITTING to it end to end (every card, button and detail speaking it), exactly as an editorial intent demands its grid and whitespace. Softening a loud brief into tasteful editorial elegance is a FAILURE of nerve; name the grammar the intent calls for and demand it consistently.
 - Spatial composition with tension: asymmetry, intentional whitespace as a material, layering/overlap, a clear focal hierarchy. Not everything centered and evenly stacked.
+- Measure and balance: body copy at a readable 55-75ch; display headlines wrap naturally at a poster measure (never chopped into one-word-per-line stacks by forced breaks); the page content sits in a centered shell, not hugging one edge. Asymmetry must be COMPOSED — a two-column moment where one side holds nothing is dead space, not tension; every column earns its width with a device (a spec card, a stamp, a big numeral, an image).
 - Committed colour: a deliberate palette used boldly — a chosen neutral with a hue bias (not a default grey), one confident accent, optionally a meaningful second. Not a timid lone accent on pure white.
 - Motion with intent: a load or scroll moment, an ambient element, hover micro-interactions — serving the subject, not scattered. A static top-tier landing does not exist.
 - One bold idea: the hero opens with the most characteristic thing about the subject — a live demo, a striking device, an interactive moment. A thesis, not a headline over a stock photo.
 - Craft in the details: grain/glow/gradient/texture where it earns its place; tabular numerals for figures; balanced headings; visible focus states.
 
-REJECT these generic tells on sight: everything centered; rounded corners on everything; a lone accent on pure white; the purple→blue gradient hero; Inter/Space Grotesk as the "safe" face; emoji as section markers; a uniform 3-column feature grid as the whole page; warm-cream + serif + terracotta; broadsheet hairline rules as decoration.
+REJECT these generic tells on sight: everything centered; rounded corners on everything; a lone accent on pure white; the purple→blue gradient hero; Inter/Space Grotesk as the "safe" face; emoji as section markers; a uniform 3-column feature grid as the whole page; warm-cream + serif + terracotta; broadsheet hairline rules as decoration; text hanging in a narrow left column against a dead right half; display headlines forced into one-word-per-line "spaghetti" by hard line breaks.
 
 Return a verdict. ship=true ONLY if the page is genuinely distinctive, specific to the intent, and crafted — a page a design-led company would be proud to ship. Otherwise ship=false with `must_fix`: specific, actionable changes that name the section, the CSS property and the direction (e.g. "the hero is centered and generic — make it asymmetric, with the product's live demo as the right-hand focal element and a clamp() display headline at ~4rem, tracking -.03em"). Add `direction` (art-direction pushes grounded in the intent) and `strengths` (what to keep). Never vague praise; every note must be actionable.
 TXT;
