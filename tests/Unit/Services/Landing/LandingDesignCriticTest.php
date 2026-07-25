@@ -25,7 +25,8 @@ it('passes the deterministic floor for a bespoke landing (and ships when the dir
 
     expect($r['must_fix'])->toBe([])
         ->and($r['ship'])->toBeTrue()
-        ->and($r['judged_by'])->toBe('deterministic');
+        ->and($r['judged_by'])->toBe('deterministic')
+        ->and($r['director'])->toBe('skipped'); // no user → the director can never run; the floor decides
 });
 
 it('blocks a landing with no bespoke css, no display type and no motion', function () {
@@ -83,6 +84,7 @@ it('ships when the director approves and the deterministic floor is clean', func
     expect($r['ship'])->toBeTrue()
         ->and($r['score'])->toBe(93)
         ->and($r['judged_by'])->toBe('design-director')
+        ->and($r['director'])->toBe('ok')
         ->and($r['strengths'])->toContain('Bold, specific hero');
 });
 
@@ -131,6 +133,40 @@ it('does not converge before the threshold or the round cap', function () {
     expect($r['ship'])->toBeFalse()
         ->and($r['converged'])->toBeFalse()
         ->and(implode(' ', $r['must_fix']))->toContain('Add tension');
+});
+
+/** A critic whose director pass FAILS (timeout / error / unparseable), to test degradation. */
+function criticWithFailedDirector(): LandingDesignCritic
+{
+    return new class(Mockery::mock(AiDefaults::class), Mockery::mock(AiProviderService::class)) extends LandingDesignCritic
+    {
+        protected function directorCritique(string $intent, string $html, string $css, ?User $user, ?string $modelOverride, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false): ?array
+        {
+            $this->directorStatus = 'failed';
+
+            return null;
+        }
+    };
+}
+
+it('does not bless a clean floor when the director pass failed before the round cap', function () {
+    // Observed live (2026-07-25): the director timed out twice and the gate
+    // silently shipped floor-only. A failed pass is retryable — the caller must
+    // re-run the gate, not treat the missing verdict as an approval.
+    $r = criticWithFailedDirector()->critique('x', RICH_HTML, RICH_CSS, null);
+
+    expect($r['ship'])->toBeFalse()
+        ->and($r['director'])->toBe('failed')
+        ->and($r['must_fix'])->toBe([]) // nothing to fix — the verdict is just missing
+        ->and($r['judged_by'])->toBe('deterministic');
+});
+
+it('ships floor-only at the round cap even when the director keeps failing', function () {
+    // The gate never hard-blocks a build: after MAX_ROUNDS a clean floor ships.
+    $r = criticWithFailedDirector()->critique('x', RICH_HTML, RICH_CSS, null, null, 3);
+
+    expect($r['ship'])->toBeTrue()
+        ->and($r['director'])->toBe('failed');
 });
 
 it('extractSurfaces marks a lead_form block so the judges know a form renders', function () {

@@ -63,9 +63,11 @@ lives in custom_css + your html sections + data-sp-* motion) and call
 critique_landing_design again — passing `round` incremented each time — until
 ship:true. The director is demanding but CONVERGES: a strong page (score ≥ 85)
 ships, and by round 3 any remaining notes demote to non-blocking polish
-(reported as `direction`). Do NOT finish a landing that has not shipped. Weigh
-`direction` and `tells` even when they don't block — they are how the page goes
-from good to best-in-market.
+(reported as `direction`). If `director` comes back 'failed' the model pass
+errored/timed out — that is NOT a verdict; re-call with the SAME round to
+retry. Do NOT finish a landing that has not shipped. Weigh `direction` and
+`tells` even when they don't block — they are how the page goes from good to
+best-in-market.
 DESC;
     }
 
@@ -136,9 +138,32 @@ DESC;
             'direction' => $result['direction'],
             'strengths' => $result['strengths'],
             'judged_by' => $result['judged_by'],
-            'message' => $result['ship']
-                ? 'The design director approved this landing — it clears the vanguard bar. You may finish. The `direction` notes are optional polish, not required.'
-                : 'NOT vanguard yet. Fix every must_fix (and weigh the direction + tells), re-author with propose_change, then call critique_landing_design again with round='.($round + 1).'. Do not finish the landing until ship:true.',
+            // 'ok' = the director judged this round; 'failed' = the director
+            // pass errored/timed out (retryable); 'skipped' = no director model.
+            'director' => $result['director'],
+            'message' => $this->verdictMessage($result, $round),
         ], JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * The instruction the model acts on. A failed director pass gets its own
+     * branch: a clean floor with no director verdict is NOT an approval, and
+     * the retry must not burn a round (the design didn't change).
+     *
+     * @param  array{ship: bool, director: string, must_fix: list<string>}  $result
+     */
+    private function verdictMessage(array $result, int $round): string
+    {
+        if ($result['ship']) {
+            return $result['director'] === 'failed'
+                ? 'Shipped on the deterministic floor only: the design-director pass kept failing and the round cap was reached. The floor is clean, so you may finish — but note the page never received a full director verdict.'
+                : 'The design director approved this landing — it clears the vanguard bar. You may finish. The `direction` notes are optional polish, not required.';
+        }
+
+        if ($result['director'] === 'failed' && $result['must_fix'] === []) {
+            return 'The design-director pass FAILED to run (timeout or model error) — the deterministic floor passed, but the landing has NOT been judged. Do not finish. Call critique_landing_design again with the SAME round='.$round.' to retry the director.';
+        }
+
+        return 'NOT vanguard yet. Fix every must_fix (and weigh the direction + tells), re-author with propose_change, then call critique_landing_design again with round='.($round + 1).'. Do not finish the landing until ship:true.';
     }
 }

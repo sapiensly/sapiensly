@@ -30,7 +30,13 @@ use Laravel\Ai\Files\StoredImage;
  */
 class LandingDesignCritic
 {
-    private const TIMEOUT_SECONDS = 45;
+    /**
+     * The director call's HTTP timeout. Frontier director models (Fable/Opus
+     * tier) routinely deliberate 45-100s on a full-page critique; at the old
+     * 45s two of three live passes timed out and the gate silently shipped on
+     * the deterministic floor alone (observed 2026-07-25).
+     */
+    private const TIMEOUT_SECONDS = 120;
 
     /** Bound the prompt so a huge page can't blow the context/cost. */
     private const MAX_CHARS = 9000;
@@ -51,11 +57,19 @@ class LandingDesignCritic
     ) {}
 
     /**
+     * How the last director pass ended: 'ok' (verdict received), 'failed'
+     * (attempted but timed out / errored / unparseable — a retry may succeed),
+     * or 'skipped' (no user / no provider — retrying cannot help). Drives the
+     * degraded-ship policy in {@see self::critique()}.
+     */
+    protected string $directorStatus = 'skipped';
+
+    /**
      * Judge a landing's authored design. `$round` is the 1-based iteration of the
      * revise→re-critique loop; it drives the max-rounds half of the convergence
      * policy.
      *
-     * @return array{ship: bool, score: ?int, must_fix: list<string>, tells: list<string>, direction: list<string>, strengths: list<string>, judged_by: string, converged: bool, round: int}
+     * @return array{ship: bool, score: ?int, must_fix: list<string>, tells: list<string>, direction: list<string>, strengths: list<string>, judged_by: string, director: string, converged: bool, round: int}
      */
     public function critique(
         string $intent,
@@ -105,6 +119,16 @@ class LandingDesignCritic
         // convergence, or (director unavailable) the deterministic pass.
         $ship = $mustFix === [] && ($ai === null || $converged);
 
+        // A FAILED director pass (timeout / error) is not the same as an
+        // unavailable one: the verdict is retryable, so a clean floor must not
+        // count as the final blessing before the round cap. Ship stays true on
+        // 'skipped' (no user/provider — a retry cannot help) and at the cap
+        // (the gate never hard-blocks a build).
+        $director = $ai !== null ? 'ok' : $this->directorStatus;
+        if ($ship && $director === 'failed' && $round < self::MAX_ROUNDS) {
+            $ship = false;
+        }
+
         return [
             'ship' => $ship,
             'score' => $score,
@@ -113,6 +137,7 @@ class LandingDesignCritic
             'direction' => $direction,
             'strengths' => $strengths,
             'judged_by' => $judgedBy,
+            'director' => $director,
             'converged' => $converged,
             'round' => $round,
         ];
@@ -260,6 +285,8 @@ class LandingDesignCritic
         ?StoredImage $screenshot = null,
         bool $screenshotIsCurrentDraft = false,
     ): ?array {
+        $this->directorStatus = 'skipped';
+
         if ($user === null) {
             return null;
         }
@@ -302,8 +329,17 @@ class LandingDesignCritic
                 $decoded = $this->decodeLenient($response->text ?? null);
             }
 
-            return is_array($decoded) && $decoded !== [] ? $decoded : null;
+            if (is_array($decoded) && $decoded !== []) {
+                $this->directorStatus = 'ok';
+
+                return $decoded;
+            }
+
+            $this->directorStatus = 'failed';
+
+            return null;
         } catch (\Throwable $e) {
+            $this->directorStatus = 'failed';
             Log::info('LandingDesignCritic: director pass failed', ['error' => $e->getMessage()]);
 
             return null;

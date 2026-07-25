@@ -68,6 +68,9 @@ class CritiqueLandingDesignTool extends SapiensTool
             'direction' => $result['direction'],
             'strengths' => $result['strengths'],
             'judged_by' => $result['judged_by'],
+            // 'ok' = director verdict received; 'failed' = the director pass
+            // errored/timed out (re-call to retry); 'skipped' = no director.
+            'director' => $result['director'],
         ]);
     }
 
