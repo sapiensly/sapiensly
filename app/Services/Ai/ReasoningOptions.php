@@ -37,6 +37,12 @@ class ReasoningOptions
         // OpenAI o-series are reasoning-only models.
         'o1*', 'o3*', 'o4*',
         '*/o1*', '*/o3*', '*/o4*',
+        // Gemini thinking generations: 3.x and 2.5 Pro cannot disable
+        // reasoning (observed live: OpenRouter 400 "Reasoning is mandatory
+        // for this endpoint and cannot be disabled" on gemini-3.6-flash as
+        // the landing constructor).
+        '*gemini-3*',
+        '*gemini-2.5-pro*',
     ];
 
     /** Whether the model reasons unconditionally and rejects an explicit disable. */

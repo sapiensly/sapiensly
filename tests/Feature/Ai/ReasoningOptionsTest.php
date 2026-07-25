@@ -53,6 +53,12 @@ it('omits the reasoning-off block for models that mandate reasoning', function (
         ->and(ReasoningOptions::reasoningIsMandatory('anthropic/claude-fable-5:nitro'))->toBeTrue()
         ->and(ReasoningOptions::reasoningIsMandatory('openai/o3-mini'))->toBeTrue()
         ->and(ReasoningOptions::reasoningIsMandatory('o4-mini'))->toBeTrue()
+        // Gemini thinking generations reject the disable (observed live on
+        // gemini-3.6-flash: "Reasoning is mandatory for this endpoint").
+        ->and(ReasoningOptions::reasoningIsMandatory('google/gemini-3.6-flash'))->toBeTrue()
+        ->and(ReasoningOptions::reasoningIsMandatory('google/gemini-3.1-pro-preview'))->toBeTrue()
+        ->and(ReasoningOptions::reasoningIsMandatory('gemini-2.5-pro-preview-05-06'))->toBeTrue()
+        ->and(ReasoningOptions::reasoningIsMandatory('gemini-2.0-flash'))->toBeFalse()
         ->and(ReasoningOptions::reasoningIsMandatory('anthropic/claude-sonnet-4'))->toBeFalse()
         ->and(ReasoningOptions::reasoningIsMandatory(null))->toBeFalse();
 
